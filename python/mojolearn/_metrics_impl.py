@@ -1,61 +1,61 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""GPU scoring functions: cluster and classification metrics and native regression errors.
+"""Scoring functions: classification, regression, ranking and clustering metrics.
 
-**metrics IS NOT AN ESTIMATOR.** It is a set of scoring functions, so this
-module is shaped like `sklearn.metrics` -- plain functions, no class, no
-`fit` -- and each one carries its own WHAT IS HONORED / REFUSED note, the
-same house rule the estimator classes follow. A parameter the kernel does
-not carry is refused BY NAME with a reason, never accepted and ignored.
+``mojolearn.metrics`` is shaped like ``sklearn.metrics``: plain functions, no
+estimator class. Function and argument names follow scikit-learn, and the
+work runs on the GPU. Where cuML has the same function, its defaults and
+semantics are followed, and each function states where scikit-learn and cuML
+differ. Three differences matter most:
 
-WHERE THE NAMES AND THE DEFAULTS COME FROM. Function and argument names
-follow scikit-learn. New regression-error
-functions document their bounded Float32 contract below. For the functions
-cuML also has, **the defaults and semantics are cuML's**, from the pinned `v26.08.00`
-checkout, and where the two libraries differ the difference is written on
-the function. Three of those differences matter:
+* ``entropy`` and ``mutual_info_score`` are in nats.
+* ``r2_score`` returns scikit-learn's finite values for constant targets
+  (``force_finite=True``) by default.
+* ``kl_divergence`` does not normalize ``P`` and ``Q``, as in cuML.
 
-  * `entropy` and `mutual_info_score` are in NATS, as RAFT computes them.
-  * `r2_score` has scikit-learn's and cuML's `force_finite=True` behavior
-    BAKED IN (DEVIATION 657) and `force_finite=False` is refused by name.
-  * `kl_divergence` does NOT normalize `P` and `Q`, exactly as cuML's
-    `cuml.metrics.kl_divergence` does not.
+A parameter a function cannot honor raises an error naming it; nothing is
+silently accepted and ignored. Inputs are checked here: non-finite values are
+refused where the docstring says so.
 
-HISTORICAL QUALIFICATION (excludes new regression-error and A2 classification kernels).
-The original metrics kernels are bit-identical
-across Apple M4, NVIDIA H100 and AMD MI325X, measured at leg 11
-(`archive/evidence/E3_RESULTS.md` round 11, commit 144aa5b, `tools/e3_round_judge.sh`
-section 7, 34 card stages, both boxes) under `MOJOLEARN_NUMERIC_MODE=
-identical`. That result is for the 34-stage card of that commit; the card
-has since grown to 61 stages and the three-vendor leg on the GROWN card is
-OWED (`metrics/README.md` Status). **The FAST arm, which is not the default
-and must be selected explicitly, makes no cross-vendor claim at all** -- the FAST cards differ between
-vendors and that is recorded, not a defect.
+Functions that take ``numeric_mode`` accept ``'identical'`` (the same bits
+on NVIDIA and AMD), ``'deterministic'``, or ``'fast'`` (Apple only); None
+uses the library default. Other functions run in the library default mode.
 
-ONE CAVEAT ABOUT THAT EVIDENCE, since it is checkable and worth checking.
-The two BOX cards are committed and are byte-identical to each other:
-`bench/results/e1/2026-08-23_165142-mojolearn-e2-nv/lanes/
-metrics.identical.card` and its `..._172650-mojolearn-e2-amd` sibling, both
-at commit `144aa5b`, 34 stages. **The APPLE reference directory that round
-was judged against is NOT in the repository** -- `archive/evidence/E3_RESULTS.md:253` names
-it `<mac 123452>` and no directory under `bench/results/e1/` carries that
-stamp or any other `lanes/metrics.identical.card`. So NVIDIA <-> AMD is
-reproducible from committed artifacts today and the two APPLE comparisons
-rest on the judge output recorded in `archive/evidence/E3_RESULTS.md`, not on a file
-anybody can re-diff.
-
-INPUT VALIDATION LIVES HERE, DELIBERATELY. The Mojo entries do not scan
-their device inputs (`metrics/README.md` HAND-OFF ask 3), so these
-functions do the `check_array` work: finite `X` for silhouette and
-trustworthiness, finite `y`/`y_pred` for `r2_score`, finite and
-non-negative `P`/`Q` for `kl_divergence`. One consequence worth naming:
-the kernel-level answers for out-of-contract values (a NaN reaching
-`sil_op` as `+0.0` through DEVIATION 656, `r2_score` returning the
-canonical NaN `0x7fc00000` through DEVIATION 657) are therefore NOT
-reachable from Python. They are gated where they live, in
-`metrics/checks/regression_metrics_check.mojo` and
-`silhouette_check.mojo`.
+Examples
+--------
+>>> import numpy as np
+>>> from mojolearn import metrics
+>>> rng = np.random.default_rng(0)
+>>> y_true = rng.integers(0, 2, 1000).astype(np.int32)
+>>> y_pred = rng.integers(0, 2, 1000).astype(np.int32)
+>>> acc = metrics.accuracy_score(y_true, y_pred)
 """
+
+# Maintainer notes (moved from the module docstring):
+# HISTORICAL QUALIFICATION (excludes new regression-error and A2
+# classification kernels). The original metrics kernels were bit-identical
+# across Apple M4, NVIDIA H100 and AMD MI325X at leg 11
+# (`archive/evidence/E3_RESULTS.md` round 11, commit 144aa5b,
+# `tools/e3_round_judge.sh` section 7, 34 card stages, both boxes) under
+# MOJOLEARN_NUMERIC_MODE=identical. The card has since grown to 61 stages and
+# the three-vendor leg on the grown card is owed (`metrics/README.md` Status).
+# The FAST arm makes no cross-vendor claim; FAST cards differ between vendors.
+# Evidence caveat: the two box cards are committed and byte-identical
+# (`bench/results/e1/2026-08-23_165142-mojolearn-e2-nv/lanes/metrics.identical.card`
+# and its `..._172650-mojolearn-e2-amd` sibling, commit 144aa5b, 34 stages).
+# The Apple reference directory that round was judged against is not in the
+# repository (`archive/evidence/E3_RESULTS.md:253` names it `<mac 123452>`), so
+# NVIDIA <-> AMD is reproducible from committed artifacts and the Apple
+# comparisons rest on the recorded judge output.
+# Input validation lives here deliberately: the Mojo entries do not scan their
+# device inputs (`metrics/README.md` HAND-OFF ask 3), so these functions do the
+# `check_array` work (finite X for silhouette and trustworthiness, finite
+# y/y_pred for r2_score, finite non-negative P/Q for kl_divergence). The
+# kernel-level answers for out-of-contract values (a NaN reaching `sil_op` as
+# +0.0 through DEVIATION 656, r2_score's canonical NaN 0x7fc00000 through
+# DEVIATION 657) are therefore not reachable from Python; they are gated in
+# `metrics/checks/regression_metrics_check.mojo` and `silhouette_check.mojo`.
+# cuML defaults come from the pinned v26.08.00 checkout.
 
 from . import _portable_math as math
 import numbers
@@ -365,41 +365,59 @@ def _native_union_codes(yt, yp):
 # ===========================================================================
 
 
+# Maintainer notes: backed by `ML::Metrics::accuracy_score_py` (cuML
+# `accuracy_score.cu`): one fused subtract-and-count with an INTEGER atomic,
+# exact and order-free on every vendor; the returned float32 is
+# `count * (1 / n)`. The int32 instantiation is the one cuML's Python passes.
+# sample_weight: pinned-sum path (metrics/impl/weighted_scores.mojo), the
+# weights of agreeing samples and all weights folded by the PINNED_SUM_W tree,
+# then one division; RAFT has no weighted arm and cuML weights in cupy, so this
+# arm follows scikit-learn. normalize=False goes to the x_metrics binding.
+# `n == 0` is refused inside the kernel (`count / n` is 0/0 in RAFT and a NaN
+# may not reach a recorded value).
 def accuracy_score(
     y_true, y_pred, *, normalize=True, sample_weight=None, numeric_mode=None
 ):
-    """The fraction of positions where two label arrays agree.
+    """Accuracy: the fraction (or number) of positions where two label arrays agree.
 
-    numeric_mode selects a compiled tier; None uses the current library default.
+    Follows scikit-learn's ``accuracy_score``; the unweighted fraction uses
+    cuML's kernel. The count of matches is exact on every device.
 
-    Backed by `ML::Metrics::accuracy_score_py` (cuML `accuracy_score.cu`):
-    one fused subtract-and-count with an INTEGER atomic, so the count is
-    exact and order-free on every vendor, and the returned float32 is
-    `count * (1 / n)`.
+    Parameters
+    ----------
+    y_true, y_pred : array-like of shape (n_samples,)
+        Integer labels of the same length that fit in int32. Larger labels
+        raise ``ValueError``. With ``normalize=False``, string labels are
+        accepted too.
+    normalize : bool, default True
+        True returns the fraction of matches. False returns the number of
+        matches (an int), or with ``sample_weight`` their summed weight.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights, as in scikit-learn's
+        ``np.average(y_true == y_pred, weights=sample_weight)``, computed in
+        float32. Weights must be finite, non-negative and have a positive
+        total; negative weights, which scikit-learn accepts, raise
+        ``ValueError``.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
 
-        y_true, y_pred  honored   int32 labels, same length. A label array
-                                  that does not fit in int32 is refused by
-                                  name (the int32 instantiation is the one
-                                  cuML's Python passes).
-        normalize       honored   True: this kernel's fraction. False: the
-                                  number of matching rows (an int), or with
-                                  sample_weight their summed weight, from the
-                                  x_metrics binding (lane/metrics).
-        sample_weight   honored   scikit-learn's `np.average(y_true ==
-                                  y_pred, weights=sample_weight)`, in Float32
-                                  on the pinned-sum path
-                                  (metrics/impl/weighted_scores.mojo): the
-                                  weights of agreeing samples and all weights
-                                  folded by the PINNED_SUM_W tree, then one
-                                  division. RAFT's kernel has no weighted arm
-                                  and cuML's Python weights in cupy, so this
-                                  arm follows the scikit-learn reference. Weights must be
-                                  1-D, one per sample, finite, non-negative
-                                  and of positive total (negative weights,
-                                  which numpy accepts, are refused by name).
+    Returns
+    -------
+    score : float or int
 
-    `n == 0` is refused by name inside the kernel (`count / n` is `0 / 0`
-    in RAFT and a NaN may not reach a recorded value).
+    Raises
+    ------
+    ValueError
+        For empty input or arrays of different lengths.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> metrics.accuracy_score(np.array([0, 1, 1, 0], dtype=np.int32),
+    ...                        np.array([0, 1, 0, 0], dtype=np.int32))
+    0.75
     """
     if not is_bool(normalize):
         raise ValueError("normalize must be a bool")
@@ -429,19 +447,32 @@ def accuracy_score(
     )
 
 
+# Maintainer notes: backed by `ML::Metrics::rand_index` (cuML
+# `rand_index.cu`, DEVIATION 652: per-block partials plus a host Int64 sum,
+# because Apple has no 64-bit float atomic). Raw labels, no label range on
+# this entry. cuML's Python exports only adjusted_rand_score; the unadjusted
+# index has a C++ entry and is exposed under scikit-learn's name.
 def rand_score(labels_true, labels_pred):
-    """The (unadjusted) Rand index between two clusterings.
+    """Rand index: the fraction of sample pairs on which two clusterings agree.
 
-    Backed by `ML::Metrics::rand_index` (cuML `rand_index.cu`, DEVIATION
-    652: per-block partials plus a host Int64 sum, because Apple has no
-    64-bit float atomic). Takes RAW labels; there is no label range on this
-    entry because theirs has none.
+    Follows scikit-learn's ``rand_score``. Labels are used as given; they
+    do not need to be contiguous.
 
-        labels_true,    honored   int32 labels, same length
-        labels_pred
+    Parameters
+    ----------
+    labels_true, labels_pred : array-like of shape (n_samples,)
+        Integer cluster labels of the same length that fit in int32.
 
-    cuML's Python exports only `adjusted_rand_score`; the unadjusted index
-    has a C++ entry and this surface exposes it under scikit-learn's name.
+    Returns
+    -------
+    score : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> score = metrics.rand_score(np.array([0, 0, 1, 1], dtype=np.int32),
+    ...                            np.array([1, 1, 0, 0], dtype=np.int32))
     """
     yt, yp = _pair_1d(
         labels_true, labels_pred, "labels_true", "labels_pred", _as_i32_1d
@@ -455,21 +486,36 @@ def rand_score(labels_true, labels_pred):
     )
 
 
+# Maintainer notes: backed by `ML::Metrics::adjusted_rand_index`, the int32
+# instantiation (the int64 overload is the same code at a wider label type and
+# is not instantiated). Builds its own contingency matrix over its own label
+# range from raw labels, as cuML does. A difference of large numbers over a
+# difference of large numbers: the three exact integers are card stages
+# (`metrics.ari.pair_sums`), and the host epilogue is float64
+# divide/multiply/subtract only, identity-safe in both modes.
 def adjusted_rand_score(labels_true, labels_pred):
-    """The Rand index adjusted for chance.
+    """Rand index adjusted for chance.
 
-    Backed by `ML::Metrics::adjusted_rand_index`, the int32 instantiation
-    (the int64 overload is the same code at a wider label type and is not
-    instantiated). Builds its own contingency matrix over its own label
-    range and takes RAW labels, exactly as theirs does.
+    Follows scikit-learn's and cuML's ``adjusted_rand_score``: 1.0 for
+    identical clusterings (up to relabeling), about 0.0 for random ones.
+    Labels are used as given.
 
-        labels_true,    honored   int32 labels, same length
-        labels_pred
+    Parameters
+    ----------
+    labels_true, labels_pred : array-like of shape (n_samples,)
+        Integer cluster labels of the same length that fit in int32.
 
-    It is a DIFFERENCE OF LARGE NUMBERS OVER A DIFFERENCE OF LARGE NUMBERS;
-    the three exact integers those differences are formed from are card
-    stages (`metrics.ari.pair_sums`), and the host epilogue is float64
-    divide/multiply/subtract only, which is identity-safe in both modes.
+    Returns
+    -------
+    score : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> rng = np.random.default_rng(0)
+    >>> a = rng.integers(0, 4, 1000).astype(np.int32)
+    >>> score = metrics.adjusted_rand_score(a, a)
     """
     yt, yp = _pair_1d(
         labels_true, labels_pred, "labels_true", "labels_pred", _as_i32_1d
@@ -483,32 +529,46 @@ def adjusted_rand_score(labels_true, labels_pred):
     )
 
 
+# Maintainer notes: backed by `ML::Metrics::entropy` (cuML `entropy.cu`, RAFT
+# `entropy.cuh`, DEVIATIONS 650 and 651). `base` uses cuML's `entropy.pyx:72-74`
+# spelling exactly, `math.log(math.exp(S), base)`, rather than the algebraically
+# equal `S / math.log(base)`. The min..max histogram is cuML's own behavior
+# (`entropy.pyx:61-62` passes min and max with no remapping, unlike the four
+# cluster metrics). Under identical the float epilogue is Float32 through
+# `identical_log` and differs from FAST's Float64 in the seventh digit by
+# design (DEVIATION 651): `checks/numerics.mojo` has no portable Float64 log
+# yet; `metrics/README.md` hand-off ask 1.
 def entropy(clustering, *, base=None):
-    """The entropy of a labelling, IN NATS unless `base` is given.
+    """Entropy of a labeling, in nats unless ``base`` is given.
 
-    Backed by `ML::Metrics::entropy` (cuML `entropy.cu`, RAFT
-    `entropy.cuh`, DEVIATIONS 650 and 651). cuML's name for this is
-    `cuml.metrics.cluster.entropy`; scikit-learn has no public equivalent.
+    Follows cuML's ``cuml.metrics.cluster.entropy``; scikit-learn has no
+    public equivalent.
 
-        clustering  honored   int32 labels
-        base        honored   cuML's `entropy.pyx:72-74` spelling exactly,
-                              `math.log(math.exp(S), base)`. Kept as theirs
-                              rather than the algebraically equal
-                              `S / math.log(base)`:
-                              None (the default) means nats.
+    The label histogram spans ``max(labels) - min(labels) + 1`` bins, not the
+    number of distinct labels, as in cuML. Sparse, large-valued labels
+    therefore allocate that many bins; encode them as ``0..k-1`` first if
+    that matters.
 
-    THE HISTOGRAM SPANS `max(labels) - min(labels) + 1` BINS, not the number
-    of distinct labels. That is cuML's own behavior (`entropy.pyx:61-62`
-    passes `min` and `max` with NO remapping, unlike the four cluster
-    metrics below), and it means entropy of sparse large-valued labels
-    allocates that many integers. Factorize your labels first if that
-    matters to you.
+    In the ``'identical'`` numeric mode the final logarithms run in float32,
+    so the result can differ from the other modes in about the seventh
+    significant digit.
 
-    Under `MOJOLEARN_NUMERIC_MODE=identical` the float epilogue is Float32
-    through `identical_log` and differs from the FAST arm's Float64 in the
-    seventh digit BY DESIGN (DEVIATION 651). That is the price of the same
-    bits everywhere; `checks/numerics.mojo` has no portable Float64 log
-    yet, and `metrics/README.md`'s hand-off ask 1 is exactly that.
+    Parameters
+    ----------
+    clustering : array-like of shape (n_samples,)
+        Integer labels that fit in int32.
+    base : float or None, default None
+        Logarithm base. None means nats.
+
+    Returns
+    -------
+    entropy : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> h = metrics.entropy(np.array([0, 0, 1, 1], dtype=np.int32), base=2)
     """
     lab = _as_i32_1d(clustering, "clustering")
     lower = int(lab.min())
@@ -525,25 +585,37 @@ def entropy(clustering, *, base=None):
     return value
 
 
+# Maintainer notes: backed by `ML::Metrics::mutual_info_score` (DEVIATIONS
+# 650 and 651): the contingency matrix is built with INTEGER atomics on the
+# device, exact and order-free everywhere, and the `c (log(nc) - log(ab))`
+# epilogue runs serially and ascending on the host. The labels are remapped
+# as cuML 26.08's `prepare_cluster_metric_inputs` does.
 def mutual_info_score(labels_true, labels_pred, *, contingency=None):
-    """The mutual information between two clusterings, IN NATS.
+    """Mutual information between two clusterings, in nats.
 
-    Backed by `ML::Metrics::mutual_info_score` (DEVIATIONS 650 and 651):
-    the contingency matrix is built with INTEGER atomics on the device, so
-    it is exact and order-free everywhere, and the `c (log(nc) - log(ab))`
-    epilogue runs serially and ascending on the host.
+    Follows scikit-learn's and cuML's ``mutual_info_score``, in nats as cuML
+    computes it. Both label arrays are first mapped onto ``0..k-1`` over the
+    union of their distinct labels, as cuML does. The contingency counts
+    are exact on every device.
 
-        labels_true,   honored   int32 labels, same length. Both are
-        labels_pred              remapped onto [0, n_classes - 1] over the
-                                 union of their distinct labels, exactly as
-                                 cuML 26.08's `prepare_cluster_metric_inputs`
-                                 does, and the kernel is handed that range.
-        contingency    refused   scikit-learn lets you pass a precomputed
-                                 contingency matrix instead of labels; the
-                                 implemented entry builds its own on the device
-                                 and there is no arm that consumes one.
+    Parameters
+    ----------
+    labels_true, labels_pred : array-like of shape (n_samples,)
+        Integer cluster labels of the same length that fit in int32.
+    contingency : None, default None
+        A precomputed contingency matrix is not supported; passing one
+        raises ``NotImplementedError``.
 
-    NATS, not bits: RAFT computes it in nats and so does this.
+    Returns
+    -------
+    mi : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> mi = metrics.mutual_info_score(np.array([0, 0, 1, 1], dtype=np.int32),
+    ...                                np.array([0, 0, 1, 2], dtype=np.int32))
     """
     if contingency is not None:
         raise NotImplementedError(
@@ -562,28 +634,38 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
     )
 
 
+# Maintainer notes: reference `sklearn/metrics/cluster/_supervised.py`. The
+# contingency matrix is built with INTEGER atomics on the device (the
+# mutual_info_score kernel); tk = sum_ij c_ij^2 - n, pk = sum_j colsum^2 - n,
+# qk = sum_i rowsum^2 - n are exact Int64 sums on the host and the score is
+# Float64.
 def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated"):
-    """The Fowlkes-Mallows index between two clusterings.
+    """Fowlkes-Mallows index between two clusterings.
 
-    Follows the scikit-learn reference `fowlkes_mallows_score`
-    (`sklearn/metrics/cluster/_supervised.py`); cuML 26.08 has no such
-    metric. The contingency matrix is built with INTEGER atomics on the
-    device (the kernel mutual_info_score uses), the three pair counts
+    Follows scikit-learn's ``fowlkes_mallows_score`` (cuML has no such
+    metric): the geometric mean of pairwise precision and recall,
+    ``sqrt(tk / pk) * sqrt(tk / qk)``. Returns 0.0 when ``tk == 0`` (every
+    cluster a singleton, a single sample, or no samples), as scikit-learn
+    does. Labels are mapped onto ``0..k-1`` over their union first.
 
-        tk = sum_ij c_ij^2 - n,  pk = sum_j (column sum)^2 - n,
-        qk = sum_i (row sum)^2 - n
+    Parameters
+    ----------
+    labels_true, labels_pred : array-like of shape (n_samples,)
+        Integer cluster labels of the same length that fit in int32.
+    sparse : default 'deprecated'
+        Deprecated and ignored in scikit-learn; any explicit value raises
+        ``NotImplementedError``.
 
-    are exact Int64 sums on the host, and the score is
-    `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, or 0.0 when `tk == 0`
-    (every class split into singletons, a single sample, or no samples),
-    exactly as scikit-learn returns.
+    Returns
+    -------
+    score : float
 
-        labels_true,   honored   int32 labels, same length, remapped onto
-        labels_pred              [0, n_classes - 1] over the union of their
-                                 distinct labels as mutual_info_score does
-        sparse         refused   scikit-learn deprecated it (1.7) and
-                                 ignores it; any explicit value is refused
-                                 by name rather than silently ignored
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> score = metrics.fowlkes_mallows_score(np.array([0, 0, 1, 1], dtype=np.int32),
+    ...                                       np.array([0, 0, 1, 2], dtype=np.int32))
     """
     if sparse != "deprecated":
         raise NotImplementedError(
@@ -610,13 +692,29 @@ def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated"):
     )
 
 
+# Maintainer note: backed by `ML::Metrics::homogeneity_score`.
 def homogeneity_score(labels_true, labels_pred):
-    """Homogeneity: `MI(true, pred) / H(true)`, in `[0, 1]`.
+    """Homogeneity: whether each cluster holds members of a single class.
 
-    Backed by `ML::Metrics::homogeneity_score`.
+    ``MI(true, pred) / H(true)``, in ``[0, 1]``. Follows scikit-learn's and
+    cuML's ``homogeneity_score``. Labels are mapped onto ``0..k-1`` over their
+    union first, as cuML does.
 
-        labels_true,   honored   int32 labels, same length, remapped onto
-        labels_pred              [0, n_classes - 1] as cuML 26.08 does
+    Parameters
+    ----------
+    labels_true, labels_pred : array-like of shape (n_samples,)
+        Integer labels of the same length that fit in int32.
+
+    Returns
+    -------
+    score : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> h = metrics.homogeneity_score(np.array([0, 0, 1, 1], dtype=np.int32),
+    ...                               np.array([0, 0, 1, 2], dtype=np.int32))
     """
     yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::homogeneity_score_binding.
@@ -628,19 +726,34 @@ def homogeneity_score(labels_true, labels_pred):
     )
 
 
+# Maintainer notes: backed by `ML::Metrics::completeness_score`, which RAFT
+# computes as homogeneity_score with the two arrays swapped. The swapped call
+# folds the TRANSPOSED contingency matrix, so the host's serial ascending walk
+# visits the cells in a different sequence: the same quantity in exact
+# arithmetic, not necessarily the same float32 bits. Implemented as theirs;
+# both folds are stages on the metrics card.
 def completeness_score(labels_true, labels_pred):
-    """Completeness: `MI(pred, true) / H(pred)`, in `[0, 1]`.
+    """Completeness: whether all members of a class are in the same cluster.
 
-    Backed by `ML::Metrics::completeness_score`, which RAFT computes as
-    `homogeneity_score` WITH THE TWO ARRAYS SWAPPED. That is not a
-    relabelling of the same computation: the swapped call folds the
-    TRANSPOSED contingency matrix, so the host's serial ascending walk
-    visits the cells in a different sequence, and the two are the same
-    quantity in exact arithmetic and not necessarily the same float32 bits.
-    Implemented as theirs, and both folds are stages on the metrics card.
+    ``MI(pred, true) / H(pred)``, in ``[0, 1]``. Follows scikit-learn's and
+    cuML's ``completeness_score``. Labels are mapped onto ``0..k-1`` over
+    their union first, as cuML does.
 
-        labels_true,   honored   int32 labels, same length, remapped onto
-        labels_pred              [0, n_classes - 1] as cuML 26.08 does
+    Parameters
+    ----------
+    labels_true, labels_pred : array-like of shape (n_samples,)
+        Integer labels of the same length that fit in int32.
+
+    Returns
+    -------
+    score : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> c = metrics.completeness_score(np.array([0, 0, 1, 1], dtype=np.int32),
+    ...                                np.array([0, 0, 1, 2], dtype=np.int32))
     """
     yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::completeness_score_binding.
@@ -652,16 +765,31 @@ def completeness_score(labels_true, labels_pred):
     )
 
 
+# Maintainer note: backed by `ML::Metrics::v_measure` (cuML `v_measure.cu`).
 def v_measure_score(labels_true, labels_pred, *, beta=1.0):
-    """The V-measure: `(1 + beta) h c / (beta h + c)`.
+    """V-measure: the weighted harmonic mean of homogeneity and completeness.
 
-    Backed by `ML::Metrics::v_measure` (cuML `v_measure.cu`).
+    ``(1 + beta) * h * c / (beta * h + c)``. Follows scikit-learn's and
+    cuML's ``v_measure_score``. Labels are mapped onto ``0..k-1`` over their
+    union first.
 
-        labels_true,   honored   int32 labels, same length, remapped onto
-        labels_pred              [0, n_classes - 1] as cuML 26.08 does
-        beta           honored   float64, cuML's and scikit-learn's default
-                                 1.0. Above 1 weights completeness more,
-                                 below 1 weights homogeneity more.
+    Parameters
+    ----------
+    labels_true, labels_pred : array-like of shape (n_samples,)
+        Integer labels of the same length that fit in int32.
+    beta : float, default 1.0
+        Above 1 weights completeness more, below 1 weights homogeneity more.
+
+    Returns
+    -------
+    score : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> v = metrics.v_measure_score(np.array([0, 0, 1, 1], dtype=np.int32),
+    ...                             np.array([0, 0, 1, 2], dtype=np.int32))
     """
     yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::v_measure_score_binding.
@@ -674,12 +802,30 @@ def v_measure_score(labels_true, labels_pred, *, beta=1.0):
 
 
 def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
-    """`(homogeneity, completeness, v_measure)`, scikit-learn's convenience.
+    """Homogeneity, completeness and V-measure in one call.
 
-    THREE SEPARATE DEVICE CALLS, not one fused pass, and therefore three
-    device contexts. scikit-learn computes all three from one contingency
-    matrix; the implemented C++ has three entries and this calls them. If you
-    care about the cost, call the one you need.
+    Returns ``(homogeneity_score, completeness_score, v_measure_score)``, as
+    scikit-learn's function of the same name. Each value is computed by its
+    own call, so this costs about three separate metric calls; call the one
+    you need if speed matters.
+
+    Parameters
+    ----------
+    labels_true, labels_pred : array-like of shape (n_samples,)
+        Integer labels of the same length that fit in int32.
+    beta : float, default 1.0
+        Passed to ``v_measure_score``.
+
+    Returns
+    -------
+    homogeneity, completeness, v_measure : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> h, c, v = metrics.homogeneity_completeness_v_measure(
+    ...     np.array([0, 0, 1, 1], dtype=np.int32), np.array([0, 0, 1, 2], dtype=np.int32))
     """
     return (
         homogeneity_score(labels_true, labels_pred),
@@ -693,6 +839,19 @@ def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
 # ===========================================================================
 
 
+# Maintainer notes: the 1-D default call is backed by `ML::Metrics::r2_score_py`,
+# the float overload (DEVIATIONS 653 and 657). The three sums (y_bar, sse,
+# ssto) are folded by a PINNED_SUM_W = 256 slab tree whose width is a constant
+# of the source, not of the launch, gated launch-invariant across two block
+# sizes and two grid shapes. float64 is refused: cuML has a double overload and
+# this implementation does not (no float64 on Apple GPUs). sample_weight:
+# pinned-sum path (metrics/impl/weighted_scores.mojo; RAFT's r2_score has no
+# weighted arm), `sum w (y - y_pred)^2` over `sum w (y - y_avg)^2` with the same
+# force_finite guards. force_finite=True: ssto == 0 returns 1.0 when sse == 0
+# and 0.0 otherwise. multioutput, 2-D targets and force_finite=False go to the
+# x_metrics binding, whose NaN / -inf are chosen by value in the binary64
+# epilogue (DEVIATION 6103). An overflow-scale y (|y - y_hat| above ~1.8e19)
+# returns the one canonical NaN payload 0x7fc00000 on every vendor.
 def r2_score(
     y_true,
     y_pred,
@@ -702,47 +861,44 @@ def r2_score(
     force_finite=True,
     numeric_mode=None,
 ):
-    """The coefficient of determination, float32.
+    """Coefficient of determination (R^2), computed in float32.
 
-    numeric_mode selects a compiled tier; None uses the current library default.
+    Follows scikit-learn's ``r2_score``. When the targets are constant
+    (total sum of squares 0), the default ``force_finite=True`` returns 1.0
+    for a perfect prediction and 0.0 otherwise, as scikit-learn and cuML do.
 
-    Backed by `ML::Metrics::r2_score_py`, the float overload (DEVIATIONS
-    653 and 657). The three sums (`y_bar`, `sse`, `ssto`) are folded by a
-    `PINNED_SUM_W = 256` slab tree whose width is a constant of the source
-    and not of the launch, gated launch-invariant across two block sizes
-    and two grid shapes.
+    Parameters
+    ----------
+    y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
+        Finite float32 targets and predictions of the same shape. float64
+        arrays raise ``TypeError`` (for 1-D input, so do Python lists of
+        floats): cast to float32 first. NaN or infinity raises
+        ``ValueError``.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights, as in scikit-learn. They must be finite,
+        non-negative and have a positive total.
+    multioutput : {'uniform_average', 'raw_values', 'variance_weighted'} or array-like, default 'uniform_average'
+        How to combine the scores of several outputs, as in scikit-learn.
+    force_finite : bool, default True
+        False returns scikit-learn's raw values for constant targets
+        (``nan`` or ``-inf``).
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
 
-        y_true, y_pred  honored   1-D float32, same length, finite. float64
-                                  is REFUSED by name: cuML has a double
-                                  overload and this implementation does not (no
-                                  float64 on this GPU), so the cast is
-                                  yours to make.
-        multioutput     refused   anything but 'uniform_average' with 1-D
-                                  input. 2-D targets are not implemented; the
-                                  kernel takes one flat pair of arrays.
-        sample_weight   honored   scikit-learn's weighted definition, in
-                                  Float32 on the pinned-sum path
-                                  (metrics/impl/weighted_scores.mojo; RAFT's
-                                  r2_score has no weighted arm):
-                                  `sum w (y - y_pred)^2` over
-                                  `sum w (y - y_avg)^2` with `y_avg = sum w y
-                                  / sum w`, the same force_finite guards.
-                                  Weights must be 1-D, one per sample,
-                                  finite, non-negative and of positive total.
-        force_finite    honored   True only, and it is BAKED IN. `ssto == 0`
-                                  returns 1.0 when `sse == 0` and 0.0
-                                  otherwise, which is scikit-learn's and
-                                  cuML's own Python surface's behavior.
-                                  False (RAFT's raw `1 - sse/ssto`, which
-                                  gives -inf or NaN there) is REFUSED by
-                                  name, because a recorded scalar carrying
-                                  a vendor's NaN payload would give a
-                                  different card per vendor on one legal
-                                  input (DEVIATION 657).
+    Returns
+    -------
+    score : float or Array
+        A float, or one float64 value per output for ``'raw_values'``.
 
-    An overflow-scale `y` (`|y - y_hat|` above about 1.8e19, so the square
-    is +inf) still returns a NaN, but the ONE canonical payload
-    `0x7fc00000` on every vendor.
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> rng = np.random.default_rng(0)
+    >>> y = rng.random(1000, dtype=np.float32)
+    >>> pred = y + rng.normal(0, 0.1, 1000).astype(np.float32)
+    >>> r2 = metrics.r2_score(y, pred)
     """
     if (not isinstance(multioutput, str) or multioutput != "uniform_average" or not force_finite
             or len(_shape_of(y_true)) == 2 and _shape_of(y_true)[1] != 1):
@@ -800,21 +956,47 @@ def _regression_error(name, y_true, y_pred, sample_weight, multioutput, numeric_
     ))
 
 
+# Maintainer notes: IDENTICAL pins the reduction schedule and flushes
+# subnormal arithmetic. The 1-D unweighted call keeps its own kernel; weights,
+# multioutput and 2-D targets go to the x_metrics binding
+# (regression_error_options). The new error metrics had local Metal
+# qualification; the cross-vendor leg was pending when this was written.
 def mean_squared_error(
     y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
 ):
-    """Mean squared residual, computed and reduced on the GPU in Float32.
+    """Mean squared error, computed in float32.
 
-    Inputs must be finite, nonempty Float32 arrays of equal length, shaped
-    (n,) or (n, 1). Other dtypes require an explicit cast. Weights and multiple
-    outputs are not supported yet. The result is a Python float containing
-    the Float32 scalar. Residuals, squares and the sum can overflow to +inf;
-    this implementation does not use a wider or scaled accumulator.
+    Follows scikit-learn's ``mean_squared_error``. The residuals, their
+    squares and the sum are float32, with no wider accumulator, so very
+    large residuals can overflow to ``inf``.
 
-    numeric_mode selects the compiled tier per call; None uses the current
-    library default. IDENTICAL pins the reduction schedule and flushes
-    subnormal arithmetic. New error metrics have local Metal qualification;
-    cross-vendor qualification remains pending.
+    Parameters
+    ----------
+    y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
+        Finite, nonempty float32 arrays of the same shape. A float64 or other
+        non-float32 buffer raises ``TypeError``: cast it first. Python lists
+        are converted to float32. NaN or infinity raises ``ValueError``.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights, as in scikit-learn.
+    multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
+        How to combine several outputs, as in scikit-learn.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
+
+    Returns
+    -------
+    loss : float or Array
+        A float, or one float64 value per output for ``'raw_values'``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> y = np.array([3.0, -0.5, 2.0, 7.0], dtype=np.float32)
+    >>> pred = np.array([2.5, 0.0, 2.0, 8.0], dtype=np.float32)
+    >>> metrics.mean_squared_error(y, pred)
+    0.375
     """
     return _regression_error(
         "mean_squared_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
@@ -824,11 +1006,38 @@ def mean_squared_error(
 def mean_absolute_error(
     y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
 ):
-    """Mean absolute residual on the GPU in Float32.
+    """Mean absolute error, computed in float32.
 
-    Uses the input, mode and overflow contract of mean_squared_error, with
-    absolute residuals instead of squares. Weights/multiple outputs are
-    unsupported; numeric_mode=None resolves the current library default.
+    Follows scikit-learn's ``mean_absolute_error``, with the same input and
+    overflow behavior as ``mean_squared_error``.
+
+    Parameters
+    ----------
+    y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
+        Finite, nonempty float32 arrays of the same shape. A float64 or other
+        non-float32 buffer raises ``TypeError``: cast it first. Python lists
+        are converted to float32. NaN or infinity raises ``ValueError``.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights, as in scikit-learn.
+    multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
+        How to combine several outputs, as in scikit-learn.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
+
+    Returns
+    -------
+    loss : float or Array
+        A float, or one float64 value per output for ``'raw_values'``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> y = np.array([3.0, -0.5, 2.0, 7.0], dtype=np.float32)
+    >>> pred = np.array([2.5, 0.0, 2.0, 8.0], dtype=np.float32)
+    >>> metrics.mean_absolute_error(y, pred)
+    0.5
     """
     return _regression_error(
         "mean_absolute_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
@@ -838,33 +1047,75 @@ def mean_absolute_error(
 def root_mean_squared_error(
     y_true, y_pred, *, sample_weight=None, multioutput="uniform_average", numeric_mode=None
 ):
-    """GPU Float32 square root of mean_squared_error's GPU result.
+    """Root mean squared error, computed in float32.
 
-    Uses mean_squared_error's input, mode and overflow contract. The square
-    root also runs on the GPU. Squaring can overflow even when the exact
-    RMSE would fit in Float32; no scaled sum-of-squares algorithm is claimed.
+    Follows scikit-learn's ``root_mean_squared_error``: the square root of
+    ``mean_squared_error``, with the same input behavior. The squares can
+    overflow to ``inf`` even when the true RMSE would fit in float32.
+
+    Parameters
+    ----------
+    y_true, y_pred : array-like of shape (n_samples,) or (n_samples, n_outputs)
+        Finite, nonempty float32 arrays of the same shape. A float64 or other
+        non-float32 buffer raises ``TypeError``: cast it first. Python lists
+        are converted to float32. NaN or infinity raises ``ValueError``.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights, as in scikit-learn.
+    multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
+        How to combine several outputs, as in scikit-learn.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
+
+    Returns
+    -------
+    loss : float or Array
+        A float, or one float64 value per output for ``'raw_values'``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> y = np.array([3.0, -0.5, 2.0, 7.0], dtype=np.float32)
+    >>> pred = np.array([2.5, 0.0, 2.0, 8.0], dtype=np.float32)
+    >>> rmse = metrics.root_mean_squared_error(y, pred)
     """
     return _regression_error(
         "root_mean_squared_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
     )
 
 
+# Maintainer notes: backed by `ML::Metrics::kl_divergence`, the float overload
+# (DEVIATIONS 653 and 658), on the same pinned fold as r2_score. float64 is
+# refused (no float64 on Apple GPUs). Negative entries are refused here, before
+# the kernel, per `metrics/README.md` HAND-OFF ask 3. RAFT's kernel does not
+# normalize either; p_i == 0 contributes zero (their branch).
 def kl_divergence(P, Q):
-    """The Kullback-Leibler divergence `sum p_i (log p_i - log q_i)`, float32.
+    """Kullback-Leibler divergence ``sum p_i * (log p_i - log q_i)``, in float32.
 
-    Backed by `ML::Metrics::kl_divergence`, the float overload (DEVIATIONS
-    653 and 658), on the same pinned fold as `r2_score`.
+    Follows cuML's ``cuml.metrics.kl_divergence``. ``P`` and ``Q`` are not
+    normalized, as in cuML; divide each by its sum first if you want the
+    divergence between distributions. A term with ``p_i == 0`` contributes
+    zero, and ``q_i == 0`` with ``p_i > 0`` gives ``inf``.
 
-        P, Q   honored   1-D float32, same length, finite and non-negative.
-                         float64 is REFUSED by name (no float64 on this
-                         GPU). Negative entries are refused HERE, before
-                         the kernel, per `metrics/README.md` HAND-OFF ask 3.
+    Parameters
+    ----------
+    P, Q : array-like of shape (n,)
+        Finite, non-negative float32 arrays of the same length. float64
+        input raises ``TypeError`` (cast to float32 first); a negative,
+        NaN or infinite entry raises ``ValueError``.
 
-    **IT DOES NOT NORMALIZE.** cuML's `cuml.metrics.kl_divergence` does not
-    normalize `P` and `Q` either, and neither does RAFT's kernel. If you
-    want a divergence between distributions, divide by the sums yourself.
-    `p_i == 0` contributes zero (their branch); `q_i == 0` with `p_i > 0`
-    gives `+inf`, as theirs.
+    Returns
+    -------
+    divergence : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> P = np.array([0.5, 0.3, 0.2], dtype=np.float32)
+    >>> Q = np.array([0.4, 0.4, 0.2], dtype=np.float32)
+    >>> kl = metrics.kl_divergence(P, Q)
     """
     p, q = _pair_1d(P, Q, "P", "Q", _as_f32_1d)
     for name, arr in (("P", p), ("Q", q)):  # glue: validates the two named arguments
@@ -940,39 +1191,58 @@ def _silhouette(X, labels, metric, chunksize, caller):
     return mean, scores
 
 
+# Maintainer notes: backed by `ML::Metrics::Batched::silhouette_score`, the
+# float batched entry cuML's Python dispatches (DEVIATIONS 654 and 656). The
+# per-cell distance runs one thread per cell through `identical_mul_add` /
+# `ftz` / `identical_sqrt`, and the a/b accumulation is one fixed tree per
+# (row, cluster); gated bitwise against a host model over 1031 samples and
+# launch-invariant across eight launches. Labels are mapped as cuML's
+# silhouette_score.pyx does; the kernel asserts 2 <= n_labels <= n_rows - 1.
+# 'euclidean' and 'l2' are the same DistanceType::L2SqrtUnexpanded.
+# chunksize is scheduling only: no distance tile is materialized, and chunk
+# 1 / 7 / 40000 are gated to one byte pattern. sample_size / random_state are
+# refused so no random draw happens where no check sees it.
 def silhouette_score(
     X, labels, *, metric="euclidean", sample_size=None, random_state=None,
     chunksize=None,
 ):
-    """The mean silhouette coefficient over all samples.
+    """Mean silhouette coefficient over all samples.
 
-    Backed by `ML::Metrics::Batched::silhouette_score`, the float batched
-    entry cuML's Python dispatches (DEVIATIONS 654 and 656). The per-cell
-    distance runs one thread per cell through `identical_mul_add` / `ftz` /
-    `identical_sqrt`, and the `a`/`b` accumulation is one fixed tree per
-    (row, cluster); gated bitwise against a host model over 1031 samples and
-    launch-invariant across eight launches.
+    Follows scikit-learn's and cuML's ``silhouette_score`` with Euclidean
+    distance. Values lie in ``[-1, 1]``; higher means better-separated
+    clusters.
 
-        X          honored   2-D float32 row-major, finite. float64 is
-                             refused by name (no float64 on this GPU).
-        labels     honored   any integer labels; they are mapped onto
-                             [0, n_labels - 1] by a host sort here, exactly
-                             as cuML's silhouette_score.pyx does. The kernel
-                             asserts 2 <= n_labels <= n_rows - 1 and refuses
-                             otherwise by name.
-        metric     honored   'euclidean' or 'l2' (the same DistanceType).
-                             Every other metric is REFUSED by name.
-        chunksize  honored   cuML's chunk, default 40000, validated >= 1.
-                             SCHEDULING ONLY: this implementation materializes no
-                             distance tile, so there is nothing for it to
-                             size, and chunk 1 / 7 / 40000 are gated to one
-                             byte pattern. It is accepted because cuML's
-                             surface has it, and it is documented as inert
-                             rather than pretending to be a knob.
-        sample_size,  refused  scikit-learn's subsampling. Sample X
-        random_state           yourself if you want it; doing it inside
-                               would put a random draw where no check sees
-                               it.
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Finite data, converted to float32 row-major. NaN or infinity raises
+        ``ValueError``.
+    labels : array-like of shape (n_samples,)
+        Integer cluster labels that fit in int32; they are mapped onto
+        ``0..k-1``. There must be at least 2 and at most ``n_samples - 1``
+        distinct labels.
+    metric : {'euclidean', 'l2'}, default 'euclidean'
+        Both mean Euclidean distance. Any other metric raises
+        ``NotImplementedError``.
+    sample_size, random_state : None, default None
+        scikit-learn's subsampling is not supported; any other value raises
+        ``NotImplementedError``. Subsample X yourself if you need it.
+    chunksize : int or None, default None
+        Accepted for compatibility with cuML (default 40000, must be at
+        least 1). It does not change the result or the work done.
+
+    Returns
+    -------
+    score : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> labels = rng.integers(0, 4, 1000).astype(np.int32)
+    >>> s = metrics.silhouette_score(X, labels)
     """
     if sample_size is not None or random_state is not None:
         raise NotImplementedError(
@@ -984,17 +1254,40 @@ def silhouette_score(
     return mean
 
 
+# Maintainer notes: the same kernel call as silhouette_score, which computes
+# both. Values that come out +0.0: a singleton cluster, an exact tie a == b,
+# a == b == 0 (all points identical), and a row whose distances were
+# non-finite (DEVIATION 656). No fixture has produced a -0.0.
 def silhouette_samples(X, labels, *, metric="euclidean", chunksize=None):
-    """The silhouette coefficient of every sample, float32 `(n_samples,)`.
+    """Silhouette coefficient of every sample.
 
-    The same kernel call as `silhouette_score`, which computes both: the
-    per-sample coefficients are what the mean is taken over. Parameters and
-    refusals are `silhouette_score`'s.
+    The per-sample values that ``silhouette_score`` averages; parameters,
+    input rules and errors are those of ``silhouette_score``. A sample in a
+    singleton cluster gets 0.0, as in scikit-learn.
 
-    Values that come out `+0.0` and are worth knowing about: a singleton
-    cluster, an exact tie `a == b`, `a == b == 0` (all points identical),
-    and a row whose distances were non-finite (DEVIATION 656). No fixture
-    in this lane has produced a `-0.0`.
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Finite data, converted to float32 row-major.
+    labels : array-like of shape (n_samples,)
+        Integer cluster labels that fit in int32.
+    metric : {'euclidean', 'l2'}, default 'euclidean'
+        Both mean Euclidean distance.
+    chunksize : int or None, default None
+        Accepted for compatibility with cuML; does not change the result.
+
+    Returns
+    -------
+    scores : Array of shape (n_samples,), float32
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> labels = rng.integers(0, 4, 1000).astype(np.int32)
+    >>> s = metrics.silhouette_samples(X, labels)
     """
     _mean, scores = _silhouette(
         X, labels, metric, chunksize, "silhouette_samples"
@@ -1007,42 +1300,63 @@ def silhouette_samples(X, labels, *, metric="euclidean", chunksize=None):
 # ===========================================================================
 
 
+# Maintainer notes: backed by `ML::Metrics::trustworthiness_score<float,
+# L2SqrtUnexpanded>` (DEVIATION 655). The rank of each embedded neighbor is
+# COUNTED with the stable sort's tie-break instead of sorting every row of the
+# n x n distance matrix, and the closed form runs in float64 on the host;
+# measured equal to scikit-learn 1.9's value on the lane's fixture.
+# n_neighbors refusals: < 1; 2 * n_neighbors >= n_samples (cuML's
+# trustworthiness.pyx:114 refuses the same, keeping the closed form's
+# denominator positive); n_neighbors + 1 > 256 (the k+1 distances and ranks
+# live in a threadgroup slab). metric: cuML's trustworthiness.pyx:86 refuses
+# other names too. batch_size sizes nothing (ranks are counted, not sorted).
+# Known soft spot: the embedded k-NN goes through this repository's one k-NN
+# entry, which uses the EXPANDED L2 distance, while RAFT's run_knn uses the
+# unexpanded one, so near-tied embedded neighbors can order differently in
+# the last bit (measured 0 rows differing against a float64 host k-NN on the
+# lane's fixture); a second neighbors/ arm for the unexpanded metric is the
+# neighbors lane's to add.
 def trustworthiness(
     X, X_embedded, *, n_neighbors=5, metric="euclidean", batch_size=512
 ):
-    """How well an embedding preserves the original space's neighborhoods.
+    """Trustworthiness: how well an embedding preserves local neighborhoods.
 
-    Backed by `ML::Metrics::trustworthiness_score<float,
-    L2SqrtUnexpanded>` (DEVIATION 655). The rank of each embedded neighbor
-    is COUNTED with the stable sort's tie-break instead of sorting every row
-    of the n x n distance matrix, and the closed form runs in float64 on the
-    host. Measured equal to scikit-learn 1.9's value on this lane's fixture.
+    Follows scikit-learn's and cuML's ``trustworthiness`` with Euclidean
+    distance. Values lie in ``[0, 1]``; 1 means every embedded neighbor is
+    also a near neighbor in the original space.
 
-        X            honored   2-D float32 row-major `(n, m)`, finite
-        X_embedded   honored   2-D float32 row-major `(n, d)`, finite
-        n_neighbors  honored   cuML's default 5. REFUSED by name when
-                               `n_neighbors < 1`, when `2 * n_neighbors >=
-                               n_samples` (cuML's trustworthiness.pyx:114
-                               refuses the same, and it is what keeps the
-                               closed form's denominator positive so no NaN
-                               reaches the answer), or when
-                               `n_neighbors + 1 > 256` (the k+1 distances
-                               and ranks live in a threadgroup slab).
-        metric       honored   'euclidean' only, as cuML's own surface;
-                               every other name is REFUSED by name.
-        batch_size   honored   validated >= 1, and it SIZES NOTHING:
-                               DEVIATION 655 counts ranks instead of
-                               sorting, so there is no batch. Accepted
-                               because cuML's surface has it, documented as
-                               inert rather than pretending to be a knob.
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Finite original data, converted to float32 row-major.
+    X_embedded : array-like of shape (n_samples, n_components)
+        Finite embedding with the same number of rows, converted to float32.
+    n_neighbors : int, default 5
+        Neighbors considered, as in cuML. Must be at least 1, less than
+        ``n_samples / 2``, and at most 255; otherwise an error names it.
+    metric : {'euclidean'}, default 'euclidean'
+        Any other metric raises ``NotImplementedError``, as in cuML.
+    batch_size : int, default 512
+        Accepted for compatibility with cuML (must be at least 1). It does
+        not change the result or the work done.
 
-    ONE KNOWN SOFT SPOT, from the lane's own hand-off. The embedded k-NN
-    goes through this repository's one k-NN entry, which uses the EXPANDED
-    L2 distance, while RAFT's `run_knn` here uses the unexpanded one; near-
-    tied embedded neighbors can therefore order differently in the last
-    bit. Measured 0 rows differing against a float64 host k-NN on the
-    lane's fixture, and a second `neighbors/` arm for the unexpanded metric
-    is that lane's to add.
+    Returns
+    -------
+    score : float
+
+    Raises
+    ------
+    ValueError
+        If X and X_embedded have different numbers of rows, contain NaN or
+        infinity, or ``batch_size < 1``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> t = metrics.trustworthiness(X, X[:, :2], n_neighbors=5)
     """
     if not isinstance(metric, str) or metric.lower() != "euclidean":
         raise NotImplementedError(
@@ -1219,20 +1533,61 @@ def _classification_pair(y_true, y_pred, sample_weight):
 
 
 
+# Maintainer notes: the probability check (finite, in [0, 1], rows summing to
+# one), the binary [1 - p, p] layout, the clipped -log p_true per row, its
+# Float32 PairSum and the mean (divided by n in binary64) run in ONE x_metrics
+# device program (x_metrics/tail.mojo proba_rows, ranking.mojo row_metric,
+# rank_epi.mojo MEAN). sample_weight goes to log_loss_options.
 def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
              numeric_mode=None):
-    """GPU log loss for strict Float32 probabilities and single-label targets.
+    """Log loss (cross-entropy) of predicted probabilities.
 
-    A vector or one-column matrix contains binary positive-class probabilities;
-    columns expand to [1-p, p]. Otherwise columns follow explicit unique labels
-    in caller order, or sorted observed target labels when labels is omitted.
-    At least two labels are required; explicit labels permit one observed class.
-    Probabilities must lie in [0,1], with row sums within sqrt(Float32 epsilon)
-    of one. Validation does not renormalize. The GPU clips selected probabilities
-    to [Float32 epsilon, 1-epsilon] and returns the Float32 PairSum of the rows
-    divided by n in binary64 (normalize=True) or the sum; the check, the layout
-    and the folds run in one x_metrics device program. Empty inputs are not
-    supported; sample weights take log_loss_options.
+    Follows scikit-learn's ``log_loss`` for single-label targets. A 1-D (or
+    one-column) ``y_pred`` holds the probability of the positive class and
+    is expanded to ``[1 - p, p]``. Otherwise each column is a class: in the
+    order of ``labels`` when given, else the sorted labels seen in
+    ``y_true``. Probabilities are checked, not renormalized: each must lie
+    in ``[0, 1]`` and each row must sum to one within ``sqrt(float32 eps)``.
+    The selected probabilities are clipped to ``[eps, 1 - eps]`` (float32
+    epsilon) before the logarithm.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        String or integer class labels, nonempty.
+    y_pred : array-like of shape (n_samples,), (n_samples, 1) or (n_samples, n_classes)
+        float32 probabilities. Other dtypes raise ``TypeError``; Python lists
+        are converted to float32.
+    normalize : bool, default True
+        True returns the mean loss per sample, False the sum.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights, as in scikit-learn.
+    labels : array-like, default None
+        The class labels, unique, in column order. Needed when ``y_true``
+        holds a single class. At least two labels are required.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
+
+    Returns
+    -------
+    loss : float
+
+    Raises
+    ------
+    ValueError
+        For fewer than two labels, a label in ``y_true`` missing from
+        ``labels``, a column count that does not match the labels, or
+        probabilities that are not finite, outside ``[0, 1]`` or do not sum
+        to one.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> y = np.array([0, 1, 1, 0], dtype=np.int32)
+    >>> p = np.array([0.1, 0.9, 0.8, 0.35], dtype=np.float32)
+    >>> loss = metrics.log_loss(y, p)
     """
     if sample_weight is not None:
         # lane/metrics: the weighted mean of the clipped -log p_true rows.
@@ -1308,16 +1663,54 @@ def _binary_ranking_inputs(y_true, y_score, sample_weight):
     return true, kind, classes, as_f32_c(scores, ndim=scores.ndim, name="scores")[0]
 
 
+# Maintainer notes: the binary unweighted full-AUC call keeps its own kernel
+# and returns the device Float32 scalar. sample_weight, partial AUC (max_fpr),
+# multiclass one-vs-rest / one-vs-one, labels and averages go to the x_metrics
+# device curve (roc_auc_options).
 def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
                   max_fpr=None, multi_class="raise", labels=None, numeric_mode=None):
-    """GPU binary ROC AUC from finite one-dimensional Float32 scores.
+    """Area under the ROC curve.
 
-    Both observed classes are required. Targets are strings or integers and
-    the larger sorted class is positive. Scores may be probabilities or
-    arbitrary finite decision scores. Ties are grouped before integration.
-    The result is a Python float representing the GPU Float32 scalar.
-    Only full binary AUC is implemented: weights, explicit labels, nondefault
-    averaging/multiclass options and partial AUC are refused.
+    Follows scikit-learn's ``roc_auc_score``. In the binary case, ``y_true``
+    has two classes, the larger sorted label is the positive class, and
+    ``y_score`` holds one finite score per sample (probabilities or any
+    decision scores); tied scores are grouped. Multiclass input (a 2-D
+    ``y_score`` of class probabilities) needs ``multi_class='ovr'`` or
+    ``'ovo'``, as in scikit-learn.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        String or integer labels. Both classes must be present in the binary
+        case.
+    y_score : array-like of shape (n_samples,) or (n_samples, n_classes)
+        Finite float32 scores. Other dtypes raise ``TypeError``.
+    average : {'macro', 'weighted', 'micro', 'samples'} or None, default 'macro'
+        Averaging for multiclass input, as in scikit-learn.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights.
+    max_fpr : float or None, default None
+        In (0, 1]: return the standardized partial AUC up to this false
+        positive rate (binary only), as in scikit-learn.
+    multi_class : {'raise', 'ovr', 'ovo'}, default 'raise'
+        Multiclass strategy.
+    labels : array-like, default None
+        Class labels for multiclass input, as in scikit-learn.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
+
+    Returns
+    -------
+    auc : float
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> y = np.array([0, 0, 1, 1], dtype=np.int32)
+    >>> s = np.array([0.1, 0.4, 0.35, 0.8], dtype=np.float32)
+    >>> auc = metrics.roc_auc_score(y, s)
     """
     if (average != "macro" or multi_class != "raise" or labels is not None or sample_weight is not None
             or not (max_fpr is None or (not is_bool(max_fpr) and isinstance(max_fpr, numbers.Real)
@@ -1339,18 +1732,57 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     return float(result[0])
 
 
+# Maintainer notes: the default call keeps its own kernel and Float32 outputs
+# (no CPU sorting or reduction). sample_weight and drop_intermediate=True go to
+# precision_recall_curve_options: Float64 curves from the x_metrics device sort
+# and counts.
 def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=None,
                            drop_intermediate=False, numeric_mode=None):
-    """GPU binary PR curve with ascending distinct Float32 score thresholds.
+    """Precision-recall pairs for each score threshold (binary).
 
-    Precision/recall have one more element than thresholds and end at (1,0).
-    Targets are strings or integers. Without pos_label, only observed subsets
-    [0], [1], [-1], [0,1], or [-1,1] are accepted and 1 is positive.
-    Other binary labels require an explicit same-type pos_label. A missing
-    positive class is allowed: threshold recalls are one, with terminal zero,
-    and a warning is emitted. Weights and drop_intermediate=True are refused.
-    All three output arrays are Float32. Scores must be finite, not necessarily
-    probabilities; no CPU sorting or metric reduction is used.
+    Follows scikit-learn's ``precision_recall_curve``. Thresholds are the
+    distinct scores in ascending order; ``precision`` and ``recall`` have
+    one more element than ``thresholds`` and end at ``(1, 0)``.
+
+    Without ``pos_label``, ``y_true`` must be integers whose observed values
+    are a subset of ``{0, 1}`` or ``{-1, 1}``, and 1 is the positive class;
+    other labels need an explicit ``pos_label`` of the same type. If the
+    positive class is absent, recall is set to one for every threshold and
+    a ``UserWarning`` is issued.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        String or integer labels with at most two classes.
+    y_score : array-like of shape (n_samples,)
+        Finite float32 scores (not necessarily probabilities). Other dtypes
+        raise ``TypeError``.
+    pos_label : int, str or None, default None
+        The positive class.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights.
+    drop_intermediate : bool, default False
+        Drop thresholds that do not change the curve's shape, as in
+        scikit-learn.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
+
+    Returns
+    -------
+    precision : Array of shape (n_thresholds + 1,)
+    recall : Array of shape (n_thresholds + 1,)
+    thresholds : Array of shape (n_thresholds,)
+        float32 by default; float64 when ``sample_weight`` is given or
+        ``drop_intermediate=True``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> y = np.array([0, 0, 1, 1], dtype=np.int32)
+    >>> s = np.array([0.1, 0.4, 0.35, 0.8], dtype=np.float32)
+    >>> precision, recall, thresholds = metrics.precision_recall_curve(y, s)
     """
     if not is_bool(drop_intermediate):
         raise ValueError("drop_intermediate must be a bool")
@@ -1404,17 +1836,49 @@ def _encode_classification(true, pred, labels):
             _label_map(pred, lambda v: mapping.get(v, -1)))
 
 
+# Maintainer notes: unweighted counts come from the metrics binding (at most
+# INT32_MAX input rows). sample_weight goes to confusion_matrix_weighted:
+# Float64 cells, each the Float32 PairSum of its rows' weights, normalized in
+# binary64.
 def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
                      normalize=None, numeric_mode=None):
-    """GPU confusion counts for unweighted strings/integer single labels.
+    """Confusion matrix of single-label predictions.
 
-    Rows are true labels; columns are predictions. The default order is the
-    sorted observed union. Explicit unique labels preserve caller order and
-    exclude rows whose true or predicted label is outside that set.
-    Counts are Int64 (at most INT32_MAX input rows); normalized results are
-    Float32. Normalization accepts None, 'true', 'pred', or 'all'; zero-mass
-    rows/columns return zeros. At most 4096 output labels are supported.
-    Empty inputs and float labels are refused.
+    Follows scikit-learn's ``confusion_matrix``: row ``i`` is the true label
+    and column ``j`` the predicted label. By default the labels are the
+    sorted union of those seen in ``y_true`` and ``y_pred``. With ``labels``,
+    their order is kept and rows whose true or predicted label is not in
+    ``labels`` are left out.
+
+    Parameters
+    ----------
+    y_true, y_pred : array-like of shape (n_samples,)
+        String or integer labels of the same type and length, nonempty.
+        Float labels raise ``TypeError``.
+    labels : array-like, default None
+        Unique labels to index the matrix. At least one must occur in
+        ``y_true``. Without ``sample_weight``, at most 4096 labels.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights; the cells are then float64 sums of weights.
+    normalize : {'true', 'pred', 'all'} or None, default None
+        Normalize over rows, columns or the whole matrix. Rows or columns
+        with no mass give zeros.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
+
+    Returns
+    -------
+    C : Array of shape (n_labels, n_labels)
+        int64 counts; float32 when normalized; float64 with
+        ``sample_weight``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> C = metrics.confusion_matrix(np.array([0, 1, 2, 2], dtype=np.int32),
+    ...                              np.array([0, 2, 2, 1], dtype=np.int32))
     """
     if normalize is not None and (not isinstance(normalize, str) or
                                   normalize not in ("true", "pred", "all")):
@@ -1498,12 +1962,42 @@ def _precision_recall_fscore(y_true, y_pred, *, labels, pos_label, average,
 
 def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
                     sample_weight=None, zero_division="warn", numeric_mode=None):
-    """GPU precision; unweighted strings/integers, Float32 ratios/averages.
+    """Precision: ``tp / (tp + fp)``.
 
-    Supported average values are binary, micro, macro, weighted and None.
-    Explicit labels preserve order and retain errors against excluded labels;
-    binary averaging uses pos_label and ignores labels. zero_division accepts
-    'warn' (zero with a warning), 0 or 1. Empty/multilabel inputs are refused.
+    Follows scikit-learn's ``precision_score`` for single-label targets.
+
+    Parameters
+    ----------
+    y_true, y_pred : array-like of shape (n_samples,)
+        String or integer labels of the same type and length, nonempty.
+        Float and multilabel input are refused.
+    labels : array-like, default None
+        Labels to report, in order. Labels left out still count as errors
+        for the reported ones. Ignored for ``average='binary'``.
+    pos_label : int or str, default 1
+        The positive class for ``average='binary'``.
+    average : {'binary', 'micro', 'macro', 'weighted'} or None, default 'binary'
+        How to combine per-label scores; None returns one score per label.
+        ``'binary'`` needs at most two observed classes.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights.
+    zero_division : {'warn', 0, 1}, default 'warn'
+        The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
+
+    Returns
+    -------
+    score : float or Array of shape (n_labels,)
+        A float, or a float32 Array per label when ``average=None``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> p = metrics.precision_score(np.array([0, 1, 1, 0], dtype=np.int32),
+    ...                             np.array([0, 1, 0, 1], dtype=np.int32))
     """
     return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
         average=average, sample_weight=sample_weight, zero_division=zero_division,
@@ -1512,7 +2006,44 @@ def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary
 
 def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
                  sample_weight=None, zero_division="warn", numeric_mode=None):
-    """GPU recall with the label/average/zero-division contract of precision_score."""
+    """Recall: ``tp / (tp + fn)``.
+
+    Follows scikit-learn's ``recall_score`` for single-label targets.
+    Labels, averaging and ``zero_division`` work as in ``precision_score``.
+
+    Parameters
+    ----------
+    y_true, y_pred : array-like of shape (n_samples,)
+        String or integer labels of the same type and length, nonempty.
+        Float and multilabel input are refused.
+    labels : array-like, default None
+        Labels to report, in order. Labels left out still count as errors
+        for the reported ones. Ignored for ``average='binary'``.
+    pos_label : int or str, default 1
+        The positive class for ``average='binary'``.
+    average : {'binary', 'micro', 'macro', 'weighted'} or None, default 'binary'
+        How to combine per-label scores; None returns one score per label.
+        ``'binary'`` needs at most two observed classes.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights.
+    zero_division : {'warn', 0, 1}, default 'warn'
+        The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
+
+    Returns
+    -------
+    score : float or Array of shape (n_labels,)
+        A float, or a float32 Array per label when ``average=None``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> r = metrics.recall_score(np.array([0, 1, 1, 0], dtype=np.int32),
+    ...                          np.array([0, 1, 0, 1], dtype=np.int32))
+    """
     return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
         average=average, sample_weight=sample_weight, zero_division=zero_division,
         numeric_mode=numeric_mode, metric=1)
@@ -1520,7 +2051,44 @@ def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
 
 def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
              sample_weight=None, zero_division="warn", numeric_mode=None):
-    """GPU F1 with the label/average/zero-division contract of precision_score."""
+    """F1 score: the harmonic mean of precision and recall.
+
+    Follows scikit-learn's ``f1_score`` for single-label targets. Labels,
+    averaging and ``zero_division`` work as in ``precision_score``.
+
+    Parameters
+    ----------
+    y_true, y_pred : array-like of shape (n_samples,)
+        String or integer labels of the same type and length, nonempty.
+        Float and multilabel input are refused.
+    labels : array-like, default None
+        Labels to report, in order. Labels left out still count as errors
+        for the reported ones. Ignored for ``average='binary'``.
+    pos_label : int or str, default 1
+        The positive class for ``average='binary'``.
+    average : {'binary', 'micro', 'macro', 'weighted'} or None, default 'binary'
+        How to combine per-label scores; None returns one score per label.
+        ``'binary'`` needs at most two observed classes.
+    sample_weight : array-like of shape (n_samples,), default None
+        Per-sample weights.
+    zero_division : {'warn', 0, 1}, default 'warn'
+        The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this call (``'fast'`` is Apple only). None uses the
+        library default.
+
+    Returns
+    -------
+    score : float or Array of shape (n_labels,)
+        A float, or a float32 Array per label when ``average=None``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import metrics
+    >>> f1 = metrics.f1_score(np.array([0, 1, 1, 0], dtype=np.int32),
+    ...                       np.array([0, 1, 0, 1], dtype=np.int32), average='macro')
+    """
     return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
         average=average, sample_weight=sample_weight, zero_division=zero_division,
         numeric_mode=numeric_mode, metric=2)

@@ -169,24 +169,98 @@ class _BinaryLaplace:
         self.nb_ = nb
 
 
+# Maintainer notes: reference is scikit-learn 1.9.0 `_gpc.py` (binary
+# Laplace `_gpc.py:36-513`, R&W Algorithms 3.1/3.2, logistic likelihood;
+# OneVsRest wrapper `_gpc.py:516` on). Stop rule DEVIATION 2830, pinned
+# float32 orders 2831, float64 probability and erf 2832, one-vs-rest
+# composition 2833 (see the module docstring). optimizer refused per
+# DEVIATION 1761: an optimizer's iteration count is data dependent and its
+# line search, gradient fold and tolerance are not pinned for this estimator.
 class GaussianProcessClassifier(NumericModeMixin):
-    """Gaussian process classification by the Laplace approximation,
-    scikit-learn's surface. See this module's docstring for the parameter
-    table, the one-vs-rest composition and the CPU inference boundary.
+    """Gaussian process classification by the Laplace approximation.
+
+    Follows scikit-learn's ``GaussianProcessClassifier``: a latent Gaussian
+    process with a logistic likelihood, fitted by Newton iteration (Rasmussen
+    and Williams, Algorithms 3.1 and 3.2). Two classes give one binary model;
+    more classes give one binary model per class against the rest, with
+    probabilities normalized per row as in scikit-learn's one-vs-rest
+    wrapper. X is dense float32 in C order (other inputs are converted).
+
+    Differences from scikit-learn that change results:
+
+    - There is no hyperparameter optimizer. ``optimizer`` must be None (the
+      default here; scikit-learn's is ``"fmin_l_bfgs_b"``), so ``kernel_``
+      is the kernel you pass.
+    - Every fit starts from zero latent values; ``warm_start=True`` is
+      refused.
+
+    Parameters
+    ----------
+    kernel : Kernel or None, default None
+        A combination of `RBF`, `Matern`, `ConstantKernel` and `WhiteKernel`
+        with ``+`` and ``*``. None means ``ConstantKernel(1.0) * RBF(1.0)``.
+        Other kernel types raise ``TypeError``.
+    optimizer : None, default None
+        Only None (or ``"none"``) is accepted; anything else raises
+        ``NotImplementedError``.
+    n_restarts_optimizer : int, default 0
+        Only 0 is accepted (``NotImplementedError`` otherwise).
+    max_iter_predict : int, default 100
+        Maximum number of Newton iterations per binary fit; the iteration
+        can stop earlier on convergence. Must be an int (``TypeError``) of at
+        least 1 (``ValueError``).
+    warm_start : bool, default False
+        Only False is accepted (``NotImplementedError`` otherwise).
+    copy_X_train : bool, default True
+        Only True is accepted: X is always copied to float32 memory.
+    random_state : None, default None
+        Only None is accepted; without an optimizer nothing is random.
+    multi_class : "one_vs_rest", default "one_vs_rest"
+        ``"one_vs_one"`` raises ``NotImplementedError``; any other value
+        raises ``ValueError``.
+    n_jobs : None, default None
+        Only None is accepted; the binary fits run on one device.
+    numeric_mode : str or None, default None
+        The numeric mode for this estimator; None uses the process default.
+        See the numeric modes guide.
 
     Attributes
     ----------
     classes_ : list
+        The class labels, in sorted order.
     n_classes_ : int
-    X_train_ : Array (n_train, n_features) float32
-    estimators_ : list of the binary fits (one for two classes, K past two),
-        each with `y_train_`, `L_`, `pi_`, `W_sr_`,
-        `log_marginal_likelihood_value_` and `n_iter_`
-    L_, pi_, W_sr_, y_train_ : Array, two classes only (the one binary fit)
+        Number of classes.
+    X_train_ : Array of shape (n_train, n_features), float32
+        The training inputs.
+    estimators_ : list
+        The binary fits: one for two classes, one per class past two. Each
+        has ``y_train_``, ``L_``, ``pi_``, ``W_sr_``,
+        ``log_marginal_likelihood_value_`` and ``n_iter_``.
+    y_train_, L_, pi_, W_sr_ : Array
+        Two classes only: the 0/1 targets, the lower Cholesky factor of
+        ``I + W_sr K W_sr``, the training probabilities and the square root
+        of the likelihood Hessian of the single binary fit.
     log_marginal_likelihood_value_ : float
-    n_iter_ : int for two classes, a list of K ints past two (DEVIATION 2830)
-    kernel_ : Kernel, the kernel passed in (no optimizer)
+        The binary fit's log marginal likelihood, or the mean over the
+        binary fits past two classes.
+    n_iter_ : int or list of int
+        Newton iterations run: an int for two classes, one int per class
+        past two.
+    kernel_ : Kernel
+        The kernel passed in.
     n_features_in_ : int
+        Number of features seen during fit.
+    input_copied_ : bool
+        Whether fit had to copy X to reach float32 C order.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((200, 4), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1.0).astype(np.int32)
+    >>> model = mojolearn.GaussianProcessClassifier(mojolearn.RBF(0.5)).fit(X, y)
+    >>> proba = model.predict_proba(X[:5])
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -305,9 +379,25 @@ class GaussianProcessClassifier(NumericModeMixin):
 
     # -- fit ------------------------------------------------------------------
 
+    # Reference: sklearn `_gpc.py:164-226`.
     def fit(self, X, y):
-        """`_gpc.py:164-226`: encode the classes, then one binary Laplace fit
-        (two classes) or one per class against the rest. Returns `self`."""
+        """Fit the classifier.
+
+        Encodes the classes, then runs one binary Laplace fit for two classes
+        or one per class against the rest.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training inputs, converted to float32.
+        y : array-like of shape (n_samples,)
+            Class labels; at least two distinct classes (``ValueError``
+            otherwise).
+
+        Returns
+        -------
+        self : GaussianProcessClassifier
+        """
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         classes, codes = encode_labels(y)
@@ -494,9 +584,23 @@ class GaussianProcessClassifier(NumericModeMixin):
             return mean, var, proba, out
         return mean, var, proba
 
+    # Reference: sklearn `_gpc.py:410-441`, binary only as `_gpc.py:873-878`.
     def latent_mean_and_variance(self, X):
-        """`_gpc.py:410-441` (binary models only, as in the reference,
-        `_gpc.py:873-878`): the float32 latent mean and variance."""
+        """Mean and variance of the latent function at ``X``.
+
+        Binary models only, as in scikit-learn; a model with more than two
+        classes raises ``ValueError``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_query, n_features)
+            Query points, converted to float32.
+
+        Returns
+        -------
+        mean : Array of shape (n_query,), float32
+        var : Array of shape (n_query,), float32
+        """
         q = self._query(X)
         if self.n_classes_ > 2:
             raise ValueError(
@@ -507,9 +611,24 @@ class GaussianProcessClassifier(NumericModeMixin):
         mean, var, _ = self._latent(self._extension(), self.estimators_[0], q, True)
         return mean, var
 
+    # Reference: sklearn `_gpc.py:292-329` and `multiclass.py:523-562`
+    # (DEVIATIONS 2832 and 2833).
     def predict_proba(self, X):
-        """`_gpc.py:292-329` and `multiclass.py:523-562`, float64
-        (DEVIATIONS 2832 and 2833)."""
+        """Class probabilities for ``X``.
+
+        Past two classes, each row of the per-class probabilities is divided
+        by its sum, as in scikit-learn's one-vs-rest wrapper.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_query, n_features)
+            Query points, converted to float32.
+
+        Returns
+        -------
+        Array of shape (n_query, n_classes), float64
+            Columns follow ``classes_``.
+        """
         q = self._query(X)
         ext = self._extension()
         if _gpc_all(ext):
@@ -559,10 +678,25 @@ class GaussianProcessClassifier(NumericModeMixin):
         )
         return out
 
+    # Reference: sklearn `_gpc.py:287-290`; multiclass argmax per DEVIATION 2833.
     def predict(self, X):
-        """Two classes: `classes_[1]` where the latent mean is positive
-        (`_gpc.py:287-290`). Past two: the one-vs-rest argmax of the
-        unnormalized class probabilities (DEVIATION 2833)."""
+        """Predict class labels for ``X``.
+
+        With two classes, ``classes_[1]`` where the latent mean is positive
+        and ``classes_[0]`` elsewhere. Past two, the class with the largest
+        one-vs-rest probability; a tie goes to the first such class.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_query, n_features)
+            Query points, converted to float32.
+
+        Returns
+        -------
+        labels : Array or list of shape (n_query,)
+            Labels drawn from ``classes_``: an int64 or float64 Array for
+            numeric classes, a list for string or bool classes.
+        """
         q = self._query(X)
         ext = self._extension()
         if _gpc_all(ext):
@@ -576,8 +710,26 @@ class GaussianProcessClassifier(NumericModeMixin):
             codes = codes32.astype("<i8")
         return decode_labels(self.classes_, codes)
 
+    # Reference: sklearn `_gpc.py:279-353`, the `theta is None` arm only.
     def log_marginal_likelihood(self, theta=None, eval_gradient=False, clone_kernel=True):
-        """`_gpc.py:279-353`, the `theta is None` arm only."""
+        """Log marginal likelihood of the fitted model.
+
+        Only ``theta=None`` is supported: it returns
+        ``log_marginal_likelihood_value_``. A theta raises
+        ``NotImplementedError`` and ``eval_gradient=True`` raises
+        ``ValueError``.
+
+        Parameters
+        ----------
+        theta : None, default None
+        eval_gradient : bool, default False
+        clone_kernel : bool, default True
+            Accepted for scikit-learn compatibility; ignored.
+
+        Returns
+        -------
+        float
+        """
         if theta is not None:
             raise NotImplementedError(
                 f"{_NAME}: log_marginal_likelihood(theta) at other "
@@ -590,8 +742,21 @@ class GaussianProcessClassifier(NumericModeMixin):
             raise ValueError(f"{_NAME}: call fit() first")
         return self.log_marginal_likelihood_value_
 
+    # A host summary outside the identity claim.
     def score(self, X, y):
-        """Mean accuracy, a host summary outside the identity claim."""
+        """Mean accuracy of `predict` on ``X`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test inputs.
+        y : array-like of shape (n_samples,)
+            True labels.
+
+        Returns
+        -------
+        float
+        """
         from ._expansion_metrics import accuracy_fraction
         from ._metrics_impl import _shape_of
         pred = self.predict(X)
@@ -604,10 +769,18 @@ class GaussianProcessClassifier(NumericModeMixin):
     # -- save and load ----------------------------------------------------------
 
     def save(self, path):
-        """Write the fitted model as an npz: the kernel's postfix arrays, the
-        float32 training matrix, the classes, and per binary fit its 0/1
-        targets, `L_`, `pi_`, `W_sr_`, likelihood, iteration count and panel
-        width. What prediction reads, byte for byte."""
+        """Save the fitted model to ``path`` as an ``.npz`` file.
+
+        The file holds everything prediction reads, byte for byte: the
+        kernel, the float32 training inputs, the classes, the numeric mode
+        and each binary fit's state. Raises ``RuntimeError`` if the model is
+        not fitted.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+        """
         if not hasattr(self, "estimators_"):
             raise RuntimeError(f"{_NAME}: call fit before save")
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
@@ -642,8 +815,23 @@ class GaussianProcessClassifier(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model written by `save`. The result predicts; every array
-        is read at its saved dtype and never cast."""
+        """Load a model written by `save`.
+
+        The loaded model supports `predict`, `predict_proba` and
+        `latent_mean_and_variance`, including on a CPU-only install. Every
+        array is read at its saved dtype and never cast; a file saved by a
+        different estimator or with inconsistent contents raises
+        ``ValueError``.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+
+        Returns
+        -------
+        GaussianProcessClassifier
+        """
         arrays = _serialize.read_npz(path, _GPC_FORMAT)
         saved_as = _serialize.scalar_str(arrays, "estimator")
         if saved_as != _ESTIMATOR:

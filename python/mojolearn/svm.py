@@ -1,24 +1,29 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`mojolearn.svm`: the kernel machines `SVC` and `SVR` (`_svm_impl.py`, the
-SMO solver) and the linear machines `LinearSVC` and `LinearSVR`, which are
-the quasi-Newton solver of `LogisticRegression` on the four hinge-family
-losses.
+# Maintainer notes (moved from the module docstring, 2026-10-12):
+# Reference for the linear pair: cuML's LinearSVC and LinearSVR
+# (cuml/svm/linear_svc.py, linear_svr.py, linear.pyx, and cpp/src/svm/linear.cu,
+# which fills qn_params and calls qnFit); the losses are
+# cpp/src/glm/qn/glm_svm.cuh, here glm/impl/qn/glm_svm.mojo (DEVIATIONS 708 and
+# 714). DEVIATION 714 stands on this surface: the squared hinge's gradient is
+# the derivative of its value, 2 (z - s), so LinearSVC(loss='squared_hinge')
+# minimizes the objective it documents. The objective's penalty_normalized =
+# true is linear.cu:151-176; tol -> grad_tol = tol, change_tol = 0.1 * tol is
+# linear.pyx:150-151.
+"""Support vector machines.
 
-Reference for the linear pair: cuML's `LinearSVC` and `LinearSVR`
-(`cuml/svm/linear_svc.py`, `linear_svr.py`, `linear.pyx`, and
-`cpp/src/svm/linear.cu`, which fills `qn_params` and calls `qnFit`); the
-losses are `cpp/src/glm/qn/glm_svm.cuh`, here `glm/impl/qn/glm_svm.mojo`
-(DEVIATIONS 708 and 714). DEVIATION 714 stands on this surface: the
-squared hinge's gradient is the derivative of its value, `2 (z - s)`, so
-`LinearSVC(loss='squared_hinge')` minimizes the objective it documents.
+``SVC`` and ``SVR`` are kernel machines trained by SMO. ``LinearSVC`` and
+``LinearSVR`` are linear machines trained by the quasi-Newton solver of
+``LogisticRegression`` (L-BFGS, or OWL-QN for an l1 penalty) on the hinge
+family of losses. The linear machines minimize::
 
-THE OBJECTIVE is `mean_i lz(y_i, x_i w + b) + (1 / (C n)) pen(w)`, `pen`
-the l1 norm or half the squared l2 norm (`linear.cu:151-176`,
-`penalty_normalized = true`): scikit-learn's `LinearSVC` / `LinearSVR`
-objective divided by `C n`. `penalty='l1'` selects OWL-QN, as on
-`LogisticRegression`. `tol` maps to `grad_tol = tol`, `change_tol = 0.1 *
-tol` (`linear.pyx:150-151`).
+    mean_i loss(y_i, x_i @ w + b) + penalty(w) / (C * n_samples)
+
+where ``penalty`` is the l1 norm or half the squared l2 norm: scikit-learn's
+``LinearSVC`` / ``LinearSVR`` objective divided by ``C * n_samples``. The
+intercept is never penalized. ``tol`` is the gradient tolerance; the
+objective-change tolerance is ``0.1 * tol``. This follows cuML's
+``LinearSVC`` and ``LinearSVR``.
 """
 
 from ._array import Array
@@ -83,25 +88,73 @@ class _LinearSVMBase(NumericModeMixin):
 class LinearSVC(_LinearSVMBase):
     """Linear support vector classification.
 
-        loss            'squared_hinge' (default) or 'hinge'
-        penalty         'l2' (default) or 'l1' (OWL-QN)
-        C               honored, > 0
-        fit_intercept, tol, max_iter, linesearch_max_iter, lbfgs_memory
-                        honored
-        multi_class     'ovr' only, the only value the reference accepts:
-                        more than two classes fit one machine per class
-                        against the rest, in class order
-        penalized_intercept   refused by name
-        class_weight    refused   it becomes a sample_weight in the
-                                  reference, and sample_weight is not
-                                  implemented
-        sample_weight   refused
+    Minimizes the hinge or squared hinge loss plus an l2 or l1 penalty
+    (see the ``mojolearn.svm`` module description for the objective).
+    Two classes fit one machine; more classes fit one machine per class
+    against the rest, in class order. The intercept is never penalized.
 
-    OUTPUTS: `classes_` (sorted, a Python list), `coef_` (1, n_features)
-    float32 and `intercept_` (1,) for two classes, (C, n_features) and (C,)
-    for C > 2, `n_iter_` (the largest count over the machines),
-    `decision_function` (n,) or (n, C) float32. `predict` is `score > 0`
-    for two classes and the row argmax, first maximum winning, for more.
+    ``X`` is read as float32. ``y`` is a 1-D array of labels;
+    ``classes_`` is the sorted unique labels. Invalid parameter values
+    raise ``ValueError``.
+
+    Parameters
+    ----------
+    penalty : {'l2', 'l1'}, default 'l2'
+        The regularization term; ``'l1'`` uses OWL-QN and gives exact
+        zeros.
+    loss : {'squared_hinge', 'hinge'}, default 'squared_hinge'
+        The data-fit loss.
+    C : float, default 1.0
+        Inverse regularization strength, > 0.
+    fit_intercept : bool, default True
+        Whether to fit an (unpenalized) intercept.
+    penalized_intercept : bool, default False
+        Only False is supported; True raises ``NotImplementedError``.
+    class_weight : None
+        Must be None; anything else raises ``NotImplementedError``.
+    tol : float, default 1e-4
+        Gradient tolerance, > 0.
+    max_iter : int, default 1000
+        Maximum number of solver iterations per machine.
+    linesearch_max_iter : int, default 100
+        Maximum number of line-search steps per iteration.
+    lbfgs_memory : int, default 5
+        Number of past updates kept by L-BFGS.
+    multi_class : {'ovr'}, default 'ovr'
+        One-vs-rest, the only supported value.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        The numeric mode for this estimator; None uses the process default
+        (see ``mojolearn.set_numeric_mode``). ``'fast'`` is for Apple GPUs.
+
+    Attributes
+    ----------
+    classes_ : list
+        The sorted class labels.
+    coef_ : array of shape (1, n_features) or (n_classes, n_features), float32
+        Coefficients: one row for two classes, one row per class for more.
+    intercept_ : array of shape (1,) or (n_classes,), float32
+        Intercepts; zeros when ``fit_intercept`` is False.
+    n_iter_ : array of shape (1,), int64
+        The largest iteration count over the machines.
+    objective_ : float or list of float
+        The final objective value (one per machine when there are more
+        than two classes).
+    retcode_ : int or list of int
+        The solver's return code, as on ``LogisticRegression`` (one per
+        machine when there are more than two classes).
+    n_features_in_ : int
+        The number of features seen in ``fit``.
+    input_copied_ : bool
+        Whether ``fit`` had to copy ``X`` to float32 C order.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1.0).astype(np.int64)
+    >>> clf = mojolearn.LinearSVC(C=10.0).fit(X, y)
+    >>> labels = clf.predict(X)
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -128,6 +181,23 @@ class LinearSVC(_LinearSVMBase):
         self.multi_class = multi_class
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the classifier.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Class labels, at least two distinct values. A 2-D ``y``, a
+            single class or a length mismatch raises ``ValueError``.
+        sample_weight : None
+            Must be None; weights raise ``NotImplementedError``.
+
+        Returns
+        -------
+        self : LinearSVC
+            The fitted estimator.
+        """
         self._refuse_sample_weight(sample_weight)
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape
@@ -197,12 +267,49 @@ class LinearSVC(_LinearSVMBase):
         return self
 
     def decision_function(self, X):
+        """Return the linear scores ``X @ coef_.T + intercept_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        scores : array of shape (n_samples,) or (n_samples, n_classes), float32
+            For two classes, one score per row (positive means
+            ``classes_[1]``); for more, one score per class.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, or ``X`` has a different number of
+            features than the training data.
+        """
         if not hasattr(self, "_w"):
             raise ValueError("mojolearn LinearSVC: call fit first")
         n_classes = len(self.classes_)
         return _qn_scores(self, X, self._w, 1 if n_classes == 2 else n_classes)
 
     def predict(self, X):
+        """Predict class labels.
+
+        For two classes a row is ``classes_[1]`` when its decision score is
+        positive and ``classes_[0]`` otherwise. For more classes it is the
+        class with the highest score; a tie goes to the class that comes
+        first in ``classes_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        labels : array of shape (n_samples,) or list
+            An int64 array for integer labels, a float64 array for float
+            labels, and a Python list for any other label type.
+        """
         b = self._bind("_mojolearn_estimators") if hasattr(self, "classes_") else None
         if (b is not None and len(self.classes_) == 2
                 and _py2mojo_flags(b) & _PY2MOJO_ROWS):
@@ -242,27 +349,88 @@ class LinearSVC(_LinearSVMBase):
         return decode_labels(self.classes_, argmax_rows(scores))
 
     def score(self, X, y):
-        """Accuracy, a host count over O(rows) labels."""
+        """Return the mean accuracy on the given data.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+
+        Returns
+        -------
+        score : float
+            The fraction of rows where ``predict(X) == y``.
+        """
         return _accuracy_host(self.predict(X), y)
 
 
 class LinearSVR(_LinearSVMBase):
     """Linear support vector regression.
 
-        loss            'epsilon_insensitive' (default) or
-                        'squared_epsilon_insensitive'
-        epsilon         honored, >= 0 (default 0.0, the reference's)
-        penalty         'l1' (the reference's default, OWL-QN) or 'l2'.
-                        scikit-learn's LinearSVR is l2 only; pass
-                        penalty='l2' for its objective
-        C               honored, > 0
-        fit_intercept, tol, max_iter, linesearch_max_iter, lbfgs_memory
-                        honored
-        penalized_intercept   refused by name
-        sample_weight   refused
+    Minimizes the epsilon-insensitive or squared epsilon-insensitive loss
+    plus an l1 or l2 penalty (see the ``mojolearn.svm`` module
+    description for the objective). The intercept is never penalized.
 
-    OUTPUTS: `coef_` (n_features,) float32, `intercept_` a float,
-    `n_iter_`, `objective_`, `retcode_`.
+    The default penalty is ``'l1'`` (cuML's default), which uses OWL-QN
+    and gives exact zeros. scikit-learn's ``LinearSVR`` is l2 only: pass
+    ``penalty='l2'`` for its objective.
+
+    ``X`` is read as float32; ``y`` must be one-dimensional. Invalid
+    parameter values raise ``ValueError``.
+
+    Parameters
+    ----------
+    epsilon : float, default 0.0
+        Width of the insensitive zone, finite and >= 0.
+    penalty : {'l1', 'l2'}, default 'l1'
+        The regularization term.
+    loss : {'epsilon_insensitive', 'squared_epsilon_insensitive'}, default 'epsilon_insensitive'
+        The data-fit loss.
+    C : float, default 1.0
+        Inverse regularization strength, > 0.
+    fit_intercept : bool, default True
+        Whether to fit an (unpenalized) intercept.
+    penalized_intercept : bool, default False
+        Only False is supported; True raises ``NotImplementedError``.
+    tol : float, default 1e-4
+        Gradient tolerance, > 0.
+    max_iter : int, default 1000
+        Maximum number of solver iterations.
+    linesearch_max_iter : int, default 100
+        Maximum number of line-search steps per iteration.
+    lbfgs_memory : int, default 5
+        Number of past updates kept by L-BFGS.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        The numeric mode for this estimator; None uses the process default
+        (see ``mojolearn.set_numeric_mode``). ``'fast'`` is for Apple GPUs.
+
+    Attributes
+    ----------
+    coef_ : array of shape (n_features,), float32
+        The fitted coefficients.
+    intercept_ : float
+        The fitted intercept; 0.0 when ``fit_intercept`` is False.
+    n_iter_ : array of shape (1,), int64
+        The number of solver iterations run.
+    objective_ : float
+        The final value of the minimized objective.
+    retcode_ : int
+        The solver's return code, as on ``LogisticRegression``.
+    n_features_in_ : int
+        The number of features seen in ``fit``.
+    input_copied_ : bool
+        Whether ``fit`` had to copy ``X`` to float32 C order.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32) + 1.0
+    >>> model = mojolearn.LinearSVR(penalty="l2", epsilon=0.1).fit(X, y)
+    >>> pred = model.predict(X)
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -284,6 +452,23 @@ class LinearSVR(_LinearSVMBase):
         self.epsilon = epsilon
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the regressor.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Target values. A 2-D ``y`` or a length mismatch raises
+            ``ValueError``.
+        sample_weight : None
+            Must be None; weights raise ``NotImplementedError``.
+
+        Returns
+        -------
+        self : LinearSVR
+            The fitted estimator.
+        """
         self._refuse_sample_weight(sample_weight)
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape
@@ -301,10 +486,42 @@ class LinearSVR(_LinearSVMBase):
         return self
 
     def predict(self, X):
+        """Predict with the fitted model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        y_pred : array of shape (n_samples,), float32
+            ``X @ coef_ + intercept_``.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, or ``X`` has a different number of
+            features than the training data.
+        """
         if not hasattr(self, "_w"):
             raise ValueError("mojolearn LinearSVR: call fit before predict")
         return _qn_scores(self, X, self._w)
 
     def score(self, X, y):
-        """R^2 on the host, as `LinearRegression.score`."""
+        """Return the coefficient of determination R^2 of the prediction.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True target values.
+
+        Returns
+        -------
+        score : float
+            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
+            scores 0.0.
+        """
         return _r2_host(self.predict(X), y)

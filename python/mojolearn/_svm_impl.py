@@ -438,166 +438,298 @@ def _native_sigmoid_train(binding, dec, labels):
     return ab[0], ab[1]
 
 
+# Maintainer notes (moved verbatim from the SVC docstring):
+# C-support vector classification, binary and one-vs-one multiclass,
+# backed by an SMO solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
+# `svm/README.md`), the scikit-learn surface.
+#
+# WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
+# because a parameter that is accepted and ignored is a wrong answer
+# waiting for a caller (the house rule):
+#
+#     C               honored   the penalty. Must be finite and positive;
+#                               a non-finite C is refused by name
+#                               (DEVIATION 636)
+#     kernel          honored   'linear', 'rbf' and 'poly'. 'poly' is the
+#                               identical linear Gram then
+#                               `(gamma * K + coef0) ** degree` as
+#                               kernel_methods' DEVIATION 1663 epilogue
+#                               (one fused multiply-add, an ascending
+#                               repeated product). 'sigmoid' is the
+#                               linear Gram then tanh(gamma * K + coef0)
+#                               (kernel_methods' TANH epilogue,
+#                               identical_tanh). 'precomputed': X is the
+#                               n x n kernel matrix at fit (the solver's
+#                               tiles are exact copies of its cells,
+#                               cuML's extractColumnsForPrecomputed) and
+#                               the q x n cross-kernel against the
+#                               training rows at predict, whose support
+#                               columns the decision reads.
+#                               support_vectors_ then holds the kernel
+#                               matrix's support ROWS (scikit-learn's is
+#                               empty)
+#     gamma           honored   a finite float >= 0, or the string 'auto'
+#                               (= 1 / n_features, cuML's `_get_gamma`).
+#                               'scale' is resolved exactly, DEVIATION
+#                               870 below (theirs is the default)
+#     degree          honored   with kernel='poly': an integer in
+#                               [0, 32] (DEVIATION 1663). With any other
+#                               kernel only the default 3 is accepted,
+#                               since nothing would read it
+#     coef0           honored   with 'poly' and 'sigmoid': a finite float. With
+#                               any other kernel only the default 0.0
+#                               is accepted
+#     tol             honored   the stopping tolerance; must be finite and
+#                               positive (DEVIATION 636)
+#     cache_size      honored   ONLY as the prediction buffer, see
+#                               DEVIATION 871 below
+#     class_weight    honored   a dict {label: weight} or 'balanced'; it
+#                               multiplies each row's bound, C * cw[y_i] *
+#                               w_i (`_c_rows`)
+#     max_iter        honored   cuML's total inner-iteration cap; -1 (the
+#                               default) is no limit
+#     nochange_steps  honored   cuML's convergence rule, with
+#                               its n_small_diff counter
+#     verbose         refused   anything truthy. It selects LOG LINES
+#                               in the reference (CUML_LOG_DEBUG); this implementation
+#                               prints none, so accepting it would be
+#                               accepting-and-ignoring
+#     random_state    honored   with probability=True: the key of the
+#                               folds' SplitMix64 shuffle (None = 0);
+#                               refused otherwise, since nothing else
+#                               draws a random number
+#     decision_       honored   'ovo' (the default here, cuML's) or 'ovr'
+#       function_shape          (scikit-learn's): with more than two
+#                               classes, decision_function's pairwise
+#                               (n, K(K-1)/2) or voted (n, K) form. No
+#                               effect on two classes, as in scikit-learn
+#     break_ties      honored   with 'ovr' and more than two classes,
+#                               predict is the argmax of the 'ovr'
+#                               decision_function; refused with 'ovo'
+#                               (scikit-learn's ValueError)
+#     multiclass      honored   one-vs-one, libsvm's scheme: one binary
+#                               machine per class pair (i < j) on the
+#                               rows of those two classes, gamma resolved
+#                               on the whole X, the per-row bounds cut to
+#                               the pair's rows; prediction by vote, ties
+#                               to the lowest class (`_fit_ovo`)
+#     probability     honored   libsvm's Platt scaling: a seeded 5-fold
+#                               cross-validation of each class pair, the
+#                               folds' decision values from the binary
+#                               solver, then sigmoid_train and (more than
+#                               two classes) pairwise coupling in binary64
+#                               with the portable exp/log
+#                               (`_fit_probability`); predict_proba and
+#                               predict_log_proba. The same bits on every
+#                               column; not libsvm's bits (its fold
+#                               shuffle is C rand())
+#     output_type     refused   a cuML-internal array-type selector; this
+#                               package returns mojolearn Arrays
+#     sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
+#                               per-row bounds C * w formed in binary64 and
+#                               rounded once to float32 (`_c_rows`)
+#     sparse X        honored   densified exactly (`as_f32_dense_c`: the
+#                               implicit entries are zeros), so it takes
+#                               its dense twin's path and bits; cuML's
+#                               CSR solver arms are not implemented
+#
+# Non-finite cells of `X` are refused by name inside the Mojo entry
+# (DEVIATION 636), naming the flat index, rather than being fitted.
+#
+# DEVIATION 870: `gamma='scale'` IS RESOLVED EXACTLY, AND THE DEFAULT
+# HERE IS STILL 'auto' (theirs is 'scale'; the default is kept so every
+# recorded default fit keeps its bits). 'scale' is `1 / (n_features *
+# X.var())` as theirs, but the variance is the EXACT population variance
+# of the float32 cells, formed in integers, and the reciprocal is rounded
+# once to binary64 (`_scale_gamma.scale_gamma`). Their float32 `X.var()`
+# carries its reduction's fold shape in its last bits; this one has no
+# fold to differ, so every host reads the same gamma bits, and it differs
+# from theirs by at most that reduction's rounding.
+#
+# DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT. In the reference it is
+# two things under one name: the training-time `raft::cache` LRU kernel
+# cache, and the ceiling on the prediction kernel-tile buffer
+# (`svm_base.pyx:554`, passed as `buffer_size` to `svcPredict`). The
+# prediction half is honored here, exactly, and it is a real knob: it
+# sets the prediction batch size, and `check_device_is_launch_invariant`
+# holds the answer fixed over it from 0.001 MiB to 200 MiB. The training
+# half is NOT implemented -- the solver always runs cuML's own
+# `n_cache_sets == 0` path -- so `cache_size` does not affect training
+# time here the way it does in the reference. It cannot affect training RESULTS
+# in the reference either (`svm/NOT_IMPLEMENTED.tsv` carries that determinism
+# statement), so nothing numeric hangs on it.
+#
+# DEVIATION 873: the fitted model crosses back to the host and is
+# uploaded again at every `predict` / `decision_function`, because the
+# binding retains no device pointer. `fit` therefore allocates
+# worst-case output buffers -- `n_samples` dual coefficients and
+# `n_samples x n_features` support-vector floats -- since `n_support` is
+# not known until the solve finishes. On a matrix that is mostly support
+# vectors that is a second copy of X.
+#
+# Attributes
+# ----------
+# classes_ : list (K,)
+#     The distinct labels, sorted ascending, as Python scalars under
+#     the package-wide order rule (`_labels.sorted_classes`, DEVIATION
+#     2340; it was an ndarray in `y`'s dtype). `predict` returns an
+#     int64 / float64 Array for int / float labels and a Python list
+#     otherwise. `classes_[1]` is the one the solver maps to +1
+#     (`getOvrlabels(..., idx=1)`), so it fixes the sign of the decision
+#     function.
+# support_ : Array (n_SV,) int32
+#     Indices of the support vectors in the training matrix.
+# support_vectors_ : Array (n_SV, n_features) float32
+# dual_coef_ : Array (1, n_SV) float32
+#     scikit-learn's 2-D layout of cuML's 1-D `dual_coefs`.
+# intercept_ : Array (1,) float32
+# n_support_ : int, or Array (K,) int32 for K > 2
+#     Two classes: cuML's scalar count (scikit-learn's is a per-class
+#     array; this one is not, and the difference is here rather than in
+#     a surprise). More: scikit-learn's per-class counts.
+# n_iter_ : int, or Array (K(K-1)/2,) int32 for K > 2
+#     Total inner SMO iterations, per pair for more than two classes.
+#
+# MULTICLASS LAYOUT (K > 2) is scikit-learn's, in its orientation (a
+# pair's decision positive toward its LOWER class): `support_` grouped
+# by class, ascending within a class; `dual_coef_` (K - 1, n_SV);
+# `intercept_` (K(K-1)/2,); `coef_` (K(K-1)/2, n_features) for 'linear'.
+# coef_ : Array (1, n_features) float32
+#     `dual_coef_ @ support_vectors_`, and only for `kernel='linear'`;
+#     raises AttributeError otherwise, as scikit-learn does.
+# n_features_in_ : int
+#
 class SVC(NumericModeMixin):
-    """C-support vector classification, binary and one-vs-one multiclass,
-    backed by an SMO solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
-    `svm/README.md`), the scikit-learn surface.
+    """C-support vector classification.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
-    because a parameter that is accepted and ignored is a wrong answer
-    waiting for a caller (the house rule):
+    Follows scikit-learn's `SVC`, with cuML's `SVC` as the reference
+    implementation: an SMO solver with the kernel matrices computed on the
+    GPU. Two classes train one machine; more train one machine per class
+    pair (one-vs-one, libsvm's scheme) and predict by vote, ties going to
+    the lowest class. `X` is converted to float32 (sparse input is
+    densified), and non-finite values in `X` raise an error naming the
+    first bad cell. Supports the `'identical'` (default) and `'fast'`
+    numeric modes; `'fast'` is available on Apple GPUs only.
 
-        C               honored   the penalty. Must be finite and positive;
-                                  a non-finite C is refused by name
-                                  (DEVIATION 636)
-        kernel          honored   'linear', 'rbf' and 'poly'. 'poly' is the
-                                  identical linear Gram then
-                                  `(gamma * K + coef0) ** degree` as
-                                  kernel_methods' DEVIATION 1663 epilogue
-                                  (one fused multiply-add, an ascending
-                                  repeated product). 'sigmoid' is the
-                                  linear Gram then tanh(gamma * K + coef0)
-                                  (kernel_methods' TANH epilogue,
-                                  identical_tanh). 'precomputed': X is the
-                                  n x n kernel matrix at fit (the solver's
-                                  tiles are exact copies of its cells,
-                                  cuML's extractColumnsForPrecomputed) and
-                                  the q x n cross-kernel against the
-                                  training rows at predict, whose support
-                                  columns the decision reads.
-                                  support_vectors_ then holds the kernel
-                                  matrix's support ROWS (scikit-learn's is
-                                  empty)
-        gamma           honored   a finite float >= 0, or the string 'auto'
-                                  (= 1 / n_features, cuML's `_get_gamma`).
-                                  'scale' is resolved exactly, DEVIATION
-                                  870 below (theirs is the default)
-        degree          honored   with kernel='poly': an integer in
-                                  [0, 32] (DEVIATION 1663). With any other
-                                  kernel only the default 3 is accepted,
-                                  since nothing would read it
-        coef0           honored   with 'poly' and 'sigmoid': a finite float. With
-                                  any other kernel only the default 0.0
-                                  is accepted
-        tol             honored   the stopping tolerance; must be finite and
-                                  positive (DEVIATION 636)
-        cache_size      honored   ONLY as the prediction buffer, see
-                                  DEVIATION 871 below
-        class_weight    honored   a dict {label: weight} or 'balanced'; it
-                                  multiplies each row's bound, C * cw[y_i] *
-                                  w_i (`_c_rows`)
-        max_iter        honored   cuML's total inner-iteration cap; -1 (the
-                                  default) is no limit
-        nochange_steps  honored   cuML's convergence rule, with
-                                  its n_small_diff counter
-        verbose         refused   anything truthy. It selects LOG LINES
-                                  in the reference (CUML_LOG_DEBUG); this implementation
-                                  prints none, so accepting it would be
-                                  accepting-and-ignoring
-        random_state    honored   with probability=True: the key of the
-                                  folds' SplitMix64 shuffle (None = 0);
-                                  refused otherwise, since nothing else
-                                  draws a random number
-        decision_       honored   'ovo' (the default here, cuML's) or 'ovr'
-          function_shape          (scikit-learn's): with more than two
-                                  classes, decision_function's pairwise
-                                  (n, K(K-1)/2) or voted (n, K) form. No
-                                  effect on two classes, as in scikit-learn
-        break_ties      honored   with 'ovr' and more than two classes,
-                                  predict is the argmax of the 'ovr'
-                                  decision_function; refused with 'ovo'
-                                  (scikit-learn's ValueError)
-        multiclass      honored   one-vs-one, libsvm's scheme: one binary
-                                  machine per class pair (i < j) on the
-                                  rows of those two classes, gamma resolved
-                                  on the whole X, the per-row bounds cut to
-                                  the pair's rows; prediction by vote, ties
-                                  to the lowest class (`_fit_ovo`)
-        probability     honored   libsvm's Platt scaling: a seeded 5-fold
-                                  cross-validation of each class pair, the
-                                  folds' decision values from the binary
-                                  solver, then sigmoid_train and (more than
-                                  two classes) pairwise coupling in binary64
-                                  with the portable exp/log
-                                  (`_fit_probability`); predict_proba and
-                                  predict_log_proba. The same bits on every
-                                  column; not libsvm's bits (its fold
-                                  shuffle is C rand())
-        output_type     refused   a cuML-internal array-type selector; this
-                                  package returns mojolearn Arrays
-        sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
-                                  per-row bounds C * w formed in binary64 and
-                                  rounded once to float32 (`_c_rows`)
-        sparse X        honored   densified exactly (`as_f32_dense_c`: the
-                                  implicit entries are zeros), so it takes
-                                  its dense twin's path and bits; cuML's
-                                  CSR solver arms are not implemented
+    Defaults that differ from scikit-learn: `gamma='auto'` (scikit-learn
+    uses 'scale'); `decision_function_shape='ovo'` (scikit-learn uses
+    'ovr'); `cache_size` is the prediction buffer in MiB and does not
+    affect training. There is no `shrinking` parameter. Every parameter is
+    keyword-only. A parameter that would be ignored is refused rather than
+    accepted: `degree` with any kernel but 'poly', `coef0` with any kernel
+    but 'poly' or 'sigmoid', `random_state` without `probability=True`,
+    and a truthy `verbose` or any `output_type` all raise
+    `NotImplementedError`.
 
-    Non-finite cells of `X` are refused by name inside the Mojo entry
-    (DEVIATION 636), naming the flat index, rather than being fitted.
-
-    DEVIATION 870: `gamma='scale'` IS RESOLVED EXACTLY, AND THE DEFAULT
-    HERE IS STILL 'auto' (theirs is 'scale'; the default is kept so every
-    recorded default fit keeps its bits). 'scale' is `1 / (n_features *
-    X.var())` as theirs, but the variance is the EXACT population variance
-    of the float32 cells, formed in integers, and the reciprocal is rounded
-    once to binary64 (`_scale_gamma.scale_gamma`). Their float32 `X.var()`
-    carries its reduction's fold shape in its last bits; this one has no
-    fold to differ, so every host reads the same gamma bits, and it differs
-    from theirs by at most that reduction's rounding.
-
-    DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT. In the reference it is
-    two things under one name: the training-time `raft::cache` LRU kernel
-    cache, and the ceiling on the prediction kernel-tile buffer
-    (`svm_base.pyx:554`, passed as `buffer_size` to `svcPredict`). The
-    prediction half is honored here, exactly, and it is a real knob: it
-    sets the prediction batch size, and `check_device_is_launch_invariant`
-    holds the answer fixed over it from 0.001 MiB to 200 MiB. The training
-    half is NOT implemented -- the solver always runs cuML's own
-    `n_cache_sets == 0` path -- so `cache_size` does not affect training
-    time here the way it does in the reference. It cannot affect training RESULTS
-    in the reference either (`svm/NOT_IMPLEMENTED.tsv` carries that determinism
-    statement), so nothing numeric hangs on it.
-
-    DEVIATION 873: the fitted model crosses back to the host and is
-    uploaded again at every `predict` / `decision_function`, because the
-    binding retains no device pointer. `fit` therefore allocates
-    worst-case output buffers -- `n_samples` dual coefficients and
-    `n_samples x n_features` support-vector floats -- since `n_support` is
-    not known until the solve finishes. On a matrix that is mostly support
-    vectors that is a second copy of X.
+    Parameters
+    ----------
+    C : float, default 1.0
+        Regularization penalty. Must be finite and positive.
+    kernel : {'linear', 'rbf', 'poly', 'sigmoid', 'precomputed'}, default 'rbf'
+        The kernel. 'poly' is `(gamma * <x, y> + coef0) ** degree`;
+        'sigmoid' is `tanh(gamma * <x, y> + coef0)`. With 'precomputed',
+        `X` is the n x n kernel matrix at fit and the q x n kernel against
+        the training rows at predict; `support_vectors_` then holds the
+        support rows of the kernel matrix (scikit-learn's is empty). Other
+        names, including 'polynomial' and 'tanh', raise.
+    degree : int, default 3
+        Degree of the 'poly' kernel, an integer in [0, 32]. Must stay 3
+        with any other kernel.
+    gamma : float, 'auto' or 'scale', default 'auto'
+        Kernel coefficient, a finite float >= 0. 'auto' is
+        `1 / n_features`; 'scale' is `1 / (n_features * X.var())`, computed
+        from the exact variance of the float32 data, so it can differ from
+        scikit-learn's float32 `X.var()` in the last bits.
+    coef0 : float, default 0.0
+        Independent term of the 'poly' and 'sigmoid' kernels, finite. Must
+        stay 0.0 with any other kernel.
+    tol : float, default 1e-3
+        Stopping tolerance. Must be finite and positive.
+    cache_size : float, default 1024.0
+        Size in MiB of the kernel tile buffer used at prediction, which
+        sets the prediction batch size; results do not depend on it. It
+        has no training-time kernel cache role here. Must be positive and
+        finite.
+    max_iter : int, default -1
+        Cap on the total inner SMO iterations (cuML's meaning); -1 means no
+        limit. 0 and values below -1 are refused.
+    nochange_steps : int, default 1000
+        Follows cuML's ``nochange_steps`` convergence rule. Must be >= 0.
+    verbose : bool, default False
+        Only False is accepted; this estimator prints no log lines.
+    output_type : None, default None
+        Only None is accepted; results are mojolearn Arrays.
+    random_state : int or None, default None
+        With `probability=True`, the seed of the cross-validation fold
+        shuffle (None means 0); an int in [0, 2**64). Refused otherwise.
+    class_weight : dict, 'balanced' or None, default None
+        Per-class weights; row i's penalty becomes
+        `C * class_weight[y_i] * sample_weight_i`.
+    decision_function_shape : {'ovo', 'ovr'}, default 'ovo'
+        With more than two classes, `decision_function` returns the
+        pairwise (n, K(K-1)/2) form ('ovo') or scikit-learn's voted
+        (n, K) form ('ovr'). No effect with two classes.
+    probability : bool, default False
+        Fit Platt scaling (libsvm's method: a seeded 5-fold
+        cross-validation per class pair, then a sigmoid fit and, for more
+        than two classes, pairwise coupling) so that `predict_proba` and
+        `predict_log_proba` are available. The fold shuffle differs from
+        libsvm's, so the probabilities are not bit-equal to libsvm's.
+    break_ties : bool, default False
+        With `decision_function_shape='ovr'` and more than two classes,
+        predict the argmax of the 'ovr' decision function instead of the
+        vote. Must be False with 'ovo' (scikit-learn's rule).
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator; None uses the process default.
 
     Attributes
     ----------
-    classes_ : list (K,)
-        The distinct labels, sorted ascending, as Python scalars under
-        the package-wide order rule (`_labels.sorted_classes`, DEVIATION
-        2340; it was an ndarray in `y`'s dtype). `predict` returns an
-        int64 / float64 Array for int / float labels and a Python list
-        otherwise. `classes_[1]` is the one the solver maps to +1
-        (`getOvrlabels(..., idx=1)`), so it fixes the sign of the decision
+    classes_ : list of shape (K,)
+        The distinct labels, sorted ascending, as Python scalars.
+        `classes_[1]` is the positive class of the binary decision
         function.
-    support_ : Array (n_SV,) int32
-        Indices of the support vectors in the training matrix.
-    support_vectors_ : Array (n_SV, n_features) float32
-    dual_coef_ : Array (1, n_SV) float32
-        scikit-learn's 2-D layout of cuML's 1-D `dual_coefs`.
-    intercept_ : Array (1,) float32
-    n_support_ : int, or Array (K,) int32 for K > 2
-        Two classes: cuML's scalar count (scikit-learn's is a per-class
-        array; this one is not, and the difference is here rather than in
-        a surprise). More: scikit-learn's per-class counts.
-    n_iter_ : int, or Array (K(K-1)/2,) int32 for K > 2
-        Total inner SMO iterations, per pair for more than two classes.
-
-    MULTICLASS LAYOUT (K > 2) is scikit-learn's, in its orientation (a
-    pair's decision positive toward its LOWER class): `support_` grouped
-    by class, ascending within a class; `dual_coef_` (K - 1, n_SV);
-    `intercept_` (K(K-1)/2,); `coef_` (K(K-1)/2, n_features) for 'linear'.
-    coef_ : Array (1, n_features) float32
-        `dual_coef_ @ support_vectors_`, and only for `kernel='linear'`;
-        raises AttributeError otherwise, as scikit-learn does.
+    support_ : Array of shape (n_SV,), int32
+        Indices of the support vectors in the training data.
+    support_vectors_ : Array of shape (n_SV, n_features), float32
+        The support vectors.
+    dual_coef_ : Array of shape (1, n_SV) or (K - 1, n_SV), float32
+        Dual coefficients, in scikit-learn's layout.
+    intercept_ : Array of shape (1,) or (K(K-1)/2,), float32
+        Intercepts of the decision functions.
+    coef_ : Array of shape (1, n_features) or (K(K-1)/2, n_features), float32
+        Primal weights `dual_coef_ @ support_vectors_`, only for
+        `kernel='linear'`; raises `AttributeError` otherwise, as
+        scikit-learn does.
+    n_support_ : int, or Array of shape (K,), int32
+        Number of support vectors. With two classes this is a single count
+        (cuML's form; scikit-learn returns a per-class array); with more,
+        the per-class counts.
+    n_iter_ : int, or Array of shape (K(K-1)/2,), int32
+        Total inner SMO iterations, per class pair with more than two
+        classes.
+    probA_, probB_ : Array of shape (K(K-1)/2,), float64
+        Platt sigmoid parameters per class pair, when `probability=True`.
     n_features_in_ : int
+        Number of features seen during `fit`.
+
+    Notes
+    -----
+    With more than two classes the fitted arrays follow scikit-learn's
+    layout and orientation: a pair's decision is positive toward its lower
+    class, `support_` is grouped by class (ascending within a class),
+    `dual_coef_` is (K - 1, n_SV) and `intercept_` is (K(K-1)/2,).
+
+    `predict` returns an int64 or float64 Array for integer or float
+    labels, and a Python list for other label types.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1.0).astype(np.int64)
+    >>> model = mojolearn.SVC(C=1.0, kernel="rbf").fit(X, y)
+    >>> labels = model.predict(X[:5])
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -836,6 +968,24 @@ class SVC(NumericModeMixin):
         return int(n_support), dual, support, sv, info
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the support vector classifier.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32. With
+            `kernel='precomputed'`, the square n x n kernel matrix.
+        y : array-like of shape (n_samples,)
+            Class labels; two or more distinct values.
+        sample_weight : array-like of shape (n_samples,), default None
+            Per-sample weights; row i's penalty becomes `C * w_i` (times
+            its class weight). None weights every sample equally.
+
+        Returns
+        -------
+        self : SVC
+            The fitted estimator.
+        """
         x, self.input_copied_ = as_f32_dense_c(X, ndim=2, name="X")
         labels, classes, pair = _as_labels(y)
         n_rows, n_cols = x.shape
@@ -1141,6 +1291,12 @@ class SVC(NumericModeMixin):
 
     @property
     def coef_(self):
+        """Primal weights, only for `kernel='linear'`.
+
+        Shape (1, n_features) for two classes and (K(K-1)/2, n_features)
+        for K > 2 classes, float32. Raises `AttributeError` for other
+        kernels or before `fit`.
+        """
         if not hasattr(self, "dual_coef_"):
             raise AttributeError("mojolearn SVC: call fit() first")
         if self.kernel != "linear":
@@ -1247,11 +1403,25 @@ class SVC(NumericModeMixin):
         return [(p["i"], p["j"]) for p in self._pairs]  # glue: pair codes and sigmoid parameters as words
 
     def decision_function(self, X):
-        """Binary: the raw `sum_j K(x, sv_j) dual_j + b`, one value per row.
-        Multiclass: `decision_function_shape='ovo'` gives (n, K (K - 1) / 2)
-        float32, each pair's decision in scikit-learn's orientation
-        (positive toward the lower class of the pair); 'ovr' gives (n, K)
-        float64, scikit-learn's vote-plus-confidence transform of those."""
+        """Evaluate the decision function for the rows of `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_rows, n_features)
+            Query data. With `kernel='precomputed'`, the kernel between the
+            queries and the training rows, shape (n_rows, n_samples).
+
+        Returns
+        -------
+        Array
+            Two classes: shape (n_rows,), the raw
+            `sum_j K(x, sv_j) dual_j + b`, positive toward `classes_[1]`.
+            More classes with `decision_function_shape='ovo'`: shape
+            (n_rows, K(K-1)/2), float32, one column per class pair,
+            positive toward the pair's lower class. With 'ovr': shape
+            (n_rows, K), float64, scikit-learn's vote-plus-confidence
+            transform of the pairwise values.
+        """
         if self.__dict__.get("_pairs") is None:
             return self._run(X, False)
         dec = self._pair_decisions(X)
@@ -1260,15 +1430,31 @@ class SVC(NumericModeMixin):
             return self._epilogue(_EPI_OVO, dec, self._pair_codes(), (n_rows, n_pairs), "<f4")
         return self._epilogue(_EPI_OVR, dec, self._pair_codes(), (n_rows, len(self.classes_)), "<f8")
 
+    # Maintainer notes: binary predict is cuML's `applyPrediction` epilogue,
+    # ON THE DEVICE: the label is chosen there by `val + b < 0 ? classes_[0] :
+    # classes_[1]` and this maps the float32 label it wrote back into
+    # `classes_`'s dtype. Multiclass: libsvm's vote (a pair's decision < 0
+    # here votes class i, otherwise class j, the binary epilogue's rule).
     def predict(self, X):
-        """Binary: cuML's `applyPrediction` epilogue, ON THE DEVICE: the
-        label is chosen there by `val + b < 0 ? classes_[0] :
-        classes_[1]` and this maps the float32 label it wrote back into
-        `classes_`'s dtype. Multiclass: libsvm's vote (a pair's decision
-        < 0 here votes class i, otherwise class j, the binary epilogue's
-        rule), the most votes winning and ties to the lowest class; with
-        `break_ties=True` (shape 'ovr') the argmax of the 'ovr'
-        decision_function instead, first maximum winning."""
+        """Predict class labels for the rows of `X`.
+
+        Two classes: `classes_[1]` where the decision function is >= 0,
+        otherwise `classes_[0]`. More classes: one-vs-one vote, the most
+        votes winning and ties going to the lowest class; with
+        `break_ties=True` (and `decision_function_shape='ovr'`), the argmax
+        of the 'ovr' decision function, the first maximum winning.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_rows, n_features)
+            Query data (the cross-kernel with `kernel='precomputed'`).
+
+        Returns
+        -------
+        Array or list of shape (n_rows,)
+            Labels from `classes_`: an int64 or float64 Array for integer
+            or float labels, a Python list otherwise.
+        """
         pairs = self.__dict__.get("_pairs")
         if pairs is None:
             raw = self._run(X, True)
@@ -1285,12 +1471,30 @@ class SVC(NumericModeMixin):
         return decode_labels(self.classes_,
                              self._epilogue(_EPI_VOTES, dec, self._pair_codes(), (n_rows,), "<i8"))
 
+    # Maintainer note: libsvm's `svm_predict_probability`; the coupling is
+    # `_multiclass_probability`.
     def predict_proba(self, X):
-        """libsvm's `svm_predict_probability`: each pair's decision through
-        its sigmoid (clamped to [1e-7, 1 - 1e-7]), then for more than two
-        classes the pairwise coupling (`_multiclass_probability`). float64
-        `(n, K)`, columns in `classes_` order. Needs probability=True at
-        fit."""
+        """Class probabilities from the fitted Platt scaling.
+
+        Follows libsvm: each class pair's decision value goes through its
+        fitted sigmoid (clamped to [1e-7, 1 - 1e-7]); with more than two
+        classes the pairwise probabilities are then coupled.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_rows, n_features)
+            Query data.
+
+        Returns
+        -------
+        Array of shape (n_rows, K), float64
+            Probabilities, columns in `classes_` order.
+
+        Raises
+        ------
+        AttributeError
+            If the model was fitted with `probability=False`.
+        """
         ab = self.__dict__.get("_prob_ab")
         if ab is None:
             raise AttributeError(
@@ -1310,10 +1514,27 @@ class SVC(NumericModeMixin):
             pairs = self._pair_codes()
         return self._epilogue(mode, dec, pairs, (dec.shape[1], k), "<f8", ab=ab)
 
+    # Maintainer note: the portable binary64 log (its Mojo twin, `pm_log`, in
+    # the same epilogue call); a probability <= 0 raises as
+    # `_portable_math.log` does.
     def predict_log_proba(self, X):
-        """`log(predict_proba(X))` with the portable binary64 log (its Mojo
-        twin, `pm_log`, in the same epilogue call); a probability <= 0
-        raises as `_portable_math.log` does."""
+        """Natural log of `predict_proba(X)`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_rows, n_features)
+            Query data.
+
+        Returns
+        -------
+        Array of shape (n_rows, K), float64
+            Log probabilities, columns in `classes_` order.
+
+        Raises
+        ------
+        AttributeError
+            If the model was fitted with `probability=False`.
+        """
         ab = self.__dict__.get("_prob_ab")
         if ab is None:
             raise AttributeError(
@@ -1322,21 +1543,51 @@ class SVC(NumericModeMixin):
             )
         return self._proba(X, ab, _EPI_LOG_PROBA)
 
+    # Maintainer note: a Python count over O(rows) labels (DEVIATION 2365).
     def score(self, X, y):
-        """Accuracy, a Python count over O(rows) labels (DEVIATION 2365)."""
+        """Mean accuracy of `predict(X)` against `y`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_rows, n_features)
+            Query data.
+        y : array-like of shape (n_rows,)
+            True labels.
+
+        Returns
+        -------
+        float
+            Fraction of rows predicted correctly.
+        """
         return _accuracy_host(self.predict(X), y)
 
+    # Maintainer note, file layout: `dual_coef_`, `support_vectors_`,
+    # `intercept_` as fitted (float32), `support_` `<i4`, `classes_` as
+    # `_labels.classes_member`, `labels` `<f8` (the float32 label pair the
+    # solver returned, `_label0` and `_label1`), `hyper` `<f8` [C, tol,
+    # cache_size, the gamma the FIT resolved], `kernel` and `gamma` (the
+    # constructor's setting, 'auto' or a number) as strings, `meta` `<i8`
+    # [n_features_in_, n_support_, n_iter_, max_iter, nochange_steps, degree].
+    # `mojolearn.host_model(path)` predicts through
+    # `_mojolearn_svm_host.svc_predict`.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: `dual_coef_`,
-        `support_vectors_`, `intercept_` as fitted (float32), `support_`
-        `<i4`, `classes_` as `_labels.classes_member`, `labels` `<f8` (the
-        float32 label pair the solver returned, `_label0` and `_label1`),
-        `hyper` `<f8` [C, tol, cache_size, the gamma the FIT resolved],
-        `kernel` and `gamma` (the constructor's setting, 'auto' or a
-        number) as strings, `meta` `<i8` [n_features_in_, n_support_,
-        n_iter_, max_iter, nochange_steps, degree] (the kde svc host lane,
-        2026-09-14). `mojolearn.host_model(path)` predicts from it on a CPU
-        with no GPU through `_mojolearn_svm_host.svc_predict`."""
+        """Save the fitted model to `path` as an `.npz` file.
+
+        The file holds the fitted arrays, the hyperparameters, the gamma
+        resolved at fit and the numeric mode. Load it with `SVC.load`, or
+        predict from it on a CPU without a GPU with
+        `mojolearn.host_model(path)`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted.
+        """
         if not hasattr(self, "dual_coef_"):
             raise RuntimeError("this estimator is not fitted yet")
         arrays = {
@@ -1393,8 +1644,25 @@ class SVC(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts; every array
-        is read at its saved dtype and never cast."""
+        """Load a model written by `save`.
+
+        Every array is read at its saved dtype, never cast.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `SVC.save`.
+
+        Returns
+        -------
+        SVC
+            A fitted model, ready to predict, with the saved numeric mode.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a valid saved `SVC`.
+        """
         arrays = _serialize.read_npz(path, _SVC_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
@@ -1538,161 +1806,260 @@ def _as_targets(y, n_rows):
     return a
 
 
+# Maintainer notes (moved verbatim from the SVR docstring). NOTE: the kernel row
+# below says 'precomputed' is refused; the code accepts it (_SVR_KERNELS is
+# _SVC_KERNELS, and fit/predict handle it), so that row is stale.
+# Epsilon-support vector regression, backed by an SMO
+# solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
+# `svm/README.md`), the scikit-learn surface.
+#
+# THE TUBE IS THE ALGORITHM. Rows whose prediction lands inside a band of
+# half-width `epsilon` around the target cost nothing, so they never
+# become support vectors; the fit is determined by the rows outside it.
+# Raising `epsilon` widens the band and can only take rows out of the
+# support set, never add them, which is the one property of this
+# estimator a caller can check without a reference implementation, and
+# `python/mojolearn/tests/test_svr_surface.py` checks it.
+#
+# WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
+# because a parameter that is accepted and ignored is a wrong answer
+# waiting for a caller (the house rule). The file named on a refusal is
+# the file that raises it.
+#
+#     C               honored   the penalty. Refused if not finite or not
+#                               positive, by `_svm_impl.py` and again by
+#                               `svm/impl/svm_parameter.mojo`
+#                               (DEVIATION 636)
+#     epsilon         honored   the half-width of the insensitive tube,
+#                               cuML's `param.epsilon`, the parameter the
+#                               whole rung-2 implementation exists for. Passed
+#                               through UNCLAMPED so that
+#                               `svm/impl/svm_parameter.mojo::
+#                               check_rung1_scope`'s two refusals -- not
+#                               finite, and negative -- stay reachable
+#                               from this surface. They fire before any
+#                               device context exists
+#     kernel          honored   'linear', 'rbf', 'poly' and 'sigmoid', the
+#                               SVC's Gram and epilogues (DEVIATION 1663,
+#                               identical_tanh). 'precomputed' is REFUSED
+#                               BY NAME with what is missing
+#     gamma           honored   a finite float >= 0, or the string 'auto'
+#                               (= 1 / n_features, cuML's `_get_gamma`).
+#                               'scale' is resolved exactly, DEVIATION
+#                               870 below (theirs is the default)
+#     degree          honored   with kernel='poly': an integer in [0, 32]
+#     coef0           honored   with 'poly' and 'sigmoid': a finite float
+#     tol             honored   the stopping tolerance. Refused if not
+#                               finite or not positive, by `_svm_impl.py`
+#                               and `svm/impl/svm_parameter.mojo`
+#     cache_size      honored   ONLY as the prediction buffer, see
+#                               DEVIATION 871 below. The TRAINING LRU it
+#                               also names in the reference is unimplemented and
+#                               `svm/impl/svm_parameter.mojo` refuses
+#                               a non-zero one; `svm/estimator.mojo` pins
+#                               the training value at 0 so that refusal
+#                               is never reached from here
+#     max_iter        honored   cuML's total inner-iteration cap; -1 (the
+#                               default) is no limit. `_svm_impl.py`
+#                               refuses 0 and anything below -1
+#     nochange_steps  honored   cuML's convergence rule, with
+#                               its n_small_diff counter. NOT a
+#                               scikit-learn parameter; it is cuML's, and
+#                               it is here because the solver reads it
+#     verbose         refused   `_svm_impl.py`, for anything truthy. It
+#                               selects LOG LINES in the reference
+#                               (CUML_LOG_DEBUG); this implementation prints none,
+#                               so accepting it would be
+#                               accepting-and-ignoring
+#     output_type     refused   `_svm_impl.py`. A cuML-internal
+#                               array-type selector; this package returns
+#                               mojolearn Arrays
+#     shrinking       absent    NOT A PARAMETER OF THIS CLASS, so passing
+#                               it is a TypeError naming it. It is
+#                               scikit-learn's (libsvm's) shrinking
+#                               heuristic and cuML has no such thing:
+#                               there is no row for it in
+#                               `svm/NOT_IMPLEMENTED.tsv` because there is
+#                               nothing in the reference to leave
+#                               unimplemented. `SVC` omits it for the same
+#                               reason
+#     sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
+#                               row i's bound C * w_i at alpha_i and
+#                               alpha*_i (`_c_rows`)
+#     sparse X        honored   densified exactly (`as_f32_dense_c`), its
+#                               dense twin's path and bits; cuML's CSR
+#                               arms are not implemented
+#     non-finite X    refused   `svm/impl/svr_impl.mojo` at fit and
+#                               `svm/impl/svc_impl.mojo` at predict
+#                               name the flat index (DEVIATION 636)
+#                               rather than fitting it
+#     non-finite y    refused   the same `check_finite_list`, same
+#                               message, and it is the ONLY check `y`
+#                               gets on this class
+#
+# THE PARAMETER ORDER IS scikit-learn's `SVR`, and every name it shares
+# with scikit-learn means what scikit-learn means by it. TWO DEFAULTS
+# DIFFER and both are stated where they bite: `gamma` is 'auto' here and
+# 'scale' there (DEVIATION 870, below), and `cache_size` is 1024.0 MiB
+# here and 200 there because it is a different quantity on this surface
+# (DEVIATION 871). `shrinking` is absent, above.
+#
+# THIS CLASS MAKES NO CROSS-VENDOR CLAIM, and that is a narrower statement
+# than `SVC`'s. The classifier's 32-stage IDENTICAL card was diffed on
+# Apple M4, NVIDIA H100 and AMD MI325X at `a0a0eee` (E3 round 13,
+# 2026-08-28). The REGRESSION path was gated after that leg and has not
+# been in a three-vendor round: what stands behind it is 44 of 44 gates at
+# `fea6becc` on one box, of which 26 are the SVR ones, including four
+# property gates derived from the epsilon-insensitive formulation rather
+# than from this solver (a dual objective that must not increase, a KKT
+# gap, a tube bound, and a gradient recomputed from alpha alone that
+# matches the solver's `f` to 1.5e-07). A three-vendor SVR card is OWED.
+#
+# DEVIATION 870: `gamma='scale'` IS RESOLVED EXACTLY, AND THE DEFAULT
+# HERE IS STILL 'auto' (theirs is 'scale'; the default is kept so every
+# recorded default fit keeps its bits). 'scale' is `1 / (n_features *
+# X.var())` as theirs, but the variance is the EXACT population variance
+# of the float32 cells, formed in integers, and the reciprocal is rounded
+# once to binary64 (`_scale_gamma.scale_gamma`). Their float32 `X.var()`
+# carries its reduction's fold shape in its last bits; this one has no
+# fold to differ, so every host reads the same gamma bits, and it differs
+# from theirs by at most that reduction's rounding.
+#
+# DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT, exactly as it is
+# on `SVC`. Upstream it is two things under one name, the training-time
+# `raft::cache` LRU and the ceiling on the prediction kernel-tile buffer
+# (`svm_base.pyx:554`). The prediction half is honored here exactly and is
+# a real knob: it sets the prediction batch size, and
+# `check_svr_device_is_launch_invariant` holds the answer fixed over it
+# from 0.001 MiB to 200 MiB ON THE REGRESSION PATH, which is a separate
+# gate from the classifier's because SVR runs `UpdateF` twice per batch
+# and so interleaves twice as many launches. The training half is NOT
+# implemented.
+#
+# DEVIATION 873: the fitted model crosses back to the host and is uploaded
+# again at every `predict`, because the binding retains no device pointer.
+# `fit` therefore allocates worst-case output buffers, `n_samples` dual
+# coefficients and `n_samples x n_features` support-vector floats, since
+# `n_support` is not known until the solve finishes. THOSE SIZES ARE NOT
+# DOUBLED for the regressor even though its solver domain is: `Results`
+# folds the two alpha halves before it selects, so at most `n_samples`
+# coefficients can be written.
+#
+# Attributes
+# ----------
+# support_ : Array (n_SV,) int32
+#     Indices of the support vectors in the training matrix.
+# support_vectors_ : Array (n_SV, n_features) float32
+# dual_coef_ : Array (1, n_SV) float32
+#     scikit-learn's 2-D layout of cuML's 1-D folded `dual_coefs`. Each
+#     entry is `alpha_i - alpha*_i` for one row, which is why there are
+#     `n_SV` of them and not `2 * n_SV`.
+# intercept_ : Array (1,) float32
+# n_support_ : int
+#     cuML's scalar count.
+# n_iter_ : int
+#     Total inner SMO iterations.
+# coef_ : Array (1, n_features) float32
+#     `dual_coef_ @ support_vectors_`, and only for `kernel='linear'`;
+#     raises AttributeError otherwise, as scikit-learn does.
+# n_features_in_ : int
+#
 class SVR(NumericModeMixin):
-    """Epsilon-support vector regression, backed by an SMO
-    solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
-    `svm/README.md`), the scikit-learn surface.
+    """Epsilon-support vector regression.
 
-    THE TUBE IS THE ALGORITHM. Rows whose prediction lands inside a band of
-    half-width `epsilon` around the target cost nothing, so they never
-    become support vectors; the fit is determined by the rows outside it.
-    Raising `epsilon` widens the band and can only take rows out of the
-    support set, never add them, which is the one property of this
-    estimator a caller can check without a reference implementation, and
-    `python/mojolearn/tests/test_svr_surface.py` checks it.
+    Follows scikit-learn's `SVR`, with cuML's `SVR` as the reference
+    implementation: an SMO solver with the kernel matrices computed on the
+    GPU. Rows whose prediction falls within `epsilon` of the target cost
+    nothing and never become support vectors, so raising `epsilon` can only
+    remove rows from the support set. `X` is converted to float32 (sparse
+    input is densified); non-finite values in `X` or `y` raise an error
+    naming the first bad cell. Supports the `'identical'` (default) and
+    `'fast'` numeric modes; `'fast'` is available on Apple GPUs only.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
-    because a parameter that is accepted and ignored is a wrong answer
-    waiting for a caller (the house rule). The file named on a refusal is
-    the file that raises it.
+    The parameters keep scikit-learn's order and meaning, with two
+    defaults that differ: `gamma='auto'` (scikit-learn uses 'scale') and
+    `cache_size=1024.0`, which here is the prediction buffer in MiB and
+    does not affect training (scikit-learn's 200 is a training cache).
+    There is no `shrinking` parameter; passing it raises `TypeError`.
+    `nochange_steps` is cuML's. Every parameter is keyword-only. A
+    parameter that would be ignored is refused: `degree` with any kernel
+    but 'poly', `coef0` with any kernel but 'poly' or 'sigmoid', and a
+    truthy `verbose` or any `output_type` raise `NotImplementedError`.
 
-        C               honored   the penalty. Refused if not finite or not
-                                  positive, by `_svm_impl.py` and again by
-                                  `svm/impl/svm_parameter.mojo`
-                                  (DEVIATION 636)
-        epsilon         honored   the half-width of the insensitive tube,
-                                  cuML's `param.epsilon`, the parameter the
-                                  whole rung-2 implementation exists for. Passed
-                                  through UNCLAMPED so that
-                                  `svm/impl/svm_parameter.mojo::
-                                  check_rung1_scope`'s two refusals -- not
-                                  finite, and negative -- stay reachable
-                                  from this surface. They fire before any
-                                  device context exists
-        kernel          honored   'linear', 'rbf', 'poly' and 'sigmoid', the
-                                  SVC's Gram and epilogues (DEVIATION 1663,
-                                  identical_tanh). 'precomputed' is REFUSED
-                                  BY NAME with what is missing
-        gamma           honored   a finite float >= 0, or the string 'auto'
-                                  (= 1 / n_features, cuML's `_get_gamma`).
-                                  'scale' is resolved exactly, DEVIATION
-                                  870 below (theirs is the default)
-        degree          honored   with kernel='poly': an integer in [0, 32]
-        coef0           honored   with 'poly' and 'sigmoid': a finite float
-        tol             honored   the stopping tolerance. Refused if not
-                                  finite or not positive, by `_svm_impl.py`
-                                  and `svm/impl/svm_parameter.mojo`
-        cache_size      honored   ONLY as the prediction buffer, see
-                                  DEVIATION 871 below. The TRAINING LRU it
-                                  also names in the reference is unimplemented and
-                                  `svm/impl/svm_parameter.mojo` refuses
-                                  a non-zero one; `svm/estimator.mojo` pins
-                                  the training value at 0 so that refusal
-                                  is never reached from here
-        max_iter        honored   cuML's total inner-iteration cap; -1 (the
-                                  default) is no limit. `_svm_impl.py`
-                                  refuses 0 and anything below -1
-        nochange_steps  honored   cuML's convergence rule, with
-                                  its n_small_diff counter. NOT a
-                                  scikit-learn parameter; it is cuML's, and
-                                  it is here because the solver reads it
-        verbose         refused   `_svm_impl.py`, for anything truthy. It
-                                  selects LOG LINES in the reference
-                                  (CUML_LOG_DEBUG); this implementation prints none,
-                                  so accepting it would be
-                                  accepting-and-ignoring
-        output_type     refused   `_svm_impl.py`. A cuML-internal
-                                  array-type selector; this package returns
-                                  mojolearn Arrays
-        shrinking       absent    NOT A PARAMETER OF THIS CLASS, so passing
-                                  it is a TypeError naming it. It is
-                                  scikit-learn's (libsvm's) shrinking
-                                  heuristic and cuML has no such thing:
-                                  there is no row for it in
-                                  `svm/NOT_IMPLEMENTED.tsv` because there is
-                                  nothing in the reference to leave
-                                  unimplemented. `SVC` omits it for the same
-                                  reason
-        sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
-                                  row i's bound C * w_i at alpha_i and
-                                  alpha*_i (`_c_rows`)
-        sparse X        honored   densified exactly (`as_f32_dense_c`), its
-                                  dense twin's path and bits; cuML's CSR
-                                  arms are not implemented
-        non-finite X    refused   `svm/impl/svr_impl.mojo` at fit and
-                                  `svm/impl/svc_impl.mojo` at predict
-                                  name the flat index (DEVIATION 636)
-                                  rather than fitting it
-        non-finite y    refused   the same `check_finite_list`, same
-                                  message, and it is the ONLY check `y`
-                                  gets on this class
-
-    THE PARAMETER ORDER IS scikit-learn's `SVR`, and every name it shares
-    with scikit-learn means what scikit-learn means by it. TWO DEFAULTS
-    DIFFER and both are stated where they bite: `gamma` is 'auto' here and
-    'scale' there (DEVIATION 870, below), and `cache_size` is 1024.0 MiB
-    here and 200 there because it is a different quantity on this surface
-    (DEVIATION 871). `shrinking` is absent, above.
-
-    THIS CLASS MAKES NO CROSS-VENDOR CLAIM, and that is a narrower statement
-    than `SVC`'s. The classifier's 32-stage IDENTICAL card was diffed on
-    Apple M4, NVIDIA H100 and AMD MI325X at `a0a0eee` (E3 round 13,
-    2026-08-28). The REGRESSION path was gated after that leg and has not
-    been in a three-vendor round: what stands behind it is 44 of 44 gates at
-    `fea6becc` on one box, of which 26 are the SVR ones, including four
-    property gates derived from the epsilon-insensitive formulation rather
-    than from this solver (a dual objective that must not increase, a KKT
-    gap, a tube bound, and a gradient recomputed from alpha alone that
-    matches the solver's `f` to 1.5e-07). A three-vendor SVR card is OWED.
-
-    DEVIATION 870: `gamma='scale'` IS RESOLVED EXACTLY, AND THE DEFAULT
-    HERE IS STILL 'auto' (theirs is 'scale'; the default is kept so every
-    recorded default fit keeps its bits). 'scale' is `1 / (n_features *
-    X.var())` as theirs, but the variance is the EXACT population variance
-    of the float32 cells, formed in integers, and the reciprocal is rounded
-    once to binary64 (`_scale_gamma.scale_gamma`). Their float32 `X.var()`
-    carries its reduction's fold shape in its last bits; this one has no
-    fold to differ, so every host reads the same gamma bits, and it differs
-    from theirs by at most that reduction's rounding.
-
-    DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT, exactly as it is
-    on `SVC`. Upstream it is two things under one name, the training-time
-    `raft::cache` LRU and the ceiling on the prediction kernel-tile buffer
-    (`svm_base.pyx:554`). The prediction half is honored here exactly and is
-    a real knob: it sets the prediction batch size, and
-    `check_svr_device_is_launch_invariant` holds the answer fixed over it
-    from 0.001 MiB to 200 MiB ON THE REGRESSION PATH, which is a separate
-    gate from the classifier's because SVR runs `UpdateF` twice per batch
-    and so interleaves twice as many launches. The training half is NOT
-    implemented.
-
-    DEVIATION 873: the fitted model crosses back to the host and is uploaded
-    again at every `predict`, because the binding retains no device pointer.
-    `fit` therefore allocates worst-case output buffers, `n_samples` dual
-    coefficients and `n_samples x n_features` support-vector floats, since
-    `n_support` is not known until the solve finishes. THOSE SIZES ARE NOT
-    DOUBLED for the regressor even though its solver domain is: `Results`
-    folds the two alpha halves before it selects, so at most `n_samples`
-    coefficients can be written.
+    Parameters
+    ----------
+    kernel : {'linear', 'rbf', 'poly', 'sigmoid', 'precomputed'}, default 'rbf'
+        The kernel. 'poly' is `(gamma * <x, y> + coef0) ** degree`;
+        'sigmoid' is `tanh(gamma * <x, y> + coef0)`. With 'precomputed',
+        `X` is the n x n kernel matrix at fit and the q x n kernel against
+        the training rows at predict. Other names, including 'polynomial'
+        and 'tanh', raise.
+    degree : int, default 3
+        Degree of the 'poly' kernel, an integer in [0, 32]. Must stay 3
+        with any other kernel.
+    gamma : float, 'auto' or 'scale', default 'auto'
+        Kernel coefficient, a finite float >= 0. 'auto' is
+        `1 / n_features`; 'scale' is `1 / (n_features * X.var())`, computed
+        from the exact variance of the float32 data, so it can differ from
+        scikit-learn's float32 `X.var()` in the last bits.
+    coef0 : float, default 0.0
+        Independent term of the 'poly' and 'sigmoid' kernels, finite. Must
+        stay 0.0 with any other kernel.
+    tol : float, default 1e-3
+        Stopping tolerance. Must be finite and positive.
+    C : float, default 1.0
+        Regularization penalty. Must be finite and positive.
+    epsilon : float, default 0.1
+        Half-width of the epsilon-insensitive tube. Must be finite and
+        >= 0; an invalid value is refused when `fit` runs.
+    cache_size : float, default 1024.0
+        Size in MiB of the kernel tile buffer used at prediction, which
+        sets the prediction batch size; results do not depend on it. Must
+        be positive and finite.
+    verbose : bool, default False
+        Only False is accepted; this estimator prints no log lines.
+    max_iter : int, default -1
+        Cap on the total inner SMO iterations (cuML's meaning); -1 means no
+        limit. 0 and values below -1 are refused.
+    nochange_steps : int, default 1000
+        Follows cuML's ``nochange_steps`` convergence rule. Must be >= 0.
+    output_type : None, default None
+        Only None is accepted; results are mojolearn Arrays.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator; None uses the process default.
 
     Attributes
     ----------
-    support_ : Array (n_SV,) int32
-        Indices of the support vectors in the training matrix.
-    support_vectors_ : Array (n_SV, n_features) float32
-    dual_coef_ : Array (1, n_SV) float32
-        scikit-learn's 2-D layout of cuML's 1-D folded `dual_coefs`. Each
-        entry is `alpha_i - alpha*_i` for one row, which is why there are
-        `n_SV` of them and not `2 * n_SV`.
-    intercept_ : Array (1,) float32
+    support_ : Array of shape (n_SV,), int32
+        Indices of the support vectors in the training data.
+    support_vectors_ : Array of shape (n_SV, n_features), float32
+        The support vectors (rows of the kernel matrix with
+        `kernel='precomputed'`).
+    dual_coef_ : Array of shape (1, n_SV), float32
+        `alpha_i - alpha*_i` for each support vector, in scikit-learn's
+        layout.
+    intercept_ : Array of shape (1,), float32
+        Intercept of the decision function.
+    coef_ : Array of shape (1, n_features), float32
+        Primal weights `dual_coef_ @ support_vectors_`, only for
+        `kernel='linear'`; raises `AttributeError` otherwise, as
+        scikit-learn does.
     n_support_ : int
-        cuML's scalar count.
+        Number of support vectors (cuML's scalar form; scikit-learn's is an
+        array).
     n_iter_ : int
         Total inner SMO iterations.
-    coef_ : Array (1, n_features) float32
-        `dual_coef_ @ support_vectors_`, and only for `kernel='linear'`;
-        raises AttributeError otherwise, as scikit-learn does.
     n_features_in_ : int
+        Number of features seen during `fit`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X.sum(axis=1)
+    >>> model = mojolearn.SVR(C=1.0, epsilon=0.1).fit(X, y)
+    >>> pred = model.predict(X[:5])
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -1868,6 +2235,24 @@ class SVR(NumericModeMixin):
         return head + kt
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the support vector regressor.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32. With
+            `kernel='precomputed'`, the square n x n kernel matrix.
+        y : array-like of shape (n_samples,)
+            Finite target values.
+        sample_weight : array-like of shape (n_samples,), default None
+            Per-sample weights; row i's penalty becomes `C * w_i`. None
+            weights every sample equally.
+
+        Returns
+        -------
+        self : SVR
+            The fitted estimator.
+        """
         x, self.input_copied_ = as_f32_dense_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         targets = _as_targets(y, n_rows)
@@ -1921,6 +2306,11 @@ class SVR(NumericModeMixin):
 
     @property
     def coef_(self):
+        """Primal weights, shape (1, n_features), float32.
+
+        Only for `kernel='linear'`; raises `AttributeError` for other
+        kernels or before `fit`.
+        """
         if not hasattr(self, "dual_coef_"):
             raise AttributeError("mojolearn SVR: call fit() first")
         if self.kernel != "linear":
@@ -1931,13 +2321,23 @@ class SVR(NumericModeMixin):
             return zeros((1, self.n_features_in_), "<f4")
         return self._dual_times_sv(self.dual_coef_, self.support_vectors_)
 
+    # Maintainer note: there is no `decision_function` beside this and no
+    # `predict_class` under it: on a regressor the decision value IS the
+    # prediction, and cuML reaches it through the same `svcPredict` with the
+    # class epilogue switched off.
     def predict(self, X):
-        """`sum_j K(x, sv_j) dual_j + b`, one value per row, float32.
+        """Predict target values for the rows of `X`.
 
-        There is no `decision_function` beside this and no `predict_class`
-        under it: on a regressor the decision value IS the prediction, and
-        cuML reaches it through the same `svcPredict` with the class
-        epilogue switched off.
+        Parameters
+        ----------
+        X : array-like of shape (n_rows, n_features)
+            Query data. With `kernel='precomputed'`, the kernel between the
+            queries and the training rows, shape (n_rows, n_samples).
+
+        Returns
+        -------
+        Array of shape (n_rows,), float32
+            `sum_j K(x, sv_j) dual_j + b` for each row.
         """
         if not hasattr(self, "dual_coef_"):
             raise ValueError("mojolearn SVR: call fit() first")
@@ -1973,16 +2373,28 @@ class SVR(NumericModeMixin):
         )
         return out
 
+    # Maintainer notes: accumulated in FLOAT64 from float32 predictions, which
+    # is what scikit-learn does and is not part of any identity claim.
+    # SEQUENTIALLY, in Python (`linear_model._r2_sums`, DEVIATION 2365): the
+    # NumPy-era pairwise sum could differ in the last bits.
     def score(self, X, y):
-        """The coefficient of determination R^2, scikit-learn's definition,
-        `1 - SS_res / SS_tot`.
+        """Coefficient of determination R^2 of `predict(X)` against `y`.
 
-        Accumulated in FLOAT64 from float32 predictions, which is what
-        scikit-learn does and is not part of any identity claim: it is a
-        summary of the answer, not the answer. SEQUENTIALLY, in Python
-        (`linear_model._r2_sums`, DEVIATION 2365): the NumPy-era pairwise
-        sum could differ in the last bits, so a recorded R^2 is
-        RE-BASELINE OWED (test_svr_surface.py only thresholds it).
+        scikit-learn's definition, `1 - SS_res / SS_tot`, accumulated in
+        float64. A constant `y` scores 1.0 when predicted exactly and 0.0
+        otherwise.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_rows, n_features)
+            Query data.
+        y : array-like of shape (n_rows,)
+            True target values.
+
+        Returns
+        -------
+        float
+            The R^2 score.
         """
         pred = self.predict(X)
         shape = _shape_of(y)
@@ -2002,15 +2414,32 @@ class SVR(NumericModeMixin):
             return 1.0 if ss_res == 0.0 else 0.0
         return 1.0 - ss_res / ss_tot
 
+    # Maintainer note, file layout: `dual_coef_`, `support_vectors_`,
+    # `intercept_` as fitted (float32), `support_` `<i4`, `hyper` `<f8` [C,
+    # epsilon, tol, cache_size, the gamma the FIT resolved], `kernel` and
+    # `gamma` (the constructor's setting, 'auto' or a number) as strings,
+    # `meta` `<i8` [n_features_in_, n_support_, n_iter_, max_iter,
+    # nochange_steps], `kernel_params` [degree, coef0] for poly and sigmoid.
+    # `mojolearn.host_model(path)` predicts through
+    # `_mojolearn_svm_host.svr_predict`.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: `dual_coef_`,
-        `support_vectors_`, `intercept_` as fitted (float32), `support_`
-        `<i4`, `hyper` `<f8` [C, epsilon, tol, cache_size, the gamma the FIT
-        resolved], `kernel` and `gamma` (the constructor's setting, 'auto'
-        or a number) as strings, `meta` `<i8` [n_features_in_, n_support_,
-        n_iter_, max_iter, nochange_steps] (lane/inference-svm, 2026-09-15).
-        `mojolearn.host_model(path)` predicts from it on a CPU with no GPU
-        through `_mojolearn_svm_host.svr_predict`."""
+        """Save the fitted model to `path` as an `.npz` file.
+
+        The file holds the fitted arrays, the hyperparameters, the gamma
+        resolved at fit and the numeric mode. Load it with `SVR.load`, or
+        predict from it on a CPU without a GPU with
+        `mojolearn.host_model(path)`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted.
+        """
         if not hasattr(self, "dual_coef_"):
             raise RuntimeError("this estimator is not fitted yet")
         return _serialize.write_npz(path, {
@@ -2040,8 +2469,25 @@ class SVR(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts; every array
-        is read at its saved dtype and never cast."""
+        """Load a model written by `save`.
+
+        Every array is read at its saved dtype, never cast.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `SVR.save`.
+
+        Returns
+        -------
+        SVR
+            A fitted model, ready to predict, with the saved numeric mode.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a valid saved `SVR`.
+        """
         arrays = _serialize.read_npz(path, _SVR_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")

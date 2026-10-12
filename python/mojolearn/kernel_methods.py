@@ -1,30 +1,40 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Kernel methods on the GPU: `KernelRidge`, `Nystroem`, `RBFSampler`
-(workstream D, 2026-09-14).
+"""Kernel methods: kernel ridge regression and kernel feature approximations.
 
-The Python door of `kernel_methods/estimator.mojo` through
-`bindings/_mojolearn_kernel_methods.mojo`. Every parameter means what the
-scikit-learn parameter of that name means, or is named differently
-(`kernel_methods/README.md` carries the mapping); every refusal is raised
-by name, here for the shapes and the spellings, on the Mojo host for the
-values (`km_validate_matrix`, `km_validate_kernel_params`, the alpha,
-gamma, degree and n_components refusals, DEVIATION 1686).
+`KernelRidge`, `Nystroem` and `RBFSampler` follow scikit-learn's estimators of
+the same names: every parameter means what scikit-learn's parameter of that
+name means, and an invalid value raises an error that names the parameter.
+Inputs are converted to float32; sparse input is densified.
 
-THE MODEL IS ITS ARRAYS. Fit returns every field `kernel_methods/
-estimator.mojo`'s structs carry, so a fitted object can be read, saved and
-hashed, and predict/transform send the same arrays back down to rebuild
-the struct. `Nystroem` keeps its eigenvalues, eigenvectors and Jacobi
-sweep count, which scikit-learn discards, because the lane's identity
-argument is which of those moved (the estimator's header, point 3).
+`KernelRidge` and `Nystroem` support the kernels 'linear', 'poly' (or
+'polynomial'), 'rbf', 'sigmoid', 'laplacian', 'cosine', 'chi2' and
+'additive_chi2'. `KernelRidge` also accepts 'precomputed'; `Nystroem` refuses
+it with `ValueError`. `RBFSampler` approximates the RBF kernel only.
+`gamma=None` is scikit-learn's `1 / n_features` (1.0 for 'chi2').
 
-The kernels are `svm/impl/svm_parameter.mojo`'s codes plus the lane's
-laplacian: linear, poly, rbf, sigmoid, laplacian. 'precomputed' is refused
-by name here and on the Mojo host. `gamma=None` is scikit-learn's
-`1 / n_features`, one Python division, correctly rounded on every host.
-
-NO SPEED CLAIM. The lane has no published number and this door adds none.
+A fitted model keeps every array it computed, so it can be inspected, saved
+with `save` and loaded with `load`; `mojolearn.host_model(path)` predicts or
+transforms from a saved model on a CPU without a GPU.
 """
+
+# Maintainer notes (moved from the module docstring):
+# The Python door of `kernel_methods/estimator.mojo` through
+# `bindings/_mojolearn_kernel_methods.mojo` (workstream D, 2026-09-14).
+# `kernel_methods/README.md` carries the parameter mapping to scikit-learn;
+# every refusal is raised by name, here for the shapes and the spellings, on the
+# Mojo host for the values (`km_validate_matrix`, `km_validate_kernel_params`,
+# the alpha, gamma, degree and n_components refusals, DEVIATION 1686).
+# THE MODEL IS ITS ARRAYS. Fit returns every field `kernel_methods/
+# estimator.mojo`'s structs carry, so a fitted object can be read, saved and
+# hashed, and predict/transform send the same arrays back down to rebuild the
+# struct. `Nystroem` keeps its eigenvalues, eigenvectors and Jacobi sweep count,
+# which scikit-learn discards, because the lane's identity argument is which of
+# those moved (the estimator's header, point 3).
+# The kernels are `svm/impl/svm_parameter.mojo`'s codes plus the lane's
+# laplacian (and cosine, chi2, additive_chi2). `gamma=None` is scikit-learn's
+# `1 / n_features`, one Python division, correctly rounded on every host.
+# No speed claim: the lane has no published number and this door adds none.
 
 from . import _backend, _serialize
 from ._scale_gamma import scale_gamma, scale_gamma_x
@@ -197,40 +207,73 @@ class _KernelMethodBase(NumericModeMixin):
         return mod
 
 
+# Maintainer notes: `alpha` IS the Cholesky ridge (DEVIATION 1660); a kernel
+# matrix that does not factor is refused by name, never solved by a
+# least-squares fallback (DEVIATION 1662). Negative or NaN alpha and
+# non-positive gamma are refused on the Mojo host. The cosine and chi2 kernels
+# are each cell one pinned chain. `info_` is LAPACK's info from the
+# factorization.
 class KernelRidge(_KernelMethodBase):
-    """`sklearn.kernel_ridge.KernelRidge` (and cuML's) on the GPU.
+    """Kernel ridge regression.
+
+    Follows `sklearn.kernel_ridge.KernelRidge` (and cuML's). Fitting forms
+    the kernel matrix `K` of the training rows, adds `alpha` to its
+    diagonal, factors it with a Cholesky factorization and solves for the
+    dual coefficients; prediction is `K(X, X_fit_) @ dual_coef_`. The
+    training matrix is kept on the model because prediction needs it.
+
+    If `K + alpha * I` cannot be factored at the given `alpha`, `fit`
+    raises an error rather than falling back to a least-squares solve;
+    increase `alpha` in that case. Inputs and outputs are float32. Supports
+    the `'identical'` (default) and `'fast'` numeric modes; `'fast'` is
+    available on Apple GPUs only.
 
     Parameters
     ----------
     alpha : float, default 1.0
-        The ridge. This IS the Cholesky ridge (DEVIATION 1660); negative
-        or NaN is refused by name on the Mojo host, and zero is accepted
-        (inside scikit-learn's own interval). A kernel matrix that does
-        not factor at the given alpha is refused by name, never solved by
-        a least-squares fallback (DEVIATION 1662).
-    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'laplacian', 'cosine', 'chi2',
-              'additive_chi2', 'precomputed'}, default 'linear'
-        cosine, chi2 and additive_chi2 are scikit-learn's pairwise kernels
-        (chi2's gamma=None is its own default 1.0; both chi2 kernels refuse
-        negative X, as theirs do), each cell one pinned chain
-        'precomputed': X is the n x n kernel matrix at fit and the
-        q x n cross-kernel at predict, taken as given (scikit-learn's
-        contract; nothing validates symmetry, and a matrix K + alpha I
-        that does not factor is refused by name as for any kernel)
+        Regularization strength, added to the kernel matrix diagonal. Must
+        be >= 0; zero is accepted, negative or NaN is refused.
+    kernel : str, default 'linear'
+        One of 'linear', 'poly', 'rbf', 'sigmoid', 'laplacian', 'cosine',
+        'chi2', 'additive_chi2' or 'precomputed'.
+        'cosine', 'chi2' and 'additive_chi2' are
+        scikit-learn's pairwise kernels; both chi2 kernels refuse negative
+        values in `X` with `ValueError`, as scikit-learn's do. With
+        'precomputed', `X` is the n x n kernel matrix at fit and the
+        q x n cross-kernel against the training rows at predict, used as
+        given (symmetry is not checked).
     gamma : float or None, default None
-        None is scikit-learn's `1 / n_features`. Must be positive where
-        the kernel reads it (refused by name on the Mojo host).
+        Kernel coefficient for 'poly', 'rbf', 'sigmoid', 'laplacian' and
+        the chi2 kernels. None means `1 / n_features` (1.0 for 'chi2', its
+        scikit-learn default). Must be positive where the kernel reads it.
     degree : int, default 3
+        Degree of the 'poly' kernel.
     coef0 : float, default 1.0
+        Independent term of the 'poly' and 'sigmoid' kernels.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator; None uses the process default.
 
     Attributes
     ----------
-    dual_coef_ : Array (n_samples, n_targets) float32
-    X_fit_ : Array (n_samples, n_features) float32
-        Predict needs it; a kernel method has no finite parameter vector.
+    dual_coef_ : Array of shape (n_samples,) or (n_samples, n_targets), float32
+        Dual coefficients, 1-D when `y` was 1-D.
+    X_fit_ : Array of shape (n_samples, n_features), float32
+        The training data, used by `predict`.
     info_ : int
-        LAPACK's info from the factorization; 0 on every model that
-        comes back (the fit refuses anything else by name).
+        Status of the factorization; always 0 on a fitted model.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+    n_targets_ : int
+        Number of regression targets.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X.sum(axis=1)
+    >>> model = mojolearn.KernelRidge(alpha=1.0, kernel="rbf").fit(X, y)
+    >>> pred = model.predict(X[:5])
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -255,14 +298,29 @@ class KernelRidge(_KernelMethodBase):
             )
         return k, int(self.degree), _gamma_for(self.gamma, n_features, self._WHERE, k), _real(self.coef0, "coef0", self._WHERE)
 
+    # Maintainer notes: `kernel_ridge_fit_host`. `sample_weight` is
+    # scikit-learn's `_solve_cholesky_kernel` weighted arm: `sw = sqrt(w)`
+    # (binary64, rounded once to float32), `y * sw`, `K * outer(sw, sw)`,
+    # then `dual_coef * sw` (float32 on both columns, DEVIATION 1688).
     def fit(self, X, y, sample_weight=None):
-        """Form `K`, ridge it, factor it, solve it (`kernel_ridge_fit_host`).
-        `y` is `(n,)` or `(n, n_targets)`. With kernel='precomputed', X IS
-        the n x n kernel matrix. `sample_weight` (a scalar or n values,
-        finite, >= 0) is scikit-learn's `_solve_cholesky_kernel` weighted
-        arm: `sw = sqrt(w)` (binary64, rounded once to float32 here),
-        `y * sw`, `K * outer(sw, sw)`, then `dual_coef * sw` (float32 on
-        both columns, DEVIATION 1688)."""
+        """Fit the kernel ridge model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32. With
+            `kernel='precomputed'`, the square n x n kernel matrix.
+        y : array-like of shape (n_samples,) or (n_samples, n_targets)
+            Target values.
+        sample_weight : float or array-like of shape (n_samples,), default None
+            Per-sample weights, finite and >= 0, applied as scikit-learn
+            does. None weights every sample equally.
+
+        Returns
+        -------
+        self : KernelRidge
+            The fitted estimator.
+        """
         x, _ = as_f32_dense_c(X, ndim=2, name="X")
         n, d = x.shape
         yy, _ = as_f32_c(y, ndim=None, name="y")
@@ -309,10 +367,22 @@ class KernelRidge(_KernelMethodBase):
         self._kernel_params = (kernel, degree, gamma, coef0, alpha)
         return self
 
+    # Maintainer note: `K(X, X_fit_) . dual_coef_` through the identical GEMM
+    # (DEVIATION 1680).
     def predict(self, X):
-        """`K(X, X_fit_) . dual_coef_` through the identical GEMM
-        (DEVIATION 1680). Returns float32, `(q,)` or `(q, n_targets)` as
-        `y` was."""
+        """Predict with the fitted model: `K(X, X_fit_) @ dual_coef_`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Query data. With `kernel='precomputed'`, the kernel between the
+            queries and the training rows, shape (n_queries, n_samples).
+
+        Returns
+        -------
+        Array of shape (n_queries,) or (n_queries, n_targets), float32
+            Predictions, 1-D when the fitted `y` was 1-D.
+        """
         if not hasattr(self, "dual_coef_"):
             raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
         xq, _ = as_f32_dense_c(X, ndim=2, name="X")
@@ -340,13 +410,28 @@ class KernelRidge(_KernelMethodBase):
             return out
         return out.reshape((q, t))
 
+    # Maintainer note, file layout: `X_fit_` and `dual_coef_` (flat,
+    # `n * n_targets`) as fitted, `hyper` `<f8` [gamma, coef0, alpha] as the fit
+    # resolved them, `meta` `<i8` [n, n_features, n_targets, kernel code, degree,
+    # info, 1-D target] and the numeric mode.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: `X_fit_` and
-        `dual_coef_` (flat, `n * n_targets`) as fitted, `hyper` `<f8`
-        [gamma, coef0, alpha] as the fit resolved them, `meta` `<i8` [n,
-        n_features, n_targets, kernel code, degree, info, 1-D target] and
-        the numeric mode. `mojolearn.host_model(path)` predicts from it on a
-        CPU with no GPU."""
+        """Save the fitted model to `path` as an `.npz` file.
+
+        The file holds the training data, the dual coefficients, the kernel
+        parameters as resolved at fit and the numeric mode. Load it with
+        `KernelRidge.load`, or predict from it on a CPU without a GPU with
+        `mojolearn.host_model(path)`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted.
+        """
         if not hasattr(self, "dual_coef_"):
             raise RuntimeError("this estimator is not fitted yet")
         kernel, degree, gamma, coef0, alpha = self._kernel_params
@@ -361,8 +446,18 @@ class KernelRidge(_KernelMethodBase):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts; it does not
-        refit."""
+        """Load a model written by `save`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `KernelRidge.save`.
+
+        Returns
+        -------
+        KernelRidge
+            A fitted model, ready to predict, with the saved numeric mode.
+        """
         from .linear_model import _restore_mode
         arrays = _serialize.read_npz(path, _KERNEL_RIDGE_FORMAT)
         meta, hyper = _km_header(arrays, path, cls, 7, 3)
@@ -381,38 +476,67 @@ class KernelRidge(_KernelMethodBase):
         return obj
 
 
+# Maintainer notes: `random_state` seeds `km_basis_indices`, the device
+# permutation. `normalization_` is NOT bitwise symmetric (DEVIATION 1674);
+# transform uses its transpose, scikit-learn's arm. `eigenvalues_` are clipped
+# at 1e-12 (DEVIATION 1670). n_components > n_samples is refused on the Mojo
+# host. The eigenvalues, eigenvectors and sweep count are kept (scikit-learn
+# discards them) because they are part of the identity argument.
 class Nystroem(_KernelMethodBase):
-    """`sklearn.kernel_approximation.Nystroem` on the GPU.
+    """Approximate a kernel map with the Nystroem method.
+
+    Follows `sklearn.kernel_approximation.Nystroem`. `fit` picks
+    `n_components` training rows at random as the basis, forms their
+    kernel matrix and computes its inverse square root with a Jacobi
+    eigensolver on the device; `transform` maps rows to
+    `K(X, components_) @ normalization_.T`, a feature space whose inner
+    products approximate the kernel. Inputs and outputs are float32.
+    Supports the `'identical'` (default) and `'fast'` numeric modes;
+    `'fast'` is available on Apple GPUs only.
 
     Parameters
     ----------
-    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'laplacian', 'cosine', 'chi2',
-              'additive_chi2'}, default 'rbf'
+    kernel : str, default 'rbf'
+        One of 'linear', 'poly', 'rbf', 'sigmoid', 'laplacian', 'cosine',
+        'chi2' or 'additive_chi2'. 'precomputed' is refused with
+        `ValueError`. Both chi2 kernels refuse negative values in `X`.
     gamma : float or None, default None
-        None is scikit-learn's `1 / n_features`.
+        Kernel coefficient. None means `1 / n_features` (1.0 for 'chi2').
     degree : int, default 3
+        Degree of the 'poly' kernel.
     coef0 : float, default 1.0
+        Independent term of the 'poly' and 'sigmoid' kernels.
     n_components : int, default 100
-        Refused by name on the Mojo host when it exceeds `n_samples` or is
-        not positive.
+        Number of basis rows. Must be positive and at most `n_samples`.
     random_state : int, default 0
-        The seed of `km_basis_indices`, the device permutation.
+        Seed of the basis selection.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator; None uses the process default.
 
     Attributes
     ----------
-    components_ : Array (n_components, n_features) float32
-    component_indices_ : Array (n_components,) int32
-    normalization_ : Array (n_components, n_components) float32
-        NOT bitwise symmetric (DEVIATION 1674); transform uses its
-        transpose, scikit-learn's arm.
-    eigenvalues_ : Array (n_components,) float32
-        The singular values of the basis kernel, `|lambda|` of its
-        eigenvalues, descending, clipped at 1e-12 (DEVIATION 1670). A
-        numerically negative eigenvalue keeps its sign in the right factor
-        of `normalization_`, as scikit-learn's SVD does.
-    eigenvectors_ : Array (n_components, n_components) float32
+    components_ : Array of shape (n_components, n_features), float32
+        The basis rows.
+    component_indices_ : Array of shape (n_components,), int32
+        Indices of the basis rows in the training data.
+    normalization_ : Array of shape (n_components, n_components), float32
+        Inverse square root of the basis kernel matrix.
+    eigenvalues_ : Array of shape (n_components,), float32
+        Absolute eigenvalues of the basis kernel matrix (its singular
+        values), descending. A negative eigenvalue keeps its sign in the
+        right factor of `normalization_`, as scikit-learn's SVD does.
+    eigenvectors_ : Array of shape (n_components, n_components), float32
+        Eigenvectors of the basis kernel matrix.
     sweeps_ : int
-        Jacobi sweeps the device eigensolver ran. Part of the model.
+        Number of Jacobi sweeps the eigensolver ran.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> features = mojolearn.Nystroem(n_components=64).fit_transform(X)
     """
 
     _WHERE = "Nystroem"
@@ -426,6 +550,20 @@ class Nystroem(_KernelMethodBase):
         self.random_state = random_state
 
     def fit(self, X, y=None):
+        """Choose the basis rows and compute the normalization.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : ignored
+            Present for scikit-learn API compatibility.
+
+        Returns
+        -------
+        self : Nystroem
+            The fitted transformer.
+        """
         x, _ = as_f32_dense_c(X, ndim=2, name="X")
         n, d = x.shape
         kernel = _kernel_code(self.kernel, self._WHERE)
@@ -469,7 +607,18 @@ class Nystroem(_KernelMethodBase):
         return self
 
     def transform(self, X):
-        """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
+        """Map `X` to the approximate kernel feature space.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_rows, n_features)
+            Data to transform.
+
+        Returns
+        -------
+        Array of shape (n_rows, n_components), float32
+            `K(X, components_) @ normalization_.T`.
+        """
         if not hasattr(self, "components_"):
             raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
         x, _ = as_f32_dense_c(X, ndim=2, name="X")
@@ -497,14 +646,41 @@ class Nystroem(_KernelMethodBase):
         return out.reshape((m, q))
 
     def fit_transform(self, X, y=None):
+        """Fit to `X`, then transform `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : ignored
+            Present for scikit-learn API compatibility.
+
+        Returns
+        -------
+        Array of shape (n_samples, n_components), float32
+            The transformed training data.
+        """
         return self.fit(X).transform(X)
 
+    # Maintainer note, file layout: every model array as fitted, `hyper` `<f8`
+    # [gamma, coef0] as the fit resolved them, `meta` `<i8` [n_components,
+    # n_features, kernel code, degree, seed, sweeps] and the numeric mode.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: every model array as
-        fitted, `hyper` `<f8` [gamma, coef0] as the fit resolved them, `meta`
-        `<i8` [n_components, n_features, kernel code, degree, seed, sweeps]
-        and the numeric mode. `mojolearn.host_model(path)` transforms from it
-        on a CPU with no GPU."""
+        """Save the fitted transformer to `path` as an `.npz` file.
+
+        Load it with `Nystroem.load`, or transform from it on a CPU without
+        a GPU with `mojolearn.host_model(path)`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the transformer has not been fitted.
+        """
         if not hasattr(self, "components_"):
             raise RuntimeError("this estimator is not fitted yet")
         kernel, degree, gamma, coef0, seed = self._kernel_params
@@ -521,8 +697,19 @@ class Nystroem(_KernelMethodBase):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result transforms; it does not
-        refit."""
+        """Load a transformer written by `save`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `Nystroem.save`.
+
+        Returns
+        -------
+        Nystroem
+            A fitted transformer, ready to transform, with the saved
+            numeric mode.
+        """
         from .linear_model import _restore_mode
         arrays = _serialize.read_npz(path, _NYSTROEM_FORMAT)
         meta, hyper = _km_header(arrays, path, cls, 6, 2)
@@ -541,28 +728,53 @@ class Nystroem(_KernelMethodBase):
         return obj
 
 
+# Maintainer notes: gamma <= 0 is refused on the Mojo host. gamma='scale' uses
+# the EXACT variance of X's float32 cells, the reciprocal rounded once
+# (`_scale_gamma.scale_gamma`). `sigma_` and `scale_` are computed once on the
+# host (DEVIATION 1678).
 class RBFSampler(_KernelMethodBase):
-    """`sklearn.kernel_approximation.RBFSampler` on the GPU: random
-    Fourier features for the RBF kernel.
+    """Approximate the RBF kernel with random Fourier features.
+
+    Follows `sklearn.kernel_approximation.RBFSampler`. `fit` draws random
+    weights and offsets from `random_state`; `transform` maps rows to
+    `scale_ * cos(X @ random_weights_ + random_offset_)`, a feature space
+    whose inner products approximate `exp(-gamma * ||x - y||^2)`. `fit`
+    reads only the number of features of `X` (and its variance when
+    `gamma='scale'`). Inputs and outputs are float32. Supports the
+    `'identical'` (default) and `'fast'` numeric modes; `'fast'` is
+    available on Apple GPUs only.
 
     Parameters
     ----------
     gamma : float or 'scale', default 1.0
-        Must be positive (refused by name on the Mojo host). 'scale' is
-        scikit-learn's `1 / (n_features * X.var())` from the EXACT variance
-        of X's float32 cells, rounded once (`_scale_gamma.scale_gamma`).
+        RBF kernel coefficient; must be positive. 'scale' is scikit-learn's
+        `1 / (n_features * X.var())` (1.0 when the variance is zero),
+        computed from the exact variance of the float32 data.
     n_components : int, default 100
-        Refused by name when not positive, before any buffer is made.
+        Number of random features. Must be positive.
     random_state : int, default 0
+        Seed of the random draws.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator; None uses the process default.
 
     Attributes
     ----------
-    random_weights_ : Array (n_features, n_components) float32
-    random_offset_ : Array (n_components,) float32
+    random_weights_ : Array of shape (n_features, n_components), float32
+        The random projection weights.
+    random_offset_ : Array of shape (n_components,), float32
+        The random phase offsets.
     sigma_ : float
-        `sqrt(2 gamma)`, computed once on the host (DEVIATION 1678).
+        `sqrt(2 * gamma)`, the standard deviation of the weights.
     scale_ : float
-        `sqrt(2 / n_components)`, same argument.
+        `sqrt(2 / n_components)`, the output scale.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> features = mojolearn.RBFSampler(gamma=0.5, n_components=256).fit_transform(X)
     """
 
     _WHERE = "RBFSampler"
@@ -573,8 +785,23 @@ class RBFSampler(_KernelMethodBase):
         self.random_state = random_state
 
     def fit(self, X, y=None):
-        """Reads `X.shape[1]` (and, for gamma='scale', the variance of X), as
-        scikit-learn's does."""
+        """Draw the random weights and offsets.
+
+        Reads only `X.shape[1]` (and, for `gamma='scale'`, the variance of
+        `X`), as scikit-learn does.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : ignored
+            Present for scikit-learn API compatibility.
+
+        Returns
+        -------
+        self : RBFSampler
+            The fitted transformer.
+        """
         x, _ = as_f32_dense_c(X, ndim=2, name="X")
         _, d = x.shape
         gamma, q, seed = self._fit_params(x, d)
@@ -622,7 +849,18 @@ class RBFSampler(_KernelMethodBase):
         return gamma, q, seed
 
     def transform(self, X):
-        """`scale_ * cos(X . random_weights_ + random_offset_)`, float32."""
+        """Map `X` to the random Fourier feature space.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_rows, n_features)
+            Data to transform.
+
+        Returns
+        -------
+        Array of shape (n_rows, n_components), float32
+            `scale_ * cos(X @ random_weights_ + random_offset_)`.
+        """
         if not hasattr(self, "random_weights_"):
             raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
         x, _ = as_f32_dense_c(X, ndim=2, name="X")
@@ -646,6 +884,20 @@ class RBFSampler(_KernelMethodBase):
         return out.reshape((m, q))
 
     def fit_transform(self, X, y=None):
+        """Fit to `X`, then transform `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : ignored
+            Present for scikit-learn API compatibility.
+
+        Returns
+        -------
+        Array of shape (n_samples, n_components), float32
+            The transformed training data.
+        """
         ext = self._extension()
         resident = getattr(ext, "rbf_sampler_fit_transform_resident", None)
         if resident is None:
@@ -670,12 +922,25 @@ class RBFSampler(_KernelMethodBase):
         self._set_fitted(d, q, gamma, seed, weights, offset, scalars)
         return out.reshape((m, q))
 
+    # Maintainer note, file layout: the weights and offsets as drawn, `hyper`
+    # `<f8` [gamma, sigma_, scale_], `meta` `<i8` [n_features, n_components,
+    # seed] and the numeric mode.
     def save(self, path):
-        """Write the fitted sampler to `path` as an npz: the weights and
-        offsets as drawn, `hyper` `<f8` [gamma, sigma_, scale_], `meta`
-        `<i8` [n_features, n_components, seed] and the numeric mode.
-        `mojolearn.host_model(path)` transforms from it on a CPU with no
-        GPU."""
+        """Save the fitted sampler to `path` as an `.npz` file.
+
+        Load it with `RBFSampler.load`, or transform from it on a CPU
+        without a GPU with `mojolearn.host_model(path)`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the sampler has not been fitted.
+        """
         if not hasattr(self, "random_weights_"):
             raise RuntimeError("this estimator is not fitted yet")
         gamma, seed = self._params
@@ -689,8 +954,19 @@ class RBFSampler(_KernelMethodBase):
 
     @classmethod
     def load(cls, path):
-        """Load a sampler saved by `save`. The result transforms; it does
-        not draw again."""
+        """Load a sampler written by `save`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `RBFSampler.save`.
+
+        Returns
+        -------
+        RBFSampler
+            A fitted sampler with the saved weights (nothing is drawn
+            again), ready to transform, with the saved numeric mode.
+        """
         from .linear_model import _restore_mode
         arrays = _serialize.read_npz(path, _RBF_SAMPLER_FORMAT)
         meta, hyper = _km_header(arrays, path, cls, 3, 3)

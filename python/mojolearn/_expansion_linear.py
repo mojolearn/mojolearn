@@ -263,6 +263,27 @@ class _LinearClassifierMixin:
     _estimator_type = "classifier"
 
     def decision_function(self, X):
+        """Signed distance of each sample to the separating hyperplane(s).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, converted to float32. The feature count must match the
+            one seen in ``fit``.
+
+        Returns
+        -------
+        scores : float32 array of shape (n_samples,) or (n_samples, n_classes)
+            ``X @ coef_.T + intercept_``. One column (returned as a 1-D array)
+            for a binary problem, one column per class otherwise.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            If ``X`` has a different number of features than in ``fit``.
+        """
         _check_fitted(self)
         k = len(self.intercept_)
         out = _decision(self, X, self.coef_, self.intercept_)
@@ -271,10 +292,40 @@ class _LinearClassifierMixin:
         return out
 
     def predict(self, X):
+        """Predict class labels.
+
+        A binary model predicts ``classes_[1]`` where the decision score is
+        positive and ``classes_[0]`` otherwise; a multiclass model predicts
+        the class with the largest score (the first one on a tie).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, converted to float32.
+
+        Returns
+        -------
+        labels : array of shape (n_samples,)
+            Predicted labels, drawn from ``classes_``.
+        """
         _check_fitted(self)
         return decode_labels(self.classes_, _decision_codes(self, X, self.coef_, self.intercept_))
 
     def score(self, X, y):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+
+        Returns
+        -------
+        score : float
+            Fraction of samples predicted correctly.
+        """
         from ._expansion_metrics import accuracy_fraction
         return accuracy_fraction(y, self.predict(X))
 
@@ -284,11 +335,48 @@ class _LinearRegressorMixin:
     _link = LINK_IDENTITY
 
     def predict(self, X):
+        """Predict targets for ``X``.
+
+        Returns ``X @ coef_ + intercept_``; models with a log link (Poisson,
+        Gamma and Tweedie with ``power > 0``) return its exponential.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, converted to float32. The feature count must match the
+            one seen in ``fit``.
+
+        Returns
+        -------
+        y_pred : float32 array of shape (n_samples,)
+            Predicted values.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            If ``X`` has a different number of features than in ``fit``.
+        """
         _check_fitted(self)
         out = _decision(self, X, self.coef_, self.intercept_, self._link)
         return out.reshape((out.shape[0],))
 
     def score(self, X, y):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True targets.
+
+        Returns
+        -------
+        score : float
+            R^2; 1.0 is a perfect fit.
+        """
         # R^2 on the device (the metrics binding's pinned-sum r2_score)
         from ._metrics_impl import r2_score
         pred, _ = as_f32_c(self.predict(X), ndim=1, name="prediction")
@@ -411,10 +499,85 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
     return coef, intercept
 
 
+# Reference: sklearn/linear_model/_stochastic_gradient.py; kernel x_linear/sgd.mojo.
 class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
-    """Linear classifiers trained by plain SGD (scikit-learn's SGDClassifier,
-    one-vs-rest for more than two classes). Reference:
-    sklearn/linear_model/_stochastic_gradient.py; kernel x_linear/sgd.mojo."""
+    """Linear classifier trained by stochastic gradient descent.
+
+    Follows scikit-learn's SGDClassifier: a binary linear model, one-vs-rest
+    for more than two classes. Two defaults differ from scikit-learn and
+    change results: the fit runs minibatch SGD with ``batch_size=4096`` rows
+    per step (``batch_size=0`` gives scikit-learn's per-sample updates), and
+    ``random_state=None`` means seed 0, so a fit is reproducible by default.
+
+    Parameters
+    ----------
+    loss : {'hinge', 'log_loss', 'modified_huber', 'squared_hinge', 'perceptron'}, default 'hinge'
+        Loss function.
+    penalty : {'l2', 'l1', 'elasticnet'} or None, default 'l2'
+        Regularization term.
+    alpha : float, default 0.0001
+        Regularization strength; must be > 0 with ``learning_rate='optimal'``.
+    l1_ratio : float, default 0.15
+        Elastic-net mixing (0 is L2, 1 is L1); used with ``penalty='elasticnet'``.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    max_iter : int, default 1000
+        Maximum number of passes over the data.
+    tol : float or None, default 1e-3
+        Stopping tolerance, as in scikit-learn; None disables it.
+    shuffle : bool, default True
+        Whether to shuffle the rows each pass.
+    epsilon : float, default 0.1
+        Epsilon of the ``'modified_huber'`` loss.
+    random_state : int or None, default None
+        Non-negative seed for shuffling. None means seed 0.
+    learning_rate : {'constant', 'optimal', 'invscaling', 'adaptive'}, default 'optimal'
+        Step-size schedule.
+    eta0 : float, default 0.0
+        Initial step size; must be > 0 for 'constant', 'invscaling' and 'adaptive'.
+    power_t : float, default 0.5
+        Exponent of the 'invscaling' schedule.
+    early_stopping : bool, default False
+        Not supported: True raises ValueError.
+    n_iter_no_change : int, default 5
+        Passes without improvement before stopping.
+    class_weight : dict, 'balanced' or None, default None
+        Per-class weights; 'balanced' weighs classes inversely to their frequency.
+    average : bool, default False
+        Not supported: True raises ValueError.
+    warm_start : bool, default False
+        Not supported: True raises ValueError.
+    batch_size : int, default 4096
+        Rows per minibatch step; 0 runs per-sample SGD.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    coef_ : float32 array of shape (1, n_features) or (n_classes, n_features)
+        Weights; one row for a binary problem.
+    intercept_ : float32 array of shape (1,) or (n_classes,)
+        Intercepts.
+    n_iter_ : int
+        Number of passes run.
+    t_ : float
+        Number of weight updates, ``n_iter_ * n_samples + 1``.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int32)
+    >>> model = mojolearn.SGDClassifier(loss="log_loss").fit(X, y)
+    >>> proba = model.predict_proba(X)
+    """
 
     _BINDING = _BINDING
 
@@ -432,6 +595,28 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.batch_size = batch_size
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Class labels; at least two classes.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : SGDClassifier
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            On an unsupported option, a single class, invalid weights, or a
+            floating-point overflow during training (scale the inputs).
+        """
         _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
         if self.loss not in _SGD_CLF_LOSS:
             raise ValueError(f"mojolearn SGDClassifier: loss must be one of {sorted(_SGD_CLF_LOSS)}")
@@ -447,8 +632,26 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         return self
 
     def predict_proba(self, X):
-        """log_loss: the sigmoid of each OvR score, normalized over classes
-        when there are more than two (their `_predict_proba_lr`)."""
+        """Class probabilities, available with ``loss='log_loss'`` only.
+
+        The sigmoid of each one-vs-rest score, normalized over the classes
+        when there are more than two (as scikit-learn does).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, converted to float32.
+
+        Returns
+        -------
+        proba : float32 array of shape (n_samples, n_classes)
+            Probability of each class, in the order of ``classes_``.
+
+        Raises
+        ------
+        AttributeError
+            If ``loss`` is not ``'log_loss'``.
+        """
         if self.loss != "log_loss":
             raise AttributeError("probability estimates are not available for loss=%r" % self.loss)
         _check_fitted(self)
@@ -456,10 +659,81 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         return _py2mojo_proba(self, _ROWS_SGD_PROBA, p, len(self.intercept_))
 
 
+# Reference: sklearn/linear_model/_stochastic_gradient.py; kernel x_linear/sgd.mojo.
 class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
-    """Linear regression trained by plain SGD (scikit-learn's SGDRegressor).
-    Reference: sklearn/linear_model/_stochastic_gradient.py; kernel
-    x_linear/sgd.mojo."""
+    """Linear regression trained by stochastic gradient descent.
+
+    Follows scikit-learn's SGDRegressor. Two defaults differ from
+    scikit-learn and change results: the fit runs minibatch SGD with
+    ``batch_size=4096`` rows per step (``batch_size=0`` gives scikit-learn's
+    per-sample updates), and ``random_state=None`` means seed 0, so a fit is
+    reproducible by default.
+
+    Parameters
+    ----------
+    loss : {'squared_error', 'huber', 'epsilon_insensitive', 'squared_epsilon_insensitive'}, default 'squared_error'
+        Loss function.
+    penalty : {'l2', 'l1', 'elasticnet'} or None, default 'l2'
+        Regularization term.
+    alpha : float, default 0.0001
+        Regularization strength; must be > 0 with ``learning_rate='optimal'``.
+    l1_ratio : float, default 0.15
+        Elastic-net mixing (0 is L2, 1 is L1); used with ``penalty='elasticnet'``.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    max_iter : int, default 1000
+        Maximum number of passes over the data.
+    tol : float or None, default 1e-3
+        Stopping tolerance, as in scikit-learn; None disables it.
+    shuffle : bool, default True
+        Whether to shuffle the rows each pass.
+    epsilon : float, default 0.1
+        Epsilon of the huber and epsilon-insensitive losses.
+    random_state : int or None, default None
+        Non-negative seed for shuffling. None means seed 0.
+    learning_rate : {'constant', 'optimal', 'invscaling', 'adaptive'}, default 'invscaling'
+        Step-size schedule.
+    eta0 : float, default 0.01
+        Initial step size; must be > 0 for 'constant', 'invscaling' and 'adaptive'.
+    power_t : float, default 0.25
+        Exponent of the 'invscaling' schedule.
+    early_stopping : bool, default False
+        Not supported: True raises ValueError.
+    n_iter_no_change : int, default 5
+        Passes without improvement before stopping.
+    average : bool, default False
+        Not supported: True raises ValueError.
+    warm_start : bool, default False
+        Not supported: True raises ValueError.
+    batch_size : int, default 4096
+        Rows per minibatch step; 0 runs per-sample SGD.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Weights.
+    intercept_ : float32 array of shape (1,)
+        Intercept.
+    n_iter_ : int
+        Number of passes run.
+    t_ : float
+        Number of weight updates, ``n_iter_ * n_samples + 1``.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32)
+    >>> model = mojolearn.SGDRegressor().fit(X, y)
+    >>> y_pred = model.predict(X)
+    """
 
     _BINDING = _BINDING
 
@@ -475,6 +749,28 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.batch_size = batch_size
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : SGDRegressor
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            On an unsupported option, invalid weights, or a floating-point
+            overflow during training (scale the inputs).
+        """
         _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
         if self.loss not in _SGD_REG_LOSS:
             raise ValueError(f"mojolearn SGDRegressor: loss must be one of {sorted(_SGD_REG_LOSS)}")
@@ -505,6 +801,32 @@ class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
         return 1
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the generalized linear model.
+
+        Both accepted ``solver`` names run the same Newton-Cholesky solver
+        with a line search.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets, inside the valid range of the model's distribution.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : object
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If ``solver`` is not 'lbfgs' or 'newton-cholesky', ``warm_start``
+            is True, ``alpha`` is negative, or a value of ``y`` is outside
+            the valid range of the loss.
+        """
         if self.solver not in ("lbfgs", "newton-cholesky"):
             raise ValueError(f"mojolearn {type(self).__name__}: solver must be 'lbfgs' or 'newton-cholesky'")
         if self.warm_start:
@@ -542,7 +864,52 @@ def _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, ver
 
 
 class PoissonRegressor(_GLMBase):
-    """Poisson GLM with log link (scikit-learn's PoissonRegressor)."""
+    """Generalized linear model with a Poisson distribution and a log link.
+
+    Follows scikit-learn's PoissonRegressor; targets must be non-negative.
+    ``predict`` returns ``exp(X @ coef_ + intercept_)``. Unlike scikit-learn,
+    ``score`` returns R^2, not the deviance-based D^2.
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        L2 regularization strength (>= 0).
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    solver : {'lbfgs', 'newton-cholesky'}, default 'lbfgs'
+        Accepted for compatibility; both run a Newton-Cholesky solver.
+    max_iter : int, default 100
+        Maximum number of solver iterations.
+    tol : float, default 1e-4
+        Stopping tolerance.
+    warm_start : bool, default False
+        Not supported: True raises ValueError.
+    verbose : int, default 0
+        Accepted for compatibility; ignored.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Weights.
+    intercept_ : float
+        Intercept.
+    n_iter_ : int
+        Number of solver iterations run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.poisson(np.exp(X[:, 0])).astype(np.float32)
+    >>> model = mojolearn.PoissonRegressor(alpha=0.01).fit(X, y)
+    """
     _power = 1.0
 
     def __init__(self, *, alpha=1.0, fit_intercept=True, solver="lbfgs", max_iter=100, tol=1e-4,
@@ -553,7 +920,52 @@ class PoissonRegressor(_GLMBase):
 
 
 class GammaRegressor(_GLMBase):
-    """Gamma GLM with log link (scikit-learn's GammaRegressor)."""
+    """Generalized linear model with a Gamma distribution and a log link.
+
+    Follows scikit-learn's GammaRegressor; targets must be positive.
+    ``predict`` returns ``exp(X @ coef_ + intercept_)``. Unlike scikit-learn,
+    ``score`` returns R^2, not the deviance-based D^2.
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        L2 regularization strength (>= 0).
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    solver : {'lbfgs', 'newton-cholesky'}, default 'lbfgs'
+        Accepted for compatibility; both run a Newton-Cholesky solver.
+    max_iter : int, default 100
+        Maximum number of solver iterations.
+    tol : float, default 1e-4
+        Stopping tolerance.
+    warm_start : bool, default False
+        Not supported: True raises ValueError.
+    verbose : int, default 0
+        Accepted for compatibility; ignored.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Weights.
+    intercept_ : float
+        Intercept.
+    n_iter_ : int
+        Number of solver iterations run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.gamma(2.0, np.exp(X[:, 0])).astype(np.float32)
+    >>> model = mojolearn.GammaRegressor(alpha=0.01).fit(X, y)
+    """
     _power = 2.0
 
     def __init__(self, *, alpha=1.0, fit_intercept=True, solver="lbfgs", max_iter=100, tol=1e-4,
@@ -563,12 +975,61 @@ class GammaRegressor(_GLMBase):
     _loss_name = "HalfGammaLoss"
 
 
+# Refused powers and links are listed in x_linear/NOT_IMPLEMENTED.tsv.
 class TweedieRegressor(_GLMBase):
-    """Tweedie GLM (scikit-learn's TweedieRegressor). power 0 (normal),
-    1 (Poisson), (1, 2) (compound Poisson-Gamma), 2 (Gamma), > 2; link
-    'auto' is identity for power 0 and log otherwise. power < 0 and
-    power in (0, 1) are refused (x_linear/NOT_IMPLEMENTED.tsv), as is the
-    identity link with power > 0."""
+    """Generalized linear model with a Tweedie distribution.
+
+    Follows scikit-learn's TweedieRegressor. Supported powers are 0 (normal),
+    1 (Poisson), between 1 and 2 (compound Poisson-Gamma), 2 (Gamma) and
+    above 2. ``power < 0`` and
+    ``0 < power < 1`` raise ValueError, as does the identity link with
+    ``power > 0``. Unlike scikit-learn, ``score`` returns R^2, not the
+    deviance-based D^2.
+
+    Parameters
+    ----------
+    power : float, default 0.0
+        Tweedie power; sets the distribution and the valid range of ``y``.
+    alpha : float, default 1.0
+        L2 regularization strength (>= 0).
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    link : {'auto', 'identity', 'log'}, default 'auto'
+        Link function; 'auto' is identity for ``power=0`` and log otherwise.
+    solver : {'lbfgs', 'newton-cholesky'}, default 'lbfgs'
+        Accepted for compatibility; both run a Newton-Cholesky solver.
+    max_iter : int, default 100
+        Maximum number of solver iterations.
+    tol : float, default 1e-4
+        Stopping tolerance.
+    warm_start : bool, default False
+        Not supported: True raises ValueError.
+    verbose : int, default 0
+        Accepted for compatibility; ignored.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Weights.
+    intercept_ : float
+        Intercept.
+    n_iter_ : int
+        Number of solver iterations run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.poisson(np.exp(X[:, 0])).astype(np.float32)
+    >>> model = mojolearn.TweedieRegressor(power=1.5, alpha=0.01).fit(X, y)
+    """
 
     def __init__(self, *, power=0.0, alpha=1.0, fit_intercept=True, link="auto", solver="lbfgs",
                  max_iter=100, tol=1e-4, warm_start=False, verbose=0):
@@ -608,8 +1069,54 @@ def _lbfgs_work(p):
 
 
 class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
-    """L2-regularized linear regression with the Huber loss and a jointly
-    estimated scale (scikit-learn's HuberRegressor)."""
+    """Linear regression with the Huber loss, robust to outliers.
+
+    Follows scikit-learn's HuberRegressor: an L2-regularized linear model
+    whose scale is estimated jointly with the weights, solved by L-BFGS.
+
+    Parameters
+    ----------
+    epsilon : float, default 1.35
+        Residuals larger than ``epsilon * scale_`` count as outliers; must be >= 1.0.
+    max_iter : int, default 100
+        Maximum number of L-BFGS iterations.
+    alpha : float, default 0.0001
+        L2 regularization strength.
+    warm_start : bool, default False
+        Not supported: True raises ValueError.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    tol : float, default 1e-05
+        Stopping tolerance.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Weights.
+    intercept_ : float
+        Intercept.
+    scale_ : float
+        Estimated scale of the residuals.
+    n_iter_ : int
+        Number of iterations run.
+    outliers_ : list of bool
+        For each training row, whether its absolute residual exceeds
+        ``epsilon * scale_``.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32)
+    >>> model = mojolearn.HuberRegressor().fit(X, y)
+    """
 
     _BINDING = _BINDING
 
@@ -619,6 +1126,27 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.warm_start, self.fit_intercept, self.tol = warm_start, fit_intercept, tol
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : HuberRegressor
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If ``epsilon < 1``, ``warm_start`` is True or the weights are invalid.
+        """
         if not self.epsilon >= 1.0:
             raise ValueError("mojolearn HuberRegressor: epsilon must be >= 1.0")
         if self.warm_start:
@@ -661,7 +1189,63 @@ def _bayes_refuse(est, return_std=False):
 
 
 class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
-    """Bayesian ridge regression by evidence maximization (scikit-learn's BayesianRidge)."""
+    """Bayesian ridge regression.
+
+    Follows scikit-learn's BayesianRidge: estimates the noise precision
+    ``alpha_`` and the weight precision ``lambda_`` by maximizing the
+    marginal likelihood (evidence). ``compute_score=True`` and
+    ``predict(return_std=True)`` raise ValueError.
+
+    Parameters
+    ----------
+    max_iter : int, default 300
+        Maximum number of iterations.
+    tol : float, default 1e-3
+        Stop when the weights change by less than this.
+    alpha_1, alpha_2 : float, default 1e-6
+        Shape and rate of the Gamma prior over ``alpha``.
+    lambda_1, lambda_2 : float, default 1e-6
+        Shape and rate of the Gamma prior over ``lambda``.
+    alpha_init : float or None, default None
+        Starting value of ``alpha``; None starts from the inverse variance of ``y``.
+    lambda_init : float or None, default None
+        Starting value of ``lambda``; None starts from 1.
+    compute_score : bool, default False
+        Not supported: True raises ValueError.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    copy_X : bool, default True
+        Accepted for compatibility; ``X`` is never modified.
+    verbose : bool, default False
+        Accepted for compatibility; ignored.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Posterior mean of the weights.
+    intercept_ : float
+        Intercept.
+    alpha_ : float
+        Estimated noise precision.
+    lambda_ : float
+        Estimated weight precision.
+    n_iter_ : int
+        Number of iterations run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32)
+    >>> model = mojolearn.BayesianRidge().fit(X, y)
+    """
 
     _BINDING = _BINDING
 
@@ -673,6 +1257,27 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
         self.compute_score, self.fit_intercept, self.copy_X, self.verbose = compute_score, fit_intercept, copy_X, verbose
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : BayesianRidge
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If ``compute_score`` is True or the weights are invalid.
+        """
         _bayes_refuse(self)
         a, n, d = _matrix(X)
         yv = _vector(y, n)
@@ -690,12 +1295,81 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
         return self
 
     def predict(self, X, return_std=False):
+        """Predict targets with the posterior mean of the weights.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, converted to float32.
+        return_std : bool, default False
+            Not supported: True raises ValueError.
+
+        Returns
+        -------
+        y_pred : float32 array of shape (n_samples,)
+            Predicted values.
+        """
         _bayes_refuse(self, return_std)
         return _LinearRegressorMixin.predict(self, X)
 
 
 class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
-    """Automatic relevance determination regression (scikit-learn's ARDRegression)."""
+    """Bayesian ARD (automatic relevance determination) regression.
+
+    Follows scikit-learn's ARDRegression: one precision per weight,
+    estimated by evidence maximization; features whose precision exceeds
+    ``threshold_lambda`` are pruned (their weight is 0). Needs at least 2
+    samples. ``compute_score=True`` and ``predict(return_std=True)`` raise
+    ValueError; ``fit`` takes no ``sample_weight``.
+
+    Parameters
+    ----------
+    max_iter : int, default 300
+        Maximum number of iterations.
+    tol : float, default 1e-3
+        Stop when the weights change by less than this.
+    alpha_1, alpha_2 : float, default 1e-6
+        Shape and rate of the Gamma prior over ``alpha``.
+    lambda_1, lambda_2 : float, default 1e-6
+        Shape and rate of the Gamma prior over each ``lambda``.
+    compute_score : bool, default False
+        Not supported: True raises ValueError.
+    threshold_lambda : float, default 1e4
+        Precision above which a weight is pruned.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    copy_X : bool, default True
+        Accepted for compatibility; ``X`` is never modified.
+    verbose : bool, default False
+        Accepted for compatibility; ignored.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Posterior mean of the weights.
+    intercept_ : float
+        Intercept.
+    alpha_ : float
+        Estimated noise precision.
+    lambda_ : float32 array of shape (n_features,)
+        Estimated precision of each weight.
+    n_iter_ : int
+        Number of iterations run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = 3 * X[:, 0] - 2 * X[:, 1]
+    >>> model = mojolearn.ARDRegression().fit(X, y)
+    """
 
     _BINDING = _BINDING
 
@@ -708,6 +1382,25 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
             threshold_lambda, fit_intercept, copy_X, verbose)
 
     def fit(self, X, y):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets.
+
+        Returns
+        -------
+        self : ARDRegression
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If ``compute_score`` is True or there are fewer than 2 samples.
+        """
         _bayes_refuse(self)
         a, n, d = _matrix(X)
         if n < 2:
@@ -725,6 +1418,20 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
         return self
 
     def predict(self, X, return_std=False):
+        """Predict targets with the posterior mean of the weights.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, converted to float32.
+        return_std : bool, default False
+            Not supported: True raises ValueError.
+
+        Returns
+        -------
+        y_pred : float32 array of shape (n_samples,)
+            Predicted values.
+        """
         _bayes_refuse(self, return_std)
         return _LinearRegressorMixin.predict(self, X)
 
@@ -752,7 +1459,60 @@ def _lars_fit(est, X, y, max_iter, lasso, alpha_min):
 
 
 class Lars(_LinearRegressorMixin, NumericModeMixin):
-    """Least angle regression (scikit-learn's Lars)."""
+    """Least angle regression (LARS).
+
+    Follows scikit-learn's Lars: adds features to the active set one at a
+    time, up to ``n_nonzero_coefs`` of them. ``jitter`` must be None
+    (any other value raises ValueError).
+
+    Parameters
+    ----------
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    verbose : bool, default False
+        Accepted for compatibility; ignored.
+    precompute : bool, 'auto' or array, default 'auto'
+        Accepted for compatibility; the fit always uses the Gram matrix.
+    n_nonzero_coefs : int, default 500
+        Maximum number of active features.
+    eps : float, default 2.220446049250313e-16
+        Accepted for compatibility; ignored.
+    copy_X : bool, default True
+        Accepted for compatibility; ``X`` is never modified.
+    fit_path : bool, default True
+        Accepted for compatibility; the path is not stored.
+    jitter : None, default None
+        Not supported: any value other than None raises ValueError.
+    random_state : int or None, default None
+        Accepted for compatibility; ignored.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Weights at the end of the path.
+    intercept_ : float
+        Intercept.
+    alpha_ : float
+        Regularization value at the end of the path.
+    active_ : list of int
+        Indices of the active features.
+    n_iter_ : int
+        Number of steps run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = 3 * X[:, 0] - 2 * X[:, 1]
+    >>> model = mojolearn.Lars(n_nonzero_coefs=2).fit(X, y)
+    """
 
     _BINDING = _BINDING
 
@@ -763,11 +1523,82 @@ class Lars(_LinearRegressorMixin, NumericModeMixin):
         self.fit_path, self.jitter, self.random_state = fit_path, jitter, random_state
 
     def fit(self, X, y):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets.
+
+        Returns
+        -------
+        self : Lars
+            The fitted model.
+        """
         return _lars_fit(self, X, y, self.n_nonzero_coefs, False, 0.0)
 
 
 class LassoLars(_LinearRegressorMixin, NumericModeMixin):
-    """Lasso fitted by least angle regression (scikit-learn's LassoLars)."""
+    """Lasso fitted by least angle regression.
+
+    Follows scikit-learn's LassoLars: the LARS path with the lasso
+    modification, stopped at ``alpha``. ``jitter`` must be None (any other
+    value raises ValueError).
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        L1 regularization strength (>= 0); 0 runs the full path.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    verbose : bool, default False
+        Accepted for compatibility; ignored.
+    precompute : bool, 'auto' or array, default 'auto'
+        Accepted for compatibility; the fit always uses the Gram matrix.
+    max_iter : int, default 500
+        Maximum number of path steps.
+    eps : float, default 2.220446049250313e-16
+        Accepted for compatibility; ignored.
+    copy_X : bool, default True
+        Accepted for compatibility; ``X`` is never modified.
+    fit_path : bool, default True
+        Accepted for compatibility; the path is not stored.
+    positive : bool, default False
+        Restrict the weights to be non-negative.
+    jitter : None, default None
+        Not supported: any value other than None raises ValueError.
+    random_state : int or None, default None
+        Accepted for compatibility; ignored.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Weights.
+    intercept_ : float
+        Intercept.
+    alpha_ : float
+        Regularization value where the path stopped.
+    active_ : list of int
+        Indices of the active features.
+    n_iter_ : int
+        Number of steps run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = 3 * X[:, 0] - 2 * X[:, 1]
+    >>> model = mojolearn.LassoLars(alpha=0.01).fit(X, y)
+    """
 
     _BINDING = _BINDING
 
@@ -779,6 +1610,25 @@ class LassoLars(_LinearRegressorMixin, NumericModeMixin):
         self.positive, self.jitter, self.random_state = positive, jitter, random_state
 
     def fit(self, X, y):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets.
+
+        Returns
+        -------
+        self : LassoLars
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If ``alpha`` is negative or ``jitter`` is not None.
+        """
         if not self.alpha >= 0:
             raise ValueError("mojolearn LassoLars: alpha must be >= 0")
         return _lars_fit(self, X, y, self.max_iter, True, self.alpha)
@@ -789,10 +1639,54 @@ class LassoLars(_LinearRegressorMixin, NumericModeMixin):
 # solver is ADMM (x_linear/quantile.mojo), not their linear program.
 
 class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
-    """L1-penalized quantile regression (scikit-learn's QuantileRegressor
-    problem). `solver` accepts their names and always runs ADMM; `max_iter`
-    and `tol` (ADMM's relative tolerance, eps_abs = tol / 100) are this
-    implementation's own keywords."""
+    """Linear regression that predicts a conditional quantile.
+
+    Solves scikit-learn's QuantileRegressor problem (the pinball loss plus
+    an L1 penalty) with ADMM instead of a linear program, so results agree
+    with scikit-learn up to the solver tolerance. ``solver`` accepts
+    scikit-learn's names but always runs ADMM; ``max_iter`` and ``tol`` are
+    mojolearn's own keywords.
+
+    Parameters
+    ----------
+    quantile : float, default 0.5
+        Quantile to predict, strictly between 0 and 1.
+    alpha : float, default 1.0
+        L1 regularization strength (>= 0).
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    solver : str, default 'highs'
+        Accepted for compatibility; the fit always runs ADMM.
+    solver_options : dict or None, default None
+        Accepted for compatibility; ignored.
+    max_iter : int, default 5000
+        Maximum number of ADMM iterations.
+    tol : float, default 1e-4
+        ADMM relative tolerance; the absolute tolerance is ``tol / 100``.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Weights.
+    intercept_ : float
+        Intercept.
+    n_iter_ : int
+        Number of ADMM iterations run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X[:, 0] + rng.standard_normal(1000).astype(np.float32)
+    >>> model = mojolearn.QuantileRegressor(quantile=0.9, alpha=0.0).fit(X, y)
+    """
 
     _BINDING = _BINDING
 
@@ -802,6 +1696,28 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.solver, self.solver_options, self.max_iter, self.tol = solver, solver_options, max_iter, tol
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : QuantileRegressor
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If ``quantile`` is not in (0, 1), ``alpha`` is negative or the
+            weights are invalid.
+        """
         if not 0 < self.quantile < 1:
             raise ValueError("mojolearn QuantileRegressor: quantile must be strictly between 0 and 1")
         if not self.alpha >= 0:
@@ -826,7 +1742,78 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
 # perceptron loss, a constant rate eta0 and no penalty (x_linear/sgd.mojo).
 
 class Perceptron(_LinearClassifierMixin, NumericModeMixin):
-    """The perceptron (scikit-learn's Perceptron)."""
+    """Perceptron classifier.
+
+    Follows scikit-learn's Perceptron: SGD with the perceptron loss and a
+    constant step ``eta0``, one-vs-rest for more than two classes. Unlike
+    scikit-learn, the default fit runs minibatches of ``batch_size=256``
+    rows, each step the sum of its rows' updates; ``batch_size=0`` gives
+    scikit-learn's per-sample updates.
+
+    Parameters
+    ----------
+    penalty : {'l2', 'l1', 'elasticnet'} or None, default None
+        Regularization term.
+    alpha : float, default 0.0001
+        Regularization strength, used with a penalty.
+    l1_ratio : float, default 0.15
+        Elastic-net mixing; used with ``penalty='elasticnet'``.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    max_iter : int, default 1000
+        Maximum number of passes over the data.
+    tol : float or None, default 1e-3
+        Stopping tolerance, as in scikit-learn; None disables it.
+    shuffle : bool, default True
+        Whether to shuffle the rows each pass.
+    verbose : int, default 0
+        Accepted for compatibility; ignored.
+    eta0 : float, default 1.0
+        Constant step size (> 0).
+    n_jobs : int or None, default None
+        Accepted for compatibility; ignored.
+    random_state : int or None, default 0
+        Non-negative seed for shuffling. None means seed 0.
+    early_stopping : bool, default False
+        Not supported: True raises ValueError.
+    validation_fraction : float, default 0.1
+        Accepted for compatibility; ignored (early stopping is not supported).
+    n_iter_no_change : int, default 5
+        Passes without improvement before stopping.
+    class_weight : dict, 'balanced' or None, default None
+        Per-class weights; 'balanced' weighs classes inversely to their frequency.
+    warm_start : bool, default False
+        Not supported: True raises ValueError.
+    batch_size : int, default 256
+        Rows per minibatch step; 0 runs per-sample updates.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    coef_ : float32 array of shape (1, n_features) or (n_classes, n_features)
+        Weights; one row for a binary problem.
+    intercept_ : float32 array of shape (1,) or (n_classes,)
+        Intercepts.
+    n_iter_ : int
+        Number of passes run.
+    t_ : float
+        Number of weight updates, ``n_iter_ * n_samples + 1``.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > X[:, 1]).astype(np.int32)
+    >>> model = mojolearn.Perceptron().fit(X, y)
+    """
 
     _BINDING = _BINDING
 
@@ -842,6 +1829,28 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
         self.class_weight, self.warm_start = class_weight, warm_start
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Class labels; at least two classes.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : Perceptron
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            On an unsupported option, a single class, invalid weights, or a
+            floating-point overflow during training (scale the inputs).
+        """
         _sgd_refuse(self, self.early_stopping, False, None, self.warm_start)
         Xm = _matrix(X)
         classes, icodes = _class_codes(self, y, Xm[1])
@@ -862,7 +1871,76 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
 # (squared_*), eta0 = C, no penalty (x_linear/sgd.mojo, `_plain_sgd`'s PA step).
 
 class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
-    """Passive-aggressive classifier, PA-I or PA-II (scikit-learn's)."""
+    """Passive-aggressive classifier (PA-I or PA-II).
+
+    Follows scikit-learn's PassiveAggressiveClassifier, one-vs-rest for more
+    than two classes: ``loss='hinge'`` is PA-I and ``'squared_hinge'`` is
+    PA-II. Unlike scikit-learn, the default fit runs minibatches of
+    ``batch_size=256`` rows; ``batch_size=0`` gives scikit-learn's
+    per-sample updates.
+
+    Parameters
+    ----------
+    C : float, default 1.0
+        Maximum step size (> 0).
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    max_iter : int, default 1000
+        Maximum number of passes over the data.
+    tol : float or None, default 1e-3
+        Stopping tolerance, as in scikit-learn; None disables it.
+    early_stopping : bool, default False
+        Not supported: True raises ValueError.
+    validation_fraction : float, default 0.1
+        Accepted for compatibility; ignored (early stopping is not supported).
+    n_iter_no_change : int, default 5
+        Passes without improvement before stopping.
+    shuffle : bool, default True
+        Whether to shuffle the rows each pass.
+    verbose : int, default 0
+        Accepted for compatibility; ignored.
+    loss : {'hinge', 'squared_hinge'}, default 'hinge'
+        PA-I ('hinge') or PA-II ('squared_hinge').
+    n_jobs : int or None, default None
+        Accepted for compatibility; ignored.
+    random_state : int or None, default None
+        Non-negative seed for shuffling. None means seed 0.
+    warm_start : bool, default False
+        Not supported: True raises ValueError.
+    class_weight : dict, 'balanced' or None, default None
+        Per-class weights; 'balanced' weighs classes inversely to their frequency.
+    average : bool, default False
+        Not supported: True raises ValueError.
+    batch_size : int, default 256
+        Rows per minibatch step; 0 runs per-sample updates.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    coef_ : float32 array of shape (1, n_features) or (n_classes, n_features)
+        Weights; one row for a binary problem.
+    intercept_ : float32 array of shape (1,) or (n_classes,)
+        Intercepts.
+    n_iter_ : int
+        Number of passes run.
+    t_ : float
+        Number of weight updates, ``n_iter_ * n_samples + 1``.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > X[:, 1]).astype(np.int32)
+    >>> model = mojolearn.PassiveAggressiveClassifier().fit(X, y)
+    """
 
     _BINDING = _BINDING
 
@@ -878,6 +1956,28 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.class_weight, self.average = class_weight, average
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Class labels; at least two classes.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : PassiveAggressiveClassifier
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            On an unsupported option or loss, ``C <= 0``, a single class,
+            invalid weights, or a floating-point overflow during training.
+        """
         _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
         if self.loss not in ("hinge", "squared_hinge"):
             raise ValueError("mojolearn PassiveAggressiveClassifier: loss must be 'hinge' or 'squared_hinge'")
@@ -897,7 +1997,72 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
 
 
 class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
-    """Passive-aggressive regressor, PA-I or PA-II (scikit-learn's)."""
+    """Passive-aggressive regressor (PA-I or PA-II).
+
+    Follows scikit-learn's PassiveAggressiveRegressor:
+    ``loss='epsilon_insensitive'`` is PA-I and
+    ``'squared_epsilon_insensitive'`` is PA-II. Unlike scikit-learn, the
+    default fit runs minibatches of ``batch_size=256`` rows;
+    ``batch_size=0`` gives scikit-learn's per-sample updates.
+
+    Parameters
+    ----------
+    C : float, default 1.0
+        Maximum step size (> 0).
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    max_iter : int, default 1000
+        Maximum number of passes over the data.
+    tol : float or None, default 1e-3
+        Stopping tolerance, as in scikit-learn; None disables it.
+    early_stopping : bool, default False
+        Not supported: True raises ValueError.
+    validation_fraction : float, default 0.1
+        Accepted for compatibility; ignored (early stopping is not supported).
+    n_iter_no_change : int, default 5
+        Passes without improvement before stopping.
+    shuffle : bool, default True
+        Whether to shuffle the rows each pass.
+    verbose : int, default 0
+        Accepted for compatibility; ignored.
+    loss : {'epsilon_insensitive', 'squared_epsilon_insensitive'}, default 'epsilon_insensitive'
+        PA-I or PA-II.
+    epsilon : float, default 0.1
+        Residuals smaller than this cause no update.
+    random_state : int or None, default None
+        Non-negative seed for shuffling. None means seed 0.
+    warm_start : bool, default False
+        Not supported: True raises ValueError.
+    average : bool, default False
+        Not supported: True raises ValueError.
+    batch_size : int, default 256
+        Rows per minibatch step; 0 runs per-sample updates.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Weights.
+    intercept_ : float32 array of shape (1,)
+        Intercept.
+    n_iter_ : int
+        Number of passes run.
+    t_ : float
+        Number of weight updates, ``n_iter_ * n_samples + 1``.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32)
+    >>> model = mojolearn.PassiveAggressiveRegressor().fit(X, y)
+    """
 
     _BINDING = _BINDING
 
@@ -912,6 +2077,28 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.epsilon, self.random_state, self.warm_start, self.average = epsilon, random_state, warm_start, average
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : PassiveAggressiveRegressor
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            On an unsupported option or loss, ``C <= 0``, invalid weights, or
+            a floating-point overflow during training.
+        """
         _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
         if self.loss not in ("epsilon_insensitive", "squared_epsilon_insensitive"):
             raise ValueError("mojolearn PassiveAggressiveRegressor: loss must be 'epsilon_insensitive' "
@@ -937,7 +2124,67 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
 # intercept = 1 - offset, the offset step `- eta * alpha`); x_linear/sgd.mojo.
 
 class SGDOneClassSVM(NumericModeMixin):
-    """Linear one-class SVM trained by SGD (scikit-learn's SGDOneClassSVM)."""
+    """Linear one-class SVM trained by stochastic gradient descent.
+
+    Follows scikit-learn's SGDOneClassSVM for outlier detection.
+    ``predict`` returns +1 for inliers and -1 for outliers.
+    ``random_state=None`` means seed 0, so a fit is reproducible by default.
+
+    Parameters
+    ----------
+    nu : float, default 0.5
+        Upper bound on the fraction of training errors, in (0, 1].
+    fit_intercept : bool, default True
+        Whether to fit the offset.
+    max_iter : int, default 1000
+        Maximum number of passes over the data.
+    tol : float or None, default 1e-3
+        Stopping tolerance, as in scikit-learn; None disables it.
+    shuffle : bool, default True
+        Whether to shuffle the rows each pass.
+    verbose : int, default 0
+        Accepted for compatibility; ignored.
+    random_state : int or None, default None
+        Non-negative seed for shuffling. None means seed 0.
+    learning_rate : {'constant', 'optimal', 'invscaling', 'adaptive'}, default 'optimal'
+        Step-size schedule.
+    eta0 : float, default 0.0
+        Initial step size; must be > 0 for 'constant', 'invscaling' and 'adaptive'.
+    power_t : float, default 0.5
+        Exponent of the 'invscaling' schedule.
+    warm_start : bool, default False
+        Not supported: True raises ValueError.
+    average : bool, default False
+        Not supported: True raises ValueError.
+    batch_size : int or None, default None
+        Rows per minibatch step. None chooses per numeric mode: minibatches
+        of 4096 rows in ``'identical'`` mode, per-sample updates otherwise.
+        0 asks for per-sample updates.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    coef_ : float32 array of shape (n_features,)
+        Weights.
+    offset_ : float32 array of shape (1,)
+        Offset; ``decision_function = score_samples - offset_``.
+    n_iter_ : int
+        Number of passes run.
+    t_ : float
+        Number of weight updates, ``n_iter_ * n_samples + 1``.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.SGDOneClassSVM(nu=0.1).fit(X)
+    >>> labels = model.predict(X)
+    """
 
     _BINDING = _BINDING
     _estimator_type = "outlier_detector"
@@ -961,6 +2208,28 @@ class SGDOneClassSVM(NumericModeMixin):
         self.warm_start, self.average = warm_start, average
 
     def fit(self, X, y=None, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : ignored
+            Present for API compatibility.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : SGDOneClassSVM
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If ``nu`` is not in (0, 1], ``learning_rate`` is not supported,
+            ``average`` or ``warm_start`` is True, or the weights are invalid.
+        """
         _sgd_refuse(self, False, self.average, None, self.warm_start)
         if not 0 < self.nu <= 1:
             raise ValueError("mojolearn SGDOneClassSVM: nu must be in (0, 1]")
@@ -980,16 +2249,52 @@ class SGDOneClassSVM(NumericModeMixin):
         return self
 
     def decision_function(self, X):
+        """Signed score of each sample: positive for inliers.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, converted to float32.
+
+        Returns
+        -------
+        scores : float32 array of shape (n_samples,)
+            ``X @ coef_ - offset_``.
+        """
         _check_fitted(self)
         out = _decision(self, X, self.coef_, -float(self.offset_[0]))
         return out.reshape((out.shape[0],))
 
     def score_samples(self, X):
+        """Raw score of each sample, ``X @ coef_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, converted to float32.
+
+        Returns
+        -------
+        scores : float32 array of shape (n_samples,)
+            Raw scores; higher is more normal.
+        """
         _check_fitted(self)
         out = _decision(self, X, self.coef_, 0.0)
         return out.reshape((out.shape[0],))
 
     def predict(self, X):
+        """Label each sample as an inlier (+1) or an outlier (-1).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, converted to float32.
+
+        Returns
+        -------
+        labels : int64 array of shape (n_samples,)
+            +1 where ``decision_function`` is >= 0, -1 elsewhere.
+        """
         _check_fitted(self)
         icpt = Array.from_list([-self.offset_.tolist()[0]], "<f4")
         return _decision_codes(self, X, self.coef_, icpt, strict=False, below=-1, above=1).astype("<i8")
@@ -1025,7 +2330,58 @@ def _ridge_refuse(est):
 
 
 class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
-    """Ridge regression on +-1 class targets (scikit-learn's RidgeClassifier)."""
+    """Classifier using ridge regression on -1/+1 targets.
+
+    Follows scikit-learn's RidgeClassifier: each class becomes a -1/+1
+    target column (one column for a binary problem), fitted by ridge
+    regression with a Cholesky solve. Only ``solver='auto'`` or
+    ``'cholesky'`` is accepted, and ``positive=True`` raises ValueError.
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        L2 regularization strength (>= 0).
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    copy_X : bool, default True
+        Accepted for compatibility; ``X`` is never modified.
+    max_iter : int or None, default None
+        Accepted for compatibility; ignored by the direct solver.
+    tol : float, default 1e-4
+        Accepted for compatibility; ignored by the direct solver.
+    class_weight : dict, 'balanced' or None, default None
+        Per-class weights, multiplied into ``sample_weight``; 'balanced'
+        weighs classes inversely to their frequency.
+    solver : {'auto', 'cholesky'}, default 'auto'
+        Both run the Cholesky solver.
+    positive : bool, default False
+        Not supported: True raises ValueError.
+    random_state : int or None, default None
+        Accepted for compatibility; ignored.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    coef_ : float32 array of shape (1, n_features) or (n_classes, n_features)
+        Weights; one row for a binary problem.
+    intercept_ : float32 array of shape (1,) or (n_classes,)
+        Intercepts.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > X[:, 1]).astype(np.int32)
+    >>> model = mojolearn.RidgeClassifier(alpha=1.0).fit(X, y)
+    """
 
     _BINDING = _BINDING
 
@@ -1036,6 +2392,30 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.random_state = random_state
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Class labels; at least two classes.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : RidgeClassifier
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            On an unsupported ``solver`` or ``positive=True``, a negative
+            ``alpha``, a single class, invalid weights, or when
+            ``X'X + alpha I`` cannot be factored (rescale ``X`` or raise
+            ``alpha``).
+        """
         _ridge_refuse(self)
         if not self.alpha >= 0:
             raise ValueError("mojolearn RidgeClassifier: alpha must be >= 0")
@@ -1066,11 +2446,64 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
 
 
 
+# Refused options are listed in x_linear/NOT_IMPLEMENTED.tsv.
 class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
-    """Ridge with the alpha chosen by efficient leave-one-out (scikit-learn's
-    RidgeCV with cv=None) or by k-fold cross-validation (cv=k: KFold(k),
-    R^2, Ridge refit on every row). Other cv objects, scoring,
-    alpha_per_target and a 2-D y are refused (x_linear/NOT_IMPLEMENTED.tsv)."""
+    """Ridge regression with built-in selection of ``alpha``.
+
+    Follows scikit-learn's RidgeCV. With ``cv=None`` the alpha is chosen by
+    efficient leave-one-out cross-validation; with ``cv=k`` (an int) by
+    unshuffled K-fold cross-validation scored by R^2, after which the model
+    is refit on all rows with the best alpha (the first one on a tie).
+    Cross-validation objects for ``cv``, ``scoring``, ``alpha_per_target``
+    and a 2-D ``y`` are not supported.
+
+    Parameters
+    ----------
+    alphas : sequence of float, default (0.1, 1.0, 10.0)
+        Candidate regularization strengths; all must be > 0.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    scoring : None, default None
+        Only None is supported; anything else raises ValueError.
+    cv : int or None, default None
+        None for leave-one-out, or the number of folds (2 to n_samples).
+    gcv_mode : str or None, default None
+        Accepted for compatibility; ignored.
+    store_cv_results : bool, default False
+        Store ``cv_results_``; only with ``cv=None``.
+    alpha_per_target : bool, default False
+        Only False is supported; True raises ValueError.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    alpha_ : float
+        Selected alpha.
+    best_score_ : float
+        Score of the selected alpha: minus its mean squared leave-one-out
+        error with ``cv=None``, its mean K-fold R^2 with ``cv=k``.
+    coef_ : float32 array of shape (n_features,)
+        Weights.
+    intercept_ : float
+        Intercept.
+    cv_results_ : float32 array of shape (n_alphas,)
+        Mean squared leave-one-out error of each alpha, when
+        ``store_cv_results=True`` (scikit-learn stores the per-sample errors).
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32)
+    >>> model = mojolearn.RidgeCV(alphas=(0.01, 0.1, 1.0)).fit(X, y)
+    >>> model.alpha_
+    """
 
     _BINDING = _BINDING
 
@@ -1080,6 +2513,29 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         self.gcv_mode, self.store_cv_results, self.alpha_per_target = gcv_mode, store_cv_results, alpha_per_target
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model and select ``alpha``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets (1-D).
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum; only with ``cv=None``.
+
+        Returns
+        -------
+        self : RidgeCV
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            On an unsupported option, a non-positive alpha, an invalid
+            ``cv``, ``sample_weight`` or ``store_cv_results`` with ``cv``
+            set, or when ``X'X + alpha I`` cannot be factored.
+        """
         if self.scoring is not None or self.alpha_per_target:
             raise ValueError("mojolearn RidgeCV: only scoring=None, alpha_per_target=False are implemented")
         alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]  # glue: converts the alphas argument
@@ -1201,8 +2657,75 @@ def _enetcv_fit(est, X, y, l1_ratios):
 
 
 class LassoCV(_LinearRegressorMixin, NumericModeMixin):
-    """Lasso with alpha chosen by K-fold cross-validation over a path
-    (scikit-learn's LassoCV; cv None or an int, unshuffled KFold)."""
+    """Lasso with ``alpha`` chosen by K-fold cross-validation along a path.
+
+    Follows scikit-learn's LassoCV, solved by coordinate descent: each fold
+    fits the regularization path, the alpha with the lowest mean squared
+    error across folds is chosen, and the model is refit on all rows.
+    ``cv`` must be None or an int (unshuffled K-fold); ``selection='random'``
+    raises ValueError.
+
+    Parameters
+    ----------
+    eps : float, default 1e-3
+        Path length: ``alpha_min / alpha_max`` for a generated grid.
+    n_alphas : int or 'deprecated', default 'deprecated'
+        Grid size, used only when ``alphas`` is None; prefer an int ``alphas``.
+    alphas : int or sequence of float, default 100
+        Number of alphas on a generated grid, or the alphas to try.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    precompute : bool, 'auto' or array, default 'auto'
+        Accepted for compatibility; ignored.
+    max_iter : int, default 1000
+        Maximum number of coordinate-descent passes per alpha.
+    tol : float, default 1e-4
+        Coordinate-descent stopping tolerance.
+    copy_X : bool, default True
+        Accepted for compatibility; ``X`` is never modified.
+    cv : int or None, default None
+        Number of folds; None means 5.
+    verbose : bool, default False
+        Accepted for compatibility; ignored.
+    n_jobs : int or None, default None
+        Accepted for compatibility; ignored.
+    positive : bool, default False
+        Restrict the weights to be non-negative.
+    random_state : int or None, default None
+        Accepted for compatibility; ignored.
+    selection : {'cyclic'}, default 'cyclic'
+        Only 'cyclic' is supported.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    alpha_ : float
+        Selected alpha.
+    alphas_ : float32 array of shape (n_alphas,)
+        Alphas tried, in decreasing order.
+    mse_path_ : float32 array of shape (n_alphas, n_folds)
+        Mean squared error of each alpha on each fold.
+    coef_ : float32 array of shape (n_features,)
+        Weights of the refit model.
+    intercept_ : float
+        Intercept.
+    n_iter_ : int
+        Coordinate-descent passes of the refit.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = 3 * X[:, 0] - 2 * X[:, 1]
+    >>> model = mojolearn.LassoCV(cv=5).fit(X, y)
+    >>> model.alpha_
+    """
 
     _BINDING = _BINDING
 
@@ -1215,13 +2738,104 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
         self.random_state, self.selection = random_state, selection
 
     def fit(self, X, y):
+        """Fit the model and select ``alpha``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets.
+
+        Returns
+        -------
+        self : LassoCV
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If ``selection`` is not 'cyclic', ``cv`` is not None or an int
+            in [2, n_samples], or no alpha is given.
+        """
         _enetcv_fit(self, X, y, [1.0])
         return self
 
 
 class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
-    """Elastic net with (l1_ratio, alpha) chosen by K-fold cross-validation
-    (scikit-learn's ElasticNetCV; cv None or an int, unshuffled KFold)."""
+    """Elastic net with ``l1_ratio`` and ``alpha`` chosen by K-fold cross-validation.
+
+    Follows scikit-learn's ElasticNetCV, solved by coordinate descent: for
+    each ``l1_ratio`` every fold fits the regularization path, the pair with
+    the lowest mean squared error across folds is chosen, and the model is
+    refit on all rows. ``cv`` must be None or an int (unshuffled K-fold);
+    ``selection='random'`` raises ValueError.
+
+    Parameters
+    ----------
+    l1_ratio : float or sequence of float, default 0.5
+        L1 share of the penalty, each in (0, 1]; a sequence is searched.
+    eps : float, default 1e-3
+        Path length: ``alpha_min / alpha_max`` for a generated grid.
+    n_alphas : int or 'deprecated', default 'deprecated'
+        Grid size, used only when ``alphas`` is None; prefer an int ``alphas``.
+    alphas : int or sequence of float, default 100
+        Number of alphas on a generated grid, or the alphas to try.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    precompute : bool, 'auto' or array, default 'auto'
+        Accepted for compatibility; ignored.
+    max_iter : int, default 1000
+        Maximum number of coordinate-descent passes per alpha.
+    tol : float, default 1e-4
+        Coordinate-descent stopping tolerance.
+    cv : int or None, default None
+        Number of folds; None means 5.
+    copy_X : bool, default True
+        Accepted for compatibility; ``X`` is never modified.
+    verbose : int, default 0
+        Accepted for compatibility; ignored.
+    n_jobs : int or None, default None
+        Accepted for compatibility; ignored.
+    positive : bool, default False
+        Restrict the weights to be non-negative.
+    random_state : int or None, default None
+        Accepted for compatibility; ignored.
+    selection : {'cyclic'}, default 'cyclic'
+        Only 'cyclic' is supported.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    alpha_ : float
+        Selected alpha.
+    l1_ratio_ : float
+        Selected l1_ratio (one of the values given).
+    alphas_ : float32 array of shape (n_alphas,) or (n_l1_ratio, n_alphas)
+        Alphas tried, in decreasing order; one row per l1_ratio when several.
+    mse_path_ : float32 array of shape (n_alphas, n_folds) or (n_l1_ratio, n_alphas, n_folds)
+        Mean squared error of each alpha on each fold.
+    coef_ : float32 array of shape (n_features,)
+        Weights of the refit model.
+    intercept_ : float
+        Intercept.
+    n_iter_ : int
+        Coordinate-descent passes of the refit.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = 3 * X[:, 0] - 2 * X[:, 1]
+    >>> model = mojolearn.ElasticNetCV(l1_ratio=[0.2, 0.5, 0.9]).fit(X, y)
+    >>> model.l1_ratio_, model.alpha_
+    """
 
     _BINDING = _BINDING
 
@@ -1234,6 +2848,27 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
         self.positive, self.random_state, self.selection = positive, random_state, selection
 
     def fit(self, X, y):
+        """Fit the model and select ``l1_ratio`` and ``alpha``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Targets.
+
+        Returns
+        -------
+        self : ElasticNetCV
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If an ``l1_ratio`` is outside (0, 1], ``selection`` is not
+            'cyclic', ``cv`` is not None or an int in [2, n_samples], or no
+            alpha is given.
+        """
         ratios = list(self.l1_ratio) if hasattr(self.l1_ratio, "__len__") else [self.l1_ratio]
         self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])  # glue: converts the l1_ratio argument
         return self
@@ -1253,8 +2888,84 @@ def _check_stratified_folds(largest, k):
 
 
 class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
-    """L2 logistic regression with C chosen by stratified K-fold accuracy
-    (scikit-learn's LogisticRegressionCV; binary or multinomial)."""
+    """Logistic regression with ``C`` chosen by stratified K-fold cross-validation.
+
+    Follows scikit-learn's LogisticRegressionCV with an L2 penalty, binary
+    or multinomial, solved by L-BFGS. Each candidate ``C`` is scored by
+    accuracy on stratified folds, and the model is refit on all rows with
+    the best one. Only ``penalty='l2'`` (primal), ``scoring=None`` and
+    ``refit=True`` are supported; other values raise ValueError.
+
+    Parameters
+    ----------
+    Cs : int or sequence of float, default 10
+        Candidate inverse regularization strengths; an int ``m`` tries ``m``
+        values log-spaced between 1e-4 and 1e4.
+    fit_intercept : bool, default True
+        Whether to fit an intercept.
+    cv : int or None, default None
+        Number of stratified folds, from 2 to the size of the largest
+        class; None means 5.
+    dual : bool, default False
+        Only False is supported.
+    penalty : {'l2'}, default 'l2'
+        Only 'l2' is supported.
+    scoring : None, default None
+        Only None (accuracy) is supported.
+    solver : {'lbfgs', 'newton-cg', 'newton-cholesky'}, default 'lbfgs'
+        All three run L-BFGS.
+    tol : float, default 1e-4
+        L-BFGS stopping tolerance.
+    max_iter : int, default 100
+        Maximum number of L-BFGS iterations per fit.
+    class_weight : dict, 'balanced' or None, default None
+        Per-class weights; 'balanced' weighs classes inversely to their frequency.
+    n_jobs : int or None, default None
+        Accepted for compatibility; ignored.
+    verbose : int, default 0
+        Accepted for compatibility; ignored.
+    refit : bool, default True
+        Only True is supported.
+    intercept_scaling : float, default 1.0
+        Accepted for compatibility; ignored.
+    random_state : int or None, default None
+        Accepted for compatibility; ignored.
+    l1_ratios : None, default None
+        Only None is supported.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    coef_ : float32 array of shape (1, n_features) or (n_classes, n_features)
+        Weights; one row for a binary problem.
+    intercept_ : float32 array of shape (1,) or (n_classes,)
+        Intercepts.
+    Cs_ : list of float
+        Candidate C values.
+    C_ : list of float
+        Selected C, repeated once per row of ``coef_``.
+    scores_ : dict
+        For each class label (the positive class only, for a binary
+        problem), a float32 array of shape (n_folds, n_Cs) of fold scores.
+    n_iter_ : int
+        L-BFGS iterations of the refit.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > X[:, 1]).astype(np.int32)
+    >>> model = mojolearn.LogisticRegressionCV(Cs=5).fit(X, y)
+    >>> proba = model.predict_proba(X)
+    """
 
     _BINDING = _BINDING
 
@@ -1267,6 +2978,28 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         self.intercept_scaling, self.random_state, self.l1_ratios = intercept_scaling, random_state, l1_ratios
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model and select ``C``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32; values must be finite.
+        y : array-like of shape (n_samples,)
+            Class labels; at least two classes.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : LogisticRegressionCV
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            On an unsupported option, a single class, invalid weights, or a
+            ``cv`` outside [2, the size of the largest class].
+        """
         if self.penalty != "l2" or self.dual or self.l1_ratios is not None:
             raise ValueError("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
         if self.scoring is not None or not self.refit:
@@ -1321,6 +3054,21 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         return self
 
     def predict_proba(self, X):
+        """Class probabilities.
+
+        The sigmoid of the score for a binary problem, the softmax of the
+        class scores otherwise.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, converted to float32.
+
+        Returns
+        -------
+        proba : float32 array of shape (n_samples, n_classes)
+            Probability of each class, in the order of ``classes_``.
+        """
         # DEVIATION 6900: the pinned exp (was the platform exp) and the
         # CPython 3.12+ sum spelled out (`_pm.nsum`), the same bits on every host
         sc = self.decision_function(X)
@@ -1343,7 +3091,54 @@ def _column(X, name="X"):
 
 
 class IsotonicRegression(NumericModeMixin):
-    """Isotonic regression (scikit-learn's IsotonicRegression)."""
+    """Isotonic regression: the best monotone fit of one feature.
+
+    Follows scikit-learn's IsotonicRegression: fits a non-decreasing (or
+    non-increasing) step function by pool-adjacent-violators and predicts
+    by linear interpolation between its thresholds. ``X`` is 1-D or of
+    shape (n_samples, 1); rows with zero weight are ignored.
+
+    Parameters
+    ----------
+    y_min : float or None, default None
+        Lower bound on the fitted values.
+    y_max : float or None, default None
+        Upper bound on the fitted values.
+    increasing : bool or 'auto', default True
+        Direction of the fit; 'auto' uses the sign of Spearman's rank
+        correlation of ``X`` and ``y``.
+    out_of_bounds : {'nan', 'clip', 'raise'}, default 'nan'
+        Prediction outside the training range of ``X``: NaN, the nearest
+        end value, or a ValueError.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    increasing_ : bool
+        Direction used by the fit.
+    X_min_ : float
+        Smallest training ``X``.
+    X_max_ : float
+        Largest training ``X``.
+    X_thresholds_ : float32 array of shape (n_thresholds,)
+        Increasing ``X`` values of the interpolation knots.
+    y_thresholds_ : float32 array of shape (n_thresholds,)
+        Fitted values at ``X_thresholds_``.
+    n_features_in_ : int
+        Always 1.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> x = rng.random(1000, dtype=np.float32)
+    >>> y = x + 0.1 * rng.standard_normal(1000).astype(np.float32)
+    >>> model = mojolearn.IsotonicRegression(out_of_bounds="clip").fit(x, y)
+    >>> y_fit = model.predict(x)
+    """
 
     _BINDING = _BINDING
     _estimator_type = "regressor"
@@ -1352,6 +3147,28 @@ class IsotonicRegression(NumericModeMixin):
         self.y_min, self.y_max, self.increasing, self.out_of_bounds = y_min, y_max, increasing, out_of_bounds
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the monotone function.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples,) or (n_samples, 1)
+            Training feature, converted to float32.
+        y : array-like of shape (n_samples,)
+            Targets.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self : IsotonicRegression
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If ``out_of_bounds`` is invalid, ``X`` is empty or not 1-D, or
+            the weights are invalid.
+        """
         if self.out_of_bounds not in ("nan", "clip", "raise"):
             raise ValueError("mojolearn IsotonicRegression: out_of_bounds must be 'nan', 'clip' or 'raise'")
         # lane/neural-pass70 (2026-10-01): no lists and no Python sort; the
@@ -1397,9 +3214,42 @@ class IsotonicRegression(NumericModeMixin):
         return self
 
     def predict(self, T):
+        """Predict by linear interpolation; same as ``transform``.
+
+        Parameters
+        ----------
+        T : array-like of shape (n_samples,) or (n_samples, 1)
+            Values to predict at.
+
+        Returns
+        -------
+        y_pred : float32 array of shape (n_samples,)
+            Interpolated fitted values.
+        """
         return self.transform(T)
 
     def transform(self, T):
+        """Interpolate the fitted function at ``T``.
+
+        Parameters
+        ----------
+        T : array-like of shape (n_samples,) or (n_samples, 1)
+            Values to transform, converted to float32.
+
+        Returns
+        -------
+        y_pred : float32 array of shape (n_samples,)
+            Interpolated fitted values; values outside the training range
+            follow ``out_of_bounds``.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            With ``out_of_bounds='raise'``, if a value of ``T`` is outside
+            the training range.
+        """
         if not hasattr(self, "X_thresholds_"):
             raise RuntimeError("mojolearn IsotonicRegression: call fit first")
         t = _column(T, "T")
@@ -1423,4 +3273,20 @@ class IsotonicRegression(NumericModeMixin):
         return out
 
     def fit_transform(self, X, y, sample_weight=None):
+        """Fit, then return the fitted values at ``X``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples,) or (n_samples, 1)
+            Training feature.
+        y : array-like of shape (n_samples,)
+            Targets.
+        sample_weight : array-like of shape (n_samples,) or float, optional
+            Non-negative weights with a positive sum.
+
+        Returns
+        -------
+        y_fit : float32 array of shape (n_samples,)
+            Fitted values.
+        """
         return self.fit(X, y, sample_weight).transform(X)

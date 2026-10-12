@@ -180,19 +180,27 @@ def _as_bounds(bounds, n, what):
     return pairs
 
 
+# Maintainer notes: the four classes build a postfix node list (`a b +` /
+# `a b *`) over GPKernelSpec's flat arrays; nothing is distributed or
+# reassociated (DEVIATION 1756). Hyperparameters per DEVIATION 2880: a user's
+# kernel computes `theta` with the owned host math helper; the fit uses the
+# same pinned logarithm arithmetic through its Mojo binding, and a fitted
+# `kernel_` reports the optimizer's own theta.
 class Kernel:
-    """Base of the four kernel spec builders. `k1 + k2` is sklearn's `Sum`
-    and `k1 * k2` its `Product`, postfix `a b +` / `a b *`; NOTHING is
-    distributed or reassociated (DEVIATION 1756).
+    """Base class of the Gaussian process kernels.
 
-    HYPERPARAMETERS (DEVIATION 2880). `theta` is the natural log of every
-    FREE hyperparameter in postfix leaf order (a Sum or Product lists its
-    left operand first, scikit-learn's order), one entry per feature for an
-    ARD length scale; `bounds` is the log of each entry's `(low, high)` pair;
-    `n_dims` is their count. A leaf built with bounds "fixed" contributes
-    nothing. A user's kernel uses the owned host math helper; the fit
-    uses the same pinned logarithm arithmetic through its Mojo binding,
-    and a fitted `kernel_` reports the optimizer's own theta."""
+    Kernels combine with ``+`` and ``*``: ``k1 + k2`` is the sum and
+    ``k1 * k2`` the product of two kernels, as in scikit-learn's ``Sum`` and
+    ``Product``. Only mojolearn kernels combine; write a scaled kernel as
+    ``ConstantKernel(2.0) * RBF(...)`` rather than ``2.0 * RBF(...)``
+    (combining a kernel with anything else raises ``TypeError``).
+
+    The hyperparameter view follows scikit-learn: `theta` is the natural log
+    of every free hyperparameter, left operand first, with one entry per
+    feature for an anisotropic length scale; `bounds` is the log of each
+    entry's ``(low, high)`` pair; `n_dims` is their count. A kernel built
+    with bounds ``"fixed"`` contributes no entries.
+    """
 
     def __add__(self, other):
         return _Combined(self, other, _K_SUM, "+")
@@ -231,10 +239,15 @@ class Kernel:
 
     @property
     def n_dims(self):
+        """Number of free hyperparameters (the length of `theta`)."""
         return len(self._free_values())
 
     @property
     def theta(self):
+        """Natural log of the free hyperparameters, as a list of floats.
+
+        On a fitted ``kernel_`` this is the optimizer's own theta.
+        """
         fitted = getattr(self, "_theta_fit", None)
         if fitted is not None:
             return list(fitted)
@@ -242,15 +255,35 @@ class Kernel:
 
     @property
     def bounds(self):
+        """Natural log of each free hyperparameter's ``(low, high)`` bounds,
+        as a list of ``[low, high]`` pairs."""
         return [[math.log(lo), math.log(hi)] for lo, hi in self._free_bounds()]  # glue: sklearn bounds API, log of kernel hyperparameters (n_dims entries) bounds
 
     def __repr__(self):
         return self._name()
 
 
+# Reference: scikit-learn `kernels.py:1187`.
 class ConstantKernel(Kernel):
-    """`ConstantKernel(constant_value, constant_value_bounds)`, sklearn
-    `kernels.py:1187`. `k(x, y) = constant_value` for every pair."""
+    """Constant kernel: ``k(x, y) = constant_value`` for every pair of points.
+
+    Follows scikit-learn's ``ConstantKernel``. Multiply it with another
+    kernel to scale that kernel's magnitude.
+
+    Parameters
+    ----------
+    constant_value : float, default 1.0
+        The constant.
+    constant_value_bounds : pair of float or "fixed", default (1e-5, 1e5)
+        Bounds for the optimizer, or ``"fixed"`` to keep the value fixed.
+        Both bounds must be finite and positive with ``low <= high``;
+        otherwise ``ValueError`` is raised.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> kernel = mojolearn.ConstantKernel(2.0) * mojolearn.RBF(1.0)
+    """
 
     def __init__(self, constant_value=1.0, constant_value_bounds=_DEFAULT_BOUNDS):
         self.constant_value = float(constant_value)
@@ -271,11 +304,29 @@ class ConstantKernel(Kernel):
         return f"ConstantKernel({self.constant_value!r})"
 
 
+# Reference: scikit-learn `kernels.py:1325`; diagonal-only rule is DEVIATION 1762.
 class WhiteKernel(Kernel):
-    """`WhiteKernel(noise_level, noise_level_bounds)`, sklearn
-    `kernels.py:1325`. Noise on the training diagonal ONLY; a
-    cross-covariance gets ZERO from it, sklearn's own structural rule
-    (DEVIATION 1762)."""
+    """White noise kernel: adds ``noise_level`` to the training diagonal.
+
+    Follows scikit-learn's ``WhiteKernel``: the noise appears only on the
+    diagonal of the training covariance, and contributes zero to the
+    covariance between training and query points. Add it to another kernel
+    to model observation noise.
+
+    Parameters
+    ----------
+    noise_level : float, default 1.0
+        The noise variance.
+    noise_level_bounds : pair of float or "fixed", default (1e-5, 1e5)
+        Bounds for the optimizer, or ``"fixed"`` to keep the value fixed.
+        Both bounds must be finite and positive with ``low <= high``;
+        otherwise ``ValueError`` is raised.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> kernel = mojolearn.RBF(1.0) + mojolearn.WhiteKernel(0.1)
+    """
 
     def __init__(self, noise_level=1.0, noise_level_bounds=_DEFAULT_BOUNDS):
         self.noise_level = float(noise_level)
@@ -296,10 +347,30 @@ class WhiteKernel(Kernel):
         return f"WhiteKernel({self.noise_level!r})"
 
 
+# Reference: scikit-learn `kernels.py:1448`.
 class RBF(Kernel):
-    """`RBF(length_scale, length_scale_bounds)`, sklearn `kernels.py:1448`.
-    One entry is the isotropic case, `n_features` entries the ARD
-    (anisotropic) one; there is no third spelling."""
+    """Radial basis function (squared exponential) kernel.
+
+    Follows scikit-learn's ``RBF``:
+    ``k(x, y) = exp(-0.5 * ||(x - y) / length_scale||^2)``.
+
+    Parameters
+    ----------
+    length_scale : float or sequence of float, default 1.0
+        A scalar gives an isotropic kernel; a sequence of ``n_features``
+        values gives one length scale per feature (anisotropic). Any other
+        length is refused when the model is fitted. Values must be positive
+        and finite; they are checked at fit time.
+    length_scale_bounds : pair of float, sequence of pairs, or "fixed", default (1e-5, 1e5)
+        Bounds for the optimizer: one pair for every length scale, one pair
+        per length scale, or ``"fixed"``. Both bounds must be finite and
+        positive with ``low <= high``; otherwise ``ValueError`` is raised.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> kernel = mojolearn.RBF(length_scale=[1.0, 2.0, 0.5])
+    """
 
     def __init__(self, length_scale=1.0, length_scale_bounds=_DEFAULT_BOUNDS):
         self.length_scale = _as_length_scale(length_scale, "RBF")
@@ -322,13 +393,35 @@ class RBF(Kernel):
         return f"RBF({self.length_scale!r})"
 
 
+# Reference: scikit-learn `kernels.py:1601`. `nu` is not checked here so
+# that `gp_kernel_matern`'s refusal (DEVIATION 1765) stays reachable.
 class Matern(Kernel):
-    """`Matern(length_scale, length_scale_bounds, nu)`, sklearn
-    `kernels.py:1601`, in scikit-learn's argument order. Only the three
-    closed forms run -- `nu` in {0.5, 1.5, 2.5} -- and every other value,
-    `nu = inf` included, is refused BY NAME by `gp_kernel_matern` at fit time
-    with the closure condition (DEVIATION 1765). `nu` is not judged here so
-    that refusal stays reachable."""
+    """Matern kernel with ``nu`` in {0.5, 1.5, 2.5}.
+
+    Follows scikit-learn's ``Matern``, with the same argument order. Only the
+    three closed forms are supported: ``nu=0.5`` (absolute exponential),
+    ``1.5`` (once differentiable) and ``2.5`` (twice differentiable). Any
+    other ``nu``, including ``inf``, is refused with an error when the model
+    is fitted; use `RBF` for the ``nu=inf`` limit.
+
+    Parameters
+    ----------
+    length_scale : float or sequence of float, default 1.0
+        A scalar gives an isotropic kernel; a sequence of ``n_features``
+        values gives one length scale per feature (anisotropic). Values must
+        be positive and finite; they are checked at fit time.
+    length_scale_bounds : pair of float, sequence of pairs, or "fixed", default (1e-5, 1e5)
+        Bounds for the optimizer: one pair for every length scale, one pair
+        per length scale, or ``"fixed"``. Both bounds must be finite and
+        positive with ``low <= high``; otherwise ``ValueError`` is raised.
+    nu : float, default 1.5
+        Smoothness: 0.5, 1.5 or 2.5.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> kernel = mojolearn.Matern(length_scale=1.0, nu=2.5)
+    """
 
     def __init__(self, length_scale=1.0, length_scale_bounds=_DEFAULT_BOUNDS, nu=1.5):
         self.length_scale = _as_length_scale(length_scale, "Matern")
@@ -411,153 +504,160 @@ class _SavedKernel(Kernel):
 _GP_FORMAT = "mojolearn-gp-1"
 
 
+# Maintainer notes (moved from the docstring):
+# - The scikit-learn surface over `gaussian_process/estimator.mojo`
+#   (DEVIATIONS 1750-1771 are the lane's; 1772 is this surface's). No
+#   reference GP exists in cuML/cuVS/RAFT; scikit-learn `_gpr.py` is the
+#   semantics oracle only.
+# - House rule: a parameter accepted and ignored is a wrong answer waiting
+#   for a caller, so each parameter is honored or refused by name.
+# - alpha IS the Cholesky profile's jitter; there is no second jitter knob
+#   (DEVIATION 1751). Passed through UNCLAMPED so the Mojo refusals stay
+#   reachable: NaN, negative and +inf refused by name (DEVIATION 1768);
+#   under identical only +0.0 and 2**-20 are accepted (DEVIATION 1637).
+# - DEVIATION 1772: the default alpha is 2**-20, not sklearn's 1e-10. (a)
+#   Every kernel matrix this lane builds has a unit diagonal, and in float32
+#   1.0 + 1e-10 rounds to exactly 1.0 (the gap above 1.0 is 2**-23), so
+#   sklearn's default ridge would be a bitwise no-op here, measured by
+#   `check_duplicate_inputs_need_the_ridge` (DEVIATION 1752). (b) Under
+#   identical the Cholesky profile accepts exactly +0.0 and 2**-20. 2**-20 is
+#   the smallest float32 ridge on a unit diagonal that does anything and is
+#   `gaussian_process/estimator.mojo::gp_profile_alpha()`'s value.
+# - optimizer: 'fmin_l_bfgs_b' uses the identical gradient (DEVIATION 2880)
+#   and a projected L-BFGS whose every rule is pinned (DEVIATION 2881,
+#   gaussian_process/gp_optim_items.mojo, one binding call on the device).
+#   None stays the default so a fit that ran before runs the same bits.
+#   Restarts are Philox keyed by random_state (DEVIATION 2881).
+# - normalize_y: sklearn `_gpr.py:275-285`; the two folds are
+#   StandardScaler's pinned float32 reductions in this estimator's tier; the
+#   un-normalization is `std * mean + y_mean` and `sqrt(var * std**2)`, each
+#   one correctly rounded binary32 operation, flushed like `ftz`.
+# - Non-finite X/y/length scales are refused on the Mojo host naming the flat
+#   index (DEVIATION 1768), before any launch.
+# - A failed Cholesky returns LAPACK info instead of raising (DEVIATION 1634);
+#   predict refuses it in Mojo, log_marginal_likelihood here with the Mojo
+#   entry's own sentences.
+# - return_cov / sample_y: DEVIATION 2793. GP classification (Laplace, Newton
+#   iteration) is `_gpc_impl.py` (DEVIATION 2830 closes DEVIATION 1766).
+# - Cross-vendor record: the IDENTICAL card is byte-identical Apple M4 vs AMD
+#   MI325X on every shipped-path line (the 8-line divergence reading was
+#   withdrawn at 9835094e: those lines are the sabotaged half of a
+#   GP_SAB_STD_EXP pair). The identity harness's 136-lane record at
+#   4048e1b51 reads IDENTICAL x3 on every gp training and infer cell across
+#   Apple M4, H100 and MI325X.
 class GaussianProcessRegressor(NumericModeMixin):
-    """Exact dense GP regression on the GPU, the scikit-learn surface over
-    `gaussian_process/estimator.mojo` (DEVIATIONS 1750-1771 are the
-    lane's; 1772 below is this surface's).
+    """Exact Gaussian process regression on the GPU.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
-    because a parameter that is accepted and ignored is a wrong answer
-    waiting for a caller (the house rule):
+    Follows scikit-learn's ``GaussianProcessRegressor``: ``fit`` builds the
+    kernel matrix ``K`` of the training points, adds ``alpha`` to its
+    diagonal, factors it by Cholesky and solves for the dual coefficients;
+    ``predict`` returns the posterior mean and, on request, the standard
+    deviation or the full covariance. X is dense float32 in C order (other
+    inputs are converted; sparse input is not accepted) and y is 1-D: one
+    target per model.
 
-        kernel          honored   a composition of RBF, Matern (nu in
-                                  {0.5, 1.5, 2.5}), ConstantKernel and
-                                  WhiteKernel via + and *. None means
-                                  sklearn's documented default,
-                                  ConstantKernel(1.0) * RBF(1.0).
-                                  DotProduct, RationalQuadratic,
-                                  ExpSineSquared and the general Matern
-                                  are unimplemented
-                                  (gaussian_process/NOT_IMPLEMENTED.tsv)
-        alpha           honored   the RIDGE added to the training diagonal,
-                                  which IS the Cholesky profile's jitter --
-                                  there is no second jitter knob (DEVIATION
-                                  1751). Passed through UNCLAMPED so the
-                                  Mojo refusals stay reachable: NaN, negative
-                                  and +inf are refused by name (DEVIATION
-                                  1768), and under numeric_mode='identical'
-                                  only +0.0 and 2**-20 are accepted, BY NAME
-                                  (DEVIATION 1637). THE DEFAULT IS 2**-20,
-                                  NOT sklearn's 1e-10 -- see DEVIATION 1772
-                                  below
-        optimizer       honored   None (also 'none'), THE DEFAULT HERE, fits
-                                  the kernel passed; 'fmin_l_bfgs_b' maximizes
-                                  the log marginal likelihood over the free
-                                  hyperparameters with the identical gradient
-                                  (DEVIATION 2880) and a projected L-BFGS
-                                  whose every rule is pinned (DEVIATION 2881,
-                                  gaussian_process/gp_optim_items.mojo, run
-                                  on the device in one binding call).
-                                  scikit-learn's default is
-                                  'fmin_l_bfgs_b'; None stays the default so a
-                                  fit that ran before runs the same bits. A
-                                  callable is refused by name
-        n_restarts_     honored   extra runs from log-uniform starts within the
-          optimizer               bounds, drawn from Philox keyed by
-                                  random_state (DEVIATION 2881); the best
-                                  likelihood wins, a tie goes to the first run
-        normalize_y     honored   scikit-learn's `_gpr.py:275-285`: y is
-                                  centered and scaled by its mean and
-                                  standard deviation before the fit, and
-                                  the predictive mean and std are scaled
-                                  back. The two folds are StandardScaler's
-                                  pinned Float32 reductions in this
-                                  estimator's tier (a zero std scales by
-                                  one, scikit-learn's 1-D arm); the
-                                  un-normalization is `std * mean + y_mean`
-                                  and `sqrt(var * std**2)`, each one
-                                  correctly rounded binary32 operation on
-                                  the host, flushed like `ftz`. y_train_ is
-                                  the normalized y, as scikit-learn stores
-                                  it
-        copy_X_train    refused   anything but True. This surface ALWAYS
-                                  copies: X crosses to float32 C-order host
-                                  memory and then to the device, so the
-                                  False spelling ("store a reference") has
-                                  nothing it could mean here
-        n_targets       refused   anything but None; it shapes sample_y's
-                                  draws from the unfitted prior, and that
-                                  arm is not implemented
-        random_state    honored   None or an int in [0, 2**64); it keys the
-                                  restart draws and must be an int when
-                                  n_restarts_optimizer > 0 (scikit-learn's
-                                  global NumPy generator has no identical
-                                  counterpart). sample_y takes its own
-                                  random_state argument (DEVIATION 2793)
-        sparse X        refused   dense row-major float32 only
-                                  (_buffer.py::as_f32_c)
-        2-D y           refused   by name; multi-target GP fits are not
-                                  implemented (single-target only)
-        non-finite X/y  refused   on the HOST in Mojo, naming the flat index
-        /length scales            (DEVIATION 1768), before any launch
+    Differences from scikit-learn that change results:
 
-    DEVIATION 1772: THE DEFAULT `alpha` IS `2**-20`, NOT sklearn's `1e-10`.
-    Two facts force it. (a) Every kernel matrix this lane builds has a unit
-    diagonal, and in float32 `1.0 + 1e-10` rounds to exactly `1.0` -- the
-    gap above 1.0 is `2**-23`, three orders of magnitude above the ridge --
-    so sklearn's default ridge would be a bitwise NO-OP here, measured by
-    `check_duplicate_inputs_need_the_ridge` (DEVIATION 1752). (b) Under
-    `identical` the Cholesky profile accepts exactly `+0.0` and `2**-20`
-    and refuses anything else by name (DEVIATION 1637). `2**-20` is the
-    smallest float32 ridge on a unit diagonal that can do anything, it is
-    `gaussian_process/estimator.mojo::gp_profile_alpha()`'s value, and a
-    default that silently did nothing is exactly the accepted-and-ignored
-    parameter this surface's table exists to prevent.
+    - The default ``alpha`` is ``2**-20``, not ``1e-10``. Kernel matrices
+      have a unit diagonal, and in float32 ``1.0 + 1e-10`` is exactly
+      ``1.0``, so scikit-learn's default would add nothing.
+    - The default ``optimizer`` is ``None``: the kernel you pass is used as
+      is. Pass ``optimizer="fmin_l_bfgs_b"`` (scikit-learn's default) to fit
+      the hyperparameters by maximizing the log marginal likelihood.
+    - A failed Cholesky factorization does not raise. ``fit`` returns
+      normally and records LAPACK's code in ``info_``; check that it is 0.
+      A nonzero ``info_`` means this kernel and ridge do not describe the
+      data (common causes: duplicate training rows, a length scale far
+      larger than the data's spread, ``alpha=0``). ``predict`` and
+      ``log_marginal_likelihood`` then raise an error.
 
-    A FAILED FACTORIZATION IS A RESULT, NOT AN EXCEPTION -- READ `info_`.
-    sklearn raises LinAlgError out of `fit` when the Cholesky fails; this
-    lane returns LAPACK's `info` instead (DEVIATION 1634), because for a
-    Gaussian process it is an ANSWER: this kernel and this ridge do not
-    describe these points (the usual causes are duplicate rows, a length
-    scale far larger than the data's spread, and alpha=0). Nothing can
-    quietly solve against a partial factor: `predict` and
-    `log_marginal_likelihood` on a fit with `info_ != 0` are refused by
-    name, the first in Mojo, the second here with the Mojo entry's own
-    sentences.
+    Under ``numeric_mode="identical"`` (the default), fit, predict and
+    sample_y give the same bits on NVIDIA and AMD GPUs.
 
-    `predict(X, return_std=True)` is honored, and so is `return_cov=True`
-    (2026-09-27): `k(X, X) - V^T V` in full, the steps `sample_y` takes
-    before its factorization (DEVIATION 2793), exactly symmetric. `sample_y(X, n_samples, random_state)`
-    is honored on a fitted model: it builds and factors that full matrix
-    inside its own call (DEVIATION 2793). GP CLASSIFICATION is a different algorithm (a
-    Laplace approximation with a Newton iteration) and lives in
-    `_gpc_impl.py` as `GaussianProcessClassifier` (DEVIATION 2830 closes
-    DEVIATION 1766).
-
-    CROSS-VENDOR STANDING: the IDENTICAL card is byte-identical Apple M4
-    against AMD MI325X on every shipped-path line (the 8-line divergence
-    reading was withdrawn at `9835094e`: those lines are the sabotaged half
-    of a `GP_SAB_STD_EXP` pair). The NVIDIA column is the identity
-    harness's: the 136-lane record at 4048e1b51 reads IDENTICAL x3 on every
-    gp training and infer cell across the Apple M4, an H100 and an MI325X.
-    That property belongs to `numeric_mode='identical'`; the FAST default
-    makes no cross-vendor claim at all.
+    Parameters
+    ----------
+    kernel : Kernel or None, default None
+        A combination of `RBF`, `Matern`, `ConstantKernel` and `WhiteKernel`
+        with ``+`` and ``*``. None means ``ConstantKernel(1.0, "fixed") *
+        RBF(1.0, "fixed")``, scikit-learn's default. Other kernel types,
+        including scikit-learn kernel objects, raise ``TypeError``.
+    alpha : float, default 2**-20
+        Value added to the diagonal of the training kernel matrix (a ridge).
+        NaN, negative and infinite values are refused at fit time. Under
+        ``numeric_mode="identical"`` only ``0.0`` and ``2**-20`` are
+        accepted. Not to be confused with the fitted ``alpha_``.
+    optimizer : None or "fmin_l_bfgs_b", default None
+        None fits the kernel as passed. ``"fmin_l_bfgs_b"`` maximizes the log
+        marginal likelihood over the kernel's free hyperparameters (those
+        whose bounds are not ``"fixed"``) with a bounded L-BFGS that runs on
+        the device. A callable raises ``NotImplementedError``; any other
+        value raises ``ValueError``.
+    n_restarts_optimizer : int, default 0
+        Number of extra optimizer runs from log-uniform random starting
+        points within the bounds. The run with the best likelihood wins; a
+        tie goes to the earlier run.
+    normalize_y : bool, default False
+        Center and scale y by its mean and standard deviation before the fit,
+        and scale the predictions back, as in scikit-learn. A zero standard
+        deviation scales by one.
+    copy_X_train : bool, default True
+        Only True is accepted: X is always copied to float32 memory.
+        False raises ``NotImplementedError``.
+    n_targets : None, default None
+        Only None is accepted; multi-target models are not supported.
+    random_state : int or None, default None
+        Seed for the optimizer's restart points, an int in ``[0, 2**64)``.
+        Required when ``optimizer`` is set and ``n_restarts_optimizer > 0``.
+        `sample_y` takes its own ``random_state``.
+    numeric_mode : str or None, default None
+        The numeric mode for this estimator; None uses the process default.
+        See the numeric modes guide.
 
     Attributes
     ----------
-    X_train_ : Array (n_train, n_features) float32
-    y_train_ : Array (n_train,) float32
+    X_train_ : Array of shape (n_train, n_features), float32
+        The training inputs.
+    y_train_ : Array of shape (n_train,), float32
+        The training targets, normalized when ``normalize_y=True`` (as in
+        scikit-learn).
     kernel_ : Kernel
-        The FITTED kernel: the kernel you passed under optimizer=None, else
-        a copy with the optimized float32 hyperparameters whose `theta` is
-        the optimizer's own (DEVIATION 2880).
-    L_ : Array (n_train, n_train) float32
-        Lower Cholesky factor of `K + alpha I`.
-    alpha_ : Array (n_train,) float32
-        The dual coefficients `(K + alpha I)^-1 y` -- sklearn's `alpha_`,
-        which is NOT the constructor's `alpha` (the ridge). One name, one
-        underscore apart, and the collision is scikit-learn's; both
-        meanings are spelled out wherever either appears.
+        The fitted kernel: the kernel you passed when ``optimizer=None``,
+        otherwise a copy with the optimized hyperparameters.
+    L_ : Array of shape (n_train, n_train), float32
+        Lower Cholesky factor of ``K + alpha * I``.
+    alpha_ : Array of shape (n_train,), float32
+        Dual coefficients ``(K + alpha * I)^-1 y`` (scikit-learn's
+        ``alpha_``; not the ``alpha`` ridge parameter).
     log_marginal_likelihood_value_ : float
-        Meaningful only when `info_ == 0`.
+        Log marginal likelihood of the fitted kernel. Meaningful only when
+        ``info_ == 0``.
     info_ : int
-        LAPACK's info. 0 means L_ is a factor; k > 0 means the leading
-        minor of order k was not positive definite. CHECK IT.
+        LAPACK's Cholesky code. 0 means ``L_`` is a valid factor; ``k > 0``
+        means the leading minor of order ``k`` was not positive definite.
     nb_ : int
-        The Cholesky panel width that ran (part of the profile).
+        The Cholesky panel width used.
     n_features_in_ : int
+        Number of features seen during fit.
     input_copied_ : bool
         Whether fit had to copy X to reach float32 C order.
+    clamped_ : Array of shape (n_query,), int32
+        Set by ``predict(X, return_std=True)``: a per-point flag marking
+        variances that were clamped to zero.
+    n_clamped_ : int
+        Set by ``predict(X, return_std=True)``: how many variances were
+        clamped to zero.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((200, 3), dtype=np.float32)
+    >>> y = np.sin(X.sum(axis=1)).astype(np.float32)
+    >>> kernel = (mojolearn.ConstantKernel(1.0) * mojolearn.RBF([1.0, 1.0, 1.0])
+    ...           + mojolearn.WhiteKernel(0.01))
+    >>> model = mojolearn.GaussianProcessRegressor(kernel, optimizer="fmin_l_bfgs_b").fit(X, y)
+    >>> ok = model.info_ == 0
+    >>> mean, std = model.predict(X[:5], return_std=True)
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -709,12 +809,30 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     # -- fit ----------------------------------------------------------------
 
+    # Reference: sklearn `_gpr.py:349-367`: `K = kernel(X); K[diag] += alpha;
+    # L = cholesky(K); alpha_ = cho_solve(L, y)` plus the log marginal
+    # likelihood, in one device call (`gpr_fit_host`). DEVIATION 1634: a
+    # failed factorization is reported in `info_`, not raised.
     def fit(self, X, y):
-        """`_gpr.py:349-367`: `K = kernel(X); K[diag] += alpha;
-        L = cholesky(K); alpha_ = cho_solve(L, y)`, plus the log marginal
-        likelihood at the fitted kernel, all in one shot on the device via
-        `gpr_fit_host`. Returns `self`. READ `info_` BEFORE YOU BELIEVE
-        THE MODEL (class docstring, DEVIATION 1634)."""
+        """Fit the Gaussian process to training data.
+
+        With an optimizer, the kernel hyperparameters are fitted first. Then
+        ``K + alpha * I`` is factored and the dual coefficients and log
+        marginal likelihood are computed on the device.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training inputs, converted to float32.
+        y : array-like of shape (n_samples,)
+            Training targets. A 2-D y raises ``ValueError``.
+
+        Returns
+        -------
+        self : GaussianProcessRegressor
+            The fitted model. Check ``info_ == 0``: a failed Cholesky
+            factorization is reported there rather than raised.
+        """
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         shape = _shape_of(y)
@@ -861,15 +979,48 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     # -- predict ------------------------------------------------------------
 
+    # Reference: sklearn `_gpr.py:446-500`. Variance clamp and flags:
+    # DEVIATION 1760. A fit with `info_ != 0` is refused in Mojo
+    # (`gpr_predict_host`, DEVIATION 1634); `info_` is passed down so that
+    # refusal stays reachable. return_cov: DEVIATION 2793.
     def predict(self, X, return_std=False, return_cov=False):
-        """`_gpr.py:446-500`. Returns `mean`, or `(mean, std)` with
-        `return_std=True`; both float32. The variance clamp at zero and its
-        per-point flags are the lane's DEVIATION 1760; the flag vector is
-        `clamped_` on this instance after any `return_std` call.
+        """Predict with the posterior of the fitted Gaussian process.
 
-        A fit with `info_ != 0` is refused BY NAME IN MOJO
-        (`gpr_predict_host`, DEVIATION 1634) -- `info_` goes down with the
-        call precisely so that refusal stays reachable from here."""
+        Parameters
+        ----------
+        X : array-like of shape (n_query, n_features)
+            Query points, converted to float32.
+        return_std : bool, default False
+            Also return the predictive standard deviation. Negative variances
+            from rounding are clamped to zero; ``clamped_`` and
+            ``n_clamped_`` record which points were clamped.
+        return_cov : bool, default False
+            Also return the full predictive covariance ``k(X, X) - V^T V``,
+            exactly symmetric and not clamped. At most one of
+            ``return_std`` and ``return_cov`` may be True (``RuntimeError``
+            otherwise).
+
+        Returns
+        -------
+        mean : Array of shape (n_query,), float32
+        std : Array of shape (n_query,), float32
+            Only with ``return_std=True``.
+        cov : Array of shape (n_query, n_query), float32
+            Only with ``return_cov=True``.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted (predicting from the unfitted prior is
+            not supported), or X has a different number of features than
+            the training data.
+
+        Notes
+        -----
+        A model whose fit failed (``info_ != 0``) refuses to predict. With
+        ``normalize_y=True`` the mean, standard deviation and covariance are
+        scaled back to the units of y.
+        """
         if return_cov and return_std:
             raise RuntimeError(
                 "mojolearn GaussianProcessRegressor: at most one of return_std "
@@ -1000,8 +1151,19 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     # -- saved models -----------------------------------------------------------
 
+    # Format: `_GP_FORMAT`, layout documented above it.
     def save(self, path):
-        """Write what `predict` reads to `path` as an npz (`_GP_FORMAT`)."""
+        """Save the fitted model to ``path`` as an ``.npz`` file.
+
+        The file holds everything `predict` reads: the training inputs, the
+        Cholesky factor, the dual coefficients, the fitted kernel and the
+        numeric mode. Raises ``RuntimeError`` if the model is not fitted.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+        """
         if not hasattr(self, "alpha_"):
             raise RuntimeError("this estimator is not fitted yet")
         from . import _serialize
@@ -1029,8 +1191,22 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`; `predict` (mean and std) answers from
-        it. Every array is read at its saved dtype and never cast."""
+        """Load a model written by `save`.
+
+        The loaded model predicts the mean and standard deviation. Every
+        array is read at its saved dtype and never cast; a file saved by a
+        different estimator or with inconsistent contents raises
+        ``ValueError``.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+
+        Returns
+        -------
+        GaussianProcessRegressor
+        """
         from . import _serialize
         from .linear_model import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, _GP_FORMAT)
@@ -1077,15 +1253,34 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     # -- the rest of sklearn's surface, honored or refused by name ----------
 
+    # Reference: sklearn `_gpr.py:575`; theta arm per DEVIATION 2880; a
+    # failed factorization answers -inf as `_gpr.py:593` does.
     def log_marginal_likelihood(self, theta=None, eval_gradient=False, clone_kernel=True):
-        """`_gpr.py:575`. With `theta=None`, the value computed during fit
-        (refused by name on a failed fit). With a theta, the likelihood of
-        the training data at `kernel_` with its free hyperparameters set to
-        `Float32(exp(theta))` (DEVIATION 2880), and with `eval_gradient` the
-        pair `(lml, grad)`, both float32 widened; a factorization that fails
-        answers `-inf` and a zero gradient, as scikit-learn's does
-        (`_gpr.py:593`). `clone_kernel` is accepted for scikit-learn's
-        signature: `kernel_` is never modified here."""
+        """Log marginal likelihood of the training data.
+
+        Parameters
+        ----------
+        theta : sequence of float or None, default None
+            None returns the value computed during fit, and raises
+            ``RuntimeError`` if that fit's factorization failed. Otherwise,
+            the log of the free hyperparameters of ``kernel_`` (one entry per
+            ``kernel_.n_dims``; ``ValueError`` on a length mismatch): the
+            likelihood is evaluated at ``exp(theta)`` in float32. A
+            factorization that fails at that theta gives ``-inf`` and a zero
+            gradient, as in scikit-learn.
+        eval_gradient : bool, default False
+            Also return the gradient with respect to theta. Requires a
+            theta (``ValueError`` otherwise).
+        clone_kernel : bool, default True
+            Accepted for scikit-learn compatibility; ``kernel_`` is never
+            modified.
+
+        Returns
+        -------
+        log_likelihood : float
+        gradient : list of float
+            Only with ``eval_gradient=True``.
+        """
         if not hasattr(self, "alpha_"):
             raise ValueError(
                 "mojolearn GaussianProcessRegressor: call fit() first"
@@ -1132,24 +1327,42 @@ class GaussianProcessRegressor(NumericModeMixin):
             )
         return self.log_marginal_likelihood_value_
 
+    # DEVIATION 2793 (`gaussian_process/checks/sample_y.mojo`) names the
+    # stream, the jitter and the order: the covariance `k(X, X) - V^T V` is
+    # factored by the identical Cholesky with its pinned 2^-20 jitter, the
+    # normals are position-mapped Philox keyed by random_state (DEVIATION
+    # 2791's construction, tag "GPSY"), and the product is the identical GEMM.
     def sample_y(self, X, n_samples=1, random_state=0):
-        """Draws from the posterior at `X`: float32 `(n_rows, n_samples)`,
-        column `s` one joint draw over the rows.
+        """Draw samples from the posterior at ``X``.
 
-        scikit-learn's `GaussianProcessRegressor.sample_y` is the reference:
-        the mean plus a factor of the predictive covariance times standard
-        normals, un-normalized under `normalize_y`. DEVIATION 2793
-        (`gaussian_process/checks/sample_y.mojo`) names the stream, the jitter
-        and the order: the covariance `k(X, X) - V^T V` is factored by the
-        repository's identical Cholesky with its pinned `2^-20` jitter, the
-        normals are position-mapped Philox keyed by `random_state` (DEVIATION
-        2791's construction, tag "GPSY"), and the product is the identical
-        GEMM. The same model, `X`, `n_samples` and `random_state` give the
-        same bits on every vendor and on every call; they are not
-        scikit-learn's bits. `random_state` must be an int in `[0, 2**64)`
-        (None and a RandomState are refused: the key is the int). A covariance
-        that does not factor is refused by name. The unfitted-prior arm and
-        multi-target draws are not implemented.
+        Each sample is the predictive mean plus a factor of the predictive
+        covariance times standard normals, scaled back to the units of y
+        under ``normalize_y``, as in scikit-learn. The covariance is factored
+        with a ``2**-20`` jitter on its diagonal. The same model, ``X``,
+        ``n_samples`` and ``random_state`` give the same values on every
+        call; they are not scikit-learn's values. A covariance that cannot be
+        factored raises an error.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_query, n_features)
+            Query points, converted to float32.
+        n_samples : int, default 1
+            Number of joint draws.
+        random_state : int, default 0
+            Seed, an int in ``[0, 2**64)``. None and a NumPy ``RandomState``
+            raise ``ValueError``.
+
+        Returns
+        -------
+        Array of shape (n_query, n_samples), float32
+            Column ``s`` is one joint draw over the query points.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted (sampling the unfitted prior is not
+            supported).
         """
         if not hasattr(self, "alpha_"):
             raise ValueError(
@@ -1209,10 +1422,25 @@ class GaussianProcessRegressor(NumericModeMixin):
         )
         return out.reshape((n_star, n))
 
+    # Host float64 summary of float32 predictions, outside the identity
+    # claim (the SVR.score rule).
     def score(self, X, y):
-        """R^2, scikit-learn's definition, accumulated in FLOAT64 from
-        float32 predictions -- a summary of the answer, not the answer, so
-        no part of any identity claim (the SVR.score rule)."""
+        """Coefficient of determination R^2 of the predictions.
+
+        Uses scikit-learn's definition, accumulated in float64 from the
+        float32 predictions.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test inputs.
+        y : array-like of shape (n_samples,)
+            True targets.
+
+        Returns
+        -------
+        float
+        """
         pred = self.predict(X)
         shape = _shape_of(y)
         if len(shape) != 1 or shape[0] != pred.shape[0]:

@@ -580,103 +580,103 @@ def _ols_tsqr_centered(x, y, rows, cols, mode):
     return X.out((cols,)), mu, float(ymean.tolist()[0])
 
 
+# Maintainer notes (moved from the docstring, 2026-10-12):
+# - Default route (lane neural-pass140): the blocked TSQR of [X | y] and the SVD
+#   of its small R (`_ols_tsqr`: no Gram matrix, the condition number not
+#   squared) for every tall design (rows >= cols + 1) with at most 511 features.
+#   MOJOLEARN_LINALG_TSQR=0, FAST Apple builds (`_ols_normal_eq_default`) and any
+#   design the TSQR does not take keep the normal-equations solver below.
+# - Normal equations: the eigendecomposition solver (cuML `algorithm='eig'`,
+#   `lstsqEig`, RAFT), which forms X.T @ X and squares the condition number.
+#   cuML's SVD and QR solvers (`lstsqSvdJacobi`, `lstsqSvdQR`, `lstsqQR`) are not
+#   written (glm/NOT_IMPLEMENTED.tsv). On the tall route the Gram matrix is
+#   equilibrated by exact power-of-two column scales and its pseudo-inverse keeps
+#   eigenvalues above n_features * eps32 * max (DEVIATIONS 2620, 2621), so a
+#   column's units do not change the model's rank. The wide route (n_features >
+#   n) is w = X.T (X X.T)^+ y through the Gram of the rows, n x n, nonsingular at
+#   full row rank (DEVIATION 550, glm/impl/linalg/detail/lstsq_min_norm.mojo),
+#   with row scales and an n * eps32 * max cutoff (DEVIATION 2622); it squares
+#   the condition number exactly as the tall route does; a true SVD or LQ route
+#   would be better and is not written.
+# - n_features == 1: cuML switches to its SVD solver because its eigensolver does
+#   not take one column (linear_regression.pyx:390-394); the device Jacobi does
+#   not share that limitation (DEVIATION 551).
+# - Sample weights are a host-side rescale through the estimators binding:
+#   `olsFit` takes sqrt of the weights, multiplies row i of X and entry i of y by
+#   it, solves, and undoes the scaling (ols.cuh:99-110, 129-141). Both halves are
+#   implemented on the device in `glm/impl/ols.mojo::ols_fit_weighted`, but
+#   `bindings/_mojolearn_estimators.mojo::ols_fit_binding` takes a fixed `params`
+#   of length 2 and cannot hand a weight pointer across, so this class applies
+#   the same two operations (`py2mojo_rows` ROWS_SQRT_F32 for the roots,
+#   `lm_scale_rows` for the rows; on the device on a GPU install) and calls the
+#   unweighted entry. The root is the correctly rounded float32 sqrt
+#   (`portable_sqrtf`) and the row multiply one float32 rounding of an exact
+#   float64 product, the same operations the device kernels perform; the routes
+#   agree bit for bit except on denormals (the device flushes).
+#   `check_ols_sample_weight_host_rescale_matches_device` in
+#   glm/checks/ols_check.mojo gates it. Weighted fits with an intercept use
+#   weighted column means, as cuML does (`raft::stats::weightedMean`,
+#   preprocess.cuh:95-97, 110-112).
+# - The intercept is a reimplementation, no reference file: cuML wraps the solver
+#   in `preProcessData` / `postProcessData` (preprocess.cuh:98-176); the
+#   implemented `ols_fit` refuses `fit_intercept` by name (glm/impl/ols.mojo).
+#   Column means and the y mean are float64 from exact column sums (`lm_col_sums`,
+#   rounded once), subtracted in float32 (`lm_center`), both on the device on a
+#   GPU install, and the intercept is mean(y) - sum(mu_X * coef) with an exactly
+#   rounded fsum (no BLAS dot: a platform-dependent host reduction, E2's first
+#   finding). cuML's sums accumulate in float32, so coef_ can differ from cuML's
+#   in the last bits on ill-conditioned data.
+# - Honored/refused rows were measured by tools/e2u_matrix_fit.py.
 class LinearRegression(NumericModeMixin):
-    """Ordinary least squares on the GPU.
+    """Ordinary least squares linear regression.
 
-    THE DEFAULT ROUTE (lane neural-pass140, 2026-10-02) is the blocked TSQR
-    of [X | y] and the SVD of its small R (`_ols_tsqr`: no Gram matrix, the
-    condition number not squared) for every tall design with at most 511
-    features; the centering, weights and intercept below are unchanged.
-    MOJOLEARN_LINALG_TSQR=0 (and any design the TSQR does not take) keeps
-    the normal-equations solver this docstring describes from here on.
+    Fits ``y ~ X @ coef_ + intercept_`` by minimizing the sum of squared
+    residuals, the same model as scikit-learn's ``LinearRegression``.
 
-    This is the eigendecomposition solver (reference: cuML's `algorithm='eig'`, `lstsqEig`, RAFT), which forms
-    ``X.T @ X`` and so squares the condition number. It is less robust than
-    an SVD-based solver and should not be used for badly conditioned
-    designs; cuML's SVD and QR solvers (`lstsqSvdJacobi`, `lstsqSvdQR`,
-    `lstsqQR`) are not written here (glm/NOT_IMPLEMENTED.tsv). A design with
-    more features than samples takes a second Gram route instead of an SVD;
-    see the `n_features > n` row below. On the tall route the Gram matrix is
-    equilibrated by exact power-of-two column scales and its pseudo-inverse
-    keeps eigenvalues above ``n_features * eps32 * max`` (DEVIATIONS 2620,
-    2621), so a column's units no longer change the model's rank. The wide
-    route does the same to ``X @ X.T`` with row scales and an
-    ``n * eps32 * max`` cutoff (DEVIATION 2622).
+    Tall designs (more rows than features, up to 511 features) are solved
+    by a QR factorization of ``[X | y]`` followed by an SVD of its small
+    triangular factor, so the condition number of ``X`` is not squared.
+    Other designs, and fits in ``fast`` mode on Apple GPUs, solve the
+    normal equations through an eigendecomposition of the (equilibrated)
+    Gram matrix; that squares the condition number, so prefer well
+    conditioned designs there. A design with more features than rows gets
+    the minimum-norm least-squares solution. Rank-deficient designs are
+    handled by a pseudo-inverse whose cutoff does not depend on a
+    column's units.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
-    `tools/e2u_matrix_fit.py`):
+    ``X`` is read as float32 (a C-contiguous float32 array is used without
+    a copy). ``y`` must be one-dimensional: a single target. With
+    ``fit_intercept=True`` the data are centered on their (weighted) means
+    before the solve, as in scikit-learn and cuML.
 
-        fit_intercept   honored   True (the default) centers X and y ON THE
-                                  HOST and the device solves the centered
-                                  system; see THE INTERCEPT IS A HOST
-                                  REIMPLEMENTATION below. False sends the
-                                  raw design to the device, which is the
-                                  arm the implemented `ols_fit` carries.
-        sample_weight   honored   a weighted least squares IS an unweighted
-                                  one on rows rescaled by sqrt(w), which is
-                                  exactly what cuML does (ols.cuh:99-110)
-                                  before it dispatches; see SAMPLE WEIGHTS
-                                  below
-        n_features == 1 honored   a single column is scalar least squares
-                                  and the Gram is 1 x 1 with condition
-                                  number 1; cuML switches to its SVD solver
-                                  here because THEIR eigensolver does not
-                                  take one column (linear_regression.pyx:
-                                  390-394), a limitation the device Jacobi
-                                  does not share (DEVIATION 551)
-        n_features > n  honored   the minimum-norm solution
-                                  w = X.T (X X.T)^+ y, through the Gram of
-                                  the ROWS, which is n x n and nonsingular
-                                  at full row rank (DEVIATION 550,
-                                  glm/impl/linalg/detail/lstsq_min_norm.mojo).
-                                  It squares the condition number exactly as
-                                  the tall route does, so it is no more
-                                  accurate than this class already is and no
-                                  less; a true SVD or LQ route would be
-                                  better and is not written
-        y 2-D           refused   one target only, at this boundary
+    Parameters
+    ----------
+    fit_intercept : bool, default True
+        Whether to fit an intercept. When False the data are assumed to be
+        centered and ``intercept_`` is 0.0.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        The numeric mode for this estimator; None uses the process default
+        (see ``mojolearn.set_numeric_mode``). ``'fast'`` is for Apple GPUs.
 
-    SAMPLE WEIGHTS ARE A HOST RESCALE HERE, AND THAT IS A DEVIATION WITH A
-    REASON. `olsFit` takes `sqrt` of the weights, multiplies row `i` of X
-    and entry `i` of y by it, solves, and undoes the scaling
-    (ols.cuh:99-110, 129-141). Both halves of the scaling are implemented and run
-    ON THE DEVICE in `glm/impl/ols.mojo::ols_fit_weighted`; what is not
-    yet in place is a BINDING that can hand a weight pointer across
-    (`bindings/_mojolearn_estimators.mojo::ols_fit_binding` takes a fixed
-    `params` of length 2). Until it is, this class applies the same two
-    operations through the estimators binding (`py2mojo_rows`
-    ROWS_SQRT_F32 for the roots, `lm_scale_rows` for the rows; on the
-    device on a GPU install) and calls the unweighted entry.
+    Attributes
+    ----------
+    coef_ : array of shape (n_features,), float32
+        The fitted coefficients.
+    intercept_ : float
+        The fitted intercept; 0.0 when ``fit_intercept`` is False.
+    n_features_in_ : int
+        The number of features seen in ``fit``.
+    input_copied_ : bool
+        Whether ``fit`` had to copy ``X`` to float32 C order.
 
-    That is defensible where a host reimplementation usually is not, and the
-    reason is arithmetic rather than convenience: the root is the IEEE
-    correctly rounded float32 square root (`portable_sqrtf`), the row
-    multiply is one float32 rounding of an exact float64 product, and both
-    are the same operations the device kernels perform. The two routes are
-    therefore expected to agree BIT FOR BIT except on denormals, where the
-    device flushes and the host does not, and
-    `check_ols_sample_weight_host_rescale_matches_device` in
-    `glm/checks/ols_check.mojo` is the gate on that rather than this
-    paragraph. `sample_weight` with `fit_intercept=True` uses WEIGHTED
-    column means, which is what cuML does too (`raft::stats::weightedMean`,
-    preprocess.cuh:95-97, 110-112).
-
-    THE INTERCEPT IS A HOST REIMPLEMENTATION, NO REFERENCE FILE. cuML's Python
-    default `fit_intercept=True` wraps the solver in `preProcessData`
-    (center X and y on the DEVICE) and `postProcessData` (intercept =
-    mean(y) - mu_X . coef; preprocess.cuh:98-176). The implemented `ols_fit`
-    REFUSES `fit_intercept` by name because those two are not implemented
-    (glm/impl/ols.mojo). This class therefore does the centering itself:
-    column means and the y mean in float64 from exact column sums
-    (`lm_col_sums`, rounded once; lane hr-small-passes), subtracted in
-    float32 (`lm_center`), both on the device on a GPU install,
-    and the intercept as `mean(y) - sum(mu_X * coef)` with `math.fsum`
-    (exactly rounded; NO BLAS dot, which would be a platform-dependent host
-    reduction -- E2's first finding). The device sees a centered design;
-    the arithmetic that reaches it is a function of the inputs alone. The
-    mean-centering is mathematically what cuML does, but its sums are
-    exact where theirs accumulate in float32, so `coef_` CAN differ from
-    cuML's in the last bits on ill-conditioned data.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32) + 1.0
+    >>> model = mojolearn.LinearRegression().fit(X, y)
+    >>> pred = model.predict(X)
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -690,6 +690,25 @@ class LinearRegression(NumericModeMixin):
         self.fit_intercept = fit_intercept
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the linear model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Target values. A 2-D ``y`` raises ``ValueError``.
+        sample_weight : array-like of shape (n_samples,), default None
+            Non-negative, finite per-row weights. A weighted fit minimizes
+            ``sum(w_i * r_i**2)``, and its intercept uses weighted means.
+            A weight array of the wrong shape or length, or with a negative
+            or non-finite entry, raises ``ValueError``.
+
+        Returns
+        -------
+        self : LinearRegression
+            The fitted estimator.
+        """
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape
         target = _target_1d(
@@ -796,6 +815,24 @@ class LinearRegression(NumericModeMixin):
         self.n_features_in_ = cols
 
     def predict(self, X):
+        """Predict with the fitted linear model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        y_pred : array of shape (n_samples,), float32
+            ``X @ coef_ + intercept_``.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, or ``X`` has a different number of
+            features than the training data.
+        """
         if not hasattr(self, "coef_"):
             raise ValueError("mojolearn LinearRegression: call fit before predict")
         x, _ = as_f32_c(X, ndim=2, name="X")
@@ -809,68 +846,151 @@ class LinearRegression(NumericModeMixin):
         )
         return out
 
+    # The R^2 sums run in the x_metrics binding (`_r2_sums`; formerly a
+    # sequential float64 host reduction, DEVIATION 2365).
     def score(self, X, y):
-        """R^2, a sequential float64 host reduction (DEVIATION 2365)."""
+        """Return the coefficient of determination R^2 of the prediction.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True target values.
+
+        Returns
+        -------
+        score : float
+            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
+            (``SS_tot == 0``) scores 0.0.
+        """
         return _r2_host(self.predict(X), y)
 
+    # The file holds what `predict` reads and nothing else (the classical host
+    # inference lane, 2026-09-13): `coef_` <f4, the intercept <f8, `meta` <i8
+    # [n_features_in_, fit_intercept] and the numeric mode.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: `coef_` as fitted,
-        the intercept as float64, the feature count and `fit_intercept`.
-        What `predict` reads and nothing else (the classical host inference
-        lane, 2026-09-13); `mojolearn.host_model(path)` predicts from it on
-        a CPU with no GPU."""
+        """Save the fitted model to ``path`` as an ``.npz`` file.
+
+        The file stores ``coef_``, the intercept (as float64), the feature
+        count, ``fit_intercept`` and the numeric mode. Equal models give
+        byte-identical files. ``mojolearn.host_model(path)`` can predict
+        from the file on a machine without a GPU.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         return _save_linear(self, path)
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts; it does not
-        refit and carries no training-time means."""
+        """Load a model written by ``save``.
+
+        The loaded model predicts with the saved coefficients, intercept
+        and numeric mode. It carries no training-time means, so it is for
+        prediction, not for continuing a fit.
+
+        Parameters
+        ----------
+        path : str or path-like
+            A file written by ``LinearRegression.save``.
+
+        Returns
+        -------
+        model : LinearRegression
+
+        Raises
+        ------
+        ValueError
+            If the file was saved by a different estimator or its fields do
+            not match.
+        """
         obj, _ = _load_linear(cls, path)
         return obj
 
 
+# Maintainer notes (moved from the docstring, 2026-10-12):
+# Reference: cuml/python/cuml/linear_model/ridge.pyx and
+# cuml/cpp/src/glm/ridge.cuh::ridgeFit (DEVIATION 545; the Mojo implementation
+# is glm/impl/ridge.mojo, whose design note is worth reading: their `eig` solver
+# is an SVD through the eigendecomposition of X.T @ X followed by `ridgeSolve`,
+# NOT "OLS with alpha added", and so is ours). Rows measured by
+# tools/e2u_matrix_fit.py:
+#   alpha          honored, non-negative (ridge.pyx:296); 0.0 is least squares
+#                  through the ridge program
+#   fit_intercept  True centers X and y on the host exactly as LinearRegression
+#                  does (DEVIATION 517); the implemented `ridge_fit` sees a
+#                  centered design with fit_intercept=False, ridge.cuh:247's
+#                  `intercept = 0` arm
+#   solver         'eig' only; cuML's 'auto' maps to 'eig' (ridge.pyx:304);
+#                  'svd' (ridgeSVD -> cuSOLVER gesvd, glm/NOT_IMPLEMENTED.tsv) and
+#                  'cd' (cuml/solvers/cd.pyx) refused by name
+#   normalize      refused: preProcessData's meanvar arm (preprocess.cuh:76-108)
+#   sample_weight  refused: ridge.cuh:197-208 / 220-231, not implemented
+#   n_features==1  refused: ridge.cuh:210 forces ridgeSVD for one column
+#                  (ridge.pyx:355 warns and switches); raised by name by the Mojo
+#                  layer (alpha > 0; `linear_gram_fit` defers to it)
+#   y 2-D          refused, one target only
 class Ridge(NumericModeMixin):
-    """l2-regularized least squares on the GPU, cuML's `solver='eig'` arm.
+    """Linear least squares with l2 regularization.
 
-    Reference: `cuml/python/cuml/linear_model/ridge.pyx` and
-    `cuml/cpp/src/glm/ridge.cuh::ridgeFit` (DEVIATION 545; the Mojo implementation is
-    `glm/impl/ridge.mojo` and the design note there is worth reading:
-    their `eig` solver is an SVD through the eigendecomposition of `X.T @ X`
-    followed by `ridgeSolve`, NOT "OLS with alpha added", and so is ours).
-    Solves `min ||y - Xw||^2 + alpha ||w||^2`; the same objective as
-    scikit-learn's `Ridge`, and the same minimizer. Forms `X.T @ X`, so the
-    condition number is squared (see `LinearRegression`).
+    Minimizes ``||y - X w||^2 + alpha * ||w||^2``, the same objective and
+    the same minimizer as scikit-learn's ``Ridge``. The solve is cuML's
+    ``solver='eig'``: an eigendecomposition of ``X.T @ X``, which squares
+    the condition number of ``X`` (see ``LinearRegression``). The
+    intercept is not penalized: with ``fit_intercept=True`` the data are
+    centered on their means before the solve.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
-    `tools/e2u_matrix_fit.py`):
+    ``X`` is read as float32 (a C-contiguous float32 array is used without
+    a copy). ``y`` must be one-dimensional: a single target.
+    ``sample_weight`` is not supported, and a design with a single feature
+    and ``alpha > 0`` is refused with an error.
 
-        alpha           honored   a non-negative float (ridge.pyx:296);
-                                  0.0 is allowed and is least squares
-                                  through the ridge program
-        fit_intercept   honored   True centers X and y ON THE HOST exactly
-                                  as `LinearRegression` does (that class's
-                                  docstring: THE INTERCEPT IS A HOST
-                                  REIMPLEMENTATION, DEVIATION 517); the
-                                  implemented `ridge_fit` sees a centered
-                                  design with fit_intercept=False, which
-                                  is `ridge.cuh:247`'s `intercept = 0` arm
-        solver          'eig' only  cuML's 'auto' maps to 'eig'
-                                  (ridge.pyx:304); 'svd' (ridgeSVD ->
-                                  cuSOLVER gesvd, glm/NOT_IMPLEMENTED.tsv) and
-                                  'cd' (cuml/solvers/cd.pyx, a different
-                                  solver) are REFUSED by name
-        normalize       refused   only reachable with fit_intercept on
-                                  their side and is preProcessData's
-                                  meanvar arm (preprocess.cuh:76-108),
-                                  not implemented
-        sample_weight   refused   ridge.cuh:197-208 / 220-231, a sqrt-
-                                  scaling of both operands and its exact
-                                  inverse, not implemented
-        n_features == 1 refused   ridge.cuh:210 forces ridgeSVD for one
-                                  column and the Python layer warns and
-                                  switches (ridge.pyx:355); raised BY NAME
-                                  by the Mojo layer
-        y 2-D           refused   one target only, at this boundary
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Regularization strength, non-negative. 0.0 gives ordinary least
+        squares. A negative value raises ``ValueError``.
+    solver : {'auto', 'eig'}, default 'auto'
+        ``'auto'`` means ``'eig'``, the one solver implemented. ``'svd'``
+        and ``'cd'`` raise ``NotImplementedError``; any other value raises
+        ``TypeError``.
+    fit_intercept : bool, default True
+        Whether to fit an intercept. When False ``intercept_`` is 0.0.
+    normalize : bool, default False
+        Only False is supported; True raises ``NotImplementedError``.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        The numeric mode for this estimator; None uses the process default
+        (see ``mojolearn.set_numeric_mode``). ``'fast'`` is for Apple GPUs.
+
+    Attributes
+    ----------
+    coef_ : array of shape (n_features,), float32
+        The fitted coefficients.
+    intercept_ : float
+        The fitted intercept; 0.0 when ``fit_intercept`` is False.
+    solver_ : str
+        The solver used, always ``'eig'``.
+    n_features_in_ : int
+        The number of features seen in ``fit``.
+    input_copied_ : bool
+        Whether ``fit`` had to copy ``X`` to float32 C order.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32) + 1.0
+    >>> model = mojolearn.Ridge(alpha=0.5).fit(X, y)
+    >>> pred = model.predict(X)
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -904,6 +1024,22 @@ class Ridge(NumericModeMixin):
         self.normalize = normalize
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the ridge model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Target values. A 2-D ``y`` raises ``ValueError``.
+        sample_weight : None
+            Must be None; weights raise ``NotImplementedError``.
+
+        Returns
+        -------
+        self : Ridge
+            The fitted estimator.
+        """
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn Ridge: sample_weight is not implemented "
@@ -976,6 +1112,24 @@ class Ridge(NumericModeMixin):
         return self
 
     def predict(self, X):
+        """Predict with the fitted ridge model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        y_pred : array of shape (n_samples,), float32
+            ``X @ coef_ + intercept_``.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, or ``X`` has a different number of
+            features than the training data.
+        """
         if not hasattr(self, "coef_"):
             raise ValueError("mojolearn Ridge: call fit before predict")
         x, _ = as_f32_c(X, ndim=2, name="X")
@@ -991,21 +1145,71 @@ class Ridge(NumericModeMixin):
         )
         return out
 
+    # The R^2 sums run in the x_metrics binding (`_r2_sums`; formerly a
+    # sequential float64 host reduction, DEVIATION 2365).
     def score(self, X, y):
-        """R^2, a sequential float64 host reduction (DEVIATION 2365)."""
+        """Return the coefficient of determination R^2 of the prediction.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True target values.
+
+        Returns
+        -------
+        score : float
+            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
+            (``SS_tot == 0``) scores 0.0.
+        """
         return _r2_host(self.predict(X), y)
 
+    # LinearRegression and Ridge share one file format because they share one
+    # predict; Ridge adds `alpha` <f8.
     def save(self, path):
-        """As `LinearRegression.save`, plus `alpha` as float64; the two
-        classes share one file format because they share one predict."""
+        """Save the fitted model to ``path`` as an ``.npz`` file.
+
+        The file stores what ``LinearRegression.save`` stores plus
+        ``alpha``. ``mojolearn.host_model(path)`` can predict from the file
+        on a machine without a GPU.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         return _save_linear(
             self, path, {"alpha": Array.from_list([float(self.alpha)], "<f8")}
         )
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts; it does not
-        refit. `solver_` is the eig arm, the only one `fit` runs."""
+        """Load a model written by ``save``.
+
+        The loaded model predicts with the saved coefficients, intercept,
+        ``alpha`` and numeric mode; ``solver_`` is ``'eig'``.
+
+        Parameters
+        ----------
+        path : str or path-like
+            A file written by ``Ridge.save``.
+
+        Returns
+        -------
+        model : Ridge
+
+        Raises
+        ------
+        ValueError
+            If the file was saved by a different estimator or its fields do
+            not match.
+        """
         arrays = _serialize.read_npz(path, _LINEAR_FORMAT)
         alpha = _serialize.exact(arrays, "alpha", "<f8")
         if alpha.size != 1:
@@ -1064,110 +1268,133 @@ def _py2mojo_flags(binding):
     return int(fn()) if fn is not None else 0
 
 
+# Maintainer notes (moved from the docstring, 2026-10-12):
+# Reference: cuml/python/cuml/linear_model/logistic_regression.py,
+# cuml/python/cuml/solvers/qn.pyx and cuml/cpp/src/glm/qn/ (DEVIATIONS 546-549;
+# the Mojo implementation is glm/impl/qn/*.mojo, one file per theirs).
+# penalty_normalized=True: cuML divides the penalty by n so its minimizer is
+# scikit-learn's LogisticRegression(C) minimizer. OWL-QN with a projected Armijo
+# line search when l1 != 0 (qn_solvers.cuh:420-445, DEVIATION 552,
+# glm/impl/qn/qn_solvers.mojo::min_owlqn). Convergence:
+# qn_util.cuh::check_convergence. Rows measured by tools/e2u_matrix_fit.py:
+#   penalty  'l2' is l2 = 1/C (logistic_regression.py:640); None is qn.cuh:61
+#   tol      grad_tol = tol, change_tol = tol * 0.01, ftol = change_tol * 0.1
+#            (qn.pyx:504-506, qn_util.cuh:88-98)
+#   fit_intercept  the bias is a solver parameter (GLMDims, glm_base.cuh:96), not
+#            penalized (glm_regularizer.cuh:45); no host centering here
+#   max_iter reaching it is a warning in the reference; here n_iter_ == max_iter
+#            with retcode_ == 3
+#   class_weight / sample_weight  refused: class_weight becomes a sample_weight
+#            in the reference (logistic_regression.py:400-436);
+#            GLMBase::add_sample_weights and the weighted getLossAndDZ arm are
+#            not implemented
+#   l1_ratio required with elasticnet (logistic_regression.py:310-316)
+#   > 2 classes  since lane/logistic-multiclass (2026-09-14): QN_LOSS_SOFTMAX,
+#            glm/impl/qn/glm_softmax.mojo, DEVIATIONS 705-711, gated by
+#            `pixi run check-glm-multinomial`; predict_proba is the softmax in
+#            float64 (`qn_softmax`, the rule of DEVIATION 549); predict's tie rule
+#            is `_labels.argmax_rows`, the positional rule of `softmax_row_max`.
+#            l1/elasticnet with > 2 classes refused: OWL-QN on the softmax
+#            objective runs but has no identity gate (CONTRIBUTING.md
+#            "Non-default paths")
+#   warm_start  absent: cuML's QN has it, LogisticRegression does not expose it
+# The l1 arm is a different solver: OWL-QN keeps the L-BFGS history; the
+# objective carries l1 * ||w||_1 in its value, the direction is built from a
+# pseudo-gradient, and every step is projected back into its starting orthant,
+# which produces exact zeros; the identity claim on this arm covers the sparsity
+# pattern too. The intercept is not l1-penalized (`pg_limit = D * C`,
+# qn_solvers.cuh:447).
+# coef_/intercept_ for C > 2 come from cuML's column-major W block w[c + C*j].
+# classes_ is a Python list (DEVIATION 2364). predict_proba goes through
+# `identical_exp64` (DEVIATION 549; cuML computes it in float32 on the device and
+# stores float64).
+# IDENTITY: under identical every reduction in the objective, the gradient and the
+# solver's dot products is a pinned fold, exp/log are the portable pair, and the
+# line search's one host multiply-add is an fma, so the accepted steps, the
+# L-BFGS history, the iteration count and the coefficients are a function of the
+# inputs alone; the card (`qn.iterNNNN.*`, `qn.n_iter`, `qn.coef`) records them.
 class LogisticRegression(NumericModeMixin):
-    """Binary logistic regression on the GPU, cuML's quasi-Newton solver.
+    """Logistic regression classifier, solved by a quasi-Newton method.
 
-    Reference: `cuml/python/cuml/linear_model/logistic_regression.py`,
-    `cuml/python/cuml/solvers/qn.pyx` and `cuml/cpp/src/glm/qn/` (DEVIATIONS
-    546-549; the Mojo implementation is `glm/impl/qn/*.mojo`, one file per
-    theirs). The objective is `mean_i logloss_i + (1/(2 C n)) ||w||^2`
-    (`penalty_normalized=True`: cuML divides the penalty by n so that its
-    minimizer is scikit-learn's `LogisticRegression(C)` minimizer), the
-    solver is L-BFGS (`lbfgs_memory=5`) with a backtracking Armijo line
-    search -- or OWL-QN with a PROJECTED Armijo line search when the penalty
-    has an l1 part (`qn_solvers.cuh:420`, DEVIATION 552) -- and convergence
-    is `max|grad| <= tol * max(loss, tol)` or an objective change below
-    `tol * 0.01 * max(loss, tol)` over 10 iterations
-    (`qn_util.cuh::check_convergence`).
+    Minimizes ``mean_i logloss_i + penalty(w) / (C * n_samples)``, which
+    has the same minimizer as scikit-learn's ``LogisticRegression(C=C)``.
+    Two classes use the logistic loss; more than two use the multinomial
+    (softmax) loss. The solver is L-BFGS (history of 5) with a
+    backtracking Armijo line search, or OWL-QN when the penalty has an l1
+    part; OWL-QN produces coefficients that are exactly zero. The
+    intercept is a solver parameter and is never penalized. This is cuML's
+    ``solver='qn'``.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
-    `tools/e2u_matrix_fit.py`):
+    A fit stops when ``max|grad| <= tol * max(loss, tol)``, when the
+    objective changes by less than ``tol * 0.01 * max(loss, tol)`` over 10
+    iterations, or at ``max_iter`` iterations (``retcode_`` 3). In
+    ``identical`` mode the iteration count and the coefficients are the
+    same on NVIDIA and AMD GPUs.
 
-        penalty         all four honored   'l2' is Tikhonov with
-                                  l2 = 1/C (logistic_regression.py:640);
-                                  None is the unregularized arm (qn.cuh:61);
-                                  'l1' and 'elasticnet' set l1 != 0, which
-                                  selects OWL-QN (qn_solvers.cuh:420-445),
-                                  implemented 2026-09-01 as
-                                  glm/impl/qn/qn_solvers.mojo::min_owlqn
-                                  (DEVIATION 552)
-        C               honored   inverse regularization strength, > 0
-        tol             honored   grad_tol = tol, change_tol = tol * 0.01,
-                                  ftol = change_tol * 0.1 (qn.pyx:504-506,
-                                  qn_util.cuh:88-98)
-        fit_intercept   honored   the bias is a parameter of the solver
-                                  (GLMDims, glm_base.cuh:96); it is NOT
-                                  penalized (glm_regularizer.cuh:45); no
-                                  host centering here, unlike the linear
-                                  models
-        max_iter        honored   the L-BFGS iteration cap; reaching it is
-                                  a WARNING in the reference and `n_iter_ ==
-                                  max_iter` with `retcode_ == 3` here
-        linesearch_max_iter honored  default 50 as theirs
-        class_weight    refused   becomes a sample_weight in the reference
-                                  (logistic_regression.py:400-436), and
-                                  sample_weight is not implemented
-        sample_weight   refused   GLMBase::add_sample_weights and the
-                                  weighted getLossAndDZ arm, not implemented
-        l1_ratio        honored, and REQUIRED with penalty='elasticnet'
-                                  (logistic_regression.py:310-316): the
-                                  split is l1 = l1_ratio / C,
-                                  l2 = (1 - l1_ratio) / C
-        solver          'qn' only the only value cuML accepts either
-        > 2 classes     honored   since lane/logistic-multiclass
-                                  (2026-09-14): the softmax loss
-                                  (QN_LOSS_SOFTMAX, glm/impl/qn/
-                                  glm_softmax.mojo, DEVIATIONS 705-711,
-                                  gated by `pixi run check-glm-multinomial`)
-                                  through the same L-BFGS; `coef_` is
-                                  (C, n_features), `intercept_` (C,),
-                                  `decision_function` (n, C) float32,
-                                  `predict_proba` the softmax of each row
-                                  in float64 on the host (`qn_softmax`,
-                                  the rule of DEVIATION 549), `predict`
-                                  the row argmax with the FIRST maximum
-                                  winning a tie (the lowest class index,
-                                  `_labels.argmax_rows`, the positional
-                                  rule of `softmax_row_max`). REFUSED by
-                                  name with more than two classes: an l1
-                                  or elasticnet penalty (OWL-QN on the
-                                  softmax objective runs but has no
-                                  identity gate; CONTRIBUTING.md (Non-default paths))
-        warm_start      absent    cuML's QN has it, LogisticRegression
-                                  does not expose it; w0 = 0 always
+    ``X`` is read as float32. ``y`` is a 1-D array of labels of any
+    sortable type; ``classes_`` is the sorted unique labels.
 
-    THE l1 ARM IS A DIFFERENT SOLVER, NOT A DIFFERENT PENALTY. `|w|` has no
-    gradient at zero, which is where an l1 solution sits, so cuML switches
-    from L-BFGS to OWL-QN whenever `l1 != 0` (`qn_solvers.cuh:420`) and so
-    does this implementation. OWL-QN keeps the L-BFGS history and replaces three
-    things: the objective carries `l1 * ||w||_1` in its VALUE, the direction
-    is built from a PSEUDO-gradient, and every step is projected back into
-    the orthant it started in. That projection is what produces coefficients
-    that are EXACTLY zero, which is the thing an l1 fit is asked for -- and
-    it means the identity claim on this arm is about the SPARSITY PATTERN as
-    well as about bits, because every branch that zeroes a coefficient is a
-    float comparison with a discrete output. The intercept is not
-    l1-penalized, exactly as it is not l2-penalized (`pg_limit = D * C`,
-    `qn_solvers.cuh:447`).
+    Parameters
+    ----------
+    penalty : {'l2', 'l1', 'elasticnet', None}, default 'l2'
+        The regularization term. ``'l1'`` and ``'elasticnet'`` use OWL-QN
+        and are available for two classes only; with more classes ``fit``
+        raises ``NotImplementedError``. Any other value raises
+        ``ValueError``.
+    tol : float, default 1e-4
+        Convergence tolerance (see above).
+    C : float, default 1.0
+        Inverse regularization strength, > 0; otherwise ``ValueError``.
+    fit_intercept : bool, default True
+        Whether to fit an (unpenalized) intercept.
+    class_weight : None
+        Must be None; anything else raises ``NotImplementedError``.
+    max_iter : int, default 1000
+        Maximum number of L-BFGS iterations. scikit-learn's default is
+        100.
+    linesearch_max_iter : int, default 50
+        Maximum number of line-search steps per iteration.
+    l1_ratio : float or None, default None
+        The l1 share of the elastic-net penalty, in [0, 1]: the l1
+        strength is ``l1_ratio / C`` and the l2 strength
+        ``(1 - l1_ratio) / C``. Required with ``penalty='elasticnet'``
+        (``ValueError`` if missing or out of range) and ignored (stored as
+        None) for every other penalty.
+    solver : {'qn'}, default 'qn'
+        Only ``'qn'`` is supported; any other value raises ``ValueError``.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        The numeric mode for this estimator; None uses the process default
+        (see ``mojolearn.set_numeric_mode``). ``'fast'`` is for Apple GPUs.
 
-    OUTPUTS: `coef_` (1, n_features) float32, `intercept_` (1,) float32
-    (with C > 2 classes: (C, n_features) and (C,), row c the class
-    `classes_[c]`, from cuML's column-major `W` block `w[c + C*j]`),
-    `classes_` (the labels, sorted, a Python LIST -- DEVIATION 2364),
-    `n_iter_` an int64 Array `[k]`, plus `objective_` (the final value of
-    the objective the solver minimized) and `retcode_` (cuML's OPT_RETCODE,
-    0 = converged). `predict` is `classes_[score > 0]`, `predict_proba` is
-    float64 (n, 2) through `identical_exp64` on the host (DEVIATION 549;
-    cuML computes it in float32 on the device and stores float64).
+    Attributes
+    ----------
+    classes_ : list
+        The sorted class labels.
+    coef_ : array of shape (1, n_features) or (n_classes, n_features), float32
+        Coefficients: one row for two classes, one row per class (in
+        ``classes_`` order) for more.
+    intercept_ : array of shape (1,) or (n_classes,), float32
+        Intercepts; zeros when ``fit_intercept`` is False.
+    n_iter_ : array of shape (1,), int64
+        The number of solver iterations run.
+    objective_ : float
+        The final value of the minimized objective.
+    retcode_ : int
+        The solver's return code: 0 converged, 1 numeric error, 2 line
+        search failed, 3 maximum iterations reached, 4 invalid arguments.
+    n_features_in_ : int
+        The number of features seen in ``fit``.
+    input_copied_ : bool
+        Whether ``fit`` had to copy ``X`` to float32 C order.
 
-    IDENTITY: under MOJOLEARN_NUMERIC_MODE=identical every reduction in
-    the objective, the gradient and the solver's dot products is a pinned
-    fold, `exp`/`log` are the portable pair, and the line search's one
-    host multiply-add is an fma -- so the accepted steps, the L-BFGS
-    history, the ITERATION COUNT and the coefficients are a function of
-    the inputs alone; the card (`qn.iterNNNN.*`, `qn.n_iter`, `qn.coef`)
-    records all of them. Under the default FAST mode the reductions are
-    the vendor's and the count may differ across GPUs.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1.0).astype(np.int64)
+    >>> clf = mojolearn.LogisticRegression(C=10.0).fit(X, y)
+    >>> proba = clf.predict_proba(X)
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -1236,6 +1463,23 @@ class LogisticRegression(NumericModeMixin):
         return self.l1_ratio * strength, (1.0 - self.l1_ratio) * strength
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the classifier.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Class labels, at least two distinct values. A 2-D ``y``, a
+            single class or a length mismatch raises ``ValueError``.
+        sample_weight : None
+            Must be None; weights raise ``NotImplementedError``.
+
+        Returns
+        -------
+        self : LogisticRegression
+            The fitted estimator.
+        """
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn LogisticRegression: sample_weight is not implemented "
@@ -1295,6 +1539,25 @@ class LogisticRegression(NumericModeMixin):
         return self
 
     def decision_function(self, X):
+        """Return the linear scores ``X @ coef_.T + intercept_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        scores : array of shape (n_samples,) or (n_samples, n_classes), float32
+            For two classes, one score per row (positive means
+            ``classes_[1]``); for more, one score per class.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, or ``X`` has a different number of
+            features than the training data.
+        """
         if not hasattr(self, "_w"):
             raise ValueError("mojolearn LogisticRegression: call fit first")
         x, _ = as_f32_c(X, ndim=2, name="X")
@@ -1324,14 +1587,29 @@ class LogisticRegression(NumericModeMixin):
         n_classes = len(self.classes_)
         return 1 if n_classes == 2 else n_classes
 
+    # `qn_predict`: `z > 0 ? 1 : 0` (qn.cuh:276), mapped to classes_
+    # (DEVIATION 2364 for the return type). C > 2: the first maximum wins a
+    # tie (`_labels.argmax_rows`; the rule the device's `softmax_row_max`
+    # applies to a tie and to +0.0 against -0.0, and cuML's argmax over C).
     def predict(self, X):
-        """`qn_predict`: `z > 0 ? 1 : 0` (qn.cuh:276), mapped to classes_.
-        An int64 / float64 Array for int / float labels, a Python list for
-        anything else (DEVIATION 2364). With C > 2 classes the row argmax
-        of the decision function, the FIRST maximum winning a tie (the
-        lowest class index, `_labels.argmax_rows`; the same rule the
-        device's `softmax_row_max` applies to a tie and to `+0.0` against
-        `-0.0`, and cuML's `qn_predict` argmax over `C` scores)."""
+        """Predict class labels.
+
+        For two classes a row is ``classes_[1]`` when its decision score is
+        positive and ``classes_[0]`` otherwise. For more classes it is the
+        class with the highest score; a tie goes to the class that comes
+        first in ``classes_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        labels : array of shape (n_samples,) or list
+            An int64 array for integer labels, a float64 array for float
+            labels, and a Python list for any other label type.
+        """
         if self._n_targets() == 1:
             x, _ = as_f32_c(X, ndim=2, name="X")
             codes = empty((x.shape[0],), "<i8")
@@ -1372,6 +1650,21 @@ class LogisticRegression(NumericModeMixin):
         return decode_labels(self.classes_, argmax_rows(scores))
 
     def predict_proba(self, X):
+        """Return class probabilities.
+
+        The sigmoid of the decision score for two classes, the softmax of
+        each row's scores for more, computed in float64.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        proba : array of shape (n_samples, n_classes), float64
+            Column ``k`` is the probability of ``classes_[k]``.
+        """
         scores = self.decision_function(X)
         n_targets = self._n_targets()
         if n_targets == 1:
@@ -1388,10 +1681,20 @@ class LogisticRegression(NumericModeMixin):
             [scores.shape[0], n_targets])
         return out
 
+    # `py2mojo_rows` ROWS_LOG in the estimators binding, on the device on a GPU
+    # install; -inf at an exact zero as NumPy gave.
     def predict_log_proba(self, X):
-        """`log(predict_proba(X))`, float64 (n, 2): `log(p)` per element,
-        `-inf` at an exact zero as NumPy gave, NaN for a negative, in the
-        binding (`py2mojo_rows` ROWS_LOG, on the device on a GPU install).
+        """Return the natural log of ``predict_proba(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        log_proba : array of shape (n_samples, n_classes), float64
+            ``log(p)`` per entry; ``-inf`` where a probability is exactly 0.
         """
         proba = self.predict_proba(X)
         binding = self._bind("_mojolearn_estimators")
@@ -1410,19 +1713,48 @@ class LogisticRegression(NumericModeMixin):
                                  addr(out, name="log proba"), [proba.size, 1])
         return out
 
+    # The match count runs in the x_metrics binding (`_accuracy_host`).
     def score(self, X, y):
-        """Accuracy: the fraction of rows where `predict(X) == y`, the
-        x_metrics binding's exact match count (`_accuracy_host`)."""
+        """Return the mean accuracy on the given data.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+
+        Returns
+        -------
+        score : float
+            The fraction of rows where ``predict(X) == y``.
+        """
         return _accuracy_host(self.predict(X), y)
 
+    # The file: `_w` as fitted (the n_targets * (n_features + fit_intercept)
+    # float32 block inference reads; coef_ and intercept_ are its copies and are
+    # rebuilt by `load`), `classes_` as `_labels.classes_member` (its length is
+    # the class count, so a C > 2 model needs no extra field), the feature count,
+    # fit_intercept and the numeric mode (classical host inference lane,
+    # 2026-09-13; C > 2 since lane/logistic-multiclass, 2026-09-14).
     def save(self, path):
-        """Write the fitted model to `path` as an npz: `_w` as fitted (the
-        `n_targets * (n_features + fit_intercept)` float32 block inference
-        reads; `coef_` and `intercept_` are its copies and are rebuilt by
-        `load`), `classes_` as `_labels.classes_member` (its length is the
-        class count, so a C > 2 model needs no extra field), the feature
-        count and `fit_intercept` (the classical host inference lane,
-        2026-09-13; C > 2 since lane/logistic-multiclass, 2026-09-14)."""
+        """Save the fitted model to ``path`` as an ``.npz`` file.
+
+        The file stores the fitted coefficients and intercepts, the class
+        labels, the feature count, ``fit_intercept`` and the numeric mode.
+        ``mojolearn.host_model(path)`` can predict from the file on a
+        machine without a GPU.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         if not hasattr(self, "_w"):
             raise RuntimeError("this estimator is not fitted yet")
         arrays = {
@@ -1439,8 +1771,27 @@ class LogisticRegression(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts; it does not
-        refit and carries no `n_iter_`, `objective_` or `retcode_`."""
+        """Load a model written by ``save``.
+
+        The loaded model predicts with the saved coefficients, classes and
+        numeric mode. It has no ``n_iter_``, ``objective_`` or
+        ``retcode_``.
+
+        Parameters
+        ----------
+        path : str or path-like
+            A file written by ``LogisticRegression.save``.
+
+        Returns
+        -------
+        model : LogisticRegression
+
+        Raises
+        ------
+        ValueError
+            If the file was saved by a different estimator or its fields do
+            not match.
+        """
         arrays = _serialize.read_npz(path, _LOGISTIC_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
@@ -1511,30 +1862,84 @@ def _check_qn_solver_fields(name, tol, max_iter, linesearch_max_iter, lbfgs_memo
             raise ValueError(f"mojolearn {name}: {field} must be a positive integer, got {value}")
 
 
+# Maintainer notes (moved from the docstring, 2026-10-12):
+# Reference: cuml.solvers.QN with loss='l2' (squared) and loss='l1' (absolute),
+# cuml/cpp/src/glm/qn/glm_linear.cuh; the Mojo implementation is
+# glm/impl/qn/glm_linear.mojo (DEVIATION 707). change_tol = delta if given else
+# tol * 0.01 (qn.pyx:504-506). sample_weight: glm/NOT_IMPLEMENTED.tsv.
 class QNRegressor(NumericModeMixin):
-    """Linear regression on the squared or the absolute loss, solved by the
-    quasi-Newton solver `LogisticRegression` uses.
+    """Linear regression on the squared or absolute loss, solved by a
+    quasi-Newton method.
 
-    Reference: `cuml.solvers.QN` with `loss='l2'` (squared) and `loss='l1'`
-    (absolute), `cuml/cpp/src/glm/qn/glm_linear.cuh`; the Mojo
-    implementation is `glm/impl/qn/glm_linear.mojo` (DEVIATION 707). The
-    objective is `mean_i lz(y_i, x_i w + b) + l1 ||w||_1 + (l2 / 2) ||w||^2`
-    with `lz = (z - y)^2 / 2` or `|z - y|`, both strengths divided by `n`
-    when `penalty_normalized`. `l1_strength != 0` selects OWL-QN, as it
-    does for `LogisticRegression`. The intercept is a solver parameter and
-    is not penalized.
+    Minimizes ``mean_i loss(y_i, x_i @ w + b) + l1_strength * ||w||_1 +
+    (l2_strength / 2) * ||w||^2``, where the loss is ``(z - y)**2 / 2``
+    (``'squared_error'``) or ``|z - y|`` (``'absolute_error'``). With
+    ``penalty_normalized=True`` both strengths are divided by the number
+    of samples. The solver is the L-BFGS / OWL-QN solver of
+    ``LogisticRegression``: a nonzero ``l1_strength`` selects OWL-QN. The
+    intercept is a solver parameter and is not penalized. This is cuML's
+    ``QN`` solver with ``loss='l2'`` or ``loss='l1'``.
 
-        loss            'squared_error' or 'absolute_error'
-        l1_strength, l2_strength   honored, non-negative
-        fit_intercept, max_iter, tol, delta, linesearch_max_iter,
-        lbfgs_memory, penalty_normalized   honored; grad_tol = tol,
-                        change_tol = delta if given else tol * 0.01
-                        (qn.pyx:504-506)
-        warm_start      refused   w0 = 0 always
-        sample_weight   refused   not implemented (glm/NOT_IMPLEMENTED.tsv)
+    ``X`` is read as float32; ``y`` must be one-dimensional. Out-of-range
+    parameter values raise ``ValueError``.
 
-    OUTPUTS: `coef_` (n_features,) float32, `intercept_` a float,
-    `n_iter_`, `objective_`, `retcode_` as on `LogisticRegression`.
+    Parameters
+    ----------
+    loss : {'squared_error', 'absolute_error'}, default 'squared_error'
+        The data-fit loss; any other value raises ``ValueError``.
+    fit_intercept : bool, default True
+        Whether to fit an (unpenalized) intercept.
+    l1_strength : float, default 0.0
+        Strength of the l1 penalty, non-negative.
+    l2_strength : float, default 0.0
+        Strength of the l2 penalty, non-negative.
+    max_iter : int, default 1000
+        Maximum number of solver iterations, a positive integer.
+    tol : float, default 1e-4
+        Gradient tolerance, > 0.
+    delta : float or None, default None
+        Tolerance on the change of the objective, non-negative; None means
+        ``tol * 0.01``.
+    linesearch_max_iter : int, default 50
+        Maximum number of line-search steps per iteration, a positive
+        integer.
+    lbfgs_memory : int, default 5
+        Number of past updates kept by L-BFGS, a positive integer.
+    warm_start : bool, default False
+        Only False is supported (the solver always starts from zero); True
+        raises ``NotImplementedError``.
+    penalty_normalized : bool, default True
+        Whether to divide both penalty strengths by the number of samples.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        The numeric mode for this estimator; None uses the process default
+        (see ``mojolearn.set_numeric_mode``). ``'fast'`` is for Apple GPUs.
+
+    Attributes
+    ----------
+    coef_ : array of shape (n_features,), float32
+        The fitted coefficients.
+    intercept_ : float
+        The fitted intercept; 0.0 when ``fit_intercept`` is False.
+    n_iter_ : array of shape (1,), int64
+        The number of solver iterations run.
+    objective_ : float
+        The final value of the minimized objective.
+    retcode_ : int
+        The solver's return code, as on ``LogisticRegression`` (0 means
+        converged).
+    n_features_in_ : int
+        The number of features seen in ``fit``.
+    input_copied_ : bool
+        Whether ``fit`` had to copy ``X`` to float32 C order.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32) + 1.0
+    >>> model = mojolearn.QNRegressor(loss="absolute_error").fit(X, y)
+    >>> pred = model.predict(X)
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -1575,6 +1980,23 @@ class QNRegressor(NumericModeMixin):
         self.penalty_normalized = penalty_normalized
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Target values. A 2-D ``y`` or a length mismatch raises
+            ``ValueError``.
+        sample_weight : None
+            Must be None; weights raise ``NotImplementedError``.
+
+        Returns
+        -------
+        self : QNRegressor
+            The fitted estimator.
+        """
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn QNRegressor: sample_weight is not implemented "
@@ -1596,10 +2018,42 @@ class QNRegressor(NumericModeMixin):
         return self
 
     def predict(self, X):
+        """Predict with the fitted model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        y_pred : array of shape (n_samples,), float32
+            ``X @ coef_ + intercept_``.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, or ``X`` has a different number of
+            features than the training data.
+        """
         if not hasattr(self, "_w"):
             raise ValueError("mojolearn QNRegressor: call fit before predict")
         return _qn_scores(self, X, self._w)
 
     def score(self, X, y):
-        """R^2 on the host, as `LinearRegression.score`."""
+        """Return the coefficient of determination R^2 of the prediction.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True target values.
+
+        Returns
+        -------
+        score : float
+            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
+            scores 0.0.
+        """
         return _r2_host(self.predict(X), y)
