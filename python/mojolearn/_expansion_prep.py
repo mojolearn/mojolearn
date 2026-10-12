@@ -1867,6 +1867,9 @@ def _target_scratch(mode):
     return _TARGET_SCRATCH[key]
 
 
+# The fold shuffle draws from random_state by splitmix64 (sklearn draws numpy's).
+# A training value outside a given categories list: sklearn codes it as the first
+# category, this class leaves it out of the statistics (x_prep/NOT_IMPLEMENTED.tsv).
 class TargetEncoder(_PrepBase):
     """Encode numeric categorical features by the target mean of each category.
 
@@ -2169,6 +2172,9 @@ def _mark_missing(pr, xo, count, missing_values):
     return out
 
 
+# A callable strategy is sklearn's `strategy(masked_X[:, j].compressed())`: it
+# runs in Python on the host, over each column's non-NaN float32
+# values compacted on the device (p2m_sel_*); the fill runs on the device.
 class SimpleImputer(_PrepBase):
     """Replace missing values with a per-column statistic.
 
@@ -2346,6 +2352,10 @@ def join_column_blocks(parts, ranges, n, d, mode=None):
 
 
 # ---------------------------------------------------------------- discretizer
+# Above `subsample` rows the with-replacement resample is drawn from
+# random_state by splitmix64 (sklearn draws numpy's). Weighted 'quantile' edges
+# follow sklearn's `_weighted_percentile`; with sample_weight above `subsample`
+# rows the weights drive the resample and are then spent.
 class KBinsDiscretizer(_PrepBase):
     """Bin continuous features into intervals.
 
@@ -3040,17 +3050,62 @@ def _check_alpha(est):
                                   "(alpha = 0 makes log(0) terms)")
 
 
+# partial_fit merges with sklearn's `_update_mean_variance` (Chan's pairwise
+# rule) and adds the batch's epsilon to the merged variance; the running
+# variance is kept without epsilon (sklearn subtracts the NEW batch's epsilon
+# from a variance that holds the old one, see naive_bayes/NOT_IMPLEMENTED.tsv).
+# sample_weight follows numpy `average`. float64 predict_proba is the FAST
+# binding's `x_prep_proba64` export (`_proba64_on`).
 class GaussianNB(_Classifier):
-    """sklearn.naive_bayes.GaussianNB (fit, predict, predict_proba,
-    predict_log_proba): per-class mean and population variance plus
-    var_smoothing * the largest feature variance, float32; `priors` as the
-    reference checks them; sample_weight weights the class means, variances
-    and counts (numpy `average`), as the reference. partial_fit merges each
-    batch into the running counts, means and variances (the reference's
-    `_update_mean_variance`, Chan's pairwise rule) and adds the batch's
-    epsilon to the merged variance; the running variance is kept without
-    epsilon (the reference subtracts the NEW batch's epsilon from a variance
-    that holds the old one, see naive_bayes/NOT_IMPLEMENTED.tsv)."""
+    """Gaussian naive Bayes classifier.
+
+    Follows scikit-learn's ``GaussianNB``. Fit learns each class's per-feature mean and population
+    variance, adds ``var_smoothing`` times the largest feature variance to every variance, and predicts
+    with the Gaussian likelihood. Computation is float32; ``predict_proba`` returns float32 in
+    ``identical`` mode and float64 in ``fast`` mode (Apple), where float32 probabilities would round to
+    exactly 1.0 for well-separated classes.
+
+    ``fit`` accepts ``sample_weight``, which weights the class means, variances and counts as in
+    scikit-learn. ``partial_fit(X, y, classes=None, sample_weight=None)`` merges each batch into the
+    running counts, means and variances; ``classes`` is required on the first call (``ValueError``
+    otherwise) and may only be repeated unchanged afterwards.
+
+    Parameters
+    ----------
+    priors : array-like of shape (n_classes,), default None
+        Class prior probabilities; nonnegative and summing to one (``ValueError`` otherwise). None uses
+        the class frequencies in the training data.
+    var_smoothing : float, default 1e-9
+        Fraction of the largest feature variance added to every variance.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    class_count_ : array of shape (n_classes,)
+        Number (or weighted number) of training rows per class.
+    class_prior_ : array of shape (n_classes,)
+        Probability of each class.
+    theta_ : array of shape (n_classes, n_features)
+        Mean of each feature per class.
+    var_ : array of shape (n_classes, n_features)
+        Smoothed variance of each feature per class.
+    epsilon_ : float
+        Value added to the variances.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int64)
+    >>> model = mojolearn.GaussianNB().fit(X, y)
+    >>> model.predict(X[:5])
+    """
     _parameters = ("priors", "var_smoothing")
 
     def __init__(self, *, priors=None, var_smoothing=1e-9):
@@ -3348,9 +3403,26 @@ class _DiscreteNB(_Classifier):
         return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), sample_weight))
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
-        """The reference's `_BaseDiscreteNB.partial_fit`: the batch's class and
-        feature counts added to the running ones, then the log probabilities
-        and the class log prior recomputed from the sums."""
+        """Update the model with one batch of rows.
+
+        The batch's class and feature counts are added to the running ones, then the log probabilities and
+        the class log prior are recomputed from the sums, as in scikit-learn.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training rows.
+        y : array-like of shape (n_samples,)
+            Class labels.
+        classes : array-like, default None
+            Every class label. Required on the first call; later calls may pass it only unchanged.
+        sample_weight : array-like of shape (n_samples,), default None
+            Weights of the rows.
+
+        Returns
+        -------
+        self
+        """
         _check_alpha(self)
         arr = _x2d(X)
         n, d = arr.shape
@@ -3406,9 +3478,53 @@ class _DiscreteNB(_Classifier):
 
 
 class MultinomialNB(_DiscreteNB):
-    """sklearn.naive_bayes.MultinomialNB, float32; alpha > 0 required.
-    class_prior as given (its log); sample_weight weights the counts, as the
-    reference; partial_fit adds each batch's counts, as the reference."""
+    """Naive Bayes classifier for multinomial (count) features.
+
+    Follows scikit-learn's ``MultinomialNB``. Fit sums the feature values of each class, smooths them by
+    ``alpha`` and stores their log share; prediction scores each class by a dot product with those log
+    probabilities plus the class log prior. ``X`` must be nonnegative (``ValueError`` otherwise).
+    Computation is float32.
+
+    ``fit`` accepts ``sample_weight``, which weights the counts. ``partial_fit(X, y, classes=None,
+    sample_weight=None)`` adds each batch's counts to the running ones; ``classes`` is required on the
+    first call.
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Additive smoothing. Must be greater than 0; ``alpha <= 0`` raises ``NotImplementedError``.
+    force_alpha : bool, default True
+        Accepted for scikit-learn compatibility.
+    fit_prior : bool, default True
+        Learn class priors from the data; when False, use a uniform prior.
+    class_prior : array-like of shape (n_classes,), default None
+        Given class priors (nonnegative); overrides ``fit_prior``.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    class_count_ : array of shape (n_classes,)
+        Number (or weighted number) of training rows per class.
+    class_log_prior_ : array of shape (n_classes,)
+        Log prior of each class.
+    feature_count_ : array of shape (n_classes, n_features)
+        Sum of each feature per class.
+    feature_log_prob_ : array of shape (n_classes, n_features)
+        Smoothed log probability of each feature given the class.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 5, (1000, 20)).astype(np.float32)
+    >>> y = rng.integers(0, 3, 1000)
+    >>> model = mojolearn.MultinomialNB().fit(X, y)
+    """
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
     _csr_ok = True
     _needs_min = True
@@ -3436,10 +3552,55 @@ class MultinomialNB(_DiscreteNB):
 
 
 class BernoulliNB(_DiscreteNB):
-    """sklearn.naive_bayes.BernoulliNB, float32 (X binarized at `binarize`
-    unless it is None); alpha > 0 required; class_prior as given (its log);
-    sample_weight weights the counts, as the reference; partial_fit adds each
-    batch's counts, as the reference."""
+    """Naive Bayes classifier for binary features.
+
+    Follows scikit-learn's ``BernoulliNB``. ``X`` is binarized at ``binarize`` (values above the threshold
+    become 1), then fit counts how often each feature is 1 in each class, smooths the counts by ``alpha``
+    and scores each class with the Bernoulli likelihood, including the features that are 0. Computation
+    is float32.
+
+    ``fit`` accepts ``sample_weight``, which weights the counts. ``partial_fit(X, y, classes=None,
+    sample_weight=None)`` adds each batch's counts to the running ones; ``classes`` is required on the
+    first call.
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Additive smoothing. Must be greater than 0; ``alpha <= 0`` raises ``NotImplementedError``.
+    force_alpha : bool, default True
+        Accepted for scikit-learn compatibility.
+    binarize : float or None, default 0.0
+        Threshold for binarizing ``X``; None means ``X`` is already binary.
+    fit_prior : bool, default True
+        Learn class priors from the data; when False, use a uniform prior.
+    class_prior : array-like of shape (n_classes,), default None
+        Given class priors (nonnegative); overrides ``fit_prior``.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    class_count_ : array of shape (n_classes,)
+        Number (or weighted number) of training rows per class.
+    class_log_prior_ : array of shape (n_classes,)
+        Log prior of each class.
+    feature_count_ : array of shape (n_classes, n_features)
+        Number of rows per class in which each feature is 1.
+    feature_log_prob_ : array of shape (n_classes, n_features)
+        Smoothed log probability that each feature is 1 given the class.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 2, (1000, 20)).astype(np.float32)
+    >>> y = rng.integers(0, 2, 1000)
+    >>> model = mojolearn.BernoulliNB().fit(X, y)
+    """
     _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, binarize=0.0, fit_prior=True, class_prior=None):
@@ -6239,11 +6400,55 @@ class RFE(_SelectorMixin):
 
 
 class ComplementNB(_DiscreteNB):
-    """sklearn.naive_bayes.ComplementNB, float32: complement class feature
-    counts, their log share (negated, or normalised when `norm`); the class
-    prior enters only with a single class, as in the reference. alpha > 0
-    required; class_prior as given (its log); sample_weight weights the counts, as the
-    reference; partial_fit adds each batch's counts, as the reference."""
+    """Complement naive Bayes classifier, suited to imbalanced text data.
+
+    Follows scikit-learn's ``ComplementNB``. Fit learns, for each class, the smoothed feature counts of
+    all the other classes and stores their negated log share (normalized when ``norm=True``). As in
+    scikit-learn, the class prior is used only when there is a single class. ``X`` must be nonnegative
+    (``ValueError`` otherwise). Computation is float32.
+
+    ``fit`` accepts ``sample_weight``, which weights the counts. ``partial_fit(X, y, classes=None,
+    sample_weight=None)`` adds each batch's counts to the running ones; ``classes`` is required on the
+    first call.
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Additive smoothing. Must be greater than 0; ``alpha <= 0`` raises ``NotImplementedError``.
+    force_alpha : bool, default True
+        Accepted for scikit-learn compatibility.
+    fit_prior : bool, default True
+        Learn class priors from the data; when False, use a uniform prior.
+    class_prior : array-like of shape (n_classes,), default None
+        Given class priors (nonnegative); overrides ``fit_prior``.
+    norm : bool, default False
+        Normalize the weights of each class.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    class_count_ : array of shape (n_classes,)
+        Number (or weighted number) of training rows per class.
+    class_log_prior_ : array of shape (n_classes,)
+        Log prior of each class.
+    feature_count_ : array of shape (n_classes, n_features)
+        Sum of each feature per class.
+    feature_log_prob_ : array of shape (n_classes, n_features)
+        Class weights computed from the complement counts.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 5, (1000, 20)).astype(np.float32)
+    >>> y = rng.integers(0, 3, 1000)
+    >>> model = mojolearn.ComplementNB().fit(X, y)
+    """
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
     _csr_ok = True
     _needs_min = True
@@ -6275,17 +6480,63 @@ class ComplementNB(_DiscreteNB):
         return self.class_log_prior_ if len(self.classes_) == 1 else None
 
 
+# partial_fit keeps n_categories_ as the accumulated counts' width; sklearn
+# narrows it to the last batch's (naive_bayes/NOT_IMPLEMENTED.tsv).
 class CategoricalNB(_DiscreteNB):
-    """sklearn.naive_bayes.CategoricalNB, float32: X holds category indices
-    0, 1, ...; per feature, class and category the smoothed log share of the
-    class's rows. A category index outside the fitted range at predict time
-    is refused, as the reference refuses it; class_prior as given (its log);
-    min_categories floors n_categories_; sample_weight weights the counts,
-    as the reference. partial_fit adds each batch's category counts to the
-    running ones (category_count_, widened as new categories appear) and
-    recomputes the log probabilities; n_categories_ is the counts' width
-    (the reference narrows it to the last batch's, see
-    naive_bayes/NOT_IMPLEMENTED.tsv)."""
+    """Naive Bayes classifier for categorical features.
+
+    Follows scikit-learn's ``CategoricalNB``. Each column of ``X`` holds category indices ``0, 1, ...``.
+    Fit counts each category per class and feature, smooths the counts by ``alpha`` and stores their log
+    share of the class's rows. Negative values raise ``ValueError`` in fit; at prediction, a category
+    index outside the fitted range raises ``IndexError``, as in scikit-learn. Computation is float32.
+
+    ``fit`` accepts ``sample_weight``, which weights the counts. ``partial_fit(X, y, classes=None,
+    sample_weight=None)`` adds each batch's category counts to the running ones, widening them as new
+    categories appear; ``classes`` is required on the first call. After ``partial_fit``,
+    ``n_categories_`` is the width of the accumulated counts (scikit-learn narrows it to the last
+    batch's).
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Additive smoothing. Must be greater than 0; ``alpha <= 0`` raises ``NotImplementedError``.
+    force_alpha : bool, default True
+        Accepted for scikit-learn compatibility.
+    fit_prior : bool, default True
+        Learn class priors from the data; when False, use a uniform prior.
+    class_prior : array-like of shape (n_classes,), default None
+        Given class priors (nonnegative); overrides ``fit_prior``.
+    min_categories : int or array-like of shape (n_features,), default None
+        Minimum number of categories per feature; the count of categories is the larger of this and the
+        largest index seen plus one.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    class_count_ : array of shape (n_classes,)
+        Number (or weighted number) of training rows per class.
+    class_log_prior_ : array of shape (n_classes,)
+        Log prior of each class.
+    category_count_ : list of arrays
+        Per feature, an array of shape (n_classes, n_categories) of category counts.
+    feature_log_prob_ : list of arrays
+        Per feature, an array of shape (n_classes, n_categories) of smoothed log probabilities.
+    n_categories_ : array of int64
+        Number of categories of each feature.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 4, (1000, 6)).astype(np.float32)
+    >>> y = rng.integers(0, 2, 1000)
+    >>> model = mojolearn.CategoricalNB().fit(X, y)
+    """
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "min_categories")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, min_categories=None):
