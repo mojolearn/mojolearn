@@ -27,3 +27,5 @@ cat > "$SITE/404.html" <<'HTML'
 HTML
 printf '/ /stable/ 302\n' > "$SITE/_redirects"
 echo "site: $SITE ($(ls "$SITE" | tr '\n' ' '))"
+rm -rf _site && cp -R "$SITE" _site
+echo "staged _site for: npx wrangler deploy"
