@@ -41,17 +41,87 @@ from ._x_sequence_device import SequenceDeviceTensor, is_seq_tensor
 _WEIGHTS = ("router", "gate_up_proj", "down_proj")
 
 
+# Weights stay on the device (lane gap-neural-overhead2): the forward reads device copies made
+# once by `moe_weights_put` instead of uploading the three arrays every call; any assignment of
+# router / gate_up_proj / down_proj (or load_state_dict) re-copies on the next forward, and the
+# read-only host copies make a stale device copy impossible. Device I/O (lane neural-io-2): a
+# resident x keeps y and the routing outputs on the device (`sequence/moe_dev.mojo`); a binding
+# built with -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF has no `moe_forward_dev` and the host entry runs.
 class MoEBlock:
+    """Sparse mixture-of-experts feed-forward block, as Mixtral's `MixtralSparseMoeBlock`.
+
+    A router scores every token against `num_experts` experts; the `top_k` highest
+    softmax probabilities are kept (renormalized to sum to one when `norm_topk_prob`),
+    each chosen expert computes ``down_proj(silu(gate) * up)``, and the output is the
+    weighted sum. Routing ties go to the lower expert index. Weights keep the Hugging
+    Face layout. Forward only.
+
+    The weight arrays are stored as read-only float32 copies: to change a weight,
+    assign a new array (``block.router = new``) rather than editing it in place.
+
+    Not supported: the backward pass, router jitter noise, activations other than
+    SiLU, the auxiliary load-balancing loss, and float64 input.
+
+    Parameters
+    ----------
+    hidden_size : int
+        Model dimension D.
+    intermediate_size : int
+        Expert hidden dimension F.
+    num_experts : int, default 8
+        Number of experts E.
+    top_k : int, default 2
+        Experts per token; ``1 <= top_k <= num_experts``, otherwise `ValueError`.
+    norm_topk_prob : bool, default True
+        Renormalize the kept routing probabilities.
+    hidden_act : str, default 'silu'
+        Expert activation; anything else raises `NotImplementedError`.
+    random_state : int, default 0
+        Seed of the N(0, 0.02**2) weight initialization.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Attributes
+    ----------
+    router : ndarray, shape (E, D)
+        Router weights.
+    gate_up_proj : ndarray, shape (E, 2F, D)
+        Gate and up projections of every expert.
+    down_proj : ndarray, shape (E, D, F)
+        Down projection of every expert.
+    router_logits_ : ndarray, shape (n_tokens, E)
+        Router logits of the last forward.
+    selected_experts_ : ndarray of int64, shape (n_tokens, top_k)
+        Experts chosen for each token by the last forward.
+    routing_weights_ : ndarray, shape (n_tokens, top_k)
+        Routing weights of the chosen experts.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> block = mojolearn.MoEBlock(hidden_size=64, intermediate_size=128, num_experts=8, top_k=2)
+    >>> x = np.random.default_rng(0).random((4, 16, 64), dtype=np.float32)
+    >>> y = block(x)
+    """
     #: the board and callers put x on the sequence binding's device with
     #: `mojolearn._x_sequence_device.to_device` (lane neural-io-2)
     _seq_device_io = True
 
     def to_device(self, a):
-        """float32 array `a` as a resident `SequenceDeviceTensor` on this
-        layer's binding, or `a` itself (a float32 array) when that binding
-        has no device MoE entry (-D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF, the host
-        binding) or MOJOLEARN_SEQ_DEVICE_IO_OFF=1: the host-array entry then
-        runs as before, with no extra round trip."""
+        """Upload a float32 array once so `forward` keeps its input and outputs on the device.
+
+        When this install has no device path for the block, the array itself is
+        returned. Non-float32 input raises `TypeError` on that path.
+
+        Parameters
+        ----------
+        a : ndarray of float32
+            Array to upload.
+
+        Returns
+        -------
+        device tensor or ndarray
+        """
         from ._x_sequence_device import to_device
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
         if not callable(getattr(b, "moe_forward_dev", None)):
@@ -73,10 +143,12 @@ class MoEBlock:
 
     @property
     def router_logits_(self):
+        """Router logits of the last forward, (n_tokens, num_experts)."""
         return self._routing_out(0)
 
     @property
     def selected_experts_(self):
+        """Experts chosen for each token by the last forward, int64 (n_tokens, top_k)."""
         r = self.__dict__.get("_routing")
         if r is not None and r[3] is None:
             r[3] = self._routing_out(1).astype(np.int64)   # glue: the picks' dtype for the caller
@@ -86,6 +158,7 @@ class MoEBlock:
 
     @property
     def routing_weights_(self):
+        """Routing weights of the chosen experts, (n_tokens, top_k)."""
         return self._routing_out(2)
 
     def __setattr__(self, name, value):
@@ -141,6 +214,10 @@ class MoEBlock:
             setattr(self, name, a)   # a read-only copy (__setattr__)
 
     def load_state_dict(self, sd):
+        """Load `router`, `gate_up_proj` and `down_proj` from a dict of arrays; returns self.
+
+        Shapes must match the block's, otherwise `ValueError`.
+        """
         for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),  # glue: the four named MoE parameter tensors
                             ("down_proj", (self.E, self.D, self.F))):
             a = np.asarray(sd[name], dtype=np.float32)
@@ -179,9 +256,21 @@ class MoEBlock:
         return y
 
     def forward(self, x):
-        """y with x's shape (..., hidden_size); also sets `router_logits_`,
-        `selected_experts_` (int) and `routing_weights_`. A resident x
-        (`to_device`) gives a resident y."""
+        """Apply the block to `x` of shape (..., hidden_size); also callable as ``block(x)``.
+
+        Sets `router_logits_`, `selected_experts_` and `routing_weights_`. float64 input
+        raises `TypeError`. An input from `to_device` gives an output on the device.
+
+        Parameters
+        ----------
+        x : ndarray of float32
+            Token activations.
+
+        Returns
+        -------
+        y : ndarray of float32
+            Output with the shape of `x`.
+        """
         if is_seq_tensor(x):
             y = self._forward_dev(x)
             if y is not None:
