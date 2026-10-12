@@ -63,37 +63,61 @@ _GPU_BINDING = "_mojolearn_gp"
 _CPU_BINDING = "_mojolearn_linalg"
 
 
+# Binds `_mojolearn_gp` (which links every cholesky/ kernel; entries cholesky_factor_host /
+# cholesky_solve_host of cholesky/estimator.mojo). CPU-only installs bind `_mojolearn_linalg`
+# routed to `_mojolearn_linalg_host` (cholesky/host/chol_oracle.mojo); fit is inference there
+# (_CPU_FIT_IS_INFERENCE). `HostCholesky` is this class on the host binding. Four scalars cross
+# with L: info (data-dependent, DEVIATION 1634), nb and jitter (profile parameters, DEVIATIONS
+# 1630, 1637), logdet. Host-side refusals: chol_validate_matrix (DEVIATION 1638),
+# chol_validate_jitter (1637), solve against info != 0 (1634). Saved npz: L <f4, meta <i8
+# [n, info, nb], scalars <f8 [logdet, jitter], jitter, tier.
 class Cholesky(NumericModeMixin):
-    """`A + jitter I = L L^T` on the GPU, one shot, then `solve`.
+    """Cholesky factorization ``A + jitter * I = L @ L.T`` of a symmetric positive-definite matrix, then solves.
+
+    `fit` factors a given float32 matrix once; `solve` answers ``A X = B`` from the
+    factor and `logdet_` gives the log-determinant. A failed factorization is not an
+    exception: check `info_` (0 means success); a failed factor's `solve` and
+    `logdet_` refuse. The factor can be saved with `save` and loaded with
+    `load`, including on a CPU-only install, where `fit` and `solve` also run.
 
     Parameters
     ----------
     jitter : float or None, default None
-        The ridge added to the diagonal before factoring. `None` means the
-        profile's pinned ridge, read from the binding
-        (`cholesky_profile_jitter`, DEVIATION 1637); `0.0` means none. Any
-        other value is refused BY NAME on the Mojo host, because the
-        identical tier pins the ridge to those two values. It is a
-        parameter of the PROFILE and is carried on the fitted object.
+        Ridge added to the diagonal before factoring. None uses the profile's fixed
+        ridge (see `profile_jitter`); 0.0 adds none. Any other value is refused,
+        because the identical mode fixes the ridge to those two values. A non-number
+        raises `TypeError`.
 
     Attributes
     ----------
-    L_ : Array (n, n) float32
-        The factor, lower triangle `L`, strict upper triangle `+0.0`.
-        Meaningful only when `info_ == 0`.
+    L_ : mojolearn.Array, shape (n, n), float32
+        Lower-triangular factor, strict upper triangle zero. Meaningful only when
+        ``info_ == 0``.
     info_ : int
-        LAPACK's `info`. READ IT BEFORE YOU BELIEVE `L_` (DEVIATION 1634):
-        0 means a complete factor; `k > 0` means the leading minor of
-        order `k` was not positive definite and `L_` is partial.
+        LAPACK-style status: 0 for a complete factor; ``k > 0`` means the leading minor
+        of order k is not positive definite and `L_` is partial.
     nb_ : int
-        The panel width that ran. Part of the profile, not a tuning record.
+        Panel width used by the factorization.
     logdet_ : float
-        `log |A + jitter I|`, computed on the device by the one pinned
-        fold. Reading it on a failed fit raises by name, as
-        `cholesky_logdet_host` does.
+        ``log |A + jitter * I|``. Raises `ValueError` after a failed fit.
     jitter_ : float
-        The ridge that was added, by value.
+        The ridge that was added.
     n_ : int
+        Matrix size.
+
+    Notes
+    -----
+    A non-square `A` or a right-hand side whose row count is not n raises
+    `ValueError`; non-finite or non-symmetric matrices are refused before any work.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> M = rng.random((64, 64), dtype=np.float32)
+    >>> A = (M @ M.T + 64 * np.eye(64, dtype=np.float32)).astype(np.float32)
+    >>> chol = mojolearn.Cholesky(jitter=0.0).fit(A)
+    >>> x = np.asarray(chol.solve(np.ones(64, dtype=np.float32)))
     """
 
     #: This class's GPU binding: the GP's, which already links `cholesky/`.
@@ -144,20 +168,21 @@ class Cholesky(NumericModeMixin):
         return mod
 
     def vendor_used(self):
-        """The accelerator API of the binary the door actually calls, read
-        back from it: "cpu" on a CPU-only install (the linalg route)."""
+        """Accelerator API of the loaded binary, read back from it; "cpu" on a CPU-only install."""
         return _backend.read_vendor(self._door()[0])
 
     def profile_jitter(self):
-        """The profile's pinned ridge, read from the binding by name."""
+        """The profile's fixed ridge, used when ``jitter=None``."""
         return float(self._extension().cholesky_profile_jitter())
 
     # -- fit ----------------------------------------------------------------
 
     def fit(self, A):
-        """Factor `A + jitter I`. Returns `self`. `info_` is a RESULT, not
-        an exception; a failed factorization is a fitted object whose
-        `solve` and `logdet_` refuse by name."""
+        """Factor ``A + jitter * I``; returns self.
+
+        `A` is a square 2-D float32 matrix, otherwise `ValueError`. A failed factorization
+        sets ``info_ != 0`` instead of raising.
+        """
         a, _ = as_f32_c(A, ndim=2, name="A")
         n, m = a.shape
         if n != m:
@@ -187,6 +212,7 @@ class Cholesky(NumericModeMixin):
 
     @property
     def logdet_(self):
+        """``log |A + jitter * I|``; raises `ValueError` after a failed fit."""
         if not hasattr(self, "info_"):
             raise AttributeError("mojolearn Cholesky: logdet_ is set by fit")
         if self.info_ != 0:
@@ -199,10 +225,22 @@ class Cholesky(NumericModeMixin):
     # -- solve --------------------------------------------------------------
 
     def solve(self, B):
-        """`A X = B` from the factor. `B` is `(n,)` or `(n, nrhs)` and `X`
-        comes back in the same shape, float32. A failed factor is refused
-        BY NAME IN MOJO; `info_` goes down with the call so that refusal
-        stays reachable from here."""
+        """Solve ``A X = B`` from the factor.
+
+        Parameters
+        ----------
+        B : float32 array, shape (n,) or (n, nrhs)
+
+        Returns
+        -------
+        X : float32 array, the shape of `B`
+
+        Raises
+        ------
+        ValueError
+            Before `fit`, or when `B` has the wrong row count or no columns. Solving
+            against a failed factor is also refused.
+        """
         if not hasattr(self, "L_"):
             raise ValueError("mojolearn Cholesky: call fit before solve")
         b, _ = as_f32_c(B, ndim=None, name="B")
@@ -237,10 +275,12 @@ class Cholesky(NumericModeMixin):
     # -- save and load ------------------------------------------------------
 
     def save(self, path):
-        """Write the factor to `path` as an npz: `L` `<f4` (n, n), `meta`
-        `<i8` [n, info, nb], `scalars` `<f8` [logdet, jitter], the `jitter`
-        parameter and the tier. What `solve` and `logdet_` read and nothing
-        else; a failed factor saves too, and its `solve` still refuses."""
+        """Write the factor to `path` as an .npz file.
+
+        Stores the factor, ``info_``, ``nb_``, ``logdet_``, the jitter and the numeric mode.
+        A failed factor saves too; its `solve` still refuses. Raises `RuntimeError` before
+        `fit`.
+        """
         if not hasattr(self, "L_"):
             raise RuntimeError("mojolearn Cholesky: call fit before save")
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
@@ -267,8 +307,12 @@ class Cholesky(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a factor written by `save`. The result solves; it carries no
-        matrix and does not refactor."""
+        """Load a factor written by `save`.
+
+        The result can `solve` and report `logdet_`; it holds no matrix and does not
+        refactor. A file saved by another estimator, or with mismatched shapes or dtypes,
+        raises `ValueError`.
+        """
         arrays = _serialize.read_npz(path, _CHOLESKY_FORMAT)
         saved_as = _serialize.scalar_str(arrays, "estimator")
         if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: checks the saved class name

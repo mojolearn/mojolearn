@@ -75,13 +75,35 @@ def _binding():
 
 
 class MLPInference:
-    """Forward-only `SmallMLPTrainer` (8 -> 16 ReLU -> 3, float32) on the
-    CPU. The weights are copied at construction and never change.
+    """Forward-only `SmallMLPTrainer` network (8 -> 16 ReLU -> 3, float32) on the CPU.
 
-    `predict_logits(X)` is `SmallMLPTrainer.predict_logits` from the same
-    weights: `X` is `(rows, 8)` float32 with 1..256 rows, the answer a
-    `(rows, 3)` float32 `mojolearn.Array`. Each row's logits depend on that
-    row alone (the GEMM profile's cells are row-independent)."""
+    Computes the same logits as `SmallMLPTrainer.predict_logits` from the same weights.
+    The weights are copied at construction and never change; the weight matrices may
+    also be given packed by `mojolearn.lowbit`, in which case they are unpacked
+    exactly to float32. Each row's logits depend on that row alone.
+
+    Parameters
+    ----------
+    weight1 : array of float32
+        First-layer weights.
+    bias1 : array of float32
+        First-layer bias.
+    weight2 : array of float32
+        Second-layer weights.
+    bias2 : array of float32
+        Second-layer bias.
+
+    Attributes
+    ----------
+    weight_format : str
+        Format the weight matrices were given in: "float32", or the packed `mojolearn.lowbit` format.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> model = mojolearn.MLPInference.from_checkpoint("mlp.ckpt")
+    >>> logits = model.predict_logits(X)    # X: (rows, 8) float32, 1..256 rows
+    """
 
     def __init__(self, weight1, bias1, weight2, bias2):
         # lane/identical-lowbit-inference (2026-09-17): the two matrices may
@@ -95,10 +117,20 @@ class MLPInference:
 
     @classmethod
     def from_checkpoint(cls, path):
-        """The weights of a `mojolearn.small-mlp-checkpoint.v1` file
-        (`SmallMLPTrainer.save_checkpoint`), after the trainer's own size,
-        schema and SHA-256 checks. The optimizer state is validated and
-        dropped."""
+        """Build from a `SmallMLPTrainer.save_checkpoint` file.
+
+        The file's size, schema, SHA-256 and arithmetic profile are checked (any mismatch
+        raises `ValueError`); the optimizer state is validated and dropped.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Checkpoint file.
+
+        Returns
+        -------
+        MLPInference
+        """
         with Path(path).open("rb") as stream:
             encoded = stream.read(_FILE_LIMIT + 1)
         if len(encoded) > _FILE_LIMIT:
@@ -121,10 +153,21 @@ class MLPInference:
 
     @property
     def weights_(self):
-        """An independent copy of the four weights, by name."""
+        """An independent copy of the four weights, keyed by name."""
         return {name: w.copy() for name, w in zip(_NAMES, self._weights)}
 
     def predict_logits(self, X):
+        """Logits for `X`.
+
+        Parameters
+        ----------
+        X : array of float32, shape (rows, 8)
+            Input rows, 1 to 256 of them.
+
+        Returns
+        -------
+        mojolearn.Array of float32, shape (rows, 3)
+        """
         x = _batch(X)
         rows = int(x.shape[0])
         out = empty((rows, 3), "<f4")
@@ -141,31 +184,35 @@ class MLPInference:
         return "MLPInference(architecture=[8, 16, 3])"
 
 
+# Nothing is overridden except the binding (lane/stateful-cpu-decoding): the host binding
+# exports transformer_forward and transformer_decode_step, so the parent's _call is the
+# arithmetic (decode = prefill entry at L = 1 with the cache carried);
+# tools/step_vs_full_check.py measures step-vs-full bitwise agreement on this column.
 class TransformerBlockInference(TransformerBlock):
-    """Forward-only `TransformerBlock` on the CPU: the same constructor
-    (`weights` by the nine names, `n_heads`, `n_kv_heads`, `head_dim`,
-    `window`) and the same weight checks, and the block's whole INFERENCE
-    surface over the shipped neural binding -- `forward(x, lengths=None)`
-    from a zero state, `allocate_state(B, max_tokens)`, `forward(x, state)`
-    and `step(x, state)`. There is no output head in a block, so there are
-    no logits to expose; a model's logits are the caller's projection of
-    this output. Only `backward` is refused by name: the binding exports no
-    VJP.
+    """Forward-only `TransformerBlock` on the CPU, from weights trained on a GPU.
 
-    NOTHING IS OVERRIDDEN HERE EXCEPT THE BINDING (lane/stateful-cpu-
-    decoding, 2026-09-16). Until that lane this class carried its own
-    `forward` plus three refusals, and the refusals were honest -- the
-    binding exported `transformer_forward_fresh` alone. It now exports
-    `transformer_forward` and `transformer_decode_step` as well, so the
-    parent's own `_call` is the arithmetic, which is the point: a decode
-    step is the prefill entry at L = 1 with the cache carried, ONE
-    spelling, and `tools/step_vs_full_check.py` measures on this column
-    that the two agree bitwise at every position."""
+    Takes the same constructor arguments as `TransformerBlock` (the nine named
+    weights, `n_heads`, `n_kv_heads`, `head_dim`, `window`) and applies the same
+    weight checks. Supports `forward(x, lengths=None)` from a zero state,
+    `allocate_state(B, max_tokens)`, `forward(x, state)` and `step(x, state)`;
+    decoding one token at a time with a carried state gives the same bits as one
+    forward pass over the whole sequence. A block has no output head, so it returns
+    hidden states, not logits. Runs on the host binding shipped with mojolearn,
+    loaded on first use.
+
+    Examples
+    --------
+    >>> blk = mojolearn.TransformerBlockInference(weights, n_heads=4)
+    >>> y = blk.forward(x)
+    """
 
     def _extension(self):
         return _binding()
 
     def backward(self, x, grad_output):
+        """Not available: inference is forward only. Always raises `NotImplementedError`;
+        train with the GPU block class.
+        """
         raise NotImplementedError(
             "mojolearn TransformerBlockInference.backward: inference is forward only; "
             "the backward pass runs on TransformerBlock over a training binding")
@@ -202,33 +249,88 @@ class _RecurrentBlockInference:
             "the backward pass runs on the GPU block class over a training binding")
 
 
+# Shared base _RecurrentBlockInference: only the binding and backward are overridden; the
+# binding exports mamba{1,2,3}_forward / mamba{1,2,3}_decode_step, so the parent's _call is
+# the arithmetic; tools/step_vs_full_check.py checks step-by-step decode against prefill.
 class Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block):
-    """Forward-only `Mamba1Block` on the CPU, from its ten named weights."""
+    """Forward-only `Mamba1Block` on the CPU, from weights trained on a GPU.
+
+    Takes the same constructor arguments as `Mamba1Block` (its ten named weights) and
+    applies the same weight checks. Supports `forward(x, lengths=None)` from a zero
+    state, `allocate_state(B)`, `forward(x, state)` and `step(x, state)`; decoding
+    one token at a time with a carried state gives the same bits as one forward pass
+    over the whole sequence. `backward` raises `NotImplementedError`. Runs on the
+    host binding shipped with mojolearn; it is loaded on first use, so an install
+    without it still imports and raises when the class is used.
+    """
 
 
 class Mamba2BlockInference(_RecurrentBlockInference, Mamba2Block):
-    """Forward-only `Mamba2Block` on the CPU, from its nine named weights and
-    `dt_limit` (default `(0.0, inf)`)."""
+    """Forward-only `Mamba2Block` on the CPU, from weights trained on a GPU.
+
+    Takes the same constructor arguments as `Mamba2Block` (its nine named weights and `dt_limit`, default ``(0.0, inf)``) and
+    applies the same weight checks. Supports `forward(x, lengths=None)` from a zero
+    state, `allocate_state(B)`, `forward(x, state)` and `step(x, state)`; decoding
+    one token at a time with a carried state gives the same bits as one forward pass
+    over the whole sequence. `backward` raises `NotImplementedError`. Runs on the
+    host binding shipped with mojolearn; it is loaded on first use, so an install
+    without it still imports and raises when the class is used.
+    """
 
 
 class Mamba3BlockInference(_RecurrentBlockInference, Mamba3Block):
-    """Forward-only `Mamba3Block` on the CPU, from its nine named weights."""
+    """Forward-only `Mamba3Block` on the CPU, from weights trained on a GPU.
+
+    Takes the same constructor arguments as `Mamba3Block` (its nine named weights) and
+    applies the same weight checks. Supports `forward(x, lengths=None)` from a zero
+    state, `allocate_state(B)`, `forward(x, state)` and `step(x, state)`; decoding
+    one token at a time with a carried state gives the same bits as one forward pass
+    over the whole sequence. `backward` raises `NotImplementedError`. Runs on the
+    host binding shipped with mojolearn; it is loaded on first use, so an install
+    without it still imports and raises when the class is used.
+    """
 
 
 # ---------------------------------------------------------------- Samba
 
+# Arithmetic is the same host functions the reference bindings call; tools/identity_break.py's
+# mlp / transformer / transformer-window / *-decode lanes measure it on a CPU column.
 class SambaInference:
-    """Forward-only `SambaStack` on the CPU: `(B, L)` ids in, `(B, L, vocab)`
-    float32 logits out, from a `SambaStack.save_checkpoint` file
-    (`from_checkpoint`) or a `SambaConfig` and the registry's weights by name.
-    The arithmetic is the stack's training forward with no dropout: the
-    embedding gather, each block's forward in stack order
-    (`Mamba3BlockInference`, `TransformerBlockInference`), the final RMSNorm
-    and the tied or untied head, each over the shipped neural binding. The
-    weights are copied at construction. `allocate_state(B, max_tokens)`,
-    `forward(ids, state)` and `step(ids, state)` carry the decode state
-    (lane/stateful-cpu-decoding, 2026-09-16); no optimizer, loss or backward
-    is reachable."""
+    """Forward-only `SambaStack` language model on the CPU.
+
+    Maps ``(B, L)`` integer token ids to ``(B, L, vocab)`` float32 logits with the
+    stack's forward (no dropout): embedding, each block in stack order, final RMSNorm
+    and the tied or untied output head. Build it from a `SambaStack.save_checkpoint`
+    file with `from_checkpoint`, or from a `SambaConfig` and a dict of weights keyed by
+    the config's registry names. Weights may be packed by `mojolearn.lowbit`; they are
+    unpacked exactly to float32 and copied at construction. `allocate_state`,
+    ``forward(ids, state)`` and `step` carry a decode state. There is no loss,
+    backward or training: `loss` and `train_step` raise `NotImplementedError`.
+
+    Parameters
+    ----------
+    config : SambaConfig
+        Model configuration; anything else raises `TypeError`.
+    weights : dict
+        float32 arrays keyed by registry name. Missing or unknown names, wrong shapes
+        and non-finite values raise `ValueError`.
+
+    Attributes
+    ----------
+    config : SambaConfig
+        The configuration.
+    weight_format : str
+        Format the weights were given in: "float32", or the packed `mojolearn.lowbit` format.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> lm = mojolearn.SambaInference.from_checkpoint("samba.ckpt")
+    >>> logits = lm.forward(ids)                  # ids: (B, L) integers
+    >>> st = lm.allocate_state(batch_size=1, max_tokens=256)
+    >>> logits = lm.forward(prompt, st)
+    >>> next_logits = lm.step(next_ids, st)       # (B, vocab)
+    """
 
     def __init__(self, config, weights):
         from ._samba_impl import SambaConfig
@@ -266,10 +368,21 @@ class SambaInference:
 
     @classmethod
     def from_checkpoint(cls, path):
-        """The config and parameters of a `SambaStack.save_checkpoint` file
-        (the streamed v2 archive or the legacy JSON), after the stack's own
-        integrity checks. The optimizer, schedule and RNG state are
-        validated by the reader and dropped."""
+        """Build from a `SambaStack.save_checkpoint` file (the streamed archive or the older JSON format).
+
+        The checkpoint's integrity checks run, and its schema, profile and weight registry
+        must match its config, otherwise `ValueError`. Optimizer, schedule and random
+        state are validated and dropped.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Checkpoint file.
+
+        Returns
+        -------
+        SambaInference
+        """
         from ._samba_checkpoint import MAGIC, load
         from ._samba_impl import PROFILE, SambaConfig, SambaStack, _STATE_SCHEMA
         with Path(path).open("rb") as stream:
@@ -291,7 +404,7 @@ class SambaInference:
         return cls(config, weights)
 
     def parameters(self):
-        """An independent copy of every weight, by registry name."""
+        """An independent copy of every weight, keyed by registry name."""
         return {n: a.copy() for n, a in self._w.items()}
 
     @staticmethod
@@ -302,14 +415,26 @@ class SambaInference:
         return as_i32_c(x, ndim=2, name="inputs")[0]
 
     def forward(self, inputs, state=None, *, lengths=None):
-        """`(B, L)` ids in, `(B, L, vocab)` float32 logits out.
+        """Logits for token ids; also available as `logits` and by calling the model.
 
-        `state=None` is the stateless forward, every block from a zero
-        state. Pass a `SambaState` (`allocate_state`) to carry the decode
-        state instead: every block's own state is read at entry and updated
-        in place, so a later `forward` or `step` on that state continues the
-        sequence (lane/stateful-cpu-decoding, 2026-09-16). `lengths` applies
-        to the stateless forward only."""
+        With ``state=None`` every block starts from a zero state. Pass a state from
+        `allocate_state` to carry it: each block's state is read and updated in place, so
+        a later `forward` or `step` on that state continues the sequence.
+
+        Parameters
+        ----------
+        inputs : array of int, shape (B, L)
+            Token ids in [0, vocab).
+        state : SambaState or None, default None
+            Decode state to read and update.
+        lengths : sequence of int or None, default None
+            Ragged batch: row i is real at positions ``[0, lengths[i])``. Stateless
+            forward only; with a `state` it raises `ValueError`.
+
+        Returns
+        -------
+        mojolearn.Array of float32, shape (B, L, vocab)
+        """
         what = "SambaInference.forward"
         ids = self._ids(inputs)
         if lengths is not None:
@@ -323,12 +448,22 @@ class SambaInference:
     __call__ = forward
 
     def allocate_state(self, batch_size, max_tokens):
-        """The zero decode state for `batch_size` sequences of up to
-        `max_tokens` positions: one block state per layer, in stack order
-        (`Mamba3BlockInference.allocate_state(B)`,
-        `TransformerBlockInference.allocate_state(B, max_tokens)`). Every
-        piece is caller-owned and documented by its block class, exactly as
-        `SambaStack.allocate_state` hands them out."""
+        """A zero decode state for `batch_size` sequences of up to `max_tokens` positions.
+
+        Holds one block state per layer, in stack order, as `SambaStack.allocate_state`
+        does. Both arguments must be positive, otherwise `ValueError`.
+
+        Parameters
+        ----------
+        batch_size : int
+            Number of sequences.
+        max_tokens : int
+            Maximum total positions per sequence.
+
+        Returns
+        -------
+        SambaState
+        """
         from ._samba_impl import SambaState
         b, smax = int(batch_size), int(max_tokens)
         if b < 1 or smax < 1:
@@ -341,12 +476,21 @@ class SambaInference:
         return SambaState(b, smax, layers)
 
     def step(self, inputs, state):
-        """One decode token per row: `(B,)` or `(B, 1)` ids in, `(B, vocab)`
-        float32 logits out, `state` updated in place. It is the stateful
-        `forward` at L = 1 with each block's `step`; the embedding, the
-        final RMSNorm and the head are the same three binding entries the
-        stateless forward calls, and they are per-token, so a step's logits
-        are the logits the one-shot forward writes at that position."""
+        """Decode one token per row and update `state` in place.
+
+        A step's logits equal the logits a one-shot `forward` gives at that position.
+
+        Parameters
+        ----------
+        inputs : array of int, shape (B,) or (B, 1)
+            Token ids.
+        state : SambaState
+            Required decode state from `allocate_state`.
+
+        Returns
+        -------
+        mojolearn.Array of float32, shape (B, vocab)
+        """
         what = "SambaInference.step"
         if state is None:
             raise ValueError("mojolearn.SambaInference.step: state is required "
@@ -408,9 +552,11 @@ class SambaInference:
             "backward and training run on SambaStack")
 
     def loss(self, inputs, targets):
+        """Not available: inference only. Raises `NotImplementedError`; use `SambaStack`."""
         self._refuse("loss")
 
     def train_step(self, inputs, targets):
+        """Not available: inference only. Raises `NotImplementedError`; use `SambaStack`."""
         self._refuse("train_step")
 
     def __repr__(self):

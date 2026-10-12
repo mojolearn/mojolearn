@@ -1079,93 +1079,78 @@ class _Optimizer(NumericModeMixin):
         return self.step(combined, max_norm=max_norm)
 
 
+# Optimizer contract 7.3 (momentum 7.3, dampening 7.3a, nesterov 7.3c). `params` order is the
+# param_id order, i.e. the clip's cross-tensor summation order (contract 3.3). lr is a host scalar
+# computed once per step (contract 7.1). At dampening 0, c_damp is exactly 1.0, so the first-step
+# copy and the recurrence agree. nesterov with momentum 0 is refused because the profile would accept
+# it and silently equal the plain update. maximize: torch's -grad at the top of the step, before the
+# coupled decay and the momentum buffer (training/maximize.mojo, DEVIATION 6200). One launch per
+# tensor for SGD; per-parameter groups refused because two clips do not equal one (contract 3.5).
+# Mixed precision: see `_NOT_COVERED` at the top of this file.
 class SGD(_Optimizer):
-    """`torch.optim.SGD`, on the GPU, over float32 buffers (NumPy arrays, `array.array`, `mojolearn.Array`; the buffer protocol is the boundary).
+    """Stochastic gradient descent, as `torch.optim.SGD`, over float32 buffers (NumPy arrays, `array.array` or `mojolearn.Array`; any writable buffer-protocol object).
 
-    Optimizer contract 7.3. Momentum, dampening, Nesterov and COUPLED L2
-    weight decay -- coupled meaning the decay is folded into the GRADIENT and
-    therefore passes through the momentum buffer, which is what
-    `torch.optim.SGD` does and is a different algorithm from AdamW's
-    decoupled form.
+    Supports momentum, dampening, Nesterov momentum and weight decay. Weight decay is
+    coupled, as in torch: it is added to the gradient and so passes through the momentum
+    buffer. Parameters are updated in place.
 
-        p = SGD([w1, w2], lr=1e-2, momentum=0.9)
-        p.step([g1, g2], max_norm=1.0)
+    Parameters
+    ----------
+    params : buffer or list of buffers
+        float32 parameter arrays, updated in place.
+    lr : float, default 1e-3
+        Learning rate. torch's SGD has no default; this one is 1e-3.
+    momentum : float, default 0.0
+        Momentum factor.
+    dampening : float, default 0.0
+        Dampening of the momentum.
+    weight_decay : float, default 0.0
+        L2 penalty, added to the gradient.
+    nesterov : bool, default False
+        Nesterov momentum. Needs ``momentum > 0`` and ``dampening == 0``, otherwise
+        `ValueError` (as torch).
+    lr_schedule : object or None, default None
+        A schedule with a one-based `lr_at(t)` method; it sets `lr` before every step.
+        Anything without `lr_at` raises `TypeError`.
+    accumulation_steps : int, default 1
+        Number of microbatches combined by `step_accumulated`; a power of two >= 1,
+        otherwise `ValueError`.
+    maximize : bool, default False
+        Maximize the objective (the gradient's sign is flipped inside the step; the
+        caller's gradient arrays are not negated). Must be a bool.
+    resident : bool or None, default None
+        Keep the optimizer state on the device between steps when the install supports
+        it (None or True). False keeps it on the host, which suits an optimizer that is
+        rebuilt every step.
 
-    WHERE THE MEASUREMENT STOPS, AND IT IS UNEVEN
-    ---------------------------------------------
-    `training-optimizer.identical.card`, 18 records, md5 `97d160b0`, is
-    BYTE-IDENTICAL on an Apple M4 and an AMD MI325X (2026-08-28 legs), and
-    its clause (a) matched device against the host oracle BITWISE over 33
-    cases and all 382,822 compared cells. **NO NVIDIA LEG HAS RUN**, for that
-    card or for the composed training loop's checkpoint comparison, so this
-    is a TWO-VENDOR result and not a three-vendor one. Clauses (b), (c), (d)
-    and (f) are SKIPPED on both columns.
+    Notes
+    -----
+    `step(grads, max_norm=None)` takes one gradient per parameter, matching `params` in
+    count, shape and order. With `max_norm` set, the global L2 gradient norm is clipped
+    first: the caller's gradient arrays are scaled in place (as
+    `torch.nn.utils.clip_grad_norm_`) and `step` returns the pre-clip total norm;
+    without it, `step` returns None and the gradients are untouched. With clipping on,
+    the order of `params` is part of the result, because it fixes the summation order of
+    the norm.
 
-    All of that belongs to `numeric_mode="identical"`. The default FAST build
-    makes no cross-vendor claim of any kind.
+    `lr` is read at every step, so you can assign ``opt.lr`` between steps, or pass an
+    `lr_schedule` (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, or any object with
+    a one-based `lr_at(t)`). `step_accumulated(microbatch_grads, tokens)` combines
+    `accumulation_steps` microbatch gradient lists before one step. `zero_grad(grads)`
+    writes +0.0 into the given gradient arrays. `state_dict()` / `load_state_dict()`
+    save and restore the step count and the optimizer state.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
-    because a parameter accepted and ignored is a wrong answer waiting for a
-    caller. Every "refused by name" names the file that raises it:
+    Refused with `TypeError`: `foreach`, `fused`, `capturable`, `differentiable`,
+    parameter groups, sparse gradients, float16/bfloat16 and float64 buffers, and any
+    unknown keyword.
 
-        params          honored   a float32 array, or a list of them. THE
-                                  ORDER IS PART OF THE ANSWER: `j` is the
-                                  `param_id` and its ascending order is the
-                                  clip's cross-tensor summation order
-                                  (contract 3.3). Reorder and the total norm
-                                  is a different, equally valid, different-
-                                  bits number.
-        lr              honored   read fresh on every step, so assigning
-                                  `opt.lr` between steps is how a schedule is
-                                  spelled here. It is a HOST scalar computed
-                                  once per step (contract 7.1) and never
-                                  inside a kernel.
-        momentum        honored   contract 7.3. `0.0` leaves the momentum
-                                  buffer untouched and the per-tensor
-                                  `buf_initialized` flag never flips.
-        dampening       honored   contract 7.3a. At `dampening = 0`, which is
-                                  the default, `c_damp` is exactly 1.0 and
-                                  the first-step COPY and the recurrence
-                                  agree; that is why the lane's own sabotage
-                                  for the first step is inert at the default.
-        weight_decay    honored   COUPLED, folded into the gradient
-        nesterov        honored   contract 7.3c, and REFUSED BY NAME with
-                                  `momentum = 0` or `dampening != 0`
-                                  (python/mojolearn/_training_impl.py), which
-                                  is `torch.optim.SGD`'s own refusal. The
-                                  profile would accept it and silently
-                                  degenerate: at `momentum = 0` the Nesterov
-                                  reading is bit-identical to the plain one,
-                                  so nothing would tell the caller their flag
-                                  did nothing.
-        max_norm        honored   on `step`, not on the constructor, because
-                                  it is a property of the step and the
-                                  reference spells it as a separate call
-        maximize        honored   torch's `-grad` at the top of the step,
-                                  before the coupled decay and the momentum
-                                  buffer: the sign bit flipped
-                                  (training/maximize.mojo, DEVIATION 6200).
-                                  The caller's gradient is never negated;
-                                  with `max_norm` on, it receives the same
-                                  clipped values as `maximize=False`
-        foreach         refused   an EXECUTION knob in torch. This surface is
-                                  one launch over the whole flat buffer for
-                                  Adam and one per tensor for SGD, and the
-                                  choice is not the caller's
-        fused           refused   same, and torch's fused path is a different
-                                  arithmetic in torch too
-        capturable      refused   CUDA-graph capture; nothing here captures
-        differentiable  refused   there is no autograd in this library
-        per-parameter   refused   one `OptimizerConfig` per optimizer. Two
-        option groups             groups would be two calls with two
-                                  registries and two clips, and two clips do
-                                  not equal one (contract 3.5)
-        sparse grads    refused   dense float32 only, everywhere
-        float16/bfloat16 refused  MIXED PRECISION IS NOT COVERED; see
-                                  `_NOT_COVERED` at the top of this file
-        float64         refused   there is no float64 on a Metal device
-                                  (python/mojolearn/_buffer.py says the same
-                                  at the library boundary)
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> w = np.zeros((64, 8), dtype=np.float32)
+    >>> opt = mojolearn.SGD([w], lr=1e-2, momentum=0.9)
+    >>> g = np.ones_like(w)
+    >>> norm = opt.step([g], max_norm=1.0)
     """
 
     _KIND = _KIND_SGD
@@ -1213,82 +1198,84 @@ class SGD(_Optimizer):
         }
 
 
+# Optimizer contract 7.2, coupled weight decay; AdamW (7.4) differs by an order, not a
+# coefficient. Contracts 5.2/5.3: bias correction is not float64 here, and `1 - beta2` in float32
+# differs from torch's float64 route by about 1.3e-5 relative. eps is contract 4d (`sqrt(v) + eps`,
+# not `sqrt(v + eps)`; they separate when v lands in 1e-20..1e-12). beta 1.0 refused by
+# training/estimator.mojo (1 - beta^t would be zero). amsgrad excluded: max(v_max, v) would create
+# a -0.0 vs +0.0 selection hazard (see `clip_coefficient`). Adam is one launch over the flat buffer.
 class Adam(_Optimizer):
-    """`torch.optim.Adam`, on the GPU, over float32 buffers (NumPy arrays, `array.array`, `mojolearn.Array`; the buffer protocol is the boundary).
+    """Adam optimizer, as `torch.optim.Adam`, over float32 buffers (NumPy arrays, `array.array` or `mojolearn.Array`; any writable buffer-protocol object).
 
-    Optimizer contract 7.2, with COUPLED weight decay: the decay is folded
-    into the GRADIENT, so it passes through `m` and `v` and is itself
-    smoothed and normalized. `AdamW` is the decoupled form and the difference
-    between the two is an ORDER, not a coefficient (contract 7.4).
+    Weight decay is coupled, as in torch's Adam: it is added to the gradient and so
+    passes through both moments. `AdamW` is the decoupled form; at ``weight_decay=0``
+    the two compute the same thing. The bias corrections are computed in float32, not
+    in torch's float64, so results are close to torch's but not bit-equal to them.
+    Parameters are updated in place.
 
-        opt = Adam([w1, w2], lr=1e-3)
-        opt.step([g1, g2])
+    Parameters
+    ----------
+    params : buffer or list of buffers
+        float32 parameter arrays, updated in place.
+    lr : float, default 1e-3
+        Learning rate.
+    betas : tuple of float, default (0.9, 0.999)
+        Decay rates of the first and second moments, each in [0, 1); 1.0 is refused.
+    eps : float, default 1e-8
+        Added to ``sqrt(v)`` in the denominator (``sqrt(v) + eps``).
+    weight_decay : float, default 0.0
+        L2 penalty, added to the gradient.
+    lr_schedule : object or None, default None
+        A schedule with a one-based `lr_at(t)` method; it sets `lr` before every step.
+        Anything without `lr_at` raises `TypeError`.
+    accumulation_steps : int, default 1
+        Number of microbatches combined by `step_accumulated`; a power of two >= 1,
+        otherwise `ValueError`.
+    maximize : bool, default False
+        Maximize the objective (the gradient's sign is flipped inside the step; the
+        caller's gradient arrays are not negated). Must be a bool.
+    resident : bool or None, default None
+        Keep the optimizer state on the device between steps when the install supports
+        it (None or True). False keeps it on the host, which suits an optimizer that is
+        rebuilt every step.
 
-    **`AT weight_decay = 0` ADAM AND ADAMW ARE THE SAME ARITHMETIC**, and 0
-    is the reference's own default. Picking between the two classes on a
-    default-configured run cannot change a bit.
+    Attributes
+    ----------
+    t : int
+        Number of steps taken.
+    exp_avg : array
+        First moment, flat over all parameters.
+    exp_avg_sq : array
+        Second moment, flat over all parameters.
 
-    WHERE THE MEASUREMENT STOPS, AND IT IS UNEVEN
-    ---------------------------------------------
-    `training-optimizer.identical.card`, 18 records, md5 `97d160b0`, is
-    BYTE-IDENTICAL on an Apple M4 and an AMD MI325X (2026-08-28 legs); clause
-    (a) matched device against the host oracle BITWISE over 33 cases and all
-    382,822 compared cells. **NO NVIDIA LEG HAS RUN**, for that card or for
-    the composed training loop's checkpoint comparison. TWO VENDORS, not
-    three. Clauses (b), (c), (d) and (f) are SKIPPED on both columns.
+    Notes
+    -----
+    `step(grads, max_norm=None)` takes one gradient per parameter, matching `params` in
+    count, shape and order. With `max_norm` set, the global L2 gradient norm is clipped
+    first: the caller's gradient arrays are scaled in place (as
+    `torch.nn.utils.clip_grad_norm_`) and `step` returns the pre-clip total norm;
+    without it, `step` returns None and the gradients are untouched. With clipping on,
+    the order of `params` is part of the result, because it fixes the summation order of
+    the norm.
 
-    THIS IS NOT PYTORCH'S ANSWER AND IT CANNOT BE. Contract 5.2 and 5.3 make
-    that structural rather than accidental: the bias correction is not
-    computed in float64 here, and `1 - beta2` in float32 differs from
-    torch's float64 route by about 1.3e-5 relative, which is the third
-    significant decimal of the coefficient that drives `v`. Sameness across
-    vendors is what the profile buys; agreement with torch is not on offer.
+    `lr` is read at every step, so you can assign ``opt.lr`` between steps, or pass an
+    `lr_schedule` (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, or any object with
+    a one-based `lr_at(t)`). `step_accumulated(microbatch_grads, tokens)` combines
+    `accumulation_steps` microbatch gradient lists before one step. `zero_grad(grads)`
+    writes +0.0 into the given gradient arrays. `state_dict()` / `load_state_dict()`
+    save and restore the step count and the optimizer state.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY:
+    Refused with `TypeError`: `foreach`, `fused`, `capturable`, `differentiable`,
+    parameter groups, sparse gradients, float16/bfloat16 and float64 buffers, and any
+    unknown keyword.
+    `amsgrad` is not supported and raises `TypeError`.
 
-        params          honored   float32 array or list of them. THE ORDER IS
-                                  PART OF THE ANSWER when clipping is on
-                                  (contract 3.3)
-        lr              honored   read fresh on every step, so a schedule is
-                                  `opt.lr = ...` between steps. A HOST scalar
-                                  computed once per step (7.1), never in a
-                                  kernel
-        betas           honored   `(beta1, beta2)`, both in [0, 1). `1.0` is
-                                  REFUSED BY NAME by
-                                  `training/estimator.mojo`: `1 - beta^t` is
-                                  then exactly zero and the host scalars
-                                  divide by it
-        eps             honored   contract 4d, and it is `sqrt(v) + eps` and
-                                  NOT `sqrt(v + eps)`. The two agree to the
-                                  last bit on ordinary gradients and separate
-                                  when `v` lands in the 1e-20 to 1e-12 band
-        weight_decay    honored   COUPLED here, DECOUPLED in `AdamW`
-        max_norm        honored   on `step`
-        amsgrad         refused   the profile excludes it and the exclusion
-                                  is LOAD BEARING (optimizer contract, and
-                                  `clip_coefficient`'s docstring says why):
-                                  `max(v_max, v)` would create the profile's
-                                  first `-0.0` vs `+0.0` selection hazard,
-                                  where the order of a compare decides which
-                                  of two equal-comparing values survives.
-                                  Refused by name in
-                                  python/mojolearn/_training_impl.py
-        maximize        honored   torch's `-grad` at the top of the step,
-                                  before the coupled decay (Adam) and the
-                                  moments; AdamW's decay reads the parameter: the sign bit flipped
-                                  (training/maximize.mojo, DEVIATION 6200).
-                                  The caller's gradient is never negated;
-                                  with `max_norm` on, it receives the same
-                                  clipped values as `maximize=False`
-        foreach         refused   an EXECUTION knob; Adam here is ONE launch
-        fused           refused   over the whole flat buffer and the choice
-        capturable      refused   is not the caller's
-        differentiable  refused   there is no autograd in this library
-        per-parameter   refused   one `OptimizerConfig` per optimizer
-        option groups
-        sparse grads    refused   dense float32 only
-        float16/bfloat16 refused  MIXED PRECISION IS NOT COVERED
-        float64         refused   no float64 on a Metal device
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> w = np.zeros((64, 8), dtype=np.float32)
+    >>> opt = mojolearn.Adam([w], lr=1e-3)
+    >>> opt.step([np.ones_like(w)])
     """
 
     _KIND = _KIND_ADAM
@@ -1328,22 +1315,26 @@ class Adam(_Optimizer):
         }
 
 
+# Optimizer contract 7.4: decoupled decay `p * (1 - lr*wd)`; the only difference from `Adam` is the
+# order. The defaults are Adam's (weight_decay 0.0), not torch's AdamW 0.01.
 class AdamW(Adam):
-    """`torch.optim.AdamW`, on the GPU, over float32 buffers (NumPy arrays, `array.array`, `mojolearn.Array`; the buffer protocol is the boundary).
+    """AdamW optimizer, as `torch.optim.AdamW`, over float32 buffers (NumPy arrays, `array.array` or `mojolearn.Array`; any writable buffer-protocol object).
 
-    Optimizer contract 7.4: DECOUPLED weight decay. The decay multiplies the
-    PARAMETER, as `p * (1 - lr*wd)`, and the gradient is untouched, so unlike
-    `Adam` it does not pass through `m` and `v`. **THE DIFFERENCE FROM `Adam`
-    IS AN ORDER, NOT A COEFFICIENT**, and it is the only difference between
-    the two classes.
+    Identical to `Adam` except that weight decay is decoupled: the parameter is
+    multiplied by ``1 - lr * weight_decay`` and the gradient is left untouched, so the
+    decay does not pass through the moments. Parameters, attributes and refusals are
+    `Adam`'s.
 
-    **AT `weight_decay = 0` THE TWO ALGORITHMS ARE THE SAME ARITHMETIC**, and
-    torch's own default for `AdamW` is 0.01 while `Adam`'s is 0. A comparison
-    of the two classes run at their library defaults is comparing two things
-    at once.
+    Note that the default ``weight_decay`` here is 0.0, while torch's AdamW default is
+    0.01; at 0.0 AdamW and Adam compute the same thing. Pass ``weight_decay=0.01`` to
+    match torch's default.
 
-    The measurement, the honored/refused table and every refusal are `Adam`'s
-    and are not restated. The one line that differs is above.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> w = np.zeros((64, 8), dtype=np.float32)
+    >>> opt = mojolearn.AdamW([w], lr=1e-3, weight_decay=0.01)
+    >>> opt.step([np.ones_like(w)])
     """
 
     _KIND = _KIND_ADAMW
@@ -1466,69 +1457,53 @@ def _refuse_unknown(kwargs, where):
 # ===================================================================
 
 
+# Optimizer contract section 3. Two-level fold (contract 3.1): a norm per tensor, then a norm over
+# those; the flat sqrt(sum of squares) is a different float32 number. Both folds go through the
+# certified GEMM at m = n = 1, OP_NT (its leaf partition, balanced tree, odd-tail carry). max_norm
+# <= 0 refused by training/estimator.mojo. norm_type != 2 refused: an L-inf clip is a max-reduction
+# with its own -0.0 selection hazard. error_if_nonfinite=False refused: the profile always refuses a
+# non-finite total (contract 8a, `refuse_nonfinite_scalar`). The certified entry synchronizes once
+# per tensor to keep sub-buffer views alive across each delegated GEMM; a batched launcher is owed.
 def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
                     numeric_mode=None, **kwargs):
-    """`torch.nn.utils.clip_grad_norm_`, on the GPU, over float32 buffers (NumPy arrays, `array.array`, `mojolearn.Array`; the buffer protocol is the boundary).
-    Scales the gradients IN PLACE and returns the PRE-CLIP total norm, which
-    is what torch returns and why the name has a trailing underscore.
+    """Clip gradients by their global L2 norm, as `torch.nn.utils.clip_grad_norm_`.
 
-    Optimizer contract section 3.
+    Works over float32 buffers (NumPy arrays, `array.array` or `mojolearn.Array`; any writable buffer-protocol object). Computes a norm per tensor, then the norm of those norms, and
+    scales every gradient in place by ``max_norm / total`` when the total exceeds
+    `max_norm`. Returns the pre-clip total norm, as torch does. The order of the tensors
+    is part of the result, because it fixes the summation order.
 
-        total = clip_grad_norm_([g1, g2, g3], max_norm=1.0)
+    Parameters
+    ----------
+    grads : buffer or list of buffers
+        float32 gradient arrays, scaled in place.
+    max_norm : float
+        Maximum total norm; must be > 0, otherwise `ValueError`.
+    norm_type : float, default 2.0
+        Only 2.0 is supported; any other value (including inf) raises
+        `NotImplementedError`.
+    error_if_nonfinite : bool, default True
+        Only True is supported (False raises `NotImplementedError`): a non-finite
+        total norm always raises.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
 
-    **THE ANSWER IS NOT `sqrt(sum of every square)`.** The reference folds
-    TWICE -- a norm per tensor, then a norm over those (contract 3.1) -- and
-    the flat spelling is a DIFFERENT number in float32. Both folds are
-    delegated to the certified GEMM at `m = n = 1`, `OP_NT`, so they inherit
-    its leaf partition, its balanced tree, its odd-tail carry and its own
-    three-vendor measurement at leg 11 (`144aa5b`), which is the GEMM's
-    measurement and not this lane's.
+    Returns
+    -------
+    total_norm : float
+        The total gradient norm before clipping.
 
-    **THE ORDER YOU PASS THE TENSORS IN IS PART OF THE ANSWER.** `j` is the
-    `param_id` and its ascending order is the cross-tensor summation order
-    (contract 3.3). A registry stable across runs is the only thing that
-    makes the number reproducible.
+    Notes
+    -----
+    Not supported: `foreach`, per-tensor norms in the result, float16/bfloat16 and
+    float64. Each tensor costs one device synchronization, so many small tensors are
+    slower than a few large ones.
 
-    WHERE THE MEASUREMENT STOPS: the optimizer card is byte-identical on an
-    Apple M4 and an AMD MI325X and **NO NVIDIA LEG HAS RUN**. See `Adam`.
-
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY:
-
-        grads            honored   float32 array or list of them, WRITTEN IN
-                                   PLACE
-        max_norm         honored   must be > 0. `<= 0` is REFUSED BY NAME by
-                                   `training/estimator.mojo`: reaching this
-                                   function IS the clip running, and "no
-                                   clipping" is spelled by not calling it
-        norm_type        honored   2.0 only. Every other value, `inf`
-                                   included, is REFUSED BY NAME
-                                   (python/mojolearn/_training_impl.py): the
-                                   profile has one norm, the two-level L2 of
-                                   contract 3.1, and an L-inf clip is a
-                                   max-reduction with its own `-0.0`
-                                   selection hazard, its own clause and its
-                                   own sabotage, none of which exist
-        error_if_nonfinite honored True only. False is REFUSED BY NAME: the
-                                   profile ALWAYS refuses a non-finite total
-                                   norm (contract 8a,
-                                   `refuse_nonfinite_scalar`), and there is
-                                   no build in which it does not, so
-                                   accepting False would be accepting a
-                                   promise this surface cannot keep
-        foreach          refused   an EXECUTION knob; see `Adam`
-        per-tensor       refused   `torch.nn.utils.clip_grad_norm_` returns
-        norms                      one scalar and so does this. The
-                                   per-tensor norms are computed on device
-                                   and are not copied back, because no gate
-                                   has ever compared them at this boundary
-        float16/bfloat16 refused   MIXED PRECISION IS NOT COVERED
-        float64          refused   no float64 on a Metal device
-
-    THE COST NOBODY PRICED. The certified entry SYNCHRONIZES ONCE PER TENSOR,
-    to keep its sub-buffer views alive across each delegated GEMM, so a
-    registry of many small tensors pays `J` round trips per clip. That is
-    stated on `identical_clip_grad_norm` itself and a batched launcher is
-    OWED. You choose `J`.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> g1 = np.ones((64, 8), dtype=np.float32); g2 = np.ones(8, dtype=np.float32)
+    >>> total = mojolearn.clip_grad_norm_([g1, g2], max_norm=1.0)
     """
     _refuse_unknown(kwargs, "clip_grad_norm_")
     if float(norm_type) != 2.0:
@@ -1602,106 +1577,69 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
 # ===================================================================
 
 
+# Profile mojolearn.identical.loss.ce.fp32.v1, loss contract sections 2-6. The backward reads the
+# forward's `expo` and `denom` and recomputes nothing. Bad targets refused by `ce_refuse_inputs`
+# (training/checks/loss_oracle.mojo). reduction='none' has no backward (loss contract section 11):
+# the placement of a per-row upstream product before or after seam L16's division is an open
+# decision. label_smoothing 0.0 selects a different kernel (contract 6.2(c), DEVIATION 1155).
+# `ce_divisor` is the one producer of the divisor. weight refused (section 11): a weighted mean's
+# denominator is a float sum needing its own fold (contract 5.5). Memory: training/estimator.mojo
+# allocates shift and expo at N*V, plus weights and dlogits with return_grad, plus logp with
+# smoothing; the forward is row independent through seam L11.
 def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
                   reduction="mean", label_smoothing=0.0, num_items=None,
                   return_grad=False, numeric_mode=None, **kwargs):
-    """`torch.nn.functional.cross_entropy` over class INDICES, on the GPU.
+    """Cross-entropy loss over class indices, as `torch.nn.functional.cross_entropy`.
 
-    Profile `mojolearn.identical.loss.ce.fp32.v1`, loss contract sections 2
-    through 6.
+    `logits` is (N, V) float32 and `targets` is (N,) int32 or int64 holding a class index
+    or `ignore_index`. Returns a float for ``reduction='mean'`` or ``'sum'`` and an (N,)
+    float32 array for ``'none'``. With ``return_grad=True`` the forward and the gradient
+    with respect to the logits come from one call: ``(loss, dlogits)``, `dlogits` of
+    shape (N, V).
 
-        loss = cross_entropy(logits, targets)              # a float
-        loss, dlogits = cross_entropy(logits, targets, return_grad=True)
-        per_row = cross_entropy(logits, targets, reduction="none")
+    Parameters
+    ----------
+    logits : buffer, shape (N, V)
+        float32 logits, row-major.
+    targets : buffer, shape (N,)
+        Integer class indices; a value that is neither a valid class nor `ignore_index`
+        raises an error naming its row.
+    ignore_index : int, default -100
+        Targets equal to this are ignored, even when it is a valid class index (as
+        torch).
+    reduction : {'mean', 'sum', 'none'}, default 'mean'
+        Reduction over rows. ``'none'`` has no gradient: `return_grad=True` with it is
+        refused.
+    label_smoothing : float, default 0.0
+        Label smoothing in [0, 1).
+    num_items : int or None, default None
+        Divisor of the mean, as Hugging Face's `num_items_in_batch`. None uses the
+        number of non-ignored targets.
+    return_grad : bool, default False
+        Also return the gradient with respect to `logits`.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
 
-    `logits` is `(N, V)` float32, `targets` is `(N,)` int32 or int64 holding
-    a class index or `ignore_index`. Returns a float under `reduction="sum"`
-    or `"mean"`, and an `(N,)` float32 array under `"none"`. With
-    `return_grad=True` it returns `(loss, dlogits)` and `dlogits` is
-    `(N, V)`.
+    Returns
+    -------
+    loss : float or ndarray
+        The loss; (N,) per-row values under ``reduction='none'``.
+    dlogits : array, shape (N, V)
+        Only with ``return_grad=True``.
 
-    **FORWARD AND BACKWARD ARE ONE CALL AND THAT IS NOT PACKAGING.** The
-    backward reads `expo` and `denom`, the buffers the forward wrote, and
-    RECOMPUTES NOTHING -- a second spelling of the softmax is a second thing
-    that can be wrong. Asking for the gradient afterwards would mean either
-    recomputing the forward or handing its intermediates out to Python, and
-    this surface does neither.
+    Notes
+    -----
+    Refused: per-class `weight`, the deprecated `size_average` and `reduce`,
+    class-probability (soft) targets, float16/bfloat16 and float64. Memory use is
+    several (N, V) float32 buffers; for a large vocabulary, split the rows into chunks
+    (with ``reduction='none'`` the chunked result equals the unsplit one).
 
-    WHERE THE MEASUREMENT STOPS, AND IT IS UNEVEN
-    ---------------------------------------------
-    `training-loss.identical.card`, 17 records, md5 `a87615d9`, is
-    BYTE-IDENTICAL on an Apple M4 and an AMD MI325X (2026-08-28 legs); clause
-    (a) matched device against the host oracle BITWISE over 24 cases and all
-    61,925 compared cells, and clause (e) matched a hand-written closed form
-    over 4 cases and 264 cells with no epsilon anywhere. **NO NVIDIA LEG HAS
-    RUN.** TWO VENDORS, not three. Clauses (b), (c), (d) and (f) are SKIPPED
-    on both columns, and without (d) the four fold arms reached through the
-    GEMM are gated only by clause (a), which sees ONE execution plan. All of
-    it belongs to `numeric_mode="identical"`.
-
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY:
-
-        logits           honored   `(N, V)` float32, row-major
-        targets          honored   `(N,)` integer class indices, or
-                                   `ignore_index`. A target that is neither
-                                   is REFUSED BY NAME with its row
-                                   (`ce_refuse_inputs` in
-                                   training/checks/loss_oracle.mojo)
-        ignore_index     honored   torch's default -100. **A target equal to
-                                   `ignore_index` is ignored even when it is
-                                   a valid class index**, which is torch's
-                                   behavior and is admitted rather than
-                                   refused: set it to 0 on a real vocabulary
-                                   and you lose class 0 silently
-        reduction        honored   'none', 'sum', 'mean'. 'none' has NO
-                                   BACKWARD and `return_grad=True` is refused
-                                   with it (loss contract section 11): a
-                                   per-row upstream vector adds a product per
-                                   cell whose placement, before or after seam
-                                   L16's division, is a real decision with two
-                                   different answers and this lane has no
-                                   caller for it
-        label_smoothing  honored   in [0, 1). **`0.0` SELECTS A DIFFERENT
-                                   KERNEL rather than a bit-inert branch**
-                                   (contract 6.2(c), DEVIATION 1155), so this
-                                   is not a knob that quietly does nothing at
-                                   its default
-        num_items        honored   `fixed_cross_entropy`'s
-                                   `num_items_in_batch`. `None` means "not
-                                   supplied", which is the MEAN arm's own
-                                   default; `ce_divisor` is the ONE producer
-                                   of the divisor the forward and the backward
-                                   must agree about, and it is host-side and
-                                   testable with no GPU present
-        return_grad      honored   the seams L14 through L16 gradient with
-                                   respect to `logits`
-        weight           refused   a per-class weight vector is REFUSED BY
-                                   NAME (loss contract section 11): a weighted
-                                   mean's denominator is a SUM OF FLOATS and
-                                   would need a fold, a clause, a fixture and
-                                   a sabotage of its own, where `count` today
-                                   is an integer and therefore exact,
-                                   order-free and vendor-free (contract 5.5)
-        size_average     refused   torch's own deprecated aliases for
-        reduce                     `reduction`; refused rather than
-                                   translated, because translating them
-                                   silently reproduces the ambiguity torch
-                                   deprecated them for
-        class-probability refused  `targets` is class INDICES only. Soft
-        targets                    targets are a different forward with a
-                                   different backward and are not in the
-                                   contract
-        float16/bfloat16 refused   MIXED PRECISION IS NOT COVERED
-        float64          refused   no float64 on a Metal device
-
-    WHAT IT COSTS, and at a real vocabulary this is the dominant cost of the
-    call. `training/estimator.mojo` allocates `shift` and `expo` at `N * V`
-    floats each, plus `weights` and `dlogits` when `return_grad` is set and a
-    third `N * V` for `logp` when smoothing is on. The forward is ROW
-    INDEPENDENT through seam L11 -- only the final fold runs over `N`, and it
-    folds `[N]` floats and not `[N, V]` -- so a caller who cannot afford the
-    residency splits the ROWS, calls per chunk and concatenates, and under
-    `reduction="none"` the answer is bit-identical to the unsplit call.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> logits = np.random.default_rng(0).random((32, 10), dtype=np.float32)
+    >>> targets = np.arange(32, dtype=np.int64) % 10
+    >>> loss, dlogits = mojolearn.cross_entropy(logits, targets, return_grad=True)
     """
     _refuse_unknown(kwargs, "cross_entropy")
     if reduction not in _REDUCTIONS:
@@ -1836,17 +1774,37 @@ def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
 
 
 def numeric_mode_used(numeric_mode=None):
-    """The tier the training binding will run on, read back from the binary
-    itself and not from the string that was passed in."""
+    """Return the numeric mode the training binding will run in.
+
+    Read from the compiled binding itself, not from the requested string.
+
+    Parameters
+    ----------
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Returns
+    -------
+    str
+    """
     return _backend._CODE_MODE.get(
         _load(numeric_mode).training_numeric_mode(), "unknown")
 
 
 def vendor_used(numeric_mode=None):
-    """'metal', 'cuda' or 'hip': the accelerator API of the binary this
-    module will call, from that binary's own compile-time constant
-    (`training_vendor()`, `checks/vendor.mojo`), not from the directory it
-    was loaded from and not from the platform."""
+    """Return the accelerator API of the training binding: 'metal', 'cuda' or 'hip'.
+
+    Read from the binding's compile-time constant, not from the platform.
+
+    Parameters
+    ----------
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Returns
+    -------
+    str
+    """
     return _backend.read_vendor(_load(numeric_mode))
 
 
@@ -2085,8 +2043,36 @@ class _Schedule(_LrTable):
 
 
 class ConstantLR(_Schedule):
-    """`peak_lr` at every step, after an optional linear warmup from
-    `peak_lr / warmup_steps`. `total_steps` and `min_lr` are ignored."""
+    """Constant learning rate, after an optional linear warmup.
+
+    Returns `peak_lr` at every step after `warmup_steps` steps of linear warmup starting
+    from ``peak_lr / warmup_steps``. `total_steps` and `min_lr` are accepted and ignored.
+
+    Parameters
+    ----------
+    peak_lr : float
+        Learning rate after warmup; finite and >= 0 (rounded to float32).
+    warmup_steps : int, default 0
+        Steps of linear warmup; >= 0.
+    total_steps : int or None, default None
+        Step at which the decay reaches `min_lr`; >= max(1, warmup_steps).
+    min_lr : float, default 0.0
+        Final learning rate; finite and >= 0.
+
+    Notes
+    -----
+    `lr_at(t)` takes the optimizer's one-based step: `lr_at(1)` is the first step's
+    rate. Each value is the float32 nearest the exact expression, so a schedule gives
+    the same bits on every machine. `config()` returns the schedule's settings as a
+    dict, which `from_config` turns back into a schedule. Invalid arguments raise
+    `ValueError`. Pass a schedule as ``lr_schedule=`` to `SGD`, `Adam` or `AdamW`.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> sched = mojolearn.ConstantLR(1e-3, warmup_steps=100)
+    >>> lr = sched.lr_at(1)
+    """
 
     kind = "constant"
 
@@ -2096,8 +2082,36 @@ class ConstantLR(_Schedule):
 
 
 class WarmupLinearLR(_Schedule):
-    """Linear warmup over `warmup_steps`, then a straight line from
-    `peak_lr` down to `min_lr` at `total_steps`, then `min_lr`."""
+    """Linear warmup, then linear decay to `min_lr`.
+
+    Rises linearly over `warmup_steps`, falls in a straight line from `peak_lr` to
+    `min_lr` at `total_steps`, then stays at `min_lr`.
+
+    Parameters
+    ----------
+    peak_lr : float
+        Learning rate after warmup; finite and >= 0 (rounded to float32).
+    warmup_steps : int, default 0
+        Steps of linear warmup; >= 0.
+    total_steps : int or None, default None
+        Step at which the decay reaches `min_lr`; >= max(1, warmup_steps).
+    min_lr : float, default 0.0
+        Final learning rate; finite and >= 0.
+
+    Notes
+    -----
+    `lr_at(t)` takes the optimizer's one-based step: `lr_at(1)` is the first step's
+    rate. Each value is the float32 nearest the exact expression, so a schedule gives
+    the same bits on every machine. `config()` returns the schedule's settings as a
+    dict, which `from_config` turns back into a schedule. Invalid arguments raise
+    `ValueError`. Pass a schedule as ``lr_schedule=`` to `SGD`, `Adam` or `AdamW`.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> sched = mojolearn.WarmupLinearLR(1e-3, warmup_steps=100, total_steps=1000)
+    >>> lr = sched.lr_at(500)
+    """
 
     kind = "linear"
 
@@ -2111,14 +2125,40 @@ class WarmupLinearLR(_Schedule):
 # bindings/lr_table_helpers.mojo) answers every step whose rigorous error
 # interval rounds to one float32; the exact route decides the rest.
 # MOJOLEARN_LR_EXACT_ONLY=1 restores the exact route for every step.
+# The value is the float32 nearest the exact rational expression (the interval route, never
+# math.cos); a binary64 evaluation with a rigorous error bound answers first whenever it provably
+# rounds to that same float32 (see the section comment above this class).
 class WarmupCosineLR(_Schedule):
-    """Linear warmup over `warmup_steps`, then
-    `min_lr + (peak_lr - min_lr) * (1 + cos(pi p)) / 2` with
-    `p = (t - warmup) / (total - warmup)`, then `min_lr`. The value is the
-    float32 nearest the exact rational expression (the interval route,
-    never `math.cos`); a binary64 evaluation with a rigorous error bound
-    answers first whenever it provably rounds to that same float32 (see
-    the section comment above this class).
+    """Linear warmup, then cosine decay to `min_lr`.
+
+    Rises linearly over `warmup_steps`, then follows
+    ``min_lr + (peak_lr - min_lr) * (1 + cos(pi * p)) / 2`` with
+    ``p = (t - warmup_steps) / (total_steps - warmup_steps)``, then stays at `min_lr`.
+
+    Parameters
+    ----------
+    peak_lr : float
+        Learning rate after warmup; finite and >= 0 (rounded to float32).
+    warmup_steps : int, default 0
+        Steps of linear warmup; >= 0.
+    total_steps : int or None, default None
+        Step at which the decay reaches `min_lr`; >= max(1, warmup_steps).
+    min_lr : float, default 0.0
+        Final learning rate; finite and >= 0.
+
+    Notes
+    -----
+    `lr_at(t)` takes the optimizer's one-based step: `lr_at(1)` is the first step's
+    rate. Each value is the float32 nearest the exact expression, so a schedule gives
+    the same bits on every machine. `config()` returns the schedule's settings as a
+    dict, which `from_config` turns back into a schedule. Invalid arguments raise
+    `ValueError`. Pass a schedule as ``lr_schedule=`` to `SGD`, `Adam` or `AdamW`.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> sched = mojolearn.WarmupCosineLR(3e-4, warmup_steps=200, total_steps=10000, min_lr=3e-5)
+    >>> lr = sched.lr_at(5000)
     """
 
     kind = "cosine"
@@ -2129,26 +2169,54 @@ class WarmupCosineLR(_Schedule):
 # ===================================================================
 
 
+# `microbatch_split_is_identical(T, A)` from training/checks/optimizer_oracle.mojo, contract clause 9.2.
 def accumulation_is_aligned(tokens, accumulation_steps, numeric_mode=None):
-    """`microbatch_split_is_identical(T, A)` from
-    `training/checks/optimizer_oracle.mojo`, contract clause 9.2: True when
-    A microbatches over T tokens combine, by the balanced tree, to the
-    unsplit weight-gradient bits."""
+    """Whether a split into microbatches gives exactly the unsplit gradient.
+
+    True when `accumulation_steps` microbatches over `tokens` tokens, combined by
+    `accumulate_grads`, give the same weight-gradient bits as one unsplit batch.
+
+    Parameters
+    ----------
+    tokens : int
+        Token count of the whole step.
+    accumulation_steps : int
+        Number of microbatches.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Returns
+    -------
+    bool
+    """
     binding = _load(numeric_mode)
     return bool(int(binding.accumulation_is_aligned(
         [int(tokens), int(accumulation_steps)])))
 
 
+# v1 balanced tree, ftz(ftz(x) + ftz(y)) at every node, contract clause 9.2 condition 5.
 def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
-    """Combine A microbatch gradients into one, on device, by the v1
-    balanced tree in ascending microbatch index (`ftz(ftz(x) + ftz(y))` at
-    every node, contract clause 9.2 condition 5; NOT a running sum).
+    """Combine microbatch gradients into one, on the device.
 
-    `microbatch_grads` is a list of A entries, each an array or a list of
-    arrays of one shape set. `tokens` is the whole step's token count T
-    and a split that clause 9.2 does not admit is REFUSED BY NAME; pass
-    `tokens=None` to make no alignment claim (a plain pair add). Returns a
-    list of arrays (or one array when the entries were arrays).
+    Adds the microbatch gradients by a balanced tree in ascending microbatch order
+    (not a running sum), so the result does not depend on the device. When `tokens` is
+    given, a split that `accumulation_is_aligned` rejects raises `ValueError`; pass
+    ``tokens=None`` to combine without that check.
+
+    Parameters
+    ----------
+    microbatch_grads : list
+        One entry per microbatch, each a float32 array or a list of arrays with the
+        same shapes across entries.
+    tokens : int or None
+        Token count of the whole step, or None.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Returns
+    -------
+    array or list of arrays
+        The combined gradient, in the structure of one entry.
     """
     parts = list(microbatch_grads)
     if not parts:
@@ -2224,18 +2292,30 @@ def _rng_call(binding, kind, n, offset, seed, stream, a, b, inp=None):
     return out
 
 
+# The initializers compute their bound / std on the host in IEEE float64 with only +, -, *, / and
+# sqrt (correctly rounded everywhere), round to float32 and hand it to the device; the draw is
+# core/philox_neural.mojo's fixed integer-to-float mapping.
 class Generator(object):
-    """A seeded, position-keyed random stream for neural training.
+    """Seeded random stream for neural-network initialization and dropout.
 
-    Every element of every draw is a pure function of (seed, stream id,
-    element index): the same call at the same counter yields the same bits
-    on every vendor and at every launch geometry. `state_dict()` is
-    `{"seed", "counter"}` and restoring it resumes the stream exactly.
+    Every value drawn is a function of (seed, stream id, element index) only, so the
+    same call at the same counter gives the same bits on every device. Each draw uses
+    the next stream id. `state_dict()` returns ``{'seed', 'counter'}``, and
+    `load_state_dict()` resumes the stream exactly.
 
-    The initializers compute their bound / std on the host in IEEE float64
-    with only +, -, *, / and sqrt (all correctly rounded on every platform),
-    round it to float32 and hand it to the device; the draw itself is
-    `core/philox_neural.mojo`'s fixed integer-to-float mapping.
+    Parameters
+    ----------
+    seed : int
+        Seed in [0, 2**64); otherwise `ValueError`.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> gen = mojolearn.Generator(0)
+    >>> w = gen.kaiming_uniform((128, 64), fan_in=64)
+    >>> y, key = gen.dropout(w, p=0.1)
     """
 
     def __init__(self, seed, numeric_mode=None):
@@ -2247,9 +2327,14 @@ class Generator(object):
         self.numeric_mode = numeric_mode
 
     def state_dict(self):
+        """Return the generator state as ``{'seed': int, 'counter': int}``."""
         return {"seed": int(self.seed), "counter": int(self.counter)}
 
     def load_state_dict(self, state):
+        """Restore a state from `state_dict`.
+
+        The counter must fit in 32 bits unsigned, otherwise `ValueError`.
+        """
         self.seed = int(state["seed"])
         self.counter = int(state["counter"])
         if self.counter < 0 or self.counter > 0xFFFFFFFF:
@@ -2257,8 +2342,11 @@ class Generator(object):
                 "mojolearn.Generator: counter must be a 32-bit unsigned")
 
     def next_stream(self):
-        """Consume and return the next stream id (for ops that draw
-        several slices of one stream, such as dropout over microbatches)."""
+        """Consume and return the next stream id.
+
+        Use it for operations that draw several slices of one stream, such as dropout over
+        microbatches. Raises `RuntimeError` when the 32-bit counter is exhausted.
+        """
         return self._next_stream()
 
     def _next_stream(self):
@@ -2285,7 +2373,17 @@ class Generator(object):
         return shape, n
 
     def uniform(self, shape, low=0.0, high=1.0):
-        """`low + u * (high - low)` with `u` in [0, 1), one rounding."""
+        """Draw float32 values uniform in [low, high).
+
+        Parameters
+        ----------
+        shape : int or tuple of int
+            Output shape; every dimension must be positive.
+        low : float, default 0.0
+            Lower bound.
+        high : float, default 1.0
+            Upper bound; must be >= `low`.
+        """
         shape, n = self._shape(shape)
         lo, hi = float(_round_f32(low)), float(_round_f32(high))
         span = float(_round_f32(hi - lo))
@@ -2296,7 +2394,17 @@ class Generator(object):
         return out.reshape(shape)
 
     def normal(self, shape, mean=0.0, std=1.0):
-        """Box-Muller (log, sqrt, cos through the identical seams)."""
+        """Draw float32 normal values (Box-Muller).
+
+        Parameters
+        ----------
+        shape : int or tuple of int
+            Output shape.
+        mean : float, default 0.0
+            Mean.
+        std : float, default 1.0
+            Standard deviation; must be >= 0.
+        """
         shape, n = self._shape(shape)
         sd = float(_round_f32(std))
         if not (sd >= 0.0):
@@ -2306,35 +2414,27 @@ class Generator(object):
                         float(_round_f32(mean)), sd)
         return out.reshape(shape)
 
+    # `a=None` means sqrt(5) and is not a behavior change (2026-09-20). The default used to read
+    # `a=math.sqrt(5.0)`, evaluated at class definition time; `math` here is `_portable_math`, whose sqrt
+    # dlopens .libs/libMojolearnMath.so, so `import mojolearn` failed on a fresh Linux box without that
+    # library. The sentinel defers the same native call to call time rather than replacing it with a
+    # literal: a literal would be a second answer to the question `_portable_math` answers, and proving
+    # it equal would mean proving the native sqrt correctly rounded on every platform. Deferring keeps
+    # bit-identity by construction.
     def kaiming_uniform(self, shape, fan_in, a=None):
-        """`torch.nn.init.kaiming_uniform_`'s bound
-        `sqrt(2 / (1 + a^2)) * sqrt(3 / fan_in)`; torch's Linear default is
-        `a = sqrt(5)`, which makes the bound `1 / sqrt(fan_in)`.
+        """Kaiming-uniform initialization, as `torch.nn.init.kaiming_uniform_`.
 
-        `a=None` MEANS sqrt(5) AND IS NOT A BEHAVIOUR CHANGE (2026-09-20).
-        This default used to read `a=math.sqrt(5.0)`, and a default argument is
-        evaluated at CLASS DEFINITION TIME. `math` here is
-        `_portable_math`, whose `sqrt` dlopens `.libs/libMojolearnMath.so`. So
-        `import mojolearn` could not complete without that library -- not
-        lazily, not for a caller who never touches a Generator, not for
-        `tools/identity_break.py --lanes <anything>`. `.libs/` is gitignored,
-        nothing under `bindings/` builds it, and the only thing in the tree
-        that compiles it is `packaging/macos/build_release_wheel.sh`, which
-        does not run on Linux. A developer Mac has it sitting in the checkout
-        from some past wheel build and never notices; a freshly rented Linux
-        box cannot import the package at all. Measured three times: this
-        lane's three CPU pods ($0.34, every binding built, zero cells),
-        lane/verifier-full-exposure ($0.019), and tools/gap_column_leg.sh,
-        which learned it on 2026-09-19 and fixed only itself.
-        A whole package's importability hung on a native call for a constant.
+        The bound is ``sqrt(2 / (1 + a**2)) * sqrt(3 / fan_in)``. The default
+        ``a = sqrt(5)`` is torch's `nn.Linear` default and gives the bound ``1 / sqrt(fan_in)``.
 
-        THE SAME CALL STILL HAPPENS, one frame later. The sentinel defers
-        `math.sqrt(5.0)` to call time; it does not replace it with a literal.
-        That is deliberate: a literal would be a second answer to the question
-        `_portable_math` exists to answer, and proving it equal would mean
-        proving the native sqrt correctly rounded on every platform we ship.
-        Deferring proves bit-identity by construction instead -- the bytes come
-        from the same function, on the same box, in the same mode.
+        Parameters
+        ----------
+        shape : int or tuple of int
+            Output shape.
+        fan_in : int
+            Fan-in of the layer.
+        a : float or None, default None
+            Negative slope; None means sqrt(5).
         """
         if a is None:
             a = math.sqrt(5.0)
@@ -2343,11 +2443,13 @@ class Generator(object):
         return self.uniform(shape, -bound, bound)
 
     def xavier_uniform(self, shape, fan_in, fan_out, gain=1.0):
+        """Xavier-uniform initialization with bound ``gain * sqrt(6 / (fan_in + fan_out))``."""
         bound = float(gain) * math.sqrt(
             6.0 / float(int(fan_in) + int(fan_out)))
         return self.uniform(shape, -bound, bound)
 
     def kaiming_normal(self, shape, fan_in, gain=None):
+        """Kaiming-normal initialization with std ``gain / sqrt(fan_in)``; `gain` None means sqrt(2)."""
         # `gain=None` means sqrt(2), deferred for the reason spelled out on
         # kaiming_uniform above: the same native call, one frame later.
         if gain is None:
@@ -2356,16 +2458,33 @@ class Generator(object):
             shape, 0.0, float(gain) / math.sqrt(float(int(fan_in))))
 
     def xavier_normal(self, shape, fan_in, fan_out, gain=1.0):
+        """Xavier-normal initialization with std ``gain * sqrt(2 / (fan_in + fan_out))``."""
         return self.normal(shape, 0.0, float(gain) * math.sqrt(
             2.0 / float(int(fan_in) + int(fan_out))))
 
     def dropout(self, x, p, offset=0, stream=None):
-        """Inverted dropout: keep where the element's uniform coin is
-        `>= p`, scaled by `1 / (1 - p)` (a host float32). Returns
-        `(y, key)`; `key` replays the mask in `dropout_backward`. `offset`
-        is the element index of `x[0]` in the stream and `stream` (default:
-        the next counter value) the stream id, so a microbatch of a larger
-        batch draws the same coins it would draw unsplit."""
+        """Inverted dropout of a float32 array.
+
+        Keeps each element whose uniform draw is ``>= p`` and scales it by ``1 / (1 - p)``.
+        Returns ``(y, key)``; pass `key` to `dropout_backward` to replay the same mask.
+
+        Parameters
+        ----------
+        x : array of float32
+            Input.
+        p : float
+            Drop probability in [0, 1); otherwise `ValueError`.
+        offset : int, default 0
+            Element index of ``x[0]`` within the stream, so that a microbatch of a larger
+            batch draws the same values it would draw unsplit.
+        stream : int or None, default None
+            Stream id; None takes the next one.
+
+        Returns
+        -------
+        y : array of float32
+        key : dict
+        """
         p = float(_round_f32(p))
         if not (0.0 <= p < 1.0):
             raise ValueError("mojolearn.Generator.dropout: p must be in [0, 1)")
@@ -2380,6 +2499,7 @@ class Generator(object):
         return y.reshape(x.shape), key
 
     def dropout_backward(self, dy, key):
+        """Gradient of `dropout`: apply the mask and scale recorded in `key` to `dy`."""
         dy = _c32(dy, "dy", "Generator.dropout_backward")
         dx = _rng_call(_load(self.numeric_mode), _RNG_DROPOUT_BACKWARD,
                        dy.size, key["offset"], key["seed"], key["stream"],
@@ -2399,9 +2519,23 @@ def _c32(a, name, where):
     return as_f32_c(a, ndim=None, name=name)[0]
 
 
+# The gather of embedding/checks/embedding_identical.mojo.
 def embedding_forward(weight, ids, numeric_mode=None):
-    """`weight[ids]` for `weight (V, D)` and integer `ids (N,)`; returns
-    `(N, D)`. `embedding/checks/embedding_identical.mojo`'s gather."""
+    """Embedding lookup: ``weight[ids]``.
+
+    Parameters
+    ----------
+    weight : array, shape (V, D)
+        float32 embedding table.
+    ids : array, shape (N,)
+        Integer row indices.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Returns
+    -------
+    array, shape (N, D)
+    """
     w = _c32(weight, "weight", "embedding_forward")
     if w.ndim != 2:
         raise ValueError("mojolearn.embedding_forward: weight must be (V, D)")
@@ -2413,9 +2547,28 @@ def embedding_forward(weight, ids, numeric_mode=None):
     return y
 
 
+# The run-sorted ascending fold of embedding/checks/embedding_identical.mojo, never atomics.
 def embedding_backward(dy, ids, vocab, numeric_mode=None):
-    """The fresh `(V, D)` gradient of `embedding_forward` from `dy (N, D)`:
-    the run-sorted ascending fold, never atomics."""
+    """Gradient of `embedding_forward` with respect to the table.
+
+    Returns a fresh (vocab, D) gradient from `dy`. Rows with equal ids are summed in a
+    fixed ascending order (no atomics), so the result is reproducible.
+
+    Parameters
+    ----------
+    dy : array, shape (N, D)
+        float32 gradient of the output.
+    ids : array, shape (N,)
+        The forward's ids; the row counts must match, otherwise `ValueError`.
+    vocab : int
+        Number of table rows V.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Returns
+    -------
+    array, shape (vocab, D)
+    """
     dy = _c32(dy, "dy", "embedding_backward")
     if dy.ndim != 2:
         raise ValueError("mojolearn.embedding_backward: dy must be (N, D)")
@@ -2432,7 +2585,23 @@ def embedding_backward(dy, ids, vocab, numeric_mode=None):
 
 
 def rms_norm_forward(x, weight, eps, numeric_mode=None):
-    """`weight * x * rsqrt(mean(x^2) + eps)` per row of `x (M, D)`."""
+    """RMS normalization of each row: ``weight * x / sqrt(mean(x**2) + eps)``.
+
+    Parameters
+    ----------
+    x : array, shape (M, D)
+        float32 input.
+    weight : array, shape (D,)
+        float32 scale.
+    eps : float
+        Added to the mean square.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Returns
+    -------
+    array, shape (M, D)
+    """
     x = _c32(x, "x", "rms_norm_forward")
     w = _c32(weight, "weight", "rms_norm_forward")
     m, d = x.reshape((-1, x.shape[-1])).shape
@@ -2444,9 +2613,28 @@ def rms_norm_forward(x, weight, eps, numeric_mode=None):
     return y.reshape(x.shape)
 
 
+# The forward's row sums are recomputed by the same kernel.
 def rms_norm_backward(dy, x, weight, eps, numeric_mode=None):
-    """`(dx, dweight)` of `rms_norm_forward`; the forward's row sums are
-    recomputed by the same kernel."""
+    """Gradients ``(dx, dweight)`` of `rms_norm_forward`.
+
+    Parameters
+    ----------
+    dy : array, shape (M, D)
+        Gradient of the output.
+    x : array, shape (M, D)
+        The forward input.
+    weight : array, shape (D,)
+        The forward's scale.
+    eps : float
+        The forward's epsilon.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Returns
+    -------
+    dx : array, shape (M, D)
+    dweight : array, shape (D,)
+    """
     x = _c32(x, "x", "rms_norm_backward")
     dy = _c32(dy, "dy", "rms_norm_backward")
     w = _c32(weight, "weight", "rms_norm_backward")
@@ -2609,9 +2797,23 @@ def _cross_entropy_dev(logits, targets, ignore_index, red, num_items, return_gra
     return value
 
 
+# Through the certified GEMM at OP_NT.
 def linear_forward(a, weight, numeric_mode=None):
-    """`a (M, K) . weight (N, K)^T -> (M, N)`, torch's Linear without bias,
-    through the certified GEMM at OP_NT."""
+    """Linear layer without bias: ``a @ weight.T``, as `torch.nn.Linear` with ``bias=False``.
+
+    Parameters
+    ----------
+    a : array, shape (M, K)
+        float32 input.
+    weight : array, shape (N, K)
+        float32 weight, in torch's layout.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Returns
+    -------
+    array, shape (M, N)
+    """
     if _is_dev(a) or _is_dev(weight):
         return _linear_forward_dev(a, weight, numeric_mode)
     a = _c32(a, "a", "linear_forward")
@@ -2672,9 +2874,26 @@ def samba_head_loss(a, weight, targets, num_items, numeric_mode=None):
     return float(loss_out[0]), da, dw
 
 
+# dweight's contraction is over the M tokens, the clause 9.2 contraction.
 def linear_backward(dc, a, weight, numeric_mode=None):
-    """`(da, dweight)` of `linear_forward`. `dweight`'s contraction is over
-    the M tokens, the clause 9.2 contraction."""
+    """Gradients ``(da, dweight)`` of `linear_forward`.
+
+    Parameters
+    ----------
+    dc : array, shape (M, N)
+        Gradient of the output.
+    a : array, shape (M, K)
+        The forward input.
+    weight : array, shape (N, K)
+        The forward weight.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Returns
+    -------
+    da : array, shape (M, K)
+    dweight : array, shape (N, K)
+    """
     if _is_dev(dc) or _is_dev(a) or _is_dev(weight):
         return _linear_backward_dev(dc, a, weight, numeric_mode)
     a = _c32(a, "a", "linear_backward")
@@ -2705,29 +2924,49 @@ def linear_backward(dc, a, weight, numeric_mode=None):
 # buffer order both bindings document.
 
 
+# v2 profile (training/CHUNKED_LM_HEAD_V2.md): per row the max and the exponential denominator visit
+# vocab ids 0..vocab-1 in one serial chain, d_hidden folds vocab ids ascending, every d_weight cell
+# folds rows ascending.
 def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
                          numeric_mode=None):
-    """Mean cross entropy of the LM head `hidden . weight^T` over class
-    indices, without ever holding the `(rows, vocab)` logits.
+    """Mean cross-entropy of a language-model head without materializing the logits.
 
-        loss = chunked_lm_head_loss(hidden, weight, targets)
-        loss, d_hidden, d_weight = chunked_lm_head_loss(
-            hidden, weight, targets, return_grad=True)
+    Computes the mean over rows of the cross-entropy of ``hidden @ weight.T`` against
+    `targets`, and optionally its gradients, without holding the (rows, vocab) logits.
+    The result does not depend on how the vocabulary is chunked internally. There is no
+    bias, ignore index, label smoothing or other reduction; use `linear_forward` and
+    `cross_entropy` when you need those. Non-finite inputs and out-of-range targets
+    raise before any output is written.
 
-    `hidden` is `(rows, width)` float32, `weight` is `(vocab, width)` float32
-    with `vocab >= 2`, `targets` is `(rows,)` integer class indices in
-    `[0, vocab)`. There is no bias, no ignore index, no label smoothing and
-    no other reduction than the mean over rows: the v2 profile defines none of
-    them, and a caller who needs one uses `linear_forward` and
-    `cross_entropy`, which hold the full logits.
+    Parameters
+    ----------
+    hidden : array, shape (rows, width)
+        float32 hidden states.
+    weight : array, shape (vocab, width)
+        float32 output embedding, ``vocab >= 2``.
+    targets : array, shape (rows,)
+        Integer class indices in [0, vocab).
+    return_grad : bool, default False
+        Also return the gradients.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
 
-    The arithmetic is fixed by the profile, not by the vocabulary chunk: for
-    each row the maximum and the exponential denominator visit vocabulary ids
-    0..vocab-1 in one serial chain, `d_hidden` folds vocabulary ids ascending,
-    and every `d_weight` cell folds rows ascending. Non-finite inputs and an
-    out-of-range target are refused by the binding before any output is
-    written. The loss is a Python float; the gradients are float32 arrays
-    shaped like `hidden` and `weight`.
+    Returns
+    -------
+    loss : float
+    d_hidden : array, shape (rows, width)
+        Only with ``return_grad=True``.
+    d_weight : array, shape (vocab, width)
+        Only with ``return_grad=True``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> hidden = rng.random((64, 32), dtype=np.float32)
+    >>> weight = rng.random((1000, 32), dtype=np.float32)
+    >>> targets = rng.integers(0, 1000, 64)
+    >>> loss, dh, dw = mojolearn.chunked_lm_head_loss(hidden, weight, targets, return_grad=True)
     """
     where = "training.chunked_lm_head_loss"
     h = _c32(hidden, "hidden", where)
@@ -2767,13 +3006,37 @@ def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
     return float(loss[0]), d_hidden, d_weight
 
 
+# The native NN64 switch selects packed projection versus separate projection calls.
 def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode="identical"):
-    """Run independent row sessions through one shared Linear/ReLU/Linear model.
+    """Run several independent batches of rows through one Linear-ReLU-Linear model.
 
-    Returns concatenated logits in caller session order. Empty sessions are
-    allowed. The native NN64 switch selects packed projection versus separate
-    projection calls. All numerical work and status checks run in Mojo.
-    Stateful caches and dropout are outside this stateless model's contract.
+    Computes ``relu(x @ weight1.T + bias1) @ weight2.T + bias2`` for every session and
+    returns the logits of all sessions concatenated in the order given. Empty sessions
+    are allowed. The model is stateless (no caches, no dropout).
+
+    Parameters
+    ----------
+    inputs : list of arrays
+        float32 sessions, each (rows_i, width).
+    weight1 : array, shape (hidden, width)
+        First layer weight, in torch's layout.
+    bias1 : array, shape (hidden,)
+        First layer bias.
+    weight2 : array, shape (out_width, hidden)
+        Second layer weight.
+    bias2 : array, shape (out_width,)
+        Second layer bias.
+    numeric_mode : {'identical', 'deterministic', 'fast'}, default 'identical'
+        Numeric mode.
+
+    Returns
+    -------
+    array, shape (sum of rows_i, out_width)
+
+    Raises
+    ------
+    ValueError
+        When the weight, bias and session shapes do not agree.
     """
     w1 = _c32(weight1, "weight1", "mlp_inference_sessions")
     b1 = _c32(bias1, "bias1", "mlp_inference_sessions")

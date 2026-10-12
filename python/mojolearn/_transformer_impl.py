@@ -476,38 +476,50 @@ def _take(weights, what, names):
     return [weights[n] for n in names]  # glue: orders weight tensors by name
 
 
+# Contract section 7.2 (transformer/IDENTICAL_TRANSFORMER_CONTRACT.md): caller-owned
+# state (DEVIATION 792), packed at stride cached_tokens (DEVIATION 795(ii)); flat on
+# purpose, a 4-D capacity shape would put the used elements at the wrong indices
+# (modeling_llama.mojo DEVIATION 1022). Cache slot j is absolute position j (DEVIATION 1028).
 class TransformerState:
-    """The transformer block's recurrent state -- the KV cache, contract
-    section 7.2 -- caller-owned (DEVIATION 792's rule, DEVIATION 795(ii)
-    for the packing). With B = batch_size, KV = n_kv_heads, SMAX =
-    max_tokens and HD = head_dim:
+    """KV cache of a `TransformerBlock`, owned by the caller.
 
-        k_cache       : (B * KV * SMAX * HD,) float32, FLAT -- the key
-                        cache, PACKED at stride `cached_tokens`: the
-                        first B*KV*cached_tokens*HD elements are the
-                        `[B, KV, cached_tokens, HD]` cache, the rest is
-                        capacity. FLAT ON PURPOSE: a 4-D capacity shape
-                        would put the used elements at the wrong indices
-                        (the pack stride is the USED length, not SMAX --
-                        modeling_llama.mojo DEVIATION 1022)
-        v_cache       : same shape and packing, the value cache
-        cached_tokens : int in [0, max_tokens] -- how many absolute
-                        positions the cache holds. Cache slot j IS
-                        absolute position j (DEVIATION 1028); the next
-                        call's tokens continue at position cached_tokens
+    Made by `TransformerBlock.allocate_state`. With B = batch_size, KV = n_kv_heads,
+    SMAX = max_tokens and HD = head_dim it holds:
 
-    Zeros (and 0) before the first token. Both buffers are read at entry
-    and written back whole by `forward` and `step` (`cached_tokens`
-    reassigned); serialize them however you like, the bytes round-trip
-    exactly. `keys()` / `values()` hand back the packed used region in
-    its natural shape.
+    - `k_cache`: flat float32 buffer of B * KV * SMAX * HD values. The first
+      B * KV * cached_tokens * HD values are the ``[B, KV, cached_tokens, HD]`` key
+      cache; the rest is spare capacity. It is flat because the packing stride is the
+      used length, not SMAX.
+    - `v_cache`: the value cache, same shape and packing.
+    - `cached_tokens`: number of positions the cache holds, in [0, max_tokens].
+      Slot j is absolute position j; the next call continues at position
+      `cached_tokens`.
 
-    WITH A SLIDING WINDOW (`TransformerBlock(window=W)`, W > 0) the two
-    buffers are a RING of W slots per (batch, kv head), always at stride
-    W: `B * KV * W * HD` floats, slot = absolute position % W, and
-    `cached_tokens` keeps counting positions past W. `keys()` /
-    `values()` then return the `min(cached_tokens, W)` most recent
-    positions in ascending position order as a COPY."""
+    A new state is all zeros. `forward` and `step` read both buffers and write them
+    back whole, and update `cached_tokens`. The buffers are plain float32 data, so you
+    can serialize them any way you like and they round-trip exactly.
+
+    With a sliding window (``TransformerBlock(window=W)``, W > 0) each buffer is a ring
+    of W slots per (batch, kv head): B * KV * W * HD floats, slot = position % W, and
+    `cached_tokens` keeps counting past W.
+
+    Parameters
+    ----------
+    batch_size : int
+        Number of sequences.
+    n_kv_heads : int
+        Number of key/value heads.
+    head_dim : int
+        Head dimension.
+    max_tokens : int
+        Maximum total positions per sequence (prefill plus decode).
+    k_cache, v_cache : buffer of float32
+        Key and value cache buffers.
+    cached_tokens : int, default 0
+        Positions already held.
+    window : int, default 0
+        Sliding-window size; 0 means full causal attention.
+    """
 
     def __init__(self, batch_size, n_kv_heads, head_dim, max_tokens,
                  k_cache, v_cache, cached_tokens=0, window=0):
@@ -522,8 +534,7 @@ class TransformerState:
 
     @property
     def capacity(self):
-        """Slots per (batch, kv head) in each buffer: `max_tokens` for the
-        linear cache, `window` for the ring."""
+        """Slots per (batch, kv head) in each buffer: `max_tokens`, or `window` under a sliding window."""
         return self.window if self.window > 0 else self.max_tokens
 
     def _packed(self, buf):
@@ -551,15 +562,16 @@ class TransformerState:
         return _Array.from_buffer(source[:n]).reshape((b, kv, self.cached_tokens, hd))
 
     def keys(self):
-        """The key cache's packed used region, as a
-        `(B, n_kv_heads, cached_tokens, head_dim)` VIEW into `k_cache`
-        (valid until the next call updates the state); under a window,
-        the held positions in order, as a copy."""
+        """The used part of the key cache as a ``(B, n_kv_heads, cached_tokens, head_dim)`` array.
+
+        Without a window this is a view into `k_cache`, valid until the next call updates
+        the state. With a window it is a copy of the ``min(cached_tokens, window)`` most
+        recent positions, in ascending position order.
+        """
         return self._packed(self.k_cache)
 
     def values(self):
-        """The value cache's packed used region, the `keys()` shape, a
-        copy likewise."""
+        """The used part of the value cache, in the shape returned by `keys()` and with the same view/copy rule."""
         return self._packed(self.v_cache)
 
 
@@ -590,133 +602,129 @@ class TransformerForwardTape:
             self._consumed = True
 
 
+# Profile mojolearn.identical.transformer.fp32.v1 (transformer/IDENTICAL_TRANSFORMER_CONTRACT.md),
+# reference LlamaDecoderLayer.forward, transformers modeling_llama.py:295-324 at d56c55b.
+# No initializer by design: bit-reproducing torch's RNG is a refused validation target; a
+# cross-check hands both sides the same weights. GQA admitted (DEVIATION 813: repeat_kv is
+# an index map, head h reads kv head h // n_rep). n_kv_heads/head_dim are arguments because
+# they cannot be read off the weight shapes. Divisibility checks: LlamaDims.validate refuses
+# each by name; this side repeats only d_model == n_heads*head_dim (needed to size buffers).
+# Absolute positions under 8192 (DEVIATION 812, refused by name in Mojo); the rotary
+# reduction's angle domain of 8192.0 is refused in Mojo whatever max_positions says.
+# norm_eps 1e-6 (0x358637BD) and rope_theta 10000.0 (0x461C4000) are the frozen defaults;
+# other values are DEVIATIONS 2937 / 2930. Attention is the eager path only (contract
+# section 6); masks beyond causal/window refused by absence (section 11). Non-finite inputs
+# refused in Mojo: weights at upload (DEVIATION 1875), x, rotary table and carried cache on
+# every call (llama_refuse_bad_call). decode == prefill is section 7.2's construction; the
+# lane's clause (d) verifies it bitwise under IDENTICAL and FAST fails it by design.
+# backward: transformer/checks/transformer_backward.mojo chains, default options only.
 class TransformerBlock(NumericModeMixin):
-    """One Llama-shaped decoder block on the GPU -- input RMSNorm, eager
-    self-attention with RoPE, GQA and a KV cache, residual,
-    post-attention RMSNorm, SiLU-gated MLP, residual
-    (`LlamaDecoderLayer.forward`, transformers modeling_llama.py:295-324
-    at the pinned `d56c55b`) -- under profile
-    `mojolearn.identical.transformer.fp32.v1`
-    (`transformer/IDENTICAL_TRANSFORMER_CONTRACT.md`). The LANE's
-    forward is recorded bit-identical on Apple, NVIDIA and AMD for
-    clauses (a) and (d) as of 2026-08-28 (transformer/README.md's status
-    block; clauses (b), (c), (e) and the sabotage ladder are OWED on the
-    cross-vendor legs and this class claims nothing wider) -- and this
-    Python path itself printed green in all three tiers on 2026-09-02
-    (`test_transformer_surface.py`, 44 checks 0 failed each) on ONE
-    APPLE M4, with its NVIDIA and AMD columns OWED.
+    """One Llama-shaped transformer decoder block, float32.
 
-    WEIGHTS IN, AS GIVEN BITS. The constructor takes a dict keyed by the
-    reference parameter names (modeling_llama.py's; the same names the
-    lane's refusals use); there is no initializer, deliberately --
-    bit-reproducing torch's RNG is a refused validation target
-    (the mamba parity table's standing reason), and a cross-check hands
-    both sides the SAME weights. With QW = n_heads*head_dim (= d_model),
-    KW = n_kv_heads*head_dim, IT = intermediate_size (read from
-    gate_proj.weight):
+    Computes Hugging Face's `LlamaDecoderLayer.forward`: input RMSNorm, causal
+    self-attention with RoPE, grouped-query attention and a KV cache, residual,
+    post-attention RMSNorm, SiLU-gated MLP, residual. Options cover common Llama-family
+    variants (LayerNorm, Gemma's ``1 + w`` RMSNorm, GELU/GeGLU MLPs, Qwen2 q/k/v biases,
+    Qwen3 q/k norms, Gemma2 attention softcap, sliding-window attention, linear and
+    Llama 3 RoPE scaling, partial rotary). Attention is the eager formulation; there is
+    no FlashAttention, SDPA, paged attention, attention dropout or mask other than
+    causal / sliding window.
 
-        input_layernorm.weight           (d_model,)
-        post_attention_layernorm.weight  (d_model,)
-        q_proj.weight                    (QW, d_model)   torch [out, in]
-        k_proj.weight                    (KW, d_model)
-        v_proj.weight                    (KW, d_model)
-        o_proj.weight                    (d_model, QW)
-        gate_proj.weight                 (IT, d_model)
-        up_proj.weight                   (IT, d_model)
-        down_proj.weight                 (d_model, IT)
+    There is no initializer: you pass the weights, as a dict keyed by Hugging Face
+    parameter names. With QW = n_heads * head_dim (= d_model), KW = n_kv_heads *
+    head_dim and IT = intermediate size (read from ``gate_proj.weight``), the required
+    weights are, in torch's ``[out, in]`` layout:
 
-    THE SHAPE ARGUMENTS: `n_heads` is required; `n_kv_heads` defaults to
-    `n_heads` (GQA is ADMITTED, contract DEVIATION 813 -- `repeat_kv` is
-    an index map, head h reads kv head h // n_rep); `head_dim` defaults
-    to `d_model // n_heads` (`LlamaConfig.__post_init__`'s rule). None
-    of the three can be read off the weight shapes alone, which is why
-    they are arguments and the weights are not.
+    ==================================  ===============
+    ``input_layernorm.weight``          (d_model,)
+    ``post_attention_layernorm.weight`` (d_model,)
+    ``q_proj.weight``                   (QW, d_model)
+    ``k_proj.weight``                   (KW, d_model)
+    ``v_proj.weight``                   (KW, d_model)
+    ``o_proj.weight``                   (d_model, QW)
+    ``gate_proj.weight``                (IT, d_model)
+    ``up_proj.weight``                  (IT, d_model)
+    ``down_proj.weight``                (d_model, IT)
+    ==================================  ===============
 
-    WHAT IS HONORED, WHAT IS FIXED, WHAT IS REFUSED -- the contract's
-    sections 3 and 11 are normative; one line each:
+    Ungated MLPs (``mlp='gelu'`` or ``'gelu_tanh'``) have no ``gate_proj.weight``.
+    Optional tensors, when their option is on: ``q_proj.bias``, ``k_proj.bias``,
+    ``v_proj.bias`` (`qkv_bias`), ``o_proj.bias`` (`o_bias`), ``input_layernorm.bias``
+    and ``post_attention_layernorm.bias`` (`norm_bias`), ``up_proj.bias``,
+    ``down_proj.bias`` and, when gated, ``gate_proj.bias`` (`mlp_bias`),
+    ``q_norm.weight`` and ``k_norm.weight`` of shape (head_dim,) (`qk_norm`). Weights
+    are converted to float32 once, and each shape is checked.
 
-        d_model/n_heads/  honored  free shapes, subject to the
-          n_kv_heads/               divisibility rules (d_model ==
-          head_dim/                 n_heads*head_dim; n_heads %
-          intermediate              n_kv_heads == 0; head_dim EVEN --
-                                    LlamaDims.validate refuses each by
-                                    name; this side repeats only the
-                                    first, because it cannot size the
-                                    buffers without it)
-        B, L, max_tokens  honored  launch shape, not arithmetic;
-                                    absolute positions must stay under
-                                    8192 (DEVIATION 812, refused by
-                                    name in Mojo); B and L through
-                                    this class are asked by the batch
-                                    part of tools/identity_break.py
-                                    since 4230ab5b0, first record owed
-        norm_eps          honored  1e-6 (bits 0x358637BD) is today's bits
-          rope_theta               and the default; rope_theta 10000.0
-                                    (0x461C4000) likewise. Any other
-                                    value is DEVIATIONS 2937 / 2930
-                                    (lane/block-options): the same
-                                    seams with the parameter in place of
-                                    the frozen constant
-        rope_scaling      honored  None (default), {"type": "linear",
-          rope_dim                  "factor"} or {"type": "llama3",
-          max_positions             "factor", "low_freq_factor",
-                                    "high_freq_factor",
-                                    "original_max_position_embeddings"};
-                                    rope_dim (partial rotary; None =
-                                    head_dim); max_positions (the
-                                    declared ceiling, 8192 default; the
-                                    rotary reduction's ANGLE domain of
-                                    8192.0 is refused by name in Mojo
-                                    whatever the ceiling)
-        norm, norm_bias   honored  "rmsnorm" (default), "layernorm"
-                                    (+ norm_bias, the *.bias tensors),
-                                    "rmsnorm_offset" (Gemma's 1 + w)
-        mlp, mlp_bias     honored  "swiglu" (default), "gelu",
-                                    "gelu_tanh" (ungated, no gate_proj),
-                                    "geglu", "geglu_tanh"; mlp_bias adds
-                                    up_proj.bias, down_proj.bias and,
-                                    when gated, gate_proj.bias
-        qkv_bias, o_bias  honored  the q/k/v (Qwen2) and o biases
-        qk_norm           honored  q_norm.weight / k_norm.weight over
-                                    head_dim before RoPE (Qwen3)
-        attn_softcap      honored  Gemma2's tanh softcap of the scores
-                                    (forces the eager attention path)
-        attention impl    FIXED    the EAGER path only (contract section
-                                    6): FlashAttention, SDPA, paged
-                                    attention and chunked prefill are
-                                    out of scope BY CONTRACT, not
-                                    missing
-        dropout           refused  attention_dropout is 0.0 and has no
-                                    inference meaning; nothing spells it
-        window            honored  `window=0` (default) is full causal
-                                    attention, today's bits exactly;
-                                    `window=W > 0` is sliding-window
-                                    causal attention (query at position
-                                    p sees keys [max(0, p-W+1), p]) with
-                                    the KV cache a RING of W slots; the
-                                    same one spelling serves prefill,
-                                    split prefill and decode bit for bit
-        masks beyond      refused  contract section 11's list, by
-          causal/window             absence
-        backward          honored  `backward(x, grad_output)`: the
-                                    zero-state prefill VJP for x and the
-                                    nine weights, IDENTICAL tier only
-                                    (the lane's `transformer_backward
-                                    .mojo` chains, window included);
-                                    DEFAULT OPTIONS ONLY, refused by
-                                    name otherwise
-        dtype             refused  float32 ONLY; bf16/fp16/float64 by
-                                    name
+    Shapes must satisfy ``d_model == n_heads * head_dim``, ``n_heads % n_kv_heads == 0``
+    and an even `head_dim`; absolute positions must stay below `max_positions`. Inputs
+    must be float32: bfloat16, float16 and float64 raise errors, and non-finite weights,
+    inputs or cache values raise an error before any computation.
 
-    STATE IS EXPLICIT (`TransformerState`): `allocate_state(B,
-    max_tokens)` makes the zero cache, `forward`/`step` update it, and
-    decode == prefill is the contract's construction (section 7.2: one
-    spelling serves both paths; the lane's clause (d) verifies it
-    bitwise under IDENTICAL and records that FAST fails it by design).
+    The KV cache is explicit (`TransformerState`): `allocate_state` makes a zero cache,
+    and `forward` and `step` update it. In the identical mode, decoding token by token
+    gives the same bits as one prefill over the whole sequence.
 
-    Non-finite inputs are refused BY NAME IN MOJO: the weights once at
-    upload (DEVIATION 1875), x, the rotary table and the carried cache
-    on every call (`llama_refuse_bad_call`), before any stage runs."""
+    Parameters
+    ----------
+    weights : dict
+        float32 buffers (NumPy arrays, `array.array`, memoryviews, ...) keyed by the
+        parameter names above.
+    n_heads : int
+        Number of attention heads. Required, keyword-only.
+    n_kv_heads : int or None, default None
+        Number of key/value heads (grouped-query attention); None means `n_heads`.
+    head_dim : int or None, default None
+        Head dimension; None means ``d_model // n_heads``.
+    window : int, default 0
+        0 is full causal attention; W > 0 is sliding-window attention, where position p
+        attends to positions ``[max(0, p - W + 1), p]`` and the KV cache is a ring of W slots.
+    rope_theta : float, default 10000.0
+        RoPE base.
+    rope_scaling : dict or None, default None
+        None, ``{"type": "linear", "factor": f}`` or ``{"type": "llama3", "factor": ...,
+        "low_freq_factor": ..., "high_freq_factor": ..., "original_max_position_embeddings": ...}``.
+    rope_dim : int or None, default None
+        Number of rotary dimensions (partial rotary); None means `head_dim`.
+    max_positions : int, default 8192
+        Ceiling on absolute positions.
+    qkv_bias : bool, default False
+        Use q/k/v projection biases (Qwen2).
+    o_bias : bool, default False
+        Use an output projection bias.
+    norm : {'rmsnorm', 'layernorm', 'rmsnorm_offset'}, default 'rmsnorm'
+        Normalization; 'rmsnorm_offset' scales by ``1 + w`` (Gemma).
+    norm_eps : float, default 1e-6
+        Normalization epsilon.
+    norm_bias : bool, default False
+        Use LayerNorm biases (with ``norm='layernorm'``).
+    mlp : {'swiglu', 'gelu', 'gelu_tanh', 'geglu', 'geglu_tanh'}, default 'swiglu'
+        MLP type.
+    mlp_bias : bool, default False
+        Use MLP biases.
+    qk_norm : bool, default False
+        RMS-normalize queries and keys over head_dim before RoPE (Qwen3).
+    attn_softcap : float or None, default None
+        Tanh softcap of the attention scores (Gemma2).
+    numeric_profile : {'fp32_v1', 'fixed15_v1'} or None, default None
+        Arithmetic profile. None and 'fp32_v1' are float32. 'fixed15_v1' quantizes the
+        projection weights once to 15-bit fixed point and is inference only.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> d, it = 64, 128
+    >>> shapes = {"input_layernorm.weight": (d,), "post_attention_layernorm.weight": (d,),
+    ...           "q_proj.weight": (d, d), "k_proj.weight": (d, d), "v_proj.weight": (d, d),
+    ...           "o_proj.weight": (d, d), "gate_proj.weight": (it, d), "up_proj.weight": (it, d),
+    ...           "down_proj.weight": (d, it)}
+    >>> weights = {k: rng.standard_normal(s, dtype=np.float32) * 0.02 for k, s in shapes.items()}
+    >>> blk = mojolearn.TransformerBlock(weights, n_heads=4)
+    >>> x = rng.standard_normal((2, 16, d), dtype=np.float32)
+    >>> y = np.asarray(blk.forward(x))
+    """
 
     _BINDING = "_mojolearn_transformer"
 
@@ -967,14 +975,24 @@ class TransformerBlock(NumericModeMixin):
         self._session_binding = None
 
     def allocate_state(self, batch_size, max_tokens):
-        """The zero KV cache for `batch_size` sequences of up to
-        `max_tokens` total positions each (prefill plus every later
-        decode step; the capacity is fixed at allocation because the
-        pack stride and every growth refusal are functions of it,
-        DEVIATION 795(ii)). `max_tokens` above 8192 is refused BY NAME
-        in Mojo at the first call (DEVIATION 812's absolute-position
-        ceiling), not here. Under a sliding window the buffers are a
-        ring of `window` slots and `max_tokens` bounds positions only."""
+        """A zero `TransformerState` for `batch_size` sequences of up to `max_tokens` positions each.
+
+        `max_tokens` counts the prefill plus every later decode step; the capacity is fixed
+        at allocation. Positions beyond `max_positions` are refused at the first call that
+        reaches them. Under a sliding window the buffers are a ring of `window` slots and
+        `max_tokens` only bounds positions.
+
+        Parameters
+        ----------
+        batch_size : int
+            Number of sequences.
+        max_tokens : int
+            Maximum total positions per sequence.
+
+        Returns
+        -------
+        TransformerState
+        """
         b = int(batch_size)
         if b < 1:
             raise ValueError(
@@ -1261,26 +1279,30 @@ class TransformerBlock(NumericModeMixin):
         return mod
 
     def forward(self, x, state=None, *, lengths=None):
-        """One block call: `(B, L, d_model)` float32 in, the block
-        output (both residual adds included) back, any B and L that fit
-        the state's capacity.
+        """Run the block on ``(B, L, d_model)`` float32 input and return the output, same shape.
 
-        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
-        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
-        after. Every real position's output is byte for byte the row run
-        alone at its own length (causal attention: contract 7.1, 7.3 and
-        7.4, no arithmetic changes; `_ragged.py` says why) and every padding
-        position's output is exactly `+0.0`, whatever the input held there.
-        Refused with a carried `state`.
+        With ``state=None`` it runs a self-contained prefill from a zero cache and discards
+        the final cache. Pass a `TransformerState` to carry the cache: it is read at entry
+        and updated, so a later `forward` or `step` on that state continues the sequence.
+        In the identical mode the result is bit-for-bit the same as one prefill over the
+        whole sequence.
 
-        `state=None` runs a self-contained prefill from a zero cache
-        sized to exactly this call and DISCARDS the final state. Pass a
-        `TransformerState` to carry it: the cache is read at entry and
-        updated, so a later `forward` or `step` on that state continues
-        the sequence -- bit-for-bit the prefill that ran the whole
-        sequence at once under the IDENTICAL tier (contract section
-        7.2's construction; the lane's clause (d) verifies it, and FAST
-        deliberately promises none of it)."""
+        Parameters
+        ----------
+        x : buffer of float32, shape (B, L, d_model)
+            Input activations.
+        state : TransformerState or None, default None
+            KV cache to read and update.
+        lengths : sequence of int or None, default None
+            Makes the batch ragged: B lengths in [1, L]; row i is real at positions
+            ``[0, lengths[i])`` and padding after. Each real position's output equals the
+            row run alone at its own length, and padding positions output exactly +0.0.
+            Not allowed together with `state`.
+
+        Returns
+        -------
+        mojolearn.Array of float32, shape (B, L, d_model)
+        """
         if lengths is None:
             return self._call(x, state, step=False)
         what = "TransformerBlock.forward"
@@ -1289,13 +1311,21 @@ class TransformerBlock(NumericModeMixin):
                                       x, state, lengths, "<f4", what)[0]
 
     def step(self, x, state):
-        """One decode token: the profile's spelling -- the SAME entry as
-        `forward` at L = 1 with the cache carried and the position taken
-        from `cached_tokens`, no arithmetic of its own (contract section
-        7.2: two spellings that agree today are two spellings that can
-        drift tomorrow). `x` is `(B, 1, d_model)` or `(B, d_model)`;
-        `state` is REQUIRED, because a stateless decode step has no
-        meaning."""
+        """Decode one token per sequence, continuing the cache in `state`.
+
+        The same computation as `forward` with L = 1, at position `state.cached_tokens`.
+
+        Parameters
+        ----------
+        x : buffer of float32, shape (B, 1, d_model) or (B, d_model)
+            The new token's activations.
+        state : TransformerState
+            Required KV cache, updated in place.
+
+        Returns
+        -------
+        mojolearn.Array of float32, shape (B, 1, d_model)
+        """
         if state is None:
             raise ValueError(
                 "mojolearn TransformerBlock.step: state is required (a "
@@ -1310,20 +1340,36 @@ class TransformerBlock(NumericModeMixin):
                 self.intermediate, self.window, tuple(self._opts_tail),
                 self.numeric_profile)
 
+    # NN32 retains native forward stages; NN31 uses the activation byte budget and optional
+    # replay cost threshold. A budget miss or switches off selects native replay. The budget
+    # covers retained forward stages, excluding input/weight snapshots and transient
+    # forward/backward work. No compilation, identity, quality or timing admission is implied.
     def forward_with_tape(self, x, *, activation_budget_bytes=536870912,
                           minimum_replay_ops_per_byte=0):
-        """Return ``(output, tape)`` for one zero-state training forward.
+        """Training forward that returns ``(output, tape)`` for a later `backward_from_tape`.
 
-        The native session snapshots the input and weights. Backward uses
-        those snapshots even if the caller edits its arrays. A later call on
-        this block invalidates the ticket; tickets are single-use and cannot
-        be serialized. Only default FP32 options in IDENTICAL are supported.
+        Runs a zero-state forward and keeps what the backward needs. The input and weights
+        are snapshotted, so editing your arrays afterwards does not change the backward. A
+        tape is single-use, cannot be serialized, and is invalidated by any later call on
+        this block. Requires the identical mode and the default float32 block options;
+        otherwise `NotImplementedError`.
 
-        NN32 retains native forward stages; NN31 uses the activation byte
-        budget and optional replay cost threshold. A budget miss or switches
-        off selects native replay. The budget covers retained forward stages,
-        excluding input/weight snapshots and transient forward/backward work.
-        No compilation, identity, quality or timing admission is implied.
+        Parameters
+        ----------
+        x : buffer of float32, shape (B, L, d_model)
+            Input activations.
+        activation_budget_bytes : int, default 536870912
+            Bytes of forward activations to keep for the backward; when they do not fit,
+            the backward recomputes the forward instead. Must be >= 0.
+        minimum_replay_ops_per_byte : int, default 0
+            Recompute rather than keep stages whose cost per byte is below this threshold.
+            Must be >= 0.
+
+        Returns
+        -------
+        output : mojolearn.Array of float32, shape (B, L, d_model)
+        tape : object
+            Ticket for `backward_from_tape`.
         """
         what = "TransformerBlock.forward_with_tape"
         if getattr(self, "_int15", None) is not None or getattr(self, "_extended", False):
@@ -1359,11 +1405,23 @@ class TransformerBlock(NumericModeMixin):
         return y, tape
 
     def backward_from_tape(self, tape, grad_output):
-        """Consume one matching forward ticket and return input/weight VJPs.
+        """Gradients for the forward recorded in `tape`.
 
-        Retention and replay both use the native snapshots from the forward.
-        Replacing model configuration or calling the session again refuses
-        this ticket. Parameter-array edits do not alter the saved forward.
+        Consumes the tape. A tape from another block, an already used tape, or one made
+        before the block's configuration changed raises `ValueError`.
+
+        Parameters
+        ----------
+        tape : object
+            The tape returned by `forward_with_tape`.
+        grad_output : buffer of float32
+            Gradient of the loss with respect to the block output, the output's shape.
+
+        Returns
+        -------
+        dict
+            float32 gradients keyed ``"x"`` plus the nine weight names, each in its
+            tensor's shape.
         """
         what = "TransformerBlock.backward_from_tape"
         if not isinstance(tape, TransformerForwardTape) or tape._block is not self:
@@ -1420,16 +1478,26 @@ class TransformerBlock(NumericModeMixin):
             ext.transformer_close_tape(handle)
 
     def backward(self, x, grad_output):
-        """The zero-state prefill VJP: `x` `(B, L, d_model)` float32 and
-        `grad_output` of the same shape (d loss / d block output) in; a
-        dict of float32 gradients out, keyed `"x"` plus the nine weight
-        names, each in its weight's shape. The forward is recomputed
-        from a zero cache at positions `[0, L)` under this block's
-        `window`, then the lane's backward (`transformer/checks/
-        transformer_backward.mojo`) runs on the saved stages: the
-        activation gradients are its pinned serial chains, every weight
-        gradient is a sum over this call's `B*L` tokens. IDENTICAL tier
-        only; no incoming-cache or carried-state cotangent."""
+        """Gradients of a zero-state prefill with respect to the input and the weights.
+
+        Recomputes the forward from a zero cache at positions ``[0, L)`` (honoring
+        `window`) and backpropagates `grad_output`. Each weight gradient is summed over the
+        B * L tokens. Identical mode and the default block options only; other settings
+        raise errors. There is no gradient for an incoming cache.
+
+        Parameters
+        ----------
+        x : buffer of float32, shape (B, L, d_model)
+            Input activations.
+        grad_output : buffer of float32, shape (B, L, d_model)
+            Gradient of the loss with respect to the block output.
+
+        Returns
+        -------
+        dict
+            float32 gradients keyed ``"x"`` plus the nine weight names, each in its
+            tensor's shape.
+        """
         what = "TransformerBlock.backward"
         if getattr(self, "_int15", None) is not None:
             # Training is not in the profile's first version: every trainer
@@ -1500,43 +1568,36 @@ class TransformerBlock(NumericModeMixin):
             native(addrs, params)
         return dict(zip(("x",) + self._W_NAMES, grads))
 
+    # DEVIATION 2940 (lane/infer-speed-neural). On the CPU host route
+    # (bindings/_mojolearn_transformer_host.mojo exports no transformer_decode_session_*) the
+    # session owns its own copies of the weights and KV cache and calls the per-call
+    # transformer_decode_step / transformer_forward entries with the same addresses
+    # TransformerBlock._call_impl builds: an ownership wrapper, no new arithmetic, no speed
+    # claim. Distinct from the block's retained per-model context (_native_session,
+    # transformer_session_*), which the per-call forward/step use; the two coexist.
     def decode_session(self, state):
-        """A `TransformerDecodeSession` on this block and `state`: the
-        weights, the KV cache, the rotary table and the L = 1 stages
-        RESIDENT on the device across decode steps (DEVIATION 2940,
-        lane/infer-speed-neural, 2026-09-17), so a token costs one input
-        upload, the block and one output download instead of the per-call
-        entry's context, weight and cache round trip. `step` there is
-        `TransformerBlock.step`'s bytes: the same certified entry point at
-        L = 1 on the same structs, built once instead of per call.
+        """Open a `TransformerDecodeSession` on this block and `state`.
 
-        OWNERSHIP. The session COPIES this block's weights and the state's
-        cache at open. Until `close()` (or `sync_state()`) the state's
-        `k_cache`/`v_cache` are STALE and `forward`/`step` on this block
-        refuse the state by name; `cached_tokens` on the state is kept
-        current. Edits to the weights after open are NOT observed: close
-        and open a new session. Edits to the cache arrays after open are
-        not observed either: `load_state()` re-uploads them.
+        On a GPU, the session keeps the weights, the KV cache and the decode buffers on the
+        device between steps, so each token costs one input upload and one output download.
+        Its outputs are byte for byte those of `step` and `forward` on the same block and
+        state.
 
-        THE CPU HOST ROUTE TAKES THIS DOOR TOO (lane/cpu-routes-gpu-only-four,
-        2026-09-20). A host binding exports no `transformer_decode_session_*`
-        entry and never will -- there is no device context to hold anything
-        resident in -- but the session's ARITHMETIC is not the residency:
-        `step` and `forward` are `transformer_decode_step` and
-        `transformer_forward`, the certified per-call entries this block's own
-        `step`/`forward` take, which `bindings/_mojolearn_transformer_host.mojo`
-        exports over `transformer/host/transformer_block_host.mojo`. So on the
-        host route this object holds its own copies of the weights and of the
-        KV cache and calls those entries, in the same order and with the same
-        addresses `TransformerBlock._call_impl` builds. It is the ownership
-        wrapper, not new arithmetic, and it earns no speed claim: on the host
-        every call re-reads the weights exactly as the per-call entry does.
+        The session copies the weights and the cache when it opens. Until `close()` (or
+        `sync_state()`), the state's `k_cache` and `v_cache` are stale, and `forward` or
+        `step` on this block refuse that state; `cached_tokens` stays current. Later edits
+        to the weights are not seen: close and open a new session. Later edits to the cache
+        buffers are not seen either: call `load_state()`.
 
-        This is NOT the block's retained per-model context (`_native_session`,
-        the binding's `transformer_session_*` entry points), which the per-call `forward`/`step`
-        use and which rereads the weights and the caller's cache on every
-        call. The decode session owns its own context and its entry points
-        are `transformer_decode_session_*`; the two coexist on one block."""
+        Parameters
+        ----------
+        state : TransformerState
+            The KV cache to decode from.
+
+        Returns
+        -------
+        TransformerDecodeSession
+        """
         # lane/lowbit-default: under numeric_profile="fixed15_v1" the session
         # opens through the profile's entry (TransformerDecodeSession refuses
         # by name a binding without it).
@@ -1586,39 +1647,26 @@ def _refuse_resident(state, what):
         )
 
 
+# Two arms, one set of bytes: a binding exporting transformer_decode_session_create keeps
+# weights, KV cache, rotary table and L = 1 stages resident; the host route owns its copies
+# here and calls transformer_decode_step / transformer_forward with the same addresses in
+# the same order. The transformer-decode-session lane hashes this byte-for-byte claim.
 class TransformerDecodeSession:
-    """Resident decode on one `TransformerBlock` and one `TransformerState`
-    (DEVIATION 2940). Made by `TransformerBlock.decode_session(state)`.
+    """Decode session on one `TransformerBlock` and one `TransformerState`.
 
-    `step(x)`      one decode token per row, `(B, 1, d_model)` or
-                   `(B, d_model)` float32 in, `(B, 1, d_model)` out;
-                   `state.cached_tokens` advances
-    `forward(x)`   `L` tokens per row on the resident cache (a prefill
-                   or a chunked continuation), `(B, L, d_model)` in and out
-    `sync_state()` copy the resident cache into the state's buffers; the
-                   state stays owned by the session
-    `load_state()` re-upload the state's buffers and `cached_tokens`
-                   (the explicit refresh of the state half)
-    `close()`      sync, release every device buffer and hand the state
-                   back; also the context manager exit
+    Made by `TransformerBlock.decode_session(state)`; see there for ownership rules. On
+    a GPU the weights and KV cache stay on the device across steps. Every output is
+    byte for byte the block's own `step` or `forward` on the same state. A session is
+    not thread-safe and refuses re-entrant use. It is a context manager: leaving the
+    ``with`` block calls `close()`.
 
-    Every output is BYTE FOR BYTE the per-call `step`/`forward` on the
-    same block and state: the binding runs the one certified entry point
-    on structs that hold the same bytes. On a GPU binding the session holds
-    its own device context; it is not thread-safe and refuses re-entrant
-    use.
-
-    TWO ARMS, ONE CLASS AND ONE SET OF BYTES. On a binding that exports
-    `transformer_decode_session_create` the weights, the KV cache, the
-    rotary table and the L = 1 stages are RESIDENT on the device across
-    steps. On the host route
-    (`bindings/_mojolearn_transformer_host.mojo`, which exports no session
-    entry) the session owns its copies HERE and each call is the host
-    binding's `transformer_decode_step` / `transformer_forward` on them:
-    the same certified entries, the same addresses in the same order, so
-    the byte-for-byte claim above holds on both arms and is what the
-    `transformer-decode-session` lane hashes. The host arm is the OWNERSHIP
-    wrapper only and makes NO speed claim."""
+    Examples
+    --------
+    >>> st = blk.allocate_state(batch_size=1, max_tokens=128)
+    >>> with blk.decode_session(st) as sess:
+    ...     y = sess.forward(prompt)        # (1, L, d_model)
+    ...     y_t = sess.step(x_t)            # (1, 1, d_model)
+    """
 
     def __init__(self, block, state):
         what = "TransformerDecodeSession"
@@ -1726,10 +1774,12 @@ class TransformerDecodeSession:
 
     @property
     def state(self):
+        """The `TransformerState` this session decodes."""
         return self._state
 
     @property
     def is_open(self):
+        """Whether the session is still open."""
         return self._open
 
     def _require_open(self, what):
@@ -1737,6 +1787,12 @@ class TransformerDecodeSession:
             raise ValueError(f"mojolearn {what}: the session is closed")
 
     def step(self, x):
+        """Decode one token per row.
+
+        `x` is ``(B, 1, d_model)`` or ``(B, d_model)`` float32; returns ``(B, 1, d_model)``
+        and advances `state.cached_tokens`. Raises `ValueError` if the session is closed or
+        B differs from the state's batch size.
+        """
         what = "TransformerDecodeSession.step"
         self._require_open(what)
         blk = self._block
@@ -1761,6 +1817,11 @@ class TransformerDecodeSession:
         return y
 
     def forward(self, x):
+        """Run L tokens per row on the session's cache (a prefill or a chunked continuation).
+
+        `x` is ``(B, L, d_model)`` float32; returns the same shape. Raises `ValueError` if
+        the session is closed or B differs from the state's batch size.
+        """
         what = "TransformerDecodeSession.forward"
         self._require_open(what)
         blk = self._block
@@ -1784,6 +1845,7 @@ class TransformerDecodeSession:
         return y
 
     def sync_state(self):
+        """Copy the session's cache into the state's buffers; the session stays open and keeps owning the state."""
         what = "TransformerDecodeSession.sync_state"
         self._require_open(what)
         st = self._state
@@ -1800,6 +1862,7 @@ class TransformerDecodeSession:
         return st
 
     def load_state(self):
+        """Reload the session's cache from the state's buffers and `cached_tokens`, after you edit them."""
         what = "TransformerDecodeSession.load_state"
         self._require_open(what)
         st = self._state
@@ -1824,6 +1887,10 @@ class TransformerDecodeSession:
             self._ext.transformer_decode_session_close(self._native)
 
     def close(self):
+        """Copy the cache back into the state, release the session's buffers and hand the state back.
+
+        Calling it on a closed session does nothing.
+        """
         if not self._open:
             return
         try:
@@ -1834,10 +1901,10 @@ class TransformerDecodeSession:
             self._release()
 
     def discard(self):
-        """Close WITHOUT writing the resident cache back to the state: for a
-        caller that owns the state and throws it away (lane/py-lm,
-        `CausalLM.generate`), where `close()`'s download of the whole cache
-        would be wasted, and after a failed call, where it may not run."""
+        """Close without copying the cache back into the state.
+
+        Use it when you throw the state away, or after a failed call.
+        """
         if not self._open:
             return
         self._open = False

@@ -312,36 +312,57 @@ def _validate_state(state):
     return weights, moments, config, _schedule(state['data_schedule'])
 
 
+# data_schedule: retained exactly with the step counter; contents are never compared with the
+# batches passed, so it is tamper-evident inside a checkpoint envelope and otherwise only as true as
+# the caller made it (lane/data-ordering-determinism). A step is one binding call when the training
+# binding offers `mlp_train_step` (same kernels, operands and order as the per-operation calls; seven
+# host round trips instead of about forty); MOJOLEARN_MLP_FUSED=0 restores the per-operation calls.
+# State changes are serialized and published only after the whole step succeeds. A checkpoint is a
+# separate bounded MLP format, not a Llama file.
 class SmallMLPTrainer:
-    """Fixed FP32 8→16→3 ReLU, mean cross-entropy, AdamW trainer.
+    """Trainer for a fixed 8-16-3 ReLU network with mean cross-entropy and AdamW.
 
-    Supply weight1 (16,8), bias1 (16,), weight2 (3,16), bias2 (3,) as
-    float32 buffers (NumPy arrays or mojolearn Arrays). Parameters and
-    inputs are copied. Batches contain 1..256 rows and labels 0..2. All
-    neural arithmetic runs on the GPU, in the process-selected IDENTICAL
-    (default) or FAST mode; this class never changes that mode, and a state
-    saved under one mode loads only under the same one. There is no CPU fallback. Every
-    array returned is a `mojolearn.Array`.
+    The model is ``Linear(8, 16) -> ReLU -> Linear(16, 3)``. Pass `weight1` (16, 8),
+    `bias1` (16,), `weight2` (3, 16) and `bias2` (3,) as float32 buffers (NumPy arrays or
+    `mojolearn.Array`); parameters and inputs are copied. Each batch has 1 to 256 rows
+    of 8 features, with labels 0, 1 or 2. All arithmetic runs on the GPU in the numeric
+    mode selected for the process (identical by default); there is no CPU fallback, and
+    a state saved under one mode loads only under the same mode. Every array returned is
+    a `mojolearn.Array`.
 
-    data_schedule is a bounded JSON descriptor supplied by the caller (for
-    example dataset hash, sample order and batch size). It is retained exactly
-    with the step counter, but this trainer does not fetch or reorder data.
-    The caller must feed the corresponding next batch after restoring state.
-    Its CONTENTS are not validated and are never compared against the batches
-    the caller passes, so it is tamper-evident once inside a checkpoint
-    envelope and otherwise only as true as the caller made it
-    (lane/data-ordering-determinism, 2026-09-16).
+    A step either completes or leaves the state unchanged. No clipping, dropout, mixed
+    precision, automatic differentiation or other layer shapes are supported.
 
-    train_step returns pre-update loss/logits and all four parameter gradients,
-    plus input_grad when requested. No clipping, dropout, mixed precision,
-    automatic differentiation or configurable layer shapes are supported.
-    A step is ONE binding call when the training binding offers
-    `mlp_train_step` (the same kernels the per-operation calls ran, on the
-    same operands in the same order, so the same bits; the intermediates
-    stay on the device and the step pays seven host round trips instead of
-    about forty); `MOJOLEARN_MLP_FUSED=0` restores the per-operation calls.
-    State changes are serialized and published only after the whole step
-    succeeds. A checkpoint is a separate bounded MLP format, not a Llama file.
+    Parameters
+    ----------
+    weight1, bias1, weight2, bias2 : buffers
+        Initial parameters, shapes as above.
+    data_schedule : dict
+        A small JSON-serializable description of your data order (for example a dataset
+        hash, sample order and batch size). It is stored with the step counter and in
+        checkpoints, so a resumed run can continue with the right next batch. It is not
+        validated against the batches you pass; the trainer never fetches or reorders
+        data.
+    lr : float, default 0.001
+        AdamW learning rate.
+    betas : tuple of float, default (0.9, 0.999)
+        AdamW moment decay rates.
+    eps : float, default 1e-8
+        AdamW epsilon.
+    weight_decay : float, default 0.01
+        AdamW decoupled weight decay.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> w1 = rng.standard_normal((16, 8)).astype(np.float32) * 0.1
+    >>> w2 = rng.standard_normal((3, 16)).astype(np.float32) * 0.1
+    >>> trainer = mojolearn.SmallMLPTrainer(w1, np.zeros(16, np.float32), w2, np.zeros(3, np.float32),
+    ...                                     data_schedule={"batch_size": 32})
+    >>> X = rng.random((32, 8), dtype=np.float32)
+    >>> y = rng.integers(0, 3, 32)
+    >>> out = trainer.train_step(X, y)
     """
 
     def __init__(self, weight1, bias1, weight2, bias2, *, data_schedule,
@@ -360,21 +381,23 @@ class SmallMLPTrainer:
 
     @property
     def step_(self):
+        """Number of optimizer steps taken."""
         with self._lock:
             return int(self._opt.t)
 
     @property
     def weights_(self):
+        """Current parameters as a dict: `weight1`, `bias1`, `weight2`, `bias2`."""
         return self.state_dict()['weights']
 
     def state_dict(self):
-        """Return an independent snapshot of every resumable state cell."""
+        """Return an independent snapshot of the full resumable state (weights, optimizer moments, settings, data schedule)."""
         with self._lock:
             self._session_sync_host()
             return _state(self._opt.params, self._opt, self._config, self._schedule)
 
     def load_state_dict(self, state):
-        """Validate/copy the complete snapshot before changing any live state."""
+        """Restore a snapshot from `state_dict`. The snapshot is validated and copied before any live state changes."""
         with self._lock:
             weights, moments, config, schedule = _validate_state(state)
             _require_mode()
@@ -469,14 +492,15 @@ class SmallMLPTrainer:
             opt.lr_ = float(_training_impl._round_f32(config['lr']))
         return values, logits, grads, input_grad
 
+    # lane afn-mlp: k consecutive train_steps as one binding call on the resident session (Apple FAST
+    # under -D MOJOLEARN_AFN_MLP_MULTISTEP or _ALL; elsewhere a RuntimeError names the build). X is
+    # (k * batch, 8) and targets (k * batch,), minibatch i the rows [i * batch, (i + 1) * batch), each
+    # 1..256 rows. Returns step, losses (one per minibatch), and loss, logits and gradients of the last.
     def train_steps(self, X, targets, k):
-        """lane afn-mlp: `k` consecutive `train_step`s as ONE binding call on
-        the resident session (Apple FAST under `-D MOJOLEARN_AFN_MLP_MULTISTEP`
-        or `_ALL`; elsewhere a RuntimeError names the build). `X` is
-        `(k * batch, 8)` and `targets` `(k * batch,)`, minibatch `i` the rows
-        `[i * batch, (i + 1) * batch)`, every minibatch 1..256 rows. Returns
-        `step`, `losses` (one per minibatch), and `loss`, `logits` and
-        `gradients` of the LAST minibatch."""
+        """Run `k` consecutive training steps in one call.
+
+        Available only on builds that provide it; otherwise raises `RuntimeError`.
+        """
         with self._lock:
             if type(k) is not int or k < 1:
                 raise ValueError('SmallMLPTrainer train_steps k must be a positive int')
@@ -581,18 +605,22 @@ class SmallMLPTrainer:
         logits = self._bias(binding, self._matmul(activation, w2, transpose_b=True), b2, False)
         return activation, logits
 
+    # NN64 selects one packed model execution; its control runs each session projection separately.
     def predict_logits_sessions(self, inputs):
-        """Concatenated logits for independent sessions using the current model.
+        """Logits of several independent batches with the current model, concatenated in the
+        order given.
 
-        NN64 selects one packed model execution; its control runs each session
-        projection separately. The session inputs and all math stay in Mojo.
+        Parameters
+        ----------
+        inputs : list of buffers
+            float32 batches, each (rows_i, 8).
         """
         with self._lock:
             return _training_impl.mlp_inference_sessions(
                 inputs, *self._opt.params, numeric_mode=_require_mode())
 
     def predict_logits(self, X):
-        """Return independent FP32 logits from the current weights."""
+        """Logits (n_rows, 3) of `X` (n_rows, 8) with the current weights."""
         with self._lock:
             x = _batch(X)
             binding = self._binding()
@@ -694,7 +722,16 @@ class SmallMLPTrainer:
         return value, logits, grads, input_grad
 
     def loss_and_grads(self, X, targets):
-        """Compute a mean-CE microbatch gradient without advancing the optimizer."""
+        """Mean cross-entropy loss and parameter gradients of a batch, without a step.
+
+        Use it with `apply_gradients` to accumulate microbatches yourself.
+
+        Returns
+        -------
+        loss : float
+        gradients : sequence of Arrays
+            Gradients of `weight1`, `bias1`, `weight2`, `bias2`, in that order.
+        """
         with self._lock:
             x = _batch(X)
             y = _targets(targets, len(x))
@@ -710,7 +747,12 @@ class SmallMLPTrainer:
             return loss, grads
 
     def apply_gradients(self, gradients):
-        """Apply one already-reduced gradient transactionally in registry order."""
+        """Apply one already-combined gradient with AdamW; returns the new step count.
+
+        `gradients` must hold exactly the four parameter gradients, in the order `weight1`,
+        `bias1`, `weight2`, `bias2`, otherwise `ValueError`.
+        The update either completes or leaves the state unchanged.
+        """
         with self._lock:
             gradients = list(gradients)
             if len(gradients) != len(_NAMES):
@@ -731,6 +773,23 @@ class SmallMLPTrainer:
             return int(working.t)
 
     def train_step(self, X, targets, *, return_input_grad=False):
+        """One AdamW training step on a batch.
+
+        Parameters
+        ----------
+        X : buffer, shape (n_rows, 8)
+            float32 batch, 1 to 256 rows.
+        targets : buffer, shape (n_rows,)
+            Labels 0, 1 or 2.
+        return_input_grad : bool, default False
+            Also return the gradient with respect to `X`.
+
+        Returns
+        -------
+        dict
+            `step` (the new step count), `loss` and `logits` from before the update,
+            `gradients` (the four parameter gradients), and `input_grad` when requested.
+        """
         with self._lock:
             x = _batch(X)
             y = _targets(targets, len(x))
@@ -775,7 +834,7 @@ class SmallMLPTrainer:
             return result
 
     def save_checkpoint(self, path):
-        """Atomically save a canonical, bounded, no-pickle MLP checkpoint."""
+        """Atomically save the full state to `path` in a bounded, pickle-free MLP checkpoint format."""
         state = self.state_dict()
         payload = _encode_state(state)
         envelope = dict(schema=_FILE_SCHEMA, payload=payload,
@@ -802,7 +861,7 @@ class SmallMLPTrainer:
 
     @classmethod
     def from_checkpoint(cls, path):
-        """Restore an MLP snapshot after validating its schema, size and hash."""
+        """Restore a trainer from `save_checkpoint` output, after checking its schema, size and hash."""
         with Path(path).open('rb') as stream:
             encoded = stream.read(_FILE_LIMIT + 1)
         if len(encoded) > _FILE_LIMIT:

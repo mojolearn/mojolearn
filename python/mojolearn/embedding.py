@@ -1,63 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`Embedding`, profile `mojolearn.identical.embedding.fp32.v1`, on the GPU.
+"""Embedding lookup tables with a reproducible backward pass.
 
-The Python door of `bindings/_mojolearn_embedding.mojo`, which reaches
-`embedding/checks/embedding_identical.mojo`'s gather and ascending fold.
-`embedding/IDENTICAL_EMBEDDING_CONTRACT.md` is the specification; the gate
-is `pixi run check-embedding` and `tools/embedding_sabotage_arm.sh`.
+`Embedding` follows `torch.nn.Embedding`'s forward and its dense backward. Rows that
+receive gradient from several positions are summed in ascending position order, so the
+gradient does not depend on the device or on how the backward is scheduled, and
+microbatches presented in position order reproduce the unsplit gradient exactly when
+each one carries the previous gradient forward (``backward(ids, dy, grad=...)``).
 
-The semantics are `torch.nn.Embedding`'s forward and its dense
-`embedding_dense_backward`, with the contract's refusals:
-
-    max_norm, norm_type != 2.0           here, by name (a forward that
-                                         renormalizes W is outside the profile)
-    scale_grad_by_freq=True              here, by name
-    sparse=True                          here, by name (DEVIATION 1314: the
-                                         dense (V, d) gradient only)
-    weight=None                          here, by name: initialization is not
-                                         part of the profile; pass the table
-    an id below 0 or at or past V        Mojo host, by name (contract 8,
-                                         never clamped)
-    a NaN or an infinity in W, dY or a   Mojo host, by name (contract 9.1)
-    carried gradient
-    an empty ids or dy                   here (the buffer layer refuses a
-                                         zero-size input)
-
-`padding_idx` follows torch: a negative value counts from the end, the
-forward gathers that row like any other, and the backward drops its
-positions at the source and STORES +0.0 in its row (contract section 8).
-`plan` selects the backward's execution plan for the run structure (contract
-section 6): "scan" (PLAN_SCAN), "sort" (PLAN_SORT, the device total-key
-bitonic sort) or "auto" (the default: the GPU binding takes "sort" from
-V * T = 2**26 upward on the IDENTICAL tier and "scan" below; a binding
-without the pick runs "scan"). The plan is not the specification: both
-enumerate each row's contributors in ascending position, and the contract's
-clause (d) holds counts, perm and dW bit-identical across the two.
-
-THE TABLE IS THE LAYER'S OWN COPY, taken at construction (and again when
-`weight` is assigned). On the IDENTICAL GPU binding its device copy is
-uploaded and scanned at the first `forward` and kept until `weight` is
-assigned or the layer is collected, so a forward does not move the table
-again. Assign `layer.weight = new_table` to change it; writing into the
-array that was passed in does not reach the layer.
-
-`backward(ids, dy, grad=...)` is the microbatch CARRY (contract 7.4): the
-fold continues from `grad`'s bits, so microbatches presented in ascending
-position order reproduce the unsplit gradient bit for bit.
-
-There is no autograd here. The class holds the table and runs the two
-calls; `weight` is never updated by this module.
-
-DEVICE I/O (lane gap-neural-io, 2026-10-08): `forward(ids, device=True)`
-returns y as a `SequenceDeviceTensor` resident on this binding (nothing comes
-back over the bus until `.numpy()`); `backward(ids, dy)` with dy such a
-tensor (`layer.to_device(array)` makes one) folds it where it lives and
-returns the (V, d) gradient as one too (a `grad` carry is copied on the
-device). The same kernels on the same values: the same bits. A binding
-without the resident entries refuses `device=True` by name.
-
-NO SPEED CLAIM.
+There is no autograd here: the layer holds the table and computes the two calls; it
+never updates `weight` itself.
 """
 import itertools
 
@@ -79,32 +31,66 @@ _TABLE_TOKENS = itertools.count(1)
 _EMBEDDING_FORMAT = "mojolearn-embedding-1"
 
 
+# Profile mojolearn.identical.embedding.fp32.v1: bindings/_mojolearn_embedding.mojo reaches
+# embedding/checks/embedding_identical.mojo's gather and ascending fold. Specification:
+# embedding/IDENTICAL_EMBEDDING_CONTRACT.md; gate: `pixi run check-embedding` and
+# tools/embedding_sabotage_arm.sh. Refusals: max_norm (torch renormalizes W in the forward, outside
+# the profile), scale_grad_by_freq, sparse (DEVIATION 1314), weight=None (initialization is not part
+# of the profile); out-of-range ids (contract 8) and NaN/inf in W, dY or a carried gradient (contract
+# 9.1) are refused by the Mojo host. padding_idx: contract section 8. plan: contract section 6
+# (PLAN_SCAN, PLAN_SORT = the device total-key bitonic sort; 'auto' takes sort from V * T = 2**26
+# upward on the IDENTICAL tier; clause (d) holds counts, perm and dW bit-identical across plans).
+# backward's grad carry: contract 7.4. Device I/O (lane gap-neural-io): forward(device=True) returns
+# a SequenceDeviceTensor; a binding without the resident entries refuses device=True by name.
 class Embedding(NumericModeMixin):
-    """A `(num_embeddings, embedding_dim)` float32 table with the pinned gather and fold.
+    """Embedding table with a reproducible gather and dense gradient, as `torch.nn.Embedding`.
+
+    The table is the layer's own float32 copy, taken at construction (and again whenever
+    `weight` is assigned): to change it, assign ``layer.weight = new_table``; writing into
+    the array you passed in does not reach the layer. On the GPU the table is uploaded once
+    and kept on the device until `weight` is reassigned.
+
+    `padding_idx` follows torch: a negative value counts from the end, the forward gathers
+    that row like any other, and the backward stores +0.0 in its row. Ids below 0 or at or
+    past `num_embeddings` raise an error (they are never clamped), as do NaN or infinite
+    values in the table or gradients, and empty `ids` or `dy`.
 
     Parameters
     ----------
     num_embeddings : int
+        Number of rows V; at least 1.
     embedding_dim : int
+        Row width d; at least 1.
     padding_idx : int or None, default None
+        Row whose gradient is always zero; within [-V, V).
     max_norm : None
-        Only None; anything else is refused by name.
+        Only None; anything else raises `ValueError`.
     norm_type : float, default 2.0
-        Only 2.0 (it has no effect without max_norm).
+        Only 2.0 (it has no effect without `max_norm`).
     scale_grad_by_freq : bool, default False
-        Only False.
+        Only False; True raises `ValueError`.
     sparse : bool, default False
-        Only False.
-    weight : array-like (num_embeddings, embedding_dim), required
-        The table, copied to float32 C order at construction.
-    plan : {"auto", "scan", "sort"}, default "auto"
-        The backward's run-structure execution plan (contract section 6).
-        Both plans give the same bits; "auto" lets the binding pick by
-        V * T. Anything else is refused by name.
+        Only False (the gradient is the dense (V, d) array); True raises `ValueError`.
+    weight : array-like of shape (num_embeddings, embedding_dim)
+        The table, required (there is no random initialization); copied to float32.
+        Use `Embedding.from_pretrained` to build a layer from a table alone.
+    plan : {'auto', 'scan', 'sort'}, default 'auto'
+        How the backward groups the positions of each row. Both plans give the same bits;
+        'auto' picks by problem size.
 
     Attributes
     ----------
-    weight : Array (num_embeddings, embedding_dim) float32
+    weight : Array of shape (num_embeddings, embedding_dim), float32
+        The table.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> table = np.random.default_rng(0).random((1000, 64), dtype=np.float32)
+    >>> emb = mojolearn.Embedding.from_pretrained(table)
+    >>> ids = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.int64)
+    >>> y = emb.forward(ids)
+    >>> dW = emb.backward(ids, np.ones((2, 3, 64), dtype=np.float32))
     """
 
     _BINDING = "_mojolearn_embedding"
@@ -173,7 +159,11 @@ class Embedding(NumericModeMixin):
     @classmethod
     def from_pretrained(cls, embeddings, padding_idx=None, max_norm=None, norm_type=2.0,
                         scale_grad_by_freq=False, sparse=False, numeric_mode=None, plan="auto"):
-        """torch's `Embedding.from_pretrained` without `freeze` (nothing here trains the table)."""
+        """Build a layer from an existing (V, d) table, as torch's `Embedding.from_pretrained`.
+
+        There is no `freeze` argument, because nothing here trains the table. The other
+        arguments are the constructor's.
+        """
         w, _ = as_f32_c(embeddings, ndim=2, name="embeddings")
         v, d = (int(s) for s in w.shape)  # glue: two shape dimensions only
         return cls(v, d, padding_idx=padding_idx, max_norm=max_norm, norm_type=norm_type,
@@ -258,8 +248,7 @@ class Embedding(NumericModeMixin):
         return mod
 
     def to_device(self, a):
-        """float32 array `a` as a tensor resident on this layer's binding
-        (uploaded once, here): a `dy` for `backward`."""
+        """Upload a float32 array once, for use as `dy` in `backward` on the device."""
         from ._x_sequence_device import SequenceDeviceTensor
         return SequenceDeviceTensor._wrap(self._dev_module(), a)
 
@@ -268,8 +257,20 @@ class Embedding(NumericModeMixin):
         return is_seq_tensor(x)
 
     def forward(self, ids, device=False):
-        """`weight[ids]`, shape `ids.shape + (embedding_dim,)`, float32
-        (resident on the device with `device=True`)."""
+        """Look up rows: ``weight[ids]``.
+
+        Parameters
+        ----------
+        ids : array of int
+            Row indices, any shape.
+        device : bool, default False
+            Return the result as a device tensor, without copying it back to the host.
+            Raises an error when this install has no device path.
+
+        Returns
+        -------
+        Array of shape ``ids.shape + (embedding_dim,)``, float32
+        """
         flat, shape = self._ids(ids)
         t, d = int(flat.size), self.embedding_dim
         if device:
@@ -298,11 +299,25 @@ class Embedding(NumericModeMixin):
     __call__ = forward
 
     def backward(self, ids, dy, grad=None):
-        """The dense `(num_embeddings, embedding_dim)` gradient of `forward(ids)` for `dy`.
+        """Dense (num_embeddings, embedding_dim) gradient of `forward(ids)` for `dy`.
 
-        `grad=None` is a fresh gradient (+0.0 fill). A `grad` array is the
-        carried accumulator (contract 7.4): its bits are copied and the fold
-        continues from them; `grad` itself is not modified.
+        With ``grad=None`` the gradient starts from zero. A `grad` array is a carried
+        accumulator: the sum continues from its values (it is not modified), so microbatches
+        given in ascending position order reproduce the unsplit gradient bit for bit. A `dy`
+        from `to_device` keeps the computation and the result on the device.
+
+        Parameters
+        ----------
+        ids : array of int
+            The forward's ids.
+        dy : array of float32, shape ``ids.shape + (embedding_dim,)``
+            Gradient of the forward's output.
+        grad : array or None, default None
+            Gradient to continue from.
+
+        Returns
+        -------
+        Array of shape (num_embeddings, embedding_dim), float32
         """
         # The gradient is training: on a CPU-only install it runs only inside
         # the internal reference context;
@@ -373,11 +388,11 @@ class Embedding(NumericModeMixin):
     # -- saved tables (lane/inference-embedding-ivf-cholesky, 2026-09-15) ---
 
     def save(self, path):
-        """Write the table to `path` as an npz: `weight` `<f4` (V, d),
-        `meta` `<i8` [V, d, padding_idx or -1], `plan` and the tier. A loaded
-        table looks ids up (`forward`); on a CPU-only install that is public
-        inference through `_mojolearn_embedding_infer_host`, which carries no
-        backward."""
+        """Save the table and settings to `path` as an `.npz` file.
+
+        A loaded table can look ids up with `forward`, including on a CPU-only install, where
+        `backward` is not available.
+        """
         from .decomposition import _saved_mode
         arrays = {
             "format": _EMBEDDING_FORMAT,
@@ -395,8 +410,7 @@ class Embedding(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a table written by `save`, dtype and shape checked, nothing
-        cast."""
+        """Load a layer written by `save`. The dtype and shape are checked; nothing is cast."""
         from .decomposition import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, _EMBEDDING_FORMAT)
         _check_saved_by(arrays, path, cls)

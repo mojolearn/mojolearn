@@ -1,22 +1,33 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Alpha GPU optimizer and loss primitives over explicit buffer-protocol
-arrays (`mojolearn.Array`, or NumPy arrays when the caller has NumPy;
-DEVIATION 2461: NumPy is no longer a dependency of this module).
+"""Optimizers, schedules, losses and training primitives over float32 arrays.
 
-SGD, Adam and AdamW update supplied parameter arrays in place. Callers supply
-gradients in the same stable tensor order. ``clip_grad_norm_`` changes supplied
-gradients in place and supports L2 norm only. ``cross_entropy`` accepts FP32
-logits and integer class targets, with an optional returned logits gradient.
-The underlying functions document supported settings and explicit refusals;
-these are bounded primitives, not a general autograd framework or drop-in
-PyTorch replacement. Optimizer failure rollback is not a public contract of
-these primitives. SmallMLPTrainer and SmallByteLanguageModelTrainer separately
-provide transactional complete-state updates for their fixed model shapes.
+These functions work on explicit float32 buffers: `mojolearn.Array`, NumPy arrays,
+or any buffer-protocol object. NumPy is not required.
 
-``numeric_mode`` selects an available compiled tier. Alpha API exposure adds
-no new bitwise validation: retained evidence must identify the exact profile,
-source, binding, device, input bytes and state. No extension is loaded by these
-re-exports until a function or optimizer operation needs it.
+`SGD`, `Adam` and `AdamW` update the parameter arrays you pass in place, from gradients
+you supply in the same order. `ConstantLR`, `WarmupLinearLR` and `WarmupCosineLR` give
+the learning rate of each step. `clip_grad_norm_` scales gradients in place (L2 norm
+only). `cross_entropy` takes float32 logits and integer class targets and can return
+the logits gradient in the same call. `embedding_forward`, `rms_norm_forward`,
+`linear_forward`, `chunked_lm_head_loss` and their backward functions are the layer
+operations of a small language-model stack, and `Generator` draws reproducible
+initializations and dropout masks.
+
+These are building blocks, not an autograd framework or a drop-in replacement for
+PyTorch: you compute and pass the gradients. `SmallMLPTrainer` and the byte language
+model trainers provide complete training loops for their fixed model shapes.
+
+`numeric_mode` selects the compiled tier where a function takes it. No compiled
+extension is loaded until a function or optimizer step needs it.
+
+Examples
+--------
+>>> import numpy as np
+>>> from mojolearn.training import AdamW, WarmupCosineLR
+>>> w = np.zeros((64, 8), dtype=np.float32)
+>>> opt = AdamW([w], lr=3e-4, weight_decay=0.01,
+...             lr_schedule=WarmupCosineLR(3e-4, warmup_steps=10, total_steps=100))
+>>> opt.step([np.ones_like(w)])
 """
 from ._training_impl import (
     SGD,

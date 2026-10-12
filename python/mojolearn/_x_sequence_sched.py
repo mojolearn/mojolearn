@@ -116,7 +116,40 @@ class _PowSched(_Sched):
 
 
 class StepLR(_PowSched):
-    """lr = base_lr gamma^(epoch // step_size) (torch's closed form)."""
+    """Step-decay learning-rate schedule: multiply by `gamma` every `step_size` steps.
+
+    Computes torch's `StepLR` closed form, ``lr = base_lr * gamma ** (epoch // step_size)``,
+    as a function of the step index. `lr_at(t)` takes the one-based optimizer step:
+    `lr_at(1)` is the rate before the first `scheduler.step()` in torch, and `lr_at(t)`
+    the rate after ``t - 1`` steps. Each value is the exact closed form rounded once to
+    float32 (ties to even, values below the smallest normal flushed to +0.0), so a
+    schedule gives the same bits on every machine.
+
+    Pass a schedule as ``lr_schedule=`` to the optimizers `RMSprop`, `Adagrad`, `Lion`,
+    `Adamax` and `NAdam`, and to the recurrent estimators (`LSTMClassifier`,
+    `GRURegressor`, ...); they set ``lr = schedule.lr_at(t)`` before step t.
+
+    Parameters
+    ----------
+    base_lr : float
+        Learning rate of the first step. Must be finite.
+    step_size : int
+        Number of steps between decays. Must be >= 1, otherwise `ValueError`.
+    gamma : float, default 0.1
+        Multiplicative decay factor. Must be finite.
+
+    Notes
+    -----
+    `lr_at(t)` raises `ValueError` for ``t < 1`` and `OverflowError` when the value overflows
+    float32. Per-group learning rates and `last_epoch` resumption are not supported:
+    to resume, evaluate `lr_at` at the step you resume from.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> sched = mojolearn.StepLR(0.1, step_size=30, gamma=0.1)
+    >>> first, after_30 = sched.lr_at(1), sched.lr_at(31)
+    """
 
     def __init__(self, base_lr, step_size, gamma=0.1):
         if int(step_size) < 1:
@@ -127,7 +160,35 @@ class StepLR(_PowSched):
 
 
 class ExponentialLR(_PowSched):
-    """lr = base_lr gamma^epoch."""
+    """Exponential learning-rate schedule: multiply by `gamma` every step.
+
+    Computes torch's `ExponentialLR` closed form, ``lr = base_lr * gamma ** epoch``, as a
+    function of the step index. `lr_at(t)` takes the one-based optimizer step
+    (`lr_at(1)` is `base_lr`). Each value is the exact closed form rounded once to
+    float32 (ties to even, values below the smallest normal flushed to +0.0), so a
+    schedule gives the same bits on every machine.
+
+    Pass it as ``lr_schedule=`` to `RMSprop`, `Adagrad`, `Lion`, `Adamax`, `NAdam` and
+    the recurrent estimators.
+
+    Parameters
+    ----------
+    base_lr : float
+        Learning rate of the first step. Must be finite.
+    gamma : float
+        Multiplicative decay factor per step. Must be finite.
+
+    Notes
+    -----
+    `lr_at(t)` raises `ValueError` for ``t < 1`` and `OverflowError` when the value overflows
+    float32.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> sched = mojolearn.ExponentialLR(0.01, gamma=0.95)
+    >>> lrs = sched.lrs(100)
+    """
 
     def __init__(self, base_lr, gamma):
         self.base_lr, self.gamma = float(base_lr), float(gamma)
@@ -135,10 +196,48 @@ class ExponentialLR(_PowSched):
 
 
 class OneCycleLR(_LrTable, _Sched):
-    """torch's OneCycleLR learning rate: from max_lr / div_factor up to
-    max_lr over pct_start of total_steps, then down to
-    initial_lr / final_div_factor (or the three-phase form), by cosine or
-    linear annealing."""
+    """One-cycle learning-rate schedule, as torch's `OneCycleLR`.
+
+    The rate rises from ``max_lr / div_factor`` to `max_lr` over the first `pct_start`
+    of `total_steps`, then anneals down to ``initial_lr / final_div_factor`` (with
+    ``three_phase=True``: back down to the initial rate, then to the final one), by
+    cosine or linear annealing. `lr_at(t)` takes the one-based optimizer step and is
+    defined up to ``total_steps + 1``; later steps raise `ValueError`, as torch does.
+    Each value is the exact closed form rounded once to float32 (ties to even, values
+    below the smallest normal flushed to +0.0), so a schedule gives the same bits on
+    every machine.
+
+    Pass it as ``lr_schedule=`` to `RMSprop`, `Adagrad`, `Lion`, `Adamax`, `NAdam` and
+    the recurrent estimators.
+
+    Parameters
+    ----------
+    max_lr : float
+        Peak learning rate. Must be finite.
+    total_steps : int
+        Number of steps in the cycle. Must be >= 1.
+    pct_start : float, default 0.3
+        Fraction of the cycle spent increasing the rate, in [0, 1].
+    anneal_strategy : {'cos', 'linear'}, default 'cos'
+        Annealing shape.
+    div_factor : float, default 25.0
+        Initial rate is ``max_lr / div_factor``.
+    final_div_factor : float, default 1e4
+        Final rate is ``initial_lr / final_div_factor``.
+    three_phase : bool, default False
+        Use torch's three-phase form.
+
+    Notes
+    -----
+    Momentum cycling (`cycle_momentum`, `base_momentum`, `max_momentum`), per-group
+    learning rates and `last_epoch` resumption are not supported.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> sched = mojolearn.OneCycleLR(max_lr=0.01, total_steps=1000)
+    >>> lrs = sched.lrs(1000)
+    """
 
     def __init__(self, max_lr, total_steps, pct_start=0.3, anneal_strategy="cos", div_factor=25.0,
                  final_div_factor=1e4, three_phase=False):

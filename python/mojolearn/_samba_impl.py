@@ -61,11 +61,41 @@ def _canonical(value):
 
 
 class SambaConfig(object):
-    """The stack's shape. `layers` is a sequence of "mamba3" / "attention"
-    in stack order. `d_model` must be a multiple of 32 for a Mamba-3 layer
-    (headdim 64, expand 2) and equal `n_heads * head_dim` for an attention
-    layer. `norm_eps` is the FINAL norm's eps; the blocks carry their own
-    profile constants."""
+    """Shape of a `SambaStack`: vocabulary, width and the sequence of layer kinds.
+
+    Parameters
+    ----------
+    vocab : int
+        Vocabulary size, >= 2.
+    d_model : int
+        Model dimension, >= 1. Must be a multiple of 32 when any layer is
+        'mamba3', and equal ``n_heads * head_dim`` when any layer is 'attention'.
+    layers : sequence of {'mamba3', 'attention'}
+        Layer kinds in stack order; at least one.
+    n_heads : int or None, default None
+        Attention heads. Required when any layer is 'attention'.
+    n_kv_heads : int or None, default None
+        Key/value heads for grouped-query attention. None uses `n_heads`.
+    head_dim : int or None, default None
+        Attention head dimension. None uses ``d_model // n_heads``.
+    intermediate : int or None, default None
+        Hidden size of the attention layers' gated MLP. Required when any layer is
+        'attention'.
+    tie_embeddings : bool, default True
+        Share the embedding matrix with the output head.
+    norm_eps : float, default 1e-5
+        Epsilon of the final RMSNorm (>= 0). Each block keeps its own constants.
+    dropout : float, default 0.0
+        Dropout rate after the embedding during `SambaStack.train_step`, in [0, 1).
+
+    Invalid values raise `ValueError`.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> cfg = mojolearn.SambaConfig(vocab=256, d_model=64, layers=("mamba3", "attention"),
+    ...                             n_heads=4, intermediate=128)
+    """
 
     def __init__(self, vocab, d_model, layers, n_heads=None, n_kv_heads=None,
                  head_dim=None, intermediate=None, tie_embeddings=True,
@@ -107,6 +137,7 @@ class SambaConfig(object):
             raise ValueError("mojolearn.SambaConfig: norm_eps must be >= 0")
 
     def to_dict(self):
+        """The configuration as a plain dict (the inverse of `from_dict`)."""
         return {"vocab": self.vocab, "d_model": self.d_model,
                 "layers": list(self.layers), "n_heads": self.n_heads,
                 "n_kv_heads": self.n_kv_heads, "head_dim": self.head_dim,
@@ -116,14 +147,25 @@ class SambaConfig(object):
 
     @classmethod
     def from_dict(cls, d):
+        """Build a configuration from a dict made by `to_dict`."""
         return cls(d["vocab"], d["d_model"], d["layers"], d["n_heads"],
                    d["n_kv_heads"], d["head_dim"], d["intermediate"],
                    d["tie_embeddings"], d["norm_eps"], d["dropout"])
 
     # -- the registry ---------------------------------------------------
     def block_shapes(self, kind):
-        """`[(name, shape)]` of one block's tensors, in the block class's
-        `_W_NAMES` order."""
+        """Names and shapes of one block's tensors.
+
+        Parameters
+        ----------
+        kind : {'mamba3', 'attention'}
+            Layer kind.
+
+        Returns
+        -------
+        list of (str, tuple)
+            ``(name, shape)`` pairs in the block's weight order.
+        """
         dm = self.d_model
         if kind == "mamba3":
             di = _M3_EXPAND * dm
@@ -151,7 +193,16 @@ class SambaConfig(object):
         return [(n, shapes[n]) for n in TransformerBlock._W_NAMES]  # glue: weight names and shapes
 
     def registry(self):
-        """`[(name, shape)]` in the clip's order."""
+        """Names and shapes of every parameter tensor of the stack, in order.
+
+        The order is ``embed.weight``, then ``layers.{i}.<block tensor>`` for each layer,
+        then ``norm_f.weight``, then ``lm_head.weight`` when embeddings are not tied.
+        It is also the summation order of gradient clipping.
+
+        Returns
+        -------
+        list of (str, tuple)
+        """
         out = [("embed.weight", (self.vocab, self.d_model))]
         for i, kind in enumerate(self.layers):  # glue: registry of named tensors
             out.extend(("layers.%d.%s" % (i, n), s)
@@ -201,30 +252,77 @@ class SambaState(object):
         self.layers = list(layers)
 
 
+# Accumulation follows optimizer contract clause 9.2 (leaf size, T mod L, A divides P, A a power of
+# two). The embedding backward is a run-sorted fold over each row's occurrences, not a leaf tree,
+# so A > 1 can change embed.weight's last bits; tests/test_samba_surface.py records it as "no claim".
+# Holds no numerics: every arithmetic step calls _mojolearn_training / _mojolearn_mamba /
+# _mojolearn_transformer (see the module docstring).
 class SambaStack(object):
-    """The stack, its optimizer, schedule and RNG, over one flat float32
-    parameter buffer whose registry views the blocks read directly.
+    """A Samba-style language model with its own training loop.
 
-        cfg = SambaConfig(vocab=256, d_model=64, layers=("mamba3", "mamba3"))
-        stack = SambaStack(cfg, generator=Generator(7), lr=1e-3,
-                           lr_schedule=WarmupCosineLR(1e-3, 8, 64),
-                           max_norm=1.0, accumulation_steps=2)
-        out = stack.train_step(inputs, targets)     # (B, L) int32 each
-        stack.save_checkpoint("run.json")
+    Embedding, then a stack of `Mamba3Block` and `TransformerBlock` layers (each with
+    its own pre-norm and residual), a final RMSNorm, a tied or untied LM head and the
+    cross-entropy loss, with a full backward pass. Training uses AdamW over the
+    parameter registry (`SambaConfig.registry`), optional gradient-norm clipping, an
+    optional learning-rate schedule and gradient accumulation. All parameters live
+    in one flat float32 buffer. Attention layers use full causal attention.
 
-    `weights` (a dict keyed by the registry names) or `generator` (a
-    `Generator`) supplies the initial bits; exactly one of them. The
-    optimizer is AdamW over the registry in order; `max_norm=None` turns
-    the clip off. `accumulation_steps` splits the batch rows into that many
-    microbatches and combines by the clause 9.2 tree; a split the clause
-    does not admit is refused BY NAME before any gradient is computed. An
-    admitted split reproduces the unsplit step's block, final-norm and
-    `lm_head` gradients bit for bit, but NOT `embed.weight`'s: the embedding
-    backward is a run-sorted fold over each row's occurrences, not a leaf
-    tree, so a row seen in two microbatches sums in a different order
-    (`tests/test_samba_surface.py` records it as "no claim"). The whole
-    parameter buffer after an A > 1 step can therefore differ from A = 1 in
-    the last bits of the embedding.
+    Pass exactly one of `weights` or `generator` to supply the initial values;
+    otherwise `ValueError`.
+
+    With ``accumulation_steps > 1`` the batch rows are split into microbatches whose
+    gradients are combined in a fixed tree. A split the accumulation rule does not
+    allow is refused with `ValueError` before any gradient is computed. An allowed
+    split reproduces the unsplit step's block, final-norm and LM-head gradients bit
+    for bit, but not the embedding gradient's, which is summed per token occurrence:
+    after a step with accumulation the embedding can differ from the unsplit step in
+    the last bits.
+
+    Parameters
+    ----------
+    config : SambaConfig
+        Model shape. Anything else raises `TypeError`.
+    weights : dict of str to float32 buffer or None, default None
+        Initial parameters keyed by the registry names, with exact names and shapes.
+    generator : Generator or None, default None
+        Seeded `mojolearn.training.Generator` used to initialize the parameters
+        and to draw dropout masks.
+    lr : float, default 1e-3
+        Learning rate, used when `lr_schedule` is None.
+    betas : tuple of float, default (0.9, 0.999)
+        AdamW moment decays.
+    eps : float, default 1e-8
+        AdamW denominator term.
+    weight_decay : float, default 0.01
+        AdamW decoupled weight decay.
+    lr_schedule : schedule or None, default None
+        For example `WarmupCosineLR` or `WarmupLinearLR`.
+    max_norm : float or None, default None
+        Clip the global gradient L2 norm to this value; None turns clipping off.
+    accumulation_steps : int, default 1
+        Number of microbatches per optimizer step; must divide the batch rows.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Attributes
+    ----------
+    config : SambaConfig
+    names : list of str
+        Registry names in order.
+    optimizer : AdamW
+        The optimizer.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> from mojolearn.training import Generator, WarmupCosineLR
+    >>> cfg = mojolearn.SambaConfig(vocab=256, d_model=64, layers=("mamba3", "mamba3"))
+    >>> stack = mojolearn.SambaStack(cfg, generator=Generator(7), lr=1e-3,
+    ...                              lr_schedule=WarmupCosineLR(1e-3, 8, 64),
+    ...                              max_norm=1.0, accumulation_steps=2)
+    >>> ids = np.random.default_rng(0).integers(0, 256, (4, 32)).astype(np.int32)
+    >>> out = stack.train_step(ids[:, :-1], ids[:, 1:])
+    >>> stack.save_checkpoint("run.ckpt")
     """
 
     def __init__(self, config, weights=None, generator=None, lr=1e-3,
@@ -271,8 +369,10 @@ class SambaStack(object):
 
     # -- weights ----------------------------------------------------------
     def load_weights(self, weights):
-        """Copy the registry's tensors in from a dict keyed by name, exact
-        key set and exact shapes, float32 only."""
+        """Copy parameters in from a dict keyed by registry name.
+
+        The key set and every shape must match exactly; values must be float32.
+        """
         missing = [n for n in self.names if n not in weights]  # glue: checks weight dict names
         extra = [n for n in weights if n not in self.shapes]  # glue: checks weight dict names
         if missing or extra:
@@ -293,7 +393,7 @@ class SambaStack(object):
             _checks.flat_view(self.arrays[n], 'f')[:] = _checks.flat_view(a, 'f')
 
     def parameters(self):
-        """The registry as `{name: array}` (views of the flat buffer)."""
+        """The parameters as ``{name: array}``, views of the flat buffer in registry order."""
         return {n: self.arrays[n] for n in self.names}  # glue: dict of named tensors
 
     def _make_block(self, i):
@@ -550,23 +650,26 @@ class SambaStack(object):
                 "logits": logits}
 
     def forward(self, inputs, state=None, *, lengths=None):
-        """`(B, L)` ids in, `(B, L, vocab)` float32 logits out, no dropout.
+        """Compute logits for a batch of token ids, without dropout.
 
-        `state=None` is the TRAINING forward: the same `_forward` that
-        `loss` and `loss_and_grads` run, every block from a zero state.
-        Pass a `SambaState` (`allocate_state`) to carry the decode state
-        instead: every block's own state is read at entry and updated in
-        place, so a later `forward` or `step` on that state continues the
-        sequence (2026-09-15, the rlpair part of tools/identity_break.py).
+        Parameters
+        ----------
+        inputs : int array, shape (B, L)
+            Token ids.
+        state : SambaState or None, default None
+            None runs every block from a zero state. Pass a state from
+            `allocate_state` to carry it: each block's state is read at entry and
+            updated in place, so a later `forward` or `step` continues the sequence.
+        lengths : sequence of int or None, default None
+            Makes the batch ragged: B integers in [1, L]. Row i is real at positions
+            [0, lengths[i]) and padding after. Each real position's logits equal the row
+            run alone at its own length, and every padding position's logits are exactly
+            +0.0. Not allowed together with `state`.
 
-        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
-        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
-        after. Every real position's logits are byte for byte the row run
-        alone at its own length (the stack is a per-token embedding, causal
-        blocks, a per-token norm and head; no arithmetic changes,
-        `_ragged.py` says why) and every padding position's logits are
-        exactly `+0.0`, whatever id the input held there. It applies to the
-        stateless forward only; `lengths` with a `state` is refused."""
+        Returns
+        -------
+        logits : mojolearn.Array, shape (B, L, vocab)
+        """
         if lengths is not None:
             if state is not None:
                 raise ValueError("mojolearn.SambaStack.forward: lengths= applies to the "
@@ -585,11 +688,20 @@ class SambaStack(object):
 
     # -- decode (2026-09-15) --------------------------------------------------
     def allocate_state(self, batch_size, max_tokens):
-        """The zero decode state for `batch_size` sequences of up to
-        `max_tokens` positions: one block state per layer, in stack order
-        (`Mamba3Block.allocate_state(B)`, `TransformerBlock.allocate_state(B,
-        max_tokens)`). Every piece is caller-owned and documented by its
-        block class; nothing is hidden here."""
+        """Return a zero decode state for `batch_size` sequences of up to `max_tokens` positions.
+
+        The state holds one block state per layer in stack order (`Mamba3State` or
+        `TransformerState`), owned by the caller.
+
+        Parameters
+        ----------
+        batch_size : int
+        max_tokens : int
+
+        Returns
+        -------
+        SambaState
+        """
         b, smax = int(batch_size), int(max_tokens)
         if b < 1 or smax < 1:
             raise ValueError("mojolearn.SambaStack.allocate_state: batch_size "
@@ -602,13 +714,21 @@ class SambaStack(object):
         return SambaState(b, smax, layers)
 
     def step(self, inputs, state):
-        """One decode token per row: `(B,)` or `(B, 1)` ids in, `(B, vocab)`
-        float32 logits out, `state` updated in place. It is the stateful
-        `forward` at L = 1 with each block's `step` (the blocks' one
-        spelling for decode, their contracts' section on prefill
-        resumption); the embedding, the final RMSNorm, the head and the
-        loss arithmetic are the training primitives `_forward` calls. No
-        dropout."""
+        """Decode one token per row, updating `state` in place.
+
+        The stateful `forward` at L = 1. No dropout.
+
+        Parameters
+        ----------
+        inputs : int array, shape (B,) or (B, 1)
+            Token ids.
+        state : SambaState
+            Decode state from `allocate_state`.
+
+        Returns
+        -------
+        logits : mojolearn.Array, shape (B, vocab)
+        """
         if state is None:
             raise ValueError("mojolearn.SambaStack.step: state is required "
                              "(allocate_state(B, max_tokens) makes the fresh one)")
@@ -646,7 +766,7 @@ class SambaStack(object):
         return logits.reshape((b, l, c.vocab))
 
     def loss(self, inputs, targets):
-        """Mean cross-entropy over the targets (no dropout, no gradient)."""
+        """Mean cross-entropy of `targets` given `inputs`, both (B, L) ids; no dropout, no gradient."""
         acts = self._forward(inputs)
         y = self._ids(targets, "targets").reshape(-1)
         return float(T.cross_entropy(acts["logits"], y, numeric_mode=self.numeric_mode))
@@ -664,11 +784,27 @@ class SambaStack(object):
 
     def loss_and_grads(self, inputs, targets, num_items=None,
                        dropout_stream=None, token_offset=0):
-        """One forward and the full backward. Returns `(loss, grads)` with
-        `grads` a list in registry order. `num_items` (an integer) makes the
-        divisor of the sum-reduced loss and gradient the whole step's target
-        count, which is how a microbatch's gradient equals its slice of the
-        unsplit one; `None` divides by this call's own target count."""
+        """Run one forward and the full backward pass.
+
+        Parameters
+        ----------
+        inputs, targets : int array, shape (B, L)
+            Token ids and next-token targets. Shapes must match.
+        num_items : int or None, default None
+            Divisor of the summed loss and gradients. None uses this call's own number of
+            targets; pass the whole step's count to make a microbatch's gradient its
+            slice of the unsplit one.
+        dropout_stream : int or None, default None
+            Generator stream for the dropout mask; None applies no dropout.
+        token_offset : int, default 0
+            Position offset of this batch in the dropout stream.
+
+        Returns
+        -------
+        loss : float
+        grads : list of mojolearn.Array
+            One gradient per parameter, in registry order.
+        """
         self._refuse_no_backward()
         c = self.config
         # The fused head (lane/py-lm): the head GEMM, the loss and the head
@@ -767,11 +903,24 @@ class SambaStack(object):
                     acts["tapes"][i] = None
 
     def train_step(self, inputs, targets):
-        """One optimizer step over `(B, L)` inputs and targets: the batch
-        rows are split into `accumulation_steps` microbatches, each
-        microbatch's gradient is computed with the whole step's divisor and
-        the pieces are combined by the clause 9.2 tree. Returns a dict with
-        `loss`, `lr`, `step`, `total_norm`."""
+        """Run one optimizer step on a batch.
+
+        The batch rows are split into `accumulation_steps` microbatches; each one's
+        gradient uses the whole step's divisor and the pieces are combined in a fixed
+        tree before clipping and the AdamW update. B must be divisible by
+        `accumulation_steps`, otherwise `ValueError`.
+
+        Parameters
+        ----------
+        inputs, targets : int array, shape (B, L)
+            Token ids and next-token targets.
+
+        Returns
+        -------
+        dict
+            ``loss``, ``lr``, ``step`` and ``total_norm`` (the gradient norm before
+            clipping, or None when `max_norm` is None).
+        """
         ids = self._ids(inputs, "inputs")
         y = self._ids(targets, "targets")
         if y.shape != ids.shape:
@@ -829,6 +978,12 @@ class SambaStack(object):
         return str(profile()) if callable(profile) else "baseline"
 
     def state_dict(self, *, _copy_arrays=True):
+        """The complete training state as a dict.
+
+        Holds the configuration, parameter registry and values, optimizer moments and
+        step, schedule, generator state and numeric mode, so `load_state_dict` resumes
+        training exactly.
+        """
         o = self.optimizer
         sched = None if o.lr_schedule is None else o.lr_schedule.config()
         return {
@@ -856,6 +1011,11 @@ class SambaStack(object):
         }
 
     def load_state_dict(self, state):
+        """Restore a state made by `state_dict`; returns self.
+
+        Raises `ValueError` when the schema, configuration, numeric profile or sizes do
+        not match this stack.
+        """
         if state.get("schema") != _STATE_SCHEMA or state.get("profile") != PROFILE:
             raise ValueError("mojolearn.SambaStack: state schema/profile mismatch")
         if state.get("experiment_profile", "baseline") != self._experiment_profile():
@@ -894,16 +1054,30 @@ class SambaStack(object):
                ("exp_avg_sq", "<f4"), ("buf_initialized", "<i4"))
 
     def save_checkpoint(self, path):
-        """Atomically stream checksummed state arrays without a total size cap.
+        """Write the training state to `path` as a checksummed checkpoint.
 
-        Saving borrows parameter and optimizer storage; callers must not train
-        or mutate this stack concurrently with saving.
+        The file is written atomically. Saving reads the live parameter and optimizer
+        storage, so do not train or modify the stack while it saves.
         """
         from ._samba_checkpoint import save
         return save(path, self.state_dict(_copy_arrays=False))
 
     @classmethod
     def from_checkpoint(cls, path, numeric_mode=None):
+        """Build a stack from a checkpoint written by `save_checkpoint`.
+
+        Parameters
+        ----------
+        path : str or path-like
+        numeric_mode : str or None, default None
+            None uses the mode stored in the checkpoint.
+
+        Returns
+        -------
+        SambaStack
+
+        Raises `ValueError` when the checkpoint fails its integrity or schema checks.
+        """
         from ._samba_checkpoint import MAGIC, load
         with Path(path).open("rb") as stream:
             streamed = stream.read(len(MAGIC)) == MAGIC

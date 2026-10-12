@@ -1,19 +1,34 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Public FP32 linear-algebra surface: the GEMM, and the three
-decompositions this tree computes.
+"""Float32 linear algebra: a bit-identical matrix product, low-bit products and
+NumPy-named decompositions.
 
-``matmul`` accepts NN, NT and TN products; both transpose flags together are
-refused. It requires the process-selected IDENTICAL binding by default.
-``identical=False`` uses the selected tier without an identity claim. See
-``matmul.__doc__`` for the exact arithmetic profile and measured shape limits.
-An import does not execute a matrix product or load this extension.
+`matmul` computes ``op(a) @ op(b)`` in float32 under the profile
+``mojolearn.identical.gemm.fp32.v1``: the same bits on NVIDIA and AMD for the same
+inputs. It supports the NN, NT and TN products; asking for both transposes raises
+`ValueError`. By default it requires the identical build and raises when another
+build is loaded; ``identical=False`` uses whichever build is loaded, with no
+identity guarantee. `numeric_mode`, `profile` and `require_identical` report and
+check what this process loaded.
 
-``qr``, ``eigh`` and ``svdvals`` carry numpy's names and numpy's meanings for
-the subset this tree computes. ``qr`` (every numpy mode) and ``svd`` (U, S,
-Vh) form Q and U in the decomp lane's cells, IDENTICAL on every column
-(lane/algos-decomp, 2026-09-27); ``qr(mode='r')``, ``eigh`` and ``svdvals``
-take the HOST route on every box, a GPU box included, so they return the same
-bits on a laptop and in a datacentre by construction.
+`matmul_bf16`, `matmul_int8` and `matmul_int15` are the low-bit profiles, with
+`to_bf16`, `from_bf16`, `quantize_int8`, `dequantize_int8`, `quantize_int15` and
+`dequantize_int15` to prepare and recover their operands.
+
+`qr`, `eigh`, `svdvals` and `svd` carry NumPy's names and meanings for the modes
+they support (note that `qr` defaults to ``mode='r'``); unsupported modes are refused
+by name rather than approximated. They run on the device on a GPU install and on the
+host binding on a CPU-only install, with the same bits. `Cholesky` factors a
+symmetric positive-definite matrix and solves with the factor.
+
+Importing this module does not load the extension or run any computation.
+
+Examples
+--------
+>>> import numpy as np
+>>> from mojolearn import linalg
+>>> a = np.random.default_rng(0).random((256, 64), dtype=np.float32)
+>>> b = np.random.default_rng(1).random((64, 32), dtype=np.float32)
+>>> c = np.asarray(linalg.matmul(a, b))
 """
 from ._linalg_impl import (
     PROFILE,
