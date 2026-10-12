@@ -9,8 +9,12 @@ JSON (the racer's output, `<board>/raw/<family>/<rows>/<lane>-<dataset>.json`, n
 This copies those values into cells that have no usable quality, and records where each came from in
 `quality_source`, the convention of bench_board.stored_identity_quality.
 
-Only the SAME run is used: --raw is the directory the board run wrote (the archive of that run), and a
-cell is filled only from the race JSON its race record names. A cell that already has a numeric quality is
+By default only the SAME run is used: --raw is the directory the board run wrote (the archive of that run), and
+a cell is filled only from the race JSON its race record names.
+
+--rerun names a separate QUALITY-ONLY rerun instead (same wheel and package versions as the board run, raced
+for its quality because the board run recorded none): --raw then holds `<lane>-<dataset>.json` files written by
+bench_board_algos.py race, and each filled cell keeps the board run's timing; quality_source says so. A cell that already has a numeric quality is
 never touched. Usable = a finite number under a metric name that is not bookkeeping (output_shape, finite,
 steps, ...), as on the published measurements page.
 
@@ -46,6 +50,8 @@ def main():
     ap.add_argument("--board", required=True)
     ap.add_argument("--raw", required=True, help="the raw/ directory of the run that built this board")
     ap.add_argument("--source", required=True, help="where --raw came from, recorded in quality_source")
+    ap.add_argument("--rerun", action="store_true",
+                    help="--raw is a quality-only rerun (files <lane>-<dataset>.json), not the board run's own raw/")
     ap.add_argument("--write", action="store_true")
     a = ap.parse_args()
 
@@ -53,10 +59,14 @@ def main():
     filled, missing_raw, no_value = [], 0, 0
     races = list(board.get("races", {}).items()) + list((board.get("extra_races") or {}).items())
     for rid, race in races:
-        rel = race.get("race_json")
-        if not rel:
-            continue
-        path = os.path.join(a.raw, rel[len("raw/"):] if rel.startswith("raw/") else rel)
+        if a.rerun:
+            rel = "%s-%s.json" % (race.get("lane"), race.get("dataset"))
+            path = os.path.join(a.raw, rel)
+        else:
+            rel = race.get("race_json")
+            if not rel:
+                continue
+            path = os.path.join(a.raw, rel[len("raw/"):] if rel.startswith("raw/") else rel)
         if not os.path.exists(path):
             missing_raw += 1
             continue
@@ -75,8 +85,10 @@ def main():
                     if old:
                         c["quality_superseded"] = old
                     c["quality"] = dict(old or {}, **found)
-                    c["quality_source"] = "%s quality of arm %s in %s (%s): the run that built this cell" % (
-                        "inference" if phase == "infer" else "fit", c.get("arm"), rel, a.source)
+                    c["quality_source"] = "%s quality of arm %s in %s (%s): %s" % (
+                        "inference" if phase == "infer" else "fit", c.get("arm"), rel, a.source,
+                        "a quality-only rerun; this cell's timing is the board run's" if a.rerun
+                        else "the run that built this cell")
                 filled.append((rid, phase, c.get("arm"), sorted(found)))
     for f in filled[:40]:
         print("fill", *f)
