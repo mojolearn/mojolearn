@@ -6425,11 +6425,37 @@ class _SelectorMixin(_PrepBase):
         return pr.get(out, (n, len(keep)))
 
 
+# At threshold 0 the variance is min(variance, max - min), so a constant
+# column is exactly 0. variance > threshold is compared in binary64 on the
+# device (c2_key64, c2_gt).
 class VarianceThreshold(_SelectorMixin):
-    """sklearn.feature_selection.VarianceThreshold: population variance per
-    column over the non-NaN entries (and, at threshold 0, min(variance,
-    max - min), so a constant column is exactly 0); keeps the columns whose
-    variance exceeds the threshold."""
+    """Feature selector that removes low-variance features.
+
+    Follows scikit-learn's ``VarianceThreshold``. Fit computes each column's population variance over
+    its non-NaN values and keeps the columns whose variance is greater than ``threshold``. With the
+    default threshold of 0, a constant column has variance exactly 0 and is removed. Fit raises
+    ``ValueError`` when no column passes.
+
+    Parameters
+    ----------
+    threshold : float, default 0.0
+        Columns with variance at or below this are removed.
+
+    Attributes
+    ----------
+    variances_ : array of shape (n_features,)
+        Variance of each column.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.array([[0, 2, 0, 3], [0, 1, 4, 3], [0, 1, 1, 3]], dtype=np.float32)
+    >>> mojolearn.VarianceThreshold().fit_transform(X)
+    """
     _parameters = ("threshold",)
 
     def __init__(self, threshold=0.0):
@@ -6488,18 +6514,66 @@ def _scores_classif(X, y, kind):
 
 
 def f_classif(X, y):
-    """sklearn.feature_selection.f_classif: the one-way ANOVA F of each
-    feature against the classes, and its p-value (float32). As the
-    reference: a constant feature (or a single class) scores NaN with p-value
-    NaN, a feature constant within every class but not across them +inf with
-    p-value 0."""
+    """Compute the ANOVA F-value of each feature against the class labels.
+
+    Follows scikit-learn's ``f_classif``. As in scikit-learn, a constant feature (or a single class)
+    scores NaN with p-value NaN, and a feature that is constant within every class but not across them
+    scores ``+inf`` with p-value 0. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix.
+    y : array-like of shape (n_samples,)
+        Class labels.
+
+    Returns
+    -------
+    f_statistic : array of shape (n_features,)
+        F-value of each feature.
+    p_values : array of shape (n_features,)
+        p-value of each F-value.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.integers(0, 3, 1000)
+    >>> F, p = mojolearn.f_classif(X, y)
+    """
     return _scores_classif(X, y, "f")
 
 
 def chi2(X, y):
-    """sklearn.feature_selection.chi2 for non-negative X: chi-squared of the
-    class-by-feature sums against their expectation, and its p-value; an
-    all-zero feature is NaN with p-value NaN, as the reference."""
+    """Compute chi-squared statistics between each nonnegative feature and the class labels.
+
+    Follows scikit-learn's ``chi2``: the per-class sums of each feature are compared with their
+    expected values. ``X`` must be nonnegative (``ValueError`` otherwise). An all-zero feature scores NaN
+    with p-value NaN, as in scikit-learn. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Nonnegative feature matrix, such as counts or frequencies.
+    y : array-like of shape (n_samples,)
+        Class labels.
+
+    Returns
+    -------
+    chi2 : array of shape (n_features,)
+        Chi-squared statistic of each feature.
+    p_values : array of shape (n_features,)
+        p-value of each statistic.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 10, (1000, 8)).astype(np.float32)
+    >>> y = rng.integers(0, 2, 1000)
+    >>> stat, p = mojolearn.chi2(X, y)
+    """
     return _scores_classif(X, y, "chi2")
 
 
@@ -6531,26 +6605,109 @@ def _pearson(X, y, center, force_finite):
 
 
 def f_regression(X, y, *, center=True, force_finite=True):
-    """sklearn.feature_selection.f_regression: F of each feature's Pearson r
-    with y, and its p-value. force_finite=True (the default) gives the
-    reference's edge values (F 0, p 1 for a constant feature or target;
-    float32 max, p 0 for |r| = 1); force_finite=False its raw NaN and +inf."""
+    """Compute the F-statistic of each feature's correlation with a continuous target.
+
+    Follows scikit-learn's ``f_regression``: the F-statistic and p-value of each feature's Pearson
+    correlation with ``y``. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix.
+    y : array-like of shape (n_samples,)
+        Target values.
+    center : bool, default True
+        Center ``X`` and ``y`` before computing the correlation.
+    force_finite : bool, default True
+        Replace non-finite results, as in scikit-learn: a constant feature or target gives F 0 and
+        p-value 1, and a perfect correlation gives the largest float32 F and p-value 0. With False, the
+        raw NaN and ``+inf`` values are returned.
+
+    Returns
+    -------
+    f_statistic : array of shape (n_features,)
+        F-statistic of each feature.
+    p_values : array of shape (n_features,)
+        p-value of each F-statistic.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (2 * X[:, 0] + rng.random(1000)).astype(np.float32)
+    >>> F, p = mojolearn.f_regression(X, y)
+    """
     sc, pv, _ = _pearson(X, y, center, force_finite)
     return sc, pv
 
 
 def r_regression(X, y, *, center=True, force_finite=True):
-    """sklearn.feature_selection.r_regression: each feature's Pearson r with
-    y (float32); a constant feature or target is 0 with force_finite, NaN
-    without it."""
+    """Compute the Pearson correlation of each feature with a continuous target.
+
+    Follows scikit-learn's ``r_regression``. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix.
+    y : array-like of shape (n_samples,)
+        Target values.
+    center : bool, default True
+        Center ``X`` and ``y`` before computing the correlation.
+    force_finite : bool, default True
+        A constant feature or target gives a correlation of 0; with False it gives NaN.
+
+    Returns
+    -------
+    correlation : array of shape (n_features,)
+        Pearson correlation of each feature with ``y``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X[:, 0] + rng.random(1000).astype(np.float32)
+    >>> r = mojolearn.r_regression(X, y)
+    """
     return _pearson(X, y, center, force_finite)[2]
 
 
 class SelectKBest(_SelectorMixin):
-    """sklearn.feature_selection.SelectKBest: the k highest scores of
-    `score_func` (this module's f_classif, chi2 or f_regression compute on
-    the device; any other callable is called as is), ties broken as the
-    reference's stable argsort does (the later column wins); k='all'."""
+    """Select the features with the ``k`` highest scores.
+
+    Follows scikit-learn's ``SelectKBest``. Fit calls ``score_func(X, y)`` and keeps the ``k`` columns
+    with the highest scores. NaN scores rank lowest. Among tied scores the later column is kept, as with
+    scikit-learn's stable sort. ``score_func`` may be :func:`f_classif`, :func:`chi2`,
+    :func:`f_regression`, or any callable returning scores or a ``(scores, pvalues)`` pair.
+
+    Parameters
+    ----------
+    score_func : callable, default f_classif
+        Function of ``(X, y)`` returning the scores.
+    k : int or 'all', default 10
+        Number of columns to keep, ``0 <= k <= n_features`` (``ValueError`` otherwise), or ``'all'``.
+
+    Attributes
+    ----------
+    scores_ : array of shape (n_features,)
+        Score of each column.
+    pvalues_ : array of shape (n_features,) or None
+        p-value of each column, when ``score_func`` returns them.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 20), dtype=np.float32)
+    >>> y = (X[:, 3] > 0.5).astype(np.int64)
+    >>> Xt = mojolearn.SelectKBest(mojolearn.f_classif, k=5).fit_transform(X, y)
+    """
     _parameters = ("score_func", "k")
 
     def __init__(self, score_func=f_classif, *, k=10):
@@ -6716,24 +6873,96 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
     return Array.from_list(vals, "<f4")
 
 
+# Brute-force neighbour scans on the device; the tie-breaking noise is drawn
+# from random_state by splitmix64 (sklearn draws numpy's). See _mutual_info.
 def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                         n_jobs=None):
-    """sklearn.feature_selection.mutual_info_classif for dense X: Ross's
-    k-NN estimator against the classes for a continuous feature, the
-    contingency mutual information for a discrete one (discrete_features),
-    float32, brute-force neighbour scans on the device. The tie-breaking
-    noise is drawn from random_state by splitmix64 (the reference draws
-    numpy's)."""
+    """Estimate the mutual information between each feature and a discrete target.
+
+    Follows scikit-learn's ``mutual_info_classif`` for dense ``X``. Continuous features use the k-nearest
+    neighbor estimator of Ross (2014) against the classes; discrete features use the mutual information
+    of the contingency table. As in scikit-learn, continuous features are scaled and a small noise is
+    added to break ties. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix.
+    y : array-like of shape (n_samples,)
+        Class labels.
+    discrete_features : 'auto', bool or array-like, default 'auto'
+        Which features are discrete: ``'auto'`` (none, for dense ``X``), a bool for all features, a
+        boolean mask, or column indices.
+    n_neighbors : int, default 3
+        Number of neighbors for the continuous estimator, from 1 to 32 (``NotImplementedError``
+        otherwise).
+    copy : bool, default True
+        Accepted for scikit-learn compatibility.
+    random_state : int or None, default None
+        Seed for the tie-breaking noise. None uses seed 0. The noise uses mojolearn's own generator, so
+        results differ slightly from scikit-learn's for the same seed.
+    n_jobs : int, default None
+        Accepted for scikit-learn compatibility.
+
+    Returns
+    -------
+    mi : array of shape (n_features,)
+        Estimated mutual information of each feature, in nats.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 5), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int64)
+    >>> mi = mojolearn.mutual_info_classif(X, y, random_state=0)
+    """
     return _mutual_info(X, y, True, discrete_features, n_neighbors, random_state)
 
 
+# Brute-force neighbour scans on the device; the tie-breaking noise is drawn
+# from random_state by splitmix64 (sklearn draws numpy's). See _mutual_info.
 def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                            n_jobs=None):
-    """sklearn.feature_selection.mutual_info_regression for dense X: the
-    Kraskov k-NN estimator for a continuous feature, Ross's estimator with
-    the feature's categories as the classes for a discrete one
-    (discrete_features), float32, brute-force neighbour scans on the
-    device; noise from random_state by splitmix64."""
+    """Estimate the mutual information between each feature and a continuous target.
+
+    Follows scikit-learn's ``mutual_info_regression`` for dense ``X``. Continuous features use the
+    k-nearest neighbor estimator of Kraskov et al. (2004); discrete features use Ross's (2014) estimator
+    with the feature's categories as the classes. As in scikit-learn, continuous variables are scaled and
+    a small noise is added to break ties. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix.
+    y : array-like of shape (n_samples,)
+        Target values.
+    discrete_features : 'auto', bool or array-like, default 'auto'
+        Which features are discrete: ``'auto'`` (none, for dense ``X``), a bool for all features, a
+        boolean mask, or column indices.
+    n_neighbors : int, default 3
+        Number of neighbors, from 1 to 32 (``NotImplementedError`` otherwise).
+    copy : bool, default True
+        Accepted for scikit-learn compatibility.
+    random_state : int or None, default None
+        Seed for the tie-breaking noise. None uses seed 0. The noise uses mojolearn's own generator, so
+        results differ slightly from scikit-learn's for the same seed.
+    n_jobs : int, default None
+        Accepted for scikit-learn compatibility.
+
+    Returns
+    -------
+    mi : array of shape (n_features,)
+        Estimated mutual information of each feature, in nats.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 5), dtype=np.float32)
+    >>> y = (X[:, 0] ** 2 + 0.1 * rng.random(1000)).astype(np.float32)
+    >>> mi = mojolearn.mutual_info_regression(X, y, random_state=0)
+    """
     return _mutual_info(X, y, False, discrete_features, n_neighbors, random_state)
 
 
@@ -6778,12 +7007,58 @@ def _stage_importance_keys(pr, est, m, getter="auto"):
 
 
 class RFE(_SelectorMixin):
-    """sklearn.feature_selection.RFE: fit, rank by squared coef_ (summed over
-    classes; or feature_importances_), drop the `step` weakest, repeat.
-    Ties are broken by a STABLE ascending sort (the lower column index is
-    dropped first); the reference's quicksort leaves them unspecified.
-    importance_getter 'auto', a dotted attribute path or a callable, as the
-    reference."""
+    """Feature ranking with recursive feature elimination.
+
+    Follows scikit-learn's ``RFE``. The estimator is fitted on the current features, the ``step``
+    weakest are removed, and the process repeats until ``n_features_to_select`` remain. Importance is the
+    squared ``coef_`` (summed over rows when 2-D) or ``feature_importances_``. Ties are broken by a
+    stable sort: of two equally weak columns, the lower index is removed first (scikit-learn leaves the
+    order unspecified).
+
+    The estimator is cloned with ``type(estimator)(**estimator.get_params())`` and fitted on float32
+    data. ``predict``, ``predict_proba``, ``decision_function`` and ``score`` apply the final estimator
+    to the selected columns.
+
+    Parameters
+    ----------
+    estimator : object
+        Estimator with ``fit`` that exposes ``coef_`` or ``feature_importances_`` (``ValueError``
+        otherwise, with ``importance_getter='auto'``).
+    n_features_to_select : int or float, default None
+        Number of features to keep, or a fraction of them when a float in ``(0, 1)``. None keeps half.
+    step : int or float, default 1
+        Number of features removed per iteration, or a fraction of the features when a float in
+        ``(0, 1)``. Must be greater than 0.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility.
+    importance_getter : 'auto', str or callable, default 'auto'
+        ``'auto'`` uses ``coef_`` or ``feature_importances_``; a dotted attribute path or a callable
+        taking the estimator picks the importances instead (they are squared).
+
+    Attributes
+    ----------
+    estimator_ : object
+        Estimator fitted on the selected features.
+    n_features_ : int
+        Number of selected features.
+    support_ : list of bool
+        Mask of selected features.
+    ranking_ : array of int64
+        Rank of each feature; selected features have rank 1.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 10), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1).astype(np.int64)
+    >>> rfe = mojolearn.RFE(mojolearn.LinearDiscriminantAnalysis(), n_features_to_select=3).fit(X, y)
+    >>> rfe.support_
+    """
     _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter")
 
     def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
