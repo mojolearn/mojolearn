@@ -6382,18 +6382,76 @@ def _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor):
     return X, Y, S, int(st) == 1
 
 
+# Reference: scikit-learn `manifold/_locally_linear.py`:
+# `barycenter_kneighbors_graph`, `barycenter_weights`, `null_space` (here
+# the smallest right singular vectors of I - W, which are M's smallest
+# eigenvectors), `locally_linear_embedding`, `transform`. M = (I - W)^T
+# (I - W), its n_components + 1 smallest eigenvectors, the first dropped.
+# method='ltsa', 'hessian' and 'modified' build sklearn's M as a stacked
+# factor (M = B^T B) and take the same SVD route. eigen_solver='auto' with
+# method='standard' past 200 rows (sklearn's ARPACK policy) takes
+# `_lle_smallest`, shift-invert subspace iteration on the deflated factor;
+# 'dense' (and every other case) the full one-sided Jacobi SVD.
 class LocallyLinearEmbedding(_Base):
-    """sklearn.manifold.LocallyLinearEmbedding, method='standard' (reference:
-    scikit-learn `manifold/_locally_linear.py`: `barycenter_kneighbors_graph`,
-    `barycenter_weights`, `null_space` (here the smallest right singular
-    vectors of I - W, which are M's smallest eigenvectors),
-    `locally_linear_embedding`, `transform`). M = (I - W)^T (I - W), its
-    n_components + 1 smallest eigenvectors, the first dropped.
-    method='ltsa', 'hessian' and 'modified' build sklearn's M as a stacked
-    factor (M = B^T B) and take the same SVD route. eigen_solver='auto'
-    with method='standard' past 200 rows (sklearn's ARPACK policy) takes
-    `_lle_smallest`, shift-invert subspace iteration on the deflated factor;
-    'dense' (and every other case) the full one-sided Jacobi SVD."""
+    """Locally linear embedding.
+
+    Follows scikit-learn's ``LocallyLinearEmbedding``: reconstructs each
+    point from its Euclidean nearest neighbors and finds the low-dimensional
+    embedding that best preserves those reconstruction weights. Supports the
+    standard, LTSA, Hessian and modified variants.
+
+    Parameters
+    ----------
+    n_neighbors : int, default 5
+        Neighbors per point; must be less than ``n_samples``.
+    n_components : int, default 2
+        Embedding dimension.
+    reg : float, default 1e-3
+        Regularization of the local weight solves.
+    eigen_solver : {"auto", "dense"}, default "auto"
+        ``"dense"`` always runs the full exact solve. ``"auto"`` with
+        ``method="standard"``, more than 200 samples and ``n_components + 1 <
+        10`` uses an iterative solver for the smallest eigenvectors;
+        otherwise it runs the full solve. ``"arpack"`` raises
+        NotImplementedError.
+    tol : ignored
+    max_iter : int, default 100
+        Iteration limit of the iterative solver.
+    method : {"standard", "ltsa", "hessian", "modified"}, default "standard"
+        LLE variant. ``"hessian"`` needs ``n_neighbors > n_components *
+        (n_components + 3) / 2``; ``"modified"`` needs ``n_neighbors >=
+        n_components``.
+    hessian_tol : float, default 1e-4
+        Tolerance for ``method="hessian"``.
+    modified_tol : float, default 1e-12
+        Tolerance for ``method="modified"``.
+    neighbors_algorithm : ignored
+    random_state : int or None, default None
+        Seed of the iterative solver's start; None means 0.
+    n_jobs : ignored
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    embedding_ : ndarray of shape (n_samples, n_components)
+    reconstruction_error_ : float
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``method`` or ``eigen_solver``, or ``n_neighbors``
+        out of range for the method.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
+    >>> Y = mojolearn.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit_transform(X)
+    """
     _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
@@ -6405,6 +6463,17 @@ class LocallyLinearEmbedding(_Base):
         self.n_jobs, self.numeric_mode = n_jobs, numeric_mode
 
     def fit(self, X, y=None):
+        """Compute the embedding of X.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.method not in ("standard", "hessian", "modified", "ltsa"):
             raise ValueError(f"LocallyLinearEmbedding: unrecognized method {self.method!r}")
@@ -6461,9 +6530,34 @@ class LocallyLinearEmbedding(_Base):
         return self
 
     def fit_transform(self, X, y=None):
+        """Compute the embedding and return ``embedding_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X).embedding_
 
     def transform(self, X):
+        """Embed new points.
+
+        Each query is written as a weighted combination of its nearest
+        training points, and the same weights are applied to their
+        embeddings.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_queries, n_components), float32
+        """
         self._check("embedding_m_")
         k = self._kit()
         Q = _M.from_input(X)
@@ -6575,14 +6669,59 @@ def _consistency_factor(k, p, alpha):
     return _f32(alpha / _chi2_cdf(k, p + 2, q))
 
 
+# Reference: scikit-learn `covariance/_robust_covariance.py`:
+# `c_step`/`_c_step`, `select_candidates`, `fast_mcd`, `MinCovDet.fit`,
+# `correct_covariance`, `reweight_covariance`. The random subsets are
+# Philox permutations (a sort of counter draws, ties to the lower index)
+# and every argsort breaks ties by index. chi2 quantiles by bisection of
+# the incomplete gamma; one feature takes sklearn's 1-D shortcut.
 class MinCovDet(_Base):
-    """sklearn.covariance.MinCovDet (reference: scikit-learn
-    `covariance/_robust_covariance.py`: `c_step`/`_c_step`,
-    `select_candidates`, `fast_mcd`, `MinCovDet.fit`, `correct_covariance`,
-    `reweight_covariance`). The random subsets are Philox permutations (a
-    sort of counter draws, ties to the lower index) and every argsort breaks
-    ties by index. chi2 quantiles by bisection of the incomplete gamma; one
-    feature takes sklearn's 1-D shortcut."""
+    """Minimum covariance determinant: a robust covariance estimator.
+
+    Follows scikit-learn's ``MinCovDet`` (FastMCD), including the
+    consistency correction and the reweighting step. Random subsets come
+    from mojolearn's own generator and ties are broken by row index, so
+    results can differ from scikit-learn's for the same seed.
+
+    Parameters
+    ----------
+    store_precision : bool, default True
+        Store ``precision_``; when False it is None.
+    assume_centered : bool, default False
+        Treat the data as centered (location fixed at zero).
+    support_fraction : float or None, default None
+        Fraction of points in the raw support. None uses
+        ``ceil((n_samples + n_features + 1) / 2)`` points.
+    random_state : int or None, default None
+        Seed for the random subsets; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    location_ : ndarray of shape (n_features,)
+        Robust location (reweighted).
+    covariance_ : ndarray of shape (n_features, n_features)
+        Robust covariance (reweighted).
+    precision_ : ndarray of shape (n_features, n_features) or None
+    support_ : ndarray of shape (n_samples,), uint8
+        1 for points used in the reweighted estimate.
+    raw_location_ : ndarray of shape (n_features,)
+    raw_covariance_ : ndarray of shape (n_features, n_features)
+    raw_support_ : ndarray of shape (n_samples,), uint8
+    dist_ : ndarray of shape (n_samples,)
+        Squared Mahalanobis distances of the training points.
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).normal(size=(500, 3)).astype(np.float32)
+    >>> mcd = mojolearn.MinCovDet(random_state=0).fit(X)
+    >>> d = mcd.mahalanobis(X)
+    """
     _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode")
 
     def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, random_state=None,
@@ -6649,6 +6788,17 @@ class MinCovDet(_Base):
         return self._fast_mcd_native(k, X, h)
 
     def fit(self, X, y=None):
+        """Fit the robust location and covariance.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         M = _M.from_input(X)
@@ -6690,6 +6840,21 @@ class MinCovDet(_Base):
         return self
 
     def mahalanobis(self, X):
+        """Return squared Mahalanobis distances under the fitted model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), float32
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         if not hasattr(self, "precision_m_"):
             raise RuntimeError("MinCovDet is not fitted; call fit first")
         k = self._kit()
@@ -6697,11 +6862,31 @@ class MinCovDet(_Base):
         return d.out((d.r,))
 
     def get_precision(self):
+        """Return the precision matrix (pseudo-inverse of ``covariance_``).
+
+        Available even when ``store_precision=False``.
+
+        Returns
+        -------
+        ndarray of shape (n_features, n_features), float32
+        """
         return self.precision_m_.out()
 
     def score(self, X, y=None):
-        """sklearn EmpiricalCovariance.score: the Gaussian log-likelihood of
-        X under location_ and covariance_ (X's own empirical covariance)."""
+        """Return the Gaussian log-likelihood of X under the fitted model.
+
+        As scikit-learn's ``EmpiricalCovariance.score``: uses X's empirical
+        covariance around ``location_`` and the fitted precision.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        float
+        """
         k = self._kit()
         M = _M.from_input(X)
         cov = _emp_cov(k, k.ew("sub", M, self.location_m_), assume_centered=True)
@@ -6712,8 +6897,48 @@ class MinCovDet(_Base):
 
 
 class EllipticEnvelope(MinCovDet):
-    """sklearn.covariance.EllipticEnvelope: MinCovDet, then offset_ the
-    `contamination` percentile of -dist_ (linear interpolation, float64)."""
+    """Outlier detection for Gaussian-distributed data.
+
+    Follows scikit-learn's ``EllipticEnvelope``: fits a :class:`MinCovDet`
+    and sets ``offset_`` at the ``contamination`` percentile of the negated
+    training distances, so that about that fraction of training points is
+    labeled an outlier.
+
+    Parameters
+    ----------
+    store_precision : bool, default True
+        Store ``precision_``.
+    assume_centered : bool, default False
+        Treat the data as centered.
+    support_fraction : float or None, default None
+        Fraction of points in the raw support; see :class:`MinCovDet`.
+    contamination : float, default 0.1
+        Expected fraction of outliers, in (0, 0.5].
+    random_state : int or None, default None
+        Seed for the random subsets; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    offset_ : float
+        Threshold on the decision function.
+    location_, covariance_, precision_, support_, dist_
+        As in :class:`MinCovDet`.
+
+    Raises
+    ------
+    ValueError
+        If ``contamination`` is not in (0, 0.5].
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).normal(size=(500, 3)).astype(np.float32)
+    >>> labels = mojolearn.EllipticEnvelope(contamination=0.05, random_state=0).fit(X).predict(X)
+    """
     _parameters = ("store_precision", "assume_centered", "support_fraction", "contamination", "random_state",
                    "numeric_mode")
 
@@ -6724,6 +6949,17 @@ class EllipticEnvelope(MinCovDet):
         self.contamination = contamination
 
     def fit(self, X, y=None):
+        """Fit the robust model and set ``offset_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         if not 0 < self.contamination <= 0.5:
             raise ValueError("contamination must be in (0, 0.5]")
         super().fit(X)
@@ -6744,16 +6980,46 @@ class EllipticEnvelope(MinCovDet):
         return self
 
     def score_samples(self, X):
+        """Return the negated squared Mahalanobis distance of each sample.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), float32
+        """
         k = self._kit()
         d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
         return k.ew("scale", d, s=-1.0).out((d.r,))
 
     def decision_function(self, X):
+        """Return ``score_samples(X) - offset_``; negative means outlier.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), float32
+        """
         k = self._kit()
         d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
         return k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_).out((d.r,))
 
     def predict(self, X):
+        """Label each sample 1 (inlier) or -1 (outlier).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), int32
+        """
         from ._buffer import frombytes as _fb
         k = self._kit()
         d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
@@ -6767,15 +7033,47 @@ class EllipticEnvelope(MinCovDet):
         return lab.out((d.r,)).astype("<i4")
 
     def fit_predict(self, X, y=None):
+        """Fit the model, then return ``predict(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), int32
+        """
         return self.fit(X).predict(X)
 
+    # Lane cpu4-python: the x_metrics device program (`accuracy_fraction`:
+    # exact match counts, the weight total its PairSum, the ratio binary64
+    # on the device; the host column runs the same units) replaces the host
+    # loop `x_decomp_accuracy`.
     def score(self, X, y, sample_weight=None):
-        """sklearn OutlierMixin/ClassifierMixin.score: accuracy_score(y,
-        predict(X), sample_weight), the (weighted) share of exact label
-        matches. Lane cpu4-python: the x_metrics device program
-        (`accuracy_fraction`: exact match counts, the weight total its
-        PairSum, the ratio binary64 on the device; the host column runs the
-        same units) replaces the host loop `x_decomp_accuracy`."""
+        """Return the accuracy of ``predict(X)`` against labels y.
+
+        As scikit-learn's ``EllipticEnvelope.score``: the (weighted) fraction
+        of exact label matches.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : array-like of shape (n_samples,)
+            True labels (1 inlier, -1 outlier).
+        sample_weight : array-like of shape (n_samples,) or None, default None
+
+        Returns
+        -------
+        float
+
+        Raises
+        ------
+        ValueError
+            If y or sample_weight has a different length than X.
+        ZeroDivisionError
+            If the weights sum to zero.
+        """
         from ._expansion_metrics import accuracy_fraction
         pa = self.predict(X)
         n = len(pa)
@@ -6792,25 +7090,61 @@ class EllipticEnvelope(MinCovDet):
 
 
 # ================================================================ implicit ALS
+# Reference: the `implicit` library's `als.py` and
+# `cpu/_als.pyx::least_squares` (exact solver) and `_least_squares_cg`
+# (use_cg=True; x_decomp/cells.mojo `als_cg_row`, DEVIATION 5321). Factors
+# start as Philox uniform draws * 0.01; each iteration solves every user row
+# then every item row as one batched Cholesky per row (one thread per row,
+# sums in a fixed order). The default stays use_cg=False, the exact solve,
+# so existing fits keep their bits.
 class AlternatingLeastSquares(_Base):
-    """Implicit-feedback matrix factorization by alternating least squares
-    (Hu, Koren and Volinsky 2008; reference: the `implicit` library's
-    `als.py` and `cpu/_als.pyx::least_squares`, the exact solver): the
-    confidence matrix is alpha * user_items, factors start as uniform draws
-    * 0.01 (the Philox stream), and each iteration solves every user row
-    and then every item row as one batched Cholesky per row (one thread per
-    row, sums in a fixed order). The input is a DENSE users x items array
-    (0 = no interaction). calculate_training_loss=True records
-    `training_loss_` after every iteration: sum over observed (u, i) of
-    c_ui (1 - x_u . y_i)^2, over the rest of (x_u . y_i)^2, plus
-    regularization (|X|^2 + |Y|^2), divided by (total confidence + the
-    unobserved count) (implicit's calculate_loss), through the cells.
-    use_cg=True (implicit's default) is implicit's conjugate-gradient solver
-    (`_least_squares_cg`): each half-sweep moves every row from its previous
-    factor by `cg_steps` (3) CG steps, stopping when r.r < 1e-20
-    (x_decomp/cells.mojo `als_cg_row`, DEVIATION 5321); use_cg=False is the
-    exact Cholesky solve. OUR DEFAULT STAYS use_cg=False, the exact solve,
-    so existing fits keep their bits."""
+    """Implicit-feedback matrix factorization by alternating least squares.
+
+    The method of Hu, Koren and Volinsky (2008), following the ``implicit``
+    library: confidence is ``alpha * user_items``, and each iteration solves
+    for every user's factors and then every item's. Unlike ``implicit``,
+    ``use_cg`` defaults to False (the exact solve), and ``user_items`` is a
+    dense array (0 means no interaction).
+
+    Parameters
+    ----------
+    factors : int, default 100
+        Number of latent factors.
+    regularization : float, default 0.01
+        L2 penalty on the factors.
+    alpha : float, default 1.0
+        Confidence scale applied to ``user_items``.
+    iterations : int, default 15
+        Number of alternating sweeps.
+    use_cg : bool, default False
+        Use ``implicit``'s conjugate-gradient solver (``cg_steps`` steps per
+        row per half-sweep) instead of the exact Cholesky solve.
+    calculate_training_loss : bool, default False
+        Record ``training_loss_`` after every iteration (``implicit``'s loss).
+    random_state : int or None, default None
+        Seed of the starting factors; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+    cg_steps : int, default 3
+        Conjugate-gradient steps per row with ``use_cg=True``; must be at
+        least 1.
+
+    Attributes
+    ----------
+    user_factors, user_factors_ : ndarray of shape (n_users, factors)
+    item_factors, item_factors_ : ndarray of shape (n_items, factors)
+    training_loss_ : list of float
+        Only with ``calculate_training_loss=True``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> R = (np.random.default_rng(0).random((200, 50)) < 0.05).astype(np.float32)
+    >>> als = mojolearn.AlternatingLeastSquares(factors=8, iterations=5, random_state=0).fit(R)
+    >>> ids, scores = als.recommend(0, R, N=5)
+    """
     _parameters = ("factors", "regularization", "alpha", "iterations", "use_cg", "cg_steps",
                    "calculate_training_loss", "random_state", "numeric_mode")
 
@@ -6821,6 +7155,24 @@ class AlternatingLeastSquares(_Base):
         self.random_state, self.numeric_mode, self.cg_steps = random_state, numeric_mode, cg_steps
 
     def fit(self, user_items, show_progress=False):
+        """Fit user and item factors.
+
+        Parameters
+        ----------
+        user_items : array-like of shape (n_users, n_items)
+            Dense interaction strengths; 0 means no interaction.
+        show_progress : bool, default False
+            Accepted for ``implicit`` compatibility; nothing is shown.
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If ``use_cg=True`` and ``cg_steps < 1``.
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         R = _M.from_input(user_items, "user_items")
@@ -6885,9 +7237,33 @@ class AlternatingLeastSquares(_Base):
         return (_fb(order[:c].tobytes(), "<i4", (c,)), _fb(vals[:c].tobytes(), "<f4", (c,)))
 
     def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):
-        """(ids, scores) of the N best items for one user: x_u . y_i, ties to
-        the lower item id; items the user interacted with (row `userid` of
-        user_items, or user_items itself when it is one row) are skipped."""
+        """Return the top N items for one user.
+
+        Items are ranked by the dot product of user and item factors, ties
+        going to the lower item id.
+
+        Parameters
+        ----------
+        userid : int
+            Row of the user.
+        user_items : array-like of shape (n_users, n_items) or (1, n_items), or None
+            Interactions used to filter items the user already has: row
+            ``userid``, or the single row given.
+        N : int, default 10
+            Number of items to return; must be non-negative.
+        filter_already_liked_items : bool, default True
+            Skip items with a nonzero entry in the user's row.
+
+        Returns
+        -------
+        ids : ndarray of shape (<= N,), int32
+        scores : ndarray of shape (<= N,), float32
+
+        Raises
+        ------
+        ValueError
+            If ``N`` is negative or ``user_items`` has no matching row.
+        """
         self._check_fit()
         k = self._kit()
         U = self.user_factors_m_.rows(userid, userid + 1)
@@ -6904,8 +7280,22 @@ class AlternatingLeastSquares(_Base):
         return self._topn(k, S, int(N), skip)
 
     def similar_items(self, itemid, N=10):
-        """(ids, scores) of the N items whose factors have the largest cosine
-        with item `itemid` (itself included, as implicit returns it)."""
+        """Return the N items most similar to one item.
+
+        Similarity is the cosine of the item factors. The item itself is
+        included, as ``implicit`` returns it.
+
+        Parameters
+        ----------
+        itemid : int
+        N : int, default 10
+            Must be non-negative.
+
+        Returns
+        -------
+        ids : ndarray of shape (<= N,), int32
+        scores : ndarray of shape (<= N,), float32
+        """
         self._check_fit()
         k = self._kit()
         Y = self.item_factors_m_
@@ -6918,8 +7308,47 @@ class AlternatingLeastSquares(_Base):
 
 
 class SparseCoder(_SparseCoding):
-    """sklearn.decomposition.SparseCoder: sparse coding against a FIXED
-    dictionary (`_BaseSparseCoding._transform`), the encoders of `_sparse_encode`."""
+    """Sparse coding against a fixed, precomputed dictionary.
+
+    Follows scikit-learn's ``SparseCoder``; ``transform`` encodes each row
+    with :func:`sparse_encode`. Nothing is learned, so ``fit`` does nothing.
+
+    Parameters
+    ----------
+    dictionary : array-like of shape (n_components, n_features)
+        Dictionary atoms, one per row.
+    transform_algorithm : {"omp", "lasso_lars", "lasso_cd", "lars", "threshold"}, default "omp"
+        Coding method. An unknown value raises ValueError at construction.
+    transform_n_nonzero_coefs : int or None, default None
+        Nonzero coefficients for ``"omp"`` and ``"lars"``.
+    transform_alpha : float or None, default None
+        Penalty or threshold; None uses 1.0.
+    split_sign : bool, default False
+        Return the positive and negative parts of the code as separate
+        columns.
+    n_jobs : ignored
+    positive_code : bool, default False
+        Force the code to be non-negative.
+    transform_max_iter : int, default 1000
+        Maximum iterations of the Lasso methods.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+    n_components_ : int
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> coder = mojolearn.SparseCoder(rng.random((5, 8), dtype=np.float32), transform_n_nonzero_coefs=2)
+    >>> code = coder.transform(rng.random((100, 8), dtype=np.float32))
+    """
     _parameters = ("dictionary", "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha",
                    "split_sign", "positive_code", "transform_max_iter", "numeric_mode")
 
@@ -6936,9 +7365,26 @@ class SparseCoder(_SparseCoding):
         self.n_components_, self.n_features_in_ = self.components_m_.r, self.components_m_.c
 
     def fit(self, X, y=None):
+        """Do nothing and return self (the dictionary is fixed).
+
+        Returns
+        -------
+        self
+        """
         return self
 
     def fit_transform(self, X, y=None):
+        """Return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.transform(X)
 
 
