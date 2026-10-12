@@ -4780,17 +4780,57 @@ def _spline_fused(mode):
 
 
 class SplineTransformer(_PrepBase):
-    """sklearn.preprocessing.SplineTransformer: per feature, B-splines of
-    `degree` on `n_knots` base knots ('uniform' over the training range,
-    'quantile': numpy linear percentiles, or an explicit (n_knots,
-    n_features) array), extended by `degree` knots at each end at the edge
-    spacing, or wrapped for 'periodic'; extrapolation 'constant', 'continue',
-    'linear', 'periodic' or 'error'; sample_weight weighs the knots (the
-    reference's weighted percentile for 'quantile', the range over rows of
-    nonzero weight for 'uniform'); handle_missing 'error' or 'zeros' (a NaN
-    is left out of the knots and encodes as a zero block); order 'C' or 'F'.
-    Dense float32 output (sparse_output is refused: there is no sparse
-    Array)."""
+    """Generate B-spline basis features for each feature.
+
+    Follows scikit-learn's ``SplineTransformer``. Each column is expanded into B-splines of ``degree`` on
+    ``n_knots`` base knots, extended by ``degree`` knots at each end at the edge spacing (or wrapped, for
+    periodic splines). The output is always a dense float32 array.
+
+    Parameters
+    ----------
+    n_knots : int, default 5
+        Number of base knots, at least 2 (``ValueError`` otherwise). Ignored when ``knots`` is an array.
+    degree : int, default 3
+        Polynomial degree of the splines, from 0 to 7 (``ValueError`` otherwise).
+    knots : {'uniform', 'quantile'} or array-like of shape (n_knots, n_features), default 'uniform'
+        ``'uniform'`` spaces the knots evenly over the training range, ``'quantile'`` places them at
+        numpy's linear percentiles, and an array gives them explicitly (sorted, without duplicates).
+    extrapolation : {'constant', 'continue', 'linear', 'periodic', 'error'}, default 'constant'
+        Behavior outside the knot range. ``'error'`` makes transform raise ``ValueError``.
+        ``'periodic'`` requires ``degree < n_knots``.
+    include_bias : bool, default True
+        Keep the last spline of each feature; when False it is dropped.
+    order : {'C', 'F'}, default 'C'
+        Memory order of the output array.
+    handle_missing : {'error', 'zeros'}, default 'error'
+        ``'error'`` raises ``ValueError`` on NaN; ``'zeros'`` leaves NaN out of the knots and encodes it
+        as a block of zeros.
+    sparse_output : bool, default False
+        Must be False; True raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    bsplines_ : list of arrays
+        Per feature, the full knot vector of its splines (scikit-learn stores ``BSpline`` objects here).
+    n_features_in_ : int
+        Number of columns seen in fit.
+    n_features_out_ : int
+        Number of output columns.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Notes
+    -----
+    ``fit`` and ``fit_transform`` accept ``sample_weight`` (nonnegative), which weights the knot
+    placement: the weighted percentile for ``'quantile'``, and the range over rows of nonzero weight for
+    ``'uniform'``. Fit needs at least two rows.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 3), dtype=np.float32)
+    >>> Xt = mojolearn.SplineTransformer(n_knots=6, degree=3).fit_transform(X)
+    """
     _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
                    "sparse_output")
     _EXTRAP = {"constant": 0, "continue": 1, "error": 1, "linear": 2, "periodic": 3}
@@ -4959,8 +4999,32 @@ class SplineTransformer(_PrepBase):
 
 
 class Binarizer(_PrepBase):
-    """sklearn.preprocessing.Binarizer: 1 where X > threshold, else 0 (NaN is
-    kept). Stateless."""
+    """Set feature values to 0 or 1 by a threshold.
+
+    Follows scikit-learn's ``Binarizer``: values greater than ``threshold`` become 1, the others 0; NaN
+    is kept. The transformer is stateless: fit only records the number of columns. Input and output are
+    float32.
+
+    Parameters
+    ----------
+    threshold : float, default 0.0
+        Values above this become 1.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.array([[-1.0, 0.5], [2.0, 0.0]], dtype=np.float32)
+    >>> mojolearn.Binarizer(threshold=0.25).fit_transform(X)
+    """
     _parameters = ("threshold", "copy")
 
     def __init__(self, *, threshold=0.0, copy=True):
@@ -5283,12 +5347,27 @@ def _label_codes_device(pr, lb, cats):
 
 
 class LabelEncoder(_PrepBase):
-    """sklearn.preprocessing.LabelEncoder: classes_ are the sorted distinct
-    labels (numeric labels on the device: sort + run scan; str labels in
-    Python), transform is each label's index (a device binary search),
-    int32. An unseen label is refused, as the reference refuses it. A
-    numeric label buffer crosses as its raw words (`_label_buffer`, lane
-    neural-pass137); fit_transform is then one program."""
+    """Encode target labels as integers ``0`` to ``n_classes - 1``.
+
+    Follows scikit-learn's ``LabelEncoder``. ``classes_`` are the sorted distinct labels and
+    ``transform`` returns each label's index as int32. Numeric and string labels are supported. A label
+    not seen in fit raises ``ValueError`` in ``transform`` and ``inverse_transform``.
+
+    Attributes
+    ----------
+    classes_ : array or list
+        Sorted distinct labels: an int64 array for integer labels, a float64 array for real labels,
+        otherwise a list.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> enc = mojolearn.LabelEncoder().fit(np.array([10, 30, 20, 10]))
+    >>> enc.transform(np.array([30, 10]))
+    >>> enc.inverse_transform(np.array([0, 2]))
+    """
     _parameters = ()
 
     def fit(self, y):
@@ -5409,16 +5488,48 @@ def _class_words(pr, out, n, ints):
 
 
 class LabelBinarizer(_PrepBase):
-    """sklearn.preprocessing.LabelBinarizer for a single-label target: one
-    int32 column per class (one column, the second class, for two classes;
-    a NEG column for one), pos_label / neg_label; an unseen label is a NEG
-    row. Numeric labels take the device route, str labels Python's.
-    inverse_transform is the reference's (argmax for multiclass, the
-    threshold for binary and multilabel). A multilabel indicator y (2-D,
-    more than one column, at most two distinct integral values) is the
-    reference's `multilabel-indicator`: classes_ are the column indices, a
-    nonzero entry is pos_label and a zero neg_label. sparse_output is
-    refused."""
+    """Binarize labels in a one-vs-all fashion.
+
+    Follows scikit-learn's ``LabelBinarizer``. ``transform`` returns an int32 matrix with one column per
+    class holding ``pos_label`` for the row's class and ``neg_label`` elsewhere; with two classes it
+    returns a single column (positive for the second class), and with one class a single column of
+    ``neg_label``. A label not seen in fit becomes a row of ``neg_label``. Numeric and string labels are
+    supported.
+
+    A 2-D ``y`` with more than one column and at most two distinct integer values is treated as a
+    multilabel indicator, as in scikit-learn: ``classes_`` are the column indices, and each nonzero
+    entry becomes ``pos_label`` and each zero ``neg_label``.
+
+    Parameters
+    ----------
+    neg_label : int, default 0
+        Value for negative entries.
+    pos_label : int, default 1
+        Value for positive entries; must be greater than ``neg_label`` (``ValueError`` otherwise).
+    sparse_output : bool, default False
+        Must be False; True raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    classes_ : array or list
+        Class labels.
+    y_type_ : str
+        ``'binary'``, ``'multiclass'`` or ``'multilabel-indicator'``.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Notes
+    -----
+    ``inverse_transform(Y, threshold=None)`` takes the largest column for multiclass output and applies
+    ``threshold`` (by default halfway between ``neg_label`` and ``pos_label``) for binary and multilabel
+    output, as in scikit-learn.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> lb = mojolearn.LabelBinarizer().fit(np.array([1, 2, 6, 4, 2]))
+    >>> lb.transform(np.array([1, 6]))
+    """
     _parameters = ("neg_label", "pos_label", "sparse_output")
 
     def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False):
@@ -5592,11 +5703,38 @@ def _mlb_flat(y):
 
 
 class MultiLabelBinarizer(_PrepBase):
-    """sklearn.preprocessing.MultiLabelBinarizer: classes_ the sorted union
-    of every sample's labels (or `classes` as given, in that order), transform
-    an int32 indicator matrix; an unseen label is ignored (the reference
-    warns). Numeric labels take the device route (a sort, a binary search, a
-    scatter of ones), str labels Python's. sparse_output is refused."""
+    """Convert sets of labels to a binary indicator matrix.
+
+    Follows scikit-learn's ``MultiLabelBinarizer``. ``y`` is an iterable of label collections, one per
+    sample. ``transform`` returns an int32 matrix with a 1 where the sample has the class. A label not
+    seen in fit is ignored (scikit-learn also warns). Numeric and string labels are supported.
+
+    Parameters
+    ----------
+    classes : array-like, default None
+        Class labels in the order of the output columns. None uses the sorted union of all labels in
+        fit.
+    sparse_output : bool, default False
+        Must be False; True raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    classes_ : array or list
+        Class labels: an int64 array for integer labels, a float64 array for real labels, otherwise a
+        list.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Notes
+    -----
+    ``inverse_transform`` returns a list with one tuple of labels per row.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> mlb = mojolearn.MultiLabelBinarizer()
+    >>> mlb.fit_transform([[1, 2], [3], [2, 3]])
+    """
     _parameters = ("classes", "sparse_output")
 
     def __init__(self, *, classes=None, sparse_output=False):
