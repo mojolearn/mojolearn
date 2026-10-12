@@ -1,16 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""STL, Season-Trend decomposition by Loess, statsmodels-shaped
-(`statsmodels.tsa.seasonal.STL`): `STL(endog, period=12).fit()` returns the
-seasonal, trend and residual components and the robustness weights. The
-arithmetic is `sequence/stl.mojo`, statsmodels' `_stl.pyx` loops in float32,
-one series per GPU thread (or host loop iteration).
-
-`endog` may be one series (1-D) or a batch `(batch_size, n_obs)`, one series
-per row, all sharing the configuration; the batch is the GPU's parallelism.
-Refused by name: `period=None` (the reference infers it from a pandas index;
-pass it), float64 input, degrees other than 0 and 1 (the reference's own
-bound)."""
+"""STL, Season-Trend decomposition by Loess, following
+``statsmodels.tsa.seasonal.STL``. Series are decomposed on the GPU."""
 from . import _portable_math as math
 
 from ._optional_numpy import require_numpy
@@ -20,8 +11,14 @@ from . import _backend
 
 
 class DecomposeResult:
-    """observed, seasonal, trend, resid, weights: arrays of the input's
-    shape."""
+    """Result of :meth:`STL.fit`.
+
+    Attributes
+    ----------
+    observed, seasonal, trend, resid, weights : ndarray, float32
+        The input series, its seasonal, trend and residual components, and
+        the robustness weights, each shaped like the input.
+    """
 
     def __init__(self, observed, seasonal, trend, resid, weights):
         self.observed = observed
@@ -31,7 +28,62 @@ class DecomposeResult:
         self.weights = weights
 
 
+# The arithmetic is `sequence/stl.mojo`, statsmodels' `_stl.pyx` loops in
+# float32, one series per GPU thread (or host loop iteration).
 class STL:
+    """Season-Trend decomposition using Loess.
+
+    Splits each series into seasonal, trend and residual components with
+    statsmodels' STL algorithm and parameters. ``endog`` may be one series
+    of shape ``(n_obs,)`` or a batch of shape ``(batch_size, n_obs)``, one
+    series per row, all sharing the configuration.
+
+    Unlike statsmodels, ``period`` is required: statsmodels can infer it from
+    a pandas index, which is not supported here.
+
+    Parameters
+    ----------
+    endog : array-like of shape (n_obs,) or (batch_size, n_obs)
+        The series, float32. float64 raises TypeError.
+    period : int
+        Periodicity of the season, at least 2. Required.
+    seasonal : int, default 7
+        Length of the seasonal smoother (odd).
+    trend : int or None, default None
+        Length of the trend smoother. None uses statsmodels' default, the
+        smallest odd integer at least ``1.5 * period / (1 - 1.5 / seasonal)``.
+    low_pass : int or None, default None
+        Length of the low-pass filter. None uses the smallest odd integer
+        greater than ``period``.
+    seasonal_deg, trend_deg, low_pass_deg : {0, 1}, default 1
+        Degree of each Loess fit (0 constant, 1 linear).
+    robust : bool, default False
+        Use robust fitting with outer iterations and robustness weights.
+    seasonal_jump, trend_jump, low_pass_jump : int, default 1
+        Evaluate each smoother every ``jump`` points and interpolate between.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``); None uses the process default (see
+        :func:`mojolearn.set_numeric_mode`).
+
+    Raises
+    ------
+    TypeError
+        If ``endog`` is float64.
+    ValueError
+        If ``period`` is missing or below 2, a degree is not 0 or 1, or
+        ``endog`` is not 1-D or 2-D.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> t = np.arange(144, dtype=np.float32)
+    >>> y = 0.05 * t + np.sin(2 * np.pi * t / 12).astype(np.float32)
+    >>> res = mojolearn.STL(y, period=12).fit()
+    >>> res.seasonal.shape
+    (144,)
+    """
+
     def __init__(self, endog, period=None, seasonal=7, trend=None, low_pass=None, seasonal_deg=1,
                  trend_deg=1, low_pass_deg=1, robust=False, seasonal_jump=1, trend_jump=1,
                  low_pass_jump=1, numeric_mode=None):
@@ -69,12 +121,30 @@ class STL:
 
     @property
     def config(self):
+        """The decomposition settings as a dict."""
         return dict(period=self.period, seasonal=self.seasonal, seasonal_deg=self.seasonal_deg,
                     seasonal_jump=self.seasonal_jump, trend=self.trend, trend_deg=self.trend_deg,
                     trend_jump=self.trend_jump, low_pass=self.low_pass, low_pass_deg=self.low_pass_deg,
                     low_pass_jump=self.low_pass_jump, robust=self.robust)
 
     def fit(self, inner_iter=None, outer_iter=None):
+        """Run the decomposition.
+
+        Parameters
+        ----------
+        inner_iter : int or None, default None
+            Inner loop iterations. None uses 2 when ``robust`` and 5
+            otherwise, as statsmodels does.
+        outer_iter : int or None, default None
+            Outer (robustness) iterations. None uses 15 when ``robust`` and 0
+            otherwise.
+
+        Returns
+        -------
+        DecomposeResult
+            ``observed``, ``seasonal``, ``trend``, ``resid`` and ``weights``,
+            each shaped like ``endog``.
+        """
         if inner_iter is None:
             inner_iter = 2 if self.robust else 5
         if outer_iter is None:
