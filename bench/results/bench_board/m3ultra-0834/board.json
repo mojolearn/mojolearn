@@ -55369,7 +55369,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 824.5,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -55415,7 +55417,8 @@
       50.03608300467022
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 131.1742500110995
+     "warmup_ms": 131.1742500110995,
+     "quality_source": "fit quality of arm ours in avgpool1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -55463,7 +55466,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 825.0,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -55509,7 +55514,8 @@
       47.314416005974635
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 128.8230000063777
+     "warmup_ms": 128.8230000063777,
+     "quality_source": "fit quality of arm ours-fast in avgpool1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -56581,7 +56587,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1422.0,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -56628,7 +56636,8 @@
       145.54458399652503
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 278.3694159879815
+     "warmup_ms": 278.3694159879815,
+     "quality_source": "fit quality of arm ours in avgpool2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -56676,7 +56685,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1420.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -56723,7 +56734,8 @@
       148.16970800166018
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 298.4993330028374
+     "warmup_ms": 298.4993330028374,
+     "quality_source": "fit quality of arm ours-fast in avgpool2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -60811,7 +60823,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1018.5,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 4.089591594664184e-06
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -60857,7 +60871,8 @@
       72.56462500663474
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 298.49841599934734
+     "warmup_ms": 298.49841599934734,
+     "quality_source": "fit quality of arm ours in batchnorm1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -60907,7 +60922,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1016.7,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 4.517998801340749e-08
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -60953,7 +60970,8 @@
       66.55958399642259
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 275.890666001942
+     "warmup_ms": 275.890666001942,
+     "quality_source": "fit quality of arm ours-fast in batchnorm1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -62054,7 +62072,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 883.7,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 2.3470175712962522e-05
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -62100,7 +62120,8 @@
       62.144083000021055
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 362.69291598000564
+     "warmup_ms": 362.69291598000564,
+     "quality_source": "fit quality of arm ours in batchnorm2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -62150,7 +62171,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 883.1,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 4.64484510257112e-08
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -62196,7 +62219,8 @@
       55.4288339917548
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 334.63987498544157
+     "warmup_ms": 334.63987498544157,
+     "quality_source": "fit quality of arm ours-fast in batchnorm2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -67892,7 +67916,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2005.1,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -67948,7 +67974,11 @@
       "previous_median_ms": 0.13395800488069654,
       "previous_hash": "8c2c7037eb44d5c4",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours in binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -67997,7 +68027,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2090.2,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -68045,7 +68077,11 @@
       0.10208299499936402
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 0.17312500858679414
+     "warmup_ms": 0.17312500858679414,
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours-fast in binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -68560,7 +68596,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 409.9,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -68616,7 +68654,11 @@
       "previous_median_ms": 0.12029201025143266,
       "previous_hash": "2c7c25943424d016",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours in binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -68665,7 +68707,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 409.4,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -68713,7 +68757,11 @@
       0.07008301327005029
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 0.13062500511296093
+     "warmup_ms": 0.13062500511296093,
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours-fast in binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -85332,7 +85380,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2865.0,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -85382,7 +85432,8 @@
       236.66808399138972
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 870.9919589746278
+     "warmup_ms": 870.9919589746278,
+     "quality_source": "fit quality of arm ours in conv1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -85430,7 +85481,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 3039.4,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -85480,7 +85533,8 @@
       223.39304100023583
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 800.2339169906918
+     "warmup_ms": 800.2339169906918,
+     "quality_source": "fit quality of arm ours-fast in conv1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -86593,7 +86647,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2059.9,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -86643,7 +86699,8 @@
       109.38466701190919
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 461.925625015283
+     "warmup_ms": 461.925625015283,
+     "quality_source": "fit quality of arm ours in conv2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -86691,7 +86748,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2235.8,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -86741,7 +86800,8 @@
       93.48220800166018
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 401.4491249981802
+     "warmup_ms": 401.4491249981802,
+     "quality_source": "fit quality of arm ours-fast in conv2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -102624,7 +102684,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1176.8,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -102666,7 +102728,8 @@
       82.67237499239855
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 191.38633299735375
+     "warmup_ms": 191.38633299735375,
+     "quality_source": "fit quality of arm ours in dropout2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -102715,7 +102778,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1175.7,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -102757,7 +102822,8 @@
       83.06145798997022
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 218.41375000076368
+     "warmup_ms": 218.41375000076368,
+     "quality_source": "fit quality of arm ours-fast in dropout2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -116625,7 +116691,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1739.8,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 1.389011747758016
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -116672,7 +116740,8 @@
       193.9645000093151
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 619.7032500058413
+     "warmup_ms": 619.7032500058413,
+     "quality_source": "fit quality of arm ours in gcn-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -116721,7 +116790,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1913.8,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 1.389011747758016
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -116768,7 +116839,8 @@
       188.5204169957433
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 603.6977910262067
+     "warmup_ms": 603.6977910262067,
+     "quality_source": "fit quality of arm ours-fast in gcn-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -117863,7 +117935,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1532.8,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 1.4468896588427946
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -117910,7 +117984,8 @@
       144.28466599201784
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 402.7936249913182
+     "warmup_ms": 402.7936249913182,
+     "quality_source": "fit quality of arm ours in gcn-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -117959,7 +118034,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1550.6,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 1.4468896588427946
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -118006,7 +118083,8 @@
       138.50866700522602
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 392.73041699198075
+     "warmup_ms": 392.73041699198075,
+     "quality_source": "fit quality of arm ours-fast in gcn-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -119100,7 +119178,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 466.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -119142,7 +119222,8 @@
       4.05112499720417
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 14.928916993085295
+     "warmup_ms": 14.928916993085295,
+     "quality_source": "fit quality of arm ours in global-avgpool-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -119190,7 +119271,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 464.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -119232,7 +119315,8 @@
       4.501125018578023
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 38.85016599087976
+     "warmup_ms": 38.85016599087976,
+     "quality_source": "fit quality of arm ours-fast in global-avgpool-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -120260,7 +120344,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 459.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -120302,7 +120388,8 @@
       4.268749995389953
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 13.832124997861683
+     "warmup_ms": 13.832124997861683,
+     "quality_source": "fit quality of arm ours in global-maxpool-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -120350,7 +120437,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 459.4,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -120392,7 +120481,8 @@
       3.482166997855529
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 35.98012498696335
+     "warmup_ms": 35.98012498696335,
+     "quality_source": "fit quality of arm ours-fast in global-maxpool-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -121421,7 +121511,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1843.2,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 1.410360608225113
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -121469,7 +121561,8 @@
       386.88574999105185
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 740.6499159988016
+     "warmup_ms": 740.6499159988016,
+     "quality_source": "fit quality of arm ours in graphsage-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -121518,7 +121611,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2015.1,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 1.410360608225113
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -121566,7 +121661,8 @@
       376.7167499754578
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 724.0879579912871
+     "warmup_ms": 724.0879579912871,
+     "quality_source": "fit quality of arm ours-fast in graphsage-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -122672,7 +122768,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1479.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 1.4512292630816335
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -122720,7 +122818,8 @@
       123.22933299583383
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 367.4476250016596
+     "warmup_ms": 367.4476250016596,
+     "quality_source": "fit quality of arm ours in graphsage-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -122769,7 +122868,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1499.5,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 1.4512292630816335
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -122817,7 +122918,8 @@
       120.66654200316407
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 354.7366250131745
+     "warmup_ms": 354.7366250131745,
+     "quality_source": "fit quality of arm ours-fast in graphsage-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -146776,7 +146878,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 63.5,
-     "quality": {},
+     "quality": {
+      "equal_fraction_vs_sklearn": 1.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -146823,7 +146927,8 @@
       "previous_median_ms": 5.425875016953796,
       "previous_hash": "baa7d556f04c86b9",
       "previous_status": "ok"
-     }
+     },
+     "quality_source": "fit quality of arm ours in jl-min-dim-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -146871,7 +146976,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 63.1,
-     "quality": {},
+     "quality": {
+      "equal_fraction_vs_sklearn": 1.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -146910,7 +147017,8 @@
       5.37508400157094
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 5.866207997314632
+     "warmup_ms": 5.866207997314632,
+     "quality_source": "fit quality of arm ours-fast in jl-min-dim-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -147174,7 +147282,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 5088.4,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -147237,7 +147347,11 @@
       "previous_median_ms": 1423.45383297652,
       "previous_hash": "7dac34b84c18dfdc",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours in kbins-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -147288,7 +147402,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 5980.9,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -147343,7 +147459,11 @@
       299.56891600158997
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 321.41854098881595
+     "warmup_ms": 321.41854098881595,
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours-fast in kbins-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -147920,7 +148040,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 578.4,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -147983,7 +148105,11 @@
       "previous_median_ms": 182.56629101233557,
       "previous_hash": "51fc5b72917da479",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours in kbins-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -148034,7 +148160,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 613.0,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -148089,7 +148217,11 @@
       24.120749993016943
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 44.29520800476894
+     "warmup_ms": 44.29520800476894,
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours-fast in kbins-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -148671,7 +148803,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2637.6,
-     "quality": {},
+     "quality": {
+      "rbf_feature_distance_relative_stress": 0.6101116359640374,
+      "subspace_cos_vs_sklearn": 0.9999999999961598
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -148736,7 +148871,8 @@
       "previous_median_ms": 1036.137791001238,
       "previous_hash": "1f95716fae428c82",
       "previous_status": "ok"
-     }
+     },
+     "quality_source": "fit quality of arm ours in kernel-pca-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -148792,7 +148928,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2680.7,
-     "quality": {},
+     "quality": {
+      "rbf_feature_distance_relative_stress": 0.6101116286319956,
+      "subspace_cos_vs_sklearn": 0.9999999999995857
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -148863,7 +149002,8 @@
       "baseline_ms": 1048.9081669948064,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in kernel-pca-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -149530,7 +149670,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1731.8,
-     "quality": {},
+     "quality": {
+      "rbf_feature_distance_relative_stress": 0.5457090496879297,
+      "subspace_cos_vs_sklearn": 0.9999999999936111
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -149595,7 +149738,8 @@
       "previous_median_ms": 948.8050420186482,
       "previous_hash": "b2fa7c2d3c246cd9",
       "previous_status": "ok"
-     }
+     },
+     "quality_source": "fit quality of arm ours in kernel-pca-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -149651,7 +149795,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1772.4,
-     "quality": {},
+     "quality": {
+      "rbf_feature_distance_relative_stress": 0.545709853077397,
+      "subspace_cos_vs_sklearn": 0.9999999999993305
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -149722,7 +149869,8 @@
       "baseline_ms": 847.3344590165652,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in kernel-pca-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -153602,7 +153750,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 812.2,
      "quality": {
-      "output_shape": "100000x16"
+      "output_shape": "100000x16",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -153659,7 +153809,11 @@
       "previous_median_ms": 46.64366698125377,
       "previous_hash": "de224838a841fa8c",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x16"
+     },
+     "quality_source": "fit quality of arm ours in label-binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -153707,7 +153861,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 794.0,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -153771,7 +153928,8 @@
       "baseline_ms": 325.5774589779321,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in label-binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -154295,7 +154453,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 5725.5,
      "quality": {
-      "output_shape": "100000x259"
+      "output_shape": "100000x259",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -154352,7 +154512,11 @@
       "previous_median_ms": 558.649874990806,
       "previous_hash": "0703e6f6396640c4",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x259"
+     },
+     "quality_source": "fit quality of arm ours in label-binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -154400,7 +154564,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 5734.6,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -154464,7 +154631,8 @@
       "baseline_ms": 1361.8820419942494,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in label-binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -154988,7 +155156,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 494.4,
      "quality": {
-      "output_shape": "100000"
+      "output_shape": "100000",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -155044,7 +155214,11 @@
       "previous_median_ms": 16.917374974582344,
       "previous_hash": "f6f7af49c5eac26f",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000"
+     },
+     "quality_source": "fit quality of arm ours in label-encoder-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -155093,7 +155267,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 468.7,
      "quality": {
-      "output_shape": 100000.0
+      "output_shape": 100000.0,
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -155157,7 +155333,11 @@
       "baseline_ms": 297.3273330135271,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_superseded": {
+      "output_shape": 100000.0
+     },
+     "quality_source": "fit quality of arm ours-fast in label-encoder-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -155676,7 +155856,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 454.2,
      "quality": {
-      "output_shape": "100000"
+      "output_shape": "100000",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -155732,7 +155914,11 @@
       "previous_median_ms": 11.475957988295704,
       "previous_hash": "3e8593d661cc23dc",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000"
+     },
+     "quality_source": "fit quality of arm ours in label-encoder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -155781,7 +155967,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 469.7,
      "quality": {
-      "output_shape": 100000.0
+      "output_shape": 100000.0,
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -155845,7 +156033,11 @@
       "baseline_ms": 312.80766701092944,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_superseded": {
+      "output_shape": 100000.0
+     },
+     "quality_source": "fit quality of arm ours-fast in label-encoder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -164748,7 +164940,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1275.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 2.2703361307204486e-07
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -164792,7 +164986,8 @@
       27.629667019937187
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 200.0120829907246
+     "warmup_ms": 200.0120829907246,
+     "quality_source": "fit quality of arm ours in layernorm-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -164841,7 +165036,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1277.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -164899,7 +165096,8 @@
       "baseline_ms": 26.788582996232435,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in layernorm-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -188203,7 +188401,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3348.3,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -188257,7 +188457,11 @@
       "previous_median_ms": 121.6507910285145,
       "previous_hash": "e1262cc792bee45e",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours in maxabs-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -188305,7 +188509,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 3348.6,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -188366,7 +188573,8 @@
       "baseline_ms": 133.47316600265913,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in maxabs-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -188875,7 +189083,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 473.8,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -188929,7 +189139,11 @@
       "previous_median_ms": 7.98520800890401,
       "previous_hash": "a53bc3e46999f042",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours in maxabs-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -188977,7 +189191,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 480.0,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -189038,7 +189255,8 @@
       "baseline_ms": 13.432916020974517,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in maxabs-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -189549,7 +189767,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 953.5,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -189595,7 +189815,8 @@
       63.05774999782443
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 146.61779199377634
+     "warmup_ms": 146.61779199377634,
+     "quality_source": "fit quality of arm ours in maxpool1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -189643,7 +189864,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 953.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -189689,7 +189912,8 @@
       64.5904159755446
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 147.1403749892488
+     "warmup_ms": 147.1403749892488,
+     "quality_source": "fit quality of arm ours-fast in maxpool1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -190761,7 +190985,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1616.5,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -190807,7 +191033,8 @@
       156.24224999919534
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 295.2988750184886
+     "warmup_ms": 295.2988750184886,
+     "quality_source": "fit quality of arm ours in maxpool2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -190855,7 +191082,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1617.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -190901,7 +191130,8 @@
       157.27641701232642
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 317.9754999873694
+     "warmup_ms": 317.9754999873694,
+     "quality_source": "fit quality of arm ours-fast in maxpool2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -200150,7 +200380,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 4284.8,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -200205,7 +200437,11 @@
       "previous_median_ms": 142.96141703380272,
       "previous_hash": "4c57a2682d976591",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours in minmax-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -200253,7 +200489,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 4286.0,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 1.1920928955078125e-07,
+      "rel_diff_vs_sklearn": 1.6935176271050205e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -200315,7 +200554,8 @@
       "baseline_ms": 359.43837501690723,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in minmax-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -200834,7 +201074,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 523.6,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -200889,7 +201131,11 @@
       "previous_median_ms": 11.794166988693178,
       "previous_hash": "7a42e69e2a675d42",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours in minmax-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -200937,7 +201183,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 520.9,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 5.960464477539063e-08,
+      "rel_diff_vs_sklearn": 2.6302235836617716e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -200999,7 +201248,8 @@
       "baseline_ms": 22.055250010453165,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in minmax-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -205153,7 +205403,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1924.2,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 1.3268446575123108e-06
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -205199,7 +205451,8 @@
       819.5888749905862
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 917.2012910130434
+     "warmup_ms": 917.2012910130434,
+     "quality_source": "fit quality of arm ours in moe-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -205248,7 +205501,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1923.0,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 1.5388819292203201e-07
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -205308,7 +205563,8 @@
       "baseline_ms": 788.8182919996325,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in moe-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -206400,7 +206656,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1291.3,
      "quality": {
-      "output_shape": "20000x119"
+      "output_shape": "20000x119",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -206454,7 +206712,11 @@
       "previous_median_ms": 172.7820000378415,
       "previous_hash": "4d7dfa9ed0ed5702",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "20000x119"
+     },
+     "quality_source": "fit quality of arm ours in multilabel-binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -206502,7 +206764,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1272.4,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -206563,7 +206828,8 @@
       "baseline_ms": 769.5074999937788,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in multilabel-binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -207077,7 +207343,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2672.5,
      "quality": {
-      "output_shape": "20000x489"
+      "output_shape": "20000x489",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -207131,7 +207399,11 @@
       "previous_median_ms": 282.9056670307182,
       "previous_hash": "540a4834ba69361e",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "20000x489"
+     },
+     "quality_source": "fit quality of arm ours in multilabel-binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -207179,7 +207451,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2661.3,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -207240,7 +207515,8 @@
       "baseline_ms": 726.9041250110604,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in multilabel-binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -216215,7 +216491,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2005.5,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 3.5762786865234375e-07,
+      "rel_diff_vs_sklearn": 5.8111687196260486e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -216271,7 +216549,11 @@
       "previous_median_ms": 0.13766600750386715,
       "previous_hash": "52c90d74251fa6de",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours in normalizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -216320,7 +216602,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2090.2,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 3.5762786865234375e-07,
+      "rel_diff_vs_sklearn": 5.673703593734647e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -216368,7 +216652,11 @@
       0.13862500782124698
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 0.17391698202118278
+     "warmup_ms": 0.17391698202118278,
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours-fast in normalizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -216883,7 +217171,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 404.9,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 1.1920928955078125e-07,
+      "rel_diff_vs_sklearn": 3.1136311569268356e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -216939,7 +217229,11 @@
       "previous_median_ms": 0.1165829598903656,
       "previous_hash": "397fca443a1c3c12",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours in normalizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -216988,7 +217282,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 409.2,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 1.1920928955078125e-07,
+      "rel_diff_vs_sklearn": 3.2825985487695846e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -217036,7 +217332,11 @@
       0.07737500709481537
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 0.18841700511984527
+     "warmup_ms": 0.18841700511984527,
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours-fast in normalizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -219155,7 +219455,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 750.7,
      "quality": {
-      "output_shape": "100000x119"
+      "output_shape": "100000x119",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -219213,7 +219515,11 @@
       "previous_median_ms": 111.2297090003267,
       "previous_hash": "8288c4730184bd3e",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x119"
+     },
+     "quality_source": "fit quality of arm ours in onehot-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -219261,7 +219567,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 771.6,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -219326,7 +219635,8 @@
       "baseline_ms": 78.8341669831425,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in onehot-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -219855,7 +220165,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1539.5,
      "quality": {
-      "output_shape": "100000x508"
+      "output_shape": "100000x508",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -219913,7 +220225,11 @@
       "previous_median_ms": 89.47629202157259,
       "previous_hash": "f0cf38cb873b3cef",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x508"
+     },
+     "quality_source": "fit quality of arm ours in onehot-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -219961,7 +220277,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1530.0,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -220026,7 +220345,8 @@
       "baseline_ms": 71.76758299465291,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in onehot-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -223124,7 +223444,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 572.2,
      "quality": {
-      "output_shape": "100000x8"
+      "output_shape": "100000x8",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -223181,7 +223503,11 @@
       "previous_median_ms": 111.01374996360391,
       "previous_hash": "55c96f880921f76f",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x8"
+     },
+     "quality_source": "fit quality of arm ours in ordinal-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -223229,7 +223555,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 593.2,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -223293,7 +223622,8 @@
       "baseline_ms": 79.84887500060722,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in ordinal-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -223817,7 +224147,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 489.0,
      "quality": {
-      "output_shape": "100000x5"
+      "output_shape": "100000x5",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -223874,7 +224206,11 @@
       "previous_median_ms": 83.91862502321601,
       "previous_hash": "5055ebbcac96f05a",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x5"
+     },
+     "quality_source": "fit quality of arm ours in ordinal-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -223922,7 +224258,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 498.7,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -223986,7 +224325,8 @@
       "baseline_ms": 67.21866701263934,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in ordinal-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -238259,7 +238599,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1683.5,
      "quality": {
-      "output_shape": "100000x152"
+      "output_shape": "100000x152",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -238319,7 +238661,11 @@
       "previous_median_ms": 0.31420798040926456,
       "previous_hash": "7a169311396e142a",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x152"
+     },
+     "quality_source": "fit quality of arm ours in poly-features-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -238370,7 +238716,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1688.7,
      "quality": {
-      "output_shape": "100000x152"
+      "output_shape": "100000x152",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -238422,7 +238770,11 @@
       0.29337499290704727
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 0.3586249949876219
+     "warmup_ms": 0.3586249949876219,
+     "quality_superseded": {
+      "output_shape": "100000x152"
+     },
+     "quality_source": "fit quality of arm ours-fast in poly-features-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -238980,7 +239332,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 561.2,
      "quality": {
-      "output_shape": "100000x77"
+      "output_shape": "100000x77",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -239040,7 +239394,11 @@
       "previous_median_ms": 0.2435420174151659,
       "previous_hash": "b972e6462f2087dc",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x77"
+     },
+     "quality_source": "fit quality of arm ours in poly-features-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -239091,7 +239449,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 564.8,
      "quality": {
-      "output_shape": "100000x77"
+      "output_shape": "100000x77",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -239143,7 +239503,11 @@
       0.2331669966224581
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 0.3482920001260936
+     "warmup_ms": 0.3482920001260936,
+     "quality_superseded": {
+      "output_shape": "100000x77"
+     },
+     "quality_source": "fit quality of arm ours-fast in poly-features-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -239699,7 +240063,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 4784.8,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 5.5750226974487305,
+      "rel_diff_vs_sklearn": 0.1050543857273591
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -239756,7 +240122,11 @@
       "previous_median_ms": 7060.201332962606,
       "previous_hash": "9e056ab44083f1db",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours in power-transformer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -239804,7 +240174,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 8279.9,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 4.190239906311035,
+      "rel_diff_vs_sklearn": 0.1056460301609967
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -239868,7 +240241,8 @@
       "baseline_ms": 2956.796582991956,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in power-transformer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -240392,7 +240766,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1082.1,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.06457020714879036,
+      "rel_diff_vs_sklearn": 0.0008076224618225516
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -240449,7 +240825,11 @@
       "previous_median_ms": 2698.402499954682,
       "previous_hash": "b1263ed3c84d6a54",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours in power-transformer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -240497,7 +240877,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 753.6,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 0.06331869587302208,
+      "rel_diff_vs_sklearn": 9.212192378257204e-05
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -240561,7 +240944,8 @@
       "baseline_ms": 476.97524999966845,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in power-transformer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -245670,7 +246054,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 5106.3,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 5.960464477539063e-08,
+      "rel_diff_vs_sklearn": 2.7641083324201145e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -245730,7 +246116,11 @@
       "previous_median_ms": 1424.0830410271883,
       "previous_hash": "4be4beb060f3f93a",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours in quantile-transformer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -245780,7 +246170,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 6003.9,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 5.960464477539063e-08,
+      "rel_diff_vs_sklearn": 2.763936871918163e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -245832,7 +246224,11 @@
       414.1912499908358
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 430.7836660009343
+     "warmup_ms": 430.7836660009343,
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours-fast in quantile-transformer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -246384,7 +246780,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 580.7,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 5.960464477539063e-08,
+      "rel_diff_vs_sklearn": 2.2935605757196118e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -246444,7 +246842,11 @@
       "previous_median_ms": 183.80787497153506,
       "previous_hash": "cef3ae2ec3477c6a",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours in quantile-transformer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -246494,7 +246896,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 612.7,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 5.960464477539063e-08,
+      "rel_diff_vs_sklearn": 2.2946875575188013e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -246546,7 +246950,11 @@
       37.06874998169951
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 66.28329199156724
+     "warmup_ms": 66.28329199156724,
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours-fast in quantile-transformer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -253081,7 +253489,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2453.2,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.889088765901747
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -253124,7 +253534,8 @@
       485.5203749903012
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 966.6114580177236
+     "warmup_ms": 966.6114580177236,
+     "quality_source": "fit quality of arm ours in resnet-block-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -253172,7 +253583,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2627.9,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.8890987373124306
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -253215,7 +253628,8 @@
       414.9808330112137
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 857.7208750066347
+     "warmup_ms": 857.7208750066347,
+     "quality_source": "fit quality of arm ours-fast in resnet-block-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -254249,7 +254663,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2273.7,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 0.864406779661017
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -254306,7 +254721,11 @@
       "previous_median_ms": 1913.7634999933653,
       "previous_hash": "0cceeaeac076d598",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours in rfe-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -254355,7 +254774,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2273.1,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 0.896551724137931
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -254404,7 +254824,11 @@
       2257.6787500001956
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 2268.9290000125766
+     "warmup_ms": 2268.9290000125766,
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours-fast in rfe-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -254685,7 +255109,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 437.1,
      "quality": {
-      "n_selected": 5
+      "n_selected": 5,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -254742,7 +255167,11 @@
       "previous_median_ms": 100.12845904566348,
       "previous_hash": "f12739eda2af1a06",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5
+     },
+     "quality_source": "fit quality of arm ours in rfe-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -254791,7 +255220,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 436.0,
      "quality": {
-      "n_selected": 5
+      "n_selected": 5,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -254840,7 +255270,11 @@
       133.6774169758428
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 188.5392919939477
+     "warmup_ms": 188.5392919939477,
+     "quality_superseded": {
+      "n_selected": 5
+     },
+     "quality_source": "fit quality of arm ours-fast in rfe-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -266586,7 +267020,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 5088.9,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 0.0001220703125,
+      "rel_diff_vs_sklearn": 7.339101932526058e-09
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -266648,7 +267084,11 @@
       "previous_median_ms": 1309.5774999819696,
       "previous_hash": "097087e534e2574b",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours in robust-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -266697,7 +267137,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 5979.6,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 0.0001220703125,
+      "rel_diff_vs_sklearn": 7.339101932526058e-09
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -266751,7 +267193,11 @@
       380.20991600933485
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 403.8124170037918
+     "warmup_ms": 403.8124170037918,
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours-fast in robust-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -267296,7 +267742,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 579.2,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -267358,7 +267806,11 @@
       "previous_median_ms": 65.6892090337351,
       "previous_hash": "70eabcc970e346d6",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours in robust-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -267407,7 +267859,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 611.9,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -267461,7 +267915,11 @@
       35.37991701159626
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 64.47012498392724
+     "warmup_ms": 64.47012498392724,
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours-fast in robust-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -268006,7 +268464,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3956.4,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -268058,7 +268517,11 @@
       "previous_median_ms": 318.2087080203928,
       "previous_hash": "9fa5ceba806931fc",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours in select-chi2-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -268107,7 +268570,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3957.9,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -268151,7 +268615,11 @@
       179.6175839845091
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 238.7149580172263
+     "warmup_ms": 238.7149580172263,
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours-fast in select-chi2-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -268422,7 +268890,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 522.2,
      "quality": {
-      "n_selected": 5
+      "n_selected": 5,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -268474,7 +268943,11 @@
       "previous_median_ms": 209.4735000282526,
       "previous_hash": "f12739eda2af1a06",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5
+     },
+     "quality_source": "fit quality of arm ours in select-chi2-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -268523,7 +268996,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 569.0,
      "quality": {
-      "n_selected": 5
+      "n_selected": 5,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -268567,7 +269041,11 @@
       21.362208004575223
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 84.34308299911208
+     "warmup_ms": 84.34308299911208,
+     "quality_superseded": {
+      "n_selected": 5
+     },
+     "quality_source": "fit quality of arm ours-fast in select-chi2-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -268837,7 +269315,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 327.8,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -268889,7 +269369,8 @@
       "previous_median_ms": 6.428125023376197,
       "previous_hash": "12c97f719e95f054",
       "previous_status": "ok"
-     }
+     },
+     "quality_source": "fit quality of arm ours in select-d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -268937,7 +269418,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 328.8,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -268995,7 +269478,8 @@
       "baseline_ms": 6.609416013816372,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in select-d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "statsmodels-cpu",
@@ -269270,7 +269754,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 328.0,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -269322,7 +269808,8 @@
       "previous_median_ms": 4.845375020522624,
       "previous_hash": "a9b53cf12395d554",
       "previous_status": "ok"
-     }
+     },
+     "quality_source": "fit quality of arm ours in select-d-taxi-hourly.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -269370,7 +269857,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 328.2,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -269428,7 +269917,8 @@
       "baseline_ms": 6.979917001444846,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in select-d-taxi-hourly.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "statsmodels-cpu",
@@ -269704,7 +270194,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2948.4,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -269756,7 +270247,11 @@
       "previous_median_ms": 335.7407909934409,
       "previous_hash": "a76213bc80114f04",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours in select-f-classif-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -269805,7 +270300,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2948.9,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -269849,7 +270345,11 @@
       256.21670798864216
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 339.53991599264555
+     "warmup_ms": 339.53991599264555,
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours-fast in select-f-classif-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -270120,7 +270620,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 475.6,
      "quality": {
-      "n_selected": 5
+      "n_selected": 5,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -270172,7 +270673,11 @@
       "previous_median_ms": 216.10124997096136,
       "previous_hash": "c1217e86bd2c518f",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5
+     },
+     "quality_source": "fit quality of arm ours in select-f-classif-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -270221,7 +270726,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 518.7,
      "quality": {
-      "n_selected": 5.0
+      "n_selected": 5.0,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -270281,7 +270787,11 @@
       "baseline_ms": 128.15620901528746,
       "baseline_quality_text": "n_selected=5",
       "display_rounded": true
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5.0
+     },
+     "quality_source": "fit quality of arm ours-fast in select-f-classif-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -270556,7 +271066,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2937.0,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -270608,7 +271119,11 @@
       "previous_median_ms": 268.5714999679476,
       "previous_hash": "1beef8f6766b17a8",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours in select-f-regression-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -270657,7 +271172,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3779.4,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -270701,7 +271217,11 @@
       223.86983400792815
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 254.51845800853334
+     "warmup_ms": 254.51845800853334,
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours-fast in select-f-regression-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -270972,7 +271492,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 463.2,
      "quality": {
-      "n_selected": 5
+      "n_selected": 5,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -271024,7 +271545,11 @@
       "previous_median_ms": 146.0220420267433,
       "previous_hash": "14ef58d0e8f1bcee",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5
+     },
+     "quality_source": "fit quality of arm ours in select-f-regression-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -271073,7 +271598,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 507.9,
      "quality": {
-      "n_selected": 5.0
+      "n_selected": 5.0,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -271133,7 +271659,11 @@
       "baseline_ms": 102.78758298954926,
       "baseline_quality_text": "n_selected=5",
       "display_rounded": true
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5.0
+     },
+     "quality_source": "fit quality of arm ours-fast in select-f-regression-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -271408,7 +271938,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2024.5,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 0.9298245614035088
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -271455,7 +271986,11 @@
       69680.26470800396
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 69522.15558398166
+     "warmup_ms": 69522.15558398166,
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours in select-mutual-info-reg-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -271504,7 +272039,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1847.0,
      "quality": {
-      "n_selected": 110.0
+      "n_selected": 110.0,
+      "jaccard_vs_sklearn": 0.9298245614035088
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -271567,7 +272103,11 @@
       "baseline_ms": 46533.26354199089,
       "baseline_quality_text": "n_selected=110",
       "display_rounded": true
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 110.0
+     },
+     "quality_source": "fit quality of arm ours-fast in select-mutual-info-reg-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -271854,7 +272394,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 428.9,
      "quality": {
-      "n_selected": 5
+      "n_selected": 5,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -271909,7 +272450,11 @@
       "previous_median_ms": 2796.2112920358777,
       "previous_hash": "f12739eda2af1a06",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5
+     },
+     "quality_source": "fit quality of arm ours in select-mutual-info-reg-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -271958,7 +272503,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 430.0,
      "quality": {
-      "n_selected": 5.0
+      "n_selected": 5.0,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -272021,7 +272567,11 @@
       "baseline_ms": 2320.249459007755,
       "baseline_quality_text": "n_selected=5",
       "display_rounded": true
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5.0
+     },
+     "quality_source": "fit quality of arm ours-fast in select-mutual-info-reg-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -272312,7 +272862,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3133.1,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 0.9298245614035088
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -272359,7 +272910,11 @@
       796.5808750013821
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 821.3104580063373
+     "warmup_ms": 821.3104580063373,
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours in select-mutual-info-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -272408,7 +272963,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3133.1,
      "quality": {
-      "n_selected": 110.0
+      "n_selected": 110.0,
+      "jaccard_vs_sklearn": 0.9298245614035088
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -272471,7 +273027,11 @@
       "baseline_ms": 783.2404169894289,
       "baseline_quality_text": "n_selected=110",
       "display_rounded": true
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 110.0
+     },
+     "quality_source": "fit quality of arm ours-fast in select-mutual-info-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -272758,7 +273318,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 638.8,
      "quality": {
-      "n_selected": 5
+      "n_selected": 5,
+      "jaccard_vs_sklearn": 0.42857142857142855
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -272813,7 +273374,11 @@
       "previous_median_ms": 217.71108295070007,
       "previous_hash": "c1217e86bd2c518f",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5
+     },
+     "quality_source": "fit quality of arm ours in select-mutual-info-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -272862,7 +273427,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 640.3,
      "quality": {
-      "n_selected": 5.0
+      "n_selected": 5.0,
+      "jaccard_vs_sklearn": 0.42857142857142855
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -272925,7 +273491,11 @@
       "baseline_ms": 202.95587499276735,
       "baseline_quality_text": "n_selected=5",
       "display_rounded": true
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5.0
+     },
+     "quality_source": "fit quality of arm ours-fast in select-mutual-info-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -273216,7 +273786,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2936.9,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -273268,7 +273839,11 @@
       "previous_median_ms": 264.33600002201274,
       "previous_hash": "22128ea25f2e4cbf",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours in select-r-regression-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -273317,7 +273892,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3016.8,
      "quality": {
-      "n_selected": 110
+      "n_selected": 110,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -273361,7 +273937,11 @@
       233.13325000344776
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 281.0342079901602
+     "warmup_ms": 281.0342079901602,
+     "quality_superseded": {
+      "n_selected": 110
+     },
+     "quality_source": "fit quality of arm ours-fast in select-r-regression-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -273632,7 +274212,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 464.5,
      "quality": {
-      "n_selected": 5
+      "n_selected": 5,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -273684,7 +274265,11 @@
       "previous_median_ms": 145.89112502289936,
       "previous_hash": "3fb86b6cedc30f3d",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5
+     },
+     "quality_source": "fit quality of arm ours in select-r-regression-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -273733,7 +274318,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 509.5,
      "quality": {
-      "n_selected": 5.0
+      "n_selected": 5.0,
+      "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -273793,7 +274379,11 @@
       "baseline_ms": 103.54637500131503,
       "baseline_quality_text": "n_selected=5",
       "display_rounded": true
-     }
+     },
+     "quality_superseded": {
+      "n_selected": 5.0
+     },
+     "quality_source": "fit quality of arm ours-fast in select-r-regression-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -279209,7 +279799,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 5188.4,
      "quality": {
-      "output_shape": "100000x64"
+      "output_shape": "100000x64",
+      "max_abs_diff_vs_sklearn": 6.103515625e-05,
+      "rel_diff_vs_sklearn": 1.1096109661614363e-07
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -279271,7 +279863,11 @@
       "previous_median_ms": 0.2252910053357482,
       "previous_hash": "ab64a829633c2461",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x64"
+     },
+     "quality_source": "fit quality of arm ours in sparse-coder-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -279320,7 +279916,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 5189.7,
      "quality": {
-      "output_shape": "100000x64"
+      "output_shape": "100000x64",
+      "max_abs_diff_vs_sklearn": 6.103515625e-05,
+      "rel_diff_vs_sklearn": 1.1096109661614363e-07
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -279374,7 +279972,11 @@
       0.20037498325109482
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 0.1784999913070351
+     "warmup_ms": 0.1784999913070351,
+     "quality_superseded": {
+      "output_shape": "100000x64"
+     },
+     "quality_source": "fit quality of arm ours-fast in sparse-coder-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -279924,7 +280526,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3979.7,
      "quality": {
-      "output_shape": "100000x64"
+      "output_shape": "100000x64",
+      "max_abs_diff_vs_sklearn": 1.049041748046875e-05,
+      "rel_diff_vs_sklearn": 9.97626799840802e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -279986,7 +280590,11 @@
       "previous_median_ms": 0.20158401457592845,
       "previous_hash": "c0eb21142785e9c7",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x64"
+     },
+     "quality_source": "fit quality of arm ours in sparse-coder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -280035,7 +280643,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3980.3,
      "quality": {
-      "output_shape": "100000x64"
+      "output_shape": "100000x64",
+      "max_abs_diff_vs_sklearn": 1.049041748046875e-05,
+      "rel_diff_vs_sklearn": 9.97626799840802e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -280089,7 +280699,11 @@
       0.18945898045785725
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 0.23166698520071805
+     "warmup_ms": 0.23166698520071805,
+     "quality_superseded": {
+      "output_shape": "100000x64"
+     },
+     "quality_source": "fit quality of arm ours-fast in sparse-coder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -283663,7 +284277,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1771.7,
      "quality": {
-      "output_shape": "100000x112"
+      "output_shape": "100000x112",
+      "max_abs_diff_vs_sklearn": 1.7881393432617188e-07,
+      "rel_diff_vs_sklearn": 6.226496914497926e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -283719,7 +284335,11 @@
       "previous_median_ms": 166.1728749750182,
       "previous_hash": "ef3a5bf82e92f122",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x112"
+     },
+     "quality_source": "fit quality of arm ours in spline-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -283769,7 +284389,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1769.9,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 1.7881393432617188e-07,
+      "rel_diff_vs_sklearn": 6.42419918001618e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -283832,7 +284455,8 @@
       "baseline_ms": 45.77679198700935,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in spline-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -284379,7 +285003,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 694.0,
      "quality": {
-      "output_shape": "100000x77"
+      "output_shape": "100000x77",
+      "max_abs_diff_vs_sklearn": 1.7881393432617188e-07,
+      "rel_diff_vs_sklearn": 5.887862278186407e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -284435,7 +285061,11 @@
       "previous_median_ms": 146.70212502824143,
       "previous_hash": "99f5873b25d03c92",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x77"
+     },
+     "quality_source": "fit quality of arm ours in spline-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -284485,7 +285115,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 694.0,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 1.1920928955078125e-07,
+      "rel_diff_vs_sklearn": 6.180746726707231e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -284548,7 +285181,8 @@
       "baseline_ms": 31.943792011588812,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in spline-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -288021,7 +288655,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 4277.7,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 0.0024261474609375,
+      "rel_diff_vs_sklearn": 3.5900231150533017e-06
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -288073,7 +288709,11 @@
       "previous_median_ms": 133.88066698098555,
       "previous_hash": "cf00d661795e2db5",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours in standard-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -288122,7 +288762,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 4286.1,
      "quality": {
-      "output_shape": "100000x220"
+      "output_shape": "100000x220",
+      "max_abs_diff_vs_sklearn": 0.0024261474609375,
+      "rel_diff_vs_sklearn": 3.5908515112046637e-06
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -288166,7 +288808,11 @@
       310.8596249949187
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 356.3317499938421
+     "warmup_ms": 356.3317499938421,
+     "quality_superseded": {
+      "output_shape": "100000x220"
+     },
+     "quality_source": "fit quality of arm ours-fast in standard-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -288666,7 +289312,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 520.5,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.000102996826171875,
+      "rel_diff_vs_sklearn": 3.845567752886867e-06
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -288718,7 +289366,11 @@
       "previous_median_ms": 12.834416003897786,
       "previous_hash": "106faca24dd60690",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours in standard-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -288767,7 +289419,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 522.3,
      "quality": {
-      "output_shape": "100000x11"
+      "output_shape": "100000x11",
+      "max_abs_diff_vs_sklearn": 0.000102996826171875,
+      "rel_diff_vs_sklearn": 3.839645804980567e-06
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -288811,7 +289465,11 @@
       26.61608302150853
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 81.74116699956357
+     "warmup_ms": 81.74116699956357,
+     "quality_superseded": {
+      "output_shape": "100000x11"
+     },
+     "quality_source": "fit quality of arm ours-fast in standard-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -293717,7 +294375,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 693.7,
      "quality": {
-      "output_shape": "100000x8"
+      "output_shape": "100000x8",
+      "max_abs_diff_vs_sklearn": 1.0742869649416065e-08,
+      "rel_diff_vs_sklearn": 2.3611373927785517e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -293780,7 +294440,11 @@
       "previous_median_ms": 410.7336250017397,
       "previous_hash": "6b3d8967d553dbb0",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x8"
+     },
+     "quality_source": "fit quality of arm ours in target-encoder-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -294488,7 +295152,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 626.8,
      "quality": {
-      "output_shape": "100000x5"
+      "output_shape": "100000x5",
+      "max_abs_diff_vs_sklearn": 2.9651312072331848e-08,
+      "rel_diff_vs_sklearn": 1.580585664203687e-08
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -294551,7 +295217,11 @@
       "previous_median_ms": 407.10141602903605,
       "previous_hash": "e662ed62eea3df89",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x5"
+     },
+     "quality_source": "fit quality of arm ours in target-encoder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -294602,7 +295272,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 639.3,
-     "quality": {},
+     "quality": {
+      "max_abs_diff_vs_sklearn": 2.9651312072331848e-08,
+      "rel_diff_vs_sklearn": 1.580585664203687e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -294672,7 +295345,8 @@
       "baseline_ms": 461.9510829797946,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in target-encoder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -299794,7 +300468,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3229.8,
      "quality": {
-      "output_shape": "100000x142"
+      "output_shape": "100000x142",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -299844,7 +300520,11 @@
       "previous_median_ms": 238.53045800933614,
       "previous_hash": "c7c9f0c480878f41",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x142"
+     },
+     "quality_source": "fit quality of arm ours in variance-threshold-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -299893,7 +300573,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 3369.2,
      "quality": {
-      "output_shape": "100000x142"
+      "output_shape": "100000x142",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -299935,7 +300617,11 @@
       158.24854202219285
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 177.33091698028147
+     "warmup_ms": 177.33091698028147,
+     "quality_superseded": {
+      "output_shape": "100000x142"
+     },
+     "quality_source": "fit quality of arm ours-fast in variance-threshold-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -300425,7 +301111,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 471.5,
      "quality": {
-      "output_shape": "100000x10"
+      "output_shape": "100000x10",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -300475,7 +301163,11 @@
       "previous_median_ms": 125.3831249778159,
       "previous_hash": "b9eb7d62e5089fa5",
       "previous_status": "ok"
-     }
+     },
+     "quality_superseded": {
+      "output_shape": "100000x10"
+     },
+     "quality_source": "fit quality of arm ours in variance-threshold-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -300524,7 +301216,9 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 468.4,
      "quality": {
-      "output_shape": "100000x10"
+      "output_shape": "100000x10",
+      "max_abs_diff_vs_sklearn": 0.0,
+      "rel_diff_vs_sklearn": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -300566,7 +301260,11 @@
       10.781417018733919
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 29.287207988090813
+     "warmup_ms": 29.287207988090813,
+     "quality_superseded": {
+      "output_shape": "100000x10"
+     },
+     "quality_source": "fit quality of arm ours-fast in variance-threshold-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
