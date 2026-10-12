@@ -157,16 +157,21 @@ def _load():
 
 
 def numeric_mode():
-    """'fast', 'deterministic' or 'identical': what this process LOADED.
+    """The numeric mode of the linalg extension this process loaded.
 
-    Read back from the binary through `linalg_numeric_mode()`, which is a
-    compile-time answer (`is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]`), and
-    cross-checked against the directory the loader chose. A `.so` in the wrong
-    directory is caught here; nothing else in the process can see it.
+    Returns 'identical', 'deterministic' or 'fast', read back from the loaded binary
+    itself rather than from the environment, and checked against the directory it was
+    loaded from and the binary's profile version.
 
-    Also checks the exact binary profile. The default accepts v1; an experimental
-    profile needs its exact name in MOJOLEARN_EXPERIMENT_GEMM_PROFILE. Unknown
-    versions and stale extensions refuse rather than return mislabeled answers.
+    Returns
+    -------
+    str
+
+    Raises
+    ------
+    RuntimeError
+        When the binary is in the wrong directory, its profile version is unknown, or
+        the extension is stale.
     """
     global _mode_cache, _profile_cache
     if _mode_cache is not None:
@@ -207,13 +212,20 @@ def numeric_mode():
 
 
 def profile():
-    """What this process is actually holding, as a dict a caller can print or
-    assert on. The profile name is part of the claim, so a result quoted
-    anywhere should carry it.
+    """Describe the matrix-product profile this process loaded, as a dict.
 
-    `identity_claimed` is the field that matters. It is True only when the
-    IDENTICAL binary loaded; in FAST mode every other field still describes
-    the shape of the computation and NONE of them is a guarantee about bits.
+    Keys include ``profile`` (the profile name, for example
+    ``'mojolearn.identical.gemm.fp32.v1'``), ``profile_version``, ``numeric_mode``,
+    ``identity_claimed``, ``dtype``, ``ops`` and ``binary`` (the loaded file). Quote the
+    profile name with any result you publish.
+
+    ``identity_claimed`` is True only when the identical build is loaded; in any other
+    mode the remaining fields describe the computation but guarantee nothing about
+    the bits.
+
+    Returns
+    -------
+    dict
     """
     mode = numeric_mode()
     actual, version = _profile_cache or (PROFILE, PROFILE_VERSION)
@@ -252,11 +264,11 @@ def profile():
 
 
 def require_identical():
-    """Raise unless this process loaded the IDENTICAL build.
+    """Raise `RuntimeError` unless this process loaded the identical build.
 
-    Call it once at start-up if your program's correctness depends on the
-    profile, so the failure lands at start-up rather than at the first
-    matmul. `matmul` calls it for you unless you passed `identical=False`.
+    Call it once at start-up when your program depends on bit-identical results, so a
+    wrong build fails immediately rather than at the first product. `matmul` calls it
+    for you unless you pass ``identical=False``.
     """
     loaded = numeric_mode()
     if loaded != "identical":
@@ -359,85 +371,78 @@ def _operand(x, name):
     return a
 
 
+# Arithmetic (contract gemm/IDENTICAL_FP32_CONTRACT.md; oracle gemm/host/gemm_oracle.mojo::gemm_oracle):
+# leaves of contract_leaf_size(k) accumulated serially ascending with FMA and flush-to-zero at
+# every seam, folded by a fixed balanced tree (adjacent pairing, carried odd tail). Identity
+# outside the certified sweep (gemm/README.md) rests on construction (contract sections 6, 0.3).
+# NaN payloads: contract 9.1; downstream min/max order: 9.2(e). Both-transposes refusal:
+# contract section 0.1 (DEVIATION 913); gemv is OP_NT at n == 1. out widened to the buffer
+# protocol by DEVIATION 2401; operands by DEVIATION 2400.
 def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
            identical=True):
-    """`C = op(a) @ op(b)` on the GPU, in float32, under profile
-    `mojolearn.identical.gemm.fp32.v1`.
+    """Float32 matrix product ``op(a) @ op(b)`` with the same bits on NVIDIA and AMD.
+
+    Computes under the profile ``mojolearn.identical.gemm.fp32.v1``. Each output cell
+    accumulates its `k` products in a fixed order that depends only on the input bits,
+    `k` and the profile: not on `m`, `n`, the launch geometry, the batch or the vendor.
+    The order is chosen for reproducibility, not accuracy, so the result does not
+    match NumPy's ``a @ b`` bit for bit.
 
     Parameters
     ----------
-    a, b : any float32 buffer
-        2-D, dtype float32, read through the buffer protocol: a NumPy
-        array, an `array.array('f')`, a `mojolearn.Array`, or any other
-        object exporting a float32 buffer (DEVIATION 2400; NumPy is not
-        required). Any other dtype is refused by name rather than cast
-        (see `_operand`). Non-contiguous input is copied, which moves no
-        bit; a C-contiguous float32 buffer is borrowed with no copy.
-    transpose_a, transpose_b : bool
-        Which of the contract's three operations to run. The flags describe
-        the ARRAYS you pass, so `transpose_a=True` means `a` is stored `k x m`
-        and the left operand is its transpose.
+    a, b : float32 buffer, 2-D
+        Any object exporting a 2-D float32 buffer: a NumPy array, an
+        ``array.array('f')``, a `mojolearn.Array`, and so on. NumPy is not required.
+        Other dtypes raise `TypeError` rather than being cast. Non-contiguous input is
+        copied; C-contiguous input is used without a copy.
+    transpose_a, transpose_b : bool, default False
+        Whether the stored array is the transpose of the operand. Three combinations
+        are supported:
 
-            transpose_a  transpose_b   op      C          a.shape   b.shape
-            False        False         OP_NN   a @ b      (m, k)    (k, n)
-            False        True          OP_NT   a @ b.T    (m, k)    (n, k)
-            True         False         OP_TN   a.T @ b    (k, m)    (k, n)
-            True         True          REFUSED
+        ===========  ===========  ===========  ========  ========
+        transpose_a  transpose_b  C            a.shape   b.shape
+        ===========  ===========  ===========  ========  ========
+        False        False        ``a @ b``    (m, k)    (k, n)
+        False        True         ``a @ b.T``  (m, k)    (n, k)
+        True         False        ``a.T @ b``  (k, m)    (k, n)
+        ===========  ===========  ===========  ========  ========
 
-        **Both true is refused by name.** The contract has three operations
-        and `a.T @ b.T` is not one of them (section 0.1); `gemv` is `OP_NT` at
-        `n == 1` and is likewise not a fourth. The refusal message names the
-        identity that gets you there through an operation the contract DOES
-        cover, as your own expression rather than as a transpose this function
-        materialized behind your back. DEVIATION 913.
-    out : any writable float32 buffer, optional
-        Where to write. Float32, C-contiguous, writable, shape `(m, n)`:
-        a NumPy array, a `mojolearn.Array`, or any other object exporting
-        such a buffer (DEVIATION 2401 widened this from `numpy.ndarray`
-        to the buffer protocol; the checks are the same four, read off
-        `_buffer.view`). A fresh `mojolearn.Array` is allocated when this
-        is None.
+        Both True raises `ValueError`; compute ``(b @ a).T`` instead, for example
+        ``np.ascontiguousarray(np.asarray(matmul(b, a)).T)``.
+    out : writable float32 buffer, optional
+        Destination, C-contiguous with shape (m, n). A new `mojolearn.Array` is
+        allocated when None.
     identical : bool, default True
-        Whether you are asking for the profile's guarantee. True requires that
-        this process loaded the IDENTICAL build and raises if it did not; see
-        `require_identical` and the module docstring for why that is the
-        default. False says in your source that you want whichever build is
-        loaded and are making no identity claim about the result.
+        Require the identical build: raises `RuntimeError` when another build is
+        loaded. False uses whichever build is loaded, with no identity guarantee.
 
     Returns
     -------
-    mojolearn.Array
-        `(m, n)`, float32, C-contiguous; `numpy.asarray` on it is
-        zero-copy through `__array_interface__`. `out` itself -- the very
-        object you passed, whatever its type -- when `out` was given.
+    mojolearn.Array or out
+        The (m, n) float32 result; ``numpy.asarray`` on it is zero-copy. When `out` is
+        given, that same object is returned.
 
-    What you are getting, stated once
-    ---------------------------------
-    Under `identical=True` the answer is `gemm_oracle`'s, bit for bit: leaves
-    of `contract_leaf_size(k)` accumulated serially ascending with a fused
-    multiply-add and a flush-to-zero at every seam, folded by a fixed balanced
-    tree with adjacent pairing and a carried odd tail. That is a pure function
-    of the input bits, `k` and the profile. It does not depend on `m`, on `n`,
-    on the launch geometry, on the block count, on how many rows shared the
-    call, or on the vendor.
+    Raises
+    ------
+    ValueError
+        Both transpose flags set, mismatched contracted extents, or a wrong `out`
+        shape or layout.
+    TypeError
+        A non-float32 operand or `out`.
 
-    It is NOT the most accurate way to sum `k` products, and it is not trying
-    to be; contract section 1 is explicit that sameness rather than accuracy is
-    what is being bought. It is also not numpy's answer and will not match
-    `a @ b` bit for bit.
+    Notes
+    -----
+    Compare NaN cells with "is NaN", not by bits: NaN payloads are not guaranteed.
+    A `min`, `max` or `argmin` you take over the output can depend on order, because
+    ``-0.0 == +0.0``; make such reductions order-independent yourself.
 
-    Where the measurement stops, honestly
-    -------------------------------------
-    The certified sweep is 62 shapes, and the three-vendor card is 60 stages
-    (`gemm/README.md`). **This function accepts shapes outside that sweep.**
-    Outside it, identity rests on the construction -- the per-cell arithmetic
-    is a pure function of `k` and the profile, contract sections 6 and 0.3 --
-    and on the gates, not on a measurement at your shape. Certification at 62
-    shapes is not certification at all shapes.
-
-    NaN cells must be compared as "is NaN" and not by bits (contract 9.1
-    declines to promise NaN payloads), and a `min`, `max` or `argmin` you take
-    over this output is yours to make order-independent (9.2(e)).
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import linalg
+    >>> a = np.random.default_rng(0).random((128, 64), dtype=np.float32)
+    >>> b = np.random.default_rng(1).random((32, 64), dtype=np.float32)
+    >>> c = np.asarray(linalg.matmul(a, b, transpose_b=True))
     """
     if identical:
         require_identical()
@@ -607,9 +612,13 @@ def _operand_bits(x, name):
     return a
 
 
+# Contract gemm/IDENTICAL_LOWBIT_CONTRACT.md L-2 (from_bf16: L-1; int8: L-3, L-4, L-6; int15: W-1..W-4).
 def to_bf16(x):
-    """float32 to bf16 bits (contract L-2: flush, then round to nearest
-    even), on the GPU, as a uint16 `mojolearn.Array` of the same shape."""
+    """Convert float32 to bfloat16 bits.
+
+    Subnormals are flushed, then each value is rounded to nearest even. Returns a
+    uint16 `mojolearn.Array` of the same shape, the input format of `matmul_bf16`.
+    """
     a, _ = as_f32_c(x, ndim=None, name="x")
     pb = probe(a)
     if not is_native_f32(pb.format):
@@ -623,8 +632,10 @@ def to_bf16(x):
 
 
 def from_bf16(bits):
-    """bf16 bits to float32 (contract L-1, exact), on the GPU, as a float32
-    `mojolearn.Array` of the same shape."""
+    """Convert bfloat16 bits (a uint16 buffer) to float32, exactly.
+
+    Returns a float32 `mojolearn.Array` of the same shape.
+    """
     a, _ = as_u16_c(bits, ndim=None, name="bits")
     pb = probe(a)
     n = nelems(pb.shape)
@@ -651,9 +662,15 @@ def from_f16(bits):
 
 
 def quantize_int8(x):
-    """Row-wise int8 codes and per-row power-of-two exponents of a 2-D
-    float32 matrix (contract L-3, L-4), on the GPU. Returns `(codes,
-    exponents)`: an int8 Array of x's shape and an int32 Array of `rows`."""
+    """Quantize a 2-D float32 matrix to int8 codes with one power-of-two exponent per row.
+
+    Returns
+    -------
+    codes : mojolearn.Array of int8
+        The shape of `x`.
+    exponents : mojolearn.Array of int32
+        One per row; ``row = codes * 2**exponent``.
+    """
     a = _operand(x, "x")
     rows, cols = probe(a).shape
     codes = empty((rows, cols), "<i1")
@@ -664,7 +681,7 @@ def quantize_int8(x):
 
 
 def dequantize_int8(codes, exponents):
-    """`codes * 2**exponents[row]`, exact, on the GPU, as float32."""
+    """Recover float32 values ``codes * 2**exponents[row]`` exactly from `quantize_int8` output."""
     q, _ = as_i8_c(codes, ndim=2, name="codes")
     e, _ = as_i32_c(exponents, ndim=1, name="exponents")
     rows, cols = probe(q).shape
@@ -708,13 +725,13 @@ def _op_and_shape(a_shape, b_shape, transpose_a, transpose_b, who):
 
 
 def matmul_bf16(a, b, *, transpose_a=False, transpose_b=False, out=None):
-    """`C = op(a) @ op(b)` under `mojolearn.identical.gemm.bf16f32.v1`.
+    """Matrix product with bfloat16 operands, under the profile ``mojolearn.identical.gemm.bf16f32.v1``.
 
-    `b` is bf16 bits (a uint16 buffer, from `to_bf16`); `a` is float32, or
-    bf16 bits too. The output is float32: the exactly widened operands
-    through the fp32 profile's arithmetic, so a caller who widens the bits
-    with `from_bf16` and calls `matmul` gets the same bits. The transpose
-    flags and `out` follow `matmul`.
+    `b` is bfloat16 bits (a uint16 buffer from `to_bf16`); `a` is float32 or bfloat16
+    bits too. The output is float32: the operands are widened exactly and multiplied
+    with `matmul`'s arithmetic, so ``matmul(from_bf16(a_bits), from_bf16(b_bits))``
+    gives the same bits. `transpose_a`, `transpose_b` and `out` behave as in `matmul`.
+    Requires the identical build.
     """
     a_bits = False
     try:
@@ -737,15 +754,13 @@ def matmul_bf16(a, b, *, transpose_a=False, transpose_b=False, out=None):
 
 
 def matmul_int8(a, b, *, out=None):
-    """`C = a @ b.T` under `mojolearn.identical.gemm.int8i32.v1` (OP_NT).
+    """Matrix product ``a @ b.T`` with int8 operands, under the profile ``mojolearn.identical.gemm.int8i32.v1``.
 
-    Each of `a` (m x k) and `b` (n x k) is either a float32 matrix, which is
-    quantized on the GPU by the profile's own rule, or a `(codes,
-    exponents)` pair from `quantize_int8`. The output is float32: the exact
-    Int32 sum of the codes, dequantized by one multiply by a power of two.
-    It is NOT the float32 product; it is the product of the rounded
-    operands, and the profile pins that, not its distance from the
-    unrounded one.
+    Each of `a` (m, k) and `b` (n, k) is either a float32 matrix, quantized by the
+    profile's rule, or a ``(codes, exponents)`` pair from `quantize_int8`. The output
+    is float32: the exact int32 sum of the code products, scaled by a power of two.
+    It is the product of the rounded operands, not the float32 product. `out` behaves
+    as in `matmul`. Requires the identical build.
     """
     qa, ea = _int8_operand(a, "a")
     qb, eb = _int8_operand(b, "b")
@@ -805,14 +820,20 @@ def _int15_binding():
 
 
 def quantize_int15(x):
-    """Row-wise fifteen-bit codes of a 2-D float32 matrix, as planes
-    (contract W-1 to W-3). Returns `(hi, lo, exponents)`: two int8 Arrays
-    of x's shape and an int32 Array of `rows`.
+    """Quantize a 2-D float32 matrix to fifteen-bit codes stored as two int8 planes.
 
-    Per row `e = floor(log2 absmax) - 13`, so the row's largest magnitude
-    lands in `[8192, 16384)`; the code is `clamp(rne(x * 2**-e), -16383,
-    16383)`; `hi = code >> 7` and `lo = code & 127`, so `code = hi * 128 +
-    lo`. The same planes and exponents on every vendor."""
+    Per row, ``e = floor(log2(absmax)) - 13`` so the largest magnitude lands in
+    [8192, 16384); each code is ``clamp(round_half_even(x * 2**-e), -16383, 16383)``,
+    split as ``hi = code >> 7`` and ``lo = code & 127`` so ``code = hi * 128 + lo``.
+    The same planes and exponents on every vendor.
+
+    Returns
+    -------
+    hi, lo : mojolearn.Array of int8
+        The shape of `x`.
+    exponents : mojolearn.Array of int32
+        One per row.
+    """
     a = _operand(x, "x")
     rows, cols = probe(a).shape
     hi = empty((rows, cols), "<i1")
@@ -846,8 +867,7 @@ def _int15_planes(x, name, who):
 
 
 def dequantize_int15(hi, lo, exponents):
-    """`(hi * 128 + lo) * 2**exponents[row]`, as float32: the matrix a
-    store of fifteen-bit planes stands for."""
+    """Recover float32 values ``(hi * 128 + lo) * 2**exponents[row]`` from `quantize_int15` output."""
     h, l, e = _int15_planes((hi, lo, exponents), "operand", "dequantize_int15")
     rows, cols = probe(h).shape
     out = empty((rows, cols), "<f4")
@@ -871,19 +891,15 @@ def _int15_operand(x, name):
 
 
 def matmul_int15(a, b, *, out=None):
-    """`C = a @ b.T` under `mojolearn.identical.gemm.int15i64.v1` (OP_NT).
+    """Matrix product ``a @ b.T`` with fifteen-bit operands, under the profile ``mojolearn.identical.gemm.int15i64.v1``.
 
-    Each of `a` (m x k) and `b` (n x k) is either a float32 matrix, which is
-    quantized by the profile's own rule, or a `(hi, lo, exponents)` triple
-    from `quantize_int15`. The output is float32: the exact integer sum of
-    the products of the codes, converted to float32 with round to nearest
-    even and scaled by one power of two. It is NOT the float32 product; it
-    is the product of the rounded operands, and the profile pins that.
-
-    `k` is at most 65536 (`INT15_MAX_K`); a larger `k` is refused by name.
-    The same bits on every vendor and from every execution plan: the
-    integer matrix unit where the vendor has one, a kernel of integer
-    multiplies elsewhere.
+    Each of `a` (m, k) and `b` (n, k) is either a float32 matrix, quantized by the
+    profile's rule, or a ``(hi, lo, exponents)`` triple from `quantize_int15`. The
+    output is float32: the exact integer sum of the code products, rounded to
+    nearest even and scaled by a power of two. It is the product of the rounded
+    operands, not the float32 product. `k` may be at most 65536 (`INT15_MAX_K`);
+    larger values raise `ValueError`. `out` behaves as in `matmul`. Requires the
+    identical build.
     """
     ah, al, ea = _int15_operand(a, "a")
     bh, bl, eb = _int15_operand(b, "b")
@@ -1237,45 +1253,38 @@ def _qr_q(a, mode):
     return QRResult(k.orgqr(h, tau, kk).out(), _triu(h, kk).out())
 
 
+# mode 'reduced'/'complete'/'raw': LAPACK geqrf with reflectors kept, dlarfg's sign convention,
+# orgqr for Q (DEVIATION 5320). 'reduced' of a tall matrix with N <= 512 uses the blocked TSQR
+# (`_qr_tsqr`, R's diagonal non-negative; MOJOLEARN_LINALG_TSQR=0 keeps geqrf + orgqr).
+# 'r' (M >= N) is the TSQR route, never forms Q; its R agrees with 'reduced''s to float32
+# rounding but not bit for bit (different tree), and rows may differ in sign. A wide input's R
+# is geqrf's. Kernel: core/householder_qr.mojo::qr_factor via
+# decomposition/linalg_public_device.mojo, host replay on CPU-only installs.
 def qr(a, mode="r"):
-    """`numpy.linalg.qr(a, mode)`.
+    """QR decomposition, as `numpy.linalg.qr`.
 
     Parameters
     ----------
     a : float32 buffer, shape (M, N)
-        C-contiguous or copied into C order; a non-float32 buffer is refused
-        by name and never cast (see `_operand`).
-    mode : {'reduced', 'complete', 'r', 'raw'}
-        The default 'r' preserves MojoLearn's existing R-only return value.
-        Request 'reduced' explicitly for NumPy's default (Q, R) form.
-        'reduced' returns (Q (M, K), R
-        (K, N)), 'complete' (Q (M, M), R (M, N)), 'raw' (h (N, M), tau (K,)),
-        K = min(M, N): LAPACK's geqrf with its reflectors kept, dlarfg's sign
-        convention, and orgqr for Q, in the decomp lane's cells (IDENTICAL on
-        every column; DEVIATION 5320). EXCEPT 'reduced' of a tall matrix with
-        N <= 512: the blocked TSQR (`_qr_tsqr`, lane neural-pass140), R's
-        diagonal non-negative (see THE BLOCKED TSQR above `_qr_tsqr`);
-        MOJOLEARN_LINALG_TSQR=0 keeps geqrf + orgqr there too. 'r' is the TSQR route below (M >= N
-        only), which never forms Q; its R agrees with 'reduced''s to float32
-        rounding but is not the same bits (a different reduction tree).
+        Non-float32 input raises `TypeError` rather than being cast.
+    mode : {'r', 'reduced', 'complete', 'raw'}, default 'r'
+        Unlike NumPy, the default is 'r' (R only); pass ``mode='reduced'`` for NumPy's
+        default ``(Q, R)``. 'reduced' returns Q (M, K) and R (K, N), 'complete' Q (M, M)
+        and R (M, N), 'raw' h (N, M) and tau (K,), with K = min(M, N), following
+        LAPACK's conventions. Any other mode raises `ValueError`.
 
     Returns
     -------
-    For mode='r': Array, shape (N, N)
-        R, row major, upper triangular; ``R.T @ R`` equals ``a.T @ a`` to
-        float32. For M >= N it is the TSQR route's R, whose rows may differ
-        in SIGN from LAPACK's (the tree's combine steps choose their own
-        reflector signs; measured 2026-09-27 on a 48 x 5 input), so it can
-        differ from ``qr(a, mode='reduced')[1]`` by a sign per row.
-        Its bits predate the Q modes and are kept (the linalg-qr lane). A
-        wide input's R is geqrf's, the same as ``qr(a, mode='reduced')[1]``.
+    R : mojolearn.Array, shape (N, N), for mode='r'
+        Upper triangular, with ``R.T @ R`` equal to ``a.T @ a`` to float32 rounding.
+        For M >= N its rows can differ in sign from ``qr(a, mode='reduced')[1]``.
+    (Q, R) or (h, tau)
+        For the other modes.
 
     Notes
     -----
-    Runs `core/householder_qr.mojo::qr_factor` ON THE DEVICE where there is
-    one (`decomposition/linalg_public_device.mojo`), and the host replay of
-    that same factorization on a CPU-only install. The two are held to each
-    other bit for bit, which is the point of having both.
+    Runs on the device on a GPU install and on the host binding on a CPU-only install,
+    with the same bits.
     """
     if mode in ("reduced", "complete", "raw"):
         return _qr_q(a, mode)
@@ -1300,46 +1309,38 @@ def qr(a, mode="r"):
     return out
 
 
+# x_decomp's round-robin Jacobi (eigh_par_* kernels) + sign_flip_kernel (PCA's host_sign_flip
+# rule) on the device; host replay on CPU-only installs. Unconverged -> RuntimeError (DEVIATION
+# 590); a kernel that never ran is reported separately. decomposition/host/linalg_public.mojo
+# derives the ascending order from PCA's descending one.
 def eigh(a, UPLO="L"):
-    """`numpy.linalg.eigh(a, UPLO)`: eigenvalues ASCENDING and their vectors.
+    """Eigenvalues and eigenvectors of a symmetric matrix, as `numpy.linalg.eigh`.
 
     Parameters
     ----------
     a : float32 buffer, shape (N, N)
-        Read as symmetric from ONE triangle, as `numpy.linalg.eigh` reads it:
-        UPLO='L' (numpy's default) mirrors the lower triangle, 'U' the upper;
-        the other triangle is never read (lane/algos-decomp, 2026-09-27; it
-        used to feed the whole matrix to the Jacobi, which agreed with numpy
-        only on a symmetric input).
+        Read as symmetric from one triangle; the other is never read. A non-square
+        matrix raises `ValueError`.
+    UPLO : {'L', 'U'}, default 'L'
+        Which triangle to read.
 
     Returns
     -------
-    (w, v) : Array (N,), Array (N, N)
-        ``w`` ascending, ``v[:, i]`` the unit eigenvector for ``w[i]`` --
-        numpy's layout and numpy's order. `PCA` sorts the same spectrum
-        DESCENDING for its own reasons; this door carries numpy's name so it
-        carries numpy's order, and `decomposition/host/linalg_public.mojo`
-        derives one from the other rather than sorting twice.
-
-        The sign of each vector is pinned by the same `host_sign_flip` `PCA`
-        applies, so a vector is a function of the matrix and not of the sweep
-        order; without it two boxes agreeing bit for bit could still return
-        ``v`` and ``-v``.
+    w : mojolearn.Array, shape (N,)
+        Eigenvalues in ascending order.
+    v : mojolearn.Array, shape (N, N)
+        ``v[:, i]`` is the unit eigenvector of ``w[i]``. Each vector's sign is fixed
+        by a deterministic rule, so the result depends only on the matrix.
 
     Raises
     ------
     RuntimeError
-        If the Jacobi sweep did not converge. An unconverged decomposition is
-        not returned as though it were one (DEVIATION 590). On the device
-        route a kernel that NEVER RAN is reported as its own failure and not
-        as a convergence failure, so a broken build is never read as bad
-        data.
+        When the Jacobi iteration does not converge, or the device kernel did not run.
 
     Notes
     -----
-    Runs x_decomp's round-robin Jacobi (`eigh_par_*` kernels) and
-    `sign_flip_kernel` ON THE DEVICE where there is one, and their host
-    replay (x_decomp's host binding, the same rounds) on a CPU-only install.
+    Uses a round-robin Jacobi method, on the device on a GPU install and on the host
+    binding on a CPU-only install, with the same bits.
     """
     a_arr, rows, cols = _two_d(a, "a")
     if rows != cols:
@@ -1364,30 +1365,20 @@ def eigh(a, UPLO="L"):
     return w.out((rows,)), v.out()
 
 
+# Route: PCA(svd_solver='full') without centering: Householder QR, then one-sided Jacobi SVD of R.
 def svdvals(a):
-    """`numpy.linalg.svdvals(a)`: the singular values, DESCENDING.
+    """Singular values in descending order, as `numpy.linalg.svdvals`.
 
-    The route is `PCA(svd_solver='full')`'s without the centering -- the
-    Householder QR of ``a``, then the one-sided Jacobi SVD of R. The singular
-    values of R ARE those of ``a`` because Q is orthogonal, and that identity
-    is why this can exist without forming Q at all. Both kernels run ON THE
-    DEVICE where there is one, and as their host replay on a CPU-only
-    install.
+    Computed as the singular values of R from a Householder QR of `a`, which equal
+    those of `a`; a wide matrix (M < N) is read through its transpose.
 
     Parameters
     ----------
-    a : float32 buffer, shape (M, N); a wide one (M < N) is read through its
-        transpose, whose singular values are the same
+    a : float32 buffer, shape (M, N)
 
     Returns
     -------
-    Array, shape (min(M, N),)
-        Descending, numpy's order.
-
-    Notes
-    -----
-    `svd` returns ``(U, S, Vh)`` (lane/algos-decomp, 2026-09-27); its
-    ``compute_uv=False`` is this function.
+    mojolearn.Array, shape (min(M, N),)
     """
     a_arr, rows, cols = _two_d(a, "a")
     if rows < cols:
@@ -1502,24 +1493,35 @@ def _svd_tall(k, A, full):
     return k.ew("mul", Qc, sg), S, Vt
 
 
+# Householder QR + one-sided Jacobi SVD of R give S and V; U[:, j] = A v_j / s_j; null directions
+# (s_j <= 2^-20 s_0) and the extra full_matrices columns come from the complete Q of the
+# Householder QR of the found columns (geqrf + orgqr, DEVIATION 5320). Wide A: transposed
+# problem (U = V', Vh = U'^T). hermitian: S = |w| descending, U = v, Vh = (sign(w) v)^T.
+# full_matrices=False of a tall A with N <= 512 uses the blocked TSQR (`_svd_tsqr`;
+# MOJOLEARN_LINALG_TSQR=0 keeps the route above).
 def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
-    """`numpy.linalg.svd(a, full_matrices, compute_uv, hermitian)`
-    (lane/algos-decomp, 2026-09-27): ``SVDResult(U, S, Vh)``, S descending.
+    """Singular value decomposition, as `numpy.linalg.svd`.
 
-    The decomp lane's cells, IDENTICAL on every column: the Householder QR
-    and the one-sided Jacobi SVD of R give S and V; U's column j is
-    ``A v_j / s_j``; a numerically null direction (s_j <= 2^-20 s_0) and the
-    extra columns of ``full_matrices=True`` come from the complete Q of the
-    Householder QR of the columns already found (geqrf + orgqr, DEVIATION
-    5320). A wide A (M < N) is the transposed problem: ``A.T = U' S V'^T``,
-    so U = V' and Vh = U'^T. ``hermitian=True`` is numpy's route through
-    eigh (the lower triangle): S = |w| descending, U = v, Vh = (sign(w) v)^T.
-    ``compute_uv=False`` returns `svdvals` (of ``a.T`` when wide), as numpy's
-    svdvals is svd(compute_uv=False). The signs of U's and V's columns are
-    the Jacobi's, not LAPACK's: numpy promises none either.
-    ``full_matrices=False`` of a tall A with N <= 512 is the blocked TSQR
-    (`_svd_tsqr`, lane neural-pass140): the same SVD of A's R, U = Q U_R in
-    one pass over the rows (MOJOLEARN_LINALG_TSQR=0 keeps the route above)."""
+    Returns ``SVDResult(U, S, Vh)`` with `S` descending. The signs of the columns of
+    `U` and `V` are deterministic but need not match LAPACK's (NumPy promises no sign
+    either). ``compute_uv=False`` returns `svdvals`. ``hermitian=True`` goes through
+    `eigh` (lower triangle) as NumPy does and needs a square matrix, otherwise
+    `ValueError`.
+
+    Parameters
+    ----------
+    a : float32 buffer, shape (M, N)
+    full_matrices : bool, default True
+        Return U (M, M) and Vh (N, N) instead of the reduced shapes.
+    compute_uv : bool, default True
+        Return U and Vh as well as S.
+    hermitian : bool, default False
+        Treat `a` as symmetric.
+
+    Returns
+    -------
+    SVDResult or mojolearn.Array
+    """
     a_arr, rows, cols = _two_d(a, "a")
     if not compute_uv:
         return svdvals(a_arr)
