@@ -155,6 +155,27 @@ class _AnnSaved:
         return v
 
     def save(self, path):
+        """Write the fitted index to `path` as an ``.npz`` file.
+
+        The file holds the constructor parameters, the fitted sizes, the index
+        arrays exactly as `fit` left them, and the numeric mode. Reload it with
+        `load`; a loaded index searches without rebuilding.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Returns
+        -------
+        path : str or path-like
+            The path written.
+
+        Raises
+        ------
+        RuntimeError
+            If the index has not been fitted.
+        """
         from . import _serialize
         from ._array import Array
         from .decomposition import _saved_mode
@@ -174,6 +195,27 @@ class _AnnSaved:
 
     @classmethod
     def load(cls, path):
+        """Load an index written by `save`.
+
+        The arrays are read back byte for byte; a file whose arrays have a
+        different dtype, or that was saved by another class, is refused.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+
+        Returns
+        -------
+        index
+            A fitted index of this class, ready to `search`.
+
+        Raises
+        ------
+        ValueError
+            If the file was saved by another class or does not hold this
+            class's parameters.
+        """
         from . import _serialize
         from .decomposition import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, cls._SAVE_FORMAT)
@@ -191,30 +233,90 @@ class _AnnSaved:
         return obj
 
 
+# IDENTICAL by construction: fixed-order codebook training and code sums,
+# ties broken by index (x_ann/ivf_pq_core.mojo).
 class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
-    """IVF-PQ build, then search (reference: cuVS `ivf_pq`), IDENTICAL by
-    construction: fixed-order codebook training and code sums, ties broken
-    by index (x_ann/ivf_pq_core.mojo).
+    """Approximate nearest-neighbor index with inverted lists and product quantization (IVF-PQ).
+
+    Follows cuVS's ``ivf_pq``. `fit` trains a k-means coarse quantizer that
+    splits the rows into `n_lists` lists, then encodes each row with product
+    quantization: the features are split into `pq_dim` subspaces and each
+    subspace is stored as one of ``2**pq_bits`` codebook entries. `search`
+    scans the `n_probes` lists nearest each query and returns approximate
+    squared Euclidean distances computed from the codes. Codebook training
+    and code sums run in a fixed order and ties are broken by row id, so the
+    results are reproducible. On a GPU the fitted index stays on the device
+    between searches; each search uploads only its queries.
 
     Parameters
     ----------
     n_lists : int
+        Number of inverted lists (k-means clusters). Must be in
+        ``[1, n_samples]``.
     n_probes : int
-        Required; `n_probes > n_lists` raises (no clamp).
+        Number of lists scanned per query. Required, with no default; a value
+        greater than `n_lists` raises an error rather than being clamped.
     pq_dim : int, default 4
-        Subspaces; `dim` is zero-padded up to a multiple of it.
+        Number of PQ subspaces. Must be in ``[1, n_features]``; the features
+        are zero-padded up to a multiple of `pq_dim`.
     pq_bits : int, default 8
-        2**pq_bits codes per subspace.
+        Bits per code, so each subspace has ``2**pq_bits`` codebook entries.
+        Must be in ``[1, 8]``.
     n_neighbors : int, default 8
+        Number of neighbors `search` returns per query.
     kmeans_n_iters : int, default 20
-        The coarse quantizer (IVF-Flat's k-means).
+        k-means iterations for the coarse quantizer.
     pq_kmeans_n_iters : int, default 20
+        k-means iterations for each subspace codebook.
     random_state : int, default 0
+        Seed for the k-means initializations.
+    numeric_mode : str or None, default None
+        Numeric mode for this estimator; None uses the package default set
+        with `mojolearn.set_numeric_mode`.
 
-    `search(queries)` returns `(distances, indices)`: approximate squared L2
-    distances float32 `(m, k)` and int32 `(m, k)` original row ids; a query
-    whose probed lists hold fewer than k rows gets `(inf, -1)` fill.
-    `n_candidates_` `(m,)` is set on the instance.
+    Attributes
+    ----------
+    centers_ : ndarray of shape (n_lists, n_features), float32
+        Coarse quantizer centers.
+    list_offsets_ : ndarray of shape (n_lists + 1,), int32
+        Start of each list in `list_indices_`.
+    list_indices_ : ndarray of shape (n_samples,), int32
+        Original row ids, grouped by list.
+    codebooks_ : ndarray of shape (pq_dim, 2**pq_bits, pq_len_), float32
+        One codebook per subspace.
+    codes_ : ndarray of shape (n_samples, pq_dim), int32
+        PQ code of every indexed row.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+    n_rows_ : int
+        Number of indexed rows.
+    n_lists_, pq_dim_, pq_bits_ : int
+        The fitted values of `n_lists`, `pq_dim` and `pq_bits`.
+    pq_len_ : int
+        Features per subspace, ``ceil(n_features / pq_dim)``.
+    n_candidates_ : ndarray of shape (n_queries,), int32
+        Set by `search`: how many indexed rows each query scanned.
+
+    Raises
+    ------
+    TypeError
+        If an integer parameter is not an int.
+    ValueError
+        If `n_lists`, `pq_dim` or `pq_bits` is out of range.
+
+    See Also
+    --------
+    IVFIndex : IVF without compression (exact distances within probed lists).
+    refine : Re-rank candidates with exact distances.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> index = mojolearn.IVFPQIndex(n_lists=16, n_probes=4, n_neighbors=5).fit(X)
+    >>> distances, indices = index.search(X[:10])
+    >>> indices.shape
+    (10, 5)
     """
 
     _BINDING = "_mojolearn_x_ann"
@@ -285,6 +387,20 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return super().__getstate__()
 
     def fit(self, X, y=None):
+        """Build the index from `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to index, converted to float32.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : IVFPQIndex
+            The fitted index.
+        """
         self.__dict__.pop("_device_codes", None)
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
@@ -344,8 +460,31 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return self
 
     def search(self, queries, filter=None):
-        """`filter`: optional boolean array over the indexed rows; a False row
-        is never returned (cuVS's sample filter, applied before scoring)."""
+        """Find the approximate nearest indexed rows of each query.
+
+        Parameters
+        ----------
+        queries : array-like of shape (n_queries, n_features)
+            Query rows, converted to float32.
+        filter : array-like of bool, shape (n_rows_,), optional
+            One flag per indexed row; a row flagged False is never returned
+            (cuVS's sample filter, applied before scoring).
+
+        Returns
+        -------
+        distances : ndarray of shape (n_queries, n_neighbors), float32
+            Approximate squared Euclidean distances, ascending.
+        indices : ndarray of shape (n_queries, n_neighbors), int32
+            Original row ids of the neighbors. A query whose probed lists hold
+            fewer than `n_neighbors` rows is padded with distance ``inf`` and
+            id ``-1``.
+
+        Raises
+        ------
+        ValueError
+            If the index is not fitted, the queries have a different number of
+            features, or `filter` has the wrong shape or dtype.
+        """
         if not self._is_built():
             raise ValueError("mojolearn IVFPQIndex: call fit before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
@@ -376,33 +515,73 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
 
+# IDENTICAL by construction (x_ann/tsne_core.mojo): exact k-NN affinities
+# with the reference's perplexity bisection, attractive term over the sparse
+# P, exact repulsion (no Barnes-Hut atomics), sklearn's gains/momentum
+# optimizer. The 'pca' and 'random' starts are built in the binding
+# (x_ann/tsne_init.mojo): 'pca' scales mojolearn's PCA embedding by the first
+# column's standard deviation (one correctly rounded sum, so no platform's
+# summation order enters) with one float32 divide and one float32 multiply per
+# element; 'random' draws from the seeded Mojo stream (uniform_init_f32),
+# whose integer-to-double draw is exact on every platform.
 class TSNE(NumericModeMixin):
-    """t-SNE (reference: scikit-learn `TSNE`, cuML `TSNE`), IDENTICAL by
-    construction (x_ann/tsne_core.mojo): exact k-NN affinities with the
-    reference's perplexity bisection, attractive term over the sparse P,
-    EXACT repulsion (no Barnes-Hut atomics), sklearn's gains/momentum
-    optimizer for exactly `max_iter` steps.
+    """t-distributed Stochastic Neighbor Embedding (t-SNE) into two dimensions.
+
+    Follows scikit-learn's ``TSNE`` (and cuML's): affinities from exact
+    k-nearest neighbors with the perplexity search, then gradient descent with
+    scikit-learn's gains and momentum, using early exaggeration for the first
+    250 iterations. Unlike scikit-learn's default Barnes-Hut method, the
+    repulsive forces are computed exactly, and the optimizer always runs
+    exactly `max_iter` iterations (there is no early stop when progress
+    stalls). The computation runs in a fixed order, so results are
+    reproducible.
 
     Parameters
     ----------
-    n_components : 2 (only)
+    n_components : int, default 2
+        Dimension of the embedding. Only 2 is supported.
     perplexity : float, default 30.0
+        Effective number of neighbors. Must be in ``(0, n_samples)``.
     early_exaggeration : float, default 12.0
+        Factor applied to the attractive forces during the early phase.
     learning_rate : float or 'auto', default 'auto'
-        'auto' is sklearn's max(n / early_exaggeration / 4, 50).
+        Optimizer step size. 'auto' is scikit-learn's
+        ``max(n_samples / early_exaggeration / 4, 50)``.
     max_iter : int, default 1000
-    init : 'pca' (default, as sklearn), 'random' or an array of shape
-        (n_samples, 2).
-        'pca' is mojolearn's PCA (identical on every column; the exact
-        eigensolver where sklearn uses its randomized solver) scaled as
-        sklearn scales it: divided by the first column's standard deviation
-        and multiplied by 1e-4. The deviation is computed on the host in
-        float64 with math.fsum (one correctly rounded sum, so no platform's
-        summation order enters) and applied as one float32 divide and one
-        float32 multiply per element.
-        'random' is uniform(-5e-5, 5e-5) from the seeded Mojo stream (uniform_init_f32),
-        whose integer-to-double draw is exact on every platform.
+        Number of optimization iterations, all of which run.
+    init : {'pca', 'random'} or array-like of shape (n_samples, 2), default 'pca'
+        Initial embedding. 'pca' is mojolearn's PCA embedding scaled as
+        scikit-learn scales it: divided by the first column's standard
+        deviation and multiplied by 1e-4. mojolearn uses an exact
+        eigensolver where scikit-learn uses a randomized one. 'random' draws
+        uniformly from ``(-5e-5, 5e-5)`` seeded by `random_state`. An array is
+        used as given.
     random_state : int, default 0
+        Seed for the 'random' initialization.
+    numeric_mode : str or None, default None
+        Numeric mode for this estimator; None uses the package default set
+        with `mojolearn.set_numeric_mode`.
+
+    Attributes
+    ----------
+    embedding_ : ndarray of shape (n_samples, 2), float32
+        The embedding.
+    kl_divergence_ : float
+        Kullback-Leibler divergence after optimization.
+    n_iter_ : int
+        Number of iterations run (always `max_iter`).
+    learning_rate_ : float
+        The learning rate used, after resolving 'auto'.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> embedding = mojolearn.TSNE(perplexity=30.0).fit_transform(X)
+    >>> embedding.shape
+    (1000, 2)
     """
 
     _BINDING = "_mojolearn_x_ann"
@@ -432,6 +611,28 @@ class TSNE(NumericModeMixin):
         return y0
 
     def fit(self, X, y=None):
+        """Compute the embedding of `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input rows, converted to float32.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : TSNE
+            The fitted estimator, with the result in `embedding_`.
+
+        Raises
+        ------
+        ValueError
+            If `n_components` is not 2, `perplexity` is out of range, `init`
+            is an unknown string, or an `init` array has the wrong shape.
+        TypeError
+            If `max_iter` or `random_state` is not an int.
+        """
         from ._optional_numpy import require_numpy
         np = require_numpy('_expansion_ann')
         x, _ = as_f32_c(X, ndim=2, name="X")
@@ -487,35 +688,98 @@ class TSNE(NumericModeMixin):
         return self
 
     def fit_transform(self, X, y=None):
+        """Compute the embedding of `X` and return it.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input rows, converted to float32.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        embedding : ndarray of shape (n_samples, 2), float32
+            The embedding, also stored in `embedding_`.
+        """
         return self.fit(X).embedding_
 
 
+# IDENTICAL by construction (x_ann/cagra_core.mojo). random_state r >= 0
+# picks start node t as splitmix64 of (r + 1, t) mod n (cg_seed_node).
 class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
-    """CAGRA graph index, build then search (reference: cuVS `cagra`),
-    IDENTICAL by construction (x_ann/cagra_core.mojo): an exact k-NN
-    intermediate graph, cuVS's rank-based detour pruning, reverse edges in
-    (rank, source id) order, and a greedy itopk search with fixed seeds, an
-    exact visited set and (distance, id) ties.
+    """Graph-based approximate nearest-neighbor index (CAGRA).
+
+    Follows cuVS's ``cagra``. `fit` builds an exact k-nearest-neighbor graph
+    of degree `intermediate_graph_degree`, prunes it to `graph_degree` with
+    cuVS's rank-based detour pruning, and adds reverse edges. `search` walks
+    the graph greedily from a set of start nodes, keeping the best
+    `itopk_size` candidates, and returns squared Euclidean distances. Ties are
+    broken by row id and the start nodes are the same for every query, so
+    results are reproducible. The index keeps a copy of the dataset, as
+    cuVS's does. On a GPU the fitted index stays on the device between
+    searches; each search uploads only its queries.
 
     Parameters
     ----------
     graph_degree : int, default 32
+        Out-degree of the final graph. Capped at `intermediate_graph_degree`.
     intermediate_graph_degree : int, default 64
+        Degree of the k-NN graph built before pruning. Capped at
+        ``n_samples - 1``.
     n_neighbors : int, default 8
+        Number of neighbors `search` returns per query.
     itopk_size : int, default 64
+        Number of candidates kept during the search. Larger values give
+        better recall and slower searches.
     search_width : int, default 1
-    max_iterations : int, default 0 (auto: itopk_size)
+        Number of candidates whose neighbors are expanded per iteration.
+    max_iterations : int, default 0
+        Search iterations; 0 means `itopk_size`.
     n_seeds : int, default 0
-        Start nodes; 0 is cuVS's pick-up count, itopk_size +
-        search_width * graph_degree.
+        Number of start nodes; 0 means cuVS's default,
+        ``itopk_size + search_width * graph_degree`` (capped at the number of
+        rows).
     random_state : int or None, default None
-        The start nodes' seed, the role of cuVS's `rand_xor_mask`: None
-        takes evenly spaced nodes (t * n) // n_seeds; an int r >= 0 takes
-        splitmix64 of (r + 1, t) mod n (x_ann/cagra_core.mojo cg_seed_node),
-        the same nodes for every query and on every device.
+        Seed for the start nodes, in the role of cuVS's ``rand_xor_mask``.
+        None takes evenly spaced nodes; a non-negative int takes seeded
+        pseudo-random nodes. Either way every query uses the same start nodes.
+    numeric_mode : str or None, default None
+        Numeric mode for this estimator; None uses the package default set
+        with `mojolearn.set_numeric_mode`.
 
-    `search(queries)` returns squared L2 distances float32 `(m, k)` and int32
-    ids `(m, k)`; the index keeps a copy of the dataset, as cuVS's does.
+    Attributes
+    ----------
+    dataset_ : ndarray of shape (n_samples, n_features), float32
+        The indexed rows.
+    graph_ : ndarray of shape (n_samples, graph_degree_), int32
+        Neighbor ids of each row in the search graph.
+    graph_degree_ : int
+        The graph degree used, after capping.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+    n_rows_ : int
+        Number of indexed rows.
+
+    Raises
+    ------
+    TypeError
+        If an integer parameter is not an int.
+    ValueError
+        If `random_state` is negative.
+
+    See Also
+    --------
+    IVFIndex, IVFPQIndex : Inverted-list indexes.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> index = mojolearn.CagraIndex(n_neighbors=5).fit(X)
+    >>> distances, indices = index.search(X[:10])
+    >>> indices.shape
+    (10, 5)
     """
 
     _BINDING = "_mojolearn_x_ann"
@@ -569,6 +833,20 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
                 [n, self.n_features_in_, deg])
 
     def fit(self, X, y=None):
+        """Build the search graph from `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to index, converted to float32. The index keeps them.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : CagraIndex
+            The fitted index.
+        """
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input
@@ -586,15 +864,38 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self.n_features_in_, self.n_rows_, self.graph_degree_ = d, n, deg
         return self
 
+    # filtered: integer selection only over the itopk buffer
+    # (x_ann/filter_topk.mojo); padding matches the IVF filters'.
     def search(self, queries, filter=None):
-        """`filter`: optional boolean array over the indexed rows; a False row
-        is never returned (cuVS's CAGRA sample filter, applied as cuVS's
-        single-CTA search applies it: after the traversal, over the whole
-        itopk buffer). A removed row still guides the walk. The answer is the
-        first `n_neighbors` kept entries of the itopk buffer in its order
-        (distance, then id); a query with fewer kept entries is padded with
-        (+inf, -1), the IVF filters' padding. Integer selection only: every
-        returned distance is a buffer entry the unfiltered search computes."""
+        """Find the approximate nearest indexed rows of each query.
+
+        Parameters
+        ----------
+        queries : array-like of shape (n_queries, n_features)
+            Query rows, converted to float32.
+        filter : array-like of bool, shape (n_rows_,), optional
+            One flag per indexed row; a row flagged False is never returned.
+            As in cuVS's single-CTA search, the filter is applied after the
+            graph walk, over the `itopk_size` candidates: removed rows still
+            guide the walk, and the answer is the first `n_neighbors` kept
+            candidates in (distance, id) order. Distances are the same values
+            the unfiltered search computes.
+
+        Returns
+        -------
+        distances : ndarray of shape (n_queries, n_neighbors), float32
+            Squared Euclidean distances, ascending.
+        indices : ndarray of shape (n_queries, n_neighbors), int32
+            Row ids of the neighbors. With a filter, a query with fewer kept
+            candidates than `n_neighbors` is padded with distance ``inf`` and
+            id ``-1``.
+
+        Raises
+        ------
+        ValueError
+            If the index is not fitted, the queries have a different number of
+            features, or `filter` has the wrong shape or dtype.
+        """
         if not hasattr(self, "graph_"):
             raise ValueError("mojolearn CagraIndex: call fit before search")
         if filter is not None:
@@ -658,15 +959,74 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
 
+# IDENTICAL by construction (x_ann/ivf_sq_core.mojo).
 class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
-    """IVF-SQ build, then search (reference: cuVS `ivf_sq`): the IVF-PQ
-    coarse quantizer, residuals quantized to 8 bits per dimension (cuVS's
-    per-dimension range with a 5% margin), a scan of the decoded residuals.
-    IDENTICAL by construction (x_ann/ivf_sq_core.mojo).
+    """Approximate nearest-neighbor index with inverted lists and 8-bit scalar quantization (IVF-SQ).
 
-    Parameters: n_lists, n_probes (required), n_neighbors=8,
-    kmeans_n_iters=20, random_state=0. `search(queries, filter=None)` as
-    `IVFPQIndex.search`."""
+    Follows cuVS's ``ivf_sq``. `fit` trains the same k-means coarse quantizer
+    as `IVFPQIndex`, then stores each row's residual (row minus its list
+    center) quantized to 8 bits per feature, using cuVS's per-feature range
+    with a 5% margin. `search` scans the decoded residuals of the `n_probes`
+    lists nearest each query and returns approximate squared Euclidean
+    distances. Results are reproducible. On a GPU the fitted index stays on
+    the device between searches; each search uploads only its queries.
+
+    Parameters
+    ----------
+    n_lists : int
+        Number of inverted lists (k-means clusters). Must be in
+        ``[1, n_samples]``.
+    n_probes : int
+        Number of lists scanned per query. Required, with no default.
+    n_neighbors : int, default 8
+        Number of neighbors `search` returns per query.
+    kmeans_n_iters : int, default 20
+        k-means iterations for the coarse quantizer.
+    random_state : int, default 0
+        Seed for the k-means initialization.
+    numeric_mode : str or None, default None
+        Numeric mode for this estimator; None uses the package default set
+        with `mojolearn.set_numeric_mode`.
+
+    Attributes
+    ----------
+    centers_ : ndarray of shape (n_lists, n_features), float32
+        Coarse quantizer centers.
+    list_offsets_ : ndarray of shape (n_lists + 1,), int32
+        Start of each list in `list_indices_`.
+    list_indices_ : ndarray of shape (n_samples,), int32
+        Original row ids, grouped by list.
+    sq_vmin_ : ndarray of shape (n_features,), float32
+        Lower end of each feature's quantization range.
+    sq_delta_ : ndarray of shape (n_features,), float32
+        Quantization step of each feature.
+    codes_ : ndarray of shape (n_samples, n_features), int32
+        8-bit code of every residual value.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+    n_rows_ : int
+        Number of indexed rows.
+    n_lists_ : int
+        The fitted value of `n_lists`.
+    n_candidates_ : ndarray of shape (n_queries,), int32
+        Set by `search`: how many indexed rows each query scanned.
+
+    Raises
+    ------
+    TypeError
+        If an integer parameter is not an int.
+    ValueError
+        If `n_lists` is out of range.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> index = mojolearn.IVFSQIndex(n_lists=16, n_probes=4, n_neighbors=5).fit(X)
+    >>> distances, indices = index.search(X[:10])
+    >>> indices.shape
+    (10, 5)
+    """
 
     _BINDING = "_mojolearn_x_ann"
     _SAVE_FORMAT = "mojolearn-ivf-sq-1"
@@ -696,6 +1056,20 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
                 [n, dim, self.n_lists_])
 
     def fit(self, X, y=None):
+        """Build the index from `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to index, converted to float32.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : IVFSQIndex
+            The fitted index.
+        """
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
@@ -724,6 +1098,31 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return self
 
     def search(self, queries, filter=None):
+        """Find the approximate nearest indexed rows of each query.
+
+        Parameters
+        ----------
+        queries : array-like of shape (n_queries, n_features)
+            Query rows, converted to float32.
+        filter : array-like of bool, shape (n_rows_,), optional
+            One flag per indexed row; a row flagged False is never returned
+            (cuVS's sample filter, applied before scoring).
+
+        Returns
+        -------
+        distances : ndarray of shape (n_queries, n_neighbors), float32
+            Approximate squared Euclidean distances, ascending.
+        indices : ndarray of shape (n_queries, n_neighbors), int32
+            Original row ids of the neighbors. A query whose probed lists hold
+            fewer than `n_neighbors` rows is padded with distance ``inf`` and
+            id ``-1``.
+
+        Raises
+        ------
+        ValueError
+            If the index is not fitted, the queries have a different number of
+            features, or `filter` has the wrong shape or dtype.
+        """
         if not hasattr(self, "codes_"):
             raise ValueError("mojolearn IVFSQIndex: call fit before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
@@ -753,17 +1152,82 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
 
+# IDENTICAL by construction (x_ann/ivf_rabitq_core.mojo).
 class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
-    """IVF-RaBitQ build, then search (reference: cuVS `ivf_rabitq`, RaBitQ
-    of Gao & Long): the IVF coarse quantizer, each residual rotated by a
-    randomized Hadamard transform and kept as sign bits plus its norm and
-    <x_bar, o> factor; search returns the RaBitQ distance ESTIMATES, top-k
-    under (estimate, id). IDENTICAL by construction
-    (x_ann/ivf_rabitq_core.mojo). Pair with `refine` for exact distances.
+    """Approximate nearest-neighbor index with inverted lists and 1-bit RaBitQ codes (IVF-RaBitQ).
 
-    Parameters: n_lists, n_probes (required), n_neighbors=8,
-    kmeans_n_iters=20, random_state=0 (the coarse init and the rotation's
-    signs). `search(queries, filter=None)` as `IVFPQIndex.search`."""
+    Follows cuVS's ``ivf_rabitq`` (RaBitQ, Gao and Long). `fit` trains a
+    k-means coarse quantizer, rotates each row's residual by a randomized
+    Hadamard transform, and keeps its sign bits together with its norm and an
+    inner-product correction factor. `search` scans the `n_probes` lists
+    nearest each query and returns the RaBitQ distance estimates, the
+    `n_neighbors` smallest by (estimate, id). The distances are estimates;
+    pass the candidates to `refine` for exact distances. Results are
+    reproducible. On a GPU the fitted index stays on the device between
+    searches; each search uploads only its queries.
+
+    Parameters
+    ----------
+    n_lists : int
+        Number of inverted lists (k-means clusters). Must be in
+        ``[1, n_samples]``.
+    n_probes : int
+        Number of lists scanned per query. Required, with no default.
+    n_neighbors : int, default 8
+        Number of neighbors `search` returns per query.
+    kmeans_n_iters : int, default 20
+        k-means iterations for the coarse quantizer.
+    random_state : int, default 0
+        Seed for the k-means initialization and the rotation's random signs.
+    numeric_mode : str or None, default None
+        Numeric mode for this estimator; None uses the package default set
+        with `mojolearn.set_numeric_mode`.
+
+    Attributes
+    ----------
+    centers_ : ndarray of shape (n_lists, n_features), float32
+        Coarse quantizer centers.
+    list_offsets_ : ndarray of shape (n_lists + 1,), int32
+        Start of each list in `list_indices_`.
+    list_indices_ : ndarray of shape (n_samples,), int32
+        Original row ids, grouped by list.
+    codes_ : ndarray of shape (n_samples, n_words), int32
+        Sign bits of each rotated residual, packed 32 per word; the residual
+        is zero-padded to the next power of two.
+    norms_ : ndarray of shape (n_samples,), float32
+        Norm of each residual.
+    ip_factors_ : ndarray of shape (n_samples,), float32
+        Inner-product correction factor of each row.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+    n_rows_ : int
+        Number of indexed rows.
+    n_lists_ : int
+        The fitted value of `n_lists`.
+    seed_ : int
+        The seed used for the rotation.
+    n_candidates_ : ndarray of shape (n_queries,), int32
+        Set by `search`: how many indexed rows each query scanned.
+
+    Raises
+    ------
+    TypeError
+        If an integer parameter is not an int.
+    ValueError
+        If `n_lists` is out of range.
+
+    See Also
+    --------
+    refine : Re-rank candidates with exact distances.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> index = mojolearn.IVFRaBitQIndex(n_lists=16, n_probes=4, n_neighbors=20).fit(X)
+    >>> _, candidates = index.search(X[:10])
+    >>> distances, indices = mojolearn.refine(X, X[:10], candidates, k=5)
+    """
 
     _BINDING = "_mojolearn_x_ann"
     _SAVE_FORMAT = "mojolearn-ivf-rabitq-1"
@@ -794,6 +1258,20 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
                 [n, dim, self.n_lists_, self.seed_])
 
     def fit(self, X, y=None):
+        """Build the index from `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to index, converted to float32.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : IVFRaBitQIndex
+            The fitted index.
+        """
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
@@ -826,6 +1304,31 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return self
 
     def search(self, queries, filter=None):
+        """Find the approximate nearest indexed rows of each query.
+
+        Parameters
+        ----------
+        queries : array-like of shape (n_queries, n_features)
+            Query rows, converted to float32.
+        filter : array-like of bool, shape (n_rows_,), optional
+            One flag per indexed row; a row flagged False is never returned
+            (cuVS's sample filter, applied before scoring).
+
+        Returns
+        -------
+        distances : ndarray of shape (n_queries, n_neighbors), float32
+            Estimated squared Euclidean distances, ascending.
+        indices : ndarray of shape (n_queries, n_neighbors), int32
+            Original row ids of the neighbors. A query whose probed lists hold
+            fewer than `n_neighbors` rows is padded with distance ``inf`` and
+            id ``-1``.
+
+        Raises
+        ------
+        ValueError
+            If the index is not fitted, the queries have a different number of
+            features, or `filter` has the wrong shape or dtype.
+        """
         if not hasattr(self, "codes_"):
             raise ValueError("mojolearn IVFRaBitQIndex: call fit before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
@@ -856,18 +1359,64 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
 
+# metric='euclidean' is cuVS L2SqrtExpanded: the selection runs on the squared
+# keys and the root of each of the k selected distances is taken afterwards
+# (in the binding), where cuVS takes it at the store.
 def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclidean"):
-    """Exact re-ranking of candidate neighbors (reference: cuVS `refine`):
-    squared L2 from each query to each of its candidate rows, the k smallest
-    under (distance, id). `candidates` is int (m, k0); an id < 0 is padding.
-    Returns `(distances, indices)`, float32 and int32 `(m, k)`; a query with
-    fewer than k valid candidates gets `(inf, -1)` fill.
+    """Re-rank candidate neighbors by exact distance.
 
-    `metric`: 'sqeuclidean' (cuVS L2Expanded, the default) or 'euclidean'
-    (L2SqrtExpanded): the same selection on the squared keys, then the root
-    of each of the k selected distances, taken on the host in float32
-    (numpy's sqrt, IEEE correctly rounded on every platform), where cuVS
-    takes it at the store. The ids and their order are the squared metric's."""
+    Follows cuVS's ``refine``. For each query, computes the exact distance to
+    each of its candidate rows of `dataset` and keeps the `k` smallest, ties
+    broken by row id. Use it after an approximate search (for example
+    `IVFRaBitQIndex` or `IVFPQIndex` with a larger `n_neighbors`) to get exact
+    distances and a better ordering.
+
+    Parameters
+    ----------
+    dataset : array-like of shape (n_samples, n_features)
+        The indexed rows, converted to float32.
+    queries : array-like of shape (n_queries, n_features)
+        Query rows, converted to float32.
+    candidates : array-like of int, shape (n_queries, n_candidates)
+        Candidate row ids for each query. Negative ids are padding and are
+        skipped, as are ids outside ``[0, n_samples)``.
+    k : int
+        Number of neighbors to return per query.
+    numeric_mode : str or None, default None
+        Numeric mode to run in; None uses the package default set with
+        `mojolearn.set_numeric_mode`.
+    metric : {'sqeuclidean', 'euclidean'}, default 'sqeuclidean'
+        'sqeuclidean' returns squared Euclidean distances (cuVS
+        ``L2Expanded``); 'euclidean' returns their square roots (cuVS
+        ``L2SqrtExpanded``). The ids and their order are the same under both.
+        Inner product is not supported.
+
+    Returns
+    -------
+    distances : ndarray of shape (n_queries, k), float32
+        Exact distances, ascending.
+    indices : ndarray of shape (n_queries, k), int32
+        Row ids of the neighbors. A query with fewer than `k` valid
+        candidates is padded with distance ``inf`` and id ``-1``.
+
+    Raises
+    ------
+    ValueError
+        If `metric` is not supported, the feature counts differ, `candidates`
+        is not an integer array of shape (n_queries, n_candidates), or a
+        candidate id does not fit in int32.
+    TypeError
+        If `k` is not an int.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> candidates = np.tile(np.arange(50), (10, 1))
+    >>> distances, indices = mojolearn.refine(X, X[:10], candidates, k=5)
+    >>> indices.shape
+    (10, 5)
+    """
     from ._optional_numpy import require_numpy
     np = require_numpy('_expansion_ann')
     if metric not in ("sqeuclidean", "euclidean"):
