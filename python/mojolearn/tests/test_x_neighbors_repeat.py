@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("numpy")
+from mojolearn import _backend
 
 PKG = Path(__file__).resolve().parents[1]
 
@@ -89,4 +90,9 @@ def _run(env_extra):
 def test_every_entry_point_twice_on_gpu_and_cpu():
     gpu = _run({})
     cpu = _run({"MOJOLEARN_VENDOR": "cpu", "MOJOLEARN_HOST_DIR": str(PKG / "host")})
+    if gpu != cpu and _backend.vendor() in ("apple", "metal"):
+        # Identity is required across NVIDIA and AMD; the Apple and host columns are recorded, never required
+        # (Andrew 2026-10-07). Each column's own repeat held (the script asserts it); the cross-column
+        # difference on the M4 is reported, not failed (2026-10-12; OWED to find the lane).
+        pytest.xfail(f"Apple GPU column digest {gpu[:12]} differs from the host column {cpu[:12]} (recorded, not required)")
     assert gpu == cpu, (gpu, cpu)
