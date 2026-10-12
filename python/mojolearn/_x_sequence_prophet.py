@@ -1,25 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""ProphetForecaster: a Prophet-style forecaster (the model of
-`prophet/forecaster.py` and `stan/prophet.stan`, linear growth): a
-piecewise-linear trend with changepoints, Fourier seasonalities, holiday
-regressors, additive or multiplicative, fitted by MAP on the GPU
-(`sequence/prophet.mojo`, one series per thread for a batch sharing t).
-
-Prophet's rules carried: y scaled by max|y| and t to [0, 1] over the
-history; `n_changepoints` placed at `np.linspace(0, hist_size - 1, n + 1)`
-of the first `changepoint_range` of the history, the first dropped; the
-auto seasonalities (yearly 365.25 d order 10 when the history spans two
-years, weekly 7 d order 3 when it spans two weeks at sub-weekly spacing,
-daily 1 d order 4 when it spans two days at sub-daily spacing) and
-`add_seasonality`; prior scales per feature; the linear initialisation.
-Time is days (floats), or numpy datetime64 converted to days since 1970.
-
-The fit is our float32 L-BFGS, not Stan's; parity with the prophet package
-is at a tolerance (its fit is Stan). Refused by name
-(sequence/NOT_IMPLEMENTED.tsv): logistic and flat growth, uncertainty
-intervals and sampling (mcmc_samples, interval_width), extra regressors
-beyond holiday indicator columns, conditional seasonalities, float64 y."""
+"""ProphetForecaster: a Prophet-style forecaster (linear growth, Fourier
+seasonalities, holiday regressors) fitted on the GPU."""
 from . import _portable_math as math
 
 from ._optional_numpy import require_numpy
@@ -49,7 +31,94 @@ def _days(t, mode):
     return days, info
 
 
+# The model of `prophet/forecaster.py` and `stan/prophet.stan` (linear growth),
+# fitted by MAP on the GPU (`sequence/prophet.mojo`, one series per thread for a
+# batch sharing t). The fit is our float32 L-BFGS, not Stan's; parity with the
+# prophet package is at a tolerance. Refusals are listed by name in
+# sequence/NOT_IMPLEMENTED.tsv.
 class ProphetForecaster:
+    """Prophet-style additive or multiplicative forecaster with linear growth.
+
+    Models a series as a piecewise-linear trend with changepoints, plus
+    Fourier seasonalities and optional holiday indicator regressors, and
+    fits the maximum a posteriori parameters with float32 L-BFGS (Prophet
+    uses Stan, so results agree with the prophet package to a tolerance, not
+    exactly). Prophet's conventions are kept: ``y`` is scaled by ``max|y|``
+    and time to [0, 1] over the history; ``n_changepoints`` are placed
+    evenly over the first ``changepoint_range`` of the history (the first
+    dropped); per-feature prior scales; Prophet's linear initialization.
+
+    Automatic seasonalities follow Prophet: yearly (period 365.25 days,
+    order 10) when the history spans two years; weekly (7 days, order 3) when
+    it spans two weeks at sub-weekly spacing; daily (1 day, order 4) when it
+    spans two days at sub-daily spacing. Add others with
+    :meth:`add_seasonality`.
+
+    Time ``t`` is given in days (floats) or as numpy ``datetime64``
+    (converted to days since 1970). ``y`` may be one series of shape
+    ``(n_obs,)`` or a batch of shape ``(batch_size, n_obs)`` sharing ``t``.
+
+    Not supported: logistic and flat growth, uncertainty intervals and
+    sampling (``mcmc_samples``, ``interval_width``), extra regressors beyond
+    holiday indicator columns, conditional seasonalities, float64 ``y``.
+
+    Parameters
+    ----------
+    growth : {"linear"}, default "linear"
+        Trend type; other values raise NotImplementedError.
+    changepoints : array-like or None, default None
+        Explicit changepoint times (same units as ``t``); they must fall
+        within the training data. None places ``n_changepoints``
+        automatically.
+    n_changepoints : int, default 25
+        Number of automatic changepoints.
+    changepoint_range : float, default 0.8
+        Fraction of the history in which automatic changepoints are placed.
+    yearly_seasonality, weekly_seasonality, daily_seasonality : "auto", bool or int, default "auto"
+        ``"auto"`` applies Prophet's rule above, True forces the seasonality
+        on with its default order, False turns it off, and an int turns it on
+        with that Fourier order.
+    seasonality_mode : {"additive", "multiplicative"}, default "additive"
+        How seasonalities and holidays combine with the trend.
+    seasonality_prior_scale : float, default 10.0
+        Prior scale of the seasonal coefficients.
+    holidays_prior_scale : float, default 10.0
+        Prior scale of the holiday coefficients.
+    changepoint_prior_scale : float, default 0.05
+        Prior scale of the trend changes (smaller is smoother).
+    max_iter : int, default 2000
+        Maximum L-BFGS iterations.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        or ``'fast'``); None uses the process default (see
+        :func:`mojolearn.set_numeric_mode`).
+
+    Attributes
+    ----------
+    seasonalities : dict
+        Seasonalities in use, by name: ``period``, ``fourier_order`` and
+        ``prior_scale``.
+    changepoints_t_ : ndarray, float32
+        Changepoint times on the scaled [0, 1] time axis.
+    params_ : ndarray of shape (batch_size, 3 + n_changepoints + n_features), float32
+        Fitted parameters per series.
+    objective_ : ndarray of shape (batch_size,), float32
+        Final objective value per series.
+    n_iter_ : ndarray of shape (batch_size,), int64
+        L-BFGS iterations per series.
+    trend_ : ndarray
+        Trend component at the times of the last :meth:`predict` call.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> t = np.arange(730, dtype=np.float64)
+    >>> y = (10 + 0.01 * t + np.sin(2 * np.pi * t / 7)).astype(np.float32)
+    >>> model = mojolearn.ProphetForecaster().fit(t, y)
+    >>> model.predict(np.arange(730, 760, dtype=np.float64)).shape
+    (30,)
+    """
+
     def __init__(self, growth="linear", changepoints=None, n_changepoints=25, changepoint_range=0.8,
                  yearly_seasonality="auto", weekly_seasonality="auto", daily_seasonality="auto",
                  seasonality_mode="additive", seasonality_prior_scale=10.0, holidays_prior_scale=10.0,
@@ -74,6 +143,24 @@ class ProphetForecaster:
         self.seasonalities = {}
 
     def add_seasonality(self, name, period, fourier_order, prior_scale=None):
+        """Add a custom seasonality before :meth:`fit`.
+
+        Parameters
+        ----------
+        name : str
+            Seasonality name. Using ``"yearly"``, ``"weekly"`` or ``"daily"``
+            replaces the automatic one.
+        period : float
+            Period in days, greater than 0.
+        fourier_order : int
+            Number of Fourier terms, at least 1.
+        prior_scale : float or None, default None
+            Prior scale; None uses ``seasonality_prior_scale``.
+
+        Returns
+        -------
+        self
+        """
         if int(fourier_order) < 1 or float(period) <= 0:
             raise ValueError("add_seasonality: period > 0 and fourier_order >= 1")
         self.seasonalities[name] = dict(period=float(period), fourier_order=int(fourier_order),
@@ -111,6 +198,31 @@ class ProphetForecaster:
         return tsc, frac
 
     def fit(self, t, y, holidays=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        t : array-like of shape (n_obs,)
+            Times in days (floats) or numpy ``datetime64``, sorted ascending,
+            no NaN.
+        y : array-like of shape (n_obs,) or (batch_size, n_obs)
+            Observations, float32 and finite; at least 2 points.
+        holidays : array-like of shape (n_obs, n_holidays) or None, default None
+            Holiday indicator columns.
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        TypeError
+            If ``y`` is float64.
+        ValueError
+            If ``t`` holds NaN or is not sorted, ``y`` is not finite, the
+            lengths differ, there are fewer than 2 points, or explicit
+            changepoints fall outside the training data.
+        """
         days, info = _days(t, self.numeric_mode)
         status, span, dmin = int(info[0]), float(info[1]), float(info[2])
         if status == 1:
@@ -172,7 +284,22 @@ class ProphetForecaster:
         return self
 
     def predict(self, t, holidays=None):
-        """yhat (and `self.trend_`) at t: (M,) for one series, else (B, M)."""
+        """Predict at the given times.
+
+        Parameters
+        ----------
+        t : array-like of shape (n_times,)
+            Times in days or numpy ``datetime64``, as for :meth:`fit`.
+        holidays : array-like of shape (n_times, n_holidays) or None, default None
+            Holiday indicator columns for ``t``; required when the model was
+            fitted with holidays.
+
+        Returns
+        -------
+        ndarray of shape (n_times,) or (batch_size, n_times), float32
+            The forecast ``yhat``. The trend component is stored in
+            ``trend_``.
+        """
         days, _ = _days(t, self.numeric_mode)
         M = len(days)
         tsc, frac_ = self._features(days)
