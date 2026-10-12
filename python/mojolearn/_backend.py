@@ -2245,11 +2245,12 @@ def set_default_mode(mode):
     a later fit.
 
     - ``"identical"`` (default): the same bits on NVIDIA and AMD GPUs.
-    - ``"deterministic"``: the same bits run to run on one device.
+    - ``"deterministic"``: reproducible results run to run.
     - ``"fast"``: the fastest arithmetic, for Apple GPUs; no bitwise promise.
 
-    The neural network families offer ``"identical"`` only and raise
-    ImportError under another mode.
+    Not every family offers every mode: ``"deterministic"`` is offered by the
+    tree ensembles (gradient boosting, random forest, extra trees) only.
+    Using a family under a mode it does not ship raises ImportError.
 
     Parameters
     ----------
