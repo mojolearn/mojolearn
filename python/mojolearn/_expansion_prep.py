@@ -2746,7 +2746,7 @@ class _Classifier(_PrepBase):
         return pr.get(o["log"], (n, K))
 
     def predict_joint_log_proba(self, X):
-        """Return the unnormalized joint log likelihood of each row and class.
+        """Return the unnormalized log score of each row and class.
 
         Parameters
         ----------
@@ -2756,7 +2756,7 @@ class _Classifier(_PrepBase):
         Returns
         -------
         array of shape (n_samples, n_classes)
-            Joint log likelihood ``log P(x, c)`` of each class, in the order of ``classes_``.
+            Log scores that ``predict_log_proba`` normalizes, in the order of ``classes_``.
         """
         pr, n, K, o = self._scores(X, ())
         return pr.get(o["jll"], (n, K))
