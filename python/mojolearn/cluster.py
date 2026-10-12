@@ -79,82 +79,98 @@ def _refuse_non_finite(a, name, where):
         )
 
 
+# Maintainer notes (moved from the docstring):
+# - Reference: cuVS `kmeans::fit_predict`. `n_init` restarts share one seeded
+#   host RNG; the best post-loop inertia wins (`tools/e2u_matrix_fit.py`
+#   measures that `n_init=3` moves the answer on its fixture).
+# - metric: 'euclidean'/'l2_expanded' are cuVS `L2Expanded`, the default every
+#   recorded cell was measured at; 'l2_sqrt_expanded' is `metric_is_sqrt`.
+#   'cosine' was routed and refused here until 2026-09-18 and was then removed;
+#   cuVS refuses it too (`kmeans_common.cuh:320`).
+# - oversampling_factor: `0.0` selects sequential k-means++ seeding, positive
+#   selects k-means|| (`detail/kmeans.cuh:910-915`).
+# - inertia_: formed by the one fresh assignment cuVS runs after the loop
+#   (`detail/kmeans.cuh:516-535`). An older docstring said "0.0 MEANS NEVER
+#   COMPUTED", which was false (corrected 2026-08-23; a 256 x 4 fit reports
+#   55.44). cuVS's `inertia_check=False` only turns off the in-loop cost; the
+#   only convergence criterion is the centroid shift.
+# - labels_: the assignment against the final centroids, not the last
+#   iteration's; cuVS and scikit-learn both run the extra pass.
+# - DEVIATION 2369: attributes are `_array.Array`s (NumPy-free) where they were
+#   ndarrays.
 class KMeans(NumericModeMixin):
-    """k-means. Reference: cuVS's `kmeans::fit_predict`.
+    """K-means clustering.
 
-    **THE DEFAULTS ARE cuVS'S, NOT scikit-learn's**, and one of them changes
-    results rather than just speed:
+    Partitions the rows of `X` into `n_clusters` groups by minimizing the
+    within-cluster sum of squared distances (Lloyd iterations after
+    k-means++ or random seeding). `X` is read as float32, C order; a NaN or
+    an infinity in `X`, `sample_weight` or `init_centroids` raises
+    `ValueError`.
 
-        n_init      cuVS 1        scikit-learn 10
-        max_iter    cuVS 300      scikit-learn 300
-        tol         cuVS 1e-4     scikit-learn 1e-4
-        init        k-means++     k-means++
-
-    `n_init=1` means ONE restart. scikit-learn runs ten and keeps the best,
-    so a like-for-like comparison must set them equal; comparing this class's
-    default against scikit-learn's default compares one restart to ten and is
-    not a hardware result.
+    The defaults follow cuVS, not scikit-learn, and one of them changes
+    results: `n_init` is 1 here and 10 in scikit-learn. To compare with
+    scikit-learn, set `n_init` to the same value on both.
 
     Parameters
     ----------
     n_clusters : int, default 8
-    init : {'k-means++', 'random', 'array'}, default 'k-means++'
-        'array' takes the starting centroids from `init_centroids`.
+        Number of clusters. Must not exceed the number of rows.
+    init : {'k-means++', 'random', 'array'}, array or callable, default 'k-means++'
+        How the starting centers are chosen. 'array' takes them from
+        `init_centroids`. An array of shape `(n_clusters, n_features)` is used
+        directly as the starting centers (`init_centroids` is then ignored).
+        A callable is called as `init(X, n_clusters, random_state)` and must
+        return such an array.
     n_init : int, default 1
-        cuVS's default. Restarts share one seeded host RNG, so restart 2
-        draws different starting centroids than restart 1; the best
-        post-loop inertia wins (`tools/e2u_matrix_fit.py` measures that
-        `n_init=3` moves the answer on its fixture).
+        Number of restarts. Each restart draws different starting centers;
+        the one with the lowest final inertia is kept.
     max_iter : int, default 300
+        Maximum number of iterations per restart.
     tol : float, default 1e-4
+        Stop when the centers move less than this between iterations.
     random_state : int, default 0
-        cuVS's `seed`.
-    metric : {'euclidean', 'l2_expanded', 'l2_sqrt_expanded'}, default
-             'euclidean'
-        cuVS's `DistanceType`. 'euclidean' and 'l2_expanded' are
-        `L2Expanded` (squared distances in `inertia_`, the default every
-        recorded cell was measured at); 'l2_sqrt_expanded' takes the root
-        of each reduced distance (`metric_is_sqrt`, so a different
-        `inertia_`; each label is still the nearest center, and `sum_scale_`, which
-        depends on `X` alone, is the same). Any other value is refused by
-        name. 'cosine' was routed and refused here until 2026-09-18 and is
-        now simply not a metric this estimator has; cuVS refuses it too
-        (`kmeans_common.cuh:320`).
+        Seed for the starting centers.
+    init_centroids : array of shape (n_clusters, n_features), default None
+        Starting centers for `init='array'`. Required in that case.
+    metric : {'euclidean', 'l2_expanded', 'l2_sqrt_expanded'}, default 'euclidean'
+        'euclidean' and 'l2_expanded' are the same: squared Euclidean
+        distance, so `inertia_` and `transform` use squared distances.
+        'l2_sqrt_expanded' uses the Euclidean distance itself, which changes
+        `inertia_` and `transform` but not the labels. Any other value raises
+        `ValueError`.
     oversampling_factor : float, default 2.0
-        cuVS's, and an ALGORITHM SWITCH rather than a knob: `0.0` selects
-        the classic sequential k-means++ seeding, anything positive the
-        scalable k-means|| seeding (`detail/kmeans.cuh:910-915`). Negative
-        is refused by name on the Mojo host. Only read under
-        `init='k-means++'`.
+        Selects the k-means++ seeding algorithm: `0.0` runs classic
+        sequential k-means++, any positive value runs scalable k-means||
+        with this oversampling. Negative values raise `ValueError`. Only used
+        with `init='k-means++'`.
 
     Attributes
     ----------
-    cluster_centers_ : Array (n_clusters, n_features) float32
-    labels_ : Array (n_samples,) int32
-        The assignment against the FINAL centroids, not the last iteration's.
-        A fit that returned the latter would be off by one iteration in a way
-        no aggregate metric would reveal; cuVS and scikit-learn both run the
-        extra pass and so does this.
+    cluster_centers_ : Array of shape (n_clusters, n_features), float32
+        The fitted centers.
+    labels_ : Array of shape (n_samples,), int32
+        The cluster of each training row, assigned against the final centers.
     inertia_ : float
-        The weighted sum of squared distances to the FINAL centroids, from
-        the one fresh assignment cuVS runs after the loop
-        (`detail/kmeans.cuh:516-535`); with `n_init > 1` it is the best
-        restart's and decides which restart is kept. **This docstring used
-        to say "0.0 MEANS NEVER COMPUTED", and that was false** (corrected
-        2026-08-23, measured: a 256 x 4 fit reports 55.44). What cuVS's
-        `inertia_check=False` turns off is the IN-LOOP cost, which would
-        make the cost ratio a second stopping rule; the only convergence
-        criterion is the centroid shift, and the post-loop inertia is
-        always formed. This mirrors them.
+        Weighted sum of distances (under `metric`) from each row to its final
+        center. With `n_init > 1`, the kept restart's value.
     n_iter_ : int
+        Number of iterations run.
     sum_scale_, weight_scale_ : float
-        The fixed-point accumulator multipliers chosen for your data. Exposed
-        because a wrong answer in this algorithm comes from these two, and
-        reproducing a result needs them.
+        The fixed-point accumulator scales chosen for your data. Reproducing a
+        result exactly needs them.
+    n_features_in_ : int
+        Number of features seen during `fit`.
 
-    NUMPY-FREE SINCE DEVIATION 2369: the two attributes above are
-    `_array.Array`s where they were ndarrays; `np.asarray(model.labels_)`
-    is a zero-copy view for a caller who has NumPy.
+    Attributes are mojolearn `Array`s; `np.asarray(model.labels_)` gives a
+    zero-copy NumPy view.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.KMeans(n_clusters=4, n_init=3).fit(X)
+    >>> labels = model.predict(X)
+    >>> distances = model.transform(X)
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -211,14 +227,36 @@ class KMeans(NumericModeMixin):
         c, _ = as_f32_c(centers, ndim=2, name="cluster_centers_")
         return x, c, metric_code
 
+    # A callable `init` is called once on the host
+    # (`_expansion_cluster._callable_init`) and its centers take the 'array'
+    # path; an array `init` takes the 'array' path with `init_centroids` ignored.
     def fit(self, X, y=None, sample_weight=None):
-        """Fit, and set `labels_` from a pass against the final centroids.
+        """Compute the k-means clustering of `X`.
 
-        `init` also takes scikit-learn's other two spellings: an array of
-        starting centers (the 'array' path, `init_centroids` ignored) and a
-        callable `init(X, n_clusters, random_state)`, called once on the
-        host (`_expansion_cluster._callable_init`) whose centers then take
-        the 'array' path."""
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : ignored
+            Present for scikit-learn API compatibility.
+        sample_weight : array-like of shape (n_samples,), default None
+            Weight of each row. None weighs every row equally.
+
+        Returns
+        -------
+        self : KMeans
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            For an unknown `init` or `metric`, `n_clusters` greater than the
+            number of rows, `init='array'` without `init_centroids`, starting
+            centers of the wrong shape, a `sample_weight` of the wrong length,
+            or a NaN or infinity in any input.
+        TypeError
+            If `oversampling_factor` is not a number.
+        """
         init_centroids = self.init_centroids
         if isinstance(self.init, str):
             if self.init not in _INIT_NAMES:
@@ -329,21 +367,41 @@ class KMeans(NumericModeMixin):
         return self
 
     def fit_predict(self, X, y=None, sample_weight=None):
+        """Fit the model and return `labels_`, the cluster of each row of `X`.
+
+        Returns
+        -------
+        labels : Array of shape (n_samples,), int32
+        """
         return self.fit(X, sample_weight=sample_weight).labels_
 
+    # Mirrors cuML's `KMeans.predict` (`kmeans.pyx:1071-1082`): the fit's own
+    # final assignment (`cluster/estimator.mojo::kmeans_predict`, host
+    # `kmeans_oracle.mojo::host_kmeans_predict`). CPU `predict` is served by the
+    # core host binding on a CPU-only install.
     def predict(self, X):
-        """The index of the nearest fitted center for every row of `X`.
+        """Return the index of the nearest fitted center for each row of `X`.
 
-        Mirrors cuML's `KMeans.predict` (`kmeans.pyx:1071-1082`,
-        `_predict_labels_inertia` keeping the labels): `X` is converted to the
-        centers' dtype (float32, C order), and the assignment is cuVS's one
-        pass under this model's `metric`. It is the fit's own final
-        assignment (`cluster/estimator.mojo::kmeans_predict`, host
-        `kmeans_oracle.mojo::host_kmeans_predict`), so `predict` on the
-        training rows returns `labels_` bit for bit, and a tie goes to the
-        lowest center index. An unsupported metric is refused by name here
-        as it is at fit. CPU `predict` is public inference and is served by
-        the core host binding on a CPU-only install.
+        Uses the same assignment as `fit`, so `predict` on the training rows
+        returns `labels_` exactly. A tie goes to the lowest center index. On a
+        CPU-only install, `predict` runs on the CPU.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Read as float32. Must have the fitted number of features and no
+            NaN or infinity.
+
+        Returns
+        -------
+        labels : Array of shape (n_samples,), int32
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            For a feature count other than the fit's, or a non-finite value.
         """
         x, c, metric_code = self._inference_inputs(X)
         n, d = x.shape
@@ -358,25 +416,35 @@ class KMeans(NumericModeMixin):
         )
         return labels
 
+    # Reference: cuML `KMeans.transform` (`kmeans.pyx:1084`), cuVS
+    # `kmeans_transform` (`detail/kmeans.cuh:1178-1219`). Each cell is the fused
+    # assignment kernel's cell (`cluster/impl/detail/kmeans_transform.mojo`,
+    # host `kmeans_oracle.mojo::host_kmeans_transform`).
     def transform(self, X):
-        """The distance from every row of `X` to every fitted center,
-        float32 `(n_samples, n_clusters)`.
+        """Return the distance from each row of `X` to each fitted center.
 
-        The reference is cuML's `KMeans.transform` (`kmeans.pyx:1084`), cuVS
-        `kmeans_transform` (`detail/kmeans.cuh:1178-1219`): the distance
-        under this model's `metric`, so `'euclidean'` (cuVS `L2Expanded`,
-        the default) gives SQUARED distances and `'l2_sqrt_expanded'` gives
-        their roots. scikit-learn's `transform` always returns the root;
-        pass `metric='l2_sqrt_expanded'` for that meaning. `X` is converted
-        to the centers' float32, C order.
+        Distances use the model's `metric`: with the default 'euclidean' they
+        are squared distances, with 'l2_sqrt_expanded' they are Euclidean
+        distances. scikit-learn's `transform` always returns Euclidean
+        distances; fit with `metric='l2_sqrt_expanded'` to get the same
+        meaning. `transform(X)[i, predict(X)[i]]` is exactly the minimum of
+        row `i`. On a CPU-only install, `transform` runs on the CPU.
 
-        Each cell is the fused assignment kernel's cell
-        (`cluster/impl/detail/kmeans_transform.mojo`, host
-        `kmeans_oracle.mojo::host_kmeans_transform`), so
-        `transform(X)[i, predict(X)[i]]` is the minimum of row `i` bit for
-        bit. An unsupported metric is refused by name, as it is at fit. CPU
-        `transform` is public inference, served by the core host binding on
-        a CPU-only install.
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Read as float32.
+
+        Returns
+        -------
+        distances : Array of shape (n_samples, n_clusters), float32
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            For a feature count other than the fit's, or a non-finite value.
         """
         x, c, metric_code = self._inference_inputs(X)
         n, d = x.shape
@@ -392,6 +460,12 @@ class KMeans(NumericModeMixin):
         return out
 
     def fit_transform(self, X, y=None, sample_weight=None):
+        """Fit the model, then return `transform(X)`.
+
+        Returns
+        -------
+        distances : Array of shape (n_samples, n_clusters), float32
+        """
         return self.fit(X, sample_weight=sample_weight).transform(X)
 
     def _saved_metric(self):
@@ -426,25 +500,34 @@ class KMeans(NumericModeMixin):
             )
         return _INIT_SAVED[code], code
 
+    # Format `_KMEANS_FORMAT` (lane/kmeans-save, 2026-09-16), written by
+    # `_serialize.write_npz`. `host_model` predicts through
+    # `_mojolearn_core_host`'s `kmeans_predict`/`kmeans_transform`
+    # (`cluster/host/kmeans_oracle.mojo`).
     def save(self, path):
-        """Write the fitted model to `path` as an npz (`_KMEANS_FORMAT`,
-        lane/kmeans-save, 2026-09-16), so a model fitted on a GPU predicts on
-        a machine with none: `centers` `<f4` `(n_clusters, n_features)`, the
-        fit's own `labels` `<i4`, the metric and the start by name, and the
-        fitted scalars `predict` does not read but a user does. Written by
-        `_serialize.write_npz`, whose bytes are a pure function of the arrays,
-        so the same model saved twice is the same file.
+        """Save the fitted model to `path` as an `.npz` file.
 
-        `mojolearn.host_model(path)` predicts and transforms it on a CPU with
-        no GPU, through `_mojolearn_core_host`'s `kmeans_predict` and
-        `kmeans_transform` (`cluster/host/kmeans_oracle.mojo`), and the answer
-        is the GPU's own bits: `predict` is the fit's final assignment on
-        both.
+        The file holds the centers, the training labels, the metric, the
+        `init` method and the fitted scalars. Saving the same model twice
+        gives the same file. A model fitted on a GPU can be loaded with
+        `load`, or with `mojolearn.host_model(path)` to predict and transform
+        on a machine with no GPU, giving the same answers as the GPU.
 
-        `init_centroids` does NOT travel. It is an input to a fit, not part of
-        a fitted model, and a loaded model does not refit; a loaded
-        `init='array'` model asked to fit refuses by name for the missing
-        array, which is the honest refusal.
+        `init_centroids` is not saved: it is an input to a fit, not part of the
+        fitted model. A loaded `init='array'` model that is fitted again raises
+        `ValueError` for the missing `init_centroids`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            If `metric` or `init` is not one the model supports.
         """
         centers = getattr(self, "cluster_centers_", None)
         if centers is None:
@@ -472,19 +555,27 @@ class KMeans(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`; every array at its saved dtype,
-        never cast. The result answers `predict` and `transform`, and carries
-        `labels_`, `inertia_`, `n_iter_`, `sum_scale_` and `weight_scale_` as
-        the fit set them.
+        """Load a model written by `save`.
 
-        WHAT IT REFUSES, BY NAME. A file of another format or another
-        estimator (`read_npz` and `_check_saved_by`). A `meta` or `reals` of
-        the wrong length, which is what a truncated or hand-built file gives.
-        A `centers` whose shape is not `(n_clusters, n_features)`, so a
-        centroid count that disagrees with the dimensionality cannot load as a
-        plausible smaller model. A metric or start name the class does not
-        serve, and a name whose code member disagrees with it. A `labels` that
-        is not the saved row count.
+        Arrays keep their saved dtypes. The result supports `predict` and
+        `transform`, and carries `labels_`, `inertia_`, `n_iter_`,
+        `sum_scale_` and `weight_scale_` as the fit set them.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `KMeans.save`.
+
+        Returns
+        -------
+        model : KMeans
+
+        Raises
+        ------
+        ValueError
+            If the file is of another format or estimator, is truncated or
+            inconsistent (field counts, center shape, label count), or names a
+            metric or `init` the class does not support.
         """
         from .linear_model import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, _KMEANS_FORMAT)
