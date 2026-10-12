@@ -1565,9 +1565,32 @@ class _Base:
     _parameters = ()
 
     def get_params(self, deep=True):
+        """Return this estimator's constructor parameters.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for scikit-learn compatibility; it has no effect.
+
+        Returns
+        -------
+        dict
+            Parameter name to current value.
+        """
         return {name: getattr(self, name) for name in self._parameters}  # glue: estimator parameter names (get_params)
 
     def set_params(self, **params):
+        """Set constructor parameters by keyword.
+
+        Raises
+        ------
+        ValueError
+            If a keyword is not a parameter of this estimator.
+
+        Returns
+        -------
+        self
+        """
         for k, v in params.items():  # glue: estimator keyword arguments (set_params)
             if k not in self._parameters:
                 raise ValueError(f"Invalid {type(self).__name__} parameter: {k}")
@@ -1575,6 +1598,18 @@ class _Base:
         return self
 
     def fit_transform(self, X, y=None):
+        """Fit to X, then return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X, y).transform(X)
 
     def _kit(self):
@@ -1597,16 +1632,63 @@ def _ipca_dev_on(k):
     return k._res()
 
 
+# Reference: scikit-learn `decomposition/_incremental_pca.py`, `partial_fit`;
+# the running mean and variance are `utils/extmath.py::_incremental_mean_and_var`.
+# Each batch's SVD is the thin SVD of the stacked matrix sklearn builds,
+# computed as the eigendecomposition of its d x d Gram matrix (the Jacobi
+# eigh of decomposition/, device or host), then sklearn's `svd_flip` with
+# `u_based_decision=False`.
 class IncrementalPCA(_Base):
-    """sklearn.decomposition.IncrementalPCA (reference: scikit-learn
-    `decomposition/_incremental_pca.py`, `partial_fit`; the running mean and
-    variance are `utils/extmath.py::_incremental_mean_and_var`).
+    """Incremental principal component analysis, fitted batch by batch.
 
-    Each batch's SVD is the thin SVD of the stacked matrix sklearn builds,
-    computed as the eigendecomposition of its d x d Gram matrix (the Jacobi
-    eigh of decomposition/, device or host), then sklearn's `svd_flip` with
-    `u_based_decision=False`. A scipy.sparse X is densified one batch at a
-    time in fit (sklearn's route), whole in partial_fit and transform."""
+    Follows scikit-learn's ``IncrementalPCA``: the mean, variance and
+    components are updated one batch at a time, so a dataset larger than
+    memory can be fitted through ``partial_fit``. Component signs follow
+    scikit-learn's ``svd_flip`` on the rows of the components. A
+    ``scipy.sparse`` input is densified one batch at a time in ``fit`` and
+    whole in ``partial_fit`` and ``transform``.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Number of components to keep. None keeps ``n_features`` (or, in a
+        later ``partial_fit``, the number already fitted). Must be between 1
+        and ``n_features`` and at most the number of rows in each batch.
+    whiten : bool, default False
+        Divide the projected data by the square root of each component's
+        explained variance.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; the input is never modified.
+    batch_size : int or None, default None
+        Rows per batch in ``fit``. None uses ``5 * n_features``.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        Principal axes, sorted by decreasing explained variance.
+    explained_variance_ : ndarray of shape (n_components,)
+    explained_variance_ratio_ : ndarray of shape (n_components,)
+    singular_values_ : ndarray of shape (n_components,)
+    mean_ : ndarray of shape (n_features,)
+    var_ : ndarray of shape (n_features,)
+    noise_variance_ : float
+    n_components_ : int
+    n_samples_seen_ : int
+    n_features_in_ : int
+    batch_size_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.IncrementalPCA(n_components=3, batch_size=200).fit(X)
+    >>> model.transform(X).shape
+    (1000, 3)
+    """
     _parameters = ("n_components", "whiten", "copy", "batch_size", "numeric_mode")
 
     def __init__(self, n_components=None, *, whiten=False, copy=True, batch_size=None, numeric_mode=None):
@@ -1614,6 +1696,23 @@ class IncrementalPCA(_Base):
         self.batch_size, self.numeric_mode = batch_size, numeric_mode
 
     def fit(self, X, y=None):
+        """Fit the model on X in batches of ``batch_size`` rows.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data. Any earlier fit is discarded.
+        y : ignored
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If X is empty or ``n_components`` is out of range.
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         for a in ("components_", "n_samples_seen_"):  # glue: drops two fitted attribute names
             if hasattr(self, a):
@@ -1647,6 +1746,25 @@ class IncrementalPCA(_Base):
         return self
 
     def partial_fit(self, X, y=None):
+        """Update the model with one more batch.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The batch. ``n_features`` must match earlier batches and
+            ``n_samples`` must be at least ``n_components``.
+        y : ignored
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If the number of features changed or ``n_components`` is out of
+            range for this batch.
+        """
         if not hasattr(self, "numeric_mode_"):
             self.numeric_mode_ = _mode(self.numeric_mode)
         self._partial(_M.from_input(X))
@@ -1729,6 +1847,23 @@ class IncrementalPCA(_Base):
         self.noise_variance_ = nv.s[0]
 
     def transform(self, X):
+        """Project X onto the fitted components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            If X has a different number of features than the fitted data.
+        """
         self._check()
         k = self._kit()
         M = _M.from_input(X)
@@ -1740,6 +1875,16 @@ class IncrementalPCA(_Base):
         return Y.out()
 
     def inverse_transform(self, X):
+        """Map projected data back to the original feature space.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+        """
         self._check()
         k = self._kit()
         Y = _M.from_input(X)
@@ -1751,7 +1896,33 @@ class IncrementalPCA(_Base):
 
 # ================================================================ random projection
 def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
-    """sklearn `random_projection.johnson_lindenstrauss_min_dim` (scalar form)."""
+    """Minimum dimension for a random projection that keeps distances within eps.
+
+    Follows scikit-learn's ``johnson_lindenstrauss_min_dim`` for a single
+    ``n_samples`` and ``eps`` (scalars only): ``4 log(n_samples) /
+    (eps**2 / 2 - eps**3 / 3)``, truncated to an int.
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples; must be greater than zero.
+    eps : float, default 0.1
+        Maximum distortion, strictly between 0 and 1.
+
+    Returns
+    -------
+    int
+
+    Raises
+    ------
+    ValueError
+        If ``eps`` is not in (0, 1) or ``n_samples`` is not positive.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> d = mojolearn.johnson_lindenstrauss_min_dim(1000, eps=0.5)
+    """
     if not 0 < eps < 1:
         raise ValueError("The JL bound is defined for eps in ]0, 1[")
     if n_samples <= 0:
@@ -1814,11 +1985,11 @@ class _RandomProjection(_Base):
     `rand_cell`), not numpy's generator: the same `random_state` gives the
     same matrix on every box, and a different one than sklearn's."""
 
+    # Under lane/apple-fast-gap-cls2's LAZY switch the fit leaves the matrix
+    # on the device and the first read downloads it once (the same words).
     @property
     def components_(self):
-        """The (n_components, n_features) matrix. Under lane/apple-fast-gap-cls2's
-        LAZY switch the fit leaves it on the device and the first read
-        downloads it once (the same words)."""
+        """The random projection matrix, shape (n_components, n_features)."""
         dct = self.__dict__
         v = dct.get("_rp_components")
         if v is None and "_rp_lazy" in dct:
@@ -1846,6 +2017,28 @@ class _RandomProjection(_Base):
         return dict(self.__dict__)
 
     def fit(self, X, y=None):
+        """Draw the projection matrix for X's shape.
+
+        Only X's shape is used (and X must be finite); the values are not.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If X is empty or non-finite, ``n_components`` is not positive, or
+            ``n_components="auto"`` gives a dimension larger than
+            ``n_features``.
+        TypeError
+            If ``random_state`` is not None or an int.
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         # fit reads only the input's shape and refuses a non-finite input;
         # the store (a copy of the whole input) is transform's to build
@@ -1954,6 +2147,22 @@ class _RandomProjection(_Base):
         return True
 
     def transform(self, X):
+        """Project X: ``X @ components_.T``.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+            Always a dense array.
+
+        Raises
+        ------
+        ValueError
+            If X has the wrong number of features or is non-finite.
+        """
         self._check()
         if not _is_sparse(X):
             out = self._project(X)
@@ -1996,6 +2205,21 @@ class _RandomProjection(_Base):
         return Array._owned(res, (m, nc), "<f4", "C")
 
     def inverse_transform(self, X):
+        """Map projected data back with the pseudo-inverse of the components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+
+        Raises
+        ------
+        ValueError
+            If the model was fitted without ``compute_inverse_components=True``.
+        """
         self._check()
         if not hasattr(self, "inverse_m_"):
             raise ValueError("inverse_transform needs compute_inverse_components=True")
@@ -2003,9 +2227,50 @@ class _RandomProjection(_Base):
         return self._kit().mm(M, self.inverse_m_, tb=True).out()
 
 
+# Box-Muller on the Philox stream.
 class GaussianRandomProjection(_RandomProjection):
-    """sklearn.random_projection.GaussianRandomProjection: components drawn
-    N(0, 1/n_components) (Box-Muller on the Philox stream)."""
+    """Reduce dimension with a Gaussian random matrix.
+
+    Follows scikit-learn's ``GaussianRandomProjection``: each component entry
+    is drawn from N(0, 1 / n_components).
+
+    Parameters
+    ----------
+    n_components : int or "auto", default "auto"
+        Target dimension. ``"auto"`` uses
+        ``johnson_lindenstrauss_min_dim(n_samples, eps=eps)``.
+    eps : float, default 0.1
+        Distortion bound used by ``n_components="auto"`` through
+        :func:`johnson_lindenstrauss_min_dim`.
+    compute_inverse_components : bool, default False
+        Compute ``inverse_components_`` (the pseudo-inverse of the
+        components) in ``fit``, needed by ``inverse_transform``. Raises
+        ValueError if the components are rank deficient.
+    random_state : int or None, default None
+        Seed of mojolearn's counter-based random generator; None means 0.
+        The same seed gives the same matrix on every device, but not the
+        matrix scikit-learn draws for that seed.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+    inverse_components_ : ndarray of shape (n_features, n_components)
+        Only with ``compute_inverse_components=True``.
+    n_components_ : int
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 64), dtype=np.float32)
+    >>> model = mojolearn.GaussianRandomProjection(n_components=8, random_state=0).fit(X)
+    >>> model.transform(X).shape
+    (1000, 8)
+    """
     _parameters = ("n_components", "eps", "compute_inverse_components", "random_state", "numeric_mode")
 
     def __init__(self, n_components="auto", *, eps=0.1, compute_inverse_components=False, random_state=None,
@@ -2018,12 +2283,58 @@ class GaussianRandomProjection(_RandomProjection):
         return k.ew("scale", _rp_rand(k, kc, d, seed, 1, 1, dev), s=1.0 / math.sqrt(kc))
 
 
+# Achlioptas / Li et al.
 class SparseRandomProjection(_RandomProjection):
-    """sklearn.random_projection.SparseRandomProjection (Achlioptas / Li et
-    al.): each entry is +-sqrt(1/density)/sqrt(n_components) with probability
-    density/2 each, else 0. `density='auto'` is 1/sqrt(n_features). The
-    components are held DENSE (`dense_output` only chooses sklearn's output
-    container; the values are the same)."""
+    """Reduce dimension with a sparse random matrix.
+
+    Follows scikit-learn's ``SparseRandomProjection``: each entry is
+    ``+sqrt(1/density)/sqrt(n_components)`` or its negative with probability
+    ``density/2`` each, and 0 otherwise. The components are stored as a dense
+    array, and ``transform`` always returns a dense array.
+
+    Parameters
+    ----------
+    n_components : int or "auto", default "auto"
+        Target dimension. ``"auto"`` uses
+        ``johnson_lindenstrauss_min_dim(n_samples, eps=eps)``.
+    density : float or "auto", default "auto"
+        Fraction of nonzero entries, in (0, 1]. ``"auto"`` is
+        ``1 / sqrt(n_features)``. Out-of-range values raise ValueError.
+    dense_output : bool, default False
+        Accepted for scikit-learn compatibility; the output is always dense.
+    eps : float, default 0.1
+        Distortion bound used by ``n_components="auto"`` through
+        :func:`johnson_lindenstrauss_min_dim`.
+    compute_inverse_components : bool, default False
+        Compute ``inverse_components_`` (the pseudo-inverse of the
+        components) in ``fit``, needed by ``inverse_transform``. Raises
+        ValueError if the components are rank deficient.
+    random_state : int or None, default None
+        Seed of mojolearn's counter-based random generator; None means 0.
+        The same seed gives the same matrix on every device, but not the
+        matrix scikit-learn draws for that seed.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+    inverse_components_ : ndarray of shape (n_features, n_components)
+        Only with ``compute_inverse_components=True``.
+    density_ : float
+    n_components_ : int
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 64), dtype=np.float32)
+    >>> model = mojolearn.SparseRandomProjection(n_components=8, random_state=0).fit(X)
+    >>> model.transform(X).shape
+    (1000, 8)
+    """
     _parameters = ("n_components", "density", "eps", "dense_output", "compute_inverse_components",
                    "random_state", "numeric_mode")
 
@@ -2082,18 +2393,86 @@ def _norm(k, v):
 _F32_EPS = 1.1920928955078125e-07
 
 
+# Reference: scikit-learn `decomposition/_nmf.py`: `_initialize_nmf`,
+# `_fit_multiplicative_update` with `_multiplicative_update_w/_h` for
+# beta_loss='frobenius', and `_fit_coordinate_descent` with
+# `_cdnmf_fast.pyx::_update_cdnmf_fast`. The NNDSVD SVD is exact (through
+# the Gram eigh) where sklearn calls randomized_svd. 'random' init and
+# shuffle use the lane's Philox stream, not numpy's. A general float beta
+# is refused by name.
 class NMF(_Base):
-    """sklearn.decomposition.NMF (reference: scikit-learn
-    `decomposition/_nmf.py`: `_initialize_nmf`, `_fit_multiplicative_update`
-    with `_multiplicative_update_w/_h` for beta_loss='frobenius', and
-    `_fit_coordinate_descent` with `_cdnmf_fast.pyx::_update_cdnmf_fast`).
+    """Non-negative matrix factorization ``X ~ W @ H``.
 
-    solver 'cd' (the default) and 'mu'; init 'random' (the lane's Philox
-    stream, not numpy's), 'nndsvd', 'nndsvda', 'nndsvdar' (the SVD is exact,
-    through the Gram eigh, where sklearn calls randomized_svd), 'custom'.
-    shuffle=True permutes the coordinates of every CD sweep with the Philox
-    stream. beta_loss 'frobenius', 'kullback-leibler' and 'itakura-saito'
-    (the last two with solver='mu'). REFUSED BY NAME: a general float beta."""
+    Follows scikit-learn's ``NMF``: finds non-negative ``W`` (n_samples,
+    n_components) and ``H`` (n_components, n_features) minimizing the chosen
+    beta divergence plus optional L1/L2 penalties. The NNDSVD initializations
+    use an exact SVD rather than scikit-learn's randomized one, and random
+    draws come from mojolearn's own generator, so results differ slightly
+    from scikit-learn's for the same seed.
+
+    Parameters
+    ----------
+    n_components : int, "auto" or None, default "auto"
+        Number of components. ``"auto"`` or None uses ``n_features`` (with
+        ``init="custom"``, the number of rows of the given ``H``).
+    init : {"random", "nndsvd", "nndsvda", "nndsvdar", "custom"} or None, default None
+        Initialization. None uses ``"nndsvda"`` when ``n_components <=
+        min(n_samples, n_features)``, else ``"random"``. The NNDSVD variants
+        need ``n_components <= min(n_samples, n_features)``. ``"custom"``
+        takes ``W`` and ``H`` from ``fit_transform``.
+    solver : {"cd", "mu"}, default "cd"
+        Coordinate descent or multiplicative update.
+    beta_loss : {"frobenius", "kullback-leibler", "itakura-saito"}, default "frobenius"
+        Divergence to minimize; the last two need ``solver="mu"``. The
+        numbers 2, 1 and 0 are accepted for the same three; any other float
+        beta raises ValueError.
+    tol : float, default 1e-4
+        Stopping tolerance.
+    max_iter : int, default 200
+        Maximum number of iterations.
+    random_state : int or None, default None
+        Seed for ``"random"`` and ``"nndsvdar"`` initialization and for
+        ``shuffle``; None means 0. Not scikit-learn's random stream.
+    alpha_W : float, default 0.0
+        Regularization strength on ``W``.
+    alpha_H : float or "same", default "same"
+        Regularization strength on ``H``; ``"same"`` uses ``alpha_W``.
+    l1_ratio : float, default 0.0
+        Mix of L1 (1.0) and L2 (0.0) regularization.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility; nothing is printed.
+    shuffle : bool, default False
+        Visit coordinates in random order in each ``"cd"`` sweep.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        The factor ``H``.
+    n_components_ : int
+    n_iter_ : int
+    reconstruction_err_ : float
+        Beta divergence between X and ``W @ H`` (square-rooted, as in
+        scikit-learn).
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        If X has negative values, or an unsupported solver, init or
+        beta_loss is requested.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.NMF(n_components=3, random_state=0)
+    >>> W = model.fit_transform(X)
+    >>> H = model.components_
+    """
     _parameters = ("n_components", "init", "solver", "beta_loss", "tol", "max_iter", "random_state",
                    "alpha_W", "alpha_H", "l1_ratio", "verbose", "shuffle", "numeric_mode")
 
@@ -2221,6 +2600,22 @@ class NMF(_Base):
         return W, H, it, nc
 
     def fit_transform(self, X, y=None, W=None, H=None):
+        """Fit the model and return ``W``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Non-negative data.
+        y : ignored
+        W : array-like of shape (n_samples, n_components), optional
+            Starting ``W``; used only with ``init="custom"``.
+        H : array-like of shape (n_components, n_features), optional
+            Starting ``H``; used only with ``init="custom"``.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         M = _M.from_input(X)
         self._validate(M)
@@ -2241,10 +2636,35 @@ class NMF(_Base):
         return Wm.out()
 
     def fit(self, X, y=None, **params):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Non-negative data.
+        y : ignored
+        **params
+            ``W`` and ``H`` for ``init="custom"``, as in ``fit_transform``.
+
+        Returns
+        -------
+        self
+        """
         self.fit_transform(X, **params)
         return self
 
     def transform(self, X):
+        """Solve for ``W`` with the fitted ``H`` held fixed.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Non-negative data.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self._check()
         M = _M.from_input(X)
         if M.c != self.n_features_in_:
@@ -2254,21 +2674,92 @@ class NMF(_Base):
         return W.out()
 
     def inverse_transform(self, X):
+        """Return ``X @ components_``, the data reconstructed from ``W``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+            A ``W`` matrix.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+        """
         self._check()
         return self._kit().mm(_M.from_input(X, "W"), self.components_m_).out()
 
 
 # ================================================================ FastICA
+# Reference: scikit-learn `decomposition/_fastica.py`: `_fit_transform`,
+# `_ica_par`, `_ica_def`, `_sym_decorrelation`, `_gs_decorrelation`,
+# `_logcosh`, `_exp`, `_cube`. The whitening SVD is the eigendecomposition
+# of X^T X (both of sklearn's whiten_solver values take this route); a
+# singular value below 10 float32 eps is clamped there, as sklearn's 'eigh'
+# solver clamps it. w_init defaults to a draw from the lane's Philox
+# stream, not numpy's. A callable `fun` is refused by name.
 class FastICA(_Base):
-    """sklearn.decomposition.FastICA (reference: scikit-learn
-    `decomposition/_fastica.py`: `_fit_transform`, `_ica_par`, `_ica_def`,
-    `_sym_decorrelation`, `_gs_decorrelation`, `_logcosh`, `_exp`, `_cube`).
+    """Independent component analysis with the FastICA algorithm.
 
-    The whitening SVD is the eigendecomposition of X^T X (both of sklearn's
-    whiten_solver values take this route); a singular value below 10 float32
-    eps is clamped there, as sklearn's 'eigh' solver clamps it. w_init
-    defaults to a draw from the lane's Philox stream, not numpy's.
-    REFUSED BY NAME: a callable `fun`."""
+    Follows scikit-learn's ``FastICA``. Whitening always uses the
+    eigendecomposition of ``X.T @ X`` (``whiten_solver`` is accepted but both
+    values take this route), and the default starting matrix is drawn from
+    mojolearn's own generator, so results can differ from scikit-learn's for
+    the same seed.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Number of components; None, or a value above ``min(n_samples,
+        n_features)``, uses ``min(n_samples, n_features)``. Ignored when
+        ``whiten=False``.
+    algorithm : {"parallel", "deflation"}, default "parallel"
+        Estimate all components together, or one at a time.
+    whiten : {"unit-variance", "arbitrary-variance"} or False, default "unit-variance"
+        Whitening strategy; False assumes X is already whitened.
+    fun : {"logcosh", "exp", "cube"}, default "logcosh"
+        Contrast function. A callable is not supported.
+    fun_args : dict or None, default None
+        For ``"logcosh"``, ``{"alpha": a}`` with ``1 <= a <= 2`` (default 1.0).
+    max_iter : int, default 200
+        Maximum number of iterations.
+    tol : float, default 1e-4
+        Convergence tolerance.
+    w_init : array-like of shape (n_components, n_components) or None, default None
+        Starting unmixing matrix; None draws one from ``random_state``.
+    whiten_solver : {"svd", "eigh"}, default "svd"
+        Accepted for scikit-learn compatibility; see above.
+    random_state : int or None, default None
+        Seed for the default ``w_init``; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        Unmixing matrix applied by ``transform``.
+    mixing_ : ndarray of shape (n_features, n_components)
+        Pseudo-inverse of ``components_``.
+    mean_ : ndarray of shape (n_features,)
+        Only when whitening.
+    whitening_ : ndarray of shape (n_components, n_features)
+        Only when whitening.
+    n_iter_ : int
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        For an unsupported ``algorithm``, ``whiten`` or ``fun``, ``alpha``
+        outside [1, 2], or a ``w_init`` of the wrong shape.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> S = mojolearn.FastICA(n_components=3, random_state=0).fit_transform(X)
+    """
     _parameters = ("n_components", "algorithm", "whiten", "fun", "fun_args", "max_iter", "tol", "w_init",
                    "whiten_solver", "random_state", "numeric_mode")
 
@@ -2299,9 +2790,31 @@ class FastICA(_Base):
         return W, it
 
     def fit_transform(self, X, y=None):
+        """Fit the model and return the estimated sources.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self._fit(X, True).out()
 
     def fit(self, X, y=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self._fit(X, False)
         return self
 
@@ -2370,6 +2883,18 @@ class FastICA(_Base):
         return S
 
     def transform(self, X, copy=True):
+        """Recover the sources from X.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        copy : bool, default True
+            Accepted for scikit-learn compatibility; X is never modified.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self._check()
         k = self._kit()
         M = _M.from_input(X)
@@ -2378,6 +2903,18 @@ class FastICA(_Base):
         return k.mm(M, self.components_m_, tb=True).out()
 
     def inverse_transform(self, X, copy=True):
+        """Map sources back to the feature space with ``mixing_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+        copy : bool, default True
+            Accepted for scikit-learn compatibility; X is never modified.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+        """
         self._check()
         k = self._kit()
         Y = k.mm(_M.from_input(X), self.mixing_m_, tb=True)
@@ -2485,16 +3022,69 @@ def _fa_fast_defines(k):
     return got
 
 
+# Reference: scikit-learn `decomposition/_factor_analysis.py`: `fit`,
+# `transform`, `get_covariance`, `get_precision`, `score_samples`,
+# `_ortho_rotation`. Each iteration's SVD of the scaled data is the QR +
+# one-sided Jacobi SVD of decomposition/ (the eigh of the d x d Gram when
+# n < d). svd_method='randomized' takes the same exact route (sklearn's
+# randomized SVD is an approximation of it).
 class FactorAnalysis(_Base):
-    """sklearn.decomposition.FactorAnalysis (reference: scikit-learn
-    `decomposition/_factor_analysis.py`: `fit`, `transform`,
-    `get_covariance`, `get_precision`, `score_samples`, `_ortho_rotation`).
+    """Factor analysis: a linear Gaussian latent variable model.
 
-    Each iteration's SVD of the scaled data is the QR + one-sided Jacobi SVD
-    of decomposition/ (the eigh of the d x d Gram when n < d).
-    svd_method='randomized' takes the same exact route (sklearn's randomized
-    SVD is an approximation of it). `rotation` in {None, 'varimax',
-    'quartimax'}."""
+    Follows scikit-learn's ``FactorAnalysis``, fitted by EM. Both
+    ``svd_method`` values use an exact SVD at every iteration (scikit-learn's
+    ``"randomized"`` is an approximation of it), so ``iterated_power`` and
+    ``random_state`` have no effect.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Dimension of the latent space; None uses ``n_features``.
+    tol : float, default 1e-2
+        Stop when the log-likelihood gain falls below this.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; X is never modified.
+    max_iter : int, default 1000
+        Maximum number of EM iterations.
+    noise_variance_init : array-like of shape (n_features,) or None, default None
+        Starting noise variances; None uses ones.
+    svd_method : {"lapack", "randomized"}, default "randomized"
+        Accepted for scikit-learn compatibility; both run the exact SVD.
+    iterated_power : int, default 3
+        Accepted for scikit-learn compatibility; unused.
+    rotation : {"varimax", "quartimax"} or None, default None
+        Rotation applied to the fitted components.
+    random_state : int or None, default 0
+        Accepted for scikit-learn compatibility; unused.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        Factor loadings.
+    noise_variance_ : ndarray of shape (n_features,)
+    mean_ : ndarray of shape (n_features,)
+    loglike_ : list of float
+        Log-likelihood at each iteration.
+    n_iter_ : int
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        For an unsupported ``svd_method`` or ``rotation``, or a
+        ``noise_variance_init`` of the wrong length.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> fa = mojolearn.FactorAnalysis(n_components=2).fit(X)
+    >>> Z = fa.transform(X)
+    """
     _parameters = ("n_components", "tol", "copy", "max_iter", "noise_variance_init", "svd_method",
                    "iterated_power", "rotation", "random_state", "numeric_mode")
 
@@ -2505,6 +3095,17 @@ class FactorAnalysis(_Base):
         self.rotation, self.random_state, self.numeric_mode = rotation, random_state, numeric_mode
 
     def fit(self, X, y=None):
+        """Fit the model with EM.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.svd_method not in ("lapack", "randomized"):
             raise ValueError("svd_method must be 'lapack' or 'randomized'")
@@ -2638,6 +3239,16 @@ class FactorAnalysis(_Base):
         return self
 
     def transform(self, X):
+        """Return the expected latent variables for each sample.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self._check()
         k = self._kit()
         W = self.components_m_
@@ -2667,15 +3278,42 @@ class FactorAnalysis(_Base):
         return k.diag_add(k.mm(W, W, ta=True), self.noise_variance_m_)
 
     def get_covariance(self):
+        """Return the model covariance ``components_.T @ components_ + diag(noise_variance_)``.
+
+        Returns
+        -------
+        ndarray of shape (n_features, n_features), float32
+        """
         self._check()
         return self._cov(self._kit()).out()
 
     def get_precision(self):
+        """Return the inverse of the model covariance.
+
+        Returns
+        -------
+        ndarray of shape (n_features, n_features), float32
+
+        Raises
+        ------
+        ValueError
+            If the covariance is singular.
+        """
         self._check()
         k = self._kit()
         return _inv(k, self._cov(k)).out()
 
     def score_samples(self, X):
+        """Return the log-likelihood of each sample under the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), float32
+        """
         v = self._ss(X)
         return v.out((v.r,))
 
@@ -2690,6 +3328,17 @@ class FactorAnalysis(_Base):
         return k.ew("adds", k.ew("scale", q, s=-0.5), s=-0.5 * (Xr.c * _LOG_2PI - ld))
 
     def score(self, X, y=None):
+        """Return the average log-likelihood of the samples.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        float
+        """
         k = self._kit()
         v = self._ss(X)
         return k.ew("scale", k.total(v), s=1.0 / v.r).s[0]
@@ -2742,12 +3391,45 @@ def _pca_mle_rank(spectrum, n_samples, mode):
 
 
 # ================================================================ LU
+# LAPACK getrf semantics. Partial pivoting on the largest |a[i, k]|, ties
+# broken by the lowest row index. A zero pivot is kept (getrf's info > 0).
 def lu_factor(a, *, numeric_mode=None):
-    """scipy.linalg.lu_factor (LAPACK getrf semantics): `(lu, piv)` with L
-    unit-lower and U in one n x n float32 matrix and `piv` the 0-based row
-    interchanges, applied in order. Partial pivoting on the largest |a[i, k]|,
-    ties broken by the LOWEST row index. A zero pivot is kept (getrf's
-    info > 0) and warned about, as scipy warns."""
+    """LU factorization of a square matrix with partial pivoting.
+
+    Follows ``scipy.linalg.lu_factor``: returns ``(lu, piv)``, where ``lu``
+    holds the unit lower-triangular L (diagonal not stored) and U in one
+    float32 matrix, and ``piv`` holds the 0-based row interchanges, applied
+    in order. Pivoting picks the largest absolute value in the column; ties
+    go to the lowest row. A zero pivot is kept and a ``RuntimeWarning`` is
+    issued, as scipy does.
+
+    Parameters
+    ----------
+    a : array-like of shape (n, n)
+        The matrix to factor; must be finite.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    lu : ndarray of shape (n, n), float32
+    piv : ndarray of shape (n,), int32
+        Pass the pair to :func:`lu_solve`.
+
+    Raises
+    ------
+    ValueError
+        If ``a`` is not square, is empty, or contains NaN or infinity.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> A = np.random.default_rng(0).random((8, 8), dtype=np.float32) + 8 * np.eye(8, dtype=np.float32)
+    >>> lu, piv = mojolearn.lu_factor(A)
+    >>> x = mojolearn.lu_solve((lu, piv), np.ones(8, dtype=np.float32))
+    """
     k = _Kit(_mode(numeric_mode))
     sf = k.s_flags()
     if ((sf & 4 and k.qfix_flags() & 4) or sf & 8) and not _is_sparse(a):
@@ -2835,11 +3517,39 @@ class _LUPair(tuple):
         return obj
 
 
+# LAPACK getrs semantics.
 def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
-    """scipy.linalg.lu_solve (LAPACK getrs): solve A x = b (trans=0) or
-    A^T x = b (trans=1, and 2, which is the same for a real matrix) from
-    `lu_factor`'s pair. `b` is n or n x nrhs; a zero pivot yields 0 in that
-    component (never inf or NaN)."""
+    """Solve a linear system from an LU factorization.
+
+    Follows ``scipy.linalg.lu_solve``: solves ``A x = b`` (``trans=0``) or
+    ``A.T x = b`` (``trans=1`` or ``2``; the same for a real matrix) with the
+    pair returned by :func:`lu_factor`. A zero pivot gives 0 in that
+    component of x, never infinity or NaN.
+
+    Parameters
+    ----------
+    lu_and_piv : tuple (lu, piv)
+        The output of :func:`lu_factor`.
+    b : array-like of shape (n,) or (n, nrhs)
+        Right-hand side.
+    trans : {0, 1, 2}, default 0
+        Which system to solve.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    x : ndarray of shape (n,) or (n, nrhs), float32
+        Same shape as ``b``.
+
+    Raises
+    ------
+    ValueError
+        If ``trans`` is not 0, 1 or 2, ``piv`` holds an index outside
+        [0, n), ``b`` has the wrong number of rows, or ``b`` is not finite.
+    """
     if trans not in (0, 1, 2):
         raise ValueError("trans must be 0, 1 or 2")
     lu, piv = lu_and_piv
@@ -2870,12 +3580,41 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     return X.out((n,)) if vec else X.out()
 
 
+# lu_factor + lu_solve (gesv). Lane idn-dense-linalg: one binding entry
+# (`x_decomp_lu_gesv`) when the binding routes there (`x_decomp_idn_flags`
+# bit 1): the same launches with the factor and the pivots resident, so
+# only A and B go up and X comes down; the same words, warning and refusals.
 def solve(a, b, *, numeric_mode=None):
-    """numpy.linalg.solve through lu_factor + lu_solve (gesv). Lane
-    idn-dense-linalg: one binding entry (`x_decomp_lu_gesv`) when the
-    binding routes there (`x_decomp_idn_flags` bit 1): the same launches
-    with the factor and the pivots resident, so only A and B go up and X
-    comes down; the same words, warning and refusals."""
+    """Solve the square linear system ``a @ x = b``.
+
+    Follows ``numpy.linalg.solve``, computed by LU factorization with partial
+    pivoting (as :func:`lu_factor` and :func:`lu_solve`). A singular matrix
+    gives a ``RuntimeWarning`` rather than an exception.
+
+    Parameters
+    ----------
+    a : array-like of shape (n, n)
+    b : array-like of shape (n,) or (n, nrhs)
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    x : ndarray of shape (n,) or (n, nrhs), float32
+
+    Raises
+    ------
+    ValueError
+        If ``a`` is not square or ``b`` has the wrong number of rows.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> A = np.random.default_rng(0).random((8, 8), dtype=np.float32) + 8 * np.eye(8, dtype=np.float32)
+    >>> x = mojolearn.solve(A, np.ones(8, dtype=np.float32))
+    """
     k = _Kit(_mode(numeric_mode))
     try:
         flags = int(getattr(k._raw(), "x_decomp_idn_flags")())
@@ -2925,15 +3664,67 @@ def _flip_u(U, Vt):
     return k.ew("mul", U, sg), k.ew("mul", Vt, sg.T)
 
 
+# Halko et al.; RAFT `linalg/rsvd.cuh` is the same scheme. The Gaussian
+# test matrix is the lane's Philox stream. Every power iteration
+# re-orthonormalizes by the two-pass Householder-R solve whatever
+# `power_iteration_normalizer` says: 'LU', 'QR' and 'none' span the same
+# subspace, only the rounding of the basis differs. The small SVD of
+# Q^T M is exact (Gram eigh).
 def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_iteration_normalizer="auto",
                    transpose="auto", flip_sign=True, random_state=None, numeric_mode=None):
-    """sklearn.utils.extmath.randomized_svd (Halko et al.; RAFT
-    `linalg/rsvd.cuh` is the same scheme). The Gaussian test matrix is the
-    lane's Philox stream (random_state None means 0). Every power iteration
-    re-orthonormalizes by the two-pass Householder-R solve whatever `power_iteration_normalizer`
-    says: 'LU', 'QR' and 'none' span the same subspace, only the rounding of
-    the basis differs. The small SVD of Q^T M is exact (Gram eigh).
-    Returns (U, s, Vt)."""
+    """Truncated SVD by randomized range finding.
+
+    Follows scikit-learn's ``utils.extmath.randomized_svd`` (Halko et al.).
+    Every power iteration re-orthonormalizes with a QR step whatever
+    ``power_iteration_normalizer`` says (all choices span the same
+    subspace), and the random test matrix comes from mojolearn's own
+    generator, so results differ slightly from scikit-learn's for the same
+    seed.
+
+    Parameters
+    ----------
+    M : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+    n_components : int
+        Number of singular values and vectors; between 1 and
+        ``min(n_samples, n_features)``.
+    n_oversamples : int, default 10
+        Extra random vectors used to sample the range.
+    n_iter : int or "auto", default "auto"
+        Power iterations. ``"auto"`` uses 7 when ``n_components < 0.1 *
+        min(M.shape)``, else 4.
+    power_iteration_normalizer : {"auto", "QR", "LU", "none"}, default "auto"
+        Accepted for scikit-learn compatibility; see above.
+    transpose : bool or "auto", default "auto"
+        Work on ``M.T``; ``"auto"`` does so when M has more columns than rows.
+    flip_sign : bool, default True
+        Make the largest-magnitude entry of each column of U positive, as
+        scikit-learn's ``svd_flip``.
+    random_state : int or None, default None
+        Seed of the random test matrix; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    U : ndarray of shape (n_samples, n_components), float32
+    s : ndarray of shape (n_components,), float32
+        Singular values, descending.
+    Vt : ndarray of shape (n_components, n_features), float32
+
+    Raises
+    ------
+    ValueError
+        If ``n_components`` is out of range, ``power_iteration_normalizer`` is
+        unknown, or M is numerically zero.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 50), dtype=np.float32)
+    >>> U, s, Vt = mojolearn.randomized_svd(X, 5, random_state=0)
+    """
     k = _Kit(_mode(numeric_mode))
     A = _rsvd_direct_input(k, M, transpose) if k.w4_flags() & 2 else None
     U, S, Vt = _rsvd_core(k, A if A is not None else _M.from_input(M, "M"), n_components, n_oversamples, n_iter,
@@ -3126,14 +3917,50 @@ def _lstsq_tsqr(k, a, b, vec, rcond):
     return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((nn,))
 
 
+# A tall a with N + nrhs <= 512 takes the blocked TSQR of [a | b] and the
+# SVD of its small R (`_tsqr_lstsq_core`); any other shape the QR +
+# one-sided Jacobi SVD of a (or of a^T).
 def lstsq(a, b, rcond=None, *, numeric_mode=None):
-    """numpy.linalg.lstsq: (x, residuals, rank, s), singular values
-    descending, those at or below rcond * s_max treated as zero (rcond None:
-    float32 eps * max(M, N)); residuals are the squared column norms of
-    b - a x when rank == N < M, else empty. A tall a with N + nrhs <= 512
-    takes the blocked TSQR of [a | b] and the SVD of its small R
-    (`_tsqr_lstsq_core`, lane neural-pass140); any other shape the QR + one-sided Jacobi SVD of a (or
-    of a^T)."""
+    """Least-squares solution of ``a @ x = b``.
+
+    Follows ``numpy.linalg.lstsq``, solved through the SVD of ``a``.
+    Singular values at or below ``rcond * s.max()`` are treated as zero.
+
+    Parameters
+    ----------
+    a : array-like of shape (M, N)
+    b : array-like of shape (M,) or (M, K)
+    rcond : float or None, default None
+        Relative cutoff for small singular values. None uses float32
+        machine epsilon times ``max(M, N)``.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    x : ndarray of shape (N,) or (N, K), float32
+    residuals : ndarray of shape (K,) or (0,), float32
+        Squared column norms of ``b - a @ x`` when ``rank == N < M``;
+        otherwise empty.
+    rank : int
+        Effective rank of ``a``.
+    s : ndarray of shape (min(M, N),), float32
+        Singular values of ``a``, descending.
+
+    Raises
+    ------
+    ValueError
+        If ``a`` and ``b`` have different numbers of rows.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> A = rng.random((100, 4), dtype=np.float32)
+    >>> x, res, rank, s = mojolearn.lstsq(A, rng.random(100, dtype=np.float32))
+    """
     k = _Kit(_mode(numeric_mode))
     vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
     got = _lstsq_tsqr(k, a, b, vec, rcond)
@@ -3213,6 +4040,22 @@ class _PLS(_Base):
         return Ac, mean, std
 
     def fit(self, X, Y):
+        """Fit the model to X and Y.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        Y : array-like of shape (n_samples,) or (n_samples, n_targets)
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If Y is missing or ``n_components`` is out of range.
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         M, Ym, vec = self._xy(X, Y)
@@ -3265,6 +4108,22 @@ class _PLS(_Base):
             raise RuntimeError(f"{type(self).__name__} is not fitted; call fit first")
 
     def transform(self, X, y=None, Y=None, copy=True):
+        """Project X (and optionally Y) onto the fitted rotations.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y, Y : array-like of shape (n_samples, n_targets), optional
+            Targets to project as well (either name).
+        copy : bool, default True
+            Accepted for scikit-learn compatibility; inputs are never modified.
+
+        Returns
+        -------
+        x_scores : ndarray of shape (n_samples, n_components), float32
+        y_scores : ndarray of shape (n_samples, n_components), float32
+            Returned only when Y is given.
+        """
         self._check_fitted()
         Y = y if y is not None else Y
         k = self._kit()
@@ -3276,6 +4135,21 @@ class _PLS(_Base):
         return xs.out(), ys.out()
 
     def inverse_transform(self, X, y=None, Y=None):
+        """Map scores back to the original X (and optionally Y) space.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+            X scores.
+        y, Y : array-like of shape (n_samples, n_components), optional
+            Y scores (either name).
+
+        Returns
+        -------
+        X_reconstructed : ndarray of shape (n_samples, n_features), float32
+        Y_reconstructed : ndarray of shape (n_samples, n_targets), float32
+            Returned only when Y scores are given.
+        """
         self._check_fitted()
         k = self._kit()
         Z = _M.from_input(X)
@@ -3288,6 +4162,19 @@ class _PLS(_Base):
         return Xr.out(), Yr.out()
 
     def predict(self, X, copy=True):
+        """Predict targets for X.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        copy : bool, default True
+            Accepted for scikit-learn compatibility; X is never modified.
+
+        Returns
+        -------
+        ndarray of shape (n_samples,) or (n_samples, n_targets), float32
+            One-dimensional when the model was fitted with a 1-D Y.
+        """
         self._check_fitted()
         k = self._kit()
         M = _M.from_input(X)
@@ -3295,22 +4182,132 @@ class _PLS(_Base):
         return P.out((P.r,)) if self._predict_1d else P.out()
 
     def fit_transform(self, X, y=None):
+        """Fit the model, then return ``transform(X, y)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : array-like of shape (n_samples,) or (n_samples, n_targets)
+
+        Returns
+        -------
+        x_scores, y_scores : ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X, y).transform(X, y)
 
 
+# NIPALS, mode A, regression deflation.
 class PLSRegression(_PLS):
-    """sklearn.cross_decomposition.PLSRegression: NIPALS, mode A, regression deflation."""
+    """Partial least squares regression.
+
+    Follows scikit-learn's ``PLSRegression`` (NIPALS algorithm). If Y's
+    residual becomes constant before ``n_components`` are found, a warning
+    is issued and fewer components are kept.
+
+    Parameters
+    ----------
+    n_components : int, default 2
+        Number of components to keep, between 1 and ``n_features``.
+    scale : bool, default True
+        Scale X and Y to unit variance.
+    max_iter : int, default 500
+        Maximum NIPALS iterations per component.
+    tol : float, default 1e-06
+        NIPALS convergence tolerance.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; inputs are never modified.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    x_weights_, y_weights_ : ndarray of shape (n_features, n_components), (n_targets, n_components)
+    x_loadings_, y_loadings_ : ndarray of shape (n_features, n_components), (n_targets, n_components)
+    x_rotations_, y_rotations_ : ndarray of shape (n_features, n_components), (n_targets, n_components)
+    coef_ : ndarray of shape (n_targets, n_features)
+    intercept_ : ndarray of shape (n_targets,)
+    n_iter_ : list of int
+        NIPALS iterations for each component.
+    n_features_in_ : int
+    x_scores_, y_scores_ : ndarray of shape (n_samples, n_components)
+        Scores of the training data.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ rng.random(8, dtype=np.float32)
+    >>> pred = mojolearn.PLSRegression(n_components=2).fit(X, y).predict(X)
+    """
     _deflation, _pmode = "regression", "A"
 
     def fit(self, X, y=None, Y=None):
+        """Fit the model to X and the targets (``y`` or ``Y``).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y, Y : array-like of shape (n_samples,) or (n_samples, n_targets)
+            Targets (either name).
+
+        Returns
+        -------
+        self
+        """
         super().fit(X, y if y is not None else Y)
         self.x_scores_, self.y_scores_ = self._x_scores, self._y_scores
         return self
 
 
+# Mode A, canonical deflation.
 class PLSCanonical(_PLS):
-    """sklearn.cross_decomposition.PLSCanonical (algorithm='nipals'): mode A,
-    canonical deflation."""
+    """Partial least squares in canonical form.
+
+    Follows scikit-learn's ``PLSCanonical``: finds paired directions in X
+    and Y with maximal covariance, deflating both blocks symmetrically.
+
+    Parameters
+    ----------
+    n_components : int, default 2
+        Number of components to keep, between 1 and
+        ``min(n_samples, n_features, n_targets)``.
+    scale : bool, default True
+        Scale X and Y to unit variance.
+    algorithm : {"nipals", "svd"}, default "nipals"
+        How the first singular vectors of each step are found. Any other
+        value raises ValueError at construction.
+    max_iter : int, default 500
+        Maximum NIPALS iterations per component.
+    tol : float, default 1e-06
+        NIPALS convergence tolerance.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; inputs are never modified.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    x_weights_, y_weights_ : ndarray of shape (n_features, n_components), (n_targets, n_components)
+    x_loadings_, y_loadings_ : ndarray of shape (n_features, n_components), (n_targets, n_components)
+    x_rotations_, y_rotations_ : ndarray of shape (n_features, n_components), (n_targets, n_components)
+    coef_ : ndarray of shape (n_targets, n_features)
+    intercept_ : ndarray of shape (n_targets,)
+    n_iter_ : list of int
+        NIPALS iterations for each component.
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X, Y = rng.random((1000, 8), dtype=np.float32), rng.random((1000, 3), dtype=np.float32)
+    >>> xs, ys = mojolearn.PLSCanonical(n_components=2).fit(X, Y).transform(X, Y)
+    """
     _deflation, _pmode = "canonical", "A"
     _parameters = ("n_components", "scale", "algorithm", "max_iter", "tol", "copy", "numeric_mode")
 
@@ -3322,9 +4319,49 @@ class PLSCanonical(_PLS):
         super().__init__(n_components, scale=scale, max_iter=max_iter, tol=tol, copy=copy, numeric_mode=numeric_mode)
 
 
+# NIPALS, mode B (the pseudo-inverses of X and Y), canonical deflation.
 class CCA(_PLS):
-    """sklearn.cross_decomposition.CCA: NIPALS, mode B (the pseudo-inverses of
-    X and Y), canonical deflation."""
+    """Canonical correlation analysis.
+
+    Follows scikit-learn's ``CCA`` (NIPALS algorithm): finds paired
+    directions in X and Y with maximal correlation.
+
+    Parameters
+    ----------
+    n_components : int, default 2
+        Number of components to keep, between 1 and
+        ``min(n_samples, n_features, n_targets)``.
+    scale : bool, default True
+        Scale X and Y to unit variance.
+    max_iter : int, default 500
+        Maximum NIPALS iterations per component.
+    tol : float, default 1e-06
+        NIPALS convergence tolerance.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; inputs are never modified.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    x_weights_, y_weights_ : ndarray of shape (n_features, n_components), (n_targets, n_components)
+    x_loadings_, y_loadings_ : ndarray of shape (n_features, n_components), (n_targets, n_components)
+    x_rotations_, y_rotations_ : ndarray of shape (n_features, n_components), (n_targets, n_components)
+    coef_ : ndarray of shape (n_targets, n_features)
+    intercept_ : ndarray of shape (n_targets,)
+    n_iter_ : list of int
+        NIPALS iterations for each component.
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X, Y = rng.random((1000, 8), dtype=np.float32), rng.random((1000, 3), dtype=np.float32)
+    >>> xs, ys = mojolearn.CCA(n_components=2).fit(X, Y).transform(X, Y)
+    """
     _deflation, _pmode = "canonical", "B"
 
 
@@ -3366,7 +4403,53 @@ def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=No
 
 def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None, alpha=None, init=None,
                   max_iter=1000, positive=False, numeric_mode=None, **_ignored):
-    """sklearn.decomposition.sparse_encode (see `_sparse_encode`)."""
+    """Sparse-code each row of X against a fixed dictionary.
+
+    Follows scikit-learn's ``sparse_encode``. ``"lasso_lars"`` and
+    ``"lasso_cd"`` solve the same Lasso problem (both by coordinate descent;
+    the optimum does not depend on the path). Other scikit-learn keywords
+    (such as ``n_jobs`` or ``check_input``) are accepted and ignored.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+    dictionary : array-like of shape (n_components, n_features)
+        Dictionary atoms, one per row.
+    algorithm : {"lasso_lars", "lasso_cd", "lars", "omp", "threshold"}, default "lasso_lars"
+        Coding method.
+    n_nonzero_coefs : int or None, default None
+        Nonzero coefficients per row for ``"lars"`` and ``"omp"``. None uses
+        ``min(max(n_features / 10, 1), n_components)``.
+    alpha : float or None, default None
+        Penalty for the Lasso methods, or threshold for ``"threshold"``.
+        None uses 1.0.
+    init : array-like of shape (n_samples, n_components) or None, default None
+        Starting code for ``"lasso_cd"``.
+    max_iter : int, default 1000
+        Maximum iterations for the Lasso methods.
+    positive : bool, default False
+        Force the code to be non-negative (Lasso methods and ``"threshold"``).
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    ndarray of shape (n_samples, n_components), float32
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``algorithm``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> D = rng.random((5, 8), dtype=np.float32)
+    >>> code = mojolearn.sparse_encode(rng.random((100, 8), dtype=np.float32), D, algorithm="omp", n_nonzero_coefs=2)
+    """
     k = _Kit(_mode(numeric_mode))
     init_m = None if init is None else _M.from_input(init, "init")
     return _sparse_encode(k, _M.from_input(X), _M.from_input(dictionary, "dictionary"), algorithm, alpha,
@@ -3419,9 +4502,34 @@ class _SparseCoding(_Base):
         return code
 
     def transform(self, X):
+        """Encode X as a sparse combination of the dictionary atoms.
+
+        Uses ``transform_algorithm`` and its settings.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+            Twice as many columns when ``split_sign=True``.
+        """
         return self._encode(X).out()
 
     def inverse_transform(self, X):
+        """Rebuild data from a code: ``code @ components_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+            A code, as returned by ``transform`` (with ``2 * n_components``
+            columns when ``split_sign=True``).
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+        """
         self._check()
         k = self._kit()
         C = _M.from_input(X, "code")
@@ -3439,13 +4547,83 @@ def _check_sparse_algos(fit_algorithm, transform_algorithm):
         raise ValueError(f"transform_algorithm must be one of {_SPARSE_ALGOS}")
 
 
+# Reference: scikit-learn `decomposition/_dict_learning.py`:
+# `_dict_learning`, `_update_dict`, `_sparse_encode_precomputed`,
+# `_BaseSparseCoding._transform`. The initial SVD is exact (QR + one-sided
+# Jacobi); a resampled unused atom is drawn from the Philox stream.
+# fit_algorithm 'lars' solves its Lasso by coordinate descent (the same
+# optimum). callback is refused by name.
 class DictionaryLearning(_SparseCoding):
-    """sklearn.decomposition.DictionaryLearning (reference: scikit-learn
-    `decomposition/_dict_learning.py`: `_dict_learning`, `_update_dict`,
-    `_sparse_encode_precomputed`, `_BaseSparseCoding._transform`). The
-    initial SVD is exact (QR + one-sided Jacobi); a resampled unused atom is
-    drawn from the Philox stream. fit_algorithm 'lars' solves its Lasso by
-    coordinate descent (the same optimum). REFUSED BY NAME: callback."""
+    """Learn a dictionary in which the data has a sparse representation.
+
+    Follows scikit-learn's ``DictionaryLearning``: alternates sparse coding
+    of X with updates of the dictionary atoms. The starting dictionary comes
+    from an exact SVD of X, and both ``fit_algorithm`` values solve the same
+    Lasso problem by coordinate descent.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Number of atoms; None uses ``n_features``.
+    alpha : float, default 1
+        Sparsity penalty used while fitting.
+    max_iter : int, default 1000
+        Maximum number of iterations.
+    tol : float, default 1e-8
+        Convergence tolerance.
+    fit_algorithm : {"lars", "cd"}, default "lars"
+        Lasso solver name used while fitting (both give the same optimum).
+    transform_algorithm : {"omp", "lasso_lars", "lasso_cd", "lars", "threshold"}, default "omp"
+        Method used by ``transform``; see :func:`sparse_encode`.
+    transform_n_nonzero_coefs : int or None, default None
+        Nonzero coefficients for ``"omp"`` and ``"lars"`` in ``transform``.
+    transform_alpha : float or None, default None
+        Penalty or threshold used by ``transform``; None uses ``alpha``.
+    n_jobs : ignored
+    code_init : array-like of shape (n_samples, n_components) or None, default None
+        Starting code; used only together with ``dict_init``.
+    dict_init : array-like of shape (n_components, n_features) or None, default None
+        Starting dictionary; used only together with ``code_init``.
+    callback : None
+        Must be None; a callable raises NotImplementedError.
+    verbose : ignored
+    split_sign : bool, default False
+        Return the positive and negative parts of the code as separate
+        columns.
+    random_state : int or None, default None
+        Seed used to resample unused atoms; None means 0.
+    positive_code : bool, default False
+        Force the code to be non-negative.
+    positive_dict : bool, default False
+        Force the dictionary to be non-negative.
+    transform_max_iter : int, default 1000
+        Maximum iterations of the Lasso methods during fit and transform.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        The dictionary atoms.
+    error_ : list of float
+        Objective value at each iteration.
+    n_iter_ : int
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``fit_algorithm`` or ``transform_algorithm``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
+    >>> dl = mojolearn.DictionaryLearning(n_components=5, max_iter=20, random_state=0)
+    >>> code = dl.fit_transform(X)
+    """
     _parameters = ("n_components", "alpha", "max_iter", "tol", "fit_algorithm", "transform_algorithm",
                    "transform_n_nonzero_coefs", "transform_alpha", "split_sign", "random_state",
                    "positive_code", "positive_dict", "transform_max_iter", "numeric_mode")
@@ -3463,10 +4641,33 @@ class DictionaryLearning(_SparseCoding):
         self.transform_max_iter, self.numeric_mode = transform_max_iter, numeric_mode
 
     def fit(self, X, y=None):
+        """Fit the dictionary to X.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.fit_transform(X)
         return self
 
     def fit_transform(self, X, y=None):
+        """Fit the dictionary and return the code found while fitting.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+            Twice as many columns when ``split_sign=True``.
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         _check_sparse_algos(self.fit_algorithm, self.transform_algorithm)
         if self.callback is not None:
@@ -3489,12 +4690,83 @@ class DictionaryLearning(_SparseCoding):
         return code.out()
 
 
+# Reference: `_dict_learning.py::MiniBatchDictionaryLearning`:
+# `_initialize_dict`, `_minibatch_step`, `_update_inner_stats`,
+# `_check_convergence`. The shuffle is a Philox permutation (sort of
+# counter draws, ties to the lower index) and the initial dictionary the
+# exact SVD (sklearn: randomized).
 class MiniBatchDictionaryLearning(_SparseCoding):
-    """sklearn.decomposition.MiniBatchDictionaryLearning (reference:
-    `_dict_learning.py::MiniBatchDictionaryLearning`: `_initialize_dict`,
-    `_minibatch_step`, `_update_inner_stats`, `_check_convergence`). The
-    shuffle is a Philox permutation (sort of counter draws, ties to the lower
-    index) and the initial dictionary the exact SVD (sklearn: randomized)."""
+    """Learn a sparse-coding dictionary from mini-batches.
+
+    Follows scikit-learn's ``MiniBatchDictionaryLearning``. The starting
+    dictionary comes from an exact SVD (scikit-learn uses a randomized one)
+    and the shuffle uses mojolearn's own generator, so results differ
+    slightly from scikit-learn's for the same seed.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Number of atoms; None uses ``n_features``.
+    alpha : float, default 1
+        Sparsity penalty used while fitting.
+    max_iter : int, default 1000
+        Maximum passes over the data.
+    fit_algorithm : {"lars", "cd"}, default "lars"
+        Lasso solver name used while fitting.
+    n_jobs : ignored
+    batch_size : int, default 256
+        Rows per mini-batch (capped at ``n_samples``).
+    shuffle : bool, default True
+        Shuffle the rows once before fitting.
+    dict_init : array-like of shape (n_components, n_features) or None, default None
+        Starting dictionary.
+    transform_algorithm : {"omp", "lasso_lars", "lasso_cd", "lars", "threshold"}, default "omp"
+        Method used by ``transform``; see :func:`sparse_encode`.
+    transform_n_nonzero_coefs : int or None, default None
+        Nonzero coefficients for ``"omp"`` and ``"lars"`` in ``transform``.
+    transform_alpha : float or None, default None
+        Penalty or threshold used by ``transform``; None uses ``alpha``.
+    verbose : ignored
+    split_sign : bool, default False
+        Return the positive and negative parts of the code as separate
+        columns.
+    random_state : int or None, default None
+        Seed for the shuffle; None means 0.
+    positive_code : bool, default False
+        Force the code to be non-negative.
+    positive_dict : bool, default False
+        Force the dictionary to be non-negative.
+    transform_max_iter : int, default 1000
+        Maximum iterations of the Lasso methods during fit and transform.
+    callback : None
+        Must be None; a callable raises NotImplementedError.
+    tol : float, default 1e-3
+        Stop when the dictionary changes less than this between steps.
+    max_no_improvement : int or None, default 10
+        Stop after this many mini-batches without improvement of the
+        smoothed cost; None disables this test.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        The dictionary atoms.
+    n_iter_ : int
+        Passes over the data.
+    n_steps_ : int
+        Mini-batches processed.
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> dl = mojolearn.MiniBatchDictionaryLearning(n_components=5, max_iter=5, random_state=0).fit(X)
+    >>> code = dl.transform(X)
+    """
     _parameters = ("n_components", "alpha", "max_iter", "fit_algorithm", "batch_size", "shuffle",
                    "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha", "split_sign",
                    "random_state", "positive_code", "positive_dict", "transform_max_iter", "tol",
@@ -3514,6 +4786,17 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         self.max_no_improvement, self.numeric_mode = max_no_improvement, numeric_mode
 
     def fit(self, X, y=None):
+        """Fit the dictionary to X.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         _check_sparse_algos(self.fit_algorithm, self.transform_algorithm)
         if self.callback is not None:
@@ -3558,6 +4841,17 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         return self
 
     def fit_transform(self, X, y=None):
+        """Fit the dictionary, then return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X).transform(X)
 
 
@@ -3567,9 +4861,22 @@ class _BaseSparsePCA(_Base):
         nrm = k.ew("select", nrm, nrm, k.const(1.0), s=0.0)
         return k.ew("div", C, nrm)
 
+    # sklearn `_BaseSparsePCA.transform`: ridge_regression(components_.T,
+    # (X - mean_).T, ridge_alpha, solver='cholesky').
     def transform(self, X):
-        """sklearn `_BaseSparsePCA.transform`: ridge_regression(components_.T,
-        (X - mean_).T, ridge_alpha, solver='cholesky')."""
+        """Project X onto the sparse components by ridge regression.
+
+        Solves a least-squares problem with penalty ``ridge_alpha`` for each
+        centered row, as scikit-learn does.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self._check()
         k = self._kit()
         Xc = k.ew("sub", _M.from_input(X), self.mean_m_)
@@ -3581,15 +4888,80 @@ class _BaseSparsePCA(_Base):
         return U.out()
 
     def inverse_transform(self, X):
+        """Map projected data back: ``X @ components_ + mean_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+        """
         self._check()
         k = self._kit()
         return k.ew("add", k.mm(_M.from_input(X), self.components_m_), self.mean_m_).out()
 
 
+# Reference: scikit-learn `decomposition/_sparse_pca.py`: dictionary
+# learning on the centered X^T, the code's transpose the components.
 class SparsePCA(_BaseSparsePCA):
-    """sklearn.decomposition.SparsePCA (reference: scikit-learn
-    `decomposition/_sparse_pca.py`): dictionary learning on the centered X^T,
-    the code's transpose the components, each normalized to unit norm."""
+    """Sparse principal component analysis.
+
+    Follows scikit-learn's ``SparsePCA``: finds components with few nonzero
+    loadings by dictionary learning on the centered, transposed data. Each
+    component is scaled to unit norm.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Number of components; None uses ``n_features``.
+    alpha : float, default 1
+        Sparsity penalty; larger values give sparser components.
+    ridge_alpha : float, default 0.01
+        Ridge penalty used by ``transform``.
+    max_iter : int, default 1000
+        Maximum number of iterations.
+    tol : float, default 1e-8
+        Convergence tolerance.
+    method : {"lars", "cd"}, default "lars"
+        Lasso solver name (both give the same optimum).
+    n_jobs : ignored
+    U_init : array-like of shape (n_samples, n_components) or None, default None
+        Starting sample loadings; used only together with ``V_init``.
+    V_init : array-like of shape (n_components, n_features) or None, default None
+        Starting components; used only together with ``U_init``.
+    verbose : ignored
+    random_state : int or None, default None
+        Seed used to resample unused atoms; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        Sparse components, each scaled to unit norm.
+    n_components_ : int
+    mean_ : ndarray of shape (n_features,)
+    n_iter_ : int
+    n_features_in_ : int
+    error_ : list of float
+        Objective value at each iteration.
+
+    Raises
+    ------
+    ValueError
+        If ``method`` is not ``"lars"`` or ``"cd"``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
+    >>> spca = mojolearn.SparsePCA(n_components=3, max_iter=20, random_state=0).fit(X)
+    >>> Z = spca.transform(X)
+    """
     _parameters = ("n_components", "alpha", "ridge_alpha", "max_iter", "tol", "method", "random_state",
                    "numeric_mode")
 
@@ -3601,6 +4973,17 @@ class SparsePCA(_BaseSparsePCA):
         self.numeric_mode = numeric_mode
 
     def fit(self, X, y=None):
+        """Fit the sparse components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.method not in ("lars", "cd"):
             raise ValueError("method must be 'lars' or 'cd'")
@@ -3623,10 +5006,61 @@ class SparsePCA(_BaseSparsePCA):
         return self
 
 
+# MiniBatchDictionaryLearning on the centered X^T, the components its
+# lasso_lars transform of X^T. callback is not forwarded (never called).
 class MiniBatchSparsePCA(_BaseSparsePCA):
-    """sklearn.decomposition.MiniBatchSparsePCA: MiniBatchDictionaryLearning
-    on the centered X^T, the components its lasso_lars transform of X^T,
-    each normalized to unit norm."""
+    """Sparse principal component analysis fitted on mini-batches.
+
+    Follows scikit-learn's ``MiniBatchSparsePCA``: runs
+    :class:`MiniBatchDictionaryLearning` on the centered, transposed data.
+    Each component is scaled to unit norm.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Number of components; None uses ``n_features``.
+    alpha : float, default 1
+        Sparsity penalty.
+    ridge_alpha : float, default 0.01
+        Ridge penalty used by ``transform``.
+    max_iter : int, default 1000
+        Maximum passes over the data.
+    callback : ignored
+    batch_size : int, default 3
+        Features per mini-batch (the data is transposed).
+    verbose : ignored
+    shuffle : bool, default True
+        Shuffle once before fitting.
+    n_jobs : ignored
+    method : {"lars", "cd"}, default "lars"
+        Lasso solver name.
+    random_state : int or None, default None
+        Seed for the shuffle; None means 0.
+    tol : float, default 1e-3
+        Convergence tolerance on the dictionary change.
+    max_no_improvement : int or None, default 10
+        Stop after this many mini-batches without improvement; None disables
+        this test.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        Sparse components, each scaled to unit norm.
+    n_components_ : int
+    mean_ : ndarray of shape (n_features,)
+    n_iter_ : int
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
+    >>> spca = mojolearn.MiniBatchSparsePCA(n_components=3, max_iter=5, random_state=0).fit(X)
+    """
     _parameters = ("n_components", "alpha", "ridge_alpha", "max_iter", "batch_size", "shuffle", "method",
                    "random_state", "tol", "max_no_improvement", "numeric_mode")
 
@@ -3639,6 +5073,17 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
         self.max_no_improvement, self.numeric_mode = max_no_improvement, numeric_mode
 
     def fit(self, X, y=None):
+        """Fit the sparse components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         M = _M.from_input(X)
@@ -3670,18 +5115,90 @@ def _dirichlet_expectation_2d(k, A):
     return k.ew("sub", k.ew("digamma", A), k.ew("digamma", k.rowsum(A)))
 
 
+# Reference: scikit-learn `decomposition/_lda.py` with
+# `_online_lda_fast.pyx`: `_init_latent_vars`, `_e_step`,
+# `_update_doc_distribution`, `_em_step`, `_approx_bound`, `transform`,
+# `perplexity`, `score`. Variational EM in a fixed order: every document's
+# inner loop is one thread, the sufficient statistics one gemm. The
+# Gamma(100, 1/100) draws are Marsaglia-Tsang on the Philox stream. Online
+# mini-batches go in row order, as sklearn with no shuffle does. A
+# scipy.sparse count matrix is densified (exact); the per-document cell
+# already skips zero counts.
 class LatentDirichletAllocation(_Base):
-    """sklearn.decomposition.LatentDirichletAllocation (reference:
-    scikit-learn `decomposition/_lda.py` with `_online_lda_fast.pyx`:
-    `_init_latent_vars`, `_e_step`, `_update_doc_distribution`, `_em_step`,
-    `_approx_bound`, `transform`, `perplexity`, `score`), variational EM in a
-    fixed order: every document's inner loop is one thread, the sufficient
-    statistics one gemm. The Gamma(100, 1/100) draws are Marsaglia-Tsang on
-    the Philox stream. learning_method 'batch' and 'online' (online: the
-    mini-batches in row order, as sklearn with no shuffle does).
-    A scipy.sparse count matrix is densified (exact); the per-document cell
-    already skips zero counts. evaluate_every with n_jobs: no host pool, so
-    n_jobs changes nothing."""
+    """Latent Dirichlet allocation topic model, fitted by variational EM.
+
+    Follows scikit-learn's ``LatentDirichletAllocation``. X is a
+    document-term count matrix (non-negative; a ``scipy.sparse`` matrix is
+    densified). Random draws come from mojolearn's own generator, so topics
+    differ from scikit-learn's for the same seed. Online learning takes the
+    mini-batches in row order.
+
+    Parameters
+    ----------
+    n_components : int, default 10
+        Number of topics.
+    doc_topic_prior : float or None, default None
+        Prior on the document-topic distribution; None uses
+        ``1 / n_components``.
+    topic_word_prior : float or None, default None
+        Prior on the topic-word distribution; None uses ``1 / n_components``.
+    learning_method : {"batch", "online"}, default "batch"
+        Use all data in each update, or mini-batches.
+    learning_decay : float, default 0.7
+        Online learning rate decay.
+    learning_offset : float, default 10.0
+        Online learning rate offset (down-weights early iterations).
+    max_iter : int, default 10
+        Maximum passes over the data.
+    batch_size : int, default 128
+        Documents per mini-batch for online learning; must be a positive int.
+    evaluate_every : int, default -1
+        Compute perplexity every this many iterations and stop once it
+        improves by less than ``perp_tol``; 0 or negative never evaluates.
+    total_samples : float, default 1e6
+        Total number of documents, used by ``partial_fit`` and
+        ``perplexity(sub_sampling=True)``.
+    perp_tol : float, default 0.1
+        Perplexity tolerance for ``evaluate_every``.
+    mean_change_tol : float, default 1e-3
+        Stopping tolerance of the per-document E-step.
+    max_doc_update_iter : int, default 100
+        Maximum E-step iterations per document.
+    n_jobs : ignored
+    verbose : ignored
+    random_state : int or None, default None
+        Seed; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        Variational topic-word parameters.
+    exp_dirichlet_component_ : ndarray of shape (n_components, n_features)
+    doc_topic_prior_ : float
+    topic_word_prior_ : float
+    bound_ : float
+        Final perplexity on the training data.
+    n_iter_ : int
+    n_batch_iter_ : int
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        If X has negative values, or ``learning_method`` or ``batch_size``
+        is invalid.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).integers(0, 5, (200, 30)).astype(np.float32)
+    >>> lda = mojolearn.LatentDirichletAllocation(n_components=4, random_state=0).fit(X)
+    >>> doc_topics = lda.transform(X)
+    """
     _parameters = ("n_components", "doc_topic_prior", "topic_word_prior", "learning_method", "learning_decay",
                    "learning_offset", "max_iter", "batch_size", "evaluate_every", "total_samples", "perp_tol",
                    "mean_change_tol", "max_doc_update_iter", "random_state", "numeric_mode")
@@ -3790,6 +5307,18 @@ class LatentDirichletAllocation(_Base):
              float(self.learning_decay), float(self.mean_change_tol), float(total_samples)])
 
     def fit(self, X, y=None):
+        """Fit the topic model to a document-term matrix.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Non-negative word counts.
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.learning_method not in ("batch", "online"):
             raise ValueError("learning_method must be 'batch' or 'online'")
@@ -3825,6 +5354,19 @@ class LatentDirichletAllocation(_Base):
         return self
 
     def partial_fit(self, X, y=None):
+        """Update the model with one batch of documents (online learning).
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Non-negative word counts, split into mini-batches of
+            ``batch_size``.
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         if not hasattr(self, "components_m_"):
             self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
@@ -3844,12 +5386,37 @@ class LatentDirichletAllocation(_Base):
         return k, M, self._e_step(k, M, False, False)[0]
 
     def transform(self, X, *, normalize=True):
+        """Return the topic distribution of each document.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Non-negative word counts.
+        normalize : bool, default True
+            Normalize each row to sum to 1.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         k, M, Dt = self._unnormalized(X)
         if normalize:
             Dt = k.ew("div", Dt, k.rowsum(Dt))
         return Dt.out()
 
     def fit_transform(self, X, y=None, *, normalize=True):
+        """Fit the model, then return ``transform(X, normalize=normalize)``.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+        y : ignored
+        normalize : bool, default True
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X).transform(X, normalize=normalize)
 
     def _loglik(self, k, prior, distr, dirichlet, size):
@@ -3895,10 +5462,35 @@ class LatentDirichletAllocation(_Base):
         return self._kit().ew("exp", k.const(-bound / word_cnt)).s[0]
 
     def score(self, X, y=None):
+        """Return the approximate log-likelihood (variational bound) of X.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        float
+        """
         k, M, Dt = self._unnormalized(X)
         return self._approx_bound(k, M, Dt)
 
     def perplexity(self, X, sub_sampling=False):
+        """Return the approximate perplexity of X.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+        sub_sampling : bool, default False
+            Scale the bound as if X were a sample of ``total_samples``
+            documents.
+
+        Returns
+        -------
+        float
+            Infinity when X has no words.
+        """
         k, M, Dt = self._unnormalized(X)
         return self._perplexity(k, M, Dt, sub_sampling)
 
@@ -4102,18 +5694,76 @@ def _top_eig(k, A, nc, topk=False):
     return w, k.ew("mul", V, k.absmax_signs(V, True))
 
 
+# Reference: scikit-learn `manifold/_isomap.py` with
+# `KernelPCA(kernel='precomputed')` and `utils/graph.py`: the kNN distance
+# graph (ties to the lower index), all-pairs shortest paths by Dijkstra
+# (one source per thread), the kernel -0.5 * D^2 centered, its top
+# eigenpairs (Jacobi eigh). path_method 'FW' runs the same Dijkstra
+# (x_decomp/NOT_IMPLEMENTED.tsv: deliberately divergent). Metrics per
+# DEVIATION 5319. A callable or any other metric is refused by name.
 class Isomap(_Base):
-    """sklearn.manifold.Isomap (reference: scikit-learn `manifold/_isomap.py`
-    with `KernelPCA(kernel='precomputed')` and `utils/graph.py`): the
-    Euclidean kNN distance graph (ties to the lower index), all-pairs
-    shortest paths by Dijkstra (one source per thread), the kernel
-    -0.5 * D^2 centered, its top eigenpairs (Jacobi eigh). `radius` (with
-    n_neighbors=None) takes every other row within the radius (closed, the
-    float32 distance compared exactly). path_method 'FW' runs the same
-    Dijkstra (x_decomp/NOT_IMPLEMENTED.tsv: DELIBERATELY DIVERGENT). metric:
-    euclidean, minkowski p (p = 1, 2 and inf by name), manhattan, chebyshev,
-    cosine (DEVIATION 5319). REFUSED BY NAME: a callable or any other
-    metric."""
+    """Isomap embedding: kernel PCA on geodesic distances.
+
+    Follows scikit-learn's ``Isomap``: builds a nearest-neighbor (or radius)
+    graph, computes shortest-path distances on it, and embeds the centered
+    kernel ``-0.5 * D**2`` by its top eigenvectors. If the graph has more
+    than one connected component, a warning is issued and the components are
+    joined. Shortest paths always use Dijkstra's algorithm, and the
+    eigenproblem is always solved exactly.
+
+    Parameters
+    ----------
+    n_neighbors : int or None, default 5
+        Neighbors per point. Set to None to use ``radius`` instead.
+    radius : float or None, default None
+        Connect every point within this distance (inclusive). Only one of
+        ``n_neighbors`` and ``radius`` may be set.
+    n_components : int, default 2
+        Embedding dimension.
+    eigen_solver : {"auto", "dense"}, default "auto"
+        Both solve exactly. ``"arpack"`` raises NotImplementedError.
+    tol : ignored
+    max_iter : ignored
+    path_method : {"auto", "FW", "D"}, default "auto"
+        Accepted for scikit-learn compatibility; every value runs Dijkstra.
+    neighbors_algorithm : ignored
+    n_jobs : ignored
+    metric : str, default "minkowski"
+        Distance metric: ``"euclidean"``, ``"l2"``, ``"minkowski"`` (with ``p``), ``"manhattan"``
+        (``"cityblock"``, ``"l1"``), ``"chebyshev"`` (``"infinity"``) or
+        ``"cosine"``; a callable or any other name raises
+        NotImplementedError.
+    p : float, default 2
+        Minkowski power (must be positive).
+    metric_params : dict or None, default None
+        Only ``{"p": ...}`` is supported; other keys raise
+        NotImplementedError.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    embedding_ : ndarray of shape (n_samples, n_components)
+    dist_matrix_ : ndarray of shape (n_samples, n_samples)
+        Geodesic distances between training points.
+    n_connected_components_ : int
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        If both or neither of ``n_neighbors`` and ``radius`` are set,
+        ``radius`` is negative, or ``path_method`` or ``eigen_solver`` is
+        unknown.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
+    >>> Y = mojolearn.Isomap(n_neighbors=10, n_components=2).fit_transform(X)
+    """
     _parameters = ("n_neighbors", "radius", "n_components", "eigen_solver", "path_method", "metric", "p", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, radius=None, n_components=2, eigen_solver="auto", tol=0, max_iter=None,
@@ -4125,6 +5775,17 @@ class Isomap(_Base):
         self.metric_params, self.numeric_mode = metric_params, numeric_mode
 
     def fit(self, X, y=None):
+        """Compute the embedding of X.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.n_neighbors is not None and self.radius is not None:
             raise ValueError(f"Both n_neighbors and radius are provided. Use Isomap(radius={self.radius}, "
@@ -4182,11 +5843,39 @@ class Isomap(_Base):
         return Wg, nn
 
     def fit_transform(self, X, y=None):
+        """Fit the model and return ``embedding_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X).embedding_
 
     def transform(self, X):
-        """sklearn Isomap.transform: geodesic distance of each query through
-        its k nearest training points, then KernelPCA.transform."""
+        """Embed new points.
+
+        Each query's geodesic distance to the training points goes through
+        its nearest training neighbors (or, with ``radius``, every training
+        point within the radius), then is projected as in kernel PCA.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_queries, n_components), float32
+
+        Raises
+        ------
+        ValueError
+            With ``radius``, if a query has no training point within it.
+        """
         self._check("embedding_m_")
         k = self._kit()
         Q = _M.from_input(X)
@@ -4228,6 +5917,16 @@ class Isomap(_Base):
         return k.graph_radius_geo(Dq, D, r)
 
     def reconstruction_error(self):
+        """Return the reconstruction error of the embedding.
+
+        Computed as in scikit-learn: the Frobenius norm of the difference
+        between the centered geodesic kernel and its rank-``n_components``
+        approximation, divided by ``n_samples``.
+
+        Returns
+        -------
+        float
+        """
         self._check("embedding_m_")
         k = self._kit()
         # a difference of two nearly equal sums: accumulated in binary64
@@ -4237,16 +5936,62 @@ class Isomap(_Base):
         return math.sqrt(t) / self._Kc.r if t > 0 else 0.0
 
 
+# Reference: scikit-learn `manifold/_classical_mds.py`.
 class ClassicalMDS(_Base):
-    """sklearn.manifold.ClassicalMDS (reference: scikit-learn
-    `manifold/_classical_mds.py`): double-centred -0.5 * D^2, its top
-    eigenpairs, embedding = V sqrt(max(w, 0))."""
+    """Classical (Torgerson) multidimensional scaling.
+
+    Follows scikit-learn's ``ClassicalMDS``: double-centers ``-0.5 * D**2``
+    for the pairwise distances D and embeds by its top eigenvectors scaled
+    by the square roots of the eigenvalues.
+
+    Parameters
+    ----------
+    n_components : int, default 2
+        Embedding dimension.
+    metric : str, default "euclidean"
+        ``"precomputed"`` (X is a distance matrix) or a distance metric:
+        ``"euclidean"``, ``"l2"``, ``"minkowski"`` (``p`` from ``metric_params``), ``"manhattan"``
+        (``"cityblock"``, ``"l1"``), ``"chebyshev"`` (``"infinity"``) or
+        ``"cosine"``; a callable or any other name raises
+        NotImplementedError.
+    metric_params : dict or None, default None
+        Only ``{"p": ...}`` is supported.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    embedding_ : ndarray of shape (n_samples, n_components)
+    eigenvalues_ : ndarray of shape (n_components,)
+    dissimilarity_matrix_ : ndarray of shape (n_samples, n_samples)
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
+    >>> Y = mojolearn.ClassicalMDS(n_components=2).fit_transform(X)
+    """
     _parameters = ("n_components", "metric", "numeric_mode")
 
     def __init__(self, n_components=2, *, metric="euclidean", metric_params=None, numeric_mode=None):
         self.n_components, self.metric, self.metric_params, self.numeric_mode = n_components, metric, metric_params, numeric_mode
 
     def fit(self, X, y=None):
+        """Compute the embedding.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
+            Data, or a distance matrix with ``metric="precomputed"``.
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         M = _M.from_input(X)
@@ -4270,17 +6015,88 @@ class ClassicalMDS(_Base):
         return self
 
     def fit_transform(self, X, y=None):
+        """Compute the embedding and return ``embedding_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X).embedding_
 
 
+# Reference: scikit-learn `manifold/_mds.py`, `_smacof_single`, `smacof`.
+# Random starts come from the Philox stream. init='random' is the default
+# sklearn's FutureWarning names. Non-metric: the disparities are the
+# isotonic regression of the distances on the dissimilarities (the linear
+# lane's IsotonicRegression), rescaled.
 class MDS(_Base):
-    """sklearn.manifold.MDS (reference: scikit-learn `manifold/_mds.py`,
-    `_smacof_single`, `smacof`): metric SMACOF with the Guttman transform,
-    `n_init` starts (random ones from the Philox stream), the lowest stress
-    kept. init 'random' (the default the FutureWarning names), 'classical_mds'
-    or an array. metric_mds=False is Kruskal's non-metric SMACOF: the
-    disparities are the isotonic regression of the distances on the
-    dissimilarities (the linear lane's IsotonicRegression), rescaled."""
+    """Multidimensional scaling by SMACOF.
+
+    Follows scikit-learn's ``MDS``: minimizes stress with the Guttman
+    transform from ``n_init`` starts and keeps the start with the lowest
+    stress. ``metric_mds=False`` runs Kruskal's non-metric SMACOF. Random
+    starts come from mojolearn's own generator.
+
+    Parameters
+    ----------
+    n_components : int, default 2
+        Embedding dimension.
+    metric_mds : bool, default True
+        Metric (True) or non-metric (False) MDS.
+    n_init : int, default 1
+        Number of random starts (with ``init="random"``).
+    init : {"random", "classical_mds"} or array-like, default "random"
+        Starting configuration: random, the :class:`ClassicalMDS`
+        embedding, or an array of shape (n_samples, n_components).
+    max_iter : int, default 300
+        Maximum SMACOF iterations per start.
+    verbose : ignored
+    eps : float, default 1e-6
+        Convergence tolerance on the stress.
+    n_jobs : ignored
+    random_state : int or None, default None
+        Seed for random starts; None means 0.
+    metric : str, default "euclidean"
+        ``"precomputed"`` (X is a dissimilarity matrix) or a distance
+        metric: ``"euclidean"``, ``"l2"``, ``"minkowski"`` (``p`` from ``metric_params``), ``"manhattan"``
+        (``"cityblock"``, ``"l1"``), ``"chebyshev"`` (``"infinity"``) or
+        ``"cosine"``; a callable or any other name raises
+        NotImplementedError.
+    metric_params : dict or None, default None
+        Only ``{"p": ...}`` is supported.
+    normalized_stress : bool or "auto", default "auto"
+        Report normalized stress (Kruskal's stress-1). ``"auto"`` is True
+        for non-metric MDS and False otherwise.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    embedding_ : ndarray of shape (n_samples, n_components)
+    stress_ : float
+    n_iter_ : int
+    dissimilarity_matrix_ : ndarray of shape (n_samples, n_samples)
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``init``, or with ``metric_mds=False`` when
+        ``n_samples**2`` exceeds ``2**31 - 1``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((300, 8), dtype=np.float32)
+    >>> Y = mojolearn.MDS(n_components=2, random_state=0).fit_transform(X)
+    """
     _parameters = ("n_components", "metric_mds", "n_init", "init", "max_iter", "eps", "random_state", "metric",
                    "normalized_stress", "numeric_mode")
 
@@ -4296,6 +6112,20 @@ class MDS(_Base):
         return k.ew("sqrt", k.sqdist(Y, Y))
 
     def fit_transform(self, X, y=None, init=None):
+        """Compute the embedding and return it.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
+            Data, or dissimilarities with ``metric="precomputed"``.
+        y : ignored
+        init : array-like of shape (n_samples, n_components) or None, default None
+            Starting configuration; overrides the ``init`` parameter.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         M = _M.from_input(X)
@@ -4334,6 +6164,19 @@ class MDS(_Base):
         return self.embedding_
 
     def fit(self, X, y=None, init=None):
+        """Compute the embedding.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
+        y : ignored
+        init : array-like of shape (n_samples, n_components) or None, default None
+            Starting configuration; overrides the ``init`` parameter.
+
+        Returns
+        -------
+        self
+        """
         self.fit_transform(X, init=init)
         return self
 
@@ -4539,18 +6382,76 @@ def _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor):
     return X, Y, S, int(st) == 1
 
 
+# Reference: scikit-learn `manifold/_locally_linear.py`:
+# `barycenter_kneighbors_graph`, `barycenter_weights`, `null_space` (here
+# the smallest right singular vectors of I - W, which are M's smallest
+# eigenvectors), `locally_linear_embedding`, `transform`. M = (I - W)^T
+# (I - W), its n_components + 1 smallest eigenvectors, the first dropped.
+# method='ltsa', 'hessian' and 'modified' build sklearn's M as a stacked
+# factor (M = B^T B) and take the same SVD route. eigen_solver='auto' with
+# method='standard' past 200 rows (sklearn's ARPACK policy) takes
+# `_lle_smallest`, shift-invert subspace iteration on the deflated factor;
+# 'dense' (and every other case) the full one-sided Jacobi SVD.
 class LocallyLinearEmbedding(_Base):
-    """sklearn.manifold.LocallyLinearEmbedding, method='standard' (reference:
-    scikit-learn `manifold/_locally_linear.py`: `barycenter_kneighbors_graph`,
-    `barycenter_weights`, `null_space` (here the smallest right singular
-    vectors of I - W, which are M's smallest eigenvectors),
-    `locally_linear_embedding`, `transform`). M = (I - W)^T (I - W), its
-    n_components + 1 smallest eigenvectors, the first dropped.
-    method='ltsa', 'hessian' and 'modified' build sklearn's M as a stacked
-    factor (M = B^T B) and take the same SVD route. eigen_solver='auto'
-    with method='standard' past 200 rows (sklearn's ARPACK policy) takes
-    `_lle_smallest`, shift-invert subspace iteration on the deflated factor;
-    'dense' (and every other case) the full one-sided Jacobi SVD."""
+    """Locally linear embedding.
+
+    Follows scikit-learn's ``LocallyLinearEmbedding``: reconstructs each
+    point from its Euclidean nearest neighbors and finds the low-dimensional
+    embedding that best preserves those reconstruction weights. Supports the
+    standard, LTSA, Hessian and modified variants.
+
+    Parameters
+    ----------
+    n_neighbors : int, default 5
+        Neighbors per point; must be less than ``n_samples``.
+    n_components : int, default 2
+        Embedding dimension.
+    reg : float, default 1e-3
+        Regularization of the local weight solves.
+    eigen_solver : {"auto", "dense"}, default "auto"
+        ``"dense"`` always runs the full exact solve. ``"auto"`` with
+        ``method="standard"``, more than 200 samples and ``n_components + 1 <
+        10`` uses an iterative solver for the smallest eigenvectors;
+        otherwise it runs the full solve. ``"arpack"`` raises
+        NotImplementedError.
+    tol : ignored
+    max_iter : int, default 100
+        Iteration limit of the iterative solver.
+    method : {"standard", "ltsa", "hessian", "modified"}, default "standard"
+        LLE variant. ``"hessian"`` needs ``n_neighbors > n_components *
+        (n_components + 3) / 2``; ``"modified"`` needs ``n_neighbors >=
+        n_components``.
+    hessian_tol : float, default 1e-4
+        Tolerance for ``method="hessian"``.
+    modified_tol : float, default 1e-12
+        Tolerance for ``method="modified"``.
+    neighbors_algorithm : ignored
+    random_state : int or None, default None
+        Seed of the iterative solver's start; None means 0.
+    n_jobs : ignored
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    embedding_ : ndarray of shape (n_samples, n_components)
+    reconstruction_error_ : float
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``method`` or ``eigen_solver``, or ``n_neighbors``
+        out of range for the method.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
+    >>> Y = mojolearn.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit_transform(X)
+    """
     _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
@@ -4562,6 +6463,17 @@ class LocallyLinearEmbedding(_Base):
         self.n_jobs, self.numeric_mode = n_jobs, numeric_mode
 
     def fit(self, X, y=None):
+        """Compute the embedding of X.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.method not in ("standard", "hessian", "modified", "ltsa"):
             raise ValueError(f"LocallyLinearEmbedding: unrecognized method {self.method!r}")
@@ -4618,9 +6530,34 @@ class LocallyLinearEmbedding(_Base):
         return self
 
     def fit_transform(self, X, y=None):
+        """Compute the embedding and return ``embedding_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X).embedding_
 
     def transform(self, X):
+        """Embed new points.
+
+        Each query is written as a weighted combination of its nearest
+        training points, and the same weights are applied to their
+        embeddings.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_queries, n_components), float32
+        """
         self._check("embedding_m_")
         k = self._kit()
         Q = _M.from_input(X)
@@ -4732,14 +6669,59 @@ def _consistency_factor(k, p, alpha):
     return _f32(alpha / _chi2_cdf(k, p + 2, q))
 
 
+# Reference: scikit-learn `covariance/_robust_covariance.py`:
+# `c_step`/`_c_step`, `select_candidates`, `fast_mcd`, `MinCovDet.fit`,
+# `correct_covariance`, `reweight_covariance`. The random subsets are
+# Philox permutations (a sort of counter draws, ties to the lower index)
+# and every argsort breaks ties by index. chi2 quantiles by bisection of
+# the incomplete gamma; one feature takes sklearn's 1-D shortcut.
 class MinCovDet(_Base):
-    """sklearn.covariance.MinCovDet (reference: scikit-learn
-    `covariance/_robust_covariance.py`: `c_step`/`_c_step`,
-    `select_candidates`, `fast_mcd`, `MinCovDet.fit`, `correct_covariance`,
-    `reweight_covariance`). The random subsets are Philox permutations (a
-    sort of counter draws, ties to the lower index) and every argsort breaks
-    ties by index. chi2 quantiles by bisection of the incomplete gamma; one
-    feature takes sklearn's 1-D shortcut."""
+    """Minimum covariance determinant: a robust covariance estimator.
+
+    Follows scikit-learn's ``MinCovDet`` (FastMCD), including the
+    consistency correction and the reweighting step. Random subsets come
+    from mojolearn's own generator and ties are broken by row index, so
+    results can differ from scikit-learn's for the same seed.
+
+    Parameters
+    ----------
+    store_precision : bool, default True
+        Store ``precision_``; when False it is None.
+    assume_centered : bool, default False
+        Treat the data as centered (location fixed at zero).
+    support_fraction : float or None, default None
+        Fraction of points in the raw support. None uses
+        ``ceil((n_samples + n_features + 1) / 2)`` points.
+    random_state : int or None, default None
+        Seed for the random subsets; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    location_ : ndarray of shape (n_features,)
+        Robust location (reweighted).
+    covariance_ : ndarray of shape (n_features, n_features)
+        Robust covariance (reweighted).
+    precision_ : ndarray of shape (n_features, n_features) or None
+    support_ : ndarray of shape (n_samples,), uint8
+        1 for points used in the reweighted estimate.
+    raw_location_ : ndarray of shape (n_features,)
+    raw_covariance_ : ndarray of shape (n_features, n_features)
+    raw_support_ : ndarray of shape (n_samples,), uint8
+    dist_ : ndarray of shape (n_samples,)
+        Squared Mahalanobis distances of the training points.
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).normal(size=(500, 3)).astype(np.float32)
+    >>> mcd = mojolearn.MinCovDet(random_state=0).fit(X)
+    >>> d = mcd.mahalanobis(X)
+    """
     _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode")
 
     def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, random_state=None,
@@ -4806,6 +6788,17 @@ class MinCovDet(_Base):
         return self._fast_mcd_native(k, X, h)
 
     def fit(self, X, y=None):
+        """Fit the robust location and covariance.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         M = _M.from_input(X)
@@ -4847,6 +6840,21 @@ class MinCovDet(_Base):
         return self
 
     def mahalanobis(self, X):
+        """Return squared Mahalanobis distances under the fitted model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), float32
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         if not hasattr(self, "precision_m_"):
             raise RuntimeError("MinCovDet is not fitted; call fit first")
         k = self._kit()
@@ -4854,11 +6862,31 @@ class MinCovDet(_Base):
         return d.out((d.r,))
 
     def get_precision(self):
+        """Return the precision matrix (pseudo-inverse of ``covariance_``).
+
+        Available even when ``store_precision=False``.
+
+        Returns
+        -------
+        ndarray of shape (n_features, n_features), float32
+        """
         return self.precision_m_.out()
 
     def score(self, X, y=None):
-        """sklearn EmpiricalCovariance.score: the Gaussian log-likelihood of
-        X under location_ and covariance_ (X's own empirical covariance)."""
+        """Return the Gaussian log-likelihood of X under the fitted model.
+
+        As scikit-learn's ``EmpiricalCovariance.score``: uses X's empirical
+        covariance around ``location_`` and the fitted precision.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        float
+        """
         k = self._kit()
         M = _M.from_input(X)
         cov = _emp_cov(k, k.ew("sub", M, self.location_m_), assume_centered=True)
@@ -4869,8 +6897,48 @@ class MinCovDet(_Base):
 
 
 class EllipticEnvelope(MinCovDet):
-    """sklearn.covariance.EllipticEnvelope: MinCovDet, then offset_ the
-    `contamination` percentile of -dist_ (linear interpolation, float64)."""
+    """Outlier detection for Gaussian-distributed data.
+
+    Follows scikit-learn's ``EllipticEnvelope``: fits a :class:`MinCovDet`
+    and sets ``offset_`` at the ``contamination`` percentile of the negated
+    training distances, so that about that fraction of training points is
+    labeled an outlier.
+
+    Parameters
+    ----------
+    store_precision : bool, default True
+        Store ``precision_``.
+    assume_centered : bool, default False
+        Treat the data as centered.
+    support_fraction : float or None, default None
+        Fraction of points in the raw support; see :class:`MinCovDet`.
+    contamination : float, default 0.1
+        Expected fraction of outliers, in (0, 0.5].
+    random_state : int or None, default None
+        Seed for the random subsets; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    offset_ : float
+        Threshold on the decision function.
+    location_, covariance_, precision_, support_, dist_
+        As in :class:`MinCovDet`.
+
+    Raises
+    ------
+    ValueError
+        If ``contamination`` is not in (0, 0.5].
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).normal(size=(500, 3)).astype(np.float32)
+    >>> labels = mojolearn.EllipticEnvelope(contamination=0.05, random_state=0).fit(X).predict(X)
+    """
     _parameters = ("store_precision", "assume_centered", "support_fraction", "contamination", "random_state",
                    "numeric_mode")
 
@@ -4881,6 +6949,17 @@ class EllipticEnvelope(MinCovDet):
         self.contamination = contamination
 
     def fit(self, X, y=None):
+        """Fit the robust model and set ``offset_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         if not 0 < self.contamination <= 0.5:
             raise ValueError("contamination must be in (0, 0.5]")
         super().fit(X)
@@ -4901,16 +6980,46 @@ class EllipticEnvelope(MinCovDet):
         return self
 
     def score_samples(self, X):
+        """Return the negated squared Mahalanobis distance of each sample.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), float32
+        """
         k = self._kit()
         d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
         return k.ew("scale", d, s=-1.0).out((d.r,))
 
     def decision_function(self, X):
+        """Return ``score_samples(X) - offset_``; negative means outlier.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), float32
+        """
         k = self._kit()
         d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
         return k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_).out((d.r,))
 
     def predict(self, X):
+        """Label each sample 1 (inlier) or -1 (outlier).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), int32
+        """
         from ._buffer import frombytes as _fb
         k = self._kit()
         d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
@@ -4924,15 +7033,47 @@ class EllipticEnvelope(MinCovDet):
         return lab.out((d.r,)).astype("<i4")
 
     def fit_predict(self, X, y=None):
+        """Fit the model, then return ``predict(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), int32
+        """
         return self.fit(X).predict(X)
 
+    # Lane cpu4-python: the x_metrics device program (`accuracy_fraction`:
+    # exact match counts, the weight total its PairSum, the ratio binary64
+    # on the device; the host column runs the same units) replaces the host
+    # loop `x_decomp_accuracy`.
     def score(self, X, y, sample_weight=None):
-        """sklearn OutlierMixin/ClassifierMixin.score: accuracy_score(y,
-        predict(X), sample_weight), the (weighted) share of exact label
-        matches. Lane cpu4-python: the x_metrics device program
-        (`accuracy_fraction`: exact match counts, the weight total its
-        PairSum, the ratio binary64 on the device; the host column runs the
-        same units) replaces the host loop `x_decomp_accuracy`."""
+        """Return the accuracy of ``predict(X)`` against labels y.
+
+        As scikit-learn's ``EllipticEnvelope.score``: the (weighted) fraction
+        of exact label matches.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : array-like of shape (n_samples,)
+            True labels (1 inlier, -1 outlier).
+        sample_weight : array-like of shape (n_samples,) or None, default None
+
+        Returns
+        -------
+        float
+
+        Raises
+        ------
+        ValueError
+            If y or sample_weight has a different length than X.
+        ZeroDivisionError
+            If the weights sum to zero.
+        """
         from ._expansion_metrics import accuracy_fraction
         pa = self.predict(X)
         n = len(pa)
@@ -4949,25 +7090,62 @@ class EllipticEnvelope(MinCovDet):
 
 
 # ================================================================ implicit ALS
+# Reference: the `implicit` library's `als.py` and
+# `cpu/_als.pyx::least_squares` (exact solver) and `_least_squares_cg`
+# (use_cg=True; x_decomp/cells.mojo `als_cg_row`, DEVIATION 5321). Factors
+# start as Philox uniform draws * 0.01; each iteration solves every user row
+# then every item row as one batched Cholesky per row (one thread per row,
+# sums in a fixed order). The default stays use_cg=False, the exact solve,
+# so existing fits keep their bits.
 class AlternatingLeastSquares(_Base):
-    """Implicit-feedback matrix factorization by alternating least squares
-    (Hu, Koren and Volinsky 2008; reference: the `implicit` library's
-    `als.py` and `cpu/_als.pyx::least_squares`, the exact solver): the
-    confidence matrix is alpha * user_items, factors start as uniform draws
-    * 0.01 (the Philox stream), and each iteration solves every user row
-    and then every item row as one batched Cholesky per row (one thread per
-    row, sums in a fixed order). The input is a DENSE users x items array
-    (0 = no interaction). calculate_training_loss=True records
-    `training_loss_` after every iteration: sum over observed (u, i) of
-    c_ui (1 - x_u . y_i)^2, over the rest of (x_u . y_i)^2, plus
-    regularization (|X|^2 + |Y|^2), divided by (total confidence + the
-    unobserved count) (implicit's calculate_loss), through the cells.
-    use_cg=True (implicit's default) is implicit's conjugate-gradient solver
-    (`_least_squares_cg`): each half-sweep moves every row from its previous
-    factor by `cg_steps` (3) CG steps, stopping when r.r < 1e-20
-    (x_decomp/cells.mojo `als_cg_row`, DEVIATION 5321); use_cg=False is the
-    exact Cholesky solve. OUR DEFAULT STAYS use_cg=False, the exact solve,
-    so existing fits keep their bits."""
+    """Implicit-feedback matrix factorization by alternating least squares.
+
+    The method of Hu, Koren and Volinsky (2008), following the ``implicit``
+    library: confidence is ``alpha * user_items``, and each iteration solves
+    for every user's factors and then every item's. Unlike ``implicit``,
+    ``use_cg`` defaults to False (the exact solve), and ``user_items`` is
+    held dense (0 means no interaction; a ``scipy.sparse`` matrix is
+    densified).
+
+    Parameters
+    ----------
+    factors : int, default 100
+        Number of latent factors.
+    regularization : float, default 0.01
+        L2 penalty on the factors.
+    alpha : float, default 1.0
+        Confidence scale applied to ``user_items``.
+    iterations : int, default 15
+        Number of alternating sweeps.
+    use_cg : bool, default False
+        Use ``implicit``'s conjugate-gradient solver (``cg_steps`` steps per
+        row per half-sweep) instead of the exact Cholesky solve.
+    calculate_training_loss : bool, default False
+        Record ``training_loss_`` after every iteration (``implicit``'s loss).
+    random_state : int or None, default None
+        Seed of the starting factors; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+    cg_steps : int, default 3
+        Conjugate-gradient steps per row with ``use_cg=True``; must be at
+        least 1.
+
+    Attributes
+    ----------
+    user_factors, user_factors_ : ndarray of shape (n_users, factors)
+    item_factors, item_factors_ : ndarray of shape (n_items, factors)
+    training_loss_ : list of float
+        Only with ``calculate_training_loss=True``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> R = (np.random.default_rng(0).random((200, 50)) < 0.05).astype(np.float32)
+    >>> als = mojolearn.AlternatingLeastSquares(factors=8, iterations=5, random_state=0).fit(R)
+    >>> ids, scores = als.recommend(0, R, N=5)
+    """
     _parameters = ("factors", "regularization", "alpha", "iterations", "use_cg", "cg_steps",
                    "calculate_training_loss", "random_state", "numeric_mode")
 
@@ -4978,6 +7156,25 @@ class AlternatingLeastSquares(_Base):
         self.random_state, self.numeric_mode, self.cg_steps = random_state, numeric_mode, cg_steps
 
     def fit(self, user_items, show_progress=False):
+        """Fit user and item factors.
+
+        Parameters
+        ----------
+        user_items : array-like of shape (n_users, n_items)
+            Interaction strengths; 0 means no interaction. A
+            ``scipy.sparse`` matrix is densified.
+        show_progress : bool, default False
+            Accepted for ``implicit`` compatibility; nothing is shown.
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If ``use_cg=True`` and ``cg_steps < 1``.
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         R = _M.from_input(user_items, "user_items")
@@ -5042,9 +7239,33 @@ class AlternatingLeastSquares(_Base):
         return (_fb(order[:c].tobytes(), "<i4", (c,)), _fb(vals[:c].tobytes(), "<f4", (c,)))
 
     def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):
-        """(ids, scores) of the N best items for one user: x_u . y_i, ties to
-        the lower item id; items the user interacted with (row `userid` of
-        user_items, or user_items itself when it is one row) are skipped."""
+        """Return the top N items for one user.
+
+        Items are ranked by the dot product of user and item factors, ties
+        going to the lower item id.
+
+        Parameters
+        ----------
+        userid : int
+            Row of the user.
+        user_items : array-like of shape (n_users, n_items) or (1, n_items), or None
+            Interactions used to filter items the user already has: row
+            ``userid``, or the single row given.
+        N : int, default 10
+            Number of items to return; must be non-negative.
+        filter_already_liked_items : bool, default True
+            Skip items with a nonzero entry in the user's row.
+
+        Returns
+        -------
+        ids : ndarray of shape (<= N,), int32
+        scores : ndarray of shape (<= N,), float32
+
+        Raises
+        ------
+        ValueError
+            If ``N`` is negative or ``user_items`` has no matching row.
+        """
         self._check_fit()
         k = self._kit()
         U = self.user_factors_m_.rows(userid, userid + 1)
@@ -5061,8 +7282,22 @@ class AlternatingLeastSquares(_Base):
         return self._topn(k, S, int(N), skip)
 
     def similar_items(self, itemid, N=10):
-        """(ids, scores) of the N items whose factors have the largest cosine
-        with item `itemid` (itself included, as implicit returns it)."""
+        """Return the N items most similar to one item.
+
+        Similarity is the cosine of the item factors. The item itself is
+        included, as ``implicit`` returns it.
+
+        Parameters
+        ----------
+        itemid : int
+        N : int, default 10
+            Must be non-negative.
+
+        Returns
+        -------
+        ids : ndarray of shape (<= N,), int32
+        scores : ndarray of shape (<= N,), float32
+        """
         self._check_fit()
         k = self._kit()
         Y = self.item_factors_m_
@@ -5075,8 +7310,47 @@ class AlternatingLeastSquares(_Base):
 
 
 class SparseCoder(_SparseCoding):
-    """sklearn.decomposition.SparseCoder: sparse coding against a FIXED
-    dictionary (`_BaseSparseCoding._transform`), the encoders of `_sparse_encode`."""
+    """Sparse coding against a fixed, precomputed dictionary.
+
+    Follows scikit-learn's ``SparseCoder``; ``transform`` encodes each row
+    with :func:`sparse_encode`. Nothing is learned, so ``fit`` does nothing.
+
+    Parameters
+    ----------
+    dictionary : array-like of shape (n_components, n_features)
+        Dictionary atoms, one per row.
+    transform_algorithm : {"omp", "lasso_lars", "lasso_cd", "lars", "threshold"}, default "omp"
+        Coding method. An unknown value raises ValueError at construction.
+    transform_n_nonzero_coefs : int or None, default None
+        Nonzero coefficients for ``"omp"`` and ``"lars"``.
+    transform_alpha : float or None, default None
+        Penalty or threshold; None uses 1.0.
+    split_sign : bool, default False
+        Return the positive and negative parts of the code as separate
+        columns.
+    n_jobs : ignored
+    positive_code : bool, default False
+        Force the code to be non-negative.
+    transform_max_iter : int, default 1000
+        Maximum iterations of the Lasso methods.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+    n_components_ : int
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> coder = mojolearn.SparseCoder(rng.random((5, 8), dtype=np.float32), transform_n_nonzero_coefs=2)
+    >>> code = coder.transform(rng.random((100, 8), dtype=np.float32))
+    """
     _parameters = ("dictionary", "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha",
                    "split_sign", "positive_code", "transform_max_iter", "numeric_mode")
 
@@ -5093,9 +7367,26 @@ class SparseCoder(_SparseCoding):
         self.n_components_, self.n_features_in_ = self.components_m_.r, self.components_m_.c
 
     def fit(self, X, y=None):
+        """Do nothing and return self (the dictionary is fixed).
+
+        Returns
+        -------
+        self
+        """
         return self
 
     def fit_transform(self, X, y=None):
+        """Return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.transform(X)
 
 

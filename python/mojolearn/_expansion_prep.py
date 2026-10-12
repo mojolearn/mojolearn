@@ -728,9 +728,29 @@ class _PrepBase:
     _parameters = ()
 
     def get_params(self, deep=True):
+        """Return the constructor parameters as a dict.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for scikit-learn compatibility.
+
+        Returns
+        -------
+        dict
+            Parameter names mapped to their values.
+        """
         return {name: getattr(self, name) for name in self._parameters}  # glue: copies estimator keyword arguments
 
     def set_params(self, **params):
+        """Set constructor parameters.
+
+        An unknown parameter name raises ``ValueError``.
+
+        Returns
+        -------
+        self
+        """
         for k, v in params.items():  # glue: copies estimator keyword arguments
             if k not in self._parameters:
                 raise ValueError(f"mojolearn: invalid parameter {k!r} for {type(self).__name__}")
@@ -738,6 +758,13 @@ class _PrepBase:
         return self
 
     def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
         return self.fit(X, y, **fit_params).transform(X)
 
     def _check_fitted(self):
@@ -764,12 +791,49 @@ def _affine(mode, X, center, scale):
 
 
 # ---------------------------------------------------------------- scalers
+# A scale below 10 * float32 eps is one (sklearn's `_handle_zeros_in_scale`);
+# unit_variance divides the scale by norm.ppf(q_max) - norm.ppf(q_min), with
+# norm.ppf by Acklam's approximation in float32.
 class RobustScaler(_PrepBase):
-    """sklearn.preprocessing.RobustScaler: center by the median, scale by the
-    quantile range (numpy's linear percentile over the non-NaN entries; NaN is
-    ignored in fit and kept in transform). Float32 throughout; a scale below
-    10 * float32 eps is one (`_handle_zeros_in_scale`); unit_variance divides
-    the scale by norm.ppf(q_max) - norm.ppf(q_min) (Acklam, float32)."""
+    """Scale features by the median and the interquantile range.
+
+    Follows scikit-learn's ``RobustScaler``. Each column is centered by its median and divided by the
+    range between the ``quantile_range`` percentiles, computed with numpy's linear percentile over the
+    non-NaN entries. NaN values are ignored during fit and kept as NaN by transform. A scale smaller than
+    ten float32 epsilons is replaced by one. Input and output are float32.
+
+    Parameters
+    ----------
+    with_centering : bool, default True
+        Subtract the median before scaling.
+    with_scaling : bool, default True
+        Divide by the interquantile range.
+    quantile_range : tuple of float, default (25.0, 75.0)
+        ``(q_min, q_max)`` percentiles, with ``0 <= q_min <= q_max <= 100``; otherwise fit raises
+        ``ValueError``.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+    unit_variance : bool, default False
+        Also divide the scale by ``norm.ppf(q_max) - norm.ppf(q_min)``, so that normally distributed
+        data ends with unit variance. Requires ``0 < q_min < q_max < 100`` (``ValueError`` otherwise).
+
+    Attributes
+    ----------
+    center_ : array of shape (n_features,) or None
+        Per-column median, or None when ``with_centering=False``.
+    scale_ : array of shape (n_features,) or None
+        Per-column scale, or None when ``with_scaling=False``.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> Xt = mojolearn.RobustScaler().fit_transform(X)
+    """
     _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance")
 
     def __init__(self, *, with_centering=True, with_scaling=True, quantile_range=(25.0, 75.0), copy=True,
@@ -826,8 +890,36 @@ class RobustScaler(_PrepBase):
 
 
 class MaxAbsScaler(_PrepBase):
-    """sklearn.preprocessing.MaxAbsScaler: X / max|X| per column over the
-    non-NaN entries (NaN kept in transform); a zero column scales by one."""
+    """Scale each feature by its maximum absolute value.
+
+    Follows scikit-learn's ``MaxAbsScaler``: each column is divided by the largest absolute value among
+    its non-NaN entries, so the result lies in ``[-1, 1]``. NaN values are kept as NaN by transform. A
+    column of zeros is scaled by one. Input and output are float32.
+
+    Parameters
+    ----------
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+
+    Attributes
+    ----------
+    max_abs_ : array of shape (n_features,)
+        Per-column maximum absolute value.
+    scale_ : array of shape (n_features,)
+        Per-column divisor (``max_abs_``, with zeros replaced by one).
+    n_features_in_ : int
+        Number of columns seen in fit.
+    n_samples_seen_ : int
+        Number of rows seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).standard_normal((1000, 8)).astype(np.float32)
+    >>> Xt = mojolearn.MaxAbsScaler().fit_transform(X)
+    """
     _parameters = ("copy",)
 
     def __init__(self, *, copy=True):
@@ -1218,18 +1310,58 @@ def _raise_unknown(pr, neg, d, who):
 
 
 class OrdinalEncoder(_PrepBase):
-    """sklearn.preprocessing.OrdinalEncoder over numeric columns: each value's
-    index among its column's sorted distinct training values, as float32; a
-    NaN seen in fit (the last category) is written as encoded_missing_value
-    (NaN by default). handle_unknown 'error' or 'use_encoded_value'.
-    inverse_transform maps codes back (an unknown_value row is NaN where the
-    reference writes None: there is no object Array). categories='auto' or
-    one sorted numeric list per column (as the reference). min_frequency /
-    max_categories group infrequent categories into one code after the
-    frequent ones (the reference's rule, a NaN category left out of it);
-    inverse_transform writes that code as NaN (the reference's
-    'infrequent_sklearn' string: there is no object Array), and
-    unknown_value may not equal it (the reference lets it collide)."""
+    """Encode numeric categorical features as integer codes.
+
+    Follows scikit-learn's ``OrdinalEncoder`` for numeric columns. Each value is replaced by its index
+    among its column's sorted distinct training values, returned as float32. NaN is a category: when a
+    column holds NaN in fit, NaN sorts last and is written as ``encoded_missing_value``. Columns of
+    strings or other objects are not supported.
+
+    Parameters
+    ----------
+    categories : 'auto' or list of array-like, default 'auto'
+        ``'auto'`` takes the categories from the training data. Otherwise one list per column, numeric,
+        sorted ascending, without duplicates in float32 and with NaN (if present) last; anything else
+        raises ``ValueError``.
+    dtype : default None
+        Accepted for scikit-learn compatibility; the output is always float32.
+    handle_unknown : {'error', 'use_encoded_value'}, default 'error'
+        ``'error'`` raises ``ValueError`` when transform (or fit, with given ``categories``) meets a
+        value outside the categories. ``'use_encoded_value'`` writes ``unknown_value`` instead.
+    unknown_value : float or None, default None
+        Code for unknown values under ``handle_unknown='use_encoded_value'``; must be a number (NaN is
+        allowed) and must not equal a code already used by a category (``ValueError``).
+    encoded_missing_value : float, default NaN
+        Code written for NaN. Must be a number and must not equal a code used by a known category.
+    min_frequency : int or float, default None
+        Categories seen fewer times than this (an int ``>= 1``, or a fraction of the rows in
+        ``(0, 1)``) are grouped into one infrequent code placed after the frequent ones. The NaN
+        category is never grouped.
+    max_categories : int, default None
+        Upper limit on output codes per column, counting the infrequent code; must be ``>= 1``.
+
+    Attributes
+    ----------
+    categories_ : list of arrays
+        Sorted categories of each column, float32, NaN last when present.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Notes
+    -----
+    ``inverse_transform`` maps codes back to categories. Where scikit-learn returns ``None`` (an unknown
+    value) or the string ``'infrequent_sklearn'`` (the infrequent code), the result here is NaN, since
+    the output is a float array. A code that names no category raises ``ValueError``. Unlike
+    scikit-learn, ``unknown_value`` may not equal the infrequent code.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.array([[3.0, 10.0], [1.0, 20.0], [3.0, 10.0]], dtype=np.float32)
+    >>> mojolearn.OrdinalEncoder().fit_transform(X)
+    """
     _parameters = ("categories", "dtype", "handle_unknown", "unknown_value", "encoded_missing_value",
                    "min_frequency", "max_categories")
 
@@ -1346,20 +1478,64 @@ class OrdinalEncoder(_PrepBase):
 
 
 class OneHotEncoder(_PrepBase):
-    """sklearn.preprocessing.OneHotEncoder over numeric columns, returned
-    DENSE (float32) whatever `sparse_output` says: there is no sparse Array.
-    drop None, 'first' or 'if_binary'; handle_unknown 'error' or 'ignore'
-    (an unknown value is an all-zero block). inverse_transform is the
-    reference's per-block argmax (an all-zero block is the dropped category,
-    or unknown: an error for handle_unknown='error', NaN where the reference
-    writes None for 'ignore'). categories='auto' or one sorted numeric list
-    per column (as the reference). drop may also be one category per
-    feature. min_frequency / max_categories group infrequent categories
-    into one last column per feature (the reference's rule);
-    handle_unknown 'infrequent_if_exist' and 'warn' send an unknown value to
-    that column when the feature has one (else an all-zero block).
-    inverse_transform writes the infrequent column as NaN (the reference's
-    'infrequent_sklearn' string: there is no object Array)."""
+    """Encode numeric categorical features as one-hot columns.
+
+    Follows scikit-learn's ``OneHotEncoder`` for numeric columns. Each column becomes a block of 0/1
+    float32 columns, one per category (minus a dropped one, see ``drop``). The output is always a
+    dense float32 array, whatever ``sparse_output`` says. NaN is a category and sorts last. Columns of
+    strings or other objects are not supported.
+
+    Parameters
+    ----------
+    categories : 'auto' or list of array-like, default 'auto'
+        ``'auto'`` takes the categories from the training data. Otherwise one list per column, numeric,
+        sorted ascending, without duplicates in float32 and with NaN (if present) last.
+    drop : {None, 'first', 'if_binary'} or array-like, default None
+        Category to leave out of each block: none, the first, the first of two-category columns only, or
+        one given category per column. Dropping a category that is not in the training data, or one
+        grouped as infrequent, raises ``ValueError``.
+    sparse_output : bool, default True
+        Accepted for scikit-learn compatibility; the output is always dense.
+    dtype : default None
+        Accepted for scikit-learn compatibility; the output is always float32.
+    handle_unknown : {'error', 'ignore', 'infrequent_if_exist', 'warn'}, default 'error'
+        ``'error'`` raises ``ValueError`` on a value outside the categories. ``'ignore'`` writes an
+        all-zero block. ``'infrequent_if_exist'`` and ``'warn'`` send the value to the column's
+        infrequent category when it has one, otherwise an all-zero block; ``'warn'`` (and ``'ignore'`` or
+        ``'infrequent_if_exist'`` together with ``drop``) issues a ``UserWarning``.
+    min_frequency : int or float, default None
+        Categories seen fewer times than this (an int ``>= 1``, or a fraction of the rows in
+        ``(0, 1)``) are grouped into one infrequent column, the last of the feature's block.
+    max_categories : int, default None
+        Upper limit on output columns per feature, counting the infrequent column; must be ``>= 1``.
+    feature_name_combiner : str, default 'concat'
+        Accepted for scikit-learn compatibility.
+
+    Attributes
+    ----------
+    categories_ : list of arrays
+        Sorted categories of each column, float32, NaN last when present.
+    drop_idx_ : list or None
+        Index into ``categories_[j]`` of the dropped category of each column (None for no drop).
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Notes
+    -----
+    ``inverse_transform`` takes each block's largest entry. An all-zero block decodes to the dropped
+    category; with no dropped category it decodes to NaN where scikit-learn would return ``None``
+    (under ``handle_unknown='ignore'``, or under ``'infrequent_if_exist'`` or ``'warn'`` for a column
+    without an infrequent category), and raises ``ValueError`` otherwise. The infrequent column
+    decodes to NaN where scikit-learn returns ``'infrequent_sklearn'``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 0.0]], dtype=np.float32)
+    >>> mojolearn.OneHotEncoder(drop="first").fit_transform(X)
+    """
     _parameters = ("categories", "drop", "sparse_output", "dtype", "handle_unknown", "min_frequency",
                    "max_categories", "feature_name_combiner")
 
@@ -1719,20 +1895,70 @@ def _target_scratch(mode):
     return _TARGET_SCRATCH[key]
 
 
+# The fold shuffle draws from random_state by splitmix64 (sklearn draws numpy's).
+# A training value outside a given categories list: sklearn codes it as the first
+# category, this class leaves it out of the statistics (x_prep/NOT_IMPLEMENTED.tsv).
 class TargetEncoder(_PrepBase):
-    """sklearn.preprocessing.TargetEncoder over numeric category columns:
-    binary, continuous and multiclass targets, smooth 'auto' (empirical
-    Bayes) or a float. `fit_transform` cross-fits over `cv` folds, as the
-    reference: KFold for a continuous target, StratifiedKFold for a binary or
-    multiclass one; the shuffle comes from `random_state` (splitmix64; the
-    reference draws numpy's). `cv` may also be a splitter object (its
-    `split(X, y)`) or an iterable of (train, test) index pairs, as the
-    reference: the test folds must cover every row exactly once, and each
-    fold's training rows must be every other row. categories='auto' or one
-    sorted numeric list per column (as the encoders). Float32 throughout.
-    A training value outside a given list is excluded from every category's
-    statistics (it still counts in the target mean); the reference codes it
-    as the first category, see x_prep/NOT_IMPLEMENTED.tsv."""
+    """Encode numeric categorical features by the target mean of each category.
+
+    Follows scikit-learn's ``TargetEncoder`` for numeric category columns. Each category is replaced by a
+    shrunk mean of the target over the rows in that category. Binary, continuous and multiclass targets
+    are supported; a multiclass target produces one output column per class for each feature.
+    Computation is float32.
+
+    ``fit_transform`` cross-fits: each row is encoded with statistics learned from the other folds, as in
+    scikit-learn. ``transform`` (and ``fit`` followed by ``transform``) uses statistics from all the
+    training rows, so ``fit(X, y).transform(X)`` differs from ``fit_transform(X, y)``.
+
+    Parameters
+    ----------
+    categories : 'auto' or list of array-like, default 'auto'
+        ``'auto'`` takes the categories from the training data. Otherwise one list per column, numeric and
+        sorted ascending. A training value outside a given list is left out of every category's
+        statistics but still counts toward the target mean; scikit-learn codes it as the first category
+        instead.
+    target_type : {'auto', 'binary', 'continuous', 'multiclass'}, default 'auto'
+        Type of the target; ``'auto'`` infers it from ``y``.
+    smooth : 'auto' or float, default 'auto'
+        Shrinkage toward the target mean: ``'auto'`` uses an empirical Bayes estimate, a float ``>= 0``
+        sets it directly.
+    cv : int, splitter or iterable, default 5
+        Folds for ``fit_transform``. An int ``>= 2`` uses KFold for a continuous target and
+        StratifiedKFold otherwise. A splitter object (its ``split(X, y)``) or an iterable of
+        ``(train, test)`` index pairs is also accepted: the test folds must cover every row exactly once
+        (``ValueError`` otherwise), and each fold's training rows must be all the other rows
+        (``NotImplementedError`` otherwise).
+    shuffle : bool, default True
+        Shuffle the rows before splitting into folds.
+    random_state : int or None, default None
+        Seed for the shuffle. None uses seed 0, so repeated fits give the same folds. The shuffle uses
+        mojolearn's own generator, so folds differ from scikit-learn's for the same seed.
+
+    Attributes
+    ----------
+    categories_ : list of arrays
+        Sorted categories of each column, float32.
+    encodings_ : list of arrays
+        Per-column encoding of each category (times the number of classes for a multiclass target).
+    target_type_ : str
+        Target type used for the fit.
+    target_mean_ : array
+        Mean of the target (one value per class for a multiclass target).
+    classes_ : array or None
+        Class labels for a binary or multiclass target, None for a continuous one.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 10, (1000, 3)).astype(np.float32)
+    >>> y = rng.random(1000).astype(np.float32)
+    >>> Xt = mojolearn.TargetEncoder().fit_transform(X, y)
+    """
     _parameters = ("categories", "target_type", "smooth", "cv", "shuffle", "random_state")
 
     def __init__(self, categories="auto", target_type="auto", smooth="auto", cv=5, shuffle=True,
@@ -1974,19 +2200,54 @@ def _mark_missing(pr, xo, count, missing_values):
     return out
 
 
+# A callable strategy is sklearn's `strategy(masked_X[:, j].compressed())`: it
+# runs in Python on the host, over each column's non-NaN float32
+# values compacted on the device (p2m_sel_*); the fill runs on the device.
 class SimpleImputer(_PrepBase):
-    """sklearn.impute.SimpleImputer, numeric: strategy 'mean', 'median'
-    (numpy's linear percentile of the non-missing entries), 'most_frequent'
-    (the smallest on a tie) or 'constant'. An all-missing column is dropped
-    from the output unless `keep_empty_features` (its statistic is NaN, as in
-    the reference; with keep_empty_features it is 0, or fill_value).
-    add_indicator appends MissingIndicator's columns (the features with a
-    missing value in fit, 1.0 where missing). A callable strategy is the
-    reference's: statistics_[j] = float(strategy(v)) over column j's
-    non-missing float32 values v in row order (a 1-D Array); it runs in
-    Python, on the host, and a NaN statistic drops the column unless
-    keep_empty_features, as the reference. The fill itself runs on the
-    device like every other strategy."""
+    """Replace missing values with a per-column statistic.
+
+    Follows scikit-learn's ``SimpleImputer`` for numeric data. Missing entries (``missing_values``) are
+    replaced by each column's mean, median, most frequent value or a constant. Input and output are
+    float32.
+
+    A column with no observed values in fit is dropped from the output, unless ``keep_empty_features``
+    is set; then it is filled with 0 (or with ``fill_value`` under ``strategy='constant'``).
+
+    Parameters
+    ----------
+    missing_values : float, default NaN
+        Value that marks a missing entry.
+    strategy : {'mean', 'median', 'most_frequent', 'constant'} or callable, default 'mean'
+        ``'median'`` uses numpy's linear percentile of the non-missing entries; ``'most_frequent'``
+        picks the smallest value on a tie. A callable is called once per column, on the host, with the
+        column's non-missing values as a 1-D float32 array, and must return the column's statistic; a
+        NaN statistic drops the column unless ``keep_empty_features``. Any other value raises
+        ``ValueError``.
+    fill_value : float or None, default None
+        Value used by ``strategy='constant'``; None means 0. Must be numeric (``TypeError`` otherwise).
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+    add_indicator : bool, default False
+        Append missing-indicator columns (1.0 where missing) for the features that had a missing value
+        in fit, as scikit-learn's ``MissingIndicator``.
+    keep_empty_features : bool, default False
+        Keep columns that had no observed values in fit.
+
+    Attributes
+    ----------
+    statistics_ : array of shape (n_features,)
+        Fill value of each column (NaN for an all-missing column unless ``keep_empty_features``).
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.array([[1.0, np.nan], [3.0, 4.0], [np.nan, 8.0]], dtype=np.float32)
+    >>> mojolearn.SimpleImputer(strategy="median").fit_transform(X)
+    """
     _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features")
 
     def __init__(self, *, missing_values=float("nan"), strategy="mean", fill_value=None, copy=True,
@@ -2119,22 +2380,66 @@ def join_column_blocks(parts, ranges, n, d, mode=None):
 
 
 # ---------------------------------------------------------------- discretizer
+# Above `subsample` rows the with-replacement resample is drawn from
+# random_state by splitmix64 (sklearn draws numpy's). Weighted 'quantile' edges
+# follow sklearn's `_weighted_percentile`; with sample_weight above `subsample`
+# rows the weights drive the resample and are then spent.
 class KBinsDiscretizer(_PrepBase):
-    """sklearn.preprocessing.KBinsDiscretizer: strategy 'uniform', 'quantile'
-    (every numpy quantile_method: 'averaged_inverted_cdf', the default,
-    'inverted_cdf', 'closest_observation', 'interpolated_inverted_cdf',
-    'hazen', 'weibull', 'linear', 'median_unbiased', 'normal_unbiased') or
-    'kmeans' (1-D Lloyd from the uniform bin centres); encode 'onehot' (dense:
-    there is no sparse Array), 'onehot-dense' or 'ordinal'. A constant column
-    is one bin with edges (-inf, inf). Above `subsample` rows the fit uses a
-    with-replacement resample drawn from `random_state` by splitmix64 (the
-    reference draws numpy's). inverse_transform is the bin centres, as the
-    reference's. sample_weight (nonnegative, not all zero) weighs the
-    'quantile' edges (the reference's `_weighted_percentile` for
-    'averaged_inverted_cdf' / 'inverted_cdf'; the other methods are refused,
-    as the reference), the 'uniform' range (min / max over rows of nonzero
-    weight) and the 'kmeans' Lloyd; above `subsample` rows it draws the
-    resample instead (with replacement, weighted) and is then spent."""
+    """Bin continuous features into intervals.
+
+    Follows scikit-learn's ``KBinsDiscretizer``. Each column is split into ``n_bins`` intervals and each
+    value is replaced by its bin index or a one-hot block. One-hot output is always a dense float32 array.
+    A constant column gets a single bin with edges ``(-inf, inf)``.
+
+    Parameters
+    ----------
+    n_bins : int or array-like of int, default 5
+        Number of bins, one value for all columns or one per column; each must be ``>= 2``.
+    encode : {'onehot', 'onehot-dense', 'ordinal'}, default 'onehot'
+        Output encoding. ``'onehot'`` returns a dense array, the same as ``'onehot-dense'``.
+    strategy : {'uniform', 'quantile', 'kmeans'}, default 'quantile'
+        ``'uniform'``: equal-width bins. ``'quantile'``: edges at the quantiles given by
+        ``quantile_method``. ``'kmeans'``: 1-D k-means started from the uniform bin centers.
+    quantile_method : str, default 'averaged_inverted_cdf'
+        numpy quantile method for ``strategy='quantile'``: ``'averaged_inverted_cdf'``,
+        ``'inverted_cdf'``, ``'closest_observation'``, ``'interpolated_inverted_cdf'``, ``'hazen'``,
+        ``'weibull'``, ``'linear'``, ``'median_unbiased'`` or ``'normal_unbiased'``.
+    dtype : default None
+        Accepted for scikit-learn compatibility; the output is always float32.
+    subsample : int or None, default 200000
+        Above this many rows, fit uses a resample of ``subsample`` rows drawn with replacement. None
+        uses every row.
+    random_state : int or None, default None
+        Seed for the resample. None uses seed 0. The draw uses mojolearn's own generator, so the rows
+        differ from scikit-learn's for the same seed.
+
+    Attributes
+    ----------
+    bin_edges_ : list of arrays
+        Edges of each column's bins.
+    n_bins_ : array of int64
+        Number of bins of each column (fewer than requested for a constant column).
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Notes
+    -----
+    ``fit`` accepts ``sample_weight`` (nonnegative, not all zero). It weights the quantile edges (only
+    ``'averaged_inverted_cdf'`` and ``'inverted_cdf'`` are allowed with weights, as in scikit-learn;
+    other methods raise ``ValueError``), the uniform range (minimum and maximum over rows of nonzero
+    weight) and the k-means fit. Above ``subsample`` rows the weights instead drive a weighted resample.
+
+    ``inverse_transform`` returns each bin's center. An all-zero one-hot block or a code that names no
+    bin raises ``ValueError``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 4), dtype=np.float32)
+    >>> Xt = mojolearn.KBinsDiscretizer(n_bins=4, encode="ordinal").fit_transform(X)
+    """
     _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state")
 
     def __init__(self, n_bins=5, *, encode="onehot", strategy="quantile", quantile_method="averaged_inverted_cdf",
@@ -2389,24 +2694,89 @@ class _Classifier(_PrepBase):
         """Raises on what `_score_checks` found, after the run."""
 
     def predict(self, X):
+        """Predict the class of each row.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to classify.
+
+        Returns
+        -------
+        array of shape (n_samples,)
+            Predicted class labels.
+        """
         pr, n, K, o = self._scores(X, ("predict",))
         return decode_labels(self.classes_, pr.get_i32(o["predict"], n))
 
     def predict_proba(self, X):
+        """Return class probabilities for each row.
+
+        Probabilities are float32 in ``identical`` mode. In ``fast`` mode (Apple), they are float64, so that
+        a very confident prediction does not round to exactly 1.0.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to score.
+
+        Returns
+        -------
+        array of shape (n_samples, n_classes)
+            Probability of each class, in the order of ``classes_``.
+        """
         pr, n, K, o = self._scores(X, ("proba",))
         if o.get("proba64"):
             return pr.get_f64(o["proba"], (n, K))
         return pr.get(o["proba"], (n, K))
 
     def predict_log_proba(self, X):
+        """Return the log of the class probabilities for each row.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to score.
+
+        Returns
+        -------
+        array of shape (n_samples, n_classes)
+            Log probability of each class, in the order of ``classes_``.
+        """
         pr, n, K, o = self._scores(X, ("log",))
         return pr.get(o["log"], (n, K))
 
     def predict_joint_log_proba(self, X):
+        """Return the unnormalized log score of each row and class.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to score.
+
+        Returns
+        -------
+        array of shape (n_samples, n_classes)
+            Log scores that ``predict_log_proba`` normalizes, in the order of ``classes_``.
+        """
         pr, n, K, o = self._scores(X, ())
         return pr.get(o["jll"], (n, K))
 
     def score(self, X, y):
+        """Return the mean accuracy on the given rows and labels.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Rows to classify.
+        y : array-like of shape (n_samples,)
+            True labels.
+
+        Returns
+        -------
+        float
+            Fraction of rows classified correctly.
+        """
         from ._expansion_metrics import accuracy_fraction
         return accuracy_fraction(y, self.predict(X))
 
@@ -2773,17 +3143,60 @@ def _check_alpha(est):
                                   "(alpha = 0 makes log(0) terms)")
 
 
+# partial_fit merges with sklearn's `_update_mean_variance` (Chan's pairwise
+# rule) and adds the batch's epsilon to the merged variance; the running
+# variance is kept without epsilon (sklearn subtracts the NEW batch's epsilon
+# from a variance that holds the old one, see naive_bayes/NOT_IMPLEMENTED.tsv).
+# sample_weight follows numpy `average`. float64 predict_proba is the FAST
+# binding's `x_prep_proba64` export (`_proba64_on`).
 class GaussianNB(_Classifier):
-    """sklearn.naive_bayes.GaussianNB (fit, predict, predict_proba,
-    predict_log_proba): per-class mean and population variance plus
-    var_smoothing * the largest feature variance, float32; `priors` as the
-    reference checks them; sample_weight weights the class means, variances
-    and counts (numpy `average`), as the reference. partial_fit merges each
-    batch into the running counts, means and variances (the reference's
-    `_update_mean_variance`, Chan's pairwise rule) and adds the batch's
-    epsilon to the merged variance; the running variance is kept without
-    epsilon (the reference subtracts the NEW batch's epsilon from a variance
-    that holds the old one, see naive_bayes/NOT_IMPLEMENTED.tsv)."""
+    """Gaussian naive Bayes classifier.
+
+    Follows scikit-learn's ``GaussianNB``. Fit learns each class's per-feature mean and population
+    variance, adds ``var_smoothing`` times the largest feature variance to every variance, and predicts
+    with the Gaussian likelihood. Computation is float32.
+
+    ``fit`` accepts ``sample_weight``, which weights the class means, variances and counts as in
+    scikit-learn. ``partial_fit(X, y, classes=None, sample_weight=None)`` merges each batch into the
+    running counts, means and variances; ``classes`` is required on the first call (``ValueError``
+    otherwise) and may only be repeated unchanged afterwards.
+
+    Parameters
+    ----------
+    priors : array-like of shape (n_classes,), default None
+        Class prior probabilities; nonnegative and summing to one (``ValueError`` otherwise). None uses
+        the class frequencies in the training data.
+    var_smoothing : float, default 1e-9
+        Fraction of the largest feature variance added to every variance.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    class_count_ : array of shape (n_classes,)
+        Number (or weighted number) of training rows per class.
+    class_prior_ : array of shape (n_classes,)
+        Probability of each class.
+    theta_ : array of shape (n_classes, n_features)
+        Mean of each feature per class.
+    var_ : array of shape (n_classes, n_features)
+        Smoothed variance of each feature per class.
+    epsilon_ : float
+        Value added to the variances.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int64)
+    >>> model = mojolearn.GaussianNB().fit(X, y)
+    >>> model.predict(X[:5])
+    """
     _parameters = ("priors", "var_smoothing")
 
     def __init__(self, *, priors=None, var_smoothing=1e-9):
@@ -3081,9 +3494,26 @@ class _DiscreteNB(_Classifier):
         return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), sample_weight))
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
-        """The reference's `_BaseDiscreteNB.partial_fit`: the batch's class and
-        feature counts added to the running ones, then the log probabilities
-        and the class log prior recomputed from the sums."""
+        """Update the model with one batch of rows.
+
+        The batch's class and feature counts are added to the running ones, then the log probabilities and
+        the class log prior are recomputed from the sums, as in scikit-learn.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training rows.
+        y : array-like of shape (n_samples,)
+            Class labels.
+        classes : array-like, default None
+            Every class label. Required on the first call; later calls may pass it only unchanged.
+        sample_weight : array-like of shape (n_samples,), default None
+            Weights of the rows.
+
+        Returns
+        -------
+        self
+        """
         _check_alpha(self)
         arr = _x2d(X)
         n, d = arr.shape
@@ -3139,9 +3569,53 @@ class _DiscreteNB(_Classifier):
 
 
 class MultinomialNB(_DiscreteNB):
-    """sklearn.naive_bayes.MultinomialNB, float32; alpha > 0 required.
-    class_prior as given (its log); sample_weight weights the counts, as the
-    reference; partial_fit adds each batch's counts, as the reference."""
+    """Naive Bayes classifier for multinomial (count) features.
+
+    Follows scikit-learn's ``MultinomialNB``. Fit sums the feature values of each class, smooths them by
+    ``alpha`` and stores their log share; prediction scores each class by a dot product with those log
+    probabilities plus the class log prior. ``X`` must be nonnegative (``ValueError`` otherwise).
+    Computation is float32.
+
+    ``fit`` accepts ``sample_weight``, which weights the counts. ``partial_fit(X, y, classes=None,
+    sample_weight=None)`` adds each batch's counts to the running ones; ``classes`` is required on the
+    first call.
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Additive smoothing. Must be greater than 0; ``alpha <= 0`` raises ``NotImplementedError``.
+    force_alpha : bool, default True
+        Accepted for scikit-learn compatibility.
+    fit_prior : bool, default True
+        Learn class priors from the data; when False, use a uniform prior.
+    class_prior : array-like of shape (n_classes,), default None
+        Given class priors (nonnegative); overrides ``fit_prior``.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    class_count_ : array of shape (n_classes,)
+        Number (or weighted number) of training rows per class.
+    class_log_prior_ : array of shape (n_classes,)
+        Log prior of each class.
+    feature_count_ : array of shape (n_classes, n_features)
+        Sum of each feature per class.
+    feature_log_prob_ : array of shape (n_classes, n_features)
+        Smoothed log probability of each feature given the class.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 5, (1000, 20)).astype(np.float32)
+    >>> y = rng.integers(0, 3, 1000)
+    >>> model = mojolearn.MultinomialNB().fit(X, y)
+    """
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
     _csr_ok = True
     _needs_min = True
@@ -3169,10 +3643,55 @@ class MultinomialNB(_DiscreteNB):
 
 
 class BernoulliNB(_DiscreteNB):
-    """sklearn.naive_bayes.BernoulliNB, float32 (X binarized at `binarize`
-    unless it is None); alpha > 0 required; class_prior as given (its log);
-    sample_weight weights the counts, as the reference; partial_fit adds each
-    batch's counts, as the reference."""
+    """Naive Bayes classifier for binary features.
+
+    Follows scikit-learn's ``BernoulliNB``. ``X`` is binarized at ``binarize`` (values above the threshold
+    become 1), then fit counts how often each feature is 1 in each class, smooths the counts by ``alpha``
+    and scores each class with the Bernoulli likelihood, including the features that are 0. Computation
+    is float32.
+
+    ``fit`` accepts ``sample_weight``, which weights the counts. ``partial_fit(X, y, classes=None,
+    sample_weight=None)`` adds each batch's counts to the running ones; ``classes`` is required on the
+    first call.
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Additive smoothing. Must be greater than 0; ``alpha <= 0`` raises ``NotImplementedError``.
+    force_alpha : bool, default True
+        Accepted for scikit-learn compatibility.
+    binarize : float or None, default 0.0
+        Threshold for binarizing ``X``; None means ``X`` is already binary.
+    fit_prior : bool, default True
+        Learn class priors from the data; when False, use a uniform prior.
+    class_prior : array-like of shape (n_classes,), default None
+        Given class priors (nonnegative); overrides ``fit_prior``.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    class_count_ : array of shape (n_classes,)
+        Number (or weighted number) of training rows per class.
+    class_log_prior_ : array of shape (n_classes,)
+        Log prior of each class.
+    feature_count_ : array of shape (n_classes, n_features)
+        Number of rows per class in which each feature is 1.
+    feature_log_prob_ : array of shape (n_classes, n_features)
+        Smoothed log probability that each feature is 1 given the class.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 2, (1000, 20)).astype(np.float32)
+    >>> y = rng.integers(0, 2, 1000)
+    >>> model = mojolearn.BernoulliNB().fit(X, y)
+    """
     _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, binarize=0.0, fit_prior=True, class_prior=None):
@@ -3315,21 +3834,88 @@ def _lda_binary(pr, coef, inter, K, d):
     return cd, ci
 
 
+# solver 'svd': sklearn's two SVDs are symmetric eigendecompositions of the
+# Gram matrices (cyclic Jacobi, x_prep/eigh.mojo), so scalings_ and transform
+# match sklearn up to each component's sign. 'lsqr' is the pooled class
+# covariance then lstsq's minimum-norm solve through its eigendecomposition
+# (sklearn's `_solve_lstsq`); 'eigen' solves Sb v = e Sw v as
+# Sw^-1/2 Sb Sw^-1/2 (`_solve_eigen`). covariance_estimator runs in Python on
+# host rows; its covariances enter the device solve as float32.
 class LinearDiscriminantAnalysis(_Classifier):
-    """sklearn.discriminant_analysis.LinearDiscriminantAnalysis, solver 'svd'
-    (the default): the reference's two SVDs are symmetric eigendecompositions
-    of the Gram matrices (cyclic Jacobi, x_prep/eigh.mojo), so `scalings_` and
-    `transform` match the reference up to each component's sign and the
-    decision function matches it outright. Solver 'lsqr' (the pooled class
-    covariance, then `lstsq`'s minimum-norm solve through its
-    eigendecomposition) and 'eigen' (the generalised eigenproblem Sb v = e Sw v
-    as Sw^-1/2 Sb Sw^-1/2), both with shrinkage None, 'auto' (Ledoit-Wolf on
-    standardised classes, as the reference) or a constant; store_covariance.
-    Float32; priors as the reference takes them (renormalised when they do
-    not sum to 1). covariance_estimator (solver 'lsqr' / 'eigen', as the
-    reference): any object with `fit` and `covariance_`, fitted in Python on
-    each class's rows (and, for 'eigen', on every row for the total scatter);
-    its covariances enter the device solve as float32."""
+    """Linear discriminant analysis classifier and supervised dimensionality reduction.
+
+    Follows scikit-learn's ``LinearDiscriminantAnalysis``. It fits one Gaussian per class with a shared
+    covariance, classifies by the resulting linear decision function, and ``transform`` projects onto the
+    most discriminative directions. Computation is float32.
+
+    With ``solver='svd'`` the projection directions (``scalings_`` and ``transform``) match
+    scikit-learn's up to the sign of each component, and the decision function matches outright.
+
+    Parameters
+    ----------
+    solver : {'svd', 'lsqr', 'eigen'}, default 'svd'
+        ``'svd'`` needs no covariance matrix. ``'lsqr'`` solves with the pooled class covariance
+        (minimum-norm least squares) and has no ``transform``. ``'eigen'`` solves the generalized
+        eigenproblem between the between-class and within-class scatter; it raises ``ValueError`` when
+        the within-class covariance is not positive definite.
+    shrinkage : {None, 'auto'} or float, default None
+        Covariance shrinkage for ``'lsqr'`` and ``'eigen'``: ``'auto'`` uses the Ledoit-Wolf estimate
+        on standardized classes, a float in ``[0, 1]`` sets it directly. With ``solver='svd'`` it raises
+        ``NotImplementedError``.
+    priors : array-like of shape (n_classes,), default None
+        Class priors (nonnegative); renormalized when they do not sum to one. None uses the class
+        frequencies.
+    n_components : int, default None
+        Number of components kept by ``transform``, at most ``min(n_classes - 1, n_features)``
+        (``ValueError`` otherwise). None keeps that maximum.
+    store_covariance : bool, default False
+        Store the pooled within-class covariance in ``covariance_`` (always stored by ``'lsqr'`` and
+        ``'eigen'``).
+    tol : float, default 1e-4
+        Threshold below which singular values are treated as zero by ``'svd'``.
+    covariance_estimator : object, default None
+        An estimator with ``fit`` and a ``covariance_`` attribute, used instead of the empirical
+        covariance with ``'lsqr'`` or ``'eigen'`` (``ValueError`` with ``'svd'`` or with ``shrinkage``
+        set). It is fitted on the host on each class's float32 rows (and, for ``'eigen'``, on all rows).
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    coef_ : array of shape (n_classes, n_features), or (1, n_features) for two classes
+        Weights of the decision function.
+    intercept_ : array of shape (n_classes,), or (1,) for two classes
+        Intercepts of the decision function.
+    means_ : array of shape (n_classes, n_features)
+        Class means.
+    priors_ : array of shape (n_classes,)
+        Class priors used.
+    xbar_ : array of shape (n_features,)
+        Overall mean.
+    scalings_ : array of shape (n_features, rank)
+        Projection directions.
+    explained_variance_ratio_ : array of shape (n_components,)
+        Share of between-class variance explained by each component.
+    covariance_ : array of shape (n_features, n_features)
+        Pooled within-class covariance, when stored.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Notes
+    -----
+    Fit raises ``ValueError`` with fewer than two classes or with no more rows than classes.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.integers(0, 3, 1000)
+    >>> lda = mojolearn.LinearDiscriminantAnalysis(n_components=2).fit(X, y)
+    >>> Z = lda.transform(X)
+    """
     _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
                    "covariance_estimator")
 
@@ -3553,18 +4139,71 @@ class LinearDiscriminantAnalysis(_Classifier):
         return self.fit(X, y).transform(X)
 
 
+# Follows sklearn 1.9's QDA (solver, shrinkage, covariance_estimator). Per
+# class, the eigendecomposition of the class covariance (divisor n_k) stands
+# in for sklearn's SVD of the centered class rows (same S^2 / n_k, vectors up
+# to sign). solver 'eigen' takes sklearn's `_cov(X_k, shrinkage)`.
+# store_covariance under 'svd' is V diag(scalings) V^T, as sklearn forms it.
 class QuadraticDiscriminantAnalysis(_Classifier):
-    """sklearn.discriminant_analysis.QuadraticDiscriminantAnalysis (1.9): per
-    class, the eigendecomposition of the class covariance (divisor n_k) stands
-    in for the reference's SVD of the centred class rows (same S^2 / n_k,
-    vectors up to sign). solver 'eigen' takes the reference's `_cov(X_k,
-    shrinkage)` (None, 'auto' Ledoit-Wolf or a constant) and ignores
-    reg_param, as the reference does. A class whose scalings are not all
-    above `tol` is refused, as the reference refuses it. store_covariance
-    keeps covariance_ (svd: V diag(scalings) V^T, as the reference forms it).
-    Float32; priors as given. covariance_estimator (solver 'eigen' only, as
-    the reference): any object with `fit` and `covariance_`, fitted in Python
-    on each class's rows; its covariances enter the device eigh as float32."""
+    """Quadratic discriminant analysis classifier.
+
+    Follows scikit-learn's ``QuadraticDiscriminantAnalysis``. It fits one Gaussian per class, each with
+    its own covariance, and classifies by the resulting quadratic decision function. Computation is
+    float32.
+
+    Parameters
+    ----------
+    solver : {'svd', 'eigen'}, default 'svd'
+        ``'svd'`` regularizes with ``reg_param``. ``'eigen'`` uses the empirical (optionally shrunk)
+        class covariances and ignores ``reg_param``, as in scikit-learn.
+    shrinkage : {None, 'auto'} or float, default None
+        Covariance shrinkage for ``'eigen'``: ``'auto'`` uses the Ledoit-Wolf estimate, a float in
+        ``[0, 1]`` sets it directly. With ``solver='svd'`` it raises ``NotImplementedError``.
+    priors : array-like of shape (n_classes,), default None
+        Class priors (nonnegative). None uses the class frequencies.
+    reg_param : float, default 0.0
+        Regularization of the class covariances under ``'svd'``.
+    store_covariance : bool, default False
+        Store each class covariance in ``covariance_``.
+    tol : float, default 1e-4
+        A class whose scalings are not all above ``tol`` is rejected with ``ValueError`` (its
+        covariance is not full rank).
+    covariance_estimator : object, default None
+        An estimator with ``fit`` and a ``covariance_`` attribute, used instead of the empirical
+        covariance with ``solver='eigen'`` (``ValueError`` with ``'svd'`` or with ``shrinkage`` set). It
+        is fitted on the host on each class's float32 rows.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    means_ : array of shape (n_classes, n_features)
+        Class means.
+    priors_ : array of shape (n_classes,)
+        Class priors used.
+    rotations_ : list of arrays
+        Per class, the (n_features, n_features) eigenvectors of its covariance.
+    scalings_ : list of arrays
+        Per class, the (n_features,) variances along those eigenvectors.
+    covariance_ : list of arrays
+        Per class covariance, when ``store_covariance=True``.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Notes
+    -----
+    Fit raises ``ValueError`` with fewer than two classes or when a class has a single row.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 4), dtype=np.float32)
+    >>> y = rng.integers(0, 2, 1000)
+    >>> model = mojolearn.QuadraticDiscriminantAnalysis().fit(X, y)
+    """
     _parameters = ("solver", "shrinkage", "priors", "reg_param", "store_covariance", "tol", "covariance_estimator")
 
     def __init__(self, *, solver="svd", shrinkage=None, priors=None, reg_param=0.0, store_covariance=False,
@@ -3670,16 +4309,54 @@ class QuadraticDiscriminantAnalysis(_Classifier):
 
 
 # ---------------------------------------------------------------- additions: transformers
+# Transform is sklearn's two-sided interpolation; 'normal' uses Acklam's
+# inverse normal CDF in float32, clipped at sklearn's +-5.1993.
+# inverse_transform is sklearn's (norm.cdf as Cephes ndtr in float32 for
+# 'normal', then np.interp back onto the quantiles). The subsample is a
+# without-replacement draw from random_state by splitmix64.
 class QuantileTransformer(_PrepBase):
-    """sklearn.preprocessing.QuantileTransformer: per-column numpy linear
-    percentiles of the non-NaN entries at n_quantiles evenly spaced
-    references, then the reference's two-sided interpolation; output
-    'uniform' or 'normal' (Acklam's inverse normal CDF, float32, clipped at
-    the reference's +-5.1993). Above `subsample` rows the fit uses a
-    without-replacement draw from `random_state` by splitmix64. NaN is kept.
-    inverse_transform is the reference's (norm.cdf, Cephes ndtr in float32,
-    for 'normal', then np.interp back onto the quantiles). Sparse input is
-    refused."""
+    """Map each feature to a uniform or normal distribution through its quantiles.
+
+    Follows scikit-learn's ``QuantileTransformer``. Fit computes, per column, numpy's linear percentiles
+    of the non-NaN values at ``n_quantiles`` evenly spaced references; transform maps values through
+    them by interpolation. NaN values are kept as NaN. Input and output are float32. ``scipy.sparse``
+    input is not supported.
+
+    Parameters
+    ----------
+    n_quantiles : int, default 1000
+        Number of quantiles; capped at the number of rows used in fit.
+    output_distribution : {'uniform', 'normal'}, default 'uniform'
+        Target distribution. ``'normal'`` output is clipped to about ``+-5.2``, as in scikit-learn.
+    ignore_implicit_zeros : bool, default False
+        Accepted for scikit-learn compatibility (it applies to sparse input only).
+    subsample : int or None, default 10000
+        Above this many rows, fit uses ``subsample`` rows drawn without replacement. None uses every row.
+    random_state : int or None, default None
+        Seed for the subsample. None uses seed 0. The draw uses mojolearn's own generator, so the rows
+        differ from scikit-learn's for the same seed.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+
+    Attributes
+    ----------
+    n_quantiles_ : int
+        Number of quantiles used.
+    quantiles_ : array of shape (n_quantiles_, n_features)
+        Quantile values of each column.
+    references_ : array of shape (n_quantiles_,)
+        Quantile levels in ``[0, 1]``.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).exponential(size=(1000, 4)).astype(np.float32)
+    >>> Xt = mojolearn.QuantileTransformer(output_distribution="normal").fit_transform(X)
+    """
     _parameters = ("n_quantiles", "output_distribution", "ignore_implicit_zeros", "subsample", "random_state",
                    "copy")
 
@@ -3785,15 +4462,47 @@ def _pt_spec_depth(n, d):
     return s
 
 
+# Each column's lambda maximizes sklearn's log-likelihood by a fixed-step
+# golden-section search over [-8, 8] (sklearn: scipy's Brent from the bracket
+# (-2, 2)), float32. inverse_transform is x * scale + mean, then scipy's
+# inv_boxcox or sklearn's yeo-johnson inverse as exp(log1p(lambda x) / lambda)
+# in float32.
 class PowerTransformer(_PrepBase):
-    """sklearn.preprocessing.PowerTransformer: 'yeo-johnson' (default) or
-    'box-cox' (strictly positive input), then StandardScaler when
-    `standardize`. Each column's lambda maximises the reference's
-    log-likelihood by a fixed-step golden-section search over [-8, 8]
-    (the reference: scipy's Brent from the bracket (-2, 2)), float32. NaN is
-    ignored in fit and kept. inverse_transform undoes the standardisation
-    (x * scale + mean), then applies scipy's inv_boxcox or the reference's
-    yeo-johnson inverse, as exp(log1p(lambda x) / lambda) in float32."""
+    """Apply a power transform per feature to make the data more Gaussian.
+
+    Follows scikit-learn's ``PowerTransformer``. Each column gets the Yeo-Johnson or Box-Cox transform
+    with the lambda that maximizes the log-likelihood, then (by default) is standardized to zero mean and
+    unit variance. Lambda is searched in ``[-8, 8]``, so fitted lambdas can differ slightly from
+    scikit-learn's. NaN values are ignored in fit and kept as NaN. Input and output are float32.
+
+    Parameters
+    ----------
+    method : {'yeo-johnson', 'box-cox'}, default 'yeo-johnson'
+        ``'box-cox'`` requires strictly positive data (``ValueError`` otherwise).
+    standardize : bool, default True
+        Standardize the transformed columns.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+
+    Attributes
+    ----------
+    lambdas_ : array of shape (n_features,)
+        Fitted lambda of each column.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Notes
+    -----
+    ``inverse_transform`` undoes the standardization, then the power transform.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).lognormal(size=(1000, 4)).astype(np.float32)
+    >>> Xt = mojolearn.PowerTransformer().fit_transform(X)
+    """
     _parameters = ("method", "standardize", "copy")
 
     def __init__(self, method="yeo-johnson", *, standardize=True, copy=True):
@@ -3935,10 +4644,34 @@ class PowerTransformer(_PrepBase):
         return self._apply(X, "pt_inverse")
 
 
+# Row norms sum the columns in ascending order.
 class Normalizer(_PrepBase):
-    """sklearn.preprocessing.Normalizer: each row divided by its 'l1', 'l2'
-    or 'max' norm (columns summed in ascending order); a zero row is left
-    as it is. Stateless."""
+    """Scale each row to unit norm.
+
+    Follows scikit-learn's ``Normalizer``. Each row is divided by its ``'l1'``, ``'l2'`` or ``'max'``
+    norm; a row of zeros is left unchanged. The transformer is stateless: fit only records the number of
+    columns. Input and output are float32.
+
+    Parameters
+    ----------
+    norm : {'l1', 'l2', 'max'}, default 'l2'
+        Norm used for each row.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> Xt = mojolearn.Normalizer(norm="l1").fit_transform(X)
+    """
     _parameters = ("norm", "copy")
 
     def __init__(self, norm="l2", *, copy=True):
@@ -3965,12 +4698,43 @@ class Normalizer(_PrepBase):
         return pr.get(out, (n, d))
 
 
+# Each output column is the product of its input columns left to right.
 class PolynomialFeatures(_PrepBase):
-    """sklearn.preprocessing.PolynomialFeatures: the reference's column
-    order (the bias, then combinations with replacement, or without when
-    interaction_only, degree by degree); each output is the product of its
-    input columns left to right on the device; order='F' returns the same
-    values in a column-major (Fortran-ordered) array."""
+    """Generate polynomial and interaction features.
+
+    Follows scikit-learn's ``PolynomialFeatures``, with the same output column order: the bias column,
+    then the products of input columns degree by degree (combinations with replacement, or without when
+    ``interaction_only``). Input and output are float32.
+
+    Parameters
+    ----------
+    degree : int or tuple of (int, int), default 2
+        Largest degree, or ``(min_degree, max_degree)``. Negative values or ``min_degree > max_degree``
+        raise ``ValueError``.
+    interaction_only : bool, default False
+        Only products of distinct columns (no powers of one column).
+    include_bias : bool, default True
+        Include the constant column of ones.
+    order : {'C', 'F'}, default 'C'
+        Memory order of the output array; ``'F'`` returns the same values column-major.
+
+    Attributes
+    ----------
+    powers_ : array of shape (n_output_features_, n_features_in_)
+        Exponent of each input column in each output column.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    n_output_features_ : int
+        Number of output columns.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.arange(6, dtype=np.float32).reshape(3, 2)
+    >>> mojolearn.PolynomialFeatures(degree=2).fit_transform(X)
+    """
     _parameters = ("degree", "interaction_only", "include_bias", "order")
 
     def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C"):
@@ -4109,17 +4873,57 @@ def _spline_fused(mode):
 
 
 class SplineTransformer(_PrepBase):
-    """sklearn.preprocessing.SplineTransformer: per feature, B-splines of
-    `degree` on `n_knots` base knots ('uniform' over the training range,
-    'quantile': numpy linear percentiles, or an explicit (n_knots,
-    n_features) array), extended by `degree` knots at each end at the edge
-    spacing, or wrapped for 'periodic'; extrapolation 'constant', 'continue',
-    'linear', 'periodic' or 'error'; sample_weight weighs the knots (the
-    reference's weighted percentile for 'quantile', the range over rows of
-    nonzero weight for 'uniform'); handle_missing 'error' or 'zeros' (a NaN
-    is left out of the knots and encodes as a zero block); order 'C' or 'F'.
-    Dense float32 output (sparse_output is refused: there is no sparse
-    Array)."""
+    """Generate B-spline basis features for each feature.
+
+    Follows scikit-learn's ``SplineTransformer``. Each column is expanded into B-splines of ``degree`` on
+    ``n_knots`` base knots, extended by ``degree`` knots at each end at the edge spacing (or wrapped, for
+    periodic splines). The output is always a dense float32 array.
+
+    Parameters
+    ----------
+    n_knots : int, default 5
+        Number of base knots, at least 2 (``ValueError`` otherwise). Ignored when ``knots`` is an array.
+    degree : int, default 3
+        Polynomial degree of the splines, from 0 to 7 (``ValueError`` otherwise).
+    knots : {'uniform', 'quantile'} or array-like of shape (n_knots, n_features), default 'uniform'
+        ``'uniform'`` spaces the knots evenly over the training range, ``'quantile'`` places them at
+        numpy's linear percentiles, and an array gives them explicitly (sorted, without duplicates).
+    extrapolation : {'constant', 'continue', 'linear', 'periodic', 'error'}, default 'constant'
+        Behavior outside the knot range. ``'error'`` makes transform raise ``ValueError``.
+        ``'periodic'`` requires ``degree < n_knots``.
+    include_bias : bool, default True
+        Keep the last spline of each feature; when False it is dropped.
+    order : {'C', 'F'}, default 'C'
+        Memory order of the output array.
+    handle_missing : {'error', 'zeros'}, default 'error'
+        ``'error'`` raises ``ValueError`` on NaN; ``'zeros'`` leaves NaN out of the knots and encodes it
+        as a block of zeros.
+    sparse_output : bool, default False
+        Must be False; True raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    bsplines_ : list of arrays
+        Per feature, the full knot vector of its splines (scikit-learn stores ``BSpline`` objects here).
+    n_features_in_ : int
+        Number of columns seen in fit.
+    n_features_out_ : int
+        Number of output columns.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Notes
+    -----
+    ``fit`` and ``fit_transform`` accept ``sample_weight`` (nonnegative), which weights the knot
+    placement: the weighted percentile for ``'quantile'``, and the range over rows of nonzero weight for
+    ``'uniform'``. Fit needs at least two rows.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 3), dtype=np.float32)
+    >>> Xt = mojolearn.SplineTransformer(n_knots=6, degree=3).fit_transform(X)
+    """
     _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
                    "sparse_output")
     _EXTRAP = {"constant": 0, "continue": 1, "error": 1, "linear": 2, "periodic": 3}
@@ -4288,8 +5092,32 @@ class SplineTransformer(_PrepBase):
 
 
 class Binarizer(_PrepBase):
-    """sklearn.preprocessing.Binarizer: 1 where X > threshold, else 0 (NaN is
-    kept). Stateless."""
+    """Set feature values to 0 or 1 by a threshold.
+
+    Follows scikit-learn's ``Binarizer``: values greater than ``threshold`` become 1, the others 0; NaN
+    is kept. The transformer is stateless: fit only records the number of columns. Input and output are
+    float32.
+
+    Parameters
+    ----------
+    threshold : float, default 0.0
+        Values above this become 1.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.array([[-1.0, 0.5], [2.0, 0.0]], dtype=np.float32)
+    >>> mojolearn.Binarizer(threshold=0.25).fit_transform(X)
+    """
     _parameters = ("threshold", "copy")
 
     def __init__(self, *, threshold=0.0, copy=True):
@@ -4611,13 +5439,31 @@ def _label_codes_device(pr, lb, cats):
     return c
 
 
+# Numeric labels run on the device (sort + run scan for classes_, a binary
+# search for transform); a numeric label buffer crosses as its raw words
+# (`_label_buffer`), so fit_transform is one program. str labels take Python.
 class LabelEncoder(_PrepBase):
-    """sklearn.preprocessing.LabelEncoder: classes_ are the sorted distinct
-    labels (numeric labels on the device: sort + run scan; str labels in
-    Python), transform is each label's index (a device binary search),
-    int32. An unseen label is refused, as the reference refuses it. A
-    numeric label buffer crosses as its raw words (`_label_buffer`, lane
-    neural-pass137); fit_transform is then one program."""
+    """Encode target labels as integers ``0`` to ``n_classes - 1``.
+
+    Follows scikit-learn's ``LabelEncoder``. ``classes_`` are the sorted distinct labels and
+    ``transform`` returns each label's index as int32. Numeric and string labels are supported. A label
+    not seen in fit raises ``ValueError`` in ``transform`` and ``inverse_transform``.
+
+    Attributes
+    ----------
+    classes_ : array or list
+        Sorted distinct labels: an int64 array for integer labels, a float64 array for real labels,
+        otherwise a list.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> enc = mojolearn.LabelEncoder().fit(np.array([10, 30, 20, 10]))
+    >>> enc.transform(np.array([30, 10]))
+    >>> enc.inverse_transform(np.array([0, 2]))
+    """
     _parameters = ()
 
     def fit(self, y):
@@ -4737,17 +5583,50 @@ def _class_words(pr, out, n, ints):
     return Array._owned(store, (n,), "<i8" if ints else "<f8", "C")
 
 
+# Numeric labels take the device route, str labels Python's.
 class LabelBinarizer(_PrepBase):
-    """sklearn.preprocessing.LabelBinarizer for a single-label target: one
-    int32 column per class (one column, the second class, for two classes;
-    a NEG column for one), pos_label / neg_label; an unseen label is a NEG
-    row. Numeric labels take the device route, str labels Python's.
-    inverse_transform is the reference's (argmax for multiclass, the
-    threshold for binary and multilabel). A multilabel indicator y (2-D,
-    more than one column, at most two distinct integral values) is the
-    reference's `multilabel-indicator`: classes_ are the column indices, a
-    nonzero entry is pos_label and a zero neg_label. sparse_output is
-    refused."""
+    """Binarize labels in a one-vs-all fashion.
+
+    Follows scikit-learn's ``LabelBinarizer``. ``transform`` returns an int32 matrix with one column per
+    class holding ``pos_label`` for the row's class and ``neg_label`` elsewhere; with two classes it
+    returns a single column (positive for the second class), and with one class a single column of
+    ``neg_label``. A label not seen in fit becomes a row of ``neg_label``. Numeric and string labels are
+    supported.
+
+    A 2-D ``y`` with more than one column and at most two distinct integer values is treated as a
+    multilabel indicator, as in scikit-learn: ``classes_`` are the column indices, and each nonzero
+    entry becomes ``pos_label`` and each zero ``neg_label``.
+
+    Parameters
+    ----------
+    neg_label : int, default 0
+        Value for negative entries.
+    pos_label : int, default 1
+        Value for positive entries; must be greater than ``neg_label`` (``ValueError`` otherwise).
+    sparse_output : bool, default False
+        Must be False; True raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    classes_ : array or list
+        Class labels.
+    y_type_ : str
+        ``'binary'``, ``'multiclass'`` or ``'multilabel-indicator'``.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Notes
+    -----
+    ``inverse_transform(Y, threshold=None)`` takes the largest column for multiclass output and applies
+    ``threshold`` (by default halfway between ``neg_label`` and ``pos_label``) for binary and multilabel
+    output, as in scikit-learn.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> lb = mojolearn.LabelBinarizer().fit(np.array([1, 2, 6, 4, 2]))
+    >>> lb.transform(np.array([1, 6]))
+    """
     _parameters = ("neg_label", "pos_label", "sparse_output")
 
     def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False):
@@ -4920,12 +5799,41 @@ def _mlb_flat(y):
     return _MLBFlat(len(rows), lb, offs)
 
 
+# Numeric labels take the device route (a sort, a binary search, a scatter
+# of ones), str labels Python's.
 class MultiLabelBinarizer(_PrepBase):
-    """sklearn.preprocessing.MultiLabelBinarizer: classes_ the sorted union
-    of every sample's labels (or `classes` as given, in that order), transform
-    an int32 indicator matrix; an unseen label is ignored (the reference
-    warns). Numeric labels take the device route (a sort, a binary search, a
-    scatter of ones), str labels Python's. sparse_output is refused."""
+    """Convert sets of labels to a binary indicator matrix.
+
+    Follows scikit-learn's ``MultiLabelBinarizer``. ``y`` is an iterable of label collections, one per
+    sample. ``transform`` returns an int32 matrix with a 1 where the sample has the class. A label not
+    seen in fit is ignored (scikit-learn also warns). Numeric and string labels are supported.
+
+    Parameters
+    ----------
+    classes : array-like, default None
+        Class labels in the order of the output columns. None uses the sorted union of all labels in
+        fit.
+    sparse_output : bool, default False
+        Must be False; True raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    classes_ : array or list
+        Class labels: an int64 array for integer labels, a float64 array for real labels, otherwise a
+        list.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Notes
+    -----
+    ``inverse_transform`` returns a list with one tuple of labels per row.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> mlb = mojolearn.MultiLabelBinarizer()
+    >>> mlb.fit_transform([[1, 2], [3], [2, 3]])
+    """
     _parameters = ("classes", "sparse_output")
 
     def __init__(self, *, classes=None, sparse_output=False):
@@ -5041,23 +5949,91 @@ class _NeighbourDraws:
         return out
 
 
+# With the default estimator (BayesianRidge, default priors, max_iter 300, tol
+# 1e-3) the whole fit is one device program; another estimator runs the same
+# rounds in Python over its fit / predict (predict(return_std=True) for
+# sample_posterior). The stop test is the matrix inf-norm of the round's change
+# < tol * max|X_observed|. Every draw (random order, neighbours, posterior
+# samples) comes from random_state by splitmix64 (sklearn draws numpy's; None
+# is seed 0).
 class IterativeImputer(_PrepBase):
-    """sklearn.impute.IterativeImputer. With its default estimator
-    (BayesianRidge, default priors, max_iter 300, tol 1e-3) the whole fit is
-    one device program: initial fill by SimpleImputer(initial_strategy), then
-    rounds over the features in imputation_order ('ascending' default,
-    'descending', 'roman', 'arabic', or 'random': a fresh permutation each
-    round), each feature regressed on the others (or on n_nearest_features of
-    them, drawn without replacement with probability proportional to their
-    absolute correlation with it) over its observed rows, its missing
-    entries predicted and clipped to [min_value, max_value], or with
-    sample_posterior drawn from the predictive normal truncated to them;
-    stop when the matrix inf-norm of the change < tol * max|X_observed|.
-    Another estimator runs the same rounds in Python over that estimator's
-    fit / predict (predict(return_std=True) for sample_posterior).
-    add_indicator appends MissingIndicator's columns. Every draw (the random
-    order, the neighbours, the posterior samples) comes from random_state by
-    splitmix64 (the reference draws numpy's; None is seed 0)."""
+    """Impute missing values by modeling each feature from the others, round by round.
+
+    Follows scikit-learn's ``IterativeImputer``. Missing entries are first filled by a
+    :class:`SimpleImputer` with ``initial_strategy``. Then, for up to ``max_iter`` rounds, each feature
+    with missing values is regressed on the other features over its observed rows, and its missing
+    entries are replaced by the predictions, clipped to ``[min_value, max_value]``. Fit stops early when
+    the largest change in a round falls below ``tol`` times the largest absolute observed value. Input
+    and output are float32.
+
+    The default estimator is a Bayesian ridge regression (default priors, at most 300 iterations, tol
+    1e-3), as in scikit-learn.
+
+    Parameters
+    ----------
+    estimator : object, default None
+        Regressor with ``fit`` and ``predict``, cloned for each step and run on the host. None uses the
+        built-in Bayesian ridge regression.
+    missing_values : float, default NaN
+        Value that marks a missing entry.
+    sample_posterior : bool, default False
+        Draw each imputed value from the predictive normal distribution, truncated to
+        ``[min_value, max_value]``, instead of using its mean. A custom ``estimator`` must then support
+        ``predict(X, return_std=True)`` (``ValueError`` otherwise).
+    max_iter : int, default 10
+        Maximum number of imputation rounds.
+    tol : float, default 1e-3
+        Stopping tolerance, relative to the largest absolute observed value.
+    n_nearest_features : int, default None
+        Number of other features used to predict each feature, drawn without replacement with
+        probability proportional to their absolute correlation with it. None uses all of them. Must be an
+        int ``>= 1``.
+    initial_strategy : {'mean', 'median', 'most_frequent', 'constant'}, default 'mean'
+        Strategy of the initial :class:`SimpleImputer`.
+    fill_value : float, default None
+        Constant for ``initial_strategy='constant'``.
+    imputation_order : {'ascending', 'descending', 'roman', 'arabic', 'random'}, default 'ascending'
+        Order in which features are imputed in each round: by increasing or decreasing count of missing
+        values, left to right, right to left, or a new random permutation each round.
+    skip_complete : bool, default False
+        Skip features with no missing values in fit.
+    min_value : float or array-like of shape (n_features,), default -inf
+        Lower bound for imputed values.
+    max_value : float or array-like of shape (n_features,), default inf
+        Upper bound for imputed values.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility.
+    random_state : int or None, default None
+        Seed for the random order, the feature draws and the posterior samples. None uses seed 0. Draws
+        use mojolearn's own generator, so they differ from scikit-learn's for the same seed.
+    add_indicator : bool, default False
+        Append missing-indicator columns (1.0 where missing), as scikit-learn's ``MissingIndicator``.
+    keep_empty_features : bool, default False
+        Keep columns that had no observed values in fit (passed to the initial imputer).
+
+    Attributes
+    ----------
+    initial_imputer_ : SimpleImputer
+        Imputer used for the initial fill.
+    imputation_sequence_ : list of tuples
+        The fitted steps in the order they are applied.
+    n_iter_ : int
+        Number of rounds run.
+    n_features_with_missing_ : int
+        Number of features with missing values in fit.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 5), dtype=np.float32)
+    >>> X[rng.random(X.shape) < 0.1] = np.nan
+    >>> Xt = mojolearn.IterativeImputer(max_iter=5).fit_transform(X)
+    """
     _parameters = ("estimator", "missing_values", "sample_posterior", "max_iter", "tol", "n_nearest_features",
                    "initial_strategy", "fill_value", "imputation_order", "skip_complete", "min_value",
                    "max_value", "verbose", "random_state", "add_indicator", "keep_empty_features")
@@ -5522,11 +6498,37 @@ def _mask_list(pr, off, d):
 # ---------------------------------------------------------------- feature selection
 class _SelectorMixin(_PrepBase):
     def get_support(self, indices=False):
+        """Return the selected features.
+
+        Parameters
+        ----------
+        indices : bool, default False
+            Return the indices of the selected columns instead of a boolean mask.
+
+        Returns
+        -------
+        list
+            Boolean mask over the input columns, or the selected column indices.
+        """
         self._check_fitted()
         mask = list(self._mask)
         return [j for j, m in enumerate(mask) if m] if indices else mask  # glue: support index list (mask-sized: feature support mask)
 
     def transform(self, X):
+        """Keep only the selected columns of ``X``.
+
+        Raises ``ValueError`` when no column is selected.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Data with the columns seen in fit.
+
+        Returns
+        -------
+        array of shape (n_samples, n_selected_features)
+            The selected columns, float32.
+        """
         self._check_fitted()
         arr = _x2d(X)
         self._check_width(arr)
@@ -5542,11 +6544,37 @@ class _SelectorMixin(_PrepBase):
         return pr.get(out, (n, len(keep)))
 
 
+# At threshold 0 the variance is min(variance, max - min), so a constant
+# column is exactly 0. variance > threshold is compared in binary64 on the
+# device (c2_key64, c2_gt).
 class VarianceThreshold(_SelectorMixin):
-    """sklearn.feature_selection.VarianceThreshold: population variance per
-    column over the non-NaN entries (and, at threshold 0, min(variance,
-    max - min), so a constant column is exactly 0); keeps the columns whose
-    variance exceeds the threshold."""
+    """Feature selector that removes low-variance features.
+
+    Follows scikit-learn's ``VarianceThreshold``. Fit computes each column's population variance over
+    its non-NaN values and keeps the columns whose variance is greater than ``threshold``. With the
+    default threshold of 0, a constant column has variance exactly 0 and is removed. Fit raises
+    ``ValueError`` when no column passes.
+
+    Parameters
+    ----------
+    threshold : float, default 0.0
+        Columns with variance at or below this are removed.
+
+    Attributes
+    ----------
+    variances_ : array of shape (n_features,)
+        Variance of each column.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.array([[0, 2, 0, 3], [0, 1, 4, 3], [0, 1, 1, 3]], dtype=np.float32)
+    >>> mojolearn.VarianceThreshold().fit_transform(X)
+    """
     _parameters = ("threshold",)
 
     def __init__(self, threshold=0.0):
@@ -5605,18 +6633,66 @@ def _scores_classif(X, y, kind):
 
 
 def f_classif(X, y):
-    """sklearn.feature_selection.f_classif: the one-way ANOVA F of each
-    feature against the classes, and its p-value (float32). As the
-    reference: a constant feature (or a single class) scores NaN with p-value
-    NaN, a feature constant within every class but not across them +inf with
-    p-value 0."""
+    """Compute the ANOVA F-value of each feature against the class labels.
+
+    Follows scikit-learn's ``f_classif``. As in scikit-learn, a constant feature (or a single class)
+    scores NaN with p-value NaN, and a feature that is constant within every class but not across them
+    scores ``+inf`` with p-value 0. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix.
+    y : array-like of shape (n_samples,)
+        Class labels.
+
+    Returns
+    -------
+    f_statistic : array of shape (n_features,)
+        F-value of each feature.
+    p_values : array of shape (n_features,)
+        p-value of each F-value.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.integers(0, 3, 1000)
+    >>> F, p = mojolearn.f_classif(X, y)
+    """
     return _scores_classif(X, y, "f")
 
 
 def chi2(X, y):
-    """sklearn.feature_selection.chi2 for non-negative X: chi-squared of the
-    class-by-feature sums against their expectation, and its p-value; an
-    all-zero feature is NaN with p-value NaN, as the reference."""
+    """Compute chi-squared statistics between each nonnegative feature and the class labels.
+
+    Follows scikit-learn's ``chi2``: the per-class sums of each feature are compared with their
+    expected values. ``X`` must be nonnegative (``ValueError`` otherwise). An all-zero feature scores NaN
+    with p-value NaN, as in scikit-learn. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Nonnegative feature matrix, such as counts or frequencies.
+    y : array-like of shape (n_samples,)
+        Class labels.
+
+    Returns
+    -------
+    chi2 : array of shape (n_features,)
+        Chi-squared statistic of each feature.
+    p_values : array of shape (n_features,)
+        p-value of each statistic.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 10, (1000, 8)).astype(np.float32)
+    >>> y = rng.integers(0, 2, 1000)
+    >>> stat, p = mojolearn.chi2(X, y)
+    """
     return _scores_classif(X, y, "chi2")
 
 
@@ -5648,26 +6724,109 @@ def _pearson(X, y, center, force_finite):
 
 
 def f_regression(X, y, *, center=True, force_finite=True):
-    """sklearn.feature_selection.f_regression: F of each feature's Pearson r
-    with y, and its p-value. force_finite=True (the default) gives the
-    reference's edge values (F 0, p 1 for a constant feature or target;
-    float32 max, p 0 for |r| = 1); force_finite=False its raw NaN and +inf."""
+    """Compute the F-statistic of each feature's correlation with a continuous target.
+
+    Follows scikit-learn's ``f_regression``: the F-statistic and p-value of each feature's Pearson
+    correlation with ``y``. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix.
+    y : array-like of shape (n_samples,)
+        Target values.
+    center : bool, default True
+        Center ``X`` and ``y`` before computing the correlation.
+    force_finite : bool, default True
+        Replace non-finite results, as in scikit-learn: a constant feature or target gives F 0 and
+        p-value 1, and a perfect correlation gives the largest float32 F and p-value 0. With False, the
+        raw NaN and ``+inf`` values are returned.
+
+    Returns
+    -------
+    f_statistic : array of shape (n_features,)
+        F-statistic of each feature.
+    p_values : array of shape (n_features,)
+        p-value of each F-statistic.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (2 * X[:, 0] + rng.random(1000)).astype(np.float32)
+    >>> F, p = mojolearn.f_regression(X, y)
+    """
     sc, pv, _ = _pearson(X, y, center, force_finite)
     return sc, pv
 
 
 def r_regression(X, y, *, center=True, force_finite=True):
-    """sklearn.feature_selection.r_regression: each feature's Pearson r with
-    y (float32); a constant feature or target is 0 with force_finite, NaN
-    without it."""
+    """Compute the Pearson correlation of each feature with a continuous target.
+
+    Follows scikit-learn's ``r_regression``. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix.
+    y : array-like of shape (n_samples,)
+        Target values.
+    center : bool, default True
+        Center ``X`` and ``y`` before computing the correlation.
+    force_finite : bool, default True
+        A constant feature or target gives a correlation of 0; with False it gives NaN.
+
+    Returns
+    -------
+    correlation : array of shape (n_features,)
+        Pearson correlation of each feature with ``y``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X[:, 0] + rng.random(1000).astype(np.float32)
+    >>> r = mojolearn.r_regression(X, y)
+    """
     return _pearson(X, y, center, force_finite)[2]
 
 
 class SelectKBest(_SelectorMixin):
-    """sklearn.feature_selection.SelectKBest: the k highest scores of
-    `score_func` (this module's f_classif, chi2 or f_regression compute on
-    the device; any other callable is called as is), ties broken as the
-    reference's stable argsort does (the later column wins); k='all'."""
+    """Select the features with the ``k`` highest scores.
+
+    Follows scikit-learn's ``SelectKBest``. Fit calls ``score_func(X, y)`` and keeps the ``k`` columns
+    with the highest scores. NaN scores rank lowest. Among tied scores the later column is kept, as with
+    scikit-learn's stable sort. ``score_func`` may be :func:`f_classif`, :func:`chi2`,
+    :func:`f_regression`, or any callable returning scores or a ``(scores, pvalues)`` pair.
+
+    Parameters
+    ----------
+    score_func : callable, default f_classif
+        Function of ``(X, y)`` returning the scores.
+    k : int or 'all', default 10
+        Number of columns to keep, ``0 <= k <= n_features`` (``ValueError`` otherwise), or ``'all'``.
+
+    Attributes
+    ----------
+    scores_ : array of shape (n_features,)
+        Score of each column.
+    pvalues_ : array of shape (n_features,) or None
+        p-value of each column, when ``score_func`` returns them.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 20), dtype=np.float32)
+    >>> y = (X[:, 3] > 0.5).astype(np.int64)
+    >>> Xt = mojolearn.SelectKBest(mojolearn.f_classif, k=5).fit_transform(X, y)
+    """
     _parameters = ("score_func", "k")
 
     def __init__(self, score_func=f_classif, *, k=10):
@@ -5833,24 +6992,96 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
     return Array.from_list(vals, "<f4")
 
 
+# Brute-force neighbour scans on the device; the tie-breaking noise is drawn
+# from random_state by splitmix64 (sklearn draws numpy's). See _mutual_info.
 def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                         n_jobs=None):
-    """sklearn.feature_selection.mutual_info_classif for dense X: Ross's
-    k-NN estimator against the classes for a continuous feature, the
-    contingency mutual information for a discrete one (discrete_features),
-    float32, brute-force neighbour scans on the device. The tie-breaking
-    noise is drawn from random_state by splitmix64 (the reference draws
-    numpy's)."""
+    """Estimate the mutual information between each feature and a discrete target.
+
+    Follows scikit-learn's ``mutual_info_classif`` for dense ``X``. Continuous features use the k-nearest
+    neighbor estimator of Ross (2014) against the classes; discrete features use the mutual information
+    of the contingency table. As in scikit-learn, continuous features are scaled and a small noise is
+    added to break ties. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix.
+    y : array-like of shape (n_samples,)
+        Class labels.
+    discrete_features : 'auto', bool or array-like, default 'auto'
+        Which features are discrete: ``'auto'`` (none, for dense ``X``), a bool for all features, a
+        boolean mask, or column indices.
+    n_neighbors : int, default 3
+        Number of neighbors for the continuous estimator, from 1 to 32 (``NotImplementedError``
+        otherwise).
+    copy : bool, default True
+        Accepted for scikit-learn compatibility.
+    random_state : int or None, default None
+        Seed for the tie-breaking noise. None uses seed 0. The noise uses mojolearn's own generator, so
+        results differ slightly from scikit-learn's for the same seed.
+    n_jobs : int, default None
+        Accepted for scikit-learn compatibility.
+
+    Returns
+    -------
+    mi : array of shape (n_features,)
+        Estimated mutual information of each feature, in nats.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 5), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int64)
+    >>> mi = mojolearn.mutual_info_classif(X, y, random_state=0)
+    """
     return _mutual_info(X, y, True, discrete_features, n_neighbors, random_state)
 
 
+# Brute-force neighbour scans on the device; the tie-breaking noise is drawn
+# from random_state by splitmix64 (sklearn draws numpy's). See _mutual_info.
 def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                            n_jobs=None):
-    """sklearn.feature_selection.mutual_info_regression for dense X: the
-    Kraskov k-NN estimator for a continuous feature, Ross's estimator with
-    the feature's categories as the classes for a discrete one
-    (discrete_features), float32, brute-force neighbour scans on the
-    device; noise from random_state by splitmix64."""
+    """Estimate the mutual information between each feature and a continuous target.
+
+    Follows scikit-learn's ``mutual_info_regression`` for dense ``X``. Continuous features use the
+    k-nearest neighbor estimator of Kraskov et al. (2004); discrete features use Ross's (2014) estimator
+    with the feature's categories as the classes. As in scikit-learn, continuous variables are scaled and
+    a small noise is added to break ties. Computation is float32.
+
+    Parameters
+    ----------
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix.
+    y : array-like of shape (n_samples,)
+        Target values.
+    discrete_features : 'auto', bool or array-like, default 'auto'
+        Which features are discrete: ``'auto'`` (none, for dense ``X``), a bool for all features, a
+        boolean mask, or column indices.
+    n_neighbors : int, default 3
+        Number of neighbors, from 1 to 32 (``NotImplementedError`` otherwise).
+    copy : bool, default True
+        Accepted for scikit-learn compatibility.
+    random_state : int or None, default None
+        Seed for the tie-breaking noise. None uses seed 0. The noise uses mojolearn's own generator, so
+        results differ slightly from scikit-learn's for the same seed.
+    n_jobs : int, default None
+        Accepted for scikit-learn compatibility.
+
+    Returns
+    -------
+    mi : array of shape (n_features,)
+        Estimated mutual information of each feature, in nats.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 5), dtype=np.float32)
+    >>> y = (X[:, 0] ** 2 + 0.1 * rng.random(1000)).astype(np.float32)
+    >>> mi = mojolearn.mutual_info_regression(X, y, random_state=0)
+    """
     return _mutual_info(X, y, False, discrete_features, n_neighbors, random_state)
 
 
@@ -5895,12 +7126,58 @@ def _stage_importance_keys(pr, est, m, getter="auto"):
 
 
 class RFE(_SelectorMixin):
-    """sklearn.feature_selection.RFE: fit, rank by squared coef_ (summed over
-    classes; or feature_importances_), drop the `step` weakest, repeat.
-    Ties are broken by a STABLE ascending sort (the lower column index is
-    dropped first); the reference's quicksort leaves them unspecified.
-    importance_getter 'auto', a dotted attribute path or a callable, as the
-    reference."""
+    """Feature ranking with recursive feature elimination.
+
+    Follows scikit-learn's ``RFE``. The estimator is fitted on the current features, the ``step``
+    weakest are removed, and the process repeats until ``n_features_to_select`` remain. Importance is the
+    squared ``coef_`` (summed over rows when 2-D) or ``feature_importances_``. Ties are broken by a
+    stable sort: of two equally weak columns, the lower index is removed first (scikit-learn leaves the
+    order unspecified).
+
+    The estimator is cloned with ``type(estimator)(**estimator.get_params())`` and fitted on float32
+    data. ``predict``, ``predict_proba``, ``decision_function`` and ``score`` apply the final estimator
+    to the selected columns.
+
+    Parameters
+    ----------
+    estimator : object
+        Estimator with ``fit`` that exposes ``coef_`` or ``feature_importances_`` (``ValueError``
+        otherwise, with ``importance_getter='auto'``).
+    n_features_to_select : int or float, default None
+        Number of features to keep, or a fraction of them when a float in ``(0, 1)``. None keeps half.
+    step : int or float, default 1
+        Number of features removed per iteration, or a fraction of the features when a float in
+        ``(0, 1)``. Must be greater than 0.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility.
+    importance_getter : 'auto', str or callable, default 'auto'
+        ``'auto'`` uses ``coef_`` or ``feature_importances_``; a dotted attribute path or a callable
+        taking the estimator picks the importances instead (they are squared).
+
+    Attributes
+    ----------
+    estimator_ : object
+        Estimator fitted on the selected features.
+    n_features_ : int
+        Number of selected features.
+    support_ : list of bool
+        Mask of selected features.
+    ranking_ : array of int64
+        Rank of each feature; selected features have rank 1.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 10), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1).astype(np.int64)
+    >>> rfe = mojolearn.RFE(mojolearn.LinearDiscriminantAnalysis(), n_features_to_select=3).fit(X, y)
+    >>> rfe.support_
+    """
     _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter")
 
     def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
@@ -5972,11 +7249,55 @@ class RFE(_SelectorMixin):
 
 
 class ComplementNB(_DiscreteNB):
-    """sklearn.naive_bayes.ComplementNB, float32: complement class feature
-    counts, their log share (negated, or normalised when `norm`); the class
-    prior enters only with a single class, as in the reference. alpha > 0
-    required; class_prior as given (its log); sample_weight weights the counts, as the
-    reference; partial_fit adds each batch's counts, as the reference."""
+    """Complement naive Bayes classifier, suited to imbalanced text data.
+
+    Follows scikit-learn's ``ComplementNB``. Fit learns, for each class, the smoothed feature counts of
+    all the other classes and stores their negated log share (normalized when ``norm=True``). As in
+    scikit-learn, the class prior is used only when there is a single class. ``X`` must be nonnegative
+    (``ValueError`` otherwise). Computation is float32.
+
+    ``fit`` accepts ``sample_weight``, which weights the counts. ``partial_fit(X, y, classes=None,
+    sample_weight=None)`` adds each batch's counts to the running ones; ``classes`` is required on the
+    first call.
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Additive smoothing. Must be greater than 0; ``alpha <= 0`` raises ``NotImplementedError``.
+    force_alpha : bool, default True
+        Accepted for scikit-learn compatibility.
+    fit_prior : bool, default True
+        Learn class priors from the data; when False, use a uniform prior.
+    class_prior : array-like of shape (n_classes,), default None
+        Given class priors (nonnegative); overrides ``fit_prior``.
+    norm : bool, default False
+        Normalize the weights of each class.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    class_count_ : array of shape (n_classes,)
+        Number (or weighted number) of training rows per class.
+    class_log_prior_ : array of shape (n_classes,)
+        Log prior of each class.
+    feature_count_ : array of shape (n_classes, n_features)
+        Sum of each feature per class.
+    feature_log_prob_ : array of shape (n_classes, n_features)
+        Class weights computed from the complement counts.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 5, (1000, 20)).astype(np.float32)
+    >>> y = rng.integers(0, 3, 1000)
+    >>> model = mojolearn.ComplementNB().fit(X, y)
+    """
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
     _csr_ok = True
     _needs_min = True
@@ -6008,17 +7329,63 @@ class ComplementNB(_DiscreteNB):
         return self.class_log_prior_ if len(self.classes_) == 1 else None
 
 
+# partial_fit keeps n_categories_ as the accumulated counts' width; sklearn
+# narrows it to the last batch's (naive_bayes/NOT_IMPLEMENTED.tsv).
 class CategoricalNB(_DiscreteNB):
-    """sklearn.naive_bayes.CategoricalNB, float32: X holds category indices
-    0, 1, ...; per feature, class and category the smoothed log share of the
-    class's rows. A category index outside the fitted range at predict time
-    is refused, as the reference refuses it; class_prior as given (its log);
-    min_categories floors n_categories_; sample_weight weights the counts,
-    as the reference. partial_fit adds each batch's category counts to the
-    running ones (category_count_, widened as new categories appear) and
-    recomputes the log probabilities; n_categories_ is the counts' width
-    (the reference narrows it to the last batch's, see
-    naive_bayes/NOT_IMPLEMENTED.tsv)."""
+    """Naive Bayes classifier for categorical features.
+
+    Follows scikit-learn's ``CategoricalNB``. Each column of ``X`` holds category indices ``0, 1, ...``.
+    Fit counts each category per class and feature, smooths the counts by ``alpha`` and stores their log
+    share of the class's rows. Negative values raise ``ValueError`` in fit; at prediction, a category
+    index outside the fitted range raises ``IndexError``, as in scikit-learn. Computation is float32.
+
+    ``fit`` accepts ``sample_weight``, which weights the counts. ``partial_fit(X, y, classes=None,
+    sample_weight=None)`` adds each batch's category counts to the running ones, widening them as new
+    categories appear; ``classes`` is required on the first call. After ``partial_fit``,
+    ``n_categories_`` is the width of the accumulated counts (scikit-learn narrows it to the last
+    batch's).
+
+    Parameters
+    ----------
+    alpha : float, default 1.0
+        Additive smoothing. Must be greater than 0; ``alpha <= 0`` raises ``NotImplementedError``.
+    force_alpha : bool, default True
+        Accepted for scikit-learn compatibility.
+    fit_prior : bool, default True
+        Learn class priors from the data; when False, use a uniform prior.
+    class_prior : array-like of shape (n_classes,), default None
+        Given class priors (nonnegative); overrides ``fit_prior``.
+    min_categories : int or array-like of shape (n_features,), default None
+        Minimum number of categories per feature; the count of categories is the larger of this and the
+        largest index seen plus one.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    class_count_ : array of shape (n_classes,)
+        Number (or weighted number) of training rows per class.
+    class_log_prior_ : array of shape (n_classes,)
+        Log prior of each class.
+    category_count_ : list of arrays
+        Per feature, an array of shape (n_classes, n_categories) of category counts.
+    feature_log_prob_ : list of arrays
+        Per feature, an array of shape (n_classes, n_categories) of smoothed log probabilities.
+    n_categories_ : array of int64
+        Number of categories of each feature.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.integers(0, 4, (1000, 6)).astype(np.float32)
+    >>> y = rng.integers(0, 2, 1000)
+    >>> model = mojolearn.CategoricalNB().fit(X, y)
+    """
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "min_categories")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, min_categories=None):

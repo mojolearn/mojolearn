@@ -1,5 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""GPU preprocessing with explicit Float32 and numeric-mode contracts."""
+"""Feature scaling: :class:`StandardScaler` and :class:`MinMaxScaler`.
+
+Both scalers take dense two-dimensional float32 input, compute their
+statistics in float32, treat NaN as a missing value and support the
+``numeric_mode`` setting. Other preprocessing estimators (encoders,
+imputers, transformers) are available from the top-level ``mojolearn``
+namespace.
+"""
 import ctypes
 import struct
 from . import _portable_math as math
@@ -305,20 +312,67 @@ class _ScalerProtocol:
         return tags
 
 
+# Maintainer notes: partial_fit's first batch reproduces fit's bits; statistics
+# and transforms run in the preprocessing binding (and x_prep for the NaN path).
 class MinMaxScaler(_ScalerProtocol):
-    """GPU feature scaling for dense two-dimensional Float32 inputs.
+    """Scale each feature to a given range.
 
-    feature_range endpoints are evaluated in Float32 and must remain finite
-    and strictly ordered. Ranges smaller than 10*Float32 epsilon use denominator
-    one, including constant features. All statistics and transforms run on GPU.
-    clip optionally bounds forward transforms. Inverse transformation cannot
-    recover values lost to clipping. NaN is missing (the reference): fit
-    ignores it (a column with no value has NaN statistics), transform keeps
-    it; +-inf is refused. partial_fit keeps the running minimum and maximum
-    (its first batch is fit's bits). copy=False transforms into the caller's
-    own float32 C-contiguous buffer when it is writable. Numeric mode resolves
-    at fit and is retained for subsequent transforms, including after pickling.
-    Sparse inputs are unsupported.
+    Computes each feature's minimum and maximum and maps them linearly onto
+    ``feature_range``. Input must be a dense, nonempty two-dimensional float32
+    array: a float64 or integer array raises ``TypeError`` (nested Python
+    lists of numbers are converted). Sparse input is not supported.
+    The endpoints of ``feature_range`` are rounded to float32. A feature whose
+    range is below 10 float32 epsilons (including a constant feature) uses a
+    denominator of one.
+
+    NaN is treated as missing: ``fit`` ignores it (a feature with no values
+    gets NaN statistics) and ``transform`` keeps it. Infinity raises
+    ``ValueError``. The numeric mode is resolved at ``fit`` and kept for later
+    transforms, including after pickling.
+
+    Parameters
+    ----------
+    feature_range : tuple of two floats, default (0, 1)
+        Target range ``(min, max)``; both finite in float32, with
+        ``min < max`` after rounding.
+    copy : bool, default True
+        If False, transform in place when ``X`` is already a writable
+        C-contiguous float32 buffer.
+    clip : bool, default False
+        Clip transformed values to ``feature_range``. Values lost to clipping
+        are not recovered by ``inverse_transform``.
+    numeric_mode : {"fast", "deterministic", "identical"} or None, default None
+        Numeric mode; None uses the library default.
+
+    Attributes
+    ----------
+    data_min_ : Array of shape (n_features,), float32
+        Per-feature minimum seen.
+    data_max_ : Array of shape (n_features,), float32
+        Per-feature maximum seen.
+    data_range_ : Array of shape (n_features,), float32
+        ``data_max_ - data_min_``.
+    scale_ : Array of shape (n_features,), float32
+        Per-feature scale factor.
+    min_ : Array of shape (n_features,), float32
+        Per-feature offset.
+    n_features_in_ : int
+        Number of features seen during ``fit``.
+    n_samples_seen_ : int
+        Number of rows processed.
+    numeric_mode_ : str
+        The numeric mode used by the fit.
+    feature_range_ : tuple of float
+        ``feature_range`` as rounded to float32.
+    clip_ : bool
+        The ``clip`` setting captured by the fit.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> scaler = mojolearn.MinMaxScaler().fit(X)
+    >>> Z = scaler.transform(X)
     """
     _parameters = ('feature_range', 'copy', 'clip', 'numeric_mode')
 
@@ -390,6 +444,21 @@ class MinMaxScaler(_ScalerProtocol):
             setattr(self, name, got[i].copy())
 
     def fit(self, X, y=None, sample_weight=None):
+        """Compute the per-feature minimum and maximum.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features), float32
+            Training data; NaN is ignored, infinity is refused.
+        y : ignored
+        sample_weight : None
+            Not supported; any value raises ``NotImplementedError``.
+
+        Returns
+        -------
+        self : MinMaxScaler
+            The fitted scaler.
+        """
         _require_training(self)
         lower, upper = self._configuration()
         # Once a new fit begins, a failed fit cannot expose stale statistics.
@@ -426,11 +495,28 @@ class MinMaxScaler(_ScalerProtocol):
         return self
 
     def partial_fit(self, X, y=None):
-        """The reference's partial_fit: the running minimum and maximum
-        (np.minimum / np.maximum: a NaN statistic stays NaN) and the
-        parameters recomputed from them by the binding's own minmax_fit over
-        the rows [data_min_, data_max_] (the same arithmetic as a fit whose
-        extrema are those). A fresh scaler's first batch is fit."""
+        """Update the running minimum and maximum with a batch of rows.
+
+        On an unfitted scaler this is ``fit``. A feature with NaN statistics
+        stays NaN.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features), float32
+            A batch of rows with the fitted feature count.
+        y : ignored
+
+        Returns
+        -------
+        self : MinMaxScaler
+            The updated scaler.
+
+        Raises
+        ------
+        ValueError
+            If ``feature_range`` changed since the first batch or the feature
+            count differs.
+        """
         _require_training(self)
         if not self.__sklearn_is_fitted__():
             return self.fit(X)
@@ -506,17 +592,60 @@ class MinMaxScaler(_ScalerProtocol):
         return _write_back(self.copy, copied, values, X, output)
 
     def transform(self, X):
+        """Scale ``X`` to ``feature_range``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features), float32
+            Data with the fitted feature count; NaN is kept.
+
+        Returns
+        -------
+        X_scaled : Array of shape (n_samples, n_features), float32
+            The scaled data.
+
+        Raises
+        ------
+        NotFittedError
+            If the scaler is not fitted (a subclass of ``ValueError`` and
+            ``AttributeError``).
+        ValueError
+            If the feature count differs or the result overflows float32.
+        """
         return self._transform(X, False)
 
     def inverse_transform(self, X):
+        """Undo the scaling.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features), float32
+            Scaled data.
+
+        Returns
+        -------
+        X_original : Array of shape (n_samples, n_features), float32
+            The data in its original units.
+        """
         return self._transform(X, True)
 
     def save(self, path):
-        """Write the fitted scaler to `path` as an npz: the five fitted
-        Float32 vectors, `feature_range_` as float64, `meta` `<i8`
-        [n_features_in_, n_samples_seen_, clip_] and the numeric mode the fit
-        resolved. `mojolearn.host_model(path)` transforms from it on a CPU
-        with no GPU."""
+        """Save the fitted scaler to ``path`` as an ``.npz`` file.
+
+        A scaler restored with ``MinMaxScaler.load`` or
+        ``mojolearn.host_model(path)`` transforms, including on a CPU-only
+        install.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the scaler is not fitted.
+        """
         if not self.__sklearn_is_fitted__():
             raise RuntimeError("this estimator is not fitted yet")
         arrays = {
@@ -536,8 +665,26 @@ class MinMaxScaler(_ScalerProtocol):
 
     @classmethod
     def load(cls, path):
-        """Load a scaler saved by `save`. The result transforms; every
-        array is read at its saved dtype and never cast."""
+        """Load a scaler written by ``save``.
+
+        The loaded scaler transforms; arrays are read at their saved dtype
+        and never cast.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by ``MinMaxScaler.save``.
+
+        Returns
+        -------
+        scaler : MinMaxScaler
+            The restored scaler.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a MinMaxScaler or its arrays are inconsistent.
+        """
         arrays = _serialize.read_npz(path, _SCALER_FORMAT)
         mode, meta = _scaler_header(arrays, path, cls, 3)
         bounds = _serialize.exact(arrays, "feature_range", "<f8")
@@ -555,26 +702,64 @@ class MinMaxScaler(_ScalerProtocol):
         return obj
 
 
+# Maintainer notes (moved from the docstring): variance is a centered
+# population float32 fold about the float32 mean; zero variance uses scale one
+# (the bounded cuML exact-zero convention, not scikit-learn's float64
+# near-constant error bound). A finite unweighted fit is the binding's
+# standard_fit (256-row pinned chunks); a fit with NaN or weights is x_prep
+# `scaler_stats`, one ascending weighted fold per column. partial_fit merges by
+# x_prep `gnb_merge` (the GaussianNB merge); its first batch is fit's bits.
 class StandardScaler(_ScalerProtocol):
-    """GPU population standardization of dense Float32 matrices.
+    """Standardize features by removing the mean and scaling to unit variance.
 
-    with_mean and with_std control the forward/inverse operations.
-    Statistics are Float32; this is not sklearn Float64 arithmetic. Variance
-    is a centered population Float32 fold about the Float32 mean. Exactly
-    constant columns have variance zero; zero variance uses scale one. This
-    follows the bounded cuML exact-zero convention, not sklearn's Float64
-    near-constant error bound. A finite unweighted fit is the binding's
-    standard_fit (256-row pinned chunks). NaN is missing (the reference):
-    fit ignores it, per feature (n_samples_seen_ becomes a vector when the
-    features' counts differ; a feature with no value has NaN statistics) and
-    transform keeps it; +-inf is refused. sample_weight weights the mean and
-    variance (n_samples_seen_ is the weight sum, float32). A fit with NaN or
-    weights is x_prep `scaler_stats`, one ascending weighted fold per column.
-    partial_fit merges a batch's count, mean and variance (the GaussianNB
-    merge, x_prep `gnb_merge`; its first batch is fit's bits). copy=False
-    transforms into the caller's own float32 C-contiguous buffer when it is
-    writable. Numeric mode and flags are captured by fit and retained
-    through pickling. Sparse inputs are not implemented.
+    Input must be a dense, nonempty two-dimensional float32 array: a float64
+    or integer array raises ``TypeError`` (nested Python lists of numbers are
+    converted). Sparse input is not supported. Statistics are
+    computed in float32, not in float64 as in scikit-learn. The variance is
+    the population variance; a feature with exactly zero variance gets scale
+    one, while a nearly constant feature is scaled by its (tiny) standard
+    deviation.
+
+    NaN is treated as missing: ``fit`` ignores it per feature (a feature with
+    no values gets NaN statistics) and ``transform`` keeps it. Infinity raises
+    ``ValueError``. The numeric mode and flags are captured by ``fit`` and kept
+    through pickling.
+
+    Parameters
+    ----------
+    copy : bool, default True
+        If False, transform in place when ``X`` is already a writable
+        C-contiguous float32 buffer.
+    with_mean : bool, default True
+        Center the data before scaling.
+    with_std : bool, default True
+        Scale the data to unit variance.
+    numeric_mode : {"fast", "deterministic", "identical"} or None, default None
+        Numeric mode; None uses the library default.
+
+    Attributes
+    ----------
+    mean_ : Array of shape (n_features,), float32, or None
+        Per-feature mean; None when both ``with_mean`` and ``with_std`` are
+        False.
+    var_ : Array of shape (n_features,), float32, or None
+        Per-feature variance; None when ``with_std=False``.
+    scale_ : Array of shape (n_features,), float32, or None
+        Per-feature scale; None when ``with_std=False``.
+    n_features_in_ : int
+        Number of features seen during ``fit``.
+    n_samples_seen_ : int, float or Array
+        Rows seen. With NaN values whose counts differ across features, a
+        per-feature array; with ``sample_weight``, the weight sum.
+    numeric_mode_ : str
+        The numeric mode used by the fit.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> scaler = mojolearn.StandardScaler().fit(X)
+    >>> Z = scaler.transform(X)
     """
     _parameters = ('copy', 'with_mean', 'with_std', 'numeric_mode')
 
@@ -606,6 +791,26 @@ class StandardScaler(_ScalerProtocol):
         self.with_std_ = bool(self.with_std)
 
     def fit(self, X, y=None, sample_weight=None):
+        """Compute the per-feature mean and variance.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features), float32
+            Training data; NaN is ignored, infinity is refused.
+        y : ignored
+        sample_weight : array-like of shape (n_samples,), optional
+            Weights for the mean and variance.
+
+        Returns
+        -------
+        self : StandardScaler
+            The fitted scaler.
+
+        Raises
+        ------
+        ValueError
+            If ``X`` holds infinity or the statistics overflow float32.
+        """
         _require_training(self)
         self._configuration()
         for name in list(self.__dict__):  # glue: drops stale fitted attributes
@@ -641,14 +846,28 @@ class StandardScaler(_ScalerProtocol):
         self._keep(mean, var, scale, _seen(seen, weight is not None), d, mode)
         return self
 
+    # MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED (a fast + Apple build's
+    # experiment, default off; lane apple-fast-round2): the binding's
+    # `standard_fit_transform_direct` uploads X once and runs the transform on
+    # the resident copy (preprocessing/estimator.mojo has the cost reasoning).
+    # Routing only: the same kernels on the same words. NaN input, sample
+    # weights, other modes and builds without the export take the two steps.
     def fit_transform(self, X, y=None, **fit_params):
-        """fit(X).transform(X). MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED (a
-        FAST + Apple build's experiment, default off; lane apple-fast-round2):
-        the binding's `standard_fit_transform_direct` uploads X ONCE and runs
-        the transform on the resident copy (preprocessing/estimator.mojo has
-        the cost reasoning). Routing only: the same kernels on the same
-        words. NaN input, sample weights, other tiers and builds without the
-        export take the two steps."""
+        """Fit to ``X`` and return the standardized data.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features), float32
+            Training data.
+        y : ignored
+        **fit_params
+            Passed to ``fit`` (for example ``sample_weight``).
+
+        Returns
+        -------
+        X_scaled : Array of shape (n_samples, n_features), float32
+            The standardized data.
+        """
         if not fit_params:
             fused = self._fit_transform_fused(X)
             if fused is not None:
@@ -680,15 +899,36 @@ class StandardScaler(_ScalerProtocol):
             raise ValueError('StandardScaler transform overflowed in Float32')
         return _write_back(self.copy, copied, values, X, output)
 
+    # partial_fit merge (x_prep `gnb_merge`): n = n_past + n_new; mean =
+    # (n_new mu_new + n_past mu) / n; var = (n_past var + n_new var_new +
+    # n_new n_past / n (mu - mu_new)^2) / n; two exactly constant parts with the
+    # same value keep it exactly (KEEP = 1); then the scale by `std_scale`.
     def partial_fit(self, X, y=None, sample_weight=None):
-        """The reference's partial_fit: the batch's count, mean and variance
-        (fit's own path for that batch) merged into the running ones, per
-        feature, by x_prep `gnb_merge` (n = n_past + n_new; mean =
-        (n_new mu_new + n_past mu) / n; var = (n_past var + n_new var_new +
-        n_new n_past / n (mu - mu_new)^2) / n; a feature the batch never saw
-        keeps its values; two exactly constant parts with the same value
-        keep it exactly, KEEP = 1), then the scale by `std_scale`. A fresh
-        scaler's first batch is fit, bit for bit."""
+        """Update the running mean and variance with a batch of rows.
+
+        On an unfitted scaler this is ``fit``. The batch's count, mean and
+        variance are merged into the running ones per feature; a feature the
+        batch never saw keeps its values.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features), float32
+            A batch of rows with the fitted feature count.
+        y : ignored
+        sample_weight : array-like of shape (n_samples,), optional
+            Weights for this batch.
+
+        Returns
+        -------
+        self : StandardScaler
+            The updated scaler.
+
+        Raises
+        ------
+        ValueError
+            If ``with_mean`` or ``with_std`` changed since the first batch or
+            the feature count differs.
+        """
         _require_training(self)
         if not self.__sklearn_is_fitted__():
             return self.fit(X, y, sample_weight=sample_weight)
@@ -784,18 +1024,64 @@ class StandardScaler(_ScalerProtocol):
         return _write_back(copy, copied, values, X, output)
 
     def transform(self, X, copy=None):
+        """Standardize ``X``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features), float32
+            Data with the fitted feature count; NaN is kept.
+        copy : bool or None, default None
+            Overrides the ``copy`` parameter for this call.
+
+        Returns
+        -------
+        X_scaled : Array of shape (n_samples, n_features), float32
+            The standardized data.
+
+        Raises
+        ------
+        NotFittedError
+            If the scaler is not fitted (a subclass of ``ValueError`` and
+            ``AttributeError``).
+        ValueError
+            If the feature count differs or the result overflows float32.
+        """
         return self._transform(X, False, copy)
 
     def inverse_transform(self, X, copy=None):
+        """Undo the standardization.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features), float32
+            Standardized data.
+        copy : bool or None, default None
+            Overrides the ``copy`` parameter for this call.
+
+        Returns
+        -------
+        X_original : Array of shape (n_samples, n_features), float32
+            The data in its original units.
+        """
         return self._transform(X, True, copy)
 
     def save(self, path):
-        """Write the fitted scaler to `path` as an npz: `mean_` (present
-        when the fit kept it), `var_` and `scale_` (present with
-        `with_std`), `meta` `<i8` [n_features_in_, n_samples_seen_,
-        with_mean_, with_std_] and the numeric mode the fit resolved.
-        `mojolearn.host_model(path)` transforms from it on a CPU with no
-        GPU."""
+        """Save the fitted scaler to ``path`` as an ``.npz`` file.
+
+        A scaler restored with ``StandardScaler.load`` or
+        ``mojolearn.host_model(path)`` transforms, including on a CPU-only
+        install.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the scaler is not fitted.
+        """
         if not self.__sklearn_is_fitted__():
             raise RuntimeError("this estimator is not fitted yet")
         arrays = {
@@ -821,8 +1107,26 @@ class StandardScaler(_ScalerProtocol):
 
     @classmethod
     def load(cls, path):
-        """Load a scaler saved by `save`. The result transforms; every
-        array is read at its saved dtype and never cast."""
+        """Load a scaler written by ``save``.
+
+        The loaded scaler transforms; arrays are read at their saved dtype
+        and never cast.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by ``StandardScaler.save``.
+
+        Returns
+        -------
+        scaler : StandardScaler
+            The restored scaler.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a StandardScaler or its arrays are inconsistent.
+        """
         arrays = _serialize.read_npz(path, _SCALER_FORMAT)
         mode, meta = _scaler_header(arrays, path, cls, 4)
         with_mean, with_std = bool(int(meta[2])), bool(int(meta[3]))
