@@ -124,18 +124,17 @@ weaker.
 pip install mojolearn   # Mac: Apple GPU; Linux: NVIDIA or AMD GPU, or CPU
 ```
 
-macOS arm64 wheels include Apple Metal support. In 0.8.25 on Linux x86-64,
+macOS arm64 wheels include Apple Metal support. On Linux x86-64,
 `pip install mojolearn` automatically installs the `mojolearn-nvidia` and
 `mojolearn-amd` GPU packages and selects the backend for the GPU it finds.
 Both platforms also support CPU training and inference.
 
-On NVIDIA, native kernels are used first; this release ships them for the
-sm_89 architecture. Every other NVIDIA GPU with compute capability 8.0 or
-newer (A100, H100/H200, Blackwell, ...) uses the PTX build that ships in the
-same package, which the driver compiles on your machine. It serves every
-numeric mode, `identical` included: its results are recorded in the reference
-table beside the NVIDIA and AMD results and must equal them. See
-[NVIDIA PTX](docs/NVIDIA_PTX_IDENTITY.md).
+This release ships native NVIDIA kernels for the sm_89 architecture (Ada:
+L40S, L40, L4, RTX 4090) and AMD kernels for gfx942 (MI300X, MI325X). A PTX
+build for every NVIDIA GPU with compute capability 8.0 or newer (A100,
+H100/H200, Blackwell, ...) is built and recorded in the reference table, but
+not shipped while the NVIDIA wheel with it exceeds PyPI's 100 MiB limit; other
+architectures need a source build. See [NVIDIA PTX](docs/NVIDIA_PTX_IDENTITY.md).
 
 mojolearn never substitutes the CPU for a GPU it cannot serve.
 
@@ -190,9 +189,9 @@ predictions are the same bits.
 The wheel ships the reference results recorded on Apple, NVIDIA, AMD and
 CPU, and a verifier that checks your machine against them.
 
-In 0.8.25, install verification support with
+Install verification support with
 `python -m pip install "mojolearn[verify]"`: the same library plus its optional
-verification dependency. On 0.8.24, use `python -m pip install numpy`.
+verification dependency.
 Optional ANN, CNN and sequence APIs that use NumPy are supported by
 `mojolearn[numpy]`; the verification extra includes that same dependency.
 The base install does not require NumPy. See [verification support](docs/VERIFY.md).
@@ -203,9 +202,8 @@ python -m mojolearn verify --quick  # representative checks from the same scope
 python -m mojolearn verify --all    # the same scope on all nine fixtures
 ```
 
-In 0.8.25, `--all` also includes applicable gradient, batch-size,
-ragged-batch and sampler/replay checks. On 0.8.24, add `--batch-checks` for
-those probes. `--quick` keeps its smaller scope.
+`--all` also includes applicable gradient, batch-size, ragged-batch and
+sampler/replay checks. `--quick` keeps its smaller scope.
 
 Each part reports its comparison with the recorded references; missing
 references read OWED and inapplicable properties are named explicitly.

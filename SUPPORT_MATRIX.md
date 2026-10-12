@@ -10,7 +10,7 @@ installed wheel supports on the machine it runs on.
 | Wheel | GPU backend | GPU architectures carried | CPU |
 |---|---|---|---|
 | macOS arm64 | Apple Metal | Apple silicon (built at the M1 ISA floor) | Apple silicon host |
-| Linux x86-64 | NVIDIA CUDA and AMD HIP in one wheel | CUDA `sm_89` and `sm_90a`, HIP `gfx942` | x86-64 host |
+| Linux x86-64 | NVIDIA CUDA (`mojolearn-nvidia`) and AMD HIP (`mojolearn-amd`), installed with the core wheel | CUDA `sm_89`, HIP `gfx942` (the `sm_80` PTX build is built and recorded but not shipped: over PyPI's size limit) | x86-64 host |
 
 Both wheels carry every CPU host binding listed under
 [The CPU surface](#the-cpu-surface), so both train and predict on a machine
