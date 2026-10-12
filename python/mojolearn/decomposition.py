@@ -83,121 +83,121 @@ def _component_count(n_components, shape):
     return value
 
 
+# Maintainer notes (moved from the docstring).
+# Two arms as of 2026-09-01. The covariance arm is cuML's pcaFit route
+# (covariance, then an eigensolver) with cuML's JACOBI eigensolver
+# (svd_solver='jacobi', cuSOLVER syevj there, a device Jacobi here). cuML's
+# 'auto' reaches the divide-and-conquer eigDC (syevd), which is NOT implemented
+# (decomposition/NOT_IMPLEMENTED.tsv); 'auto' runs the Jacobi arm. 'jacobi' is
+# cuML's name (pca.pyx:398 maps it to COV_EIG_JACOBI).
+# Wide IDENTICAL full fits use transposed QR, at most min(X.shape) components,
+# and a 64-sweep/1e-6 Jacobi budget; tall fits keep the RAFT 15-sweep/1e-7
+# budget (decomposition/impl/linalg/detail/pca.mojo). Nonconvergence raises.
+# svd_solver='full' is scikit-learn's meaning (_pca.py:539-540 -> _fit_full):
+# Householder QR of X_c, then a one-sided Jacobi SVD of the small R; the
+# covariance is never formed, so the condition number is never squared. cuML
+# collapses the two names; we deliberately do not. DEVIATIONS 586-593 in
+# core/householder_qr.mojo and decomposition/impl/linalg/detail/svd_full.mojo;
+# gated by decomposition/checks/svd_full_check.mojo (its ill-conditioning gate
+# measures the accuracy claim). IDENTICAL supports n_samples < n_features via
+# transposed QR and explicit right-basis reconstruction (DEVIATION 593); other
+# modes keep the wide-shape refusal.
+# 'randomized' (lane/algos-decomp): scikit-learn's _fit_truncated through
+# mojolearn.randomized_svd (Philox Gaussian sketch, orthonormalized power
+# iterations, exact small SVD).
+# n_components: the eigendecomposition is of the FULL covariance on every
+# setting; noise_variance_ is the mean of the discarded eigenvalues (cuML's
+# truncCompExpVars).
+# Whitening: cuML's rescale of a COPY of the components (pca.cuh:292-302 and
+# :232-243), all three numeric modes, pinned at the seam through identical_mul
+# / identical_div / ftz. DEVIATIONS 580-585 in
+# decomposition/impl/linalg/detail/pca.mojo; gated by
+# decomposition/checks/pca_check.mojo (unit variance, round trip, row-subset
+# agreement, planted-bit edges). Components are scaled by sqrt(n_samples_-1)/s
+# (pinned FP32 multiply, then divide, FTZ seams); s < float32(1e-10) skips the
+# division (cuML's threshold), keeping the sample-count scale. The whitened
+# pair is an additive binding export: an older extension needs a rebuild.
+# Options measured row by row by tools/e2u_matrix_fit.py.
 class PCA(NumericModeMixin):
-    """PCA on the GPU, in TWO ARMS as of 2026-09-01.
+    """Principal component analysis.
 
-    The default is cuML's `pcaFit` route (covariance, then an eigensolver)
-    with the eigensolver being cuML's JACOBI arm (`svd_solver='jacobi'`,
-    cuSOLVER syevj there, a device Jacobi here). cuML's own 'auto' reaches
-    the divide-and-conquer `eigDC` (syevd), which is NOT implemented
-    (decomposition/NOT_IMPLEMENTED.tsv); this class accepts 'auto' and runs
-    the Jacobi arm, and says so here.
+    Centers the data and projects it onto its leading principal axes. Input
+    is converted to C-order float32; a scipy.sparse matrix is densified. Use
+    :class:`IncrementalPCA` for fitting in batches.
 
-    Wide IDENTICAL full fits use transposed QR, at most min(X.shape)
-    components, and a 64-sweep/1e-6 Jacobi budget. Tall fits retain their
-    existing 15-sweep/1e-7 budget. Nonconvergence still raises.
+    The default ``svd_solver="auto"`` always runs the covariance
+    eigendecomposition (covariance matrix, then a Jacobi eigensolver), unlike
+    scikit-learn, where ``"auto"`` chooses a solver from the data shape.
+    ``svd_solver="full"`` is a different algorithm, an SVD of the centered
+    data that never forms the covariance and so is more accurate on
+    ill-conditioned data.
 
-    `svd_solver='full'` is the second arm and a genuinely different
-    algorithm: an R-SVD of the centered data that never forms the
-    covariance, so it never squares the condition number. That is
-    scikit-learn's meaning for the name and it is why scikit-learn keeps it
-    beside 'covariance_eigh'; cuML collapses the two and we deliberately do
-    not. THE SENTENCE THAT USED TO OPEN THIS DOCSTRING SAID THIS CLASS WAS A
-    COVARIANCE EIGENDECOMPOSITION FULL STOP, AND IT IS DELETED RATHER THAN
-    QUALIFIED.
+    Parameters
+    ----------
+    n_components : int, float, "mle" or None, default None
+        Number of components to keep. An int in ``[1, n_features]``; None
+        keeps ``min(n_samples, n_features)``; a float in (0, 1) keeps the
+        fewest components whose cumulative explained variance ratio exceeds
+        it; ``"mle"`` uses Minka's MLE (requires ``n_samples >= n_features``).
+    copy : bool, default True
+        Accepted for compatibility; the input is never modified.
+    whiten : bool, default False
+        Scale the projected columns to unit sample variance (using the
+        fitted sample count, never the size of the ``transform`` batch).
+        ``inverse_transform`` undoes the scaling. Columns whose singular
+        value is below 1e-10 are not divided by it, so they do not reach unit
+        variance.
+    svd_solver : {"auto", "covariance_eigh", "jacobi", "full", "randomized"}, default "auto"
+        ``"auto"``, ``"covariance_eigh"`` and ``"jacobi"`` all run the
+        covariance eigendecomposition. ``"full"`` runs a QR-based SVD of the
+        centered data; outside the ``"identical"`` numeric mode it needs
+        ``n_samples >= n_features`` and raises ``NotImplementedError``
+        otherwise. ``"randomized"`` runs :func:`randomized_svd` and needs
+        ``n_components < min(n_samples, n_features)``. ``"arpack"`` raises
+        ``NotImplementedError``.
+    tol : float, default 0.0
+        Only 0.0 is accepted (it is ARPACK's tolerance); any other value
+        raises ``NotImplementedError``.
+    iterated_power : int or "auto", default "auto"
+        Power iterations for ``"randomized"``; ``"auto"`` uses 7 when
+        ``n_components < 0.1 * min(n_samples, n_features)``, else 4.
+    n_oversamples : int, default 10
+        Extra random vectors for ``"randomized"``.
+    power_iteration_normalizer : str, default "auto"
+        Normalizer between power iterations for ``"randomized"``.
+    random_state : int or None, default None
+        Seed for ``"randomized"``; None means seed 0.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
-    `tools/e2u_matrix_fit.py`):
+    Attributes
+    ----------
+    components_ : Array of shape (n_components_, n_features), float32
+        Principal axes, sorted by decreasing explained variance.
+    mean_ : Array of shape (n_features,), float32
+        Per-feature mean of the training data.
+    explained_variance_ : Array of shape (n_components_,), float32
+        Variance explained by each component.
+    explained_variance_ratio_ : Array of shape (n_components_,), float32
+        Fraction of total variance explained by each component.
+    singular_values_ : Array of shape (n_components_,), float32
+        Singular values of the centered data for each component.
+    noise_variance_ : float
+        Mean of the discarded eigenvalues of the covariance.
+    n_components_ : int
+        Number of components kept.
+    n_features_in_ : int
+        Number of features seen during ``fit``.
+    n_samples_ : int
+        Number of training rows.
+    input_copied_ : bool
+        Whether ``X`` had to be copied to C-order float32.
 
-        n_components  honored   1..n_features; None means min(n_samples,
-                                n_features). The eigendecomposition is of
-                                the FULL covariance on every setting; the
-                                count selects how many eigenpairs are kept
-                                and sets `noise_variance_` (the mean of the
-                                discarded eigenvalues, cuML's
-                                truncCompExpVars)
-        whiten        honored   nondegenerate fitted score columns have unit
-                                sample variance; inverse_transform applies
-                                the reverse component scaling.
-                                cuML's rescale of a COPY of the components
-                                (pca.cuh:292-302 and :232-243), in all three
-                                numeric modes, pinned at the seam through
-                                identical_mul / identical_div / ftz.
-                                DEVIATIONS 580-585 in
-                                decomposition/impl/linalg/detail/pca.mojo;
-                                gated by decomposition/checks/pca_check.mojo
-                                (unit variance, round trip, row-subset
-                                agreement, and the planted-bit edges)
-        svd_solver    honored   'auto', 'covariance_eigh' and 'jacobi' all
-                                name THE COVARIANCE ARM: the covariance plus
-                                the device Jacobi. 'jacobi' is cuML's own
-                                name for it (pca.pyx:398 maps it to
-                                COV_EIG_JACOBI). 'auto' is accepted with the
-                                substitution stated: cuML maps 'auto' to
-                                COV_EIG_DQ and we run the Jacobi arm
-        svd_solver    honored   'full' is a SECOND ARM as of 2026-09-01, and
-                                it is a different algorithm rather than a
-                                second name: an R-SVD of the CENTERED data,
-                                which is what scikit-learn's 'full' means
-                                (_pca.py:539-540 sends it to _fit_full).
-                                Householder QR of X_c, then a one-sided
-                                Jacobi SVD of the small R; the covariance is
-                                never formed and the condition number is
-                                never squared, which is why scikit-learn
-                                keeps this name beside 'covariance_eigh'.
-                                DEVIATIONS 586-593 in
-                                core/householder_qr.mojo and
-                                decomposition/impl/linalg/detail/svd_full.mojo;
-                                gated by
-                                decomposition/checks/svd_full_check.mojo,
-                                whose ill-conditioning gate MEASURES the
-                                accuracy claim rather than asserting it.
-                                IDENTICAL supports n_samples < n_features
-                                through transposed QR and explicit right-basis
-                                reconstruction (DEVIATION 593). Other numeric
-                                modes retain the wide-shape refusal.
-        svd_solver    honored   'randomized' (lane/algos-decomp): scikit-
-                                learn's `_fit_truncated` through
-                                mojolearn.randomized_svd (a Philox Gaussian
-                                sketch, orthonormalized power iterations, the
-                                exact small SVD); iterated_power,
-                                n_oversamples and random_state are honored
-        svd_solver    refused   'arpack' (scikit-learn's implicitly
-                                restarted Lanczos) is a third algorithm, NOT
-                                IMPLEMENTED; accepting the name and running
-                                an exact arm would be a silent substitution
-                                (decomposition/NOT_IMPLEMENTED.tsv)
-        n_components  honored   a float in (0, 1) (the variance fraction) and
-                                'mle' (Minka's MLE, `_infer_dimension`)
-        copy          accepted (the input is never written). Both Jacobis run RAFT's own
-                                defaults (tol 1e-7, 15 sweeps; see
-                                decomposition/impl/linalg/detail/pca.mojo)
-        n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY, and only on
-                                the COVARIANCE arm: the limit is the pinned
-                                split-K Gram kernel's capacity
-                                (IDENTITY_PATHS row 27; the refusal names
-                                the shape). FAST runs any width through
-                                the vendor matmul. svd_solver='full' builds
-                                no Gram and so does not meet that limit,
-                                which is UNRUN on every column and is
-                                recorded as owed rather than claimed
-
-    Whitening uses the fitted sample count, never the query batch count.
-    For ordinary singular values s, components are scaled by
-    sqrt(n_samples_-1)/s, equivalent in real arithmetic to
-    1/sqrt(explained_variance_). The order is pinned FP32 multiply, then
-    divide, with FTZ seams; it is not a promise to match another spelling's
-    rounded bits. Following the existing skip-zero contract (the same threshold as cuML),
-    s < float32(1e-10) skips the singular division (inverse skips its
-    multiplication), retaining the sample-count scale. Degenerate columns
-    therefore do not promise unit variance. Nonfinite data/model arrays and
-    negative singular values or explained variances are refused on this
-    whitening surface. Overflowed output is refused. These additive binding
-    exports require a rebuilt extension; source availability is not new
-    cross-vendor or installed-wheel qualification.
-
-    A scipy.sparse X is densified exactly (every arm). Incremental fitting
-    is IncrementalPCA's.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> pca = mojolearn.PCA(n_components=3).fit(X)
+    >>> Z = pca.transform(X)
+    >>> X_back = pca.inverse_transform(Z)
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -314,6 +314,29 @@ class PCA(NumericModeMixin):
         return binding
 
     def fit(self, X, y=None):
+        """Fit the model to ``X``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data; at least 2 rows and 2 features. Must be finite
+            when ``whiten=True``.
+        y : ignored
+
+        Returns
+        -------
+        self : PCA
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``X`` is too small or ``n_components`` is out of range.
+        NotImplementedError
+            For an unsupported ``svd_solver``, a nonzero ``tol``, or
+            ``svd_solver="full"`` on a wide matrix outside ``"identical"``
+            mode.
+        """
         if self.svd_solver not in self._SOLVERS:
             raise NotImplementedError(
                 f"mojolearn PCA: svd_solver={self.svd_solver!r} is not "
@@ -454,6 +477,23 @@ class PCA(NumericModeMixin):
         return self
 
     def transform(self, X):
+        """Project ``X`` onto the principal components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Data with the training feature count.
+
+        Returns
+        -------
+        Z : Array of shape (n_samples, n_components_), float32
+            The projected (and, with ``whiten=True``, whitened) data.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted or the feature count differs.
+        """
         if not hasattr(self, "components_"):
             raise ValueError("mojolearn PCA: call fit before transform")
         x, _ = as_f32_c(_dense(X), ndim=2, name="X")
@@ -484,9 +524,39 @@ class PCA(NumericModeMixin):
         return out
 
     def fit_transform(self, X, y=None):
+        """Fit to ``X`` and return its projection.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : ignored
+
+        Returns
+        -------
+        Z : Array of shape (n_samples, n_components_), float32
+            The projected data.
+        """
         return self.fit(X, y=y).transform(X)
 
     def inverse_transform(self, X):
+        """Map projected data back to the original feature space.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components_)
+            Projected data, as returned by ``transform``.
+
+        Returns
+        -------
+        X_original : Array of shape (n_samples, n_features), float32
+            The reconstruction (undoing whitening when ``whiten=True``).
+
+        Raises
+        ------
+        ValueError
+            If the component count differs from the fit.
+        """
         if self.whiten and not hasattr(self, "components_"):
             raise ValueError("mojolearn PCA: call fit before inverse_transform")
         z, _ = as_f32_c(_dense(X), ndim=2, name="X")
@@ -513,15 +583,27 @@ class PCA(NumericModeMixin):
         )
         return out
 
+    # Saved layout (classical host inference lane, 2026-09-13): components_,
+    # mean_, singular_values_, explained_variance_, explained_variance_ratio_
+    # as fitted (float32), noise_variance_ float64, meta <i8 [n_components_,
+    # n_features_in_, n_samples_, whiten], svd_solver. The whitened pair joined
+    # the host binding in the kde svc host lane, 2026-09-14.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: `components_`,
-        `mean_`, `singular_values_`, `explained_variance_` and
-        `explained_variance_ratio_` as fitted (float32), `noise_variance_`
-        as float64, `meta` `<i8` [n_components_, n_features_in_,
-        n_samples_, whiten] and `svd_solver` (the classical host inference
-        lane, 2026-09-13). `mojolearn.host_model(path)` transforms from it
-        on a CPU with no GPU, whitened or not (the whitened pair joined the
-        host binding in the kde svc host lane, 2026-09-14)."""
+        """Save the fitted model to ``path`` as an ``.npz`` file.
+
+        A model restored with ``PCA.load`` or ``mojolearn.host_model(path)``
+        transforms (whitened or not), including on a CPU-only install.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         if not hasattr(self, "components_"):
             raise RuntimeError("this estimator is not fitted yet")
         arrays = {
@@ -545,8 +627,25 @@ class PCA(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result transforms; it does not
-        refit."""
+        """Load a model written by ``save``.
+
+        The loaded model transforms; it does not refit.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by ``PCA.save``.
+
+        Returns
+        -------
+        model : PCA
+            The restored model.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a PCA model or its arrays are inconsistent.
+        """
         arrays = _serialize.read_npz(path, _PCA_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
@@ -578,35 +677,66 @@ class PCA(NumericModeMixin):
         return obj
 
 
+# Maintainer notes (moved from the docstring). Reference: cuML's tsvdFit
+# (Gram matrix + the same device Jacobi eigensolver PCA uses). 'covariance_eigh'
+# and 'jacobi' both name that one exact arm. 'arpack' (scipy's svds,
+# implicitly restarted Lanczos) is not implemented: running the Gram arm under
+# its name would be a silent substitution (decomposition/NOT_IMPLEMENTED.tsv).
+# explained_variance_ and _ratio_ are scikit-learn's (and tsvd.cuh's)
+# transformed-data definition, computed in this class's binding
+# (`tsvd_explained`). Options measured row by row by tools/e2u_matrix_fit.py.
 class TruncatedSVD(NumericModeMixin):
-    """Uncentered truncated SVD on the GPU. Reference: cuML's `tsvdFit`
-    (Gram matrix + the same device Jacobi eigensolver PCA uses).
+    """Dimensionality reduction by truncated singular value decomposition.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
-    `tools/e2u_matrix_fit.py`):
+    Unlike :class:`PCA`, the data is not centered, so this works on raw term
+    counts or TF-IDF matrices (a scipy.sparse input is densified). Input is
+    converted to C-order float32. The default ``algorithm`` is the exact
+    ``"covariance_eigh"`` solver, not scikit-learn's ``"randomized"``.
 
-        n_components  honored   1..n_features, the eigenpairs kept
-        algorithm     honored   'covariance_eigh' and 'jacobi', both naming
-                                the one arm that runs: the Gram matrix plus
-                                the device Jacobi, which is what cuML's
-                                `tsvdFit` takes
-        algorithm     honored   'randomized' through mojolearn.randomized_svd
-                                (n_iter, n_oversamples, random_state
-                                honored). NOTE the default is NOT
-                                scikit-learn's 'randomized'
-        algorithm     refused   'arpack' (scipy's svds, implicitly restarted
-                                Lanczos) is NOT IMPLEMENTED: running the Gram
-                                arm under its name would be a silent
-                                substitution (decomposition/
-                                NOT_IMPLEMENTED.tsv)
-        tol           refused unless 0.0 (it is ARPACK's tolerance)
-        n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY, as for PCA
-                                (IDENTITY_PATHS row 27)
+    Parameters
+    ----------
+    n_components : int, default 2
+        Number of components, in ``[1, n_features]``.
+    algorithm : {"covariance_eigh", "jacobi", "randomized"}, default "covariance_eigh"
+        ``"covariance_eigh"`` and ``"jacobi"`` run the exact solver (an
+        eigendecomposition of the Gram matrix). ``"randomized"`` runs
+        :func:`randomized_svd`. ``"arpack"`` and any other value raise
+        ``NotImplementedError``.
+    n_iter : int, default 5
+        Power iterations for ``"randomized"``.
+    n_oversamples : int, default 10
+        Extra random vectors for ``"randomized"``.
+    power_iteration_normalizer : str, default "auto"
+        Normalizer between power iterations for ``"randomized"``.
+    random_state : int or None, default None
+        Seed for ``"randomized"``.
+    tol : float, default 0.0
+        Only 0.0 is accepted (it is ARPACK's tolerance); any other value
+        raises ``NotImplementedError``.
 
-    Components, singular values, `explained_variance_` and
-    `explained_variance_ratio_` are exposed; the two variances are
-    scikit-learn's (and tsvd.cuh's) transformed-data definition, computed
-    in this class's binding (`tsvd_explained`).
+    Attributes
+    ----------
+    components_ : Array of shape (n_components, n_features), float32
+        Right singular vectors.
+    singular_values_ : Array of shape (n_components,), float32
+        Singular values.
+    explained_variance_ : Array of shape (n_components,), float32
+        Variance of each transformed column (scikit-learn's definition).
+    explained_variance_ratio_ : Array of shape (n_components,), float32
+        ``explained_variance_`` divided by the total variance of ``X``.
+    n_components_ : int
+        Number of components.
+    n_features_in_ : int
+        Number of features seen during ``fit``.
+    input_copied_ : bool
+        Whether ``X`` had to be copied to C-order float32.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> svd = mojolearn.TruncatedSVD(n_components=3).fit(X)
+    >>> Z = svd.transform(X)
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -627,6 +757,26 @@ class TruncatedSVD(NumericModeMixin):
         self.random_state = random_state
 
     def fit(self, X, y=None):
+        """Fit the model to ``X``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data; at least 2 rows and 2 features.
+        y : ignored
+
+        Returns
+        -------
+        self : TruncatedSVD
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``X`` is too small or ``n_components`` is out of range.
+        NotImplementedError
+            For an unsupported ``algorithm`` or a nonzero ``tol``.
+        """
         if float(self.tol) != 0.0:
             raise NotImplementedError(
                 "mojolearn TruncatedSVD: tol is ARPACK's convergence tolerance "
@@ -715,6 +865,23 @@ class TruncatedSVD(NumericModeMixin):
         return self
 
     def transform(self, X):
+        """Project ``X`` onto the components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Data with the training feature count.
+
+        Returns
+        -------
+        Z : Array of shape (n_samples, n_components), float32
+            The reduced data.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted or the feature count differs.
+        """
         if not hasattr(self, "components_"):
             raise ValueError("mojolearn TruncatedSVD: call fit before transform")
         x, _ = as_f32_c(_dense(X), ndim=2, name="X")
@@ -728,9 +895,39 @@ class TruncatedSVD(NumericModeMixin):
         return out
 
     def fit_transform(self, X, y=None):
+        """Fit to ``X`` and return its projection.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : ignored
+
+        Returns
+        -------
+        Z : Array of shape (n_samples, n_components), float32
+            The reduced data.
+        """
         return self.fit(X, y=y).transform(X)
 
     def inverse_transform(self, X):
+        """Map reduced data back to the original feature space.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+            Reduced data, as returned by ``transform``.
+
+        Returns
+        -------
+        X_original : Array of shape (n_samples, n_features), float32
+            The reconstruction ``X @ components_``.
+
+        Raises
+        ------
+        ValueError
+            If the component count differs from the fit.
+        """
         z, _ = as_f32_c(_dense(X), ndim=2, name="X")
         if z.shape[1] != self.n_components_:
             raise ValueError("mojolearn TruncatedSVD component count differs from fit")
@@ -743,12 +940,26 @@ class TruncatedSVD(NumericModeMixin):
         )
         return out
 
+    # Saved layout (classical host inference lane, 2026-09-13): components_ and
+    # singular_values_ as fitted (float32), meta <i8 [n_components_,
+    # n_features_in_], algorithm.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: `components_` and
-        `singular_values_` as fitted (float32), `meta` `<i8` [n_components_,
-        n_features_in_] and `algorithm` (the classical host inference lane,
-        2026-09-13). `mojolearn.host_model(path)` transforms from it on a
-        CPU with no GPU."""
+        """Save the fitted model to ``path`` as an ``.npz`` file.
+
+        A model restored with ``TruncatedSVD.load`` or
+        ``mojolearn.host_model(path)`` transforms, including on a CPU-only
+        install.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        """
         if not hasattr(self, "components_"):
             raise RuntimeError("this estimator is not fitted yet")
         arrays = {
@@ -766,8 +977,25 @@ class TruncatedSVD(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result transforms; it does not
-        refit."""
+        """Load a model written by ``save``.
+
+        The loaded model transforms; it does not refit.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by ``TruncatedSVD.save``.
+
+        Returns
+        -------
+        model : TruncatedSVD
+            The restored model.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a TruncatedSVD model or its arrays are inconsistent.
+        """
         arrays = _serialize.read_npz(path, _TSVD_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
