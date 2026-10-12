@@ -162,52 +162,90 @@ def _series_major(y, name):
     return arr, int(arr.shape[0]), int(arr.shape[1])
 
 
+# The KPSS stationarity test, with the reference
+# `cuml.tsa.stationarity.kpss_test` (`tsa/`, DEVIATIONS 671-672).
+#
+# WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
+# because a parameter that is accepted and ignored is a wrong answer
+# waiting for a caller:
+#
+#     y               honored   `(n_obs, n_series)`, each series in a
+#                               COLUMN, which is cuML's layout. A 1-D
+#                               array is one series. NON-FINITE VALUES
+#                               ARE REFUSED BY NAME with the offending
+#                               index, where cuML passes
+#                               `ensure_all_finite=False` and lets a NaN
+#                               flow into the statistic
+#                               (`tsa/NOT_IMPLEMENTED.tsv`).
+#     d               honored   order of simple differencing
+#     D               honored   order of seasonal differencing
+#     s               honored   seasonal period; `D > 0` needs `s >= 2`,
+#                               refused by name in `prepare_data`
+#     pval_threshold  honored   default 0.05, cuML's
+#     return_statistic honored  OURS, not cuML's: cuML returns the flags
+#                               only. False (the default) returns exactly
+#                               what cuML returns.
+#     float64 input   CONVERTED to float32, and the conversion COPIES.
+#                               Named rather than hidden. cuML runs this
+#                               test on `double` too and picks the arm
+#                               from the input dtype; Metal has no
+#                               float64, so there is no double arm here
+#                               to pick (DEVIATION 670). Results are
+#                               float32 answers to a float32 problem, not
+#                               cuML's float64 answers.
+#
+# `d + D > 2` is refused by name (`prepare_data`; cuML enforces the same
+# bound one layer up at `arima.pyx:313`).
+#
+# Returns a `mojolearn.Array` of length `n_series` and dtype `'<u1'`
+# (1 where the series is judged stationary after differencing, 0
+# otherwise -- the closest the Array contract has to NumPy's bool
+# array; DEVIATION 2419). With `return_statistic=True`, returns
+# `(stationary, statistic)` where `statistic` is float32. A constant
+# series has statistic `0.0` rather than a computed NaN (DEVIATION 672)
+# and is judged stationary, which is the decision cuML's NaN also falls
+# through to.
+#
+# Cross-vendor status: see this module's docstring. One Apple M4.
 def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
-    """The KPSS stationarity test, with the reference
-    `cuml.tsa.stationarity.kpss_test` (`tsa/`, DEVIATIONS 671-672).
+    """KPSS stationarity test for a batch of series.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
-    because a parameter that is accepted and ignored is a wrong answer
-    waiting for a caller:
+    Differences each series (``d`` simple and ``D`` seasonal differences) and
+    runs the KPSS test, following ``cuml.tsa.stationarity.kpss_test``. Series
+    are given in columns, as in cuML. Computation is float32; float64 input is
+    converted (and copied). Non-finite values raise an error naming the index,
+    where cuML lets them reach the statistic. A constant series has statistic
+    0.0 and is judged stationary.
 
-        y               honored   `(n_obs, n_series)`, each series in a
-                                  COLUMN, which is cuML's layout. A 1-D
-                                  array is one series. NON-FINITE VALUES
-                                  ARE REFUSED BY NAME with the offending
-                                  index, where cuML passes
-                                  `ensure_all_finite=False` and lets a NaN
-                                  flow into the statistic
-                                  (`tsa/NOT_IMPLEMENTED.tsv`).
-        d               honored   order of simple differencing
-        D               honored   order of seasonal differencing
-        s               honored   seasonal period; `D > 0` needs `s >= 2`,
-                                  refused by name in `prepare_data`
-        pval_threshold  honored   default 0.05, cuML's
-        return_statistic honored  OURS, not cuML's: cuML returns the flags
-                                  only. False (the default) returns exactly
-                                  what cuML returns.
-        float64 input   CONVERTED to float32, and the conversion COPIES.
-                                  Named rather than hidden. cuML runs this
-                                  test on `double` too and picks the arm
-                                  from the input dtype; Metal has no
-                                  float64, so there is no double arm here
-                                  to pick (DEVIATION 670). Results are
-                                  float32 answers to a float32 problem, not
-                                  cuML's float64 answers.
+    Parameters
+    ----------
+    y : array-like of shape (n_obs, n_series) or (n_obs,)
+        The series, one per column; 1-D is one series.
+    d : int, default 0
+        Order of simple differencing.
+    D : int, default 0
+        Order of seasonal differencing; ``D > 0`` needs ``s >= 2``. ``d + D``
+        is at most 2.
+    s : int, default 0
+        Seasonal period.
+    pval_threshold : float, default 0.05
+        Significance level.
+    return_statistic : bool, default False
+        Also return the test statistic (cuML returns the flags only).
 
-    `d + D > 2` is refused by name (`prepare_data`; cuML enforces the same
-    bound one layer up at `arima.pyx:313`).
+    Returns
+    -------
+    stationary : Array of shape (n_series,), uint8
+        1 where the series is judged stationary after differencing, else 0.
+    statistic : Array of shape (n_series,), float32
+        The KPSS statistic; returned only when ``return_statistic=True``.
 
-    Returns a `mojolearn.Array` of length `n_series` and dtype `'<u1'`
-    (1 where the series is judged stationary after differencing, 0
-    otherwise -- the closest the Array contract has to NumPy's bool
-    array; DEVIATION 2419). With `return_statistic=True`, returns
-    `(stationary, statistic)` where `statistic` is float32. A constant
-    series has statistic `0.0` rather than a computed NaN (DEVIATION 672)
-    and is judged stationary, which is the decision cuML's NaN also falls
-    through to.
-
-    Cross-vendor status: see this module's docstring. One Apple M4.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> y = np.random.default_rng(0).standard_normal((200, 4)).astype(np.float32)
+    >>> np.asarray(mojolearn.kpss_test(y)).shape
+    (4,)
     """
     flat, n_obs, batch_size = _series_major(y, "kpss_test")
     flags = empty((batch_size,), "<i4")
@@ -235,49 +273,81 @@ def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
     return stationary
 
 
+# Choose the simple differencing order `d` per series.
+#
+# This is the "Choose the hyper-parameter d" block of
+# `AutoARIMA.search` (`auto_arima.pyx:318-343`) and nothing else of
+# auto_arima. It runs `kpss_test` for `d = 0, 1, ... d_max - 1` and
+# takes the first order at which a series tests stationary, falling back
+# to `d_max`.
+#
+# WHAT IS HONORED, WHAT IS REFUSED, AND WHY:
+#
+#     y               honored   the same layout and the same non-finite
+#                               refusal as `kpss_test`
+#     D               honored   and REQUIRED. cuML CHOOSES `D` with
+#                               `seasonal_test="seas"`, which is
+#                               statsmodels' STL on the host; that is not
+#                               a GPU path in cuML either and it is not
+#                               implemented (`tsa/NOT_IMPLEMENTED.tsv`). Pass the `D`
+#                               you want.
+#     s               honored   seasonal period
+#     d_max           honored   None (the default) means `2 - D`, which
+#                               is cuML's `d_options = range(0, 2 - D + 1)`
+#     pval_threshold  honored   default 0.05, cuML's
+#     the p/q/P/Q/k   REFUSED   auto_arima's information-criterion grid
+#     search                    is not implemented
+#                               (`arima/NOT_IMPLEMENTED.tsv`). The ARIMA
+#                               fit it searches over EXISTS since
+#                               2026-09-01 (`mojolearn.ARIMA`, backed by
+#                               `arima/`), so this refusal is now about
+#                               the SEARCH only. There is no `AutoARIMA`
+#                               class.
+#
+# Returns an int32 `mojolearn.Array` of length `n_series`.
+#
+# A DIFFERENCE FROM cuML THAT CHANGES NO ANSWER. cuML physically splits
+# the batch after each round (`_divide_by_mask`) so the next test runs on
+# the undecided sub-batch; this runs every round on the full batch and
+# masks on the host. The test is per series and its result is a pure
+# function of that series' bits, which is the property
+# `check_kpss_batch_composition_invariant` gates in
+# `tsa/checks/stationarity_check.mojo`.
+#
+# Cross-vendor status: see this module's docstring. One Apple M4.
 def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
-    """Choose the simple differencing order `d` per series.
+    """Choose the differencing order ``d`` for each series by the KPSS test.
 
-    This is the "Choose the hyper-parameter d" block of
-    `AutoARIMA.search` (`auto_arima.pyx:318-343`) and nothing else of
-    auto_arima. It runs `kpss_test` for `d = 0, 1, ... d_max - 1` and
-    takes the first order at which a series tests stationary, falling back
-    to `d_max`.
+    Runs :func:`kpss_test` for ``d = 0, 1, ..., d_max - 1`` and returns, per
+    series, the first order at which it tests stationary, or ``d_max`` if
+    none does. This is the ``d`` step of cuML's ``AutoARIMA.search``. The
+    seasonal order ``D`` is not chosen: pass the one you want. Input layout and
+    non-finite handling are as for :func:`kpss_test`.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY:
+    Parameters
+    ----------
+    y : array-like of shape (n_obs, n_series) or (n_obs,)
+        The series, one per column.
+    D : int, default 0
+        Seasonal differencing applied before the test.
+    s : int, default 0
+        Seasonal period.
+    d_max : int or None, default None
+        Largest ``d`` returned; None means ``2 - D``. Must satisfy
+        ``0 <= d_max <= 2 - D``.
+    pval_threshold : float, default 0.05
+        Significance level of the KPSS test.
 
-        y               honored   the same layout and the same non-finite
-                                  refusal as `kpss_test`
-        D               honored   and REQUIRED. cuML CHOOSES `D` with
-                                  `seasonal_test="seas"`, which is
-                                  statsmodels' STL on the host; that is not
-                                  a GPU path in cuML either and it is not
-                                  implemented (`tsa/NOT_IMPLEMENTED.tsv`). Pass the `D`
-                                  you want.
-        s               honored   seasonal period
-        d_max           honored   None (the default) means `2 - D`, which
-                                  is cuML's `d_options = range(0, 2 - D + 1)`
-        pval_threshold  honored   default 0.05, cuML's
-        the p/q/P/Q/k   REFUSED   auto_arima's information-criterion grid
-        search                    is not implemented
-                                  (`arima/NOT_IMPLEMENTED.tsv`). The ARIMA
-                                  fit it searches over EXISTS since
-                                  2026-09-01 (`mojolearn.ARIMA`, backed by
-                                  `arima/`), so this refusal is now about
-                                  the SEARCH only. There is no `AutoARIMA`
-                                  class.
+    Returns
+    -------
+    Array of shape (n_series,), int32
 
-    Returns an int32 `mojolearn.Array` of length `n_series`.
-
-    A DIFFERENCE FROM cuML THAT CHANGES NO ANSWER. cuML physically splits
-    the batch after each round (`_divide_by_mask`) so the next test runs on
-    the undecided sub-batch; this runs every round on the full batch and
-    masks on the host. The test is per series and its result is a pure
-    function of that series' bits, which is the property
-    `check_kpss_batch_composition_invariant` gates in
-    `tsa/checks/stationarity_check.mojo`.
-
-    Cross-vendor status: see this module's docstring. One Apple M4.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> y = np.random.default_rng(0).standard_normal((200, 4)).cumsum(axis=0).astype(np.float32)
+    >>> np.asarray(mojolearn.select_d(y)).shape
+    (4,)
     """
     if d_max is None:
         d_max = 2 - int(D)
@@ -313,136 +383,212 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
     return out
 
 
+# Holt-Winters exponential smoothing, with the reference
+# `cuml.tsa.ExponentialSmoothing` (`holtwinters/`, DEVIATIONS 660-665 and
+# 697-699).
+#
+# THE SHAPE IS cuML's, NOT sklearn's. `endog` goes in the CONSTRUCTOR,
+# `fit()` takes no arguments, and the successor method is `forecast(h)`.
+# There is no `predict(X)` here and there is none in cuML. OURS, since
+# lane/inference-holtwinters (2026-09-15): `predict(start, end)`, the
+# in-sample one-step predictions and the forecast beyond `n`, and `save`
+# and `load` (format `mojolearn-holtwinters-1`), so a model fitted on a
+# GPU forecasts and predicts on a CPU with no GPU.
+#
+# WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter:
+#
+#     endog            honored   `(ts_num, n)` with each series in a ROW,
+#                                or 1-D for a single series. That is
+#                                `holtwinters.pyx::_check_dims` on a
+#                                numpy input. NON-FINITE VALUES ARE
+#                                REFUSED BY NAME with the series and the
+#                                position (DEVIATION 664), where cuML
+#                                passes `ensure_all_finite=False`; under
+#                                `seasonal='multiplicative'` a value that
+#                                is not strictly positive is refused the
+#                                same way, because their multiplicative
+#                                arm divides by it.
+#     seasonal         honored   'additive'/'add' (default) or
+#                                'multiplicative'/'mul'; anything else is
+#                                refused by name with the reference's message.
+#     seasonal_periods honored   cuML's frequency; must be >= 2.
+#     start_periods    honored   must be >= 2 and <= seasonal_periods.
+#                                Sets the heuristic seed (the first
+#                                `start_periods` seasons), which is the
+#                                whole initialization under "heuristic"
+#                                and the optimizer's starting point under
+#                                "estimated".
+#     initialization_method
+#                      OURS      "estimated" (DEFAULT since 2026-09-22),
+#                                "heuristic" or its alias "cuml".
+#                                "estimated" is statsmodels' default
+#                                definition: the initial level, trend and
+#                                all `seasonal_periods` seasonal states
+#                                are estimated jointly with alpha, beta
+#                                and gamma by minimizing the SSE over all
+#                                `n` points (Levenberg-Marquardt, three
+#                                fixed starts, `holtwinters/impl/
+#                                internal/hw_estimate.mojo`). "heuristic"
+#                                is cuML's fit, BIT FOR BIT what 0.8.13
+#                                returned: level and trend from a line
+#                                through a moving average of the first
+#                                `start_periods` seasons, seasons from its
+#                                residuals, BFGS over alpha/beta/gamma
+#                                only, the first `seasonal_periods` points
+#                                left out of the SSE. It is faster and,
+#                                on a 30-series comparison, less accurate
+#                                (forecast RMSE geomean 1.121 against
+#                                1.044 estimated and statsmodels' 1.049).
+#                                Both are bitwise identical across CPU,
+#                                Apple, NVIDIA and AMD.
+#     ts_num           honored   the number of series; must match
+#                                `endog`'s first dimension, and cuML's
+#                                mismatch message is the same.
+#     eps              honored   default 2.24e-3, cuML's. Must be > 0.
+#     verbose          REFUSED   cuML's logging plumbing; there is no
+#                                logger here.
+#     output_type      REFUSED   cuML's cudf/cupy output selector. This
+#                                returns float32 `mojolearn.Array` and
+#                                nothing else.
+#     float64 input    CONVERTED to float32, and the conversion
+#                                COPIES. Named rather than hidden. cuML
+#                                fits on `double` too and picks the arm
+#                                from the input dtype; Metal has no
+#                                float64, so there is no double arm here
+#                                to pick (DEVIATION 670).
+#     OptimParams      ABSENT    cuML's `runner.cuh:236-253` override
+#                                block is dead code in their own fit
+#                                (`HoltWintersFitHelper` passes a null
+#                                pointer), so the defaults at
+#                                `runner.cuh:226-234` are always what
+#                                runs. Exposing knobs their fit cannot
+#                                reach would be inventing a surface.
+#     single-parameter REFUSED   `hw_optim.cuh`'s golden-section arm,
+#     optimization               taken only when exactly one of alpha /
+#                                beta / gamma is optimized. `ML::
+#                                HoltWinters::fit` optimizes all three,
+#                                so the arm is unreachable from cuML's
+#                                own surface; the implementation raises naming it
+#                                rather than quietly running BFGS
+#                                instead.
+#
+# ATTRIBUTES AFTER `fit()`
+#
+#     level_, trend_, season_   `(ts_num, n - seasonal_periods)` float32,
+#                               the fitted components. cuML's shape.
+#     sse_                      `(ts_num,)` float32. cuML's `SSE`
+#                               (points `seasonal_periods .. n - 1`)
+#                               under "heuristic"; the SSE over all `n`
+#                               points, the estimated objective, under
+#                               "estimated".
+#     alpha_, beta_, gamma_     `(ts_num,)` float32, the fitted smoothing
+#                               parameters. OURS: cuML leaves these in
+#                               device scratch its Python surface never
+#                               reads back.
+#     n_iter_                   `(ts_num,)` int32, BFGS iterations.
+#                               OURS, DEVIATION 665.
+#     criterion_                `(ts_num,)` int32, why the optimizer
+#                               stopped: 0 BFGS_ITER_LIMIT,
+#                               1 MIN_PARAM_DIFF, 2 MIN_ERROR_DIFF,
+#                               3 MIN_GRAD_NORM. OURS, DEVIATION 665;
+#                               cuML writes this only in the arm its fit
+#                               does not take. Under "estimated" these
+#                               are the Levenberg-Marquardt iterations of
+#                               the chosen start and its stop: 0 the
+#                               iteration cap, 1 no step lowers the SSE,
+#                               2 relative SSE decrease below 1e-6.
+#
+# THE LINE-SEARCH LIMIT, DEVIATION 2717. When the BFGS line search hits
+# its iteration limit, this implementation stores the trial point with
+# the lowest loss (strictly lower replaces, so a tie keeps the earliest
+# trial), not the last trial the reference stores (rapidsai/cuml#888).
+# A line search that exits normally is unchanged. Fits that reach the
+# limit can therefore differ from the reference's parameters.
+#
+# A DIVERGENCE FROM cuML's PYTHON THAT IS NOT A NUMERIC ONE. cuML caches
+# `forecasted_points` and recomputes only when `h` grows, so a second
+# `forecast(h)` with a smaller `h` returns a slice of the larger array.
+# This recomputes every call. Same numbers, no cache to reason about.
+#
+# Cross-vendor status: see this module's docstring. One Apple M4, both
+# numeric modes, against a host oracle; no second vendor has run it.
 class ExponentialSmoothing:
-    """Holt-Winters exponential smoothing, with the reference
-    `cuml.tsa.ExponentialSmoothing` (`holtwinters/`, DEVIATIONS 660-665 and
-    697-699).
+    """Holt-Winters exponential smoothing for a batch of seasonal series.
 
-    THE SHAPE IS cuML's, NOT sklearn's. `endog` goes in the CONSTRUCTOR,
-    `fit()` takes no arguments, and the successor method is `forecast(h)`.
-    There is no `predict(X)` here and there is none in cuML. OURS, since
-    lane/inference-holtwinters (2026-09-15): `predict(start, end)`, the
-    in-sample one-step predictions and the forecast beyond `n`, and `save`
-    and `load` (format `mojolearn-holtwinters-1`), so a model fitted on a
-    GPU forecasts and predicts on a CPU with no GPU.
+    Fits level, trend and season with additive or multiplicative seasonality,
+    following ``cuml.tsa.ExponentialSmoothing``. As in cuML (and unlike
+    scikit-learn), the data goes to the constructor as ``endog``, :meth:`fit`
+    takes no arguments, and :meth:`forecast` produces forecasts.
+    :meth:`predict`, :meth:`save` and :meth:`load` are additions: a saved
+    model forecasts and predicts without refitting, also on a CPU-only
+    install.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter:
+    The default ``initialization_method="estimated"`` differs from cuML: it
+    estimates the initial level, trend and all seasonal states jointly with
+    the smoothing parameters by minimizing the SSE over all points
+    (statsmodels' definition). ``"heuristic"`` (alias ``"cuml"``) reproduces
+    cuML's fit: initial states from a moving-average decomposition of the
+    first ``start_periods`` seasons, then BFGS over the smoothing parameters
+    only. The heuristic fit is faster and usually less accurate.
 
-        endog            honored   `(ts_num, n)` with each series in a ROW,
-                                   or 1-D for a single series. That is
-                                   `holtwinters.pyx::_check_dims` on a
-                                   numpy input. NON-FINITE VALUES ARE
-                                   REFUSED BY NAME with the series and the
-                                   position (DEVIATION 664), where cuML
-                                   passes `ensure_all_finite=False`; under
-                                   `seasonal='multiplicative'` a value that
-                                   is not strictly positive is refused the
-                                   same way, because their multiplicative
-                                   arm divides by it.
-        seasonal         honored   'additive'/'add' (default) or
-                                   'multiplicative'/'mul'; anything else is
-                                   refused by name with the reference's message.
-        seasonal_periods honored   cuML's frequency; must be >= 2.
-        start_periods    honored   must be >= 2 and <= seasonal_periods.
-                                   Sets the heuristic seed (the first
-                                   `start_periods` seasons), which is the
-                                   whole initialization under "heuristic"
-                                   and the optimizer's starting point under
-                                   "estimated".
-        initialization_method
-                         OURS      "estimated" (DEFAULT since 2026-09-22),
-                                   "heuristic" or its alias "cuml".
-                                   "estimated" is statsmodels' default
-                                   definition: the initial level, trend and
-                                   all `seasonal_periods` seasonal states
-                                   are estimated jointly with alpha, beta
-                                   and gamma by minimizing the SSE over all
-                                   `n` points (Levenberg-Marquardt, three
-                                   fixed starts, `holtwinters/impl/
-                                   internal/hw_estimate.mojo`). "heuristic"
-                                   is cuML's fit, BIT FOR BIT what 0.8.13
-                                   returned: level and trend from a line
-                                   through a moving average of the first
-                                   `start_periods` seasons, seasons from its
-                                   residuals, BFGS over alpha/beta/gamma
-                                   only, the first `seasonal_periods` points
-                                   left out of the SSE. It is faster and,
-                                   on a 30-series comparison, less accurate
-                                   (forecast RMSE geomean 1.121 against
-                                   1.044 estimated and statsmodels' 1.049).
-                                   Both are bitwise identical across CPU,
-                                   Apple, NVIDIA and AMD.
-        ts_num           honored   the number of series; must match
-                                   `endog`'s first dimension, and cuML's
-                                   mismatch message is the same.
-        eps              honored   default 2.24e-3, cuML's. Must be > 0.
-        verbose          REFUSED   cuML's logging plumbing; there is no
-                                   logger here.
-        output_type      REFUSED   cuML's cudf/cupy output selector. This
-                                   returns float32 `mojolearn.Array` and
-                                   nothing else.
-        float64 input    CONVERTED to float32, and the conversion
-                                   COPIES. Named rather than hidden. cuML
-                                   fits on `double` too and picks the arm
-                                   from the input dtype; Metal has no
-                                   float64, so there is no double arm here
-                                   to pick (DEVIATION 670).
-        OptimParams      ABSENT    cuML's `runner.cuh:236-253` override
-                                   block is dead code in their own fit
-                                   (`HoltWintersFitHelper` passes a null
-                                   pointer), so the defaults at
-                                   `runner.cuh:226-234` are always what
-                                   runs. Exposing knobs their fit cannot
-                                   reach would be inventing a surface.
-        single-parameter REFUSED   `hw_optim.cuh`'s golden-section arm,
-        optimization               taken only when exactly one of alpha /
-                                   beta / gamma is optimized. `ML::
-                                   HoltWinters::fit` optimizes all three,
-                                   so the arm is unreachable from cuML's
-                                   own surface; the implementation raises naming it
-                                   rather than quietly running BFGS
-                                   instead.
+    Computation is float32; float64 input is converted (and copied).
+    Non-finite values are refused with the series and position, and
+    multiplicative seasonality needs strictly positive data. The numeric mode
+    is the process default (see :func:`mojolearn.set_numeric_mode`).
 
-    ATTRIBUTES AFTER `fit()`
+    Parameters
+    ----------
+    endog : array-like of shape (ts_num, n) or (n,)
+        The series, one per row; 1-D is one series. ``n`` must be at least
+        ``start_periods * seasonal_periods``.
+    seasonal : {"additive", "add", "multiplicative", "mul"}, default "additive"
+        Seasonal component type.
+    seasonal_periods : int, default 2
+        Season length, at least 2.
+    start_periods : int, default 2
+        Seasons used to seed the initial states, between 2 and
+        ``seasonal_periods``.
+    ts_num : int, default 1
+        Number of series; must match ``endog``.
+    eps : float, default 2.24e-3
+        Optimizer tolerance, greater than 0 (cuML's default).
+    initialization_method : {"estimated", "heuristic", "cuml"}, default "estimated"
+        How initial states are found, as described above.
 
-        level_, trend_, season_   `(ts_num, n - seasonal_periods)` float32,
-                                  the fitted components. cuML's shape.
-        sse_                      `(ts_num,)` float32. cuML's `SSE`
-                                  (points `seasonal_periods .. n - 1`)
-                                  under "heuristic"; the SSE over all `n`
-                                  points, the estimated objective, under
-                                  "estimated".
-        alpha_, beta_, gamma_     `(ts_num,)` float32, the fitted smoothing
-                                  parameters. OURS: cuML leaves these in
-                                  device scratch its Python surface never
-                                  reads back.
-        n_iter_                   `(ts_num,)` int32, BFGS iterations.
-                                  OURS, DEVIATION 665.
-        criterion_                `(ts_num,)` int32, why the optimizer
-                                  stopped: 0 BFGS_ITER_LIMIT,
-                                  1 MIN_PARAM_DIFF, 2 MIN_ERROR_DIFF,
-                                  3 MIN_GRAD_NORM. OURS, DEVIATION 665;
-                                  cuML writes this only in the arm its fit
-                                  does not take. Under "estimated" these
-                                  are the Levenberg-Marquardt iterations of
-                                  the chosen start and its stop: 0 the
-                                  iteration cap, 1 no step lowers the SSE,
-                                  2 relative SSE decrease below 1e-6.
+    Attributes
+    ----------
+    level_, trend_, season_ : Array of shape (ts_num, n - seasonal_periods), float32
+        Fitted components.
+    sse_ : Array of shape (ts_num,), float32
+        Sum of squared errors: over all ``n`` points under ``"estimated"``, over
+        points ``seasonal_periods`` to ``n - 1`` under ``"heuristic"`` (cuML's
+        SSE).
+    alpha_, beta_, gamma_ : Array of shape (ts_num,), float32
+        Fitted smoothing parameters.
+    n_iter_ : Array of shape (ts_num,), int32
+        Optimizer iterations.
+    criterion_ : Array of shape (ts_num,), int32
+        Why the optimizer stopped. Under ``"heuristic"`` (BFGS): 0 iteration
+        limit, 1 parameter change below tolerance, 2 error change below
+        tolerance, 3 gradient norm below tolerance. Under ``"estimated"``
+        (Levenberg-Marquardt): 0 iteration limit, 1 no step lowers the SSE, 2
+        relative SSE decrease below 1e-6.
 
-    THE LINE-SEARCH LIMIT, DEVIATION 2717. When the BFGS line search hits
-    its iteration limit, this implementation stores the trial point with
-    the lowest loss (strictly lower replaces, so a tie keeps the earliest
-    trial), not the last trial the reference stores (rapidsai/cuml#888).
-    A line search that exits normally is unchanged. Fits that reach the
-    limit can therefore differ from the reference's parameters.
+    Notes
+    -----
+    cuML's ``verbose`` and ``output_type`` are not accepted. Results are float32
+    ``mojolearn.Array`` objects. When the BFGS line search hits its iteration
+    limit, the lowest-loss trial point is kept rather than the last one, so such
+    fits can differ from cuML's.
 
-    A DIVERGENCE FROM cuML's PYTHON THAT IS NOT A NUMERIC ONE. cuML caches
-    `forecasted_points` and recomputes only when `h` grows, so a second
-    `forecast(h)` with a smaller `h` returns a slice of the larger array.
-    This recomputes every call. Same numbers, no cache to reason about.
-
-    Cross-vendor status: see this module's docstring. One Apple M4, both
-    numeric modes, against a host oracle; no second vendor has run it.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> t = np.arange(96, dtype=np.float32)
+    >>> y = 20 + 0.1 * t + 3 * np.sin(2 * np.pi * t / 12).astype(np.float32)
+    >>> model = mojolearn.ExponentialSmoothing(y, seasonal_periods=12).fit()
+    >>> np.asarray(model.forecast(12)).shape
+    (12,)
     """
 
     def __init__(
@@ -548,17 +694,30 @@ class ExponentialSmoothing:
             )
         return flat, n
 
+    # Fit level, trend, season and SSE. Returns self.
+    #
+    # Every validation cuML does in `holtwinters.pyx` runs on the Mojo
+    # side, by name, in their words: `ts_num >= 1`, `seasonal_periods
+    # >= 2`, `start_periods >= 2`, `seasonal_periods >= start_periods`,
+    # `eps > 0`, `n >= 1`, `n >= start_periods * seasonal_periods`. They
+    # are not restated here, so there is one place they can drift from.
+    #
+    # On a CPU-only install this refuses by name outside the internal
+    # reference context, as every other CPU fit does.
     def fit(self):
-        """Fit level, trend, season and SSE. Returns self.
+        """Fit level, trend, season and the smoothing parameters.
 
-        Every validation cuML does in `holtwinters.pyx` runs on the Mojo
-        side, by name, in their words: `ts_num >= 1`, `seasonal_periods
-        >= 2`, `start_periods >= 2`, `seasonal_periods >= start_periods`,
-        `eps > 0`, `n >= 1`, `n >= start_periods * seasonal_periods`. They
-        are not restated here, so there is one place they can drift from.
+        Returns
+        -------
+        self
 
-        On a CPU-only install this refuses by name outside the internal
-        reference context, as every other CPU fit does.
+        Raises
+        ------
+        ValueError
+            If a constraint is violated: ``ts_num >= 1``, ``seasonal_periods >=
+            2``, ``start_periods >= 2``, ``seasonal_periods >= start_periods``,
+            ``eps > 0``, ``n >= start_periods * seasonal_periods``; or for
+            non-finite (or, multiplicative, non-positive) data.
         """
         from ._cpu_reference import require_training
         require_training(self)
@@ -662,13 +821,20 @@ class ExponentialSmoothing:
         return self
 
     def forecast(self, h=1, index=None):
-        """Forecast `h` points per series.
+        """Forecast ``h`` points per series.
 
-        Return shapes are cuML's, including its single-series special case
-        (`holtwinters.pyx:417-426`): with `index=None` and `ts_num > 1` a
-        `(h, ts_num)` array; with `index=None` and `ts_num == 1` a 1-D
-        array of length `h`; with an integer `index` a 1-D array of length
-        `h` for that series.
+        Parameters
+        ----------
+        h : int, default 1
+            Forecast horizon, greater than 0.
+        index : int or None, default None
+            Return only this series.
+
+        Returns
+        -------
+        Array, float32
+            Shapes follow cuML: ``(h, ts_num)`` when ``index`` is None and
+            ``ts_num > 1``; ``(h,)`` when ``ts_num == 1`` or for a given ``index``.
         """
         if not self.fit_executed_flag:
             raise ValueError(
@@ -727,23 +893,44 @@ class ExponentialSmoothing:
             return out
         return out.reshape((steps, self.ts_num))
 
+    # The one-step predictions at times `[start, end)` (lane/inference-
+    # holtwinters, 2026-09-15). OURS: cuML has no prediction entry.
+    #
+    # A time `t < n` is in sample: the value the fit's final evaluation
+    # predicted for `endog[t]` before it read it, from the fitted level,
+    # trend and season (`holtwinters/host/hw_predict.mojo`). Times `t <
+    # 2 * seasonal_periods` are NaN, by name: their prediction reads the
+    # decomposition's start state, which the fit does not keep. A time
+    # `t >= n` is the forecast, so `predict(n, n + h)` is `forecast(h)`
+    # byte for byte. `end` defaults to `n`. The return shapes are
+    # `forecast`'s.
+    #
+    # The in-sample arithmetic is host code on every install, the GPU
+    # binding's included; on a CPU with no GPU it runs through the
+    # shipped forecast host binding from a saved model (`save`, `load`,
+    # `mojolearn.host_model`).
     def predict(self, start=0, end=None, index=None):
-        """The one-step predictions at times `[start, end)` (lane/inference-
-        holtwinters, 2026-09-15). OURS: cuML has no prediction entry.
+        """One-step-ahead predictions at times ``start`` to ``end - 1``.
 
-        A time `t < n` is in sample: the value the fit's final evaluation
-        predicted for `endog[t]` before it read it, from the fitted level,
-        trend and season (`holtwinters/host/hw_predict.mojo`). Times `t <
-        2 * seasonal_periods` are NaN, by name: their prediction reads the
-        decomposition's start state, which the fit does not keep. A time
-        `t >= n` is the forecast, so `predict(n, n + h)` is `forecast(h)`
-        byte for byte. `end` defaults to `n`. The return shapes are
-        `forecast`'s.
+        A time ``t < n`` is in sample: the prediction of ``endog[t]`` from the
+        fitted state before it was observed. Times ``t < 2 * seasonal_periods`` are
+        NaN, because the fit does not keep the state they need. A time ``t >= n``
+        is a forecast, so ``predict(n, n + h)`` equals ``forecast(h)``.
 
-        The in-sample arithmetic is host code on every install, the GPU
-        binding's included; on a CPU with no GPU it runs through the
-        shipped forecast host binding from a saved model (`save`, `load`,
-        `mojolearn.host_model`)."""
+        Parameters
+        ----------
+        start : int, default 0
+            First time index, at least 0.
+        end : int or None, default None
+            Index to stop before; None means ``n``. Must be greater than ``start``.
+        index : int or None, default None
+            Return only this series.
+
+        Returns
+        -------
+        Array, float32
+            Shapes as for :meth:`forecast`, with ``end - start`` steps.
+        """
         if not self.fit_executed_flag:
             raise ValueError(
                 "mojolearn ExponentialSmoothing: fit() the model before predict()"
@@ -798,20 +985,32 @@ class ExponentialSmoothing:
 
     # -- saved models (lane/inference-holtwinters, 2026-09-15) ----------------
 
+    # Write the fitted model to `path` as an npz: `components` (the
+    # packed, time-major level, trend and season float32 buffer `fit`
+    # keeps), `sse`, `alpha`, `beta`, `gamma` (float32), `n_iter`,
+    # `criterion` (int32), `meta` `<i8` [n, ts_num, seasonal_periods,
+    # start_periods], `eps` `<f8`, `seasonal`, `initialization_method`
+    # and `numeric_mode`. A file without `initialization_method` was
+    # written before it existed and loads as "heuristic".
+    #
+    # `endog` is not saved: nothing a loaded model answers reads it. A
+    # loaded model forecasts, predicts and answers every fitted attribute;
+    # it does not refit. On a CPU-only install that is public inference
+    # through the forecast host binding (`mojolearn.host_model(path)`, or
+    # `ExponentialSmoothing.load(path)`), with no GPU and no CPU training.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: `components` (the
-        packed, time-major level, trend and season float32 buffer `fit`
-        keeps), `sse`, `alpha`, `beta`, `gamma` (float32), `n_iter`,
-        `criterion` (int32), `meta` `<i8` [n, ts_num, seasonal_periods,
-        start_periods], `eps` `<f8`, `seasonal`, `initialization_method`
-        and `numeric_mode`. A file without `initialization_method` was
-        written before it existed and loads as "heuristic".
+        """Save the fitted model to an ``.npz`` file.
 
-        `endog` is not saved: nothing a loaded model answers reads it. A
-        loaded model forecasts, predicts and answers every fitted attribute;
-        it does not refit. On a CPU-only install that is public inference
-        through the forecast host binding (`mojolearn.host_model(path)`, or
-        `ExponentialSmoothing.load(path)`), with no GPU and no CPU training."""
+        The fitted components, smoothing parameters, diagnostics and settings are
+        written; ``endog`` is not. A loaded model forecasts, predicts and exposes
+        the fitted attributes without refitting, including on a CPU-only install
+        (``ExponentialSmoothing.load(path)`` or ``mojolearn.host_model(path)``).
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+        """
         if not self.fit_executed_flag:
             raise ValueError(
                 "mojolearn ExponentialSmoothing: fit() the model before save()"
@@ -841,8 +1040,18 @@ class ExponentialSmoothing:
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result forecasts, predicts and
-        answers the fitted attributes; it does not refit."""
+        """Load a model written by :meth:`save`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by :meth:`save`.
+
+        Returns
+        -------
+        ExponentialSmoothing
+            A fitted model that forecasts and predicts; it does not refit.
+        """
         from . import _serialize
         from .decomposition import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, _HW_FORMAT)
@@ -876,12 +1085,16 @@ class ExponentialSmoothing:
                                got["gamma"], got["n_iter"], got["criterion"])
 
     def score(self, index=None):
-        """The SSE of the fitted model, which is what cuML's `score`
-        returns (they note in `holtwinters.pyx` that it is the SSE rather
-        than the log-likelihood gradient, rapidsai/cuml#876).
+        """Sum of squared errors of the fit, as cuML's ``score`` returns.
 
-        `index=None` gives all `ts_num` of them; an integer `index` gives
-        that series' SSE as a scalar. Those are cuML's two returns.
+        Parameters
+        ----------
+        index : int or None, default None
+            None returns every series' SSE; an integer returns that series' SSE.
+
+        Returns
+        -------
+        Array of shape (ts_num,) or float32
         """
         if not self.fit_executed_flag:
             raise ValueError(
@@ -945,10 +1158,49 @@ class ExponentialSmoothing:
         return self._component(getattr(self, name), index, who)
 
     def get_level(self, index=None):
+        """Fitted level component.
+
+        Parameters
+        ----------
+        index : int or None, default None
+            Return only this series.
+
+        Returns
+        -------
+        Array, float32
+            ``(n - seasonal_periods, ts_num)`` when ``index`` is None and
+            ``ts_num > 1``; 1-D for one series or a given ``index``.
+        """
         return self._named("level_", index, "level")
 
     def get_trend(self, index=None):
+        """Fitted trend component.
+
+        Parameters
+        ----------
+        index : int or None, default None
+            Return only this series.
+
+        Returns
+        -------
+        Array, float32
+            ``(n - seasonal_periods, ts_num)`` when ``index`` is None and
+            ``ts_num > 1``; 1-D for one series or a given ``index``.
+        """
         return self._named("trend_", index, "trend")
 
     def get_season(self, index=None):
+        """Fitted season component.
+
+        Parameters
+        ----------
+        index : int or None, default None
+            Return only this series.
+
+        Returns
+        -------
+        Array, float32
+            ``(n - seasonal_periods, ts_num)`` when ``index`` is None and
+            ``ts_num > 1``; 1-D for one series or a given ``index``.
+        """
         return self._named("season_", index, "season")
