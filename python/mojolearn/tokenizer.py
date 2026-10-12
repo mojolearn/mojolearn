@@ -1,46 +1,45 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""A byte-level BPE tokenizer over a vocabulary the caller supplies or
-trains with `BpeVocabularyTrainer`.
+"""Byte-level BPE tokenization with a vocabulary you supply or train.
 
-MOJOLEARN SHIPS NO VOCABULARY (2026-09-15). `BpeTokenizer` is byte-level BPE
-by merge rank, cut into pre-tokens by the GPT-2 pre-tokenization pattern (the
-only pattern the compiled binding cuts; `mojolearn.models.tokenizer` cuts
-Llama 3 and Qwen 2 in Python, see `tokenizer/README.md`), with
-`<|endoftext|>` as the id after the last rank. The vocabulary is yours:
+mojolearn ships no vocabulary. :class:`BpeTokenizer` encodes and decodes
+byte-level BPE by merge rank, splitting text into pre-tokens with the GPT-2
+pre-tokenization pattern, with ``<|endoftext|>`` as the id after the last
+rank. Load a vocabulary you have, or train one with
+:class:`BpeVocabularyTrainer`::
 
     tok = BpeTokenizer.from_files("encoder.json", "vocab.bpe")
     tok = BpeTokenizer.from_ranks_file("ranks.tsv")      # rank<TAB>hex lines
     tok = BpeTokenizer.from_token_bytes(list_of_bytes)   # rank = list index
     tok = BpeVocabularyTrainer(vocab_size=32000).train(docs).tokenizer()
 
-THE NAME (2026-09-18, lane/tokenized-corpus). This class was `GPT2Tokenizer`
-until 0.8.7. It ships no GPT-2 vocabulary and `TrainedBpeVocabulary.
-tokenizer()` returns one over OUR OWN trained table, so the old name described
-a model it does not carry. `GPT2Tokenizer` stays importable as a deprecated
-alias of this class (same object, a DeprecationWarning on access). The GPT-2
-name is kept where it names a GPT-2 thing: the pre-tokenization pattern and
-the `encoder.json` + `vocab.bpe` file format `from_files` reads.
+With the ``encoder.json`` and ``vocab.bpe`` files OpenAI publishes with
+GPT-2 (download them yourself), the ids are GPT-2's. Tokenization runs in
+compiled code on the CPU and reads no data file other than the vocabulary.
+For the Llama 3 and Qwen 2 pre-tokenization patterns, see
+:class:`mojolearn.models.Tokenizer`.
 
-OpenAI publishes the GPT-2 `encoder.json` and `vocab.bpe` with its GPT-2
-release, for example under
-https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/ ; download
-them yourself and pass their paths. With those two files the ids are the
-GPT-2 ids. `BpeTokenizer()` with no vocabulary is refused by name.
-
-The arithmetic is `tokenizer/encoding.mojo` (integers and tables only, no
-float, no device kernel), reached through the host binding
-`_mojolearn_tokenizer_host` under `mojolearn/host/`. The Unicode letter,
-number and White_Space classes the pattern needs are compiled into that
-binding at build time (`tokenizer/tools/gen_unicode_categories.py`), so no
-data file is read at run time except the vocabulary.
-
-What is asserted, and where: `pixi run check-tokenizer` holds the Mojo encoder
-to a synthetic vocabulary mojolearn trains itself
-(`mojolearn/_tokenizer_synthetic.py`) and to a second, pure Python encoder of
-the same algorithm; `python/mojolearn/tests/test_tokenizer_surface.py` holds
-THIS door to the same cases through the binding, plus every refusal by name.
+``GPT2Tokenizer`` is a deprecated alias of :class:`BpeTokenizer` (accessing it
+issues a DeprecationWarning).
 """
+# Maintainer notes moved from the docstring:
+# - The class was `GPT2Tokenizer` until 0.8.7 (renamed 2026-09-18,
+#   lane/tokenized-corpus): it ships no GPT-2 vocabulary. The GPT-2 name is kept
+#   where it names a GPT-2 thing: the pre-tokenization pattern and the
+#   `encoder.json` + `vocab.bpe` format `from_files` reads.
+# - The GPT-2 pattern is the only one the compiled binding cuts;
+#   `mojolearn.models.tokenizer` cuts Llama 3 and Qwen 2 in Python (see
+#   `tokenizer/README.md`). GPT-2's files are published under
+#   https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/
+# - The arithmetic is `tokenizer/encoding.mojo` (integers and tables only),
+#   reached through the host binding `_mojolearn_tokenizer_host` under
+#   `mojolearn/host/`. The Unicode letter, number and White_Space classes are
+#   compiled into that binding at build time
+#   (`tokenizer/tools/gen_unicode_categories.py`).
+# - `pixi run check-tokenizer` holds the Mojo encoder to a synthetic vocabulary
+#   (`mojolearn/_tokenizer_synthetic.py`) and to a pure Python encoder of the
+#   same algorithm; `python/mojolearn/tests/test_tokenizer_surface.py` holds
+#   this door to the same cases plus every refusal by name.
 import array
 import json
 import operator
@@ -157,21 +156,53 @@ def _byte_to_char():
     return out
 
 
+# `encode` and `decode` for byte-level BPE in the GPT-2 format.
+#
+# Ids are in [0, n_vocab): the vocabulary's ranks, then `<|endoftext|>` at
+# `n_vocab - 1`. The special token is recognized only when
+# `allow_endoftext=True`; otherwise its thirteen characters are ordinary
+# text. There is no "raise on a disallowed special token" mode and no
+# other special token (`tokenizer/NOT_IMPLEMENTED.tsv`).
+#
+# Bytes are the interface: `encode_bytes` and `decode_bytes` are the real
+# entries. `encode` accepts `str` (UTF-8 encoded first) or a bytes-like
+# object; `decode` is `decode_bytes` decoded as UTF-8 with
+# `errors="replace"`, because a token stream cut inside a character is
+# still the right bytes. Invalid UTF-8 input encodes as one-byte
+# pre-tokens and round trips.
 class BpeTokenizer:
-    """`encode` and `decode` for byte-level BPE in the GPT-2 format.
+    """Byte-level BPE tokenizer in the GPT-2 format, over your vocabulary.
 
-    Ids are in [0, n_vocab): the vocabulary's ranks, then `<|endoftext|>` at
-    `n_vocab - 1`. The special token is recognized only when
-    `allow_endoftext=True`; otherwise its thirteen characters are ordinary
-    text. There is no "raise on a disallowed special token" mode and no
-    other special token (`tokenizer/NOT_IMPLEMENTED.tsv`).
+    Ids are in ``[0, n_vocab)``: the vocabulary's ranks, then
+    ``<|endoftext|>`` at ``n_vocab - 1``. The special token is recognized only
+    with ``allow_endoftext=True``; otherwise its characters are ordinary text.
+    There are no other special tokens.
 
-    Bytes are the interface: `encode_bytes` and `decode_bytes` are the real
-    entries. `encode` accepts `str` (UTF-8 encoded first) or a bytes-like
-    object; `decode` is `decode_bytes` decoded as UTF-8 with
-    `errors="replace"`, because a token stream cut inside a character is
-    still the right bytes. Invalid UTF-8 input encodes as one-byte
-    pre-tokens and round trips.
+    Bytes are the interface: :meth:`encode_bytes` and :meth:`decode_bytes` do
+    the work. :meth:`encode` also accepts ``str`` (encoded as UTF-8 first);
+    :meth:`decode` decodes the bytes as UTF-8 with ``errors="replace"``, since a
+    token sequence may end inside a character. Invalid UTF-8 input round trips.
+
+    ``GPT2Tokenizer`` is a deprecated alias of this class.
+
+    Parameters
+    ----------
+    ranks_file : str or path-like
+        A rank file (see :meth:`from_ranks_file`). Required: there is no
+        built-in vocabulary, so omitting it raises ValueError.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``ranks_file`` does not exist.
+
+    Examples
+    --------
+    >>> from mojolearn.tokenizer import BpeTokenizer
+    >>> tok = BpeTokenizer.from_files("encoder.json", "vocab.bpe")
+    >>> ids = tok.encode("Hello, world")
+    >>> tok.decode(ids)
+    'Hello, world'
     """
 
     ENDOFTEXT = "<|endoftext|>"
@@ -203,16 +234,34 @@ class BpeTokenizer:
 
     @classmethod
     def from_ranks_file(cls, path):
-        """A rank file: one `rank<TAB>hex_of_token_bytes` line per rank,
-        ascending from 0, every one of the 256 single bytes present."""
+        """Load a rank file.
+
+        One ``rank<TAB>hex_of_token_bytes`` line per rank, ascending from 0, with
+        all 256 single bytes present (the format :meth:`TrainedBpeVocabulary.write_ranks`
+        writes).
+
+        Returns
+        -------
+        BpeTokenizer
+        """
         return cls(path)
 
     @classmethod
     def from_token_bytes(cls, tokens):
-        """A vocabulary as a sequence of bytes-like tokens; a token's rank
-        (and id) is its index. Unique, non-empty, and holding all 256 single
-        bytes, or refused by name before anything is loaded (the checks are
-        `tokenizer/impl/vocab_build.mojo::table_from_tokens`)."""
+        """Build a tokenizer from a list of token byte strings.
+
+        A token's rank (and id) is its index. Tokens must be unique and non-empty,
+        and all 256 single bytes must be present; otherwise ValueError is raised
+        before anything is loaded.
+
+        Parameters
+        ----------
+        tokens : sequence of bytes-like
+
+        Returns
+        -------
+        BpeTokenizer
+        """
         if isinstance(tokens, (str, bytes, bytearray, memoryview)):
             raise TypeError(f"mojolearn: tokens must be a sequence of bytes, got {type(tokens).__name__}")
         try:
@@ -226,17 +275,29 @@ class BpeTokenizer:
 
     @classmethod
     def from_files(cls, encoder_json, vocab_bpe):
-        """The two files of the GPT-2 format: `encoder.json` (token spelling
-        to id) and `vocab.bpe` (the merge list). mojolearn ships neither;
-        OpenAI publishes GPT-2's with its GPT-2 release.
+        """Load the two files of the GPT-2 format.
 
-        Checked before loading, each refused by name: every spelling decodes
-        through the byte-to-unicode table; ids are 0 to n-1 with
-        `<|endoftext|>` (if present) at n; every merge's two parts and result
-        are tokens; merge results take strictly increasing ids above both
-        parts; and every token no merge makes is a single byte. Those are
-        the conditions under which merging by rank gives the merge list's
-        own result."""
+        Parameters
+        ----------
+        encoder_json : str or path-like
+            ``encoder.json``: token spelling to id.
+        vocab_bpe : str or path-like
+            ``vocab.bpe``: the merge list.
+
+        Returns
+        -------
+        BpeTokenizer
+
+        Raises
+        ------
+        ValueError
+            If the files are inconsistent: a spelling that does not decode through
+            the byte-to-unicode table, ids that are not 0 to n-1 (with
+            ``<|endoftext|>``, if present, at n), a merge whose parts or result are
+            not tokens, merge results whose ids do not increase above both parts, or
+            a multi-byte token no merge makes. These are the conditions under which
+            merging by rank reproduces the merge list.
+        """
         with open(encoder_json, "r", encoding="utf-8") as fh:
             encoder = json.load(fh)
         if not isinstance(encoder, dict):
@@ -262,28 +323,30 @@ class BpeTokenizer:
 
     @property
     def n_vocab(self):
-        """The ranks plus `<|endoftext|>`."""
+        """Number of ids: the ranks plus ``<|endoftext|>``."""
         return self._n_vocab
 
     @property
     def eot_token(self):
-        """`<|endoftext|>`'s id, `n_vocab - 1`."""
+        """The id of ``<|endoftext|>``, ``n_vocab - 1``."""
         return self._n_vocab - 1
 
     @property
     def vocabulary_source(self):
+        """Where the vocabulary was loaded from."""
         return self._source
 
     @property
     def identity(self):
-        """What names this vocabulary, whatever file it came from:
-        `dict(schema, sha256, n_ranks, n_vocab, endoftext_id)`, `sha256` being
-        over the CANONICAL rank file (`rank<TAB>lowercase hex` per line, the
-        text `TrainedBpeVocabulary.render_ranks` writes). The same table read
-        from a rank file, from `encoder.json` + `vocab.bpe` or from a trained
-        vocabulary has the same identity. A model trained on ids carries this
-        (`mojolearn.lm_corpus`), so its ids are never decoded with another
-        table."""
+        """The vocabulary's identity, independent of the file it came from.
+
+        ``dict(schema, sha256, n_ranks, n_vocab, endoftext_id)``, with ``sha256``
+        over the canonical rank file (``rank<TAB>lowercase hex`` per line). The same
+        table loaded from a rank file, from ``encoder.json`` + ``vocab.bpe`` or from a
+        trained vocabulary has the same identity. Models trained through
+        :mod:`mojolearn.lm_corpus` record it, so their ids are never decoded with
+        another table.
+        """
         return dict(self._identity)
 
     # ------------------------------------------------------------ encode
@@ -307,7 +370,19 @@ class BpeTokenizer:
         return allow_endoftext
 
     def encode_bytes(self, data, allow_endoftext=False):
-        """The ids of a byte string, as a list of int. `data` is bytes-like."""
+        """Encode a byte string.
+
+        Parameters
+        ----------
+        data : bytes-like
+            The input; ``str`` raises TypeError (use :meth:`encode`).
+        allow_endoftext : bool, default False
+            Recognize ``<|endoftext|>`` as the special token.
+
+        Returns
+        -------
+        list of int
+        """
         if isinstance(data, str):
             raise TypeError("mojolearn: encode_bytes takes bytes; use encode for str")
         raw = self._text_bytes(data)
@@ -323,17 +398,45 @@ class BpeTokenizer:
         return out[:count].tolist()
 
     def encode(self, text, allow_endoftext=False):
-        """The ids of `text` (str, UTF-8 encoded first, or bytes-like)."""
+        """Encode text.
+
+        Parameters
+        ----------
+        text : str or bytes-like
+            ``str`` is encoded as UTF-8 first.
+        allow_endoftext : bool, default False
+            Recognize ``<|endoftext|>`` as the special token.
+
+        Returns
+        -------
+        list of int
+        """
         return self.encode_bytes(self._text_bytes(text), allow_endoftext)
 
+    # The ids of each document, as a list of lists of int, in order.
+    #
+    # Each document is a str (UTF-8 encoded first) or bytes-like and is
+    # encoded ALONE: `encode_batch(docs)[k] == encode(docs[k])` id for id,
+    # whatever else is in the batch. The documents are encoded one after
+    # another inside ONE binding call (`bpe_encode_batch`), which saves
+    # the per-call crossing that dominates short documents.
     def encode_batch(self, documents, allow_endoftext=False):
-        """The ids of each document, as a list of lists of int, in order.
+        """Encode several documents in one call.
 
-        Each document is a str (UTF-8 encoded first) or bytes-like and is
-        encoded ALONE: `encode_batch(docs)[k] == encode(docs[k])` id for id,
-        whatever else is in the batch. The documents are encoded one after
-        another inside ONE binding call (`bpe_encode_batch`), which saves
-        the per-call crossing that dominates short documents."""
+        Each document is encoded alone: ``encode_batch(docs)[k] ==
+        encode(docs[k])``, whatever else is in the batch. One call is faster than
+        many for short documents.
+
+        Parameters
+        ----------
+        documents : sequence of str or bytes-like
+        allow_endoftext : bool, default False
+            Recognize ``<|endoftext|>`` as the special token.
+
+        Returns
+        -------
+        list of list of int
+        """
         if isinstance(documents, (str, bytes, bytearray, memoryview)):
             raise TypeError(
                 f"mojolearn: encode_batch takes a sequence of documents, got {type(documents).__name__}"
@@ -402,9 +505,18 @@ class BpeTokenizer:
             raise TypeError(f"mojolearn: ids must be a sequence of int, got {type(ids).__name__}") from None
 
     def decode_bytes(self, ids):
-        """The bytes of an id sequence. An id that is not an int, or is
-        outside [0, n_vocab), is refused by value and position before
-        anything is decoded (the binding's `bpe_decode_seq`)."""
+        """Decode ids to bytes.
+
+        Parameters
+        ----------
+        ids : sequence of int
+            Each in ``[0, n_vocab)``; an invalid id raises an error naming its value
+            and position before anything is decoded.
+
+        Returns
+        -------
+        bytes
+        """
         seq = self._id_list(ids)
         if not seq:
             return b""
@@ -414,13 +526,30 @@ class BpeTokenizer:
         return bytes(out[:count])
 
     def decode(self, ids, errors="replace"):
-        """`decode_bytes(ids)` as text; `errors` is passed to `bytes.decode`."""
+        """Decode ids to text.
+
+        Parameters
+        ----------
+        ids : sequence of int
+        errors : str, default "replace"
+            Passed to ``bytes.decode``.
+
+        Returns
+        -------
+        str
+        """
         return self.decode_bytes(ids).decode("utf-8", errors)
 
     def decode_bytes_batch(self, batch):
-        """`[decode_bytes(ids) for ids in batch]`, in ONE binding call
-        (`bpe_decode_batch`); an id is refused by its position inside its
-        own sequence."""
+        """Decode several id sequences to bytes in one call.
+
+        Equivalent to ``[decode_bytes(ids) for ids in batch]``; an invalid id is
+        reported by its position within its own sequence.
+
+        Returns
+        -------
+        list of bytes
+        """
         if isinstance(batch, (str, bytes, bytearray)):
             raise TypeError(f"mojolearn: decode_bytes_batch takes a sequence of id sequences, got {type(batch).__name__}")
         seqs = self._id_list(batch)
@@ -436,7 +565,7 @@ class BpeTokenizer:
         return result
 
     def decode_batch(self, batch, errors="replace"):
-        """`[decode(ids, errors) for ids in batch]`."""
+        """Decode several id sequences to text: ``[decode(ids, errors) for ids in batch]``."""
         return [b.decode("utf-8", errors) for b in self.decode_bytes_batch(batch)]  # cpu-route: decodes bytes to str per sequence (text output)
 
     def __repr__(self):
@@ -444,14 +573,17 @@ class BpeTokenizer:
 
 
 class TrainedBpeVocabulary:
-    """What `BpeVocabularyTrainer.train` returns: the vocabulary, the merges,
-    and the two formats it can be written in.
+    """A vocabulary trained by :meth:`BpeVocabularyTrainer.train`.
 
-    `tokens` are the token byte strings in rank order (rank = id, the 256
-    single bytes first). `merges` are `(left_id, right_id, new_id)` in the
-    order they were made. `n_ties_broken` is how many selections had two or
-    more pairs at the top count, which is how you can see the tie-break rule
-    was actually REACHED on your corpus rather than merely present.
+    Attributes
+    ----------
+    tokens : list of bytes
+        Token byte strings in rank order (rank = id), the 256 single bytes
+        first.
+    merges : list of tuple of int
+        ``(left_id, right_id, new_id)`` in the order the merges were made.
+    stats : dict
+        Training statistics, including ``n_ties_broken`` and ``tie_break``.
     """
 
     def __init__(self, tokens, merges, stats):
@@ -461,16 +593,17 @@ class TrainedBpeVocabulary:
 
     @property
     def n_tokens(self):
-        """The ranks. `<|endoftext|>` takes the id after the last one."""
+        """Number of ranks; ``<|endoftext|>`` takes the id after the last one."""
         return len(self.tokens)
 
     @property
     def n_ties_broken(self):
+        """How many merge selections had two or more pairs at the top count."""
         return self.stats["n_ties_broken"]
 
     @property
     def tie_break(self):
-        """The total order that settles equal counts, spelled out."""
+        """The rule that settles equal counts, as text."""
         return self.stats["tie_break"]
 
     def _render(self, which):
@@ -481,34 +614,37 @@ class TrainedBpeVocabulary:
         return _native(m.bpe_render, [_ro(blob, "tokens"), _ro(lengths, "lengths"), _ro(left, "merge_left"),
                                       _ro(right, "merge_right")], [len(self.tokens), len(self.merges), which])
 
+    # OUR format as text: `rank<TAB>hex_of_token_bytes` per line
+    # (`tokenizer/train/emit.mojo::render_ranks`).
     def render_ranks(self):
-        """OUR format as text: `rank<TAB>hex_of_token_bytes` per line
-        (`tokenizer/train/emit.mojo::render_ranks`)."""
+        """The vocabulary as rank-file text: ``rank<TAB>hex_of_token_bytes`` per line."""
         return self._render(0)
 
+    # A `tokenizer.json` Hugging Face `tokenizers` loads, as text
+    # (`tokenizer/train/emit.mojo::render_tokenizer_json`).
     def render_tokenizer_json(self):
-        """A `tokenizer.json` Hugging Face `tokenizers` loads, as text
-        (`tokenizer/train/emit.mojo::render_tokenizer_json`)."""
+        """The vocabulary as Hugging Face ``tokenizer.json`` text, loadable by the ``tokenizers`` library."""
         return self._render(1)
 
     def write_ranks(self, path):
+        """Write :meth:`render_ranks` to ``path`` and return ``path``."""
         with open(path, "w", encoding="ascii", newline="\n") as fh:
             fh.write(self.render_ranks())
         return path
 
     def write_tokenizer_json(self, path):
+        """Write :meth:`render_tokenizer_json` to ``path`` and return ``path``."""
         with open(path, "w", encoding="ascii", newline="\n") as fh:
             fh.write(self.render_tokenizer_json())
         return path
 
     @property
     def identity(self):
-        """`BpeTokenizer.identity` of this vocabulary, without loading it."""
+        """The :attr:`BpeTokenizer.identity` of this vocabulary, without loading it."""
         return _identity_from_tokens_text(self.render_ranks(), self.n_tokens)
 
     def tokenizer(self):
-        """A `BpeTokenizer` over this vocabulary, so a freshly trained table
-        can be used without going through a file."""
+        """A :class:`BpeTokenizer` over this vocabulary, without writing a file."""
         return BpeTokenizer.from_token_bytes(self.tokens)
 
     def __repr__(self):
@@ -516,36 +652,63 @@ class TrainedBpeVocabulary:
                 f"n_merges={len(self.merges)}, n_ties_broken={self.n_ties_broken})")
 
 
+# Train a byte-level BPE vocabulary, deterministically.
+#
+#     tok = BpeVocabularyTrainer(vocab_size=32000).train(documents).tokenizer()
+#
+# mojolearn ships no vocabulary and no corpus; `documents` is yours, as a
+# sequence of `bytes` (or `str`, encoded UTF-8 first). Each document is
+# pre-tokenized ALONE, so no pre-token spans a document join and the ORDER
+# the documents arrive in cannot reach the result.
+#
+# WHAT IS BEING CLAIMED. Vocabulary training is host-only everywhere --
+# Hugging Face, SentencePiece and tiktoken all train on a CPU -- so this is
+# not a cross-vendor GPU claim and there is no vendor column. The claim is
+# that THE SAME CORPUS AND CONFIG PRODUCE THE SAME VOCABULARY BYTES ON ANY
+# MACHINE AND ARCHITECTURE, and it rests on four things: a total order on
+# the tie-break (highest count, then smallest `(left_id, right_id)`),
+# single-threaded counting so there is no reduction order to get wrong,
+# selection that never depends on an iteration order, and no float anywhere
+# in the selection.
+#
+# THE TRAINER is the Mojo one, `tokenizer/train/bpe_train.mojo`, through
+# the tokenizer host binding (`bpe_train`). `backend` is kept for its
+# old spellings: "auto" and "mojo" both name it. The pure Python
+# reference `_bpe_trainer.train` is a VERIFICATION oracle only
+# (lane/pyglue-text-io, 2026-10-03: Python is glue at run time), held to
+# the Mojo trainer's bytes by `pixi run check-bpe-trainer` and the
+# tokenizer surface test; `backend="python"` is refused by name.
+# `stats["backend"]` records "mojo".
+# `MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reverses the tie-break (the negative
+# control).
 class BpeVocabularyTrainer:
-    """Train a byte-level BPE vocabulary, deterministically.
+    """Train a byte-level BPE vocabulary deterministically.
 
-        tok = BpeVocabularyTrainer(vocab_size=32000).train(documents).tokenizer()
+    The same corpus and settings give the same vocabulary bytes on any machine:
+    ties are broken by a total order (highest count, then smallest
+    ``(left_id, right_id)``), counting is exact and single-threaded, and no
+    floating point is involved. Training runs on the CPU in compiled code.
 
-    mojolearn ships no vocabulary and no corpus; `documents` is yours, as a
-    sequence of `bytes` (or `str`, encoded UTF-8 first). Each document is
-    pre-tokenized ALONE, so no pre-token spans a document join and the ORDER
-    the documents arrive in cannot reach the result.
+    Each document is pre-tokenized alone, so no pre-token spans two documents
+    and the order of the documents does not affect the result.
 
-    WHAT IS BEING CLAIMED. Vocabulary training is host-only everywhere --
-    Hugging Face, SentencePiece and tiktoken all train on a CPU -- so this is
-    not a cross-vendor GPU claim and there is no vendor column. The claim is
-    that THE SAME CORPUS AND CONFIG PRODUCE THE SAME VOCABULARY BYTES ON ANY
-    MACHINE AND ARCHITECTURE, and it rests on four things: a total order on
-    the tie-break (highest count, then smallest `(left_id, right_id)`),
-    single-threaded counting so there is no reduction order to get wrong,
-    selection that never depends on an iteration order, and no float anywhere
-    in the selection.
+    Parameters
+    ----------
+    vocab_size : int, default 32000
+        Number of ranks to train, including the 256 single bytes; at least 256.
+    min_frequency : int, default 2
+        Minimum pair count for a merge; at least 1.
+    backend : {"auto", "mojo"}, default "auto"
+        Both name the compiled trainer.
 
-    THE TRAINER is the Mojo one, `tokenizer/train/bpe_train.mojo`, through
-    the tokenizer host binding (`bpe_train`). `backend` is kept for its
-    old spellings: "auto" and "mojo" both name it. The pure Python
-    reference `_bpe_trainer.train` is a VERIFICATION oracle only
-    (lane/pyglue-text-io, 2026-10-03: Python is glue at run time), held to
-    the Mojo trainer's bytes by `pixi run check-bpe-trainer` and the
-    tokenizer surface test; `backend="python"` is refused by name.
-    `stats["backend"]` records "mojo".
-    `MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reverses the tie-break (the negative
-    control).
+    Examples
+    --------
+    >>> from mojolearn.tokenizer import BpeVocabularyTrainer
+    >>> docs = ["the cat sat on the mat", "the dog sat on the log"]
+    >>> vocab = BpeVocabularyTrainer(vocab_size=300).train(docs)
+    >>> tok = vocab.tokenizer()
+    >>> tok.decode(tok.encode("the cat"))
+    'the cat'
     """
 
     _BACKENDS = ("auto", "mojo")
@@ -571,7 +734,17 @@ class BpeVocabularyTrainer:
         self.backend = backend
 
     def train(self, documents):
-        """Train on `documents`, a sequence of bytes-like or str."""
+        """Train on ``documents``.
+
+        Parameters
+        ----------
+        documents : sequence of str or bytes-like
+            At least one document; ``str`` is encoded as UTF-8.
+
+        Returns
+        -------
+        TrainedBpeVocabulary
+        """
         if isinstance(documents, (str, bytes, bytearray, memoryview)):
             raise TypeError(
                 f"mojolearn: train takes a sequence of documents, got {type(documents).__name__}; "
