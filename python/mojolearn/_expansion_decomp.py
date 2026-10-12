@@ -4928,7 +4928,7 @@ class SparsePCA(_BaseSparsePCA):
         Lasso solver name (both give the same optimum).
     n_jobs : ignored
     U_init : array-like of shape (n_samples, n_components) or None, default None
-        Starting code; used only together with ``V_init``.
+        Starting sample loadings; used only together with ``V_init``.
     V_init : array-like of shape (n_components, n_features) or None, default None
         Starting components; used only together with ``U_init``.
     verbose : ignored
@@ -5115,18 +5115,90 @@ def _dirichlet_expectation_2d(k, A):
     return k.ew("sub", k.ew("digamma", A), k.ew("digamma", k.rowsum(A)))
 
 
+# Reference: scikit-learn `decomposition/_lda.py` with
+# `_online_lda_fast.pyx`: `_init_latent_vars`, `_e_step`,
+# `_update_doc_distribution`, `_em_step`, `_approx_bound`, `transform`,
+# `perplexity`, `score`. Variational EM in a fixed order: every document's
+# inner loop is one thread, the sufficient statistics one gemm. The
+# Gamma(100, 1/100) draws are Marsaglia-Tsang on the Philox stream. Online
+# mini-batches go in row order, as sklearn with no shuffle does. A
+# scipy.sparse count matrix is densified (exact); the per-document cell
+# already skips zero counts.
 class LatentDirichletAllocation(_Base):
-    """sklearn.decomposition.LatentDirichletAllocation (reference:
-    scikit-learn `decomposition/_lda.py` with `_online_lda_fast.pyx`:
-    `_init_latent_vars`, `_e_step`, `_update_doc_distribution`, `_em_step`,
-    `_approx_bound`, `transform`, `perplexity`, `score`), variational EM in a
-    fixed order: every document's inner loop is one thread, the sufficient
-    statistics one gemm. The Gamma(100, 1/100) draws are Marsaglia-Tsang on
-    the Philox stream. learning_method 'batch' and 'online' (online: the
-    mini-batches in row order, as sklearn with no shuffle does).
-    A scipy.sparse count matrix is densified (exact); the per-document cell
-    already skips zero counts. evaluate_every with n_jobs: no host pool, so
-    n_jobs changes nothing."""
+    """Latent Dirichlet allocation topic model, fitted by variational EM.
+
+    Follows scikit-learn's ``LatentDirichletAllocation``. X is a
+    document-term count matrix (non-negative; a ``scipy.sparse`` matrix is
+    densified). Random draws come from mojolearn's own generator, so topics
+    differ from scikit-learn's for the same seed. Online learning takes the
+    mini-batches in row order.
+
+    Parameters
+    ----------
+    n_components : int, default 10
+        Number of topics.
+    doc_topic_prior : float or None, default None
+        Prior on the document-topic distribution; None uses
+        ``1 / n_components``.
+    topic_word_prior : float or None, default None
+        Prior on the topic-word distribution; None uses ``1 / n_components``.
+    learning_method : {"batch", "online"}, default "batch"
+        Use all data in each update, or mini-batches.
+    learning_decay : float, default 0.7
+        Online learning rate decay.
+    learning_offset : float, default 10.0
+        Online learning rate offset (down-weights early iterations).
+    max_iter : int, default 10
+        Maximum passes over the data.
+    batch_size : int, default 128
+        Documents per mini-batch for online learning; must be a positive int.
+    evaluate_every : int, default -1
+        Compute perplexity every this many iterations and stop once it
+        improves by less than ``perp_tol``; 0 or negative never evaluates.
+    total_samples : float, default 1e6
+        Total number of documents, used by ``partial_fit`` and
+        ``perplexity(sub_sampling=True)``.
+    perp_tol : float, default 0.1
+        Perplexity tolerance for ``evaluate_every``.
+    mean_change_tol : float, default 1e-3
+        Stopping tolerance of the per-document E-step.
+    max_doc_update_iter : int, default 100
+        Maximum E-step iterations per document.
+    n_jobs : ignored
+    verbose : ignored
+    random_state : int or None, default None
+        Seed; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        Variational topic-word parameters.
+    exp_dirichlet_component_ : ndarray of shape (n_components, n_features)
+    doc_topic_prior_ : float
+    topic_word_prior_ : float
+    bound_ : float
+        Final perplexity on the training data.
+    n_iter_ : int
+    n_batch_iter_ : int
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        If X has negative values, or ``learning_method`` or ``batch_size``
+        is invalid.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).integers(0, 5, (200, 30)).astype(np.float32)
+    >>> lda = mojolearn.LatentDirichletAllocation(n_components=4, random_state=0).fit(X)
+    >>> doc_topics = lda.transform(X)
+    """
     _parameters = ("n_components", "doc_topic_prior", "topic_word_prior", "learning_method", "learning_decay",
                    "learning_offset", "max_iter", "batch_size", "evaluate_every", "total_samples", "perp_tol",
                    "mean_change_tol", "max_doc_update_iter", "random_state", "numeric_mode")
@@ -5235,6 +5307,18 @@ class LatentDirichletAllocation(_Base):
              float(self.learning_decay), float(self.mean_change_tol), float(total_samples)])
 
     def fit(self, X, y=None):
+        """Fit the topic model to a document-term matrix.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Non-negative word counts.
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.learning_method not in ("batch", "online"):
             raise ValueError("learning_method must be 'batch' or 'online'")
@@ -5270,6 +5354,19 @@ class LatentDirichletAllocation(_Base):
         return self
 
     def partial_fit(self, X, y=None):
+        """Update the model with one batch of documents (online learning).
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Non-negative word counts, split into mini-batches of
+            ``batch_size``.
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         if not hasattr(self, "components_m_"):
             self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
@@ -5289,12 +5386,37 @@ class LatentDirichletAllocation(_Base):
         return k, M, self._e_step(k, M, False, False)[0]
 
     def transform(self, X, *, normalize=True):
+        """Return the topic distribution of each document.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Non-negative word counts.
+        normalize : bool, default True
+            Normalize each row to sum to 1.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         k, M, Dt = self._unnormalized(X)
         if normalize:
             Dt = k.ew("div", Dt, k.rowsum(Dt))
         return Dt.out()
 
     def fit_transform(self, X, y=None, *, normalize=True):
+        """Fit the model, then return ``transform(X, normalize=normalize)``.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+        y : ignored
+        normalize : bool, default True
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X).transform(X, normalize=normalize)
 
     def _loglik(self, k, prior, distr, dirichlet, size):
@@ -5340,10 +5462,35 @@ class LatentDirichletAllocation(_Base):
         return self._kit().ew("exp", k.const(-bound / word_cnt)).s[0]
 
     def score(self, X, y=None):
+        """Return the approximate log-likelihood (variational bound) of X.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        float
+        """
         k, M, Dt = self._unnormalized(X)
         return self._approx_bound(k, M, Dt)
 
     def perplexity(self, X, sub_sampling=False):
+        """Return the approximate perplexity of X.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+        sub_sampling : bool, default False
+            Scale the bound as if X were a sample of ``total_samples``
+            documents.
+
+        Returns
+        -------
+        float
+            Infinity when X has no words.
+        """
         k, M, Dt = self._unnormalized(X)
         return self._perplexity(k, M, Dt, sub_sampling)
 
@@ -5547,18 +5694,76 @@ def _top_eig(k, A, nc, topk=False):
     return w, k.ew("mul", V, k.absmax_signs(V, True))
 
 
+# Reference: scikit-learn `manifold/_isomap.py` with
+# `KernelPCA(kernel='precomputed')` and `utils/graph.py`: the kNN distance
+# graph (ties to the lower index), all-pairs shortest paths by Dijkstra
+# (one source per thread), the kernel -0.5 * D^2 centered, its top
+# eigenpairs (Jacobi eigh). path_method 'FW' runs the same Dijkstra
+# (x_decomp/NOT_IMPLEMENTED.tsv: deliberately divergent). Metrics per
+# DEVIATION 5319. A callable or any other metric is refused by name.
 class Isomap(_Base):
-    """sklearn.manifold.Isomap (reference: scikit-learn `manifold/_isomap.py`
-    with `KernelPCA(kernel='precomputed')` and `utils/graph.py`): the
-    Euclidean kNN distance graph (ties to the lower index), all-pairs
-    shortest paths by Dijkstra (one source per thread), the kernel
-    -0.5 * D^2 centered, its top eigenpairs (Jacobi eigh). `radius` (with
-    n_neighbors=None) takes every other row within the radius (closed, the
-    float32 distance compared exactly). path_method 'FW' runs the same
-    Dijkstra (x_decomp/NOT_IMPLEMENTED.tsv: DELIBERATELY DIVERGENT). metric:
-    euclidean, minkowski p (p = 1, 2 and inf by name), manhattan, chebyshev,
-    cosine (DEVIATION 5319). REFUSED BY NAME: a callable or any other
-    metric."""
+    """Isomap embedding: kernel PCA on geodesic distances.
+
+    Follows scikit-learn's ``Isomap``: builds a nearest-neighbor (or radius)
+    graph, computes shortest-path distances on it, and embeds the centered
+    kernel ``-0.5 * D**2`` by its top eigenvectors. If the graph has more
+    than one connected component, a warning is issued and the components are
+    joined. Shortest paths always use Dijkstra's algorithm, and the
+    eigenproblem is always solved exactly.
+
+    Parameters
+    ----------
+    n_neighbors : int or None, default 5
+        Neighbors per point. Set to None to use ``radius`` instead.
+    radius : float or None, default None
+        Connect every point within this distance (inclusive). Only one of
+        ``n_neighbors`` and ``radius`` may be set.
+    n_components : int, default 2
+        Embedding dimension.
+    eigen_solver : {"auto", "dense"}, default "auto"
+        Both solve exactly. ``"arpack"`` raises NotImplementedError.
+    tol : ignored
+    max_iter : ignored
+    path_method : {"auto", "FW", "D"}, default "auto"
+        Accepted for scikit-learn compatibility; every value runs Dijkstra.
+    neighbors_algorithm : ignored
+    n_jobs : ignored
+    metric : str, default "minkowski"
+        Distance metric: ``"euclidean"``, ``"l2"``, ``"minkowski"`` (with ``p``), ``"manhattan"``
+        (``"cityblock"``, ``"l1"``), ``"chebyshev"`` (``"infinity"``) or
+        ``"cosine"``; a callable or any other name raises
+        NotImplementedError.
+    p : float, default 2
+        Minkowski power (must be positive).
+    metric_params : dict or None, default None
+        Only ``{"p": ...}`` is supported; other keys raise
+        NotImplementedError.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    embedding_ : ndarray of shape (n_samples, n_components)
+    dist_matrix_ : ndarray of shape (n_samples, n_samples)
+        Geodesic distances between training points.
+    n_connected_components_ : int
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        If both or neither of ``n_neighbors`` and ``radius`` are set,
+        ``radius`` is negative, or ``path_method`` or ``eigen_solver`` is
+        unknown.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
+    >>> Y = mojolearn.Isomap(n_neighbors=10, n_components=2).fit_transform(X)
+    """
     _parameters = ("n_neighbors", "radius", "n_components", "eigen_solver", "path_method", "metric", "p", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, radius=None, n_components=2, eigen_solver="auto", tol=0, max_iter=None,
@@ -5570,6 +5775,17 @@ class Isomap(_Base):
         self.metric_params, self.numeric_mode = metric_params, numeric_mode
 
     def fit(self, X, y=None):
+        """Compute the embedding of X.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.n_neighbors is not None and self.radius is not None:
             raise ValueError(f"Both n_neighbors and radius are provided. Use Isomap(radius={self.radius}, "
@@ -5627,11 +5843,39 @@ class Isomap(_Base):
         return Wg, nn
 
     def fit_transform(self, X, y=None):
+        """Fit the model and return ``embedding_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X).embedding_
 
     def transform(self, X):
-        """sklearn Isomap.transform: geodesic distance of each query through
-        its k nearest training points, then KernelPCA.transform."""
+        """Embed new points.
+
+        Each query's geodesic distance to the training points goes through
+        its nearest training neighbors (or, with ``radius``, every training
+        point within the radius), then is projected as in kernel PCA.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_queries, n_components), float32
+
+        Raises
+        ------
+        ValueError
+            With ``radius``, if a query has no training point within it.
+        """
         self._check("embedding_m_")
         k = self._kit()
         Q = _M.from_input(X)
@@ -5673,6 +5917,16 @@ class Isomap(_Base):
         return k.graph_radius_geo(Dq, D, r)
 
     def reconstruction_error(self):
+        """Return the reconstruction error of the embedding.
+
+        Computed as in scikit-learn: the Frobenius norm of the difference
+        between the centered geodesic kernel and its rank-``n_components``
+        approximation, divided by ``n_samples``.
+
+        Returns
+        -------
+        float
+        """
         self._check("embedding_m_")
         k = self._kit()
         # a difference of two nearly equal sums: accumulated in binary64
@@ -5682,16 +5936,62 @@ class Isomap(_Base):
         return math.sqrt(t) / self._Kc.r if t > 0 else 0.0
 
 
+# Reference: scikit-learn `manifold/_classical_mds.py`.
 class ClassicalMDS(_Base):
-    """sklearn.manifold.ClassicalMDS (reference: scikit-learn
-    `manifold/_classical_mds.py`): double-centred -0.5 * D^2, its top
-    eigenpairs, embedding = V sqrt(max(w, 0))."""
+    """Classical (Torgerson) multidimensional scaling.
+
+    Follows scikit-learn's ``ClassicalMDS``: double-centers ``-0.5 * D**2``
+    for the pairwise distances D and embeds by its top eigenvectors scaled
+    by the square roots of the eigenvalues.
+
+    Parameters
+    ----------
+    n_components : int, default 2
+        Embedding dimension.
+    metric : str, default "euclidean"
+        ``"precomputed"`` (X is a distance matrix) or a distance metric:
+        ``"euclidean"``, ``"l2"``, ``"minkowski"`` (``p`` from ``metric_params``), ``"manhattan"``
+        (``"cityblock"``, ``"l1"``), ``"chebyshev"`` (``"infinity"``) or
+        ``"cosine"``; a callable or any other name raises
+        NotImplementedError.
+    metric_params : dict or None, default None
+        Only ``{"p": ...}`` is supported.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    embedding_ : ndarray of shape (n_samples, n_components)
+    eigenvalues_ : ndarray of shape (n_components,)
+    dissimilarity_matrix_ : ndarray of shape (n_samples, n_samples)
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
+    >>> Y = mojolearn.ClassicalMDS(n_components=2).fit_transform(X)
+    """
     _parameters = ("n_components", "metric", "numeric_mode")
 
     def __init__(self, n_components=2, *, metric="euclidean", metric_params=None, numeric_mode=None):
         self.n_components, self.metric, self.metric_params, self.numeric_mode = n_components, metric, metric_params, numeric_mode
 
     def fit(self, X, y=None):
+        """Compute the embedding.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
+            Data, or a distance matrix with ``metric="precomputed"``.
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         M = _M.from_input(X)
@@ -5715,17 +6015,88 @@ class ClassicalMDS(_Base):
         return self
 
     def fit_transform(self, X, y=None):
+        """Compute the embedding and return ``embedding_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X).embedding_
 
 
+# Reference: scikit-learn `manifold/_mds.py`, `_smacof_single`, `smacof`.
+# Random starts come from the Philox stream. init='random' is the default
+# sklearn's FutureWarning names. Non-metric: the disparities are the
+# isotonic regression of the distances on the dissimilarities (the linear
+# lane's IsotonicRegression), rescaled.
 class MDS(_Base):
-    """sklearn.manifold.MDS (reference: scikit-learn `manifold/_mds.py`,
-    `_smacof_single`, `smacof`): metric SMACOF with the Guttman transform,
-    `n_init` starts (random ones from the Philox stream), the lowest stress
-    kept. init 'random' (the default the FutureWarning names), 'classical_mds'
-    or an array. metric_mds=False is Kruskal's non-metric SMACOF: the
-    disparities are the isotonic regression of the distances on the
-    dissimilarities (the linear lane's IsotonicRegression), rescaled."""
+    """Multidimensional scaling by SMACOF.
+
+    Follows scikit-learn's ``MDS``: minimizes stress with the Guttman
+    transform from ``n_init`` starts and keeps the start with the lowest
+    stress. ``metric_mds=False`` runs Kruskal's non-metric SMACOF. Random
+    starts come from mojolearn's own generator.
+
+    Parameters
+    ----------
+    n_components : int, default 2
+        Embedding dimension.
+    metric_mds : bool, default True
+        Metric (True) or non-metric (False) MDS.
+    n_init : int, default 1
+        Number of random starts (with ``init="random"``).
+    init : {"random", "classical_mds"} or array-like, default "random"
+        Starting configuration: random, the :class:`ClassicalMDS`
+        embedding, or an array of shape (n_samples, n_components).
+    max_iter : int, default 300
+        Maximum SMACOF iterations per start.
+    verbose : ignored
+    eps : float, default 1e-6
+        Convergence tolerance on the stress.
+    n_jobs : ignored
+    random_state : int or None, default None
+        Seed for random starts; None means 0.
+    metric : str, default "euclidean"
+        ``"precomputed"`` (X is a dissimilarity matrix) or a distance
+        metric: ``"euclidean"``, ``"l2"``, ``"minkowski"`` (``p`` from ``metric_params``), ``"manhattan"``
+        (``"cityblock"``, ``"l1"``), ``"chebyshev"`` (``"infinity"``) or
+        ``"cosine"``; a callable or any other name raises
+        NotImplementedError.
+    metric_params : dict or None, default None
+        Only ``{"p": ...}`` is supported.
+    normalized_stress : bool or "auto", default "auto"
+        Report normalized stress (Kruskal's stress-1). ``"auto"`` is True
+        for non-metric MDS and False otherwise.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    embedding_ : ndarray of shape (n_samples, n_components)
+    stress_ : float
+    n_iter_ : int
+    dissimilarity_matrix_ : ndarray of shape (n_samples, n_samples)
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``init``, or with ``metric_mds=False`` when
+        ``n_samples**2`` exceeds ``2**31 - 1``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((300, 8), dtype=np.float32)
+    >>> Y = mojolearn.MDS(n_components=2, random_state=0).fit_transform(X)
+    """
     _parameters = ("n_components", "metric_mds", "n_init", "init", "max_iter", "eps", "random_state", "metric",
                    "normalized_stress", "numeric_mode")
 
@@ -5741,6 +6112,20 @@ class MDS(_Base):
         return k.ew("sqrt", k.sqdist(Y, Y))
 
     def fit_transform(self, X, y=None, init=None):
+        """Compute the embedding and return it.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
+            Data, or dissimilarities with ``metric="precomputed"``.
+        y : ignored
+        init : array-like of shape (n_samples, n_components) or None, default None
+            Starting configuration; overrides the ``init`` parameter.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         M = _M.from_input(X)
@@ -5779,6 +6164,19 @@ class MDS(_Base):
         return self.embedding_
 
     def fit(self, X, y=None, init=None):
+        """Compute the embedding.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
+        y : ignored
+        init : array-like of shape (n_samples, n_components) or None, default None
+            Starting configuration; overrides the ``init`` parameter.
+
+        Returns
+        -------
+        self
+        """
         self.fit_transform(X, init=init)
         return self
 
