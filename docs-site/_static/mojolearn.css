@@ -19,3 +19,7 @@ html[data-theme="dark"] {
 }
 .navbar-brand img { height: 1.6rem; }
 .sd-card-title { font-weight: 650; }
+
+/* Selected text uses the pop color. */
+html[data-theme="light"] ::selection { background: #30215A; color: #FFFFFF; }
+html[data-theme="dark"] ::selection { background: #A99BE0; color: #14181b; }
