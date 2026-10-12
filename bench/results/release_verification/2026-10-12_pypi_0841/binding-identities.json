@@ -51,7 +51,7 @@
    "identity_digest": "4c5c1d8fda6fe5a222810f8c762e1929dd4fbe93f57cc9eaeb9a95ce286fb319",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_gbdt",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "156aa7f82d69295ff9e221ba4e963ed798df755275821c6b62f4dfcefe1eb741",
    "target": "linux-64"
   },
   {
@@ -103,7 +103,7 @@
    "identity_digest": "b384dfd951b46fe768bd5075f948366cab187a91bf3c9dffe9dd63ef8a43a7c8",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_rf",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "237c3d7fadcbe4547b9ab8f423dbc9bbf31b227e1abca2cbadc1c739a3085f51",
    "target": "linux-64"
   },
   {
@@ -155,7 +155,7 @@
    "identity_digest": "a9fc1f70c0a130f700fcc2f4daa25cafaf8ee24e3d268183e2789128dbad885a",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_trees",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "7251b8e8a7ccb1cbe2de91baf85117bda85adf38392b574cc0e5d921dc5542f1",
    "target": "linux-64"
   },
   {
@@ -207,7 +207,7 @@
    "identity_digest": "2f49160b2e2661e7751efb91c498ae99a9216554a1b2809151632176953c67ac",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "e8309247bf29917e215387d184cbb7934424b5ca15fcddb8fb7bc48a3062d413",
    "target": "linux-64"
   },
   {
@@ -259,7 +259,7 @@
    "identity_digest": "5d422791d12b643929486f320da9bc329f06cb3ade5587db77801b79a771f0dd",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_estimators",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "ed80e776151ab8d808c20a49e5d1521e22922e936a1d7976104e46d1f7d9e62c",
    "target": "linux-64"
   },
   {
@@ -311,7 +311,7 @@
    "identity_digest": "61710b974b0cb20b139e851fe5f60e2c0f87ca565facf98ca897f0e9d3a76be8",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_svm",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "fea5f8b1c1b86393a5b44ab3cb555ed4a97916e613ed54b321e8bbf95473b7e6",
    "target": "linux-64"
   },
   {
@@ -363,7 +363,7 @@
    "identity_digest": "5f0beefe3ecb18deaff5861fd15a834063b8179b6dbd813d206ad8ff97d80648",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_solver",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "a42335912c3ab76ab49374436e3652d4396bb962e20a146333e1beb60744952b",
    "target": "linux-64"
   },
   {
@@ -415,7 +415,7 @@
    "identity_digest": "3039166de8725fad2d4d682380f0814dce87093026e1d79b6ea88e281e5e2231",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_metrics",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "d2219a5397746ad52e5356dd92616f58b19d44415c79ecc8a4a57ef4452f5195",
    "target": "linux-64"
   },
   {
@@ -467,7 +467,7 @@
    "identity_digest": "3fa0bf3c4a6ce653bb38cda0c99ff700217c1fdf5d634cd75d213eaa823764e8",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_preprocessing",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "1c6a7f174142b036036ef2c5fdb25fd97e61ec6a2c500565f3195364bd780574",
    "target": "linux-64"
   },
   {
@@ -519,7 +519,7 @@
    "identity_digest": "627eb111a8d9e9d293f4d2c444cece62885ab012726e5fd988eb5a561c77f04a",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_tsa",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "6e53b392ea69f3b3131d5c3442b92a9b70fa0726fa28d8556146f2f83d9f244a",
    "target": "linux-64"
   },
   {
@@ -571,7 +571,7 @@
    "identity_digest": "5fb4c0d145c2732f441675656ad62b78060f6b6333587d599438e82b6bc97ee4",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_linalg",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "31db82bf3da8d1aaa2a9f9708ad2c1499ac39b254ae2e16823a460ac1b7e1c55",
    "target": "linux-64"
   },
   {
@@ -623,7 +623,7 @@
    "identity_digest": "4abc5550302524b232c4031c6d8a6cb55365d0879e116efe650df77146ba8abc",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_arima",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "1251d17db6c7857bee181abc42abc683023381b81f419968c3ec401993e56e39",
    "target": "linux-64"
   },
   {
@@ -675,7 +675,7 @@
    "identity_digest": "7c69dff35d996d624adccfb24594f04554b9bc64f13b10b06be71dd58c70f04d",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_gp",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "19a00f00210c1e147d3a298bf5fd1dc53d1894be2499768a5c1eb8578a543c17",
    "target": "linux-64"
   },
   {
@@ -727,7 +727,7 @@
    "identity_digest": "6c74d6d0801dad82773c9d6f1e50aca9dd62dedd16439b9acfa477633379dc86",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_kernel_methods",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "d9b06482e123b644d807c6bb2c266ace639d34720d17dc719ef054d8ae1033e2",
    "target": "linux-64"
   },
   {
@@ -779,7 +779,7 @@
    "identity_digest": "5564c0790255e78f5e0058b9a9997303fcce9132d9965c77a01638b28321cf16",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_mixture",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "b0d4dcc1d8ba5d719c2cc92884d1681438ba4560b8c65700490f28d2997bb67f",
    "target": "linux-64"
   },
   {
@@ -831,7 +831,7 @@
    "identity_digest": "1f14539bfc047db6e99569469f78c8fdad194d07865afb3818d391a264046805",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_hdbscan",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "2014147e69b719c4528fd845f9f258d235fa16601187914897d73329ed5cde43",
    "target": "linux-64"
   },
   {
@@ -883,7 +883,7 @@
    "identity_digest": "1e9240132092646daab8998d58017948d0526758b0501f487572eff2af6aa119",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_resample",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "b837f561fc1e3953f1e1e0eb3f853daa03ec18197b5ff59f9276488b3f82348a",
    "target": "linux-64"
   },
   {
@@ -935,7 +935,7 @@
    "identity_digest": "8033a2d350d89b049944c33ebfd6b8d9806c58661ef4b89d77a4228b866089af",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_ivf",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "99eaa0b195945a16fd52f2dce46750678aed874f3d35ac3998d30d6bc7700135",
    "target": "linux-64"
   },
   {
@@ -987,7 +987,7 @@
    "identity_digest": "61688b573de84591cdbe7f1343f1dc2e7f1f0dd2c8641d5ddbe339b4faa9597c",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_training",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "b38404dab854350dc84ccd8be5851f3d677af31ea883ea3f2603a34626208430",
    "target": "linux-64"
   },
   {
@@ -1039,7 +1039,7 @@
    "identity_digest": "4c61824c67374e013346235a66f0a2224e1937bc0a4177a52113e80ab9f59570",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_mamba",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "9a3ef48024fea660108f395a8763fc2a16941c4256b827aa03a975eaa156b9bb",
    "target": "linux-64"
   },
   {
@@ -1091,7 +1091,7 @@
    "identity_digest": "d0281b7c6652881e55a39465d6340d04adc4b4cda9ef3fc3327cbadf139cff33",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_transformer",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "cbf8d479d9d0ba80dceef4d22e35f389eb66c20007ec07fd3d77233883b8365a",
    "target": "linux-64"
   },
   {
@@ -1143,7 +1143,7 @@
    "identity_digest": "d72340f823fbe056e4b1bb9411dc773fb701c374f80a90234a3f59e7a73ede6f",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_embedding",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "ffe83376df12813da5ecbe98361147df0432957d2fa3356b81389fa2eaca4548",
    "target": "linux-64"
   },
   {
@@ -1195,7 +1195,7 @@
    "identity_digest": "21b842466e13eb0b050c7cf9cde08a94099de909baee7fb9432faca64e41ab35",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_linear",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "0caa0424657b86240666eb4f1562f0ccf9806278f204d73694973612e68ad44e",
    "target": "linux-64"
   },
   {
@@ -1247,7 +1247,7 @@
    "identity_digest": "ddf6a9c194b8ebd403b17593abe9fca8b896cb0a494406f67d935bfbd3cbbdb2",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_cluster",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "df88f71bff4f9e21e5bcc1a0fc334dfb3958cef754db38f4f94d34496171e5a7",
    "target": "linux-64"
   },
   {
@@ -1299,7 +1299,7 @@
    "identity_digest": "7f28065e5871cb1d285f4b948ff0ed958b385266611839e631de9c03d9a8e9b7",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_neighbors",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "effd775f4b583959842d83c7033e13de1f0335ed787edcc95b7c9ac9a61828c9",
    "target": "linux-64"
   },
   {
@@ -1351,7 +1351,7 @@
    "identity_digest": "d5748569d318f56e537e23ade95bab7e2572810dc729feb67d552041f7357214",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_decomp",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "21d3b18024851e12babc00462a366ea69e92c386f54704aaacead0f08fe4d2cd",
    "target": "linux-64"
   },
   {
@@ -1403,7 +1403,7 @@
    "identity_digest": "6fe33a8e52515c03e6ad6b419c010fdba751988f9ba761cfb8c34bc825cf58cb",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_prep",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "bb43511dbec98ff6259d772e202f2a1f9345fefbe1cd97b830142ee2d94fca6d",
    "target": "linux-64"
   },
   {
@@ -1455,7 +1455,7 @@
    "identity_digest": "024599ed1e12efc4e1823c1985824c53e1ecac1507242bcf93d6da4942726ea8",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_sequence",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "2bd99527392a55c65d788635ea3d42d336b89f48001343ecd32a06131607e519",
    "target": "linux-64"
   },
   {
@@ -1507,7 +1507,7 @@
    "identity_digest": "462359ad5979b29329e32102acd72b36a930798d1a0ef93b220126169c8c125f",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_trees",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "0b79bd76439b2762ec76aa0bead34fdfe9496141ff2c73e1a0d17d6b5789715e",
    "target": "linux-64"
   },
   {
@@ -1559,7 +1559,7 @@
    "identity_digest": "51e7dc6389bfda9eb150a9b6a6e55a0f0cb37a3546bde386e3260705c5f92810",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_cnn",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "e8edf80a57bc8269fda1efb3de822b385f03dbf7bf1f914af3086287fc196d15",
    "target": "linux-64"
   },
   {
@@ -1611,7 +1611,7 @@
    "identity_digest": "0fe7f4bde35dd24e823279f4d5cbf0ff8daafa6b2c40967cfd8d57ca65dd389e",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_ann",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "9ff9c3a747d5dead1fb11bef1da8791549323377537a5efee16a4c544b63da35",
    "target": "linux-64"
   },
   {
@@ -1663,7 +1663,7 @@
    "identity_digest": "0455f2f6d1fcb6033f97bccd69e12b81e1a3f9bfa229d97eb1c80e99eb5f702a",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_metrics",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "d7bc6b5cd9354b09fdf551a03608cf88d425740583bdf0ea676b3ed00eff0217",
    "target": "linux-64"
   },
   {
@@ -1715,7 +1715,7 @@
    "identity_digest": "d595b848114a6d5293a43f02b344126d30ae28c03a7bc879ff3ee46c03ffc59d",
    "key": "linux-64/cuda/sm_89/deterministic/_mojolearn_gbdt",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "4bca32637c46c3a6ca7277208a3c593642c6ffa0d2f26c9c0e31b72fe7230648",
    "target": "linux-64"
   },
   {
@@ -1767,7 +1767,7 @@
    "identity_digest": "a97ed39bc57f5d21c79050a780c278fe8db8f6bd66bdd88fec29ab395e7b7b51",
    "key": "linux-64/cuda/sm_89/deterministic/_mojolearn_rf",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "9284f6ce731b6a559bcccdaf7863eb78e625ebe3ee71685177edeba40c6a18ac",
    "target": "linux-64"
   },
   {
@@ -1819,7 +1819,7 @@
    "identity_digest": "5d4cee457dbde616a109c3059ae6ede38565737e42bcea4b060b4e7d28409b57",
    "key": "linux-64/cuda/sm_89/deterministic/_mojolearn_trees",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "0a071aa9f7054bc6ba5d7091b853c2e3510338c68b1a7f17e7ab337d0fd63b31",
    "target": "linux-64"
   },
   {
@@ -1871,7 +1871,7 @@
    "identity_digest": "720ca10cd90482591c88ebdf872124b2d7309a9acd86a056bc7f33bb4b97d601",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_gbdt",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "806f7e1df7ed425679e662f110a8c1ea2ff4e2d31a26efec9cbbc7b5bfddc2e0",
    "target": "linux-64"
   },
   {
@@ -1923,7 +1923,7 @@
    "identity_digest": "2f1711fa451690e89075c7dbc164e7728ba375273220eb288242b21dea2b5111",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_rf",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "db2afbd5644d88cfdfefd15a4b9391cfd4e394b7a4ac374b4b6111d5f7a2d850",
    "target": "linux-64"
   },
   {
@@ -1975,7 +1975,7 @@
    "identity_digest": "ff265e543839afb370e5d72dda5675987a4a117e8d5cb8c309e5bba28fe226d2",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_trees",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "7aed555fd86f978e50bd696eb6057da653f4448a163a542e91265a8739436588",
    "target": "linux-64"
   },
   {
@@ -2027,7 +2027,7 @@
    "identity_digest": "6a5132e68409cd1c32ec9d83421bd8d672d1949831f959a30f05b61da3fedc5a",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "0e0b82045025ac597719757857d53d0cfb1f8e098cfbf2f8e8c0a5db986ea7f6",
    "target": "linux-64"
   },
   {
@@ -2079,7 +2079,7 @@
    "identity_digest": "e4d6f60e358f606be30b0536aeda7c681fa86e2fd6bfac80a13ac65a4a84f9ef",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_estimators",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "aa0d91ec8a89f94fd157bdd6cd9542700eb6cd32b92890079bce4db2c4335281",
    "target": "linux-64"
   },
   {
@@ -2131,7 +2131,7 @@
    "identity_digest": "1865d2ac71175f40982226ce1b148ce4e0d0974c951904ab679555169837e7bd",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_svm",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "77d376a45b3b99fd5baa256bd93dc857c8e4f978bd1f3285a0eced7c9b5e4471",
    "target": "linux-64"
   },
   {
@@ -2183,7 +2183,7 @@
    "identity_digest": "a635f5f0c5d704c6050e67e3edc4e548eba9c09b85382679a025ec9a0baf1386",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_solver",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "5e321bbbaa1d6b9a6867a254bb98d29d5a77eac78f0ec953d2e0df211e381f9b",
    "target": "linux-64"
   },
   {
@@ -2235,7 +2235,7 @@
    "identity_digest": "61f4250f694026a30e77f2635a929197c860cb15c21d6befe60944343df83d2c",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_metrics",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "c6c821b320f170dc1463df1923a41dd4ed41ffc1375a82b3714ded658dd74bf5",
    "target": "linux-64"
   },
   {
@@ -2287,7 +2287,7 @@
    "identity_digest": "381e43a55c23a9fdf18c3269f1b0ac16fb40353ebf25ae27a8d888a7f8976ce2",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_preprocessing",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "7107776340b829bcd6a8fbafb9813318560540de2a469b1d16f38bd07d954ee0",
    "target": "linux-64"
   },
   {
@@ -2339,7 +2339,7 @@
    "identity_digest": "9dcd0c4c98fc7320faf94c842c01eebed58b082ece9e93f66f47d78e18b66067",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_tsa",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "912f7b363644178722d7e8b6773d8dccc5c97dc5858fc81541ec4803c2ac4024",
    "target": "linux-64"
   },
   {
@@ -2391,7 +2391,7 @@
    "identity_digest": "f1336f4b45c712bf349c63d8706f9dc9be941814e79ee679cdd1a5efa81a42cc",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_linalg",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "3cf6bf0e1912953c413c4171f94c2960ffebb0ff9e6d6e5f1ae1cd7e78b7f4a8",
    "target": "linux-64"
   },
   {
@@ -2443,7 +2443,7 @@
    "identity_digest": "487ecf339c5d2a799dcd7eb8c9af0f650579383f6fabe616ded8bdc6fc6c7bdd",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_arima",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "6089eccf3c0acfcd54c6eb699aa46d80c974bca4cb684fac2efeea5b54911fc1",
    "target": "linux-64"
   },
   {
@@ -2495,7 +2495,7 @@
    "identity_digest": "92281b1a916f239cac172eda0b02db385a62cb84297e78b160e98edcada0c196",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_gp",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "c4a01de4733c2ae6a6084a0f555f559d729c91e262b374dcef461089e05d9b2e",
    "target": "linux-64"
   },
   {
@@ -2547,7 +2547,7 @@
    "identity_digest": "810d457ebc14ce1f285b663e48ee6678df2f557ff02305d5c6dd11147009af2c",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_kernel_methods",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "26634625ab7392516376aa7a62ed3baee170030ffb18e6c66f2b69b65c35b760",
    "target": "linux-64"
   },
   {
@@ -2599,7 +2599,7 @@
    "identity_digest": "edde3665feddec365e1741972ef17fdc9076f785645caa232b13b6173ee371a1",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_mixture",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "5e9d53010057cc2bcc9a4df112479b9f3eae96808b43380412c0b6100d033aeb",
    "target": "linux-64"
   },
   {
@@ -2651,7 +2651,7 @@
    "identity_digest": "177e83c501cf45b442ea5a24e67080b5ccf27531f8616a5d12b8634d7b154948",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_hdbscan",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "9c314b1369c43fcaf8184b251078bda952b9520887c2a0a5360c0bb93d7ad31c",
    "target": "linux-64"
   },
   {
@@ -2703,7 +2703,7 @@
    "identity_digest": "465ceff60b4678701eef64e68354959a4e3b6052a4f5c93adf25cf6bb0fd469d",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_resample",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "6dea49316b63a3b1156384ebdff62c745c108f619255a5091e5e3691b55d4299",
    "target": "linux-64"
   },
   {
@@ -2755,7 +2755,7 @@
    "identity_digest": "5fa898f01bc4ea14bc1df32d784cd90ec812e56fdc7fd4a7c0d86545e0c0852c",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_ivf",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "7cc5382fca4709441018fdfc2c6dd56aacfca6e60130e11cf3431f4249d4edd7",
    "target": "linux-64"
   },
   {
@@ -2807,7 +2807,7 @@
    "identity_digest": "97257b97e5f80dd0f0bfcd705b0ce906f7596c01c236af1e811001c34a5cd010",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_training",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "58e01ae60f2131f7cae56c07f63203daa00188660e3c281eff0b454ce0d8b54b",
    "target": "linux-64"
   },
   {
@@ -2859,7 +2859,7 @@
    "identity_digest": "f1212c87d5742aa64bd7927fabb7c98aa256e37ff0d2d044b41d675e4cb1bf06",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_mamba",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "f08cc6e91c778d1be7824aaf1fc0b0ef99ade8f1cbec82cde7fa9e471da0d07f",
    "target": "linux-64"
   },
   {
@@ -2911,7 +2911,7 @@
    "identity_digest": "76067e37588cac1d0ef1e8cb532145c146766ffa5b1a9a992e242c2aaf0a34ab",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_transformer",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "a57473dbf5b5b8f0e74246f1c8a53a144471a4c97d4886adfddb52770d9527b6",
    "target": "linux-64"
   },
   {
@@ -2963,7 +2963,7 @@
    "identity_digest": "f8b3401f75dd9b2a9b35bdf33f96b95993f441de1b14e3d21973998d653a6d6b",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_embedding",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "83c7f3210f83b6eee1b7544cf31b8d117b3430015b441ef35d6826a5af7fdbfd",
    "target": "linux-64"
   },
   {
@@ -3015,7 +3015,7 @@
    "identity_digest": "f5752b66650c9446e114b79bf15d34908fefa1b8614b666f67fdbd1428e747b0",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_linear",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "3cd48205c61e8f105b2f4c3b8c8d2c0fe48d83cd21647c19e274d37a246e4ccf",
    "target": "linux-64"
   },
   {
@@ -3067,7 +3067,7 @@
    "identity_digest": "3f4b02f59e0d471f4828a6c12f6a242019b2fbc36e57d8e5f8a8f028706616c3",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_cluster",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "b9d1af57641966706ae5bbb4e258087c3ac5f381c1ff7bddf1556c28e6184c11",
    "target": "linux-64"
   },
   {
@@ -3119,7 +3119,7 @@
    "identity_digest": "de5200d28d064afbf261c831b5fc342582bca0cb5e59b4156cdf65bd393cc6f6",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_neighbors",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "626226a996fdeecf140dc5633f27a830b4ce4012d52dea7a0121501979d573a7",
    "target": "linux-64"
   },
   {
@@ -3171,7 +3171,7 @@
    "identity_digest": "d70fadfa3f8792925300f03958ac98f2d0040db2bb6be949c650cce5c76b78f2",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_decomp",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "c985277c2e0295a004fc5cf04f01757e7e8daddb70394c37f2c21abe4fbaf7d9",
    "target": "linux-64"
   },
   {
@@ -3223,7 +3223,7 @@
    "identity_digest": "fa841163479a94144365d52e24b6351121e3279c18e122705a7d441660ff9509",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_prep",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "e75b81949c0a9051e3874aea016e589eefa2070ec5026d2e238047607db0e689",
    "target": "linux-64"
   },
   {
@@ -3275,7 +3275,7 @@
    "identity_digest": "3223a80391bc79a5323b9d06b3fbf8967f0b4ef9e4e7d254431f21e5f3f62d8a",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_sequence",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "5e172f6761a05436cdaf80a2e3ac169ab1e04b0a0a5a64fd48df793f5300df6e",
    "target": "linux-64"
   },
   {
@@ -3327,7 +3327,7 @@
    "identity_digest": "393e401feb18a0a13dbd0f0929b26ec98aaf8aba4fd88941f0a5f254af7700df",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_trees",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "c5042a5cba6cb692eba95e22d544ef266ceb8916f3846c392e9484910e638d39",
    "target": "linux-64"
   },
   {
@@ -3379,7 +3379,7 @@
    "identity_digest": "c6913835d428d0ac41593a21ff96768994176ef5ff8ce9ccae0343f23f73608f",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_cnn",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "584e2b845259b24fa5287520a052c5ed2e869225a12e09cda14bbefe7a96f399",
    "target": "linux-64"
   },
   {
@@ -3431,7 +3431,7 @@
    "identity_digest": "4516109df88ee9b3d5010285a1e4d0b51fedcc0ebd40d5363144572aa3720b70",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_ann",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "8dac3852160b3b9f6968075754d32332d4712f574a6d7eaeaa1d5052c31b5ca9",
    "target": "linux-64"
   },
   {
@@ -3483,7 +3483,7 @@
    "identity_digest": "d480a3be87c0118c297ec171d01828ffb09b7157ace2f01c1f2a0be9dad493ef",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_metrics",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "7677b8372ef03fa9a67ad458672c013fbc0e511251fcb3128f2e9e274b222253",
    "target": "linux-64"
   },
   {
@@ -3535,7 +3535,7 @@
    "identity_digest": "5e0cd35c5acd1f19a1b8bbed3e77628a61d756827b27b4654973acf0c3308738",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_byte_lm",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "95b4f4ef62d7839b51eaecd656c053239a34d8e49b23a19adc3e9a62caa24c1f",
    "target": "linux-64"
   },
   {
