@@ -47,16 +47,16 @@ architecture: 0.8.41's NVIDIA package carries `sm_89` only (see the table above)
 |---|---|
 | `identical` | The default. For a certified fixture and configuration, the raw result bits match across NVIDIA CUDA and AMD HIP; that is the release requirement. Apple Metal and CPU host-binding results are recorded beside them and agree for the configurations recorded, but are not required. |
 | `deterministic` | Repeated execution on the same device and build returns the same bits. No cross-vendor promise. |
-| `fast` | Performance oriented. No repeatability or cross-vendor promise. |
+| `fast` | Apple GPUs only. Performance oriented; no repeatability or cross-vendor promise. |
 
 | Family | `identical` | `deterministic` | `fast` |
 |---|---|---|---|
-| Gradient boosting | yes | yes | yes (opt-in; tuned and measured on Apple) |
-| Random Forest | yes | yes | yes (opt-in; tuned and measured on Apple) |
-| Extra Trees | yes | yes | yes (opt-in; tuned and measured on Apple) |
-| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | no | yes (opt-in; tuned and measured on Apple) |
-| Neural networks, GPU surface (LanguageModelTrainer, TransformerBlock, Mamba1/2/3Block, SambaStack, SmallMLPTrainer, Embedding, linalg GEMMs) | yes | no | Apple only (the Apple FAST neural tier, 2026-10-03; the byte LM's FAST build lands with lane afn-lm) |
-| Every other family (the rest of classical ML and the expansion lanes) | yes | no | yes (opt-in; tuned and measured on Apple) |
+| Gradient boosting | yes | yes | Apple only (opt-in) |
+| Random Forest | yes | yes | Apple only (opt-in) |
+| Extra Trees | yes | yes | Apple only (opt-in) |
+| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | no | Apple only (opt-in) |
+| Neural networks, GPU surface (LanguageModelTrainer, TransformerBlock, Mamba1/2/3Block, SambaStack, SmallMLPTrainer, Embedding, linalg GEMMs) | yes | no | Apple only (opt-in) |
+| Every other family (the rest of classical ML and the expansion lanes) | yes | no | Apple only (opt-in) |
 
 Select a process mode with `mojolearn.set_numeric_mode(...)` or the
 `MOJOLEARN_NUMERIC_MODE` environment variable. Estimators that accept

@@ -24,12 +24,8 @@ numerical tolerance.
   one GPU vendor to another mid-run, or shared by Apple, NVIDIA and AMD GPUs
   working on one model at once, and the training state after every step is
   bitwise identical to a single GPU's.
-- **GPT-3 Small, trained twice, the same bits.** Two 5,000-step runs of a
-  162-million-parameter GPT-3 Small-shaped decoder, each on 2.62 billion
-  tokens, took different hardware routes across Apple, NVIDIA and AMD GPUs,
-  with checkpoints handed between vendors and one segment trained jointly on
-  an NVIDIA H100 and an AMD MI325X. The runs agree at every step and write the
-  same final checkpoint.
+- **A language model trained twice, the same bits.** The
+  [training experiment](https://mojolearn.org/#experiment) on mojolearn.org.
 - **Full FP32.** Neural training and inference run in full FP32
   floating-point arithmetic, without reducing the computation to integers.
 - **Every algorithm runs on the Mac's own GPU**, where XGBoost, LightGBM,
@@ -97,16 +93,16 @@ verifier.
 
 ## Numeric modes
 
-`identical` is the default. `fast` is an opt-in for most families (tuned and
-measured on Apple), and gradient boosting, random forests and Extra Trees also
-offer `deterministic`. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
+`identical` is the default. On Apple GPUs, `fast` is an opt-in for most
+families; it is not offered on NVIDIA, AMD or the CPU. Gradient boosting, random
+forests and Extra Trees also offer `deterministic`. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
 the table by family.
 
 | mode | contract |
 |---|---|
 | `identical` | The same bits on NVIDIA and AMD GPUs (the release requirement); Apple GPU and CPU results are recorded beside them. |
 | `deterministic` | The same bits on repeated runs on one device. |
-| `fast` | Throughput only, with no repeatability promise. |
+| `fast` | Apple GPUs only: throughput, with no repeatability promise. |
 
 The `identical` contract is across hardware within one release. mojolearn is
 alpha: a release may change `identical` output bits (a faster or more accurate
