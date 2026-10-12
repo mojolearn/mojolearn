@@ -1,59 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Low-bit WEIGHT STORAGE for every inference class, with fp32 arithmetic.
+"""Low-bit weight storage for the inference classes, with float32 arithmetic.
 
-Lane lane/identical-lowbit-inference, 2026-09-17. Contract
-`gemm/IDENTICAL_LOWBIT_CONTRACT.md`; profiles
-`mojolearn.identical.gemm.bf16f32.v1` and `mojolearn.identical.gemm.int8i32.v1`.
+A model's 2-D weight matrices can be stored as bfloat16 bits or as int8 codes with
+one power-of-two exponent per row, half or a quarter of the float32 size on disk and
+in memory. An inference class built from packed weights first converts them back to
+float32 exactly (bfloat16 by widening, int8 as ``codes * 2**exponent``) and then runs
+its normal float32 path, so it computes the same bits as the float32 block given the
+converted weights. Packed weights are rounded weights: the model is not the original
+float32 model, and the arithmetic is not lower precision.
 
-WHAT THIS IS. A model's matrix weights held as bf16 bits or as int8 codes
-with one power-of-two exponent per output row, half or a quarter of the
-float32 bytes, on disk and in memory. When an inference class is built from
-packed weights it MATERIALIZES them: bf16 widens by the shift (exact,
-contract L-1) and int8 dequantizes by `codes * 2^e` (exact, L-6), and the
-float32 result runs through the block's certified fp32 path unchanged. So a
-block built from packed weights computes, bit for bit, what the fp32 block
-computes from the materialized weights, on every certified backend; the
-`*-bf16w` and `*-int8w` lanes of `tools/identity_break.py` measure exactly
-that on each column, and `python/mojolearn/tests/test_lowbit_weights.py`
-asserts the equality on one box.
+`pack` converts every 2-D tensor of a weight dict, selected by rank, not by name
+(so a Mamba-1 ``A_log`` of shape (d_inner, 16) is packed too). 1-D and 3-D tensors
+(norm weights, biases, convolution taps, ``D``) stay float32. Use `pack_one` to pack
+selected tensors by name. `unpack` (also `materialize`) returns the float32 dict and
+its format; ``unpack(pack(unpack(p)[0], fmt))`` equals ``unpack(p)``.
 
-WHAT IT IS NOT. Not the fp32 model: a bf16 weight is a rounded weight and an
-int8 weight a coarser one. Not a lower-precision matrix unit: the arithmetic
-is the fp32 profile's. Not a speed claim.
+Conversion runs on the GPU on a GPU install and on the host binding on a CPU-only
+install; an install without the linalg extension raises an error. NumPy is not
+required: packed tensors are `mojolearn.Array` objects and inputs can be any buffer.
 
-WHERE THE MATERIALIZATION RUNS. Through the linalg extension's conversion
-kernels on a GPU install (only there: a GPU install never converts on the
-host), through `_mojolearn_linalg_host` on a CPU-only install (the selector
-installs it under the linalg binding's canonical name, so `mojolearn.linalg`
-reaches it the same way). An install with no linalg binding at all refuses
-by name (pyglue-sweep, 2026-10-03: Python is glue only, so the per-element
-pure-Python spelling that used to run there is gone; the NumPy oracle in
-the test file still holds the kernels and the host binding to the
-`checks/numerics.mojo` seams).
-
-NUMPY-FREE (lane/model-loader, 2026-09-17). This module reaches no NumPy:
-packed tensors are `mojolearn.Array`s (`'<u2'` bits, `'<i1'` codes, `'<i4'`
-exponents), inputs are anything with the buffer protocol, and the NumPy
-oracle spellings that used to live here now live in the test file, where
-NumPy is allowed. No bit moved: the three spellings are unchanged
-constructions, so this rewrite takes no DEVIATION number.
-
-    packed = mojolearn.lowbit.pack(weights, "bfloat16")     # or "int8"
-    blk = mojolearn.TransformerBlock(packed, n_heads=8)      # weight_format "bfloat16"
-    f32, fmt = mojolearn.lowbit.unpack(packed)               # (materialized dict, format)
-
-Only 2-D tensors are packed. `pack` selects BY RANK, not by name: every 2-D
-tensor of the dict is packed, which is the projection matrices and ALSO a
-Mamba-1 `A_log` of shape (d_inner, 16) (the block materializes it exactly
-like the rest; `test_lowbit_weights.py`'s Mamba-1 case packs it). Norm
-weights, biases, convolution taps, `D` and every other 1-D or 3-D tensor
-stay float32, because they never enter a GEMM and the profiles are about
-the GEMM's operands. A caller that wants `A_log` kept float32 packs by name
-with `pack_one` (the model loader does). `pack` and `unpack` are inverses on
-the packed tensors up to the rounding `pack` performs, and
-`unpack(pack(unpack(p)[0], fmt))` is `unpack(p)` (`unpack` returns the
-materialized dict and its format).
+Examples
+--------
+>>> import mojolearn
+>>> packed = mojolearn.lowbit.pack(weights, "bfloat16")        # or "int8"
+>>> blk = mojolearn.TransformerBlock(packed, n_heads=8)
+>>> f32, fmt = mojolearn.lowbit.unpack(packed)
 """
 from ._array import Array
 from ._buffer import (
@@ -66,8 +38,25 @@ FORMATS = ("float32", "bfloat16", "int8")
 __all__ = ["FORMATS", "BF16Weight", "Int8Weight", "pack", "unpack", "materialize",
            "format_of", "is_packed", "pack_one", "materialize_one", "widen_bf16"]
 
+# Contract gemm/IDENTICAL_LOWBIT_CONTRACT.md (profiles bf16f32.v1, int8i32.v1): bf16 is L-2
+# (widen L-1), int8 is L-3/L-4 (dequantize L-6). The *-bf16w / *-int8w lanes of
+# tools/identity_break.py and tests/test_lowbit_weights.py check packed == materialized fp32.
 class BF16Weight:
-    """A 2-D float32 weight stored as bf16 bits (uint16), contract L-2."""
+    """A 2-D weight stored as bfloat16 bits.
+
+    Parameters
+    ----------
+    bits : 2-D uint16 buffer
+        bfloat16 bits, for example from `mojolearn.linalg.to_bf16`. Anything else
+        raises `TypeError`.
+
+    Attributes
+    ----------
+    bits : mojolearn.Array of uint16
+    shape : tuple of int
+    format : str
+        ``'bfloat16'``.
+    """
 
     format = "bfloat16"
 
@@ -87,8 +76,22 @@ class BF16Weight:
 
 
 class Int8Weight:
-    """A 2-D float32 weight stored as int8 codes with one int32 exponent per
-    row, contract L-3 and L-4: `row = codes * 2^exponent`."""
+    """A 2-D weight stored as int8 codes with one int32 exponent per row: ``row = codes * 2**exponent``.
+
+    Parameters
+    ----------
+    codes : 2-D int8 buffer
+    exponents : int32 buffer of shape (rows,)
+        Wrong dtypes or shapes raise `TypeError`.
+
+    Attributes
+    ----------
+    codes : mojolearn.Array of int8
+    exponents : mojolearn.Array of int32
+    shape : tuple of int
+    format : str
+        ``'int8'``.
+    """
 
     format = "int8"
 
@@ -117,13 +120,15 @@ class Int8Weight:
 
 
 def is_packed(value):
+    """Whether `value` is a packed weight (`BF16Weight` or `Int8Weight`)."""
     return isinstance(value, (BF16Weight, Int8Weight))
 
 
 def format_of(weights):
-    """The one format the packed tensors of `weights` share, or "float32"
-    when none is packed. Two formats in one dict are refused: a model is
-    stored one way."""
+    """The format shared by the packed tensors of `weights`, or ``'float32'`` when none is packed.
+
+    Raises `ValueError` when the dict mixes formats.
+    """
     fmts = set()
     values = weights.values() if hasattr(weights, "values") else weights
     for v in values:  # glue: format tag per named tensor
@@ -174,16 +179,27 @@ def _linalg():
 
 
 def widen_bf16(bits):
-    """bf16 bits of ANY rank (a `'<u2'` buffer) to float32, exact, through
-    whichever of the three spellings this install has. The model loader
-    widens 1-D norm weights and the embedding table through this; the 2-D
-    projections go through `BF16Weight` and `materialize_one`."""
+    """Convert bfloat16 bits of any rank (a uint16 buffer) to float32, exactly."""
     b, _ = as_u16_c(bits, ndim=None, name="bits")
     return _linalg().from_bf16(b)
 
 
 def pack_one(value, fmt, name="weight"):
-    """One 2-D float32 tensor to `fmt`. "float32" returns a float32 copy."""
+    """Pack one 2-D float32 tensor to `fmt`.
+
+    Parameters
+    ----------
+    value : 2-D float32 buffer
+    fmt : {'float32', 'bfloat16', 'int8'}
+        ``'float32'`` returns a float32 copy. Unknown formats and non-2-D tensors raise
+        `ValueError`.
+    name : str, default 'weight'
+        Name used in error messages.
+
+    Returns
+    -------
+    BF16Weight, Int8Weight or mojolearn.Array
+    """
     if fmt not in FORMATS:
         raise ValueError(f"mojolearn.lowbit: unknown format {fmt!r}; one of {FORMATS}")
     a = _f32_2d(value, name)
@@ -199,7 +215,7 @@ def pack_one(value, fmt, name="weight"):
 
 
 def materialize_one(value, name="weight"):
-    """A packed tensor as float32 (exact), or a float32 tensor as itself."""
+    """A packed tensor converted to float32 exactly, or a float32 tensor returned as is."""
     if isinstance(value, BF16Weight):
         return _linalg().from_bf16(value.bits)
     if isinstance(value, Int8Weight):
@@ -219,8 +235,20 @@ def _as_given(value, name):
 
 
 def pack(weights, fmt):
-    """Every 2-D float32 tensor of a weight dict to `fmt`; everything else
-    is passed through as given. Returns a new dict."""
+    """Pack every 2-D tensor of a weight dict to `fmt`; other tensors pass through unchanged.
+
+    Parameters
+    ----------
+    weights : dict
+        Tensors by name. Anything but a dict raises `TypeError`.
+    fmt : {'float32', 'bfloat16', 'int8'}
+        Target format; unknown formats raise `ValueError`.
+
+    Returns
+    -------
+    dict
+        A new dict.
+    """
     if fmt not in FORMATS:
         raise ValueError(f"mojolearn.lowbit: unknown format {fmt!r}; one of {FORMATS}")
     if not hasattr(weights, "keys"):
@@ -249,8 +277,20 @@ def pack(weights, fmt):
 
 
 def unpack(weights, what="weights"):
-    """`(float32 dict, format)`: every packed tensor materialized exactly,
-    every other tensor as given. The hook the inference classes call."""
+    """Convert every packed tensor of a weight dict to float32, exactly.
+
+    Parameters
+    ----------
+    weights : dict
+        Tensors by name; other tensors pass through unchanged.
+    what : str, default 'weights'
+        Name used in error messages.
+
+    Returns
+    -------
+    (dict, str)
+        The float32 dict and the format the weights were stored in.
+    """
     if not hasattr(weights, "keys"):
         return weights, "float32"
     fmt = format_of(weights)
