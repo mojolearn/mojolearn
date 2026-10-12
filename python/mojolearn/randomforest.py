@@ -549,14 +549,13 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
         return Xa, n_rows, n_features
 
     def save(self, path):
-        """Write the fitted forest to `path` as an npz.
+        """Write the fitted forest to `path` as an npz file.
 
-        The file holds the five prediction arrays exactly as fitted, raw
-        bytes and exact dtypes. GPU-parallel archives also retain their
-        inference engine and numeric mode in a separately versioned format.
-        Floats never pass through decimal text. The bytes of the file itself are a pure function of
-        the model (see `_serialize.write_npz`), so equal models give equal
-        file hashes across machines.
+        The file holds the prediction arrays exactly as fitted, with exact
+        dtypes; floats never pass through decimal text. A model saved with the
+        'parallel_groves' inference engine also records its engine and
+        numeric mode. The file bytes depend only on the model, so equal models
+        give equal file hashes on any machine.
         """
         if not hasattr(self, "_offsets"):
             raise RuntimeError("this estimator is not fitted yet")
@@ -589,9 +588,11 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a forest saved by `save`. The result predicts; it does not
-        refit. Loading a file saved by the other estimator class raises
-        rather than reinterpreting its leaves."""
+        """Load a forest saved by `save`.
+
+        The loaded model predicts; it does not refit. Loading a file saved by
+        a different estimator class raises `ValueError`.
+        """
         arrays = _serialize.read_npz(path, (_MODEL_FORMAT, _MODEL_FORMAT + "-parallel-groves-1"))
         saved_as = _serialize.scalar_str(arrays, "estimator")
         if saved_as != cls.__name__:
@@ -619,25 +620,118 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
         return obj
 
 
+# Maintainer notes (moved from the docstring): criteria cross as cuML's
+# CRITERION enumerator (DEVIATION 407). `predict` argmaxes exactly as
+# `RandomForest::predict` (`randomforest.cuh:417-427`). Entropy's `log` is
+# DEVIATION 113/406's: it runs in both numeric modes and is bit-comparable to
+# cuML's in neither. `max_depth=None` matches cuML >= v26.08.00; this surface
+# substituted 16 until 2026-09-01 (DEVIATION 409, closed by aligning).
+# `max_leaf_nodes` is refused by name (DEVIATION 408, see _MAX_LEAF_NODES_WHY).
 @forest_estimator("classifier")
 class RandomForestClassifier(_RandomForestBase):
-    """cuML's `RandomForestClassifier`, honoured or refused by name.
+    """Random forest classifier with cuML's defaults.
 
-    `criterion` is 'gini' (cuML's GINI, the default) or 'entropy' /
-    'log_loss' (ENTROPY), split over per-feature quantiles (`n_bins`,
-    default 128); `max_depth` defaults to `None`, unlimited depth, matching
-    both the pinned cuML (whose own default changed from 16 to `None` in
-    v26.08.00) and sklearn -- until 2026-09-01 this surface substituted 16
-    (DEVIATION 409, CLOSED by aligning; pass `max_depth=16` to keep it).
-    `predict` is the argmax of `predict_proba`, exactly as
-    `RandomForest::predict` argmaxes (`randomforest.cuh:417-427`).
-    Entropy's `log` is DEVIATION 113/406's: it runs in both numeric modes
-    and is bit-comparable to cuML's in neither.
+    An ensemble of bootstrapped decision trees whose split thresholds are
+    searched over at most `n_bins` per-feature quantiles, as in cuML, rather
+    than scikit-learn's exact thresholds. Defaults follow cuML. Every
+    scikit-learn-shaped parameter is either honoured or refused by name with
+    `NotImplementedError`; none is accepted and ignored.
 
-    `max_leaves` is cuML's leaf budget, -1 (unlimited) by default, and it
-    caps a LEVEL-ORDER grower. It is NOT sklearn's `max_leaf_nodes`, which
-    is best-first growth to exactly k leaves and is refused by name here
-    (DEVIATION 408); `mojolearn.ExtraTreesClassifier` is where that lives.
+    `X` is converted to float32; NaN or infinity in `X` raises `ValueError`.
+    `y` may hold numbers or strings; NaN labels are refused. The fit is
+    reproducible from `random_state`, and `random_state=None` means seed 0
+    (deterministic), unlike scikit-learn. Supports the `fast`,
+    `deterministic` and `identical` numeric modes through `numeric_mode`.
+
+    Parameters
+    ----------
+    n_estimators : int, default 100
+        Number of trees.
+    criterion : {'gini', 'entropy', 'log_loss'}, default 'gini'
+        Split criterion; 'log_loss' is a second spelling of 'entropy'.
+    max_depth : int or None, default None
+        Maximum tree depth. None means unlimited, as in cuML and scikit-learn.
+    min_samples_split : int, default 2
+        Minimum rows needed to split a node.
+    min_samples_leaf : int, default 1
+        Minimum rows in a leaf.
+    min_weight_fraction_leaf : float, default 0.0
+        Only 0.0 is accepted; any other value raises `NotImplementedError`.
+    max_features : {'sqrt', 'log2'}, int, float or None, default 'sqrt'
+        Features considered per split: a name, a count in [1, n_features],
+        a fraction in (0, 1], or None for all features.
+    max_leaf_nodes : None, default None
+        Refused by name: scikit-learn's best-first growth to exactly k leaves
+        is not available here. Use `max_leaves` for cuML's level-order leaf
+        cap, or `mojolearn.ExtraTreesClassifier`, whose `max_leaf_nodes` is
+        scikit-learn's.
+    min_impurity_decrease : float, default 0.0
+        Minimum impurity decrease required to split.
+    bootstrap : bool, default True
+        Sample rows with replacement for each tree.
+    oob_score : bool, default False
+        Compute the out-of-bag score during `fit`; requires
+        `bootstrap=True`. Callable scorers are not supported.
+    n_jobs : None, default None
+        Only None is accepted.
+    random_state : int or None, default None
+        Seed; None means 0.
+    verbose : int, default 0
+        Only 0 is accepted.
+    warm_start : bool, default False
+        Only False is accepted; there is no incremental fit.
+    class_weight : dict, 'balanced' or None, default None
+        Per-class weights. 'balanced_subsample' is not supported.
+    ccp_alpha : float, default 0.0
+        Only 0.0 is accepted; cost-complexity pruning is not implemented.
+    max_samples : float or None, default None
+        Fraction of rows drawn per tree, in (0, 1]. None means all rows.
+    monotonic_cst : None, default None
+        Only None is accepted.
+    max_leaves : int, default -1
+        cuML's leaf cap on a level-order grower; -1 (or None) means
+        unlimited. This is not scikit-learn's `max_leaf_nodes`.
+    n_bins : int, default 128
+        Number of per-feature quantile bins searched for splits.
+    n_streams : int, default 4
+        cuML's stream count parameter.
+    max_batch_size : int, default 4096
+        cuML's node batch size for the tree builder.
+    device : {'gpu'}, default 'gpu'
+        Only 'gpu' is accepted. On a CPU-only install the same setting runs
+        the host build of the forest.
+    inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
+        How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
+        `fast` mode and 'sequential' otherwise.
+    numeric_mode : {'fast', 'deterministic', 'identical'} or None, default None
+        Numeric mode for this estimator; None uses the package default.
+
+    Attributes
+    ----------
+    classes_ : list
+        Class labels in sorted order (numbers by value, strings by code
+        point).
+    n_classes_ : int
+        Number of classes.
+    n_features_in_ : int
+        Number of features seen in `fit`.
+    oob_score_ : float
+        Out-of-bag score; present when `oob_score=True`.
+    oob_decision_function_ : Array
+        Out-of-bag class probabilities, `(n_samples, n_classes)` float64;
+        present when `oob_score=True`.
+    feature_importances_ : Array
+        Impurity importances, float32; present when `fit` was called with
+        `feature_importances=True`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int64)
+    >>> model = mojolearn.RandomForestClassifier(n_estimators=50).fit(X, y)
+    >>> proba = model.predict_proba(X)
     """
 
     def __init__(
@@ -684,7 +778,21 @@ class RandomForestClassifier(_RandomForestBase):
         self.criterion = criterion
 
     def fit(self, X, y, *, feature_importances=False):
-        """Fit; optionally consume native impurity importances in this fit."""
+        """Fit the forest.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array-like of shape (n_samples,)
+            Targets.
+        feature_importances : bool, default False
+            Also compute `feature_importances_` during this fit.
+
+        Returns
+        -------
+        self
+        """
         return self._fit_with_tree_start(X, y, feature_importances=feature_importances)
 
     def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False):
@@ -753,8 +861,13 @@ class RandomForestClassifier(_RandomForestBase):
         return self._fit_arrays(X, y32, self.n_classes_, fit_fn, rowmajor_fn)
 
     def predict_proba(self, X):
-        """Per-class vote fractions, `(n_samples, n_classes)` float32
-        `Array`, columns in `classes_` order."""
+        """Class probabilities: the per-class vote fractions over the trees.
+
+        Returns
+        -------
+        Array of shape (n_samples, n_classes), float32
+            Columns in `classes_` order.
+        """
         Xa, n_rows, n_features = self._check_predict_input(X)
         out = empty((n_rows * self._num_outputs,), "<f4")
         wrote = self._predict_forest("rf_predict_proba", Xa, out)
@@ -777,10 +890,15 @@ class RandomForestClassifier(_RandomForestBase):
         return decode_labels(self.classes_, argmax_rows(proba)), proba
 
     def predict(self, X):
-        """The argmax of `predict_proba` (first max wins, as cuML's
-        `randomforest.cuh:417-427`) mapped through `classes_`: an int64 or
-        float64 `Array` for numeric labels, a Python list for str labels
-        (DEVIATION 2340)."""
+        """Predicted class labels: the argmax of `predict_proba`, first
+        maximum winning, mapped through `classes_`.
+
+        Returns
+        -------
+        Array or list of shape (n_samples,)
+            An int64 or float64 `Array` for numeric labels, a Python list for
+            string labels.
+        """
         Xa, _, _ = self._check_predict_input(X)
         codes = self._predict_forest_labels(Xa)
         if codes is not None:
@@ -788,32 +906,112 @@ class RandomForestClassifier(_RandomForestBase):
         return decode_labels(self.classes_, argmax_rows(self.predict_proba(Xa)))
 
 
+# Maintainer notes (moved from the docstring): the regression criteria are
+# the four arms of cuML's `GainPerSplit` (`objectives.cuh:331-338`);
+# 'absolute_error'/'mae' and 'friedman_mse' are refused (DEVIATION 407).
+# The three deviance criteria return `-max()` for a non-positive label sum
+# (`objectives.cuh:251-253`, `:279-281`, `:306-308`), so cuML silently fits
+# stumps; `fit` refuses instead. `max_features=1.0` is cuML's regressor
+# default (`randomforestregressor.py:162`). `max_depth=None` since
+# 2026-09-01 (DEVIATION 409); `max_leaf_nodes` refused (DEVIATION 408).
 @forest_estimator("regressor")
 class RandomForestRegressor(_RandomForestBase):
-    """cuML's `RandomForestRegressor`, honoured or refused by name.
+    """Random forest regressor with cuML's defaults.
 
-    `criterion` is 'squared_error' (cuML's MSE, the default; 'mse' is
-    accepted as cuML's spelling), 'poisson', 'gamma' or 'inverse_gaussian'
-    -- the four arms of their `GainPerSplit` (`objectives.cuh:331-338`).
-    'absolute_error' / 'mae' and 'friedman_mse' are refused by name
-    (DEVIATION 407). Same quantile-split default as the classifier, and the
-    same `max_depth=None` (unlimited), the pinned cuML's own default since
-    v26.08.00 -- this surface substituted 16 until 2026-09-01 (DEVIATION
-    409, CLOSED by aligning; pass `max_depth=16` to keep it). `max_features`
-    defaults to 1.0, which IS cuML's regressor default
-    (`randomforestregressor.py:162`).
+    An ensemble of bootstrapped regression trees whose split thresholds are
+    searched over at most `n_bins` per-feature quantiles, as in cuML, rather
+    than scikit-learn's exact thresholds. Defaults follow cuML, including
+    `max_features=1.0`. Every scikit-learn-shaped parameter is either
+    honoured or refused by name with `NotImplementedError`.
 
-    TARGET DOMAIN. The three deviance criteria return `-max()` for any
-    candidate whose label sum is not positive (`objectives.cuh:251-253`,
-    `:279-281`, `:306-308`), so cuML, fed a non-positive target, silently
-    fits stumps. `fit` refuses instead: 'poisson' needs y >= 0 with a
-    positive sum (sklearn's rule, which is the engine's per-node guard
-    applied at the root); 'gamma' and 'inverse_gaussian' need y > 0.
+    `X` and `y` are converted to float32; NaN or infinity in `X` raises
+    `ValueError`. `random_state=None` means seed 0 (deterministic), unlike
+    scikit-learn. Supports the `fast`, `deterministic` and `identical`
+    numeric modes through `numeric_mode`.
 
-    `max_leaves` is cuML's leaf budget, -1 (unlimited) by default, and it
-    caps a LEVEL-ORDER grower. It is NOT sklearn's `max_leaf_nodes`, which
-    is best-first growth to exactly k leaves and is refused by name here
-    (DEVIATION 408); `mojolearn.ExtraTreesRegressor` is where that lives.
+    Parameters
+    ----------
+    n_estimators : int, default 100
+        Number of trees.
+    criterion : {'squared_error', 'mse', 'poisson', 'gamma', 'inverse_gaussian'}, default 'squared_error'
+        Split criterion; 'mse' is cuML's spelling of 'squared_error'.
+        'poisson' requires finite `y >= 0` with at least one positive value;
+        'gamma' and 'inverse_gaussian' require finite `y > 0`; otherwise
+        `fit` raises `ValueError`. 'absolute_error', 'mae' and
+        'friedman_mse' raise `NotImplementedError`.
+    max_depth : int or None, default None
+        Maximum tree depth. None means unlimited.
+    min_samples_split : int, default 2
+        Minimum rows needed to split a node.
+    min_samples_leaf : int, default 1
+        Minimum rows in a leaf.
+    min_weight_fraction_leaf : float, default 0.0
+        Only 0.0 is accepted.
+    max_features : {'sqrt', 'log2'}, int, float or None, default 1.0
+        Features considered per split: a name, a count, a fraction in
+        (0, 1], or None for all features.
+    max_leaf_nodes : None, default None
+        Refused by name. Use `max_leaves` for cuML's level-order leaf cap, or
+        `mojolearn.ExtraTreesRegressor`, whose `max_leaf_nodes` is
+        scikit-learn's best-first budget.
+    min_impurity_decrease : float, default 0.0
+        Minimum impurity decrease required to split.
+    bootstrap : bool, default True
+        Sample rows with replacement for each tree.
+    oob_score : bool, default False
+        Compute the out-of-bag score during `fit`; requires `bootstrap=True`.
+    n_jobs : None, default None
+        Only None is accepted.
+    random_state : int or None, default None
+        Seed; None means 0.
+    verbose : int, default 0
+        Only 0 is accepted.
+    warm_start : bool, default False
+        Only False is accepted.
+    ccp_alpha : float, default 0.0
+        Only 0.0 is accepted.
+    max_samples : float or None, default None
+        Fraction of rows drawn per tree, in (0, 1]. None means all rows.
+    monotonic_cst : None, default None
+        Only None is accepted.
+    max_leaves : int, default -1
+        cuML's leaf cap on a level-order grower; -1 (or None) means
+        unlimited.
+    n_bins : int, default 128
+        Number of per-feature quantile bins searched for splits.
+    n_streams : int, default 4
+        cuML's stream count parameter.
+    max_batch_size : int, default 4096
+        cuML's node batch size for the tree builder.
+    device : {'gpu'}, default 'gpu'
+        Only 'gpu' is accepted. On a CPU-only install the same setting runs
+        the host build of the forest.
+    inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
+        How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
+        `fast` mode and 'sequential' otherwise.
+    numeric_mode : {'fast', 'deterministic', 'identical'} or None, default None
+        Numeric mode for this estimator; None uses the package default.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of features seen in `fit`.
+    oob_score_ : float
+        Out-of-bag score; present when `oob_score=True`.
+    oob_prediction_ : Array
+        Out-of-bag predictions, float64; present when `oob_score=True`.
+    feature_importances_ : Array
+        Impurity importances, float32; present when `fit` was called with
+        `feature_importances=True`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X[:, 0] * 2.0 + X[:, 1]
+    >>> model = mojolearn.RandomForestRegressor(n_estimators=50).fit(X, y)
+    >>> pred = model.predict(X)
     """
 
     def __init__(
@@ -859,7 +1057,21 @@ class RandomForestRegressor(_RandomForestBase):
         self.criterion = criterion
 
     def fit(self, X, y, *, feature_importances=False):
-        """Fit; optionally consume native impurity importances in this fit."""
+        """Fit the forest.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array-like of shape (n_samples,)
+            Targets.
+        feature_importances : bool, default False
+            Also compute `feature_importances_` during this fit.
+
+        Returns
+        -------
+        self
+        """
         return self._fit_with_tree_start(X, y, feature_importances=feature_importances)
 
     def _fit_in_session(self, session, y, rows=None):
@@ -988,7 +1200,12 @@ class RandomForestRegressor(_RandomForestBase):
                                 _rowmajor_fit_function(binding, "rf_regressor_fit"))
 
     def predict(self, X):
-        """The forest mean per row, a float32 `Array` of `(n_samples,)`."""
+        """Predicted values: the mean of the trees' predictions.
+
+        Returns
+        -------
+        Array of shape (n_samples,), float32
+        """
         Xa, n_rows, n_features = self._check_predict_input(X)
         out = empty((n_rows,), "<f4")
         wrote = self._predict_forest("rf_predict_reg", Xa, out)

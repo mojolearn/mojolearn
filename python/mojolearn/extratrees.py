@@ -339,14 +339,13 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         return out.reshape((n_rows, self._num_outputs))
 
     def save(self, path):
-        """Write the fitted forest to `path` as an npz.
+        """Write the fitted forest to `path` as an npz file.
 
-        The file holds the five prediction arrays exactly as fitted, raw
-        bytes and exact dtypes. GPU-parallel archives also retain their
-        inference engine and numeric mode in a separately versioned format.
-        Floats never pass through decimal text. The bytes of the file itself are a pure function of
-        the model (see `_serialize.write_npz`), so equal models give equal
-        file hashes across machines.
+        The file holds the prediction arrays exactly as fitted, with exact
+        dtypes; floats never pass through decimal text. A model saved with the
+        'parallel_groves' inference engine also records its engine and
+        numeric mode. The file bytes depend only on the model, so equal models
+        give equal file hashes on any machine.
         """
         if not hasattr(self, "_offsets"):
             raise RuntimeError("this estimator is not fitted yet")
@@ -382,9 +381,11 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a forest saved by `save`. The result predicts; it does not
-        refit. Loading a file saved by the other estimator class raises
-        rather than reinterpreting its leaves."""
+        """Load a forest saved by `save`.
+
+        The loaded model predicts; it does not refit. Loading a file saved by
+        a different estimator class raises `ValueError`.
+        """
         arrays = _serialize.read_npz(path, (_MODEL_FORMAT, _MODEL_FORMAT + "-parallel-groves-1"))
         saved_as = _serialize.scalar_str(arrays, "estimator")
         if saved_as != cls.__name__:
@@ -416,12 +417,97 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
 
 
 @forest_estimator("classifier")
+# Maintainer note (moved from the docstring): `predict_proba` is
+# `forest_vote`'s average of per-tree leaf distributions (cuML
+# `randomforest.cuh:229-242`); `predict` is its argmax through `classes_`.
 class ExtraTreesClassifier(_ExtraTreesBase):
-    """sklearn's `ExtraTreesClassifier`, honoured or refused by name.
+    """Extra-trees classifier with scikit-learn's defaults.
 
-    `predict_proba` is `forest_vote`'s average of per-tree leaf
-    distributions (cuML `randomforest.cuh:229-242`); `predict` is its
-    argmax mapped back through `classes_`.
+    Extremely randomized trees: each split draws one random threshold per
+    candidate feature (scikit-learn's random splitter, Geurts, Ernst and
+    Wehenkel 2006) instead of searching for the best one. Defaults are
+    scikit-learn's, name for name. Every scikit-learn parameter is either
+    honoured or refused by name; none is accepted and ignored.
+
+    `X` is converted to float32; NaN or infinity in `X` raises `ValueError`.
+    `y` may hold numbers or strings; NaN labels are refused. Supports the `fast`, `deterministic` and
+    `identical` numeric modes through `numeric_mode`.
+
+    Parameters
+    ----------
+    n_estimators : int, default 100
+        Number of trees.
+    criterion : {'gini', 'entropy', 'log_loss'}, default 'gini'
+        Split criterion; 'log_loss' is an alias of 'entropy'. Other names
+        raise `NotImplementedError`.
+    max_depth : int or None, default None
+        Maximum tree depth; None means unlimited.
+    min_samples_split : int, default 2
+        Minimum rows needed to split a node.
+    min_samples_leaf : int, default 1
+        Minimum rows in a leaf.
+    min_weight_fraction_leaf : float, default 0.0
+        Only 0.0 is accepted; sample weights are not supported.
+    max_features : {'sqrt', 'log2'}, int, float or None, default 'sqrt'
+        Features drawn per split: a name, a count, a fraction, or None for
+        all features.
+    max_leaf_nodes : int or None, default None
+        scikit-learn's best-first growth: an int grows each tree to exactly
+        that many leaves, expanding the node with the largest impurity
+        improvement first (ties go to the smaller node id). None keeps
+        depth-wise growth. The improvement is computed in float32.
+    min_impurity_decrease : float, default 0.0
+        Minimum impurity decrease required to split.
+    bootstrap : bool, default False
+        Sample rows with replacement for each tree.
+    oob_score : bool, default False
+        Only False is accepted; out-of-bag scoring is not implemented.
+    n_jobs : None, default None
+        Only None is accepted; any other value raises `NotImplementedError`.
+    random_state : int or None, default None
+        Seed. None means seed 0, so the default fit is deterministic, unlike
+        scikit-learn.
+    verbose : int, default 0
+        Only 0 is accepted; any other value raises `NotImplementedError`.
+    warm_start : bool, default False
+        Only False is accepted; there is no incremental fit.
+    class_weight : None, default None
+        Only None is accepted; any other value raises `NotImplementedError`
+        in `fit`.
+    ccp_alpha : float, default 0.0
+        Only 0.0 is accepted; cost-complexity pruning is not implemented.
+    max_samples : int, float or None, default None
+        Rows drawn per tree when `bootstrap=True`, resolved as in
+        scikit-learn: None means all rows, an int is a count, a float f
+        means max(int(f * n_samples), 1). Setting it without bootstrap
+        raises an error, as in scikit-learn.
+    monotonic_cst : None, default None
+        Only None is accepted.
+    device : {'gpu'}, default 'gpu'
+        Only 'gpu' is accepted; other values raise `ValueError`. On a
+        CPU-only install the same calls run the host build of the trainer.
+    inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
+        How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
+        `fast` mode and 'sequential' otherwise.
+    numeric_mode : {'fast', 'deterministic', 'identical'} or None, default None
+        Numeric mode for this estimator; None uses the package default.
+
+    Attributes
+    ----------
+    classes_ : list
+        Class labels in sorted order (numbers by value, strings by code
+        point).
+    n_features_in_ : int
+        Number of features seen in `fit`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int64)
+    >>> model = mojolearn.ExtraTreesClassifier(n_estimators=50).fit(X, y)
+    >>> proba = model.predict_proba(X)
     """
 
     def __init__(
@@ -480,6 +566,19 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         )
 
     def fit(self, X, y):
+        """Fit the forest.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array-like of shape (n_samples,)
+            Targets.
+
+        Returns
+        -------
+        self
+        """
         return self._fit_with_tree_start(X, y)
 
     def _fit_with_tree_start(self, X, y, tree_start=None):
@@ -515,9 +614,14 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         )
 
     def predict_proba(self, X):
-        """Averaged per-tree leaf distributions, `(n_samples,
-        n_classes)` float64 `Array` (exact widening of the float32 vote),
-        columns in `classes_` order."""
+        """Class probabilities: the average of the trees' leaf class
+        distributions.
+
+        Returns
+        -------
+        Array of shape (n_samples, n_classes), float64
+            Columns in `classes_` order.
+        """
         return self._vote(X).astype("<f8")
 
     def _predict_with_proba(self, X):
@@ -533,9 +637,15 @@ class ExtraTreesClassifier(_ExtraTreesBase):
                 vote.astype("<f8"))
 
     def predict(self, X):
-        """The argmax of the vote (first max wins) mapped through
-        `classes_`: an int64 or float64 `Array` for numeric labels, a
-        Python list for str labels (DEVIATION 2340)."""
+        """Predicted class labels: the argmax of `predict_proba`, first
+        maximum winning, mapped through `classes_`.
+
+        Returns
+        -------
+        Array or list of shape (n_samples,)
+            An int64 or float64 `Array` for numeric labels, a Python list for
+            string labels.
+        """
         if not hasattr(self, "_offsets"):
             raise RuntimeError("this estimator is not fitted yet")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
@@ -551,12 +661,93 @@ class ExtraTreesClassifier(_ExtraTreesBase):
 
 
 @forest_estimator("regressor")
+# Maintainer note (moved from the docstring): GPU training produces means of
+# fixed-point quantized labels (deviation 135).
 class ExtraTreesRegressor(_ExtraTreesBase):
-    """sklearn's `ExtraTreesRegressor`, honoured or refused by name.
+    """Extra-trees regressor with scikit-learn's defaults.
 
-    GPU training produces means of fixed-point quantized labels
-    (deviation 135). Prediction supports the sequential and parallel_groves
-    inference algorithms; there is no CPU training implementation.
+    Extremely randomized trees: each split draws one random threshold per
+    candidate feature (scikit-learn's random splitter, Geurts, Ernst and
+    Wehenkel 2006) instead of searching for the best one. Defaults are
+    scikit-learn's, name for name. Every scikit-learn parameter is either
+    honoured or refused by name; none is accepted and ignored.
+
+    `X` is converted to float32; NaN or infinity in `X` raises `ValueError`.
+    `y` is converted to float32. Leaf values are means of fixed-point
+    quantized labels. Supports the `fast`, `deterministic` and
+    `identical` numeric modes through `numeric_mode`.
+
+    Parameters
+    ----------
+    n_estimators : int, default 100
+        Number of trees.
+    criterion : {'squared_error', 'poisson', 'gamma', 'inverse_gaussian'}, default 'squared_error'
+        Split criterion. 'poisson' requires finite `y >= 0` with at least one
+        positive value; 'gamma' and 'inverse_gaussian' require finite
+        `y > 0`; otherwise `fit` raises `ValueError`. 'absolute_error' and
+        'friedman_mse' raise `NotImplementedError`.
+    max_depth : int or None, default None
+        Maximum tree depth; None means unlimited.
+    min_samples_split : int, default 2
+        Minimum rows needed to split a node.
+    min_samples_leaf : int, default 1
+        Minimum rows in a leaf.
+    min_weight_fraction_leaf : float, default 0.0
+        Only 0.0 is accepted; sample weights are not supported.
+    max_features : {'sqrt', 'log2'}, int, float or None, default 1.0
+        Features drawn per split: a name, a count, a fraction, or None for
+        all features.
+    max_leaf_nodes : int or None, default None
+        scikit-learn's best-first growth: an int grows each tree to exactly
+        that many leaves, expanding the node with the largest impurity
+        improvement first (ties go to the smaller node id). None keeps
+        depth-wise growth. The improvement is computed in float32.
+    min_impurity_decrease : float, default 0.0
+        Minimum impurity decrease required to split.
+    bootstrap : bool, default False
+        Sample rows with replacement for each tree.
+    oob_score : bool, default False
+        Only False is accepted; out-of-bag scoring is not implemented.
+    n_jobs : None, default None
+        Only None is accepted; any other value raises `NotImplementedError`.
+    random_state : int or None, default None
+        Seed. None means seed 0, so the default fit is deterministic, unlike
+        scikit-learn.
+    verbose : int, default 0
+        Only 0 is accepted; any other value raises `NotImplementedError`.
+    warm_start : bool, default False
+        Only False is accepted; there is no incremental fit.
+    ccp_alpha : float, default 0.0
+        Only 0.0 is accepted; cost-complexity pruning is not implemented.
+    max_samples : int, float or None, default None
+        Rows drawn per tree when `bootstrap=True`, resolved as in
+        scikit-learn: None means all rows, an int is a count, a float f
+        means max(int(f * n_samples), 1). Setting it without bootstrap
+        raises an error, as in scikit-learn.
+    monotonic_cst : None, default None
+        Only None is accepted.
+    device : {'gpu'}, default 'gpu'
+        Only 'gpu' is accepted; other values raise `ValueError`. On a
+        CPU-only install the same calls run the host build of the trainer.
+    inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
+        How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
+        `fast` mode and 'sequential' otherwise.
+    numeric_mode : {'fast', 'deterministic', 'identical'} or None, default None
+        Numeric mode for this estimator; None uses the package default.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of features seen in `fit`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X[:, 0] * 2.0 + X[:, 1]
+    >>> model = mojolearn.ExtraTreesRegressor(n_estimators=50).fit(X, y)
+    >>> pred = model.predict(X)
     """
 
     def __init__(
@@ -619,6 +810,19 @@ class ExtraTreesRegressor(_ExtraTreesBase):
             self._cfg["max_features"] = None
 
     def fit(self, X, y):
+        """Fit the forest.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array-like of shape (n_samples,)
+            Targets.
+
+        Returns
+        -------
+        self
+        """
         return self._fit_with_tree_start(X, y)
 
     def _fit_with_tree_start(self, X, y, tree_start=None):
@@ -656,7 +860,11 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         )
 
     def predict(self, X):
-        """The forest mean per row, a float64 `Array` of `(n_samples,)`
-        (exact widening of the float32 vote)."""
+        """Predicted values: the mean of the trees' predictions.
+
+        Returns
+        -------
+        Array of shape (n_samples,), float64
+        """
         vote = self._vote(X)  # (n_rows, 1): one output for the regressor
         return vote.reshape((vote.shape[0],)).astype("<f8")

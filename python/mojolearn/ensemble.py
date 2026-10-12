@@ -816,355 +816,331 @@ def _check_ordered_options(boosting_type, loss, grow_policy, score_function,
         )
 
 
+# Maintainer notes moved out of the public docstring (CatBoost 1.2.10 source references):
+# - n_estimators None: 1000 under SymmetricTree (boosting_options.cpp:13); 100 under Depthwise/Lossguide,
+#   this library's earlier default, which those policies keep.
+# - grow_policy: oblivious_tree_options.cpp:23. Depthwise/Lossguide are grown by the same
+#   TGreedySubsetsSearcher<TNonSymmetricTree> CatBoost's GPU uses (pointwise_non_symmetric.cpp), then take
+#   its estimation arm (bins off the model, the loss's leaf estimator, AddBinModelValues). Refusals follow
+#   CatBoost: losses with no non-symmetric GPU trainer (Lq, MultiClass; pointwise_non_symmetric.cpp:7-29
+#   lists the eleven that have one; train.cpp:279 is the error) and use_pointwise_searcher=True (the
+#   doc-parallel oblivious searcher). Region is not implemented. DEVIATION 259.
+# - feature_fraction default 1.0 preserves existing model bits and ABI layout.
+# - max_leaves: default 31 (oblivious_tree_options.cpp:24), cap 65536 (:130-133); CatBoost pins it to
+#   2**max_depth for other policies and refuses another value (catboost_options.cpp:993-1001).
+# - min_data_in_leaf: oblivious_tree_options.cpp:25; terminal test is size <= value
+#   (greedy_search_helper.cpp:693); IsTerminalLeaf guards it with Policy != SymmetricTree (:685) and
+#   discards it on oblivious trees, so any value but 1 is refused there.
+# - learning_rate None: UpdateLearningRate (libs/train_lib/options_helper.cpp:269-288), rate =
+#   Round(min(exp(A*log(n_rows) + B) * exp(C*log(n_estimators) + D) / exp(C*log(1000) + D), 0.5), 6)
+#   with GPU coefficients keyed on loss, resolved use_best_model and boost_from_average (:221-243,
+#   :252-262); otherwise 0.03 (boosting_options.cpp:10).
+# - l2_leaf_reg None: catboost_options.cpp:34-37, :166-172; explicit value disables auto rate
+#   (options_helper.cpp:278).
+# - border_count: GPU default (data_processing_options.cpp:16); 254 on their CPU.
+# - feature_border_type: data_processing_options.cpp:15; MakeBinarizer dispatch
+#   (library/cpp/grid_creator/binarization.cpp:114-134). Border selection runs on the host here as in
+#   CatBoost, the same host function on every vendor and on the CPU host path; all seven types reproduce
+#   CatBoost 1.2.10 borders bit for bit on 294 cases (checks/border_types_check.mojo). A value below
+#   2**-126 is binned as zero (the flush GreedyLogSum's border build already applies).
+# - loss_alpha: MAE fixes alpha at 0.5 (pointwise_target_impl.h:272-275).
+# - boost_from_average None: AdjustBoostFromAverageDefaultValue (options_helper.cpp:353-374); accepted
+#   losses catboost_options.cpp:705-709. MAE/Quantile/MAPE constant is CalcSampleQuantile with the 1e-6
+#   delta adjust, host code shared by device fit and CPU host path; reproduces CatBoost 1.2.10 CPU
+#   get_scale_and_bias()[1] by bits on 40 cases. Quantile level enters as float32 widened to double
+#   (theirs parses a double), so a level a float does not hold exactly (0.3) can move a quantile that
+#   sits exactly on the boundary.
+# - leaf_estimation_method Newton refusal: catboost_options.cpp:588-601 (second derivative zero).
+# - leaf_estimation_iterations: UpdateLeavesEstimationIterations (options_helper.cpp:290-307),
+#   IsSmallIterationCount (catboost_options.h:88-90).
+# - bootstrap_type None under SymmetricTree: Bayesian, GPU default (bootstrap_options.h:18; the MVS
+#   default of catboost_options.cpp:782-787 is CPU only). bagging_temperature bootstrap_options.h:16;
+#   subsample default 0.66 bootstrap_options.h:15.
+# - cat_features dispatch: binarizations_manager.cpp:106-115. CatBoost shuffles the learn pool at load
+#   when there are categorical features and no time column (preprocess.cpp:161-199), CPU-side upstream of
+#   catboost/cuda; this implementation does not, so CTRs read caller row order
+#   (gbdt/data/permutation.mojo).
+# - od_type: overfitting_detector_options.cpp:24-32; IncToDec inactive when stop_pvalue is 0
+#   (IsActive() is Threshold > 0).
+# - use_best_model default: options_helper.cpp:106-108 (ShrinkToBestIteration). CatBoost warns without
+#   an eval set; we raise because a warning on a returned model is invisible.
+# - best_model_min_trees: output_file_options.cpp:77, boosting_progress_tracker.cpp:162.
+# - score_function None: Cosine for SymmetricTree/Depthwise (oblivious_tree_options.cpp:20), NewtonL2
+#   for Lossguide (catboost_options.cpp:980-991). TCosineScoreCalcer is the only calcer with the
+#   random_strength noise term (score_calcers.cuh:152-167); TL2ScoreCalcer (:40-69) has none. Newton
+#   spellings run the same calcers with weight*der2 in the weight plane (secondDerAsWeights,
+#   greedy_search_helper.cpp:286-296), so for RMSE each is bit-identical to its twin. SolarL2, LOOL2,
+#   SatL2: see _UNSUPPORTED_SCORE_FUNCTIONS.
+# - nan_mode: data_processing_options.cpp:26.
+# - random_strength: oblivious_tree_options.cpp:17. On the greedy searcher CatBoost's noise largely
+#   cancels in the gain (compute_scores.cu:84-134); live on the pointwise searcher, where noise is drawn
+#   before the bootstrap (oblivious_tree_doc_parallel_structure_searcher.cpp:200-218).
+# - border_build_max_samples: data_processing_options.cpp:37.
+# - class_weights: multiplied into row weight (target/data_providers.cpp:168).
+# - boosting_type: boosting_options.cpp:16; Ordered default catboost_options.cpp:802-807,
+#   UpdateBoostingTypeOption (defaults_helper.h:33-42); GPU Plain-only cases :949-978. Ordered is their
+#   GPU TDynamicBoosting (gbdt/methods/ordered_boosting.mojo carries the account). The CPU host path
+#   restates Ordered at unit weights on numeric columns and agrees with Apple Metal bit for bit (the
+#   gbdt-ordered* identity lanes). parallel_ensemble.fit_boosting partitions its fold histograms across
+#   GPUs as it does OrderedRMSE's.
+# - fold_len_multiplier: boosting_options.cpp:11. fold_permutation_block: boosting_options.cpp:12; GPU
+#   64 (cuda/train_lib/train.cpp:115-118), halved while block*128 > rows (dynamic_boosting.h:115-128).
+# - permutation_count: boosting_options.cpp:14 (UpdateGpuSpecificDefaults).
+# - ctr_estimation_permutation_id: doc_parallel_boosting.h:101-103.
+# - model_: the text format check-model-io gates bit-for-bit; floats carry hex bits beside the decimal
+#   because String(Float32) on this toolchain is one ULP wrong for 0.46% of values.
+# - loss_curve_: CatBoost's functionValue negated and divided by the row count.
+# - best_iteration_: the error tracker's best (error_tracker.h:73-75).
 class GradientBoosting(NumericModeMixin):
-    """Gradient-boosted trees, with CatBoost's GPU learner as the reference: its three
-    growth policies (`grow_policy`), its losses, its leaf estimators.
+    """Gradient-boosted decision trees with CatBoost's GPU learner as the reference.
+
+    Fits an ensemble of trees with CatBoost's growth policies (oblivious
+    ``SymmetricTree``, ``Depthwise``, ``Lossguide``), losses and leaf estimators.
+    ``X`` is ``(n_samples, n_features)`` and is converted to float32.
+
+    Under the default ``grow_policy='SymmetricTree'`` every default follows
+    CatBoost's GPU learner (``task_type='GPU'``), not scikit-learn, and several
+    of these change results: 1000 iterations, an automatically chosen learning
+    rate, depth 6, ``l2_leaf_reg=3``, 128 borders, ``random_strength=1``,
+    Bayesian bootstrap, and Ordered boosting on smaller pools. ``predict``
+    returns raw scores for every loss; use ``predict_proba`` or
+    ``predict_classes`` for classification output.
+
+    Supports the ``numeric_mode`` parameter (``'identical'``,
+    ``'deterministic'``, or ``'fast'`` on Apple GPUs).
 
     Parameters
     ----------
     loss : str, default 'RMSE'
-        One of `LOSSES`, CatBoost's own spellings. Four of them require a
-        parameter: `Lq` needs `loss_q`, `Huber` needs `loss_delta`,
-        `Tweedie` needs `loss_variance_power`, `Expectile` needs
-        `loss_alpha`. `MultiRMSE` is multi-target regression: `y` is
-        `(n_samples, n_targets)` with `n_targets >= 2` and `predict`
-        returns `(n_samples, n_targets)` (Plain SymmetricTree, numeric
-        features, no eval set, `boost_from_average` unset or False).
+        One of ``LOSSES``, in CatBoost's spellings: ``MultiClass``,
+        ``MultiClassOneVsAll``, ``RMSE``, ``Logloss``, ``CrossEntropy``,
+        ``Quantile``, ``MAE``, ``LogLinQuantile``, ``MAPE``, ``Poisson``, ``Lq``,
+        ``Expectile``, ``Tweedie``, ``Huber``, ``QueryRMSE``, ``PairLogit``,
+        ``YetiRank``, ``MultiRMSE``. Four require a parameter: ``Lq`` needs
+        ``loss_q``, ``Huber`` needs ``loss_delta``, ``Tweedie`` needs
+        ``loss_variance_power`` and ``Expectile`` needs ``loss_alpha``; a
+        missing one raises ``ValueError``. ``MultiRMSE`` is multi-target
+        regression: ``y`` is ``(n_samples, n_targets)`` with ``n_targets >= 2``
+        and ``predict`` returns ``(n_samples, n_targets)`` (Plain SymmetricTree,
+        numeric features, no eval set, ``boost_from_average`` unset or False).
     n_estimators : int or None, default None
-        CatBoost's `iterations`. None is 1000 under SymmetricTree, their
-        default (`boosting_options.cpp:13`), and 100 under Depthwise and
-        Lossguide, this library's earlier default, which those policies
-        keep.
+        CatBoost's ``iterations``. None is 1000 under SymmetricTree (CatBoost's
+        default) and 100 under Depthwise and Lossguide.
     max_depth : int, default 6
-        CatBoost's `depth`. Under `grow_policy='SymmetricTree'` the tree
-        is oblivious, so this is exactly `2 ** max_depth` leaves; under
-        Depthwise it is a bound on the level count and the leaf count is
-        ragged; under Lossguide it bounds any one leaf's depth and
-        `max_leaves` is what stops the tree.
-    grow_policy : {'SymmetricTree', 'Depthwise', 'Lossguide'}, \
-            default 'SymmetricTree'
-        CatBoost's `grow_policy` (`oblivious_tree_options.cpp:23`).
-        SymmetricTree is the oblivious tree; Depthwise splits every
-        improving leaf of a level on ITS OWN best split; Lossguide splits
-        ONE leaf per step, the one with the best score, until
-        `max_leaves`. Both non-symmetric policies are grown by the same
-        `TGreedySubsetsSearcher<TNonSymmetricTree>` CatBoost's GPU grows
-        them with (`pointwise_non_symmetric.cpp`), then take their
-        estimation arm -- bins off the model, the leaf estimator the loss
-        picks, `AddBinModelValues` -- and the saved model carries the
-        non-symmetric shape. **Refused by name, each where CatBoost
-        refuses it**: a loss with no non-symmetric GPU trainer (`Lq`,
-        `MultiClass` -- `pointwise_non_symmetric.cpp:7-29` lists the
-        eleven that have one; `train.cpp:279` is the error), and
-        `use_pointwise_searcher=True` (that is the doc-parallel OBLIVIOUS
-        searcher). Their `Region` policy is not implemented and is refused by
-        name. DEVIATION 259.
-    feature_fraction : float, default 1.0
-        Per-tree numeric feature subsampling in (0, 1]. A deterministic
-        subset of nonconstant features is chosen for each tree and shared
-        by its split searches. The default preserves existing model bits
-        and ABI layout. Values below one refuse categorical/one-hot/CTR paths.
-    min_child_hessian : float or None, default None
-        Minimum weighted Hessian sum in each candidate child, before split
-        selection. Requires Depthwise/Lossguide, NewtonL2/NewtonCosine and
-        RMSE/Logloss/CrossEntropy. Includes training and bootstrap weights;
-        equality is allowed. None preserves existing growth.
-    min_split_gain : float or None, default None
-        Optional strict lower bound on a split's improvement in the selected
-        score function, for Depthwise and Lossguide only. None preserves
-        CatBoost's existing growth behavior, including Lossguide's ability
-        to split without positive gain. Zero requires positive improvement;
-        equality is rejected. Units depend on score_function, feature weights
-        and score noise; this is not numerically interchangeable with XGBoost
-        gamma or LightGBM min_gain_to_split. Enabled values must be finite
-        and nonnegative.
-    max_leaves : int, optional
-        CatBoost's `max_leaves`, the Lossguide leaf budget. Their default
-        is 31 (`oblivious_tree_options.cpp:24`) and their cap is 65536
-        (`:130-133`). **Read under Lossguide only**: for every other policy
-        CatBoost pins it to `2 ** max_depth` and refuses a different value
-        with "max_leaves option works only with lossguide tree growing"
-        (`catboost_options.cpp:993-1001`), and so does this.
-    min_data_in_leaf : int, default 1
-        CatBoost's `min_data_in_leaf` (`oblivious_tree_options.cpp:25`), a
-        leaf with `size <= min_data_in_leaf` is terminal
-        (`greedy_search_helper.cpp:693`, their `<=`). **Live under
-        Depthwise and Lossguide only**: their `IsTerminalLeaf` guards the
-        size test with `Policy != SymmetricTree` (`:685`) and DISCARDS the
-        value on oblivious trees; this refuses any value but 1 there
-        rather than accepting what it would drop.
+        CatBoost's ``depth``. Under SymmetricTree the tree is oblivious, so it
+        has exactly ``2 ** max_depth`` leaves; under Depthwise it bounds the
+        number of levels; under Lossguide it bounds any one leaf's depth and
+        ``max_leaves`` is what stops the tree.
     learning_rate : float or None, default None
-        None under SymmetricTree is CatBoost's GPU auto-selection
-        (`UpdateLearningRate`, `libs/train_lib/options_helper.cpp:269-288`):
-        when `l2_leaf_reg`, `leaf_estimation_method` and
-        `leaf_estimation_iterations` are also unset and the loss is RMSE,
-        Logloss or MultiClass, the rate is
-        `Round(min(exp(A*log(n_rows) + B) * exp(C*log(n_estimators) + D) /
-        exp(C*log(1000) + D), 0.5), 6)` with the GPU coefficients keyed on
-        the loss, the resolved `use_best_model` and the resolved
-        `boost_from_average` (`:221-243`, `:252-262`); otherwise 0.03
-        (`boosting_options.cpp:10`). Under Depthwise and Lossguide None is
-        0.03. The value a fit used is `learning_rate_`.
+        None under SymmetricTree is CatBoost's GPU auto-selection: when
+        ``l2_leaf_reg``, ``leaf_estimation_method`` and
+        ``leaf_estimation_iterations`` are also unset and the loss is RMSE,
+        Logloss or MultiClass, the rate is computed from the row count and
+        ``n_estimators`` with CatBoost's GPU coefficients (capped at 0.5,
+        rounded to six decimals); otherwise 0.03. Under Depthwise and
+        Lossguide None is 0.03. The value used is stored in ``learning_rate_``.
     l2_leaf_reg : float or None, default None
-        None takes the loss's CatBoost default: 3.0, and 0 for YetiRank
-        (`catboost_options.cpp:34-37`, `:166-172`). An explicit value is used
-        as given, and (as theirs, `options_helper.cpp:278`) turns the
+        None takes the loss's CatBoost default: 3.0, and 0 for YetiRank. An
+        explicit value is used as given and, as in CatBoost, turns the
         learning-rate auto-selection off.
     border_count : int, default 128
-        Quantization bins per numeric feature (their GPU default,
-        `data_processing_options.cpp:16`; 254 on their CPU).
-    feature_border_type : str, default 'GreedyLogSum'
-        How the numeric borders are chosen, CatBoost's `feature_border_type`
-        (`data_processing_options.cpp:15`), one of `BORDER_TYPES`, each the
-        binarizer `MakeBinarizer` dispatches
-        (`library/cpp/grid_creator/binarization.cpp:114-134`): GreedyLogSum
-        and GreedyMinEntropy (greedy bin splitting under the two penalties),
-        MaxLogSum and MinEntropy (the exact dynamic program), Median
-        (quantiles), Uniform (equal width) and UniformAndQuantiles (half of
-        each). Border selection runs on the host in CatBoost and here, and
-        it is the same host function on every vendor and on the CPU host
-        path, so every type holds the identical-mode contract; all seven
-        reproduce CatBoost 1.2.10's own borders bit for bit on 294 cases
-        (`checks/border_types_check.mojo`). CTR columns keep their own
-        grids. A value below 2**-126 is binned as zero under every type (the
-        flush GreedyLogSum's border build already applies).
+        Quantization bins per numeric feature (CatBoost's GPU default; their
+        CPU default is 254).
     random_state : int, default 0
+        Random seed.
     loss_alpha : float, optional
-        Quantile level for `Quantile` and `LogLinQuantile` (default 0.5),
-        and MANDATORY for `Expectile`. Ignored by `MAE`, whose alpha
-        CatBoost fixes at 0.5 (`pointwise_target_impl.h:272-275`).
+        Quantile level for ``Quantile`` and ``LogLinQuantile`` (default 0.5),
+        and required for ``Expectile``. Ignored by ``MAE``, whose alpha is
+        fixed at 0.5.
     loss_q, loss_delta, loss_variance_power : float, optional
-        `Lq`'s q, `Huber`'s delta, `Tweedie`'s variance_power.
+        ``Lq``'s q, ``Huber``'s delta, ``Tweedie``'s variance power.
     loss_border : float, optional
-        `Logloss`'s target threshold, default 0.5.
-    boost_from_average : bool or None, default None
-        Start every row at the loss's optimal constant, stored as the
-        model's `bias_`. None is CatBoost's `AdjustBoostFromAverageDefaultValue`
-        (`options_helper.cpp:353-374`): True for RMSE, MAE, Quantile and
-        MAPE, False otherwise; True is accepted for those four and Logloss
-        and CrossEntropy (`catboost_options.cpp:705-709`). The MAE,
-        Quantile and MAPE constant is their `CalcSampleQuantile` with the
-        1e-6 delta adjust, host code shared by the device fit and the CPU
-        host path; it reproduces CatBoost 1.2.10 CPU's
-        `get_scale_and_bias()[1]` by bits on 40 cases (both search
-        branches, tied targets). The Quantile level enters as the float
-        `loss_alpha` widened to double (theirs parses a double), so a level
-        a float does not hold exactly (0.3) can move a quantile that sits
-        exactly on the boundary.
-    leaf_estimation_method : {'Newton','Gradient','Exact','Simple'}, optional
-        None (default) means the LOSS decides, per CatBoost. 'Newton' is
-        refused for Quantile, MAE, LogLinQuantile, MAPE and Lq with q < 2,
-        with CatBoost's own message (`catboost_options.cpp:588-601`;
-        their second derivative is zero there).
+        ``Logloss``'s target threshold, default 0.5.
+    leaf_estimation_method : {'Newton', 'Gradient', 'Exact', 'Simple'}, optional
+        None lets the loss decide, as in CatBoost. ``'Newton'`` is refused for
+        Quantile, MAE, LogLinQuantile, MAPE and Lq with q < 2, whose second
+        derivative is zero.
     leaf_estimation_iterations : int, optional
-        None (default) means the loss decides, and then, under
-        SymmetricTree, CatBoost's `UpdateLeavesEstimationIterations`
-        (`options_helper.cpp:290-307`) applies: fewer than 200 iterations
-        (`IsSmallIterationCount`, `catboost_options.h:88-90`) on fewer than
-        20 features sets it to 1.
-    bootstrap_type : {'Bayesian','Bernoulli','Poisson','No'}, optional
-        None under SymmetricTree is 'Bayesian', CatBoost's GPU default
-        (`bootstrap_options.h:18`; the MVS default of
-        `catboost_options.cpp:782-787` is CPU only). Ranking losses apply
-        row weights after computing their grouped gradients, as the reference
-        greedy searcher does. None under Depthwise and Lossguide means no row
-        sampling, as before. 'Bernoulli' is the familiar `subsample` knob;
-        'Bayesian' uses `bagging_temperature` instead.
+        None lets the loss decide; under SymmetricTree, fewer than 200
+        iterations on fewer than 20 features then sets it to 1, as CatBoost
+        does.
+    bootstrap_type : {'Bayesian', 'Bernoulli', 'Poisson', 'No'}, optional
+        None under SymmetricTree is ``'Bayesian'`` (CatBoost's GPU default);
+        under Depthwise and Lossguide it means no row sampling. ``'Bernoulli'``
+        and ``'Poisson'`` take ``subsample``; ``'Bayesian'`` takes
+        ``bagging_temperature``. Ranking losses apply row weights after
+        computing their grouped gradients.
     bagging_temperature : float, default 1.0
-        Bayesian only (`bootstrap_options.h:16`). CatBoost refuses
-        `subsample` beside it and so does this.
+        Read by ``bootstrap_type='Bayesian'`` only; a non-default value with
+        any other bootstrap raises ``ValueError``.
     subsample : float, optional
-        Bernoulli and Poisson only. Default 0.66
-        (`bootstrap_options.h:15`).
+        Read by Bernoulli and Poisson only (default 0.66). Passing it with
+        Bayesian (including the default) or no bootstrap raises ``ValueError``.
     cat_features : sequence of int, optional
-        Column indices holding DENSE CATEGORY CODES 0..k-1. CatBoost's own
-        dispatch decides what happens to each
-        (`binarizations_manager.cpp:106-115`): one-hot when the cardinality
-        is small enough, target statistics (CTRs) otherwise.
-
-        THE CTR PATH IS THE ONE PLACE A FIT READS YOUR ROW ORDER, and the
-        caveat belongs here rather than only in the native source
-        (`gbdt/data/permutation.mojo`, lane/data-ordering-determinism
-        2026-09-16). CatBoost shuffles the learn pool at load whenever there
-        are categorical features and no time column
-        (`preprocess.cpp:161-199`); that is CPU-side preparation upstream of
-        everything in `catboost/cuda`, and this implementation does not have
-        it. So the ordered statistics are computed over the rows AS YOU HAND
-        THEM IN. Rows sorted by target are the worst case: every row's
-        statistic then reads its own neighborhood, which is a different and
-        worse estimator, not a slower one. Shuffle before fitting, and record
-        the order you used; with no `cat_features` none of this is reached.
-
+        Column indices holding dense category codes ``0..k-1``. As in
+        CatBoost, each column is one-hot encoded when its cardinality is small
+        and otherwise uses target statistics (CTRs). CTRs are computed over
+        the rows in the order you pass them; CatBoost shuffles the pool first
+        and this does not. Rows sorted by target give a worse estimator, so
+        shuffle before fitting and record the order you used. Without
+        ``cat_features`` row order does not matter.
+    one_hot_features : sequence of int, optional
+        Column indices to one-hot encode. An index out of range raises
+        ``ValueError``.
     od_type : {'None', 'IncToDec', 'Iter'}, optional
-        The overfitting detector. LEAVING IT UNSET IS NOT THE SAME AS
-        'None': their `Load` (`overfitting_detector_options.cpp:24-32`)
-        picks the type from whichever of `od_pvalue` / `od_wait` was
-        given -- a wait alone means 'Iter', a p-value alone means
-        'IncToDec', neither means 'None'. Requires `eval_set`; stopping on
-        the learn loss would stop on a curve that falls by construction,
-        so it raises instead.
+        The overfitting detector. Unset is not the same as ``'None'``: as in
+        CatBoost, the type follows from what was given (``od_wait`` alone
+        means ``'Iter'``, ``od_pvalue`` alone means ``'IncToDec'``, neither
+        means ``'None'``). Requires ``eval_set``; otherwise it raises.
     od_pvalue : float, optional
-        `stop_pvalue`, IncToDec's threshold. Their default is 0, which
-        makes the detector INACTIVE (`IsActive()` is `Threshold > 0`).
+        IncToDec's threshold. The default 0 leaves the detector inactive.
     od_wait : int, optional
-        `wait_iterations`, default 20. Iterations without a new best
-        before stopping.
+        Iterations without a new best before stopping, default 20.
     use_best_model : bool, optional
-        Truncate the returned ensemble to the best held-out iteration,
-        their `ShrinkToBestIteration`. UNSET IS NOT FALSE: with an
-        `eval_set` whose target is not constant it defaults to True, which
-        is their own data-dependent default (`options_helper.cpp:106-108`).
-        True without an `eval_set` raises -- they warn and carry on, and a
-        warning on a returned model is invisible from here.
+        Truncate the fitted ensemble to the best held-out iteration. Unset is
+        not False: with an ``eval_set`` whose target is not constant it
+        defaults to True, as in CatBoost. True without an ``eval_set`` raises.
     best_model_min_trees : int, default 1
-        The shrink may not cut below this many trees
-        (`output_file_options.cpp:77`,
-        `boosting_progress_tracker.cpp:162`).
-
+        The truncation never keeps fewer than this many trees.
     score_function : {'Cosine', 'L2', 'NewtonCosine', 'NewtonL2'}, optional
-        The split score. None (default) is CatBoost's OWN default FOR THE
-        POLICY: Cosine for SymmetricTree and Depthwise
-        (`oblivious_tree_options.cpp:20`), and NewtonL2 for Lossguide,
-        which their GPU option resolver sets when the option is unset
-        (`catboost_options.cpp:980-991`; L2 there for MultiClass, which
-        Lossguide refuses anyway). Cosine is what the shipped symmetric
-        oracle certifies, and `TCosineScoreCalcer` is the
-        only one of their five calcers that carries the `random_strength`
-        noise term (`score_calcers.cuh:152-167`); `TL2ScoreCalcer` (`:40-69`)
-        has none. The Newton spellings run the SAME calcers with
-        `weight * der2` in the histogram's weight plane instead of the raw
-        weight -- their `secondDerAsWeights`
-        (`greedy_search_helper.cpp:286-296`) -- so for RMSE, whose Der2 is
-        1.0, each is bit-identical to its twin. CatBoost's other three
-        spellings -- SolarL2, LOOL2, SatL2 -- ARE REFUSED BY NAME rather
-        than accepted, because on this implementation each silently fits a different
-        model than the one asked for. See `_UNSUPPORTED_SCORE_FUNCTIONS` for
-        which, and why.
+        The split score. None is CatBoost's default for the policy: Cosine for
+        SymmetricTree and Depthwise, NewtonL2 for Lossguide. Only Cosine
+        scores carry ``random_strength`` noise. For RMSE each Newton spelling
+        gives the same model as its plain twin. CatBoost's SolarL2, LOOL2 and
+        SatL2 are refused by name.
     nan_mode : {'Min', 'Max', 'Forbidden'}, default 'Min'
-        Where a NaN sorts against the borders
-        (`data_processing_options.cpp:26`). 'Min' puts it below every
-        border, 'Max' above; 'Forbidden' RAISES on a NaN instead of binning
-        it, which is CatBoost's behavior.
+        Where a NaN sorts against the borders: below every border, above, or
+        ``'Forbidden'`` to raise on a NaN, as CatBoost does.
     random_strength : float or None, default None
-        CatBoost's `random_strength` (`oblivious_tree_options.cpp:17`).
-        None under SymmetricTree is their default, 1.0 (it was 0.0 here
-        until 2026-09-19); under Depthwise and Lossguide it is 0.0, as
-        before. On the greedy searcher CatBoost's own noise largely cancels
-        in the gain (`compute_scores.cu:84-134`); it is a live knob on
-        `use_pointwise_searcher=True`, where the noise is drawn before the
-        bootstrap
-        (`oblivious_tree_doc_parallel_structure_searcher.cpp:200-218`). An
-        explicit value
-        above 0.0 is refused with `score_function='L2'` or `'NewtonL2'`,
-        because the L2 calcer both run has no noise term and CatBoost itself
-        would discard it; an UNSET value resolves to 0.0 there, which is the
-        model CatBoost fits.
+        CatBoost's score noise. None is 1.0 under SymmetricTree and 0.0 under
+        Depthwise and Lossguide. An explicit value above 0 is refused with
+        ``score_function='L2'`` or ``'NewtonL2'``, which have no noise term;
+        unset resolves to 0 there.
     use_pointwise_searcher : bool, default False
-        Grow with `TDocParallelObliviousTreeSearcher`, CatBoost's
-        single-target symmetric learner, instead of the greedy subsets
-        searcher. Both are theirs and both are reachable on their GPU. The
-        pointwise arm returns the STRUCTURE ONLY, so it always runs the leaf
-        estimator where the greedy arm can reuse the leaf it grew.
+        Grow with CatBoost's doc-parallel oblivious searcher instead of the
+        greedy subsets searcher. It returns tree structure only, so it always
+        runs the leaf estimator.
+    boost_from_average : bool or None, default None
+        Start every row at the loss's optimal constant, stored as ``bias_``.
+        None is CatBoost's default: True for RMSE, MAE, Quantile and MAPE,
+        False otherwise. True is accepted for those four and for Logloss and
+        CrossEntropy.
     border_build_max_samples : int, default 200000
-        How many rows the BORDER SEARCH subsamples
-        (`data_processing_options.cpp:37`). It does not subsample training;
-        every row is still fitted. 0 means use every row for the borders
-        too.
+        Rows subsampled for the border search only; every row is still
+        fitted. 0 uses every row for the borders too.
     class_weights : sequence of float, optional
-        One weight per class slot, MULTIPLIED into the row weight rather
-        than substituted for it (`target/data_providers.cpp:168`), so it
-        composes with `sample_weight`. The length must match the label set
-        or the fit raises. Refused with `loss='RMSE'`, which CatBoost also
-        refuses.
-    boosting_type : {'Plain', 'Ordered'} or None, default None
-        CatBoost's `boosting_type` (`boosting_options.cpp:16`). None under
-        SymmetricTree is their GPU default, DATA-DEPENDENT: Ordered
-        (`catboost_options.cpp:802-807`) unless the pool has 50,000 rows or
-        more or there are fewer than 500 iterations
-        (`UpdateBoostingTypeOption`, `defaults_helper.h:33-42`), and Plain
-        for the multiclass losses and the L2 scores, which their GPU trains
-        Plain only (`:949-978`), and for `use_pointwise_searcher` and
-        `feature_fraction < 1` (Plain arms of this library). None under
-        Depthwise and Lossguide is Plain. The value a fit used is
-        `boosting_type_`.
-
-        ORDERED is their GPU `TDynamicBoosting` (`gbdt/methods/
-        ordered_boosting.mojo` carries the account): `permutation_count`
-        learn permutations of the shuffled pool, growing folds per
-        permutation with one prediction cursor per fold, every tree's
-        structure searched on one permutation's folds with leaves estimated
-        on each fold's PREFIX only, and the exported model estimated on the
-        last (estimation) permutation. It supports every pointwise loss,
-        Cosine and NewtonCosine scores, every bootstrap (applied to the
-        quality slices, their TestOnly default), random_strength, every
-        border type and NaN mode, sample and class weights, one-hot
-        categorical columns and boost_from_average. It runs in the
-        identical numeric mode; the CPU host path restates it at unit
-        weights on numeric columns (sample weights, class weights and
-        one-hot columns are GPU only and refused by name on a CPU-only
-        install) and agrees with Apple Metal bit for bit there (the
-        `gbdt-ordered*` identity lanes; the NVIDIA and AMD columns are
-        owed). `parallel_ensemble.fit_boosting` partitions its fold
-        histograms across GPUs as it does OrderedRMSE's (the multi-GPU run
-        is owed). REFUSED BY NAME where
-        CatBoost refuses: Depthwise and Lossguide, the multiclass losses, L2
-        and NewtonL2 scores, the Exact leaf estimator (unset, MAE, MAPE and
-        Quantile take Gradient under Ordered, as theirs). NOT IMPLEMENTED,
-        refused by name: categorical columns that build CTRs, the ranking
-        losses. An eval set, its overfitting detector and use_best_model
-        work as on a Plain fit (their test cursor). Their random streams
-        (the load shuffle, the permutation draw, the score noise) are this
-        library's, so an Ordered model matches CatBoost in behavior, not in
-        bits.
-    fold_len_multiplier : float, default 2.0
-        Ordered only: the fold growth factor (`boosting_options.cpp:11`),
-        greater than 1. Refused by a Plain fit.
-    fold_permutation_block : int or None, default None
-        Ordered only: `fold_permutation_block` (`boosting_options.cpp:12`).
-        None or 0 is their GPU 64 (`cuda/train_lib/train.cpp:115-118`), used
-        from 50,000 rows up and halved while `block * 128 > rows`
-        (`dynamic_boosting.h:115-128`); below 50,000 rows the block is 1.
+        One weight per class, multiplied into each row's weight (so it
+        composes with ``sample_weight``). The length must match the label set
+        or the fit raises. Refused with ``loss='RMSE'``, as in CatBoost.
     permutation_count : int, optional
-        CatBoost's `permutation_count` (`boosting_options.cpp:14`, default
-        4). None (default) lets the fit resolve it: 4 for an Ordered fit (its
-        permutations) and for CTR categoricals, and 1 for a Plain fit without
-        CTRs (`UpdateGpuSpecificDefaults`). It is read by the categorical
-        path and by Ordered boosting only; a Plain fit with no
-        `cat_features` refuses it rather than accept and ignore it.
+        CatBoost's ``permutation_count``. None resolves in ``fit``: 4 for an
+        Ordered fit and for CTR categoricals, 1 for a Plain fit without CTRs.
+        Only the categorical path and Ordered boosting read it; a Plain fit
+        with no ``cat_features`` refuses it.
     ctr_estimation_permutation_id : int, optional
-        Which permutation estimates the CTRs
-        (`doc_parallel_boosting.h:101-103`). None (default) means
-        `permutation_count - 1`, their estimation permutation. **ONLY THE
-        CATEGORICAL PATH READS IT**, and it is refused otherwise.
+        Which permutation estimates the CTRs. None means
+        ``permutation_count - 1``. Only the categorical path reads it; it is
+        refused otherwise.
+    grow_policy : {'SymmetricTree', 'Depthwise', 'Lossguide'}, default 'SymmetricTree'
+        ``SymmetricTree`` grows oblivious trees; ``Depthwise`` splits every
+        improving leaf of a level on its own best split; ``Lossguide`` splits
+        one leaf per step, the best-scoring one, until ``max_leaves``. The
+        non-symmetric policies refuse, as CatBoost does, losses without a
+        non-symmetric GPU trainer (``Lq``, ``MultiClass``) and
+        ``use_pointwise_searcher=True``. ``'Region'`` raises
+        ``NotImplementedError``.
+    max_leaves : int, optional
+        The Lossguide leaf budget (CatBoost's default 31, cap 65536). Read
+        under Lossguide only; for other policies any value other than
+        ``2 ** max_depth`` is refused, as in CatBoost.
+    min_data_in_leaf : int, default 1
+        A leaf with at most this many rows is terminal. Used under Depthwise
+        and Lossguide only; under SymmetricTree any value but 1 is refused.
+    min_split_gain : float or None, default None
+        Strict lower bound on a split's improvement in the selected score
+        function, Depthwise and Lossguide only. None keeps CatBoost's growth,
+        including Lossguide's ability to split without positive gain; 0
+        requires positive improvement. Units depend on ``score_function``, so
+        it is not interchangeable with XGBoost's ``gamma`` or LightGBM's
+        ``min_gain_to_split``. Must be finite and nonnegative.
+    min_child_hessian : float or None, default None
+        Minimum weighted Hessian sum in each candidate child (training and
+        bootstrap weights included; equality allowed). Requires Depthwise or
+        Lossguide, NewtonL2 or NewtonCosine scores, and RMSE, Logloss or
+        CrossEntropy.
+    feature_fraction : float, default 1.0
+        Per-tree numeric feature subsampling in (0, 1]: a deterministic subset
+        of nonconstant features is chosen per tree. Values below 1 require
+        numeric features only (categorical and one-hot columns raise
+        ``NotImplementedError``).
+    feature_border_type : str, default 'GreedyLogSum'
+        How numeric borders are chosen, one of ``BORDER_TYPES``: GreedyLogSum
+        and GreedyMinEntropy (greedy splitting), MaxLogSum and MinEntropy
+        (exact dynamic program), Median (quantiles), Uniform (equal width) and
+        UniformAndQuantiles (half of each). Each matches CatBoost's borders.
+        CTR columns keep their own grids.
+    boosting_type : {'Plain', 'Ordered'} or None, default None
+        None under SymmetricTree is CatBoost's data-dependent GPU default:
+        Ordered when the pool has fewer than 50,000 rows and there are at
+        least 500 iterations, otherwise Plain; always Plain for the multiclass
+        losses, the L2 scores, ``use_pointwise_searcher`` and
+        ``feature_fraction < 1``. None under Depthwise and Lossguide is Plain.
+        The value used is stored in ``boosting_type_``.
+
+        Ordered follows CatBoost's GPU ordered boosting: ``permutation_count``
+        permutations, growing folds with leaves estimated on each fold's
+        prefix, and the exported model estimated on the last permutation. It
+        supports every pointwise loss, Cosine and NewtonCosine scores, every
+        bootstrap, ``random_strength``, every border type and NaN mode,
+        sample and class weights, one-hot categorical columns,
+        ``boost_from_average`` and eval sets. On a CPU-only install, sample
+        weights, class weights and one-hot columns are refused under Ordered.
+        Refused, as in CatBoost: Depthwise and Lossguide, the multiclass
+        losses, L2 and NewtonL2 scores, the Exact leaf estimator. Not
+        implemented, refused by name: CTR categorical columns and the ranking
+        losses. Its random streams are this library's, so an Ordered model
+        matches CatBoost in behavior, not in bits.
+    fold_len_multiplier : float, default 2.0
+        Ordered only: the fold growth factor, greater than 1. Refused by a
+        Plain fit.
+    fold_permutation_block : int or None, default None
+        Ordered only. None or 0 means 64 from 50,000 rows up (halved while
+        ``block * 128 > rows``) and 1 below 50,000 rows.
 
     Attributes
     ----------
     model_ : str
-        The fitted ensemble, as the text format `check-model-io` gates
-        bit-for-bit. It is a plain string: save it, ship it, hand it to
-        another process. Floats in it carry their hex bits beside the
-        decimal, because `String(Float32)` on this toolchain is one ULP
-        wrong for 0.46% of values and a decimal-only round trip would
-        change predictions.
+        The fitted ensemble as text. It is a plain string you can store or
+        pass to another process; floats carry their exact bits, so a round
+        trip does not change predictions.
     loss_curve_ : ndarray
-        The training loss after each iteration. It is CatBoost's
-        `functionValue` negated and divided by the row count, so it FALLS.
+        The training loss after each iteration.
     test_loss_curve_ : ndarray or None
-        The HELD-OUT loss after each iteration, `None` without an
-        `eval_set`. This is the curve the detector reads and the one worth
-        plotting: `loss_curve_` falls almost by construction.
+        The held-out loss after each iteration, or None without an
+        ``eval_set``. This is the curve the overfitting detector reads.
     learning_rate_ : float
-        The learning rate the fit used (CatBoost's auto-selection resolved).
+        The learning rate the fit used.
     boosting_type_ : str
-        'Plain' or 'Ordered', the boosting type the fit used.
+        ``'Plain'`` or ``'Ordered'``, the boosting type the fit used.
     best_iteration_ : int
-        The index of the lowest `test_loss_curve_` entry, or of the lowest
-        learn loss with no eval set. It is the ERROR tracker's best
-        (`error_tracker.h:73-75`), so with `best_model_min_trees` above it
-        the fitted model holds MORE trees than `best_iteration_ + 1` and
-        both numbers are right.
+        Index of the lowest ``test_loss_curve_`` entry, or of the lowest
+        training loss without an eval set. With ``best_model_min_trees`` above
+        it, the model holds more than ``best_iteration_ + 1`` trees.
     stopped_early_ : bool
-        Whether the detector fired before `n_estimators` was reached.
+        Whether the detector stopped before ``n_estimators``.
+    bias_ : float
+        The starting constant (0.0 unless ``boost_from_average``).
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1).astype(np.float32)
+    >>> model = mojolearn.GradientBoosting(loss="Logloss", n_estimators=100).fit(X, y)
+    >>> proba = model.predict_proba(X)
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -1847,63 +1823,59 @@ class GradientBoosting(NumericModeMixin):
             raise ValueError(f"mojolearn: {what} must be finite (no NaN or infinity)")
         return Xea, yea, n_eval_rows
 
+    # group_id keys follow get_id_object_bytes_string_representation; consecutive-group refusal is
+    # libs/data/objects.cpp:60-87. A QueryRMSE fit without groups mirrors TWithoutQueriesGrouping
+    # (gpu_data/doc_parallel_dataset.h:26-38). YetiRank derivative draws come from a stream of random_state
+    # kept apart from the searcher's, so its trees cannot match the reference GPU bit for bit. sample_weight
+    # x class_weights follows target/data_providers.cpp:168 (rawWeights * rawGroupWeights * classWeights);
+    # there are no group weights here. use_best_model default: options_helper.cpp:106-108.
     def fit(self, X, y, sample_weight=None, eval_set=None, group_id=None,
             subgroup_id=None, pairs=None, pairs_weight=None):
-        """Fit the ensemble. `X` is (n_samples, n_features), `y` is 1-D.
+        """Fit the ensemble.
 
-        `group_id` is CatBoost's Pool `group_id`: one id per row, a string
-        or an integer (integers compare by their decimal spelling, as
-        `get_id_object_bytes_string_representation` makes them, so 7 and
-        "7" are one group; floats are refused as theirs are). The rows of a
-        group must be CONSECUTIVE, their `group Ids are not consecutive`
-        refusal (`libs/data/objects.cpp:60-87`). It is read by
-        `loss="QueryRMSE"`, which fits on the SymmetricTree greedy searcher
-        with no categorical features or eval set; every other
-        loss refuses a grouping BY NAME. A QueryRMSE fit given no
-        `group_id`, or one with as many groups as rows, trains on queries
-        of one row, as the CatBoost reference's `TWithoutQueriesGrouping`
-        does (`gpu_data/doc_parallel_dataset.h:26-38`): every query mean is
-        its row's own residual, every derivative is zero and the model
-        predicts zero. `loss="PairLogit"` reads it too, on the same arm:
-        without `pairs` its pairs are generated from the groups and `y` as the
-        reference's default `max_pairs` does (every two rows of a query with
-        different grades, the higher grade the winner, weighted by the
-        query's first row weight). `pairs` is their Pool argument: a sequence
-        of `[winner, loser]` integer row indices, each pair inside one group,
-        with `pairs_weight` one weight per pair (default 1.0). `pairs` is
-        refused without `group_id`, where the reference would regroup and
-        reorder the pool, and with any loss but PairLogit. `loss="YetiRank"`
-        reads the groups on the same arm, with the reference's defaults
-        (10 permutations, decay 0.85, `l2_leaf_reg` 0 unless given, Newton
-        leaves at one iteration, which it refuses to change); a query over
-        1023 rows is refused in the reference's words. Its derivative draws
-        come from a stream of `random_state` kept apart from the searcher's,
-        so its trees cannot match the reference's GPU bit for bit, and
-        `loss_curve_` is zero, as the reference's YetiRank target writes no
-        value. `subgroup_id` is read by no loss here and is refused by name.
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array-like of shape (n_samples,) or (n_samples, n_targets)
+            Targets; 2-D only for ``loss='MultiRMSE'``.
+        sample_weight : array-like of shape (n_samples,), optional
+            Per-row weights, None meaning all ones. Multiplied with
+            ``class_weights`` where both are given.
+        eval_set : tuple (X_eval, y_eval) or list of one such tuple, optional
+            Held-out data for ``test_loss_curve_``, the overfitting detector and
+            ``use_best_model``. Unlike CatBoost, only one eval set is accepted;
+            more than one raises. Passing it makes ``use_best_model`` default to
+            True, so ``model_`` keeps the trees up to the best held-out iteration;
+            pass ``use_best_model=False`` to keep every tree.
+        group_id : sequence, optional
+            One query id per row (string or integer; integers compare by their
+            decimal spelling, so 7 and "7" are one group; floats are refused).
+            Rows of a group must be consecutive. Read by ``QueryRMSE``,
+            ``PairLogit`` and ``YetiRank`` (SymmetricTree, no categorical
+            features, no eval set); every other loss refuses it. A QueryRMSE fit
+            with no groups, or one row per group, predicts zero.
+        subgroup_id : sequence, optional
+            Not read by any loss; refused by name.
+        pairs : sequence of [winner, loser], optional
+            ``PairLogit`` only: integer row-index pairs, each inside one group.
+            Requires ``group_id``. Without it, pairs are generated from the groups
+            and ``y`` (every two rows of a query with different grades, the higher
+            grade winning, weighted by the query's first row weight).
+        pairs_weight : sequence of float, optional
+            One weight per pair, default 1.0.
 
-        `sample_weight` is a per-row weight, `None` meaning all ones. It
-        MULTIPLIES with `class_weights` where both are given, which is
-        their own combination at pool build
-        (`target/data_providers.cpp:168`:
-        `rawWeights[i] * rawGroupWeights[i] * classWeights[...]`). Their
-        group-weight factor is absent: `group_id` carries no group weights
-        here.
+        Returns
+        -------
+        self
+            The fitted estimator.
 
-        `eval_set` is `(X_eval, y_eval)`, or a one-element list holding
-        that pair. **CatBoost takes a LIST of eval sets and this takes
-        one**, because the boosting carries a single test cursor; more
-        than one raises rather than silently scoring the first.
-
-        Passing it changes the DEFAULT of `use_best_model` to True, which
-        is CatBoost's own data-dependent default
-        (`options_helper.cpp:106-108`) and means `model_` holds the trees
-        up to the best held-out iteration rather than all of them. Pass
-        `use_best_model=False` to keep every tree.
-
-        After the call: `test_loss_curve_` is the held-out loss per
-        iteration, `best_iteration_` its argmin, and `stopped_early_` says
-        whether the detector fired before `n_estimators`.
+        Notes
+        -----
+        ``YetiRank`` uses CatBoost's defaults (10 permutations, decay 0.85,
+        ``l2_leaf_reg`` 0 unless given, Newton leaves at one iteration, which it
+        refuses to change), refuses a query over 1023 rows, and leaves
+        ``loss_curve_`` at zero.
         """
         # COLUMN-MAJOR is what the quantizer walks, so X is materialized
         # STRAIGHT to Fortran order: one copy at most, zero when the
@@ -2363,16 +2335,21 @@ class GradientBoosting(NumericModeMixin):
         return Xa, n_rows
 
     def predict(self, X):
-        """RAW SCORES, not probabilities, as a float32 `Array`. See the
-        module docstring.
+        """Return raw scores (not probabilities) as a float32 ``mojolearn.Array``.
 
-        For a single-output loss the result is `(n_samples,)`. For
-        `MultiClass` it is `(n_samples, n_classes - 1)` -- the free
-        approxes, with the LAST class's pinned at zero and therefore not
-        returned. `predict_proba` is what turns those into `n_classes`
-        columns; dropping the pinned class and renormalising the rest
-        would give a different answer. `MultiClassOneVsAll` returns
-        `(n_samples, n_classes)` with one raw score per independent head.
+        For a single-output loss the result has shape ``(n_samples,)``. For
+        ``MultiClass`` it is ``(n_samples, n_classes - 1)``: the last class's
+        score is fixed at zero and not returned, so use ``predict_proba`` for
+        probabilities. ``MultiClassOneVsAll`` returns ``(n_samples, n_classes)``,
+        one raw score per class. ``MultiRMSE`` returns ``(n_samples, n_targets)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        mojolearn.Array
         """
         if self.model_ is None:
             raise RuntimeError("mojolearn: predict() before fit()")
@@ -2438,33 +2415,28 @@ class GradientBoosting(NumericModeMixin):
             )
         return out
 
+    # MultiClass softmax is their Probability (eval_processing.h:214-221); OneVsAll elementwise sigmoid is
+    # MultiProbability (:222-226). The device applies the transform, so the max-subtraction matches
+    # MultiLogitValAndFirstDerImpl rather than being re-derived here.
     def predict_proba(self, X):
-        """Class probabilities, `(n_samples, n_classes)`, as an `Array`:
-        float32 for the two multi-output losses (the device applies the
-        transform), float64 for Logloss and CrossEntropy.
+        """Return class probabilities of shape ``(n_samples, n_classes)``.
 
-        Defined for `Logloss` and `CrossEntropy` (the sigmoid),
-        `MultiClass` (the softmax), and `MultiClassOneVsAll` (independent
-        sigmoids). It
-        refuses every other loss rather than returning a number that looks
-        like a probability. CatBoost's `prediction_type='Probability'` is
-        the same transform over the same raw scores.
+        Defined for ``Logloss`` and ``CrossEntropy`` (sigmoid), ``MultiClass``
+        (softmax over all classes, columns sum to 1) and ``MultiClassOneVsAll``
+        (independent sigmoids per class; columns do not sum to 1, because each
+        class was fitted as a separate problem). Every other loss raises. This
+        is the same transform as CatBoost's ``prediction_type='Probability'``.
+        Columns are in class-code order. The result is a float32
+        ``mojolearn.Array`` for the two multiclass losses and float64 for
+        Logloss and CrossEntropy.
 
-        THE TWO MULTI-OUTPUT LOSSES GET DIFFERENT TRANSFORMS, and it is
-        not a style choice. `MultiClass` is a softmax -- one shared
-        denominator, columns summing to 1, their `Probability`
-        (`eval_processing.h:214-221`). `MultiClassOneVsAll` is an
-        ELEMENTWISE sigmoid -- their `MultiProbability` (`:222-226`) --
-        and **its columns do NOT sum to 1**, because it fitted
-        `n_classes` independent "is this row class k" problems and
-        renormalising would assert an exclusivity it never learned.
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
 
-        THE MULTICLASS SOFTMAX IS TAKEN OVER ALL `n_classes`, INCLUDING THE
-        PINNED ONE. The model stores `n_classes - 1` free approxes and the
-        last class's is zero by construction; the device applies the
-        transform, so the max-subtraction matches the one in their
-        `MultiLogitValAndFirstDerImpl` rather than being re-derived here.
-        The returned columns are in class-code order, `0 .. n_classes - 1`.
+        Returns
+        -------
+        mojolearn.Array
         """
         if self.loss in MULTI_OUTPUT_LOSSES:
             if self.model_ is None:
@@ -2565,15 +2537,20 @@ class GradientBoosting(NumericModeMixin):
         )
 
     def predict_classes(self, X):
-        """The argmax of `predict_proba`, as dense class codes in an int64
-        `Array`.
+        """Return the predicted class codes (argmax of ``predict_proba``).
 
-        Named `predict_classes` rather than overloading `predict`, because
-        `predict` returns RAW SCORES for every loss in this library and
-        making one loss return labels instead would be the kind of silent
-        contract change that is worse than an extra method. The argmax is
-        first-max-wins over the class columns, the O(rows * classes) Python
-        loop the contract permits (`_labels.argmax_rows`).
+        A separate method because ``predict`` returns raw scores for every loss.
+        Ties go to the first class. Raises ``ValueError`` for a model fitted with
+        a non-classification loss.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        mojolearn.Array
+            int64 dense class codes of shape ``(n_samples,)``.
         """
         if self.loss not in MULTI_OUTPUT_LOSSES + (
             "Logloss", "CrossEntropy",
@@ -2666,50 +2643,48 @@ class GradientBoosting(NumericModeMixin):
         return counts, leaves
 
     def get_tree_leaf_counts(self):
-        """Return leaf counts per tree as a uint32 `Array`, as in CatBoost.
+        """Return the number of leaves in each tree, as in CatBoost.
 
-        Reads fitted or loaded model metadata; does not launch GPU work.
+        Returns
+        -------
+        mojolearn.Array
+            uint32 array with one entry per tree.
         """
         counts, _ = self._tree_metadata()
         return Array.from_list([int(c) for c in counts], "<u4")  # glue: leaf counts per tree as words
 
     def get_leaf_values(self):
-        """Return tree-major, leaf-major stored values as a float64 `Array`.
+        """Return the stored leaf values, tree-major then leaf-major.
 
-        Multiclass stores each leaf's dimensions consecutively. MultiClass
-        contains k-1 free dimensions; OneVsAll contains k dimensions.
-        Conversion from stored float32 bits to float64 is exact, including
-        signed zero (`_f32_bits_to_float`, one `struct` round trip per
-        leaf, the same O(leaves) walk that parsed the text). No decimal
-        model text is used to recover the values.
+        For multiclass models each leaf's dimensions are consecutive:
+        ``MultiClass`` stores ``n_classes - 1`` values per leaf and
+        ``MultiClassOneVsAll`` stores ``n_classes``. Values are the stored
+        float32 values converted exactly to float64.
+
+        Returns
+        -------
+        mojolearn.Array
+            float64 array.
         """
         _, leaves = self._tree_metadata()
         values = [_f32_bits_to_float(bits) for tree in leaves for bits in tree]  # cpu-route: model text metadata parsed for inspection [py-data-loop]
         return Array.from_list(values, "<f8")
 
+    # The payload is model_, the text format check-model-io gates bit-for-bit; the loader reads the hex-bits
+    # half of each float, and nothing here formats a number. The model text carries the quantization borders
+    # (one `feature ... borders ...` table per feature), which is why gbdt_predict takes only the text and
+    # raw rows. The text also records per-iteration learn losses on its `loss` lines.
     def save(self, path):
-        """Write the fitted ensemble to `path` as an npz.
+        """Write the fitted model to ``path`` as an ``.npz`` file.
 
-        The payload is `model_`, the text format `check-model-io` already
-        gates bit-for-bit. Every float in that text carries its hex bit
-        pattern beside the decimal and the loader reads the BITS half, so
-        the text is a bit-exact carrier by construction. It travels here
-        as raw utf-8 bytes; nothing in this method formats a number. The
-        model text is self contained for prediction. The quantization
-        borders live in it as one `feature ... borders ...` table per
-        feature, each border with its hex bits, and every split references
-        a border by index, which is why `gbdt_predict` takes only the text
-        and raw feature rows.
+        The saved model predicts bit for bit like the original. The numeric mode
+        the model used is saved with it. ``loss_curve_`` and ``test_loss_curve_``
+        are not restored by ``load``.
 
-        The effective numeric mode is saved and restored independently of a
-        future process default. Legacy files without this field keep the
-        loader process default; select their desired tier explicitly.
-
-        The curve attributes (`loss_curve_`, `test_loss_curve_`) are not
-        reconstructed by `load`; a loaded model carries them as None. The
-        model text does record per-iteration learn losses on its `loss`
-        lines, so nothing is destroyed, but `load` populates only what
-        prediction reads.
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
         """
         if self.model_ is None:
             raise RuntimeError("mojolearn: save() before fit()")
@@ -2754,11 +2729,20 @@ class GradientBoosting(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load an ensemble saved by `save`. The result predicts; it does
-        not refit, and it does not carry the training configuration or
-        the loss curves. `approx_dim_` is re-derived from the model text
-        exactly as `fit` derives it, and a file whose stored value
-        disagrees is refused as corrupt."""
+        """Load a model written by ``save``.
+
+        The loaded model predicts; it does not carry the training configuration
+        or the loss curves. A file whose stored metadata disagrees with its model
+        is refused as corrupt.
+
+        Parameters
+        ----------
+        path : str or path-like
+
+        Returns
+        -------
+        GradientBoosting
+        """
         arrays = _serialize.read_npz(path, _MODEL_FORMAT)
         saved_as = _serialize.scalar_str(arrays, "estimator")
         if saved_as != cls.__name__:
@@ -2837,15 +2821,22 @@ def _fit_row_major_available(binding):
         return False
 
 
+# Former docstring: Experimental one-tree, depth-two FeatureFreq combination estimator. Source columns
+# must hold dense categorical codes; non-source columns are ordinary numeric split candidates. Separate
+# from GradientBoosting; selecting it cannot change standard fit behavior or imply support for
+# deeper/general CatBoost combinations. fit(sample_weight=) accepts finite non-negative row weights;
+# structure scores and leaf values both use the same weights.
 class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
-    """Experimental one-tree, depth-two FeatureFreq combination estimator.
+    """One-tree, depth-two RMSE model over a combination of categorical source columns.
 
-    Source columns must hold dense categorical codes; non-source columns are
-    ordinary numeric split candidates. It is separate from
-    :class:`GradientBoosting`; selecting it cannot change standard fit
-    behavior or imply support for deeper/general CatBoost combinations.
-    ``fit(..., sample_weight=...)`` accepts finite non-negative row weights;
-    structure scores and leaf values both use the same weights.
+    Parameters
+    ----------
+    sources : sequence of int
+        At least two distinct column indices holding dense category codes
+        ``0..k-1``.
+    learning_rate : float, default 0.03
+    l2_leaf_reg : float, default 3.0
+    random_state : int, default 0
     """
 
     def __init__(
@@ -2865,6 +2856,21 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         self.sources = parsed
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the tree.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Finite values; source columns hold dense codes ``0..k-1`` and the
+            other columns must not be constant.
+        y : array-like of shape (n_samples,)
+        sample_weight : array-like of shape (n_samples,), optional
+            Finite, non-negative row weights with a positive sum.
+
+        Returns
+        -------
+        self
+        """
         Xa, _ = as_f32_colmajor(X, name="X")
         n_rows, n_features = Xa.shape
         if n_rows == 0 or n_features < 2:
@@ -2960,21 +2966,26 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         return self
 
 
+# Former docstring: Numeric ordered RMSE with one explicit row permutation. Fits symmetric trees using
+# independent prefix approximation cursors and one full-data cursor for exported leaves. Supports finite
+# numeric X/y, nonnegative sample weights, zero initial bias, Newton-1 leaves, and depths 1..8.
+# Categorical CTRs, other objectives, bootstrap and early stopping are absent and rejected as unknown
+# kwargs. Not the general boosting_type="Ordered" interface; that is
+# GradientBoosting(boosting_type="Ordered") (lane/catboost-parity). numeric_mode="identical" selects
+# pinned arithmetic. Native AMD/NVIDIA fixtures are certified; the Python binding needs independent
+# installed-artifact qualification. loss_curve_ and best_iteration_ are None.
 class OrderedRMSE(GradientBoosting):
-    """Numeric ordered RMSE with one explicit row permutation.
+    """Ordered-boosting RMSE regressor with an explicit row permutation.
 
-    Fits symmetric trees using independent prefix approximation cursors and
-    one full-data cursor for exported leaves. Supports finite numeric X/y,
-    nonnegative sample weights, zero initial bias, Newton-1 leaves, and
-    depths 1..8. Categorical CTRs, other objectives, bootstrap and early
-    stopping are absent from this narrow API and rejected as unknown kwargs.
-    This is not the general CatBoost ``boosting_type="Ordered"`` interface;
-    that is ``GradientBoosting(boosting_type="Ordered")`` (lane/catboost-parity).
-
-    Pass ``numeric_mode="identical"`` to select pinned arithmetic. Native
-    AMD/NVIDIA fixtures are certified; the Python binding needs independent
-    installed-artifact qualification. ``loss_curve_`` and
-    ``best_iteration_`` are None because this path does not track losses.
+    Parameters
+    ----------
+    n_estimators : int, default 100
+    max_depth : int, default 6
+        1 to 8.
+    learning_rate : float, default 0.03
+    l2_leaf_reg : float, default 3.0
+    border_count : int, default 128
+        1 to 255.
     """
 
     def __init__(
@@ -3019,10 +3030,22 @@ class OrderedRMSE(GradientBoosting):
                                  + ("positive" if positive else "non-negative"))
 
     def fit(self, X, y, *, permutation, sample_weight=None):
-        """Fit using a bijection of original row ids in ``permutation``.
+        """Fit with the ordering given by ``permutation``.
 
-        X, y and weights remain in original row order; only permutation
-        defines ordered prefix membership. No host random shuffle is hidden.
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Finite values, at least 4 rows.
+        y : array-like of shape (n_samples,)
+        permutation : sequence of int
+            A bijection of row ids ``0..n_samples-1``. ``X``, ``y`` and weights
+            stay in their original order; only the permutation sets the order.
+        sample_weight : array-like of shape (n_samples,), optional
+            Finite, non-negative weights with a positive sum.
+
+        Returns
+        -------
+        self
         """
         self._ordered_options(self.n_estimators, self.max_depth,
                               self.border_count, self.learning_rate,

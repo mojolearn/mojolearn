@@ -558,9 +558,65 @@ GBDT_ESTIMATORS = {
 }
 
 
+# The model text is parsed in Python because the Mojo parser (gbdt/models/model_text.mojo, load_model_text)
+# returns a TrainedModel from gbdt/train.mojo, which imports the device side. This parser applies the same
+# strictness (header order, gap-free indices, counts that add up, unknown keyword is an error). Every float
+# comes from the hex-bits half of its token; the decimal half is not consulted (the Mojo loader checks it
+# agrees within one ULP, this parser does not, so a hand-edited decimal is not caught here).
+# CTR tables and tensor CTRs are parsed with load_model_text's checks and handed to
+# forest_host_gbdt_expand_ctr, which calls the same expand_raw_columns / expand_tensor_ctr_columns the GPU
+# predict_floats calls. Refused at load as predict_floats refuses: a model with both kinds, more CTR
+# columns declared than tables, and the table types without apply-time arithmetic. The tensor record's hash
+# is checked for shape only. tools/forest_host_gate.py compares host predictions against a GPU-recorded
+# SHA-256.
 class HostGBDT:
-    """A saved GradientBoosting, OrderedRMSE or ExperimentalTwoLevelFeatureFreq
-    model that predicts on the CPU."""
+    """CPU inference for a saved gradient-boosting model.
+
+    Loads a file written by ``GradientBoosting.save`` (also ``OrderedRMSE``
+    and ``ExperimentalTwoLevelFeatureFreq`` models) and predicts on the CPU,
+    with no GPU needed. ``predict`` returns what ``GradientBoosting.predict``
+    returns for the same file. Models with categorical (CTR) columns are
+    supported; a model that uses CTR table types with no prediction-time
+    formula (Buckets, BinarizedTargetMeanValue, FloatTargetMeanValue) is
+    refused at load.
+
+    Build one with :meth:`from_file`. The constructor takes the archive's
+    fields directly and refuses a file whose fields disagree with its model
+    text as corrupt.
+
+    Parameters
+    ----------
+    loss : str
+        The loss the model was fitted with.
+    text : str
+        The model text (``GradientBoosting.model_``).
+    n_features_in : int
+    approx_dim : int
+        Number of raw outputs per row.
+    n_classes : int or None, default None
+    numeric_mode : str or None, default None
+        The numeric mode recorded with the model.
+    bias : float or None, default None
+    estimator : str, default 'GradientBoosting'
+        The class that saved the model.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+    approx_dim_ : int
+    bias_ : float
+    n_classes_ : int or None
+    model_ : str
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.float32)
+    >>> mojolearn.GradientBoosting(loss="Logloss", n_estimators=50).fit(X, y).save("gb.npz")
+    >>> host = mojolearn.HostGBDT.from_file("gb.npz")
+    >>> proba = host.predict_proba(X)
+    """
 
     estimator = 'GradientBoosting'
 
@@ -602,8 +658,21 @@ class HostGBDT:
 
     @classmethod
     def from_file(cls, path):
-        """A model from a file written by `GradientBoosting.save` (or the
-        `OrderedRMSE` and `ExperimentalTwoLevelFeatureFreq` save it inherits)."""
+        """Load a model from a file written by ``GradientBoosting.save``.
+
+        Parameters
+        ----------
+        path : str or path-like
+
+        Returns
+        -------
+        HostGBDT
+
+        Raises
+        ------
+        ValueError
+            If the file was saved by another class or is corrupt.
+        """
         arrays = _serialize.read_npz(path, GBDT_FORMAT)
         saved_as = _serialize.scalar_str(arrays, 'estimator')
         if saved_as not in GBDT_ESTIMATORS:
@@ -628,20 +697,34 @@ class HostGBDT:
 
     @property
     def n_trees(self):
+        """Number of trees in the model."""
         return self._arrays['n_trees']
 
     @property
     def inference_engine(self):
+        """Name of the prediction engine, ``'sequential'``."""
         return 'sequential'
 
     def model_sha256(self):
-        """SHA-256 over the model text's UTF-8, which is the archive's
-        `model` member byte for byte."""
+        """Return the SHA-256 hex digest of the model text (UTF-8).
+
+        It equals the digest of the archive's ``model`` member.
+        """
         return hashlib.sha256(self.model_.encode('utf-8')).hexdigest()
 
     def predict(self, X):
-        """The raw approxes, float32, `(n_rows,)` or `(n_rows, approx_dim)`,
-        as `GradientBoosting.predict` returns them."""
+        """Return raw float32 scores, as ``GradientBoosting.predict`` does.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        mojolearn.Array
+            Shape ``(n_samples,)`` for a single-output loss, otherwise
+            ``(n_samples, approx_dim)``.
+        """
         # `GradientBoosting._check_fitted` stages X COLUMN-major through
         # `as_f32_colmajor`, whose 2-D flip is the base binding's
         # `transpose_f32`, a stub on a CPU-only install. The float32 cast is
@@ -690,9 +773,21 @@ class HostGBDT:
         return out if dim == 1 else out.reshape((n_rows, dim))
 
     def predict_proba(self, X):
-        """`GradientBoosting.predict_proba` for Logloss and CrossEntropy:
-        the raw score widened to float64, the sigmoid through the binding,
-        and the `[1 - p, p]` columns built the way ensemble.py builds them."""
+        """Return float64 class probabilities ``[1 - p, p]`` for ``Logloss`` and ``CrossEntropy`` models.
+
+        Matches ``GradientBoosting.predict_proba`` for these losses. ``MultiClass``
+        and ``MultiClassOneVsAll`` models raise ``NotImplementedError``; any other
+        loss raises ``ValueError``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        mojolearn.Array
+            Shape ``(n_samples, 2)``.
+        """
         if self.loss in _MULTI_LOSSES:
             raise NotImplementedError(
                 f"mojolearn: HostGBDT.predict_proba does not carry the {self.loss} "

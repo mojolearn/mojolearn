@@ -71,96 +71,84 @@ _IFOREST_INTS = 11
 _IFOREST_REALS = 4
 
 
+# Maintainer notes (moved from the docstring): the GPU implementation is
+# `isolation_forest/` (DEVIATIONS 680-686 and 750-751). max_depth=None is
+# cuML's auto, ceil(log2(max_samples_)) computed in integers rather than
+# through libm log2 (DEVIATION 684). warm_start and sample_weight raise
+# UnsupportedOnGPU in cuML too (isolation_forest.pyx:592-595). estimators_ is
+# absent: the forest is flat device arrays (DEVIATION 685). as_treelite() /
+# as_nvforest() are not implemented (isolation_forest/NOT_IMPLEMENTED.tsv).
+# Non-finite X is refused inside the Mojo entry (DEVIATION 680); cuML accepts
+# NaN and splits on it.
+# DEVIATION 874: the CPython boundary retains no device pointer
+# (`bindings/_mojolearn_estimators.mojo`), so a binding without the resident
+# forest export keeps the training matrix and rebuilds the forest on every
+# `score_samples`, `decision_function` and `predict`; the forest is a pure
+# function of (random_state, tree_id, X bits), so the rebuild is bit-identical,
+# at the cost of a full fit per scoring call. `fit` runs a fit plus a one-row
+# scoring pass to read `offset_` and `max_samples_` back.
+# DEVIATION 875: random_state=None is seed 0, not a fresh draw.
+# `predict` thresholds on the device with cuML's `score > threshold ? 1 : -1`
+# at threshold = -offset_, then negates; it is not re-derived from
+# `decision_function`.
 class IsolationForest(NumericModeMixin):
-    """Isolation Forest backed by a GPU implementation
-    (`isolation_forest/`, DEVIATIONS 680-686 and 750-751), the
-    scikit-learn surface.
+    """Isolation Forest anomaly detector with scikit-learn's interface.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter:
+    Builds random isolation trees on subsamples of `X` and scores each row by
+    how quickly the trees isolate it. Parameters and defaults follow
+    scikit-learn and cuML. Parameters that are not supported raise
+    `NotImplementedError` instead of being ignored.
 
-        n_estimators    honored   the tree count (cuML's default 100)
-        max_samples     honored   'auto' (= min(256, n_samples)), a
-                                  positive int (clipped to n_samples), or
-                                  a float in (0, 1]; the same
-                                  resolution as cuML's `fit`
-        max_depth       honored   None (the default) is their auto, an
-                                  integer ceil(log2(max_samples_)) computed
-                                  in integers rather than through a libm
-                                  log2 (DEVIATION 684); a positive int is
-                                  taken as given
-        max_features    honored   a float in (0, 1] (default 1.0) or an int
-                                  in [1, n_features]
-        bootstrap       honored   whether the per-tree subsample is drawn
-                                  with replacement
-        contamination   honored   'auto' (offset_ = -0.5) or a float in
-                                  (0, 0.5], which takes the training-score
-                                  quantile exactly as theirs does
-        random_state    honored   an int in [0, 2**32 - 1]. None is 0 HERE,
-                                  not a fresh draw -- DEVIATION 875 below
-        warm_start      refused   `UnsupportedOnGPU` in the reference too
-                                  (isolation_forest.pyx:592-595)
-        sample_weight   refused   in fit(); `UnsupportedOnGPU` in the reference too
-        n_jobs          refused   scikit-learn's thread count; there is no
-                                  CPU path in this library to spread
-        verbose         refused   anything truthy; this implementation prints no log
-                                  lines, so accepting it would be
-                                  accepting-and-ignoring
-        output_type     refused   a cuML-internal array-type selector; this
-                                  package returns `mojolearn.Array`
-        estimators_     absent    the per-tree Python objects are
-                                  scikit-learn's; the forest here is four
-                                  flat device arrays (DEVIATION 685)
-        as_treelite(),  absent    the Treelite / nvForest export is not
-        as_nvforest()             implemented (isolation_forest/NOT_IMPLEMENTED.tsv)
+    `X` is converted to float32; NaN or infinity in `X` raises `ValueError`.
+    `random_state=None` means seed 0, so the default fit is deterministic,
+    unlike scikit-learn and cuML. The fitted model keeps the training matrix;
+    depending on the installed build, a scoring call may rebuild the forest
+    from it, which gives the same forest bit for bit.
 
-    Non-finite cells of `X` are refused by name inside the Mojo entry
-    (DEVIATION 680), with the row and column, rather than being split on.
-    Theirs accepts a NaN and splits on it.
-
-    DEVIATION 874: EVERY SCORING CALL REFITS THE FOREST. The fitted forest
-    is eight device buffers and the CPython boundary retains no device
-    pointer (`bindings/_mojolearn_estimators.mojo`'s header states that
-    rule for the whole package), so `fit` cannot hand a live model to
-    `predict`. This class keeps the training matrix instead and rebuilds
-    the forest on every `score_samples`, `decision_function` and
-    `predict`. It is CORRECT -- the forest is a pure function of
-    `(random_state, tree_id, X bits)`, which is the property the whole
-    lane is built around, so the rebuild is the same forest bit for bit --
-    and it COSTS a full fit per scoring call. `fit` itself runs a fit plus
-    a one-row scoring pass, which is the cheapest way to read `offset_`
-    and `max_samples_` back out.
-
-    DEVIATION 875: `random_state=None` IS SEED 0 HERE, NOT A FRESH DRAW.
-    scikit-learn and cuML both take a fresh entropy source for None. A fit
-    whose seed nobody recorded cannot be reproduced, and a reproducible
-    fit is this library's product, so None is 0 and it is said out loud
-    rather than left for a caller to discover from two runs agreeing.
+    Parameters
+    ----------
+    n_estimators : int, default 100
+        Number of trees; at least 1.
+    max_samples : 'auto', int or float, default 'auto'
+        Rows per tree: 'auto' means min(256, n_samples), a positive int is
+        clipped to n_samples, a float in (0, 1] is a fraction of n_samples.
+    max_depth : int or None, default None
+        Maximum tree depth. None means ceil(log2(max_samples_)).
+    max_features : int or float, default 1.0
+        Features per tree: an int in [1, n_features] or a float in (0, 1].
+    bootstrap : bool, default False
+        Draw each tree's subsample with replacement.
+    contamination : 'auto' or float, default 'auto'
+        Expected fraction of anomalies. 'auto' sets `offset_` to -0.5; a
+        float in (0, 0.5] sets it from the training scores.
+    random_state : int or None, default None
+        Seed in [0, 2**32 - 1]. None means 0.
+    warm_start : bool, default False
+        Only False is accepted.
+    n_jobs : None, default None
+        Only None is accepted.
+    verbose : bool, default False
+        Only False is accepted.
+    output_type : None, default None
+        Only None is accepted; results are `mojolearn.Array`.
 
     Attributes
     ----------
     offset_ : float
-        The decision-function shift. -0.5 for `contamination='auto'`,
+        Shift used by `decision_function`: -0.5 for `contamination='auto'`,
         otherwise the `100 * contamination` percentile of the training
-        scores under numpy's default `linear` interpolation.
+        scores (linear interpolation).
     max_samples_ : int
         The resolved per-tree subsample size.
     n_features_in_ : int
+        Number of features seen in `fit`.
 
-    Methods
-    -------
-    score_samples(X)
-        The negated anomaly score, cuML's `-paper_score`, a float32
-        `Array` of `(n_samples,)`. LOWER is more anomalous, which is
-        scikit-learn's convention and theirs.
-    decision_function(X)
-        `score_samples(X) - offset_`, in float32 as the reference's Python layer
-        computes it; a float32 `Array`. Negative is predicted
-        anomalous.
-    predict(X)
-        -1 for an anomaly, 1 for an inlier, an int32 `Array`, thresholded
-        ON THE DEVICE by cuML's own `score > threshold ? 1 : -1` at
-        `threshold = -offset_` and then negated, not re-derived from
-        `decision_function`.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.IsolationForest(n_estimators=100).fit(X)
+    >>> labels = model.predict(X)  # -1 anomaly, 1 inlier
     """
 
     #: The binding `_run` asks through `NumericModeMixin._bind`, which is
@@ -443,10 +431,19 @@ class IsolationForest(NumericModeMixin):
         return state
 
     def fit(self, X, y=None, sample_weight=None):
-        """Fit and read back `offset_`, `max_samples_` and `n_features_in_`.
+        """Fit the isolation forest.
 
-        Resident-capable bindings keep the forest; other bindings reconstruct
-        it on each scoring call. The one-row score initializes either path.
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : ignored
+        sample_weight : None, default None
+            Only None is accepted; other values raise `NotImplementedError`.
+
+        Returns
+        -------
+        self
         """
         if sample_weight is not None:
             raise NotImplementedError(
@@ -485,21 +482,46 @@ class IsolationForest(NumericModeMixin):
         return self
 
     def score_samples(self, X):
+        """Anomaly score of each row; lower is more anomalous.
+
+        This is the negated isolation-forest anomaly score, as in
+        scikit-learn and cuML.
+
+        Returns
+        -------
+        Array of shape (n_samples,), float32
+        """
         return self._run(X, _WANT_SCORE_SAMPLES)
 
     def decision_function(self, X):
+        """`score_samples(X) - offset_`, computed in float32; negative means
+        predicted anomalous.
+
+        Returns
+        -------
+        Array of shape (n_samples,), float32
+        """
         return self._run(X, _WANT_DECISION_FUNCTION)
 
     def predict(self, X):
+        """Label each row: -1 for an anomaly, 1 for an inlier.
+
+        Returns
+        -------
+        Array of shape (n_samples,), int32
+        """
         return self._run(X, _WANT_PREDICT)
 
     def fit_predict(self, X, y=None, sample_weight=None):
+        """Fit on `X` and return `predict(X)`."""
         return self.fit(X, y=y, sample_weight=sample_weight).predict(X)
 
     def save(self, path):
-        """Write the fitted model to `path` as an npz (`_IFOREST_FORMAT`):
-        the training matrix and the resolved knobs every scoring call
-        rebuilds the forest from."""
+        """Write the fitted model to `path` as an npz file.
+
+        The file holds the training matrix and the resolved parameters the
+        forest is built from, so it is as large as the training data.
+        """
         if not hasattr(self, "_x"):
             raise RuntimeError("this estimator is not fitted yet")
         from .linear_model import _saved_mode
@@ -522,8 +544,11 @@ class IsolationForest(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The constructor sees the knobs the
-        fit saw, so its refusals hold on the loaded file too."""
+        """Load a model saved by `save`.
+
+        The saved parameters pass through the constructor again, so the same
+        checks apply to a loaded file.
+        """
         from .linear_model import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, _IFOREST_FORMAT)
         _check_saved_by(arrays, path, cls)

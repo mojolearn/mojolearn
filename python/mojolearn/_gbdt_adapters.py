@@ -63,12 +63,14 @@ class _GBDTAdapter:
         return GradientBoosting(loss=self._loss, **parameters)
 
     def get_params(self, deep=True):
+        """Return the constructor parameters as a dict."""
         if type(self).__init__ is not _GBDTAdapter.__init__:
             raise TypeError('GBDT adapter subclasses with custom constructors need their own parameter protocol')
         names = inspect.signature(_GBDTAdapter.__init__).parameters
         return {name: getattr(self, name) for name in names if name != 'self'}  # glue: returns constructor parameters by name
 
     def set_params(self, **params):
+        """Set constructor parameters and return ``self``; unknown names raise ``ValueError``."""
         if not params:
             return self
         values = self.get_params()
@@ -122,26 +124,95 @@ class _GBDTAdapter:
         return self
 
     def save(self, path):
+        """Not available for this estimator; raises ``NotImplementedError``. Use pickle."""
         raise NotImplementedError('GBDT adapter archives are not implemented; pickle retains adapter state')
 
     @classmethod
     def load(cls, path):
+        """Not available for this estimator; raises ``NotImplementedError``. Use pickle."""
         raise NotImplementedError('Legacy raw GBDT archives have no adapter vocabulary/parameters')
 
 
 class GradientBoostingClassifier(_GBDTAdapter):
-    """Binary Logloss GPU classifier; original class labels are retained.
+    """Binary gradient-boosted tree classifier with a scikit-learn interface.
 
-    predict returns labels, decision_function returns raw Float32 margins,
-    predict_proba returns GPU Float32 [negative, positive] probabilities.
-    Positive means the larger sorted class; a zero margin predicts class zero.
-    Training weights and weighted scoring are supported. eval_set labels
-    must belong to the training vocabulary, and its X must already be transformed.
+    Fits :class:`GradientBoosting` with ``loss='Logloss'`` on numeric
+    features and keeps the original class labels. Exactly two classes are
+    required; the positive class is the larger of the two sorted labels.
+    Supports sample weights in ``fit`` and ``score``, and pickling. ``save``
+    and ``load`` are not available; use pickle.
+
+    Parameters
+    ----------
+    n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count, random_state
+        As in :class:`GradientBoosting`; every default is that class's
+        default, so ``n_estimators=None`` means 1000 iterations and an
+        automatically chosen learning rate under ``grow_policy='SymmetricTree'``.
+    leaf_estimation_method, leaf_estimation_iterations, bootstrap_type, bagging_temperature, subsample
+        As in :class:`GradientBoosting`.
+    od_type, od_pvalue, od_wait, use_best_model, best_model_min_trees
+        Overfitting detector and best-model truncation, as in
+        :class:`GradientBoosting`; they need ``eval_set`` in ``fit``.
+    score_function, nan_mode, random_strength, use_pointwise_searcher
+        As in :class:`GradientBoosting`.
+    boost_from_average, border_build_max_samples, class_weights
+        As in :class:`GradientBoosting`.
+    grow_policy, max_leaves, min_data_in_leaf, min_split_gain, min_child_hessian
+        As in :class:`GradientBoosting`.
+    feature_fraction, feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block
+        As in :class:`GradientBoosting`.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` on Apple GPUs); None uses
+        the process default. Any other value raises ``ValueError``.
+
+    All parameters are keyword-only.
+
+    Attributes
+    ----------
+    classes_ : list
+        The two class labels, sorted.
+    n_classes_ : int
+        Always 2.
+    n_features_in_ : int
+    model_ : str
+        The fitted model text.
+    loss_curve_, test_loss_curve_, best_iteration_, stopped_early_, learning_rate_
+        As on :class:`GradientBoosting`.
+    numeric_mode_ : str
+        The numeric mode the fit used.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = np.where(X[:, 0] > 0.5, "yes", "no")
+    >>> clf = mojolearn.GradientBoostingClassifier(n_estimators=100).fit(X, y)
+    >>> labels = clf.predict(X)
     """
     _loss = 'Logloss'
     _estimator_type = 'classifier'
 
     def fit(self, X, y, sample_weight=None, eval_set=None):
+        """Fit the classifier.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Numeric features.
+        y : array-like of shape (n_samples,)
+            Labels with exactly two distinct values; otherwise ``ValueError``.
+        sample_weight : array-like of shape (n_samples,), optional
+        eval_set : tuple (X_eval, y_eval) or list of one such tuple, optional
+            Held-out data for the overfitting detector and ``use_best_model``. Its
+            labels must be among the training labels, and ``X_eval`` must already
+            have the same preprocessing as ``X`` (a scikit-learn ``Pipeline`` does
+            not transform it for you).
+
+        Returns
+        -------
+        self
+        """
         self._clear_fit()
         target, kind = metrics._classification_encoded(y, 'y')
         classes = sorted(metrics._label_set(target))  # glue: orders the binary class labels (two expected)
@@ -168,6 +239,11 @@ class GradientBoostingClassifier(_GBDTAdapter):
         return self
 
     def decision_function(self, X):
+        """Return the raw float32 margin for each row.
+
+        A positive margin favors the positive (larger) class; a zero margin
+        predicts the negative class.
+        """
         self._check_fitted()
         return self._learner_.predict(X)
 
@@ -190,16 +266,24 @@ class GradientBoostingClassifier(_GBDTAdapter):
         return output
 
     def predict_proba(self, X):
+        """Return float32 probabilities of shape ``(n_samples, 2)``.
+
+        Columns are ``[negative, positive]`` in ``classes_`` order.
+        """
         return self._binary_output(X, True)
 
     def predict(self, X):
+        """Return the predicted class labels, using the original label values."""
         self._check_fitted()
         return decode_labels(self.classes_, self._binary_output(X, False))
 
+    # The accuracy is metrics.accuracy_score on the pinned-sum path.
     def score(self, X, y, sample_weight=None):
-        """Accuracy, weighted by `sample_weight` when given (scikit-learn's
-        `np.average(y == predict(X), weights=sample_weight)` on the pinned-sum
-        path, `metrics.accuracy_score`)."""
+        """Return the accuracy on ``X`` and ``y``, weighted by ``sample_weight`` when given.
+
+        Follows scikit-learn's weighted accuracy. ``y`` must have the same label
+        type as the training labels; otherwise ``TypeError``.
+        """
         self._check_fitted()
         target, kind = metrics._classification_encoded(y, 'y')
         if kind != self._label_kind_:
@@ -212,11 +296,79 @@ class GradientBoostingClassifier(_GBDTAdapter):
 
 
 class GradientBoostingRegressor(_GBDTAdapter):
-    """RMSE GPU regressor with raw Float32 predictions and GPU Float32 R²."""
+    """Gradient-boosted tree regressor with a scikit-learn interface.
+
+    Fits :class:`GradientBoosting` with ``loss='RMSE'`` on numeric features.
+    Predictions are float32. Supports sample weights in ``fit`` and
+    ``score``, and pickling. ``class_weights`` raises
+    ``NotImplementedError``. ``save`` and ``load`` are not available; use
+    pickle.
+
+    Parameters
+    ----------
+    n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count, random_state
+        As in :class:`GradientBoosting`; every default is that class's
+        default, so ``n_estimators=None`` means 1000 iterations and an
+        automatically chosen learning rate under ``grow_policy='SymmetricTree'``.
+    leaf_estimation_method, leaf_estimation_iterations, bootstrap_type, bagging_temperature, subsample
+        As in :class:`GradientBoosting`.
+    od_type, od_pvalue, od_wait, use_best_model, best_model_min_trees
+        Overfitting detector and best-model truncation, as in
+        :class:`GradientBoosting`; they need ``eval_set`` in ``fit``.
+    score_function, nan_mode, random_strength, use_pointwise_searcher
+        As in :class:`GradientBoosting`.
+    boost_from_average, border_build_max_samples, class_weights
+        As in :class:`GradientBoosting`.
+    grow_policy, max_leaves, min_data_in_leaf, min_split_gain, min_child_hessian
+        As in :class:`GradientBoosting`.
+    feature_fraction, feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block
+        As in :class:`GradientBoosting`.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` on Apple GPUs); None uses
+        the process default. Any other value raises ``ValueError``.
+
+    All parameters are keyword-only.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+    model_ : str
+        The fitted model text.
+    loss_curve_, test_loss_curve_, best_iteration_, stopped_early_, learning_rate_
+        As on :class:`GradientBoosting`.
+    numeric_mode_ : str
+        The numeric mode the fit used.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] * 2 + X[:, 1]).astype(np.float32)
+    >>> reg = mojolearn.GradientBoostingRegressor(n_estimators=100).fit(X, y)
+    >>> r2 = reg.score(X, y)
+    """
     _loss = 'RMSE'
     _estimator_type = 'regressor'
 
     def fit(self, X, y, sample_weight=None, eval_set=None):
+        """Fit the regressor.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Numeric features.
+        y : array-like of shape (n_samples,)
+            Finite, nonempty float32 targets.
+        sample_weight : array-like of shape (n_samples,), optional
+        eval_set : tuple (X_eval, y_eval) or list of one such tuple, optional
+            Held-out data for the overfitting detector and ``use_best_model``.
+            ``X_eval`` must already have the same preprocessing as ``X``.
+
+        Returns
+        -------
+        self
+        """
         self._clear_fit()
         target = materialize_f32_lists(y, "y")[0]
         self._regression_target(target, 'y')
@@ -243,12 +395,16 @@ class GradientBoostingRegressor(_GBDTAdapter):
             raise ValueError(f'{name} must be finite')
 
     def predict(self, X):
+        """Return float32 predictions of shape ``(n_samples,)``."""
         self._check_fitted()
         return self._learner_.predict(X)
 
+    # R2 is metrics.r2_score on the pinned-sum path.
     def score(self, X, y, sample_weight=None):
-        """R2, weighted by `sample_weight` when given (scikit-learn's weighted
-        `r2_score` on the pinned-sum path, `metrics.r2_score`)."""
+        """Return the R² score on ``X`` and ``y``, weighted by ``sample_weight`` when given.
+
+        Follows scikit-learn's weighted ``r2_score``.
+        """
         self._check_fitted()
         target = materialize_f32_lists(y, "y")[0]
         self._regression_target(target, 'y')

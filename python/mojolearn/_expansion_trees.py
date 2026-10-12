@@ -177,15 +177,89 @@ def _dt_random_fit(est, cls, X, y, **extra):
     return est
 
 
+# sample_weight goes through the weighted RF fit entry (the weighted
+# objective; its CPU restatement is ensemble/host/rf_oracle.mojo).
 @forest_estimator("classifier")
 class DecisionTreeClassifier(RandomForestClassifier):
-    """sklearn's `DecisionTreeClassifier` on the forest builder: one tree, no
-    bootstrap, `max_features=None` (every feature) by default.
+    """A single classification tree (CART).
 
-    `fit(X, y, sample_weight=None)` takes per-row weights (multiplied into
-    `class_weight`'s row weights) through the weighted RF fit entry (the
-    weighted objective; its CPU restatement is ensemble/host/rf_oracle.mojo).
-    `predict_proba` is the leaf's class distribution."""
+    Follows scikit-learn's ``DecisionTreeClassifier``: one tree grown on every
+    row (no bootstrap) and, by default, every feature. Split thresholds are
+    searched over ``n_bins`` per-feature quantile bins (cuML's rule) rather
+    than every midpoint, so thresholds can differ from scikit-learn's.
+    ``X`` is read as float32; NaN or infinity in ``X`` raises ``ValueError``.
+
+    Parameters
+    ----------
+    criterion : {"gini", "entropy", "log_loss"}, default="gini"
+        Split quality measure. ``"log_loss"`` is the same as ``"entropy"``.
+    splitter : {"best", "random"}, default="best"
+        ``"best"`` searches the quantile bins of every candidate feature.
+        ``"random"`` grows one extremely randomized tree (one random threshold
+        per candidate feature), the builder of ``ExtraTreesClassifier``; it
+        accepts no ``sample_weight`` or ``class_weight``.
+    max_depth : int or None, default=None
+        Maximum depth of the tree. None grows until the other stopping rules
+        apply.
+    min_samples_split : int, default=2
+        Minimum number of rows a node needs before it can be split.
+    min_samples_leaf : int, default=1
+        Minimum number of rows in each leaf.
+    min_weight_fraction_leaf : float, default=0.0
+        Only 0.0 is accepted; any other value raises ``NotImplementedError``.
+    max_features : int, float, {"sqrt", "log2"} or None, default=None
+        Number of features considered per split: an int count, a fraction in
+        (0, 1], ``"sqrt"``, ``"log2"``, or None for every feature.
+    random_state : int or None, default=None
+        Seed for the random draws. None means seed 0, so repeated fits give
+        the same tree (unlike scikit-learn, where None draws a fresh seed).
+    max_leaf_nodes : int or None, default=None
+        Grow best-first to at most this many leaves. Supported only with
+        ``splitter="random"``; with ``splitter="best"`` it raises
+        ``NotImplementedError``.
+    min_impurity_decrease : float, default=0.0
+        A node is split only if the split decreases impurity by at least this
+        much.
+    class_weight : dict, "balanced" or None, default=None
+        Per-class weights, multiplied into ``sample_weight``.
+        ``"balanced_subsample"`` is not supported.
+    ccp_alpha : float, default=0.0
+        Only 0.0 is accepted; cost-complexity pruning is not implemented and
+        any other value raises ``NotImplementedError``.
+    monotonic_cst : None, default=None
+        Only None is accepted; monotonic constraints raise
+        ``NotImplementedError``.
+    n_bins : int, default=128
+        Number of quantile bins per feature used for the split search.
+    device : {"gpu"}, default="gpu"
+        Only ``"gpu"`` is accepted. On a CPU-only install the same fit runs
+        on the host binding.
+    inference_engine : {"auto", "sequential", "parallel_groves"}, default="auto"
+        Prediction kernel. ``"auto"`` lets the library choose; in identical
+        mode it predicts as ``"sequential"``.
+    numeric_mode : {"identical", "deterministic", "fast"} or None, default=None
+        Numeric mode for this estimator. None uses the process default (see
+        ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
+        only.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels seen in ``fit``.
+    n_classes_ : int
+        Number of classes.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int32)
+    >>> model = mojolearn.DecisionTreeClassifier(max_depth=4).fit(X, y)
+    >>> proba = model.predict_proba(X)
+    """
 
     def __init__(
         self,
@@ -220,6 +294,22 @@ class DecisionTreeClassifier(RandomForestClassifier):
         self.splitter = splitter
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the tree.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Class labels; at least two classes are required.
+        sample_weight : array-like of shape (n_samples,), default=None
+            Per-row weights, multiplied into the ``class_weight`` row weights.
+            Not accepted with ``splitter="random"``.
+
+        Returns
+        -------
+        self
+        """
         if self.splitter == "random":
             if sample_weight is not None or self.class_weight is not None:
                 _refuse("splitter='random' with weights", "the ExtraTrees builder takes no row weights.")
@@ -279,20 +369,33 @@ class DecisionTreeClassifier(RandomForestClassifier):
         return self
 
     def get_depth(self):
+        """Return the depth of the fitted tree."""
         return _trees_depth(self)
 
     def get_n_leaves(self):
+        """Return the number of leaves of the fitted tree."""
         return _trees_n_leaves(self)
 
     def predict_proba(self, X):
+        """Class probabilities: the class distribution of each row's leaf.
+
+        Returns an array of shape (n_samples, n_classes), columns in the
+        order of ``classes_``.
+        """
         inner = getattr(self, "_random_inner", None)
         return inner.predict_proba(X) if inner is not None else super().predict_proba(X)
 
     def predict(self, X):
+        """Predict the class label of each row of ``X``."""
         inner = getattr(self, "_random_inner", None)
         return inner.predict(X) if inner is not None else super().predict(X)
 
     def save(self, path):
+        """Save the fitted tree to ``path``.
+
+        Raises ``NotImplementedError`` for a tree fitted with
+        ``splitter="random"``.
+        """
         if getattr(self, "_random_inner", None) is not None:
             raise NotImplementedError("a splitter='random' tree saves through ExtraTrees; not carried yet")
         return super().save(path)
@@ -313,11 +416,84 @@ def _dt_tier_bins(est):
     return int(query()) if callable(query) else 128
 
 
+# sample_weight is refused by name: the regressor fit entry carries no row
+# weights. n_bins=None resolves at fit through `_dt_tier_bins`.
 @forest_estimator("regressor")
 class DecisionTreeRegressor(RandomForestRegressor):
-    """sklearn's `DecisionTreeRegressor` on the forest builder: one tree, no
-    bootstrap, every feature. `sample_weight` is refused by name: the
-    regressor fit entry carries no row weights."""
+    """A single regression tree (CART).
+
+    Follows scikit-learn's ``DecisionTreeRegressor``: one tree grown on every
+    row (no bootstrap) and, by default, every feature. Split thresholds are
+    searched over per-feature quantile bins (cuML's rule) rather than every
+    midpoint, so thresholds can differ from scikit-learn's. ``fit`` accepts
+    no ``sample_weight``. ``X`` and ``y`` are read as float32.
+
+    Parameters
+    ----------
+    criterion : {"squared_error", "mse", "poisson", "gamma", "inverse_gaussian"}, default="squared_error"
+        Split quality measure. ``"mse"`` is the same as ``"squared_error"``.
+        ``"absolute_error"`` and ``"friedman_mse"`` raise
+        ``NotImplementedError``.
+    splitter : {"best", "random"}, default="best"
+        ``"best"`` searches the quantile bins of every candidate feature.
+        ``"random"`` grows one extremely randomized tree (one random threshold
+        per candidate feature), the builder of ``ExtraTreesRegressor``.
+    max_depth : int or None, default=None
+        Maximum depth of the tree. None grows until the other stopping rules
+        apply.
+    min_samples_split : int, default=2
+        Minimum number of rows a node needs before it can be split.
+    min_samples_leaf : int, default=1
+        Minimum number of rows in each leaf.
+    min_weight_fraction_leaf : float, default=0.0
+        Only 0.0 is accepted; any other value raises ``NotImplementedError``.
+    max_features : int, float, {"sqrt", "log2"} or None, default=None
+        Number of features considered per split: an int count, a fraction in
+        (0, 1], ``"sqrt"``, ``"log2"``, or None for every feature.
+    random_state : int or None, default=None
+        Seed for the random draws. None means seed 0, so repeated fits give
+        the same tree (unlike scikit-learn, where None draws a fresh seed).
+    max_leaf_nodes : int or None, default=None
+        Grow best-first to at most this many leaves. Supported only with
+        ``splitter="random"``; with ``splitter="best"`` it raises
+        ``NotImplementedError``.
+    min_impurity_decrease : float, default=0.0
+        A node is split only if the split decreases impurity by at least this
+        much.
+    ccp_alpha : float, default=0.0
+        Only 0.0 is accepted; cost-complexity pruning is not implemented and
+        any other value raises ``NotImplementedError``.
+    monotonic_cst : None, default=None
+        Only None is accepted; monotonic constraints raise
+        ``NotImplementedError``.
+    n_bins : int or None, default=None
+        Number of quantile bins per feature used for the split search. None
+        uses the numeric mode's default: 128, or 256 in fast mode.
+    device : {"gpu"}, default="gpu"
+        Only ``"gpu"`` is accepted. On a CPU-only install the same fit runs
+        on the host binding.
+    inference_engine : {"auto", "sequential", "parallel_groves"}, default="auto"
+        Prediction kernel. ``"auto"`` lets the library choose; in identical
+        mode it predicts as ``"sequential"``.
+    numeric_mode : {"identical", "deterministic", "fast"} or None, default=None
+        Numeric mode for this estimator. None uses the process default (see
+        ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
+        only.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ rng.random(8, dtype=np.float32)
+    >>> model = mojolearn.DecisionTreeRegressor(max_depth=6).fit(X, y)
+    >>> pred = model.predict(X)
+    """
 
     def __init__(
         self,
@@ -357,6 +533,21 @@ class DecisionTreeRegressor(RandomForestRegressor):
         return params
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the tree.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Target values.
+        sample_weight : None
+            Must be None; row weights raise ``NotImplementedError``.
+
+        Returns
+        -------
+        self
+        """
         if sample_weight is not None:
             _refuse("DecisionTreeRegressor sample_weight", "the regressor fit entry"
                     " carries no row weights.")
@@ -366,16 +557,24 @@ class DecisionTreeRegressor(RandomForestRegressor):
         return self._fit_with_tree_start(X, y)
 
     def get_depth(self):
+        """Return the depth of the fitted tree."""
         return _trees_depth(self)
 
     def get_n_leaves(self):
+        """Return the number of leaves of the fitted tree."""
         return _trees_n_leaves(self)
 
     def predict(self, X):
+        """Predict the target of each row of ``X``."""
         inner = getattr(self, "_random_inner", None)
         return inner.predict(X) if inner is not None else super().predict(X)
 
     def save(self, path):
+        """Save the fitted tree to ``path``.
+
+        Raises ``NotImplementedError`` for a tree fitted with
+        ``splitter="random"``.
+        """
         if getattr(self, "_random_inner", None) is not None:
             raise NotImplementedError("a splitter='random' tree saves through ExtraTrees; not carried yet")
         return super().save(path)
@@ -816,6 +1015,7 @@ class _BaggingBase(_TreesEnsembleBase):
 
     @property
     def estimators_(self):
+        """The fitted members, as a list of estimators."""
         if getattr(self, "_estimators", None) is None and getattr(self, "_batched", None) is not None:
             self._estimators = self._slice_members()
         if getattr(self, "_estimators", None) is None:
@@ -932,9 +1132,76 @@ class _BaggingBase(_TreesEnsembleBase):
 
 
 class BaggingClassifier(_BaggingBase):
-    """sklearn's `BaggingClassifier` over any mojolearn classifier (default
-    `DecisionTreeClassifier`). `predict_proba` averages the members'
-    `predict_proba` (a member without one votes with `predict`), float64."""
+    """A bagging ensemble of classifiers.
+
+    Follows scikit-learn's ``BaggingClassifier``: each member is fitted on a
+    random draw of rows and features, and ``predict_proba`` averages the
+    members' ``predict_proba`` (a member without ``predict_proba`` votes with
+    ``predict``), returned as float64. Any mojolearn classifier can be a
+    member; the default is ``DecisionTreeClassifier()``. When the members are
+    best-splitter decision trees over every feature, without
+    ``sample_weight``, ``oob_score`` or feature bootstrap, the whole bag is
+    grown as one random forest fit.
+
+    Parameters
+    ----------
+    estimator : estimator or None, default=None
+        The member to clone. None uses ``DecisionTreeClassifier()``.
+    n_estimators : int, default=10
+        Number of members; must be at least 1.
+    max_samples : int or float, default=1.0
+        Rows drawn for each member: an int count, or a fraction in (0, 1] of
+        the rows.
+    max_features : int or float, default=1.0
+        Features drawn for each member: an int count, or a fraction in (0, 1]
+        of the features.
+    bootstrap : bool, default=True
+        Draw rows with replacement.
+    bootstrap_features : bool, default=False
+        Draw features with replacement.
+    oob_score : bool, default=False
+        Score the ensemble on the rows each member did not draw. Requires
+        ``bootstrap=True`` (``ValueError`` otherwise).
+    warm_start : bool, default=False
+        Only False is accepted; True raises ``NotImplementedError``.
+    n_jobs : None, default=None
+        Only None is accepted; members are fitted one after another on the
+        device.
+    random_state : int or None, default=None
+        Seed for the row and feature draws and the members' seeds. None means
+        seed 0, so repeated fits are the same (unlike scikit-learn). A
+        ``RandomState`` object raises ``ValueError``.
+    verbose : int, default=0
+        Only 0 is accepted.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels seen in ``fit``.
+    n_classes_ : int
+        Number of classes.
+    estimators_ : list of estimators
+        The fitted members.
+    estimators_features_ : list of arrays
+        The feature indices each member was fitted on.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+    oob_score_ : float
+        Out-of-bag accuracy (with ``oob_score=True``).
+    oob_decision_function_ : array of shape (n_samples, n_classes)
+        Out-of-bag class scores, normalized per row (with ``oob_score=True``).
+        A row that no member left out gets the uniform 1 / n_classes, where
+        scikit-learn would divide 0 by 0.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1.0).astype(np.int32)
+    >>> model = mojolearn.BaggingClassifier(n_estimators=20, random_state=0).fit(X, y)
+    >>> proba = model.predict_proba(X)
+    """
     _estimator_type = "classifier"
 
     def __init__(self, estimator=None, n_estimators=10, *, max_samples=1.0, max_features=1.0,
@@ -944,6 +1211,22 @@ class BaggingClassifier(_BaggingBase):
                          bootstrap_features, oob_score, warm_start, n_jobs, random_state, verbose)
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the bag.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Class labels; at least two classes are required.
+        sample_weight : array-like of shape (n_samples,), default=None
+            Per-row weights, passed to each member for the rows it drew. The
+            member must accept ``sample_weight``.
+
+        Returns
+        -------
+        self
+        """
         self.classes_, codes = encode_labels(y)
         self.n_classes_ = len(self.classes_)
         if self.n_classes_ < 2:
@@ -983,6 +1266,11 @@ class BaggingClassifier(_BaggingBase):
         self.oob_score_ = hit_count / n
 
     def predict_proba(self, X):
+        """Mean of the members' class probabilities, float64.
+
+        Returns an array of shape (n_samples, n_classes), columns in the
+        order of ``classes_``.
+        """
         Xa = self._check_X(X)
         n, k = Xa.shape[0], self.n_classes_
         if getattr(self, "_batched", None) is not None:
@@ -1003,13 +1291,75 @@ class BaggingClassifier(_BaggingBase):
         return acc.reshape((n, k))
 
     def predict(self, X):
+        """Predict the class with the highest mean probability."""
         p = self.predict_proba(X)
         return decode_labels(self.classes_, self._argmax(p, p.shape[0], self.n_classes_))
 
 
 class BaggingRegressor(_BaggingBase):
-    """sklearn's `BaggingRegressor` over any mojolearn regressor (default
-    `DecisionTreeRegressor`); `predict` is the members' mean, float64."""
+    """A bagging ensemble of regressors.
+
+    Follows scikit-learn's ``BaggingRegressor``: each member is fitted on a
+    random draw of rows and features, and ``predict`` is the members' mean,
+    returned as float64. Any mojolearn regressor can be a member; the default
+    is ``DecisionTreeRegressor()``. When the members are best-splitter
+    decision trees over every feature, without ``sample_weight``,
+    ``oob_score`` or feature bootstrap, the whole bag is grown as one random
+    forest fit.
+
+    Parameters
+    ----------
+    estimator : estimator or None, default=None
+        The member to clone. None uses ``DecisionTreeRegressor()``.
+    n_estimators : int, default=10
+        Number of members; must be at least 1.
+    max_samples : int or float, default=1.0
+        Rows drawn for each member: an int count, or a fraction in (0, 1] of
+        the rows.
+    max_features : int or float, default=1.0
+        Features drawn for each member: an int count, or a fraction in (0, 1]
+        of the features.
+    bootstrap : bool, default=True
+        Draw rows with replacement.
+    bootstrap_features : bool, default=False
+        Draw features with replacement.
+    oob_score : bool, default=False
+        Score the ensemble on the rows each member did not draw. Requires
+        ``bootstrap=True`` (``ValueError`` otherwise).
+    warm_start : bool, default=False
+        Only False is accepted; True raises ``NotImplementedError``.
+    n_jobs : None, default=None
+        Only None is accepted; members are fitted one after another on the
+        device.
+    random_state : int or None, default=None
+        Seed for the row and feature draws and the members' seeds. None means
+        seed 0, so repeated fits are the same (unlike scikit-learn). A
+        ``RandomState`` object raises ``ValueError``.
+    verbose : int, default=0
+        Only 0 is accepted.
+
+    Attributes
+    ----------
+    estimators_ : list of estimators
+        The fitted members.
+    estimators_features_ : list of arrays
+        The feature indices each member was fitted on.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+    oob_score_ : float
+        Out-of-bag R^2 (with ``oob_score=True``).
+    oob_prediction_ : array of shape (n_samples,)
+        Out-of-bag prediction of each row (with ``oob_score=True``).
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ rng.random(8, dtype=np.float32)
+    >>> model = mojolearn.BaggingRegressor(n_estimators=20, random_state=0).fit(X, y)
+    >>> pred = model.predict(X)
+    """
     _estimator_type = "regressor"
 
     def __init__(self, estimator=None, n_estimators=10, *, max_samples=1.0, max_features=1.0,
@@ -1019,6 +1369,23 @@ class BaggingRegressor(_BaggingBase):
                          bootstrap_features, oob_score, warm_start, n_jobs, random_state, verbose)
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the bag.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Target values, read as float32.
+        sample_weight : array-like of shape (n_samples,), default=None
+            Per-row weights, passed to each member for the rows it drew. The
+            member must accept ``sample_weight`` (the default
+            ``DecisionTreeRegressor`` does not).
+
+        Returns
+        -------
+        self
+        """
         y32, _ = as_f32_c(y, ndim=1, name="y")
         self._fit_bags(X, lambda rows, all_rows: y32 if all_rows else self._gather_vec(y32, rows),
                        sample_weight, DecisionTreeRegressor)
@@ -1056,6 +1423,7 @@ class BaggingRegressor(_BaggingBase):
         self.oob_score_ = 1.0 - ss_res / ss_tot if ss_tot > 0 else (1.0 if ss_res == 0 else 0.0)
 
     def predict(self, X):
+        """Mean of the members' predictions, float64."""
         Xa = self._check_X(X)
         n = Xa.shape[0]
         if getattr(self, "_batched", None) is not None:
@@ -1146,10 +1514,56 @@ class _AdaBoostBase(_TreesEnsembleBase):
 
 
 class AdaBoostClassifier(_AdaBoostBase):
-    """sklearn's `AdaBoostClassifier` (SAMME) over a mojolearn classifier
-    that takes `sample_weight`, default `DecisionTreeClassifier(max_depth=1)`:
-    each member is fitted on every row with the boosting weights (times n,
-    float32) as its sample weights, as sklearn's `_boost_discrete` does."""
+    """An AdaBoost classifier (SAMME).
+
+    Follows scikit-learn's ``AdaBoostClassifier`` with the SAMME algorithm:
+    each member is fitted on every row, with the current boosting weights
+    (scaled by the number of rows, float32) as its ``sample_weight``. Any
+    mojolearn classifier that accepts ``sample_weight`` can be a member; the
+    default is a decision stump, ``DecisionTreeClassifier(max_depth=1)``.
+
+    Parameters
+    ----------
+    estimator : estimator or None, default=None
+        The member to clone. None uses
+        ``DecisionTreeClassifier(max_depth=1)``.
+    n_estimators : int, default=50
+        Maximum number of boosting rounds; must be at least 1. Boosting can
+        stop earlier, as in scikit-learn.
+    learning_rate : float, default=1.0
+        Shrinks each member's weight; must be > 0.
+    algorithm : {"SAMME"}, default="SAMME"
+        Only SAMME is supported (scikit-learn 1.6 removed SAMME.R);
+        ``"SAMME.R"`` raises ``NotImplementedError``.
+    random_state : int or None, default=None
+        Seed for the members' seeds. None means seed 0, so repeated fits
+        are the same (unlike scikit-learn). A ``RandomState`` object raises
+        ``ValueError``.
+
+    Attributes
+    ----------
+    estimators_ : list of estimators
+        The fitted members.
+    estimator_weights_ : list of float
+        Weight of each member.
+    estimator_errors_ : list of float
+        Weighted training error of each member.
+    classes_ : array of shape (n_classes,)
+        Class labels seen in ``fit``.
+    n_classes_ : int
+        Number of classes.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1.0).astype(np.int32)
+    >>> model = mojolearn.AdaBoostClassifier(n_estimators=50).fit(X, y)
+    >>> proba = model.predict_proba(X)
+    """
     _estimator_type = "classifier"
 
     def __init__(self, estimator=None, *, n_estimators=50, learning_rate=1.0, algorithm="SAMME",
@@ -1161,6 +1575,28 @@ class AdaBoostClassifier(_AdaBoostBase):
         self.algorithm = algorithm
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the boosted ensemble.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32. NaN or infinity raises
+            ``ValueError``.
+        y : array-like of shape (n_samples,)
+            Class labels; at least two classes are required.
+        sample_weight : array-like of shape (n_samples,), default=None
+            Initial row weights; must be finite, nonnegative and have a
+            positive total. None weights every row equally.
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If the first member is worse than random guessing.
+        """
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n = Xa.shape[0]
         self.classes_, codes = encode_labels(y)
@@ -1239,6 +1675,11 @@ class AdaBoostClassifier(_AdaBoostBase):
         return acc
 
     def decision_function(self, X):
+        """Weighted member votes, float64.
+
+        Returns shape (n_samples,) for two classes (positive favors
+        ``classes_[1]``) and (n_samples, n_classes) otherwise.
+        """
         Xa = self._check_X(X)
         n, k = Xa.shape[0], self.n_classes_
         acc = self._decision(Xa)
@@ -1249,6 +1690,11 @@ class AdaBoostClassifier(_AdaBoostBase):
         return acc.reshape((n, k))
 
     def predict_proba(self, X):
+        """Class probabilities from the decision function (softmax), float64.
+
+        Returns an array of shape (n_samples, n_classes), columns in the
+        order of ``classes_``.
+        """
         Xa = self._check_X(X)
         n, k = Xa.shape[0], self.n_classes_
         acc = self._decision(Xa)
@@ -1262,6 +1708,7 @@ class AdaBoostClassifier(_AdaBoostBase):
         return acc.reshape((n, k))
 
     def predict(self, X):
+        """Predict the class with the highest weighted vote."""
         Xa = self._check_X(X)
         n, k = Xa.shape[0], self.n_classes_
         acc = self._decision(Xa)
@@ -1274,9 +1721,52 @@ class AdaBoostClassifier(_AdaBoostBase):
 
 
 class AdaBoostRegressor(_AdaBoostBase):
-    """sklearn's `AdaBoostRegressor` (AdaBoost.R2) over any mojolearn
-    regressor, default `DecisionTreeRegressor(max_depth=3)`: each member fits
-    a weighted bootstrap of the rows; `predict` is the weighted median."""
+    """An AdaBoost regressor (AdaBoost.R2).
+
+    Follows scikit-learn's ``AdaBoostRegressor``: each member is fitted on a
+    weighted bootstrap draw of the rows, and ``predict`` is the weighted
+    median of the members' predictions. Any mojolearn regressor can be a
+    member; the default is ``DecisionTreeRegressor(max_depth=3)``. The
+    bootstrap draws come from mojolearn's own random generator, so they
+    differ from scikit-learn's for the same seed.
+
+    Parameters
+    ----------
+    estimator : estimator or None, default=None
+        The member to clone. None uses
+        ``DecisionTreeRegressor(max_depth=3)``.
+    n_estimators : int, default=50
+        Maximum number of boosting rounds; must be at least 1. Boosting can
+        stop earlier, as in scikit-learn.
+    learning_rate : float, default=1.0
+        Shrinks each member's weight; must be > 0.
+    loss : {"linear", "square", "exponential"}, default="linear"
+        Loss used to update the row weights after each round.
+    random_state : int or None, default=None
+        Seed for the members' seeds and the bootstrap draws. None means seed 0, so repeated fits
+        are the same (unlike scikit-learn). A ``RandomState`` object raises
+        ``ValueError``.
+
+    Attributes
+    ----------
+    estimators_ : list of estimators
+        The fitted members.
+    estimator_weights_ : list of float
+        Weight of each member.
+    estimator_errors_ : list of float
+        Weighted average loss of each member.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ rng.random(8, dtype=np.float32)
+    >>> model = mojolearn.AdaBoostRegressor(n_estimators=50, random_state=0).fit(X, y)
+    >>> pred = model.predict(X)
+    """
     _estimator_type = "regressor"
     _LOSSES = {"linear": 0, "square": 1, "exponential": 2}
 
@@ -1288,6 +1778,22 @@ class AdaBoostRegressor(_AdaBoostBase):
         self.loss = loss
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the boosted ensemble.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : array-like of shape (n_samples,)
+            Target values, read as float32.
+        sample_weight : array-like of shape (n_samples,), default=None
+            Initial row weights; must be finite, nonnegative and have a
+            positive total. None weights every row equally.
+
+        Returns
+        -------
+        self
+        """
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n, d = Xa.shape
         y32, _ = as_f32_c(y, ndim=1, name="y")
@@ -1350,6 +1856,7 @@ class AdaBoostRegressor(_AdaBoostBase):
                 self._scale(w, total)
 
     def predict(self, X):
+        """Weighted median of the members' predictions."""
         Xa = self._check_X(X)
         n, m = Xa.shape[0], len(self.estimators_)
         preds = empty((m * n,), "<f4")
@@ -1678,8 +2185,85 @@ class _DARTBase(_TreesEnsembleBase):
 
 
 class DARTRegressor(_DARTBase):
-    """LightGBM's `boosting='dart'` with the L2 objective. `predict` is the
-    raw score, float64."""
+    """Gradient boosting with DART dropout, squared-error loss.
+
+    Follows LightGBM's ``boosting="dart"`` with the L2 objective: in each
+    iteration a random subset of the earlier trees is dropped while the new
+    tree is fitted, and the trees are then renormalized. ``predict`` returns
+    the raw score as float64. ``X`` and ``y`` are read as float32.
+
+    Each tree is grown by the forest builder (level-order, quantile bins) on
+    the negative gradient; leaf values follow LightGBM (the L1/L2-regularized
+    Newton step, clipped by ``max_delta_step``). The draws (dropout, bagging,
+    feature sampling) come from mojolearn's own random generator, not
+    LightGBM's, and the starting score is a constant kept outside the trees.
+    A fit with ``n_estimators * n_classes * (2 * num_leaves - 1)`` above
+    2**26, or ``num_leaves`` above 32768, raises ``NotImplementedError``.
+
+    Parameters
+    ----------
+    n_estimators : int, default=100
+        Number of boosting iterations; must be at least 1.
+    learning_rate : float, default=0.1
+        Shrinkage; must be > 0.
+    num_leaves : int, default=31
+        Maximum leaves per tree, applied as a cap on level-order growth
+        (LightGBM grows leaf-wise), so trees can differ from LightGBM's.
+    max_depth : int, default=-1
+        Maximum tree depth; -1 or any value <= 0 means no limit.
+    min_child_samples : int, default=20
+        Minimum number of rows in each leaf.
+    reg_lambda : float, default=0.0
+        L2 regularization on leaf values; must be >= 0.
+    max_bin : int, default=255
+        Number of quantile bins per feature used for the split search.
+    drop_rate : float, default=0.1
+        Fraction of earlier trees dropped each iteration, in [0, 1].
+    max_drop : int, default=50
+        Maximum number of trees dropped per iteration.
+    skip_drop : float, default=0.5
+        Probability of skipping the dropout in an iteration, in [0, 1].
+    xgboost_dart_mode : bool, default=False
+        Use XGBoost's DART normalization.
+    uniform_drop : bool, default=False
+        Drop trees uniformly instead of in proportion to their weights.
+    drop_seed : int, default=4
+        Seed for the dropout draws.
+    random_state : int or None, default=None
+        Seed for the trees. None means seed 0.
+    reg_alpha : float, default=0.0
+        L1 regularization on leaf values; must be >= 0.
+    max_delta_step : float, default=0.0
+        Clip on each leaf value; 0 means no clip.
+    colsample_bytree : float, default=1.0
+        Fraction of features sampled for each tree, in (0, 1].
+    subsample : float, default=1.0
+        Fraction of rows bagged, in (0, 1]; used when ``subsample_freq > 0``.
+    subsample_freq : int, default=0
+        Re-draw the row bag every this many iterations; 0 disables bagging.
+    feature_fraction_seed : int, default=2
+        Seed for the per-tree feature sampling.
+    bagging_seed : int, default=3
+        Seed for the row bagging.
+
+    Attributes
+    ----------
+    init_score_ : float or list of float
+        Starting score (one per class for more than two classes).
+    tree_weights_ : list of float
+        Final weight of each tree after DART normalization.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ rng.random(8, dtype=np.float32)
+    >>> model = mojolearn.DARTRegressor(n_estimators=50).fit(X, y)
+    >>> pred = model.predict(X)
+    """
     _estimator_type = "regressor"
     _KIND = 0
 
@@ -1694,6 +2278,12 @@ class DARTRegressor(_DARTBase):
                          feature_fraction_seed, bagging_seed)
 
     def fit(self, X, y):
+        """Fit the boosted trees on ``X`` (n_samples, n_features) and target ``y``.
+
+        Returns
+        -------
+        self
+        """
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         y32, _ = as_f32_c(y, ndim=1, name="y")
         if len(y32) != Xa.shape[0]:
@@ -1701,15 +2291,93 @@ class DARTRegressor(_DARTBase):
         return self._boost(Xa, y32)
 
     def predict(self, X):
+        """Raw boosted score of each row, float64."""
         return self._raw(X)
 
 
 class DARTClassifier(_DARTBase):
-    """LightGBM's `boosting='dart'`: binary logloss for two classes
-    (`predict_proba` is [1 - p, p], p the sigmoid of the raw score, a
-    two-column softmax of [0, raw]), multiclass softmax for more (one tree
-    per class per iteration; `predict_proba` the softmax of the K raw
-    scores)."""
+    """Gradient boosting with DART dropout, classification.
+
+    Follows LightGBM's ``boosting="dart"``: binary log loss for two classes,
+    multiclass softmax (one tree per class per iteration) for more. In each
+    iteration a random subset of the earlier iterations is dropped while the
+    new trees are fitted, and the trees are then renormalized. ``X`` is read
+    as float32.
+
+    Each tree is grown by the forest builder (level-order, quantile bins) on
+    the negative gradient; leaf values follow LightGBM (the L1/L2-regularized
+    Newton step, clipped by ``max_delta_step``). The draws (dropout, bagging,
+    feature sampling) come from mojolearn's own random generator, not
+    LightGBM's, and the starting score is a constant kept outside the trees.
+    A fit with ``n_estimators * n_classes * (2 * num_leaves - 1)`` above
+    2**26, or ``num_leaves`` above 32768, raises ``NotImplementedError``.
+
+    Parameters
+    ----------
+    n_estimators : int, default=100
+        Number of boosting iterations; must be at least 1.
+    learning_rate : float, default=0.1
+        Shrinkage; must be > 0.
+    num_leaves : int, default=31
+        Maximum leaves per tree, applied as a cap on level-order growth
+        (LightGBM grows leaf-wise), so trees can differ from LightGBM's.
+    max_depth : int, default=-1
+        Maximum tree depth; -1 or any value <= 0 means no limit.
+    min_child_samples : int, default=20
+        Minimum number of rows in each leaf.
+    reg_lambda : float, default=0.0
+        L2 regularization on leaf values; must be >= 0.
+    max_bin : int, default=255
+        Number of quantile bins per feature used for the split search.
+    drop_rate : float, default=0.1
+        Fraction of earlier trees dropped each iteration, in [0, 1].
+    max_drop : int, default=50
+        Maximum number of trees dropped per iteration.
+    skip_drop : float, default=0.5
+        Probability of skipping the dropout in an iteration, in [0, 1].
+    xgboost_dart_mode : bool, default=False
+        Use XGBoost's DART normalization.
+    uniform_drop : bool, default=False
+        Drop trees uniformly instead of in proportion to their weights.
+    drop_seed : int, default=4
+        Seed for the dropout draws.
+    random_state : int or None, default=None
+        Seed for the trees. None means seed 0.
+    reg_alpha : float, default=0.0
+        L1 regularization on leaf values; must be >= 0.
+    max_delta_step : float, default=0.0
+        Clip on each leaf value; 0 means no clip.
+    colsample_bytree : float, default=1.0
+        Fraction of features sampled for each tree, in (0, 1].
+    subsample : float, default=1.0
+        Fraction of rows bagged, in (0, 1]; used when ``subsample_freq > 0``.
+    subsample_freq : int, default=0
+        Re-draw the row bag every this many iterations; 0 disables bagging.
+    feature_fraction_seed : int, default=2
+        Seed for the per-tree feature sampling.
+    bagging_seed : int, default=3
+        Seed for the row bagging.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels seen in ``fit``.
+    init_score_ : float or list of float
+        Starting score (one per class for more than two classes).
+    tree_weights_ : list of float
+        Final weight of each tree after DART normalization.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1.0).astype(np.int32)
+    >>> model = mojolearn.DARTClassifier(n_estimators=50).fit(X, y)
+    >>> proba = model.predict_proba(X)
+    """
     _estimator_type = "classifier"
     _KIND = 1
 
@@ -1724,6 +2392,14 @@ class DARTClassifier(_DARTBase):
                          feature_fraction_seed, bagging_seed)
 
     def fit(self, X, y):
+        """Fit the boosted trees on ``X`` (n_samples, n_features) and labels ``y``.
+
+        At least two classes are required.
+
+        Returns
+        -------
+        self
+        """
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         self.classes_, codes = encode_labels(y)
         K = len(self.classes_)
@@ -1736,11 +2412,21 @@ class DARTClassifier(_DARTBase):
         return self._boost(Xa, y32, 1 if K == 2 else K)
 
     def decision_function(self, X):
+        """Raw boosted scores, float64.
+
+        Shape (n_samples,) for two classes (the log-odds of ``classes_[1]``),
+        (n_samples, n_classes) otherwise.
+        """
         if int(getattr(self, "n_classes_", 1)) > 1:
             return self._raw_rows(X)
         return self._raw(X)
 
     def predict_proba(self, X):
+        """Class probabilities, float64, shape (n_samples, n_classes).
+
+        For two classes the columns are ``[1 - p, p]`` with ``p`` the sigmoid
+        of the raw score; for more, the softmax of the per-class raw scores.
+        """
         if int(getattr(self, "n_classes_", 1)) > 1:
             acc = self._raw_rows(X)
             n, K = acc.shape
@@ -1757,6 +2443,7 @@ class DARTClassifier(_DARTBase):
         return acc.reshape((n, 2))
 
     def predict(self, X):
+        """Predict the class with the highest score."""
         if int(getattr(self, "n_classes_", 1)) > 1:
             acc = self._raw_rows(X)
             n, K = acc.shape
@@ -1777,7 +2464,60 @@ class DARTClassifier(_DARTBase):
 # `sparse_output=True` (sklearn's default) is refused by name, there being no
 # sparse container in the NumPy-free layer.
 class RandomTreesEmbedding(_TreesEnsembleBase):
-    """sklearn's totally random trees embedding, dense output."""
+    """An unsupervised embedding by totally random trees.
+
+    Follows scikit-learn's ``RandomTreesEmbedding``: a forest of extremely
+    randomized trees (one random feature per split) is fitted to uniform
+    random targets, and ``transform`` one-hot encodes the leaf each row
+    reaches in every tree. Unlike scikit-learn, the output is a dense float64
+    array; ``sparse_output=True`` raises ``NotImplementedError``.
+
+    Parameters
+    ----------
+    n_estimators : int, default=100
+        Number of trees.
+    max_depth : int, default=5
+        Maximum depth of each tree.
+    min_samples_split : int, default=2
+        Minimum number of rows a node needs before it can be split.
+    min_samples_leaf : int, default=1
+        Minimum number of rows in each leaf.
+    min_weight_fraction_leaf : float, default=0.0
+        Stored for scikit-learn compatibility; not used by the fit.
+    max_leaf_nodes : int or None, default=None
+        Grow each tree best-first to at most this many leaves.
+    min_impurity_decrease : float, default=0.0
+        A node is split only if the split decreases impurity by at least this
+        much.
+    sparse_output : bool, default=False
+        Only False is accepted.
+    n_jobs : None, default=None
+        Only None is accepted.
+    random_state : int or None, default=None
+        Seed for the random targets and the trees. None means seed 0. A
+        ``RandomState`` object raises ``ValueError``.
+    verbose : int, default=0
+        Only 0 is accepted.
+    warm_start : bool, default=False
+        Only False is accepted.
+
+    Attributes
+    ----------
+    forest_ : ExtraTreesRegressor
+        The fitted forest.
+    n_trees_ : int
+        Number of trees.
+    n_output_features_ : int
+        Width of the embedding: the total number of leaves.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> emb = mojolearn.RandomTreesEmbedding(n_estimators=10, random_state=0).fit_transform(X)
+    """
 
     def __init__(self, n_estimators=100, *, max_depth=5, min_samples_split=2, min_samples_leaf=1,
                  min_weight_fraction_leaf=0.0, max_leaf_nodes=None, min_impurity_decrease=0.0,
@@ -1802,6 +2542,15 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         _trees_seed(random_state)
 
     def fit(self, X, y=None, sample_weight=None):
+        """Fit the random trees on ``X`` (n_samples, n_features).
+
+        ``y`` is ignored. ``sample_weight`` must be None; row weights raise
+        ``NotImplementedError``.
+
+        Returns
+        -------
+        self
+        """
         if sample_weight is not None:
             _refuse("RandomTreesEmbedding sample_weight", "the members take none.")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
@@ -1832,7 +2581,11 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         return self
 
     def apply(self, X):
-        """(n_samples, n_estimators) tree-relative leaf node ids, int32."""
+        """Leaf reached by each row in each tree.
+
+        Returns an int32 array of shape (n_samples, n_trees) of node ids,
+        numbered within each tree.
+        """
         if not hasattr(self, "forest_"):
             raise RuntimeError("this estimator is not fitted yet")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
@@ -1847,6 +2600,11 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         return out.reshape((n, self.n_trees_))
 
     def transform(self, X):
+        """One-hot encode the leaves of ``X``.
+
+        Returns a dense float64 array of shape
+        (n_samples, n_output_features_).
+        """
         nodes = self.apply(X)
         n = nodes.shape[0]
         out = zeros((n * self.n_output_features_,), "<f8")
@@ -1856,6 +2614,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         return out.reshape((n, self.n_output_features_))
 
     def fit_transform(self, X, y=None, sample_weight=None):
+        """Fit on ``X``, then return ``transform(X)``."""
         return self.fit(X, y, sample_weight).transform(X)
 
 
@@ -2013,6 +2772,61 @@ class _TreesWrapperBase(_TreesEnsembleBase):
 # weighted np.average of predict). Members are cloned, never refitted in
 # place; n_jobs and verbose are refused by name.
 class VotingClassifier(_TreesWrapperBase):
+    """Combine classifiers by a weighted majority vote or averaged probabilities.
+
+    Follows scikit-learn's ``VotingClassifier``. ``fit`` clones every estimator
+    and fits the clones on the label-encoded ``y``; the estimators you pass are
+    never fitted in place. ``voting="hard"`` predicts the weighted majority of
+    the members' predicted labels; ``voting="soft"`` predicts the argmax of the
+    weighted average of their ``predict_proba``. The members fit one after
+    another.
+
+    Parameters
+    ----------
+    estimators : list of (str, estimator)
+        Named mojolearn classifiers. Names must be unique; an entry whose
+        estimator is the string ``"drop"`` is skipped. An empty list, duplicate
+        names, or every entry ``"drop"`` raise ``ValueError``.
+    voting : {"hard", "soft"}, default "hard"
+        Majority vote on predicted labels, or argmax of the averaged
+        probabilities (every member then needs ``predict_proba``). Any other
+        value raises ``ValueError``.
+    weights : sequence of float, default None
+        One weight per active estimator; None weighs them equally. A length
+        that does not match the active estimators raises ``ValueError``.
+    n_jobs : None
+        Only None is accepted; any other value raises ``NotImplementedError``.
+    flatten_transform : bool, default True
+        Kept for scikit-learn compatibility; ``transform`` always returns a 2-D
+        array.
+    verbose : bool, default False
+        Only False is accepted; True raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    estimators_ : list
+        The fitted clones, in order (fitted on integer class codes).
+    named_estimators_ : dict
+        The fitted clones by name.
+    classes_ : array
+        The class labels seen in ``fit``, sorted.
+    n_classes_ : int
+        Number of classes.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int32)
+    >>> model = mojolearn.VotingClassifier(
+    ...     [("rf", mojolearn.RandomForestClassifier()),
+    ...      ("dt", mojolearn.DecisionTreeClassifier())], voting="soft").fit(X, y)
+    >>> model.predict(X[:5]).shape
+    (5,)
+    """
     _estimator_type = "classifier"
 
     def __init__(self, estimators, *, voting="hard", weights=None, n_jobs=None, flatten_transform=True,
@@ -2036,6 +2850,21 @@ class VotingClassifier(_TreesWrapperBase):
         return w
 
     def fit(self, X, y, sample_weight=None):
+        """Fit a clone of every active estimator on ``X`` and ``y``.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array of shape (n_samples,)
+            Class labels.
+        sample_weight : array of shape (n_samples,), default None
+            Passed to every member's ``fit`` when given.
+
+        Returns
+        -------
+        self
+        """
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         self.classes_, codes = encode_labels(y)
         self.n_classes_ = len(self.classes_)
@@ -2061,12 +2890,28 @@ class VotingClassifier(_TreesWrapperBase):
         return acc
 
     def predict_proba(self, X):
+        """Weighted average of the members' class probabilities.
+
+        Only available with ``voting="soft"``; with ``voting="hard"`` it raises
+        ``AttributeError``.
+
+        Returns
+        -------
+        array of shape (n_samples, n_classes), float64
+        """
         if self.voting == "hard":
             raise AttributeError("predict_proba is not available when voting='hard'")
         Xa = self._check_X(X)
         return self._soft(Xa).reshape((Xa.shape[0], self.n_classes_))
 
     def predict(self, X):
+        """Predict class labels by weighted vote (hard) or averaged probabilities (soft).
+
+        Returns
+        -------
+        array of shape (n_samples,)
+            Labels from ``classes_``.
+        """
         Xa = self._check_X(X)
         n, k = Xa.shape[0], self.n_classes_
         if self.voting == "soft":
@@ -2078,8 +2923,15 @@ class VotingClassifier(_TreesWrapperBase):
         return decode_labels(self.classes_, self._argmax(acc, n, k))
 
     def transform(self, X):
-        """soft: the members' probabilities side by side (n, m * k), float64;
-        hard: the members' predicted codes (n, m), float64."""
+        """The members' outputs side by side.
+
+        Returns
+        -------
+        array, float64
+            With ``voting="soft"``, every member's class probabilities, shape
+            (n_samples, n_estimators * n_classes); with ``voting="hard"``, every
+            member's predicted class code, shape (n_samples, n_estimators).
+        """
         Xa = self._check_X(X)
         n, k, m = Xa.shape[0], self.n_classes_, len(self.estimators_)
         width = m * k if self.voting == "soft" else m
@@ -2096,6 +2948,49 @@ class VotingClassifier(_TreesWrapperBase):
 
 
 class VotingRegressor(_TreesWrapperBase):
+    """Average the predictions of several regressors.
+
+    Follows scikit-learn's ``VotingRegressor``. ``fit`` clones every estimator
+    and fits the clones; the estimators you pass are never fitted in place.
+    ``predict`` is the weighted average of the members' predictions. The
+    members fit one after another.
+
+    Parameters
+    ----------
+    estimators : list of (str, estimator)
+        Named mojolearn regressors. Names must be unique; an entry whose
+        estimator is the string ``"drop"`` is skipped. An empty list, duplicate
+        names, or every entry ``"drop"`` raise ``ValueError``.
+    weights : sequence of float, default None
+        One weight per active estimator; None weighs them equally. A length
+        that does not match the active estimators raises ``ValueError`` in
+        ``predict``.
+    n_jobs : None
+        Only None is accepted; any other value raises ``NotImplementedError``.
+    verbose : bool, default False
+        Only False is accepted; True raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    estimators_ : list
+        The fitted clones, in order.
+    named_estimators_ : dict
+        The fitted clones by name.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32)
+    >>> model = mojolearn.VotingRegressor(
+    ...     [("rf", mojolearn.RandomForestRegressor()),
+    ...      ("dt", mojolearn.DecisionTreeRegressor())]).fit(X, y)
+    >>> model.predict(X[:5]).shape
+    (5,)
+    """
     _estimator_type = "regressor"
 
     def __init__(self, estimators, *, weights=None, n_jobs=None, verbose=False):
@@ -2107,6 +3002,21 @@ class VotingRegressor(_TreesWrapperBase):
         self.verbose = verbose
 
     def fit(self, X, y, sample_weight=None):
+        """Fit a clone of every active estimator on ``X`` and ``y``.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array of shape (n_samples,)
+            Targets.
+        sample_weight : array of shape (n_samples,), default None
+            Passed to every member's ``fit`` when given.
+
+        Returns
+        -------
+        self
+        """
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         active = _trees_estimators(self.estimators)
         self.estimators_ = []
@@ -2120,6 +3030,12 @@ class VotingRegressor(_TreesWrapperBase):
         return self
 
     def predict(self, X):
+        """Weighted average of the members' predictions.
+
+        Returns
+        -------
+        array of shape (n_samples,), float64
+        """
         Xa = self._check_X(X)
         n, m = Xa.shape[0], len(self.estimators_)
         w = [1.0] * m if self.weights is None else [float(v) for v in self.weights]  # glue: user weights argument as floats
@@ -2132,6 +3048,12 @@ class VotingRegressor(_TreesWrapperBase):
         return acc
 
     def transform(self, X):
+        """Every member's prediction side by side.
+
+        Returns
+        -------
+        array of shape (n_samples, n_estimators), float64
+        """
         Xa = self._check_X(X)
         n, m = Xa.shape[0], len(self.estimators_)
         out = zeros((n * m,), "<f8")
@@ -2223,6 +3145,16 @@ class _StackingBase(_TreesWrapperBase):
         return self
 
     def transform(self, X):
+        """The meta features the final estimator reads.
+
+        Each member's output (per ``stack_method_``) side by side, followed by
+        ``X`` itself when ``passthrough=True``. For a binary classifier,
+        ``predict_proba`` contributes only its second column.
+
+        Returns
+        -------
+        array of shape (n_samples, n_meta_features), float64
+        """
         Xa = self._check_X(X)
         n, d = Xa.shape
         width = sum(self._widths_) + (d if self.passthrough else 0)  # glue: output widths over the members
@@ -2239,6 +3171,68 @@ class _StackingBase(_TreesWrapperBase):
 
 
 class StackingClassifier(_StackingBase):
+    """Stack classifiers and train a final classifier on their cross-validated outputs.
+
+    Follows scikit-learn's ``StackingClassifier``. ``fit`` refits every member on
+    all rows, and trains ``final_estimator`` on the members' out-of-fold
+    outputs (``cross_val_predict``). The members and folds fit one after
+    another.
+
+    Differs from scikit-learn: the default ``final_estimator`` is
+    mojolearn's ``LogisticRegression``.
+
+    Parameters
+    ----------
+    estimators : list of (str, estimator)
+        Named mojolearn classifiers. Names must be unique; an entry whose
+        estimator is the string ``"drop"`` is skipped.
+    final_estimator : estimator, default None
+        The classifier fitted on the meta features; None uses
+        ``LogisticRegression()``.
+    cv : int, splitter or iterable of (train, test), default None
+        An int is the number of unshuffled stratified folds (``>= 2``); None
+        means 5. A splitter object's ``split(X, y)`` or an iterable of index
+        pairs is used as given, but its test sets must cover every row exactly
+        once, else ``ValueError``.
+    stack_method : {"auto", "predict_proba", "decision_function", "predict"}, default "auto"
+        The member method whose output is stacked. ``"auto"`` takes the first
+        of ``predict_proba``, ``decision_function``, ``predict`` the member has.
+        For a binary problem ``predict_proba`` contributes only its second
+        column.
+    n_jobs : None
+        Only None is accepted; any other value raises ``NotImplementedError``.
+    passthrough : bool, default False
+        Also give the final estimator the original features.
+    verbose : int, default 0
+        Only 0 is accepted; any other value raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    estimators_ : list
+        The members refitted on all rows (fitted on integer class codes).
+    named_estimators_ : dict
+        The fitted members by name.
+    stack_method_ : list of str
+        The method stacked for each member.
+    final_estimator_ : estimator
+        The fitted final classifier.
+    classes_ : array
+        The class labels seen in ``fit``, sorted.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] + X[:, 1] > 1.0).astype(np.int32)
+    >>> model = mojolearn.StackingClassifier(
+    ...     [("rf", mojolearn.RandomForestClassifier()),
+    ...      ("dt", mojolearn.DecisionTreeClassifier())]).fit(X, y)
+    >>> model.predict_proba(X[:5]).shape
+    (5, 2)
+    """
     _estimator_type = "classifier"
 
     def __init__(self, estimators, final_estimator=None, *, cv=None, stack_method="auto", n_jobs=None,
@@ -2246,6 +3240,27 @@ class StackingClassifier(_StackingBase):
         super().__init__(estimators, final_estimator, cv, stack_method, n_jobs, passthrough, verbose)
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the members, their out-of-fold outputs, and the final estimator.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array of shape (n_samples,)
+            Class labels.
+        sample_weight : None
+            Only None is accepted; weights raise ``NotImplementedError``.
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            When a member's output width differs between folds (a class missing
+            from a fold's training rows).
+        """
         if sample_weight is not None:
             _refuse("StackingClassifier sample_weight", "not carried in pass 1.")
         self.classes_, codes = encode_labels(y)
@@ -2261,10 +3276,23 @@ class StackingClassifier(_StackingBase):
                                splits, final)
 
     def predict(self, X):
+        """Predict class labels with the final estimator on the stacked outputs.
+
+        Returns
+        -------
+        array of shape (n_samples,)
+            Labels from ``classes_``.
+        """
         codes = as_i32_c(self.final_estimator_.predict(self._meta32(X)), ndim=1, name="codes")[0]
         return decode_labels(self.classes_, codes)
 
     def predict_proba(self, X):
+        """The final estimator's class probabilities on the stacked outputs.
+
+        Returns
+        -------
+        array of shape (n_samples, n_classes), float64
+        """
         k = len(self.classes_)
         Xm = self._meta32(X)
         n = Xm.shape[0]
@@ -2274,6 +3302,60 @@ class StackingClassifier(_StackingBase):
 
 
 class StackingRegressor(_StackingBase):
+    """Stack regressors and train a final regressor on their cross-validated outputs.
+
+    Follows scikit-learn's ``StackingRegressor``. ``fit`` refits every member on
+    all rows, and trains ``final_estimator`` on the members' out-of-fold
+    ``predict`` outputs (``cross_val_predict``). The members and folds fit one
+    after another.
+
+    Differs from scikit-learn: the default ``final_estimator`` is mojolearn's
+    ``Ridge`` (scikit-learn uses ``RidgeCV``).
+
+    Parameters
+    ----------
+    estimators : list of (str, estimator)
+        Named mojolearn regressors. Names must be unique; an entry whose
+        estimator is the string ``"drop"`` is skipped.
+    final_estimator : estimator, default None
+        The regressor fitted on the meta features; None uses ``Ridge()``.
+    cv : int, splitter or iterable of (train, test), default None
+        An int is the number of unshuffled ``KFold`` folds (``>= 2``); None
+        means 5. A splitter object's ``split(X, y)`` or an iterable of index
+        pairs is used as given, but its test sets must cover every row exactly
+        once, else ``ValueError``.
+    n_jobs : None
+        Only None is accepted; any other value raises ``NotImplementedError``.
+    passthrough : bool, default False
+        Also give the final estimator the original features.
+    verbose : int, default 0
+        Only 0 is accepted; any other value raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    estimators_ : list
+        The members refitted on all rows.
+    named_estimators_ : dict
+        The fitted members by name.
+    stack_method_ : list of str
+        The method stacked for each member (``"predict"``).
+    final_estimator_ : estimator
+        The fitted final regressor.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32)
+    >>> model = mojolearn.StackingRegressor(
+    ...     [("rf", mojolearn.RandomForestRegressor()),
+    ...      ("dt", mojolearn.DecisionTreeRegressor())]).fit(X, y)
+    >>> model.predict(X[:5]).shape
+    (5,)
+    """
     _estimator_type = "regressor"
     _binary = False
 
@@ -2281,6 +3363,21 @@ class StackingRegressor(_StackingBase):
         super().__init__(estimators, final_estimator, cv, "auto", n_jobs, passthrough, verbose)
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the members, their out-of-fold predictions, and the final estimator.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array of shape (n_samples,)
+            Targets, converted to float32.
+        sample_weight : None
+            Only None is accepted; weights raise ``NotImplementedError``.
+
+        Returns
+        -------
+        self
+        """
         if sample_weight is not None:
             _refuse("StackingRegressor sample_weight", "not carried in pass 1.")
         y32, _ = as_f32_c(y, ndim=1, name="y")
@@ -2292,6 +3389,12 @@ class StackingRegressor(_StackingBase):
         return self._fit_stack(X, lambda rows: y32 if rows is None else self._gather_vec(y32, rows), splits, final)
 
     def predict(self, X):
+        """Predict with the final estimator on the stacked member predictions.
+
+        Returns
+        -------
+        array of shape (n_samples,)
+        """
         return self.final_estimator_.predict(self._meta32(X))
 
 
@@ -2320,6 +3423,36 @@ def _multiout_ridge_entry(est, sample_weight):
 
 
 class MultiOutputRegressor(_TreesWrapperBase):
+    """Fit one regressor per target column.
+
+    Follows scikit-learn's ``MultiOutputRegressor``: ``fit`` clones
+    ``estimator`` once per column of ``Y`` and fits each clone on that column;
+    ``predict`` stacks their predictions. The columns fit one after another.
+
+    Parameters
+    ----------
+    estimator : estimator
+        A mojolearn regressor; it is cloned, never fitted in place.
+    n_jobs : None
+        Only None is accepted; any other value raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    estimators_ : list
+        One fitted clone per column of ``Y``.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> Y = np.stack([X[:, 0] + X[:, 1], X[:, 2] - X[:, 3]], axis=1)
+    >>> model = mojolearn.MultiOutputRegressor(mojolearn.Ridge()).fit(X, Y)
+    >>> model.predict(X[:5]).shape
+    (5, 2)
+    """
     _estimator_type = "regressor"
 
     def __init__(self, estimator, *, n_jobs=None):
@@ -2368,6 +3501,22 @@ class MultiOutputRegressor(_TreesWrapperBase):
         return self
 
     def fit(self, X, Y, sample_weight=None):
+        """Fit one clone of ``estimator`` per column of ``Y``.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Training data, converted to float32.
+        Y : array of shape (n_samples, n_outputs)
+            Numeric targets, converted to float32. A row count that differs from
+            ``X`` raises ``ValueError``.
+        sample_weight : array of shape (n_samples,), default None
+            Passed to every clone's ``fit`` when given.
+
+        Returns
+        -------
+        self
+        """
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         Ya, _ = as_f32_c(Y, ndim=2, name="Y")
         if Ya.shape[0] != Xa.shape[0]:
@@ -2387,6 +3536,12 @@ class MultiOutputRegressor(_TreesWrapperBase):
         return self
 
     def predict(self, X):
+        """Every target's prediction, one column per output.
+
+        Returns
+        -------
+        array of shape (n_samples, n_outputs)
+        """
         Xa = self._check_X(X)
         n, m = Xa.shape[0], len(self.estimators_)
         mr = getattr(self, "_multi_ridge", None)
@@ -2405,6 +3560,40 @@ class MultiOutputRegressor(_TreesWrapperBase):
 
 
 class MultiOutputClassifier(_TreesWrapperBase):
+    """Fit one classifier per label column.
+
+    Follows scikit-learn's ``MultiOutputClassifier``: ``fit`` clones
+    ``estimator`` once per column of ``Y``, encodes that column's labels and
+    fits the clone on them; ``predict`` stacks the decoded predictions and
+    ``predict_proba`` returns a list with one probability array per output.
+    The columns fit one after another.
+
+    Parameters
+    ----------
+    estimator : estimator
+        A mojolearn classifier; it is cloned, never fitted in place.
+    n_jobs : None
+        Only None is accepted; any other value raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    estimators_ : list
+        One fitted clone per column of ``Y`` (fitted on integer class codes).
+    classes_ : list of arrays
+        The sorted class labels of each output column.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> Y = np.stack([X[:, 0] > 0.5, X[:, 1] > 0.5], axis=1).astype(np.int64)
+    >>> model = mojolearn.MultiOutputClassifier(mojolearn.DecisionTreeClassifier()).fit(X, Y)
+    >>> model.predict(X[:5]).shape
+    (5, 2)
+    """
     _estimator_type = "classifier"
 
     def __init__(self, estimator, *, n_jobs=None):
@@ -2414,6 +3603,22 @@ class MultiOutputClassifier(_TreesWrapperBase):
         self.n_jobs = n_jobs
 
     def fit(self, X, Y, sample_weight=None):
+        """Fit one clone of ``estimator`` per label column of ``Y``.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Training data, converted to float32.
+        Y : array of shape (n_samples, n_outputs)
+            Class labels, one column per output. A row count that differs from
+            ``X`` raises ``ValueError``.
+        sample_weight : array of shape (n_samples,), default None
+            Passed to every clone's ``fit`` when given.
+
+        Returns
+        -------
+        self
+        """
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         W = _trees_label_words(Y)
         if W is not None:
@@ -2473,7 +3678,14 @@ class MultiOutputClassifier(_TreesWrapperBase):
         return self
 
     def predict(self, X):
-        """(n, n_outputs): an int64 or float64 Array for numeric labels."""
+        """Predict every output's labels.
+
+        Returns
+        -------
+        array of shape (n_samples, n_outputs)
+            For numeric labels, int64 when every output's labels are integers,
+            else float64.
+        """
         Xa = self._check_X(X)
         out = self._predict_stacked(Xa)
         if out is not None:
@@ -2505,7 +3717,14 @@ class MultiOutputClassifier(_TreesWrapperBase):
         return out.reshape((n, len(cols)))
 
     def predict_proba(self, X):
-        """A list, one (n, n_classes_j) float64 Array per output."""
+        """Every output's class probabilities.
+
+        Returns
+        -------
+        list of arrays
+            One float64 array of shape (n_samples, n_classes_j) per output, its
+            columns in the order of ``classes_[j]``.
+        """
         Xa = self._check_X(X)
         n = Xa.shape[0]
         out = []
@@ -2524,6 +3743,47 @@ class MultiOutputClassifier(_TreesWrapperBase):
 # the multiclass case). DEVIATION: a row whose scores sum to 0 is uniform,
 # where sklearn divides 0 / 0.
 class OneVsRestClassifier(_TreesWrapperBase):
+    """Multiclass classification with one binary classifier per class.
+
+    Follows scikit-learn's ``OneVsRestClassifier``: ``fit`` trains one clone of
+    ``estimator`` per class (that class against the rest), or a single clone
+    when there are two classes. ``predict`` takes the class whose clone scores
+    highest, using ``decision_function`` when the estimator has one, else the
+    positive-class column of ``predict_proba``. The classes fit one after
+    another.
+
+    Differs from scikit-learn: in ``predict_proba``, a row whose per-class
+    probabilities are all 0 gets uniform probabilities (scikit-learn divides
+    0 by 0).
+
+    Parameters
+    ----------
+    estimator : estimator
+        A mojolearn binary classifier; it is cloned, never fitted in place.
+    n_jobs : None
+        Only None is accepted; any other value raises ``NotImplementedError``.
+    verbose : int, default 0
+        Only 0 is accepted; any other value raises ``NotImplementedError``.
+
+    Attributes
+    ----------
+    estimators_ : list
+        The fitted clones, one per class (one in total for two classes).
+    classes_ : array
+        The class labels seen in ``fit``, sorted.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (3 * X[:, 0]).astype(np.int32)
+    >>> model = mojolearn.OneVsRestClassifier(mojolearn.LogisticRegression()).fit(X, y)
+    >>> model.predict_proba(X[:5]).shape
+    (5, 3)
+    """
     _estimator_type = "classifier"
 
     def __init__(self, estimator, *, n_jobs=None, verbose=0):
@@ -2534,6 +3794,19 @@ class OneVsRestClassifier(_TreesWrapperBase):
         self.verbose = verbose
 
     def fit(self, X, y):
+        """Fit one binary clone per class.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array of shape (n_samples,)
+            Class labels; fewer than two classes raise ``ValueError``.
+
+        Returns
+        -------
+        self
+        """
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         self.classes_, codes = encode_labels(y)
         k = len(self.classes_)
@@ -2578,6 +3851,13 @@ class OneVsRestClassifier(_TreesWrapperBase):
         return self._gather(p, self._arange(n), Array.from_list([subs.index(1)], "<i4")).reshape((n,))
 
     def predict(self, X):
+        """Predict the class whose binary classifier scores highest.
+
+        Returns
+        -------
+        array of shape (n_samples,)
+            Labels from ``classes_``.
+        """
         Xa = self._check_X(X)
         n, k = Xa.shape[0], len(self.classes_)
         if k == 2:
@@ -2590,6 +3870,16 @@ class OneVsRestClassifier(_TreesWrapperBase):
         return decode_labels(self.classes_, self._argmax(acc, n, k))
 
     def predict_proba(self, X):
+        """Class probabilities.
+
+        Each class's positive-class probability from its clone, with every row
+        normalized to sum to 1 when there are more than two classes. For two
+        classes the rows are ``(1 - p, p)``.
+
+        Returns
+        -------
+        array of shape (n_samples, n_classes), float64
+        """
         Xa = self._check_X(X)
         n, k = Xa.shape[0], len(self.classes_)
         acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
@@ -2649,6 +3939,62 @@ def _cal_fast_consts(base, method, ensemble, cv, sample_weight):
 
 
 class CalibratedClassifierCV(_TreesWrapperBase):
+    """Calibrate a classifier's probabilities with cross-validation.
+
+    Follows scikit-learn's ``CalibratedClassifierCV``. The calibrator reads the
+    estimator's ``decision_function``, else its ``predict_proba`` (the positive
+    column for a binary problem), and fits one calibrator per class
+    (one-vs-rest): Platt's sigmoid or isotonic regression (clipped outside the
+    fitted range). Multiclass probabilities are normalized per row; a row of
+    zeros becomes uniform. The folds fit one after another.
+
+    Differs from scikit-learn: Platt's sigmoid minimizes scikit-learn's
+    objective with Newton steps and a backtracking line search instead of
+    L-BFGS, so its parameters can differ in the last digits.
+
+    Parameters
+    ----------
+    estimator : estimator, default None
+        The mojolearn classifier to calibrate; it is cloned, never fitted in
+        place. None uses ``LinearSVC()``, as scikit-learn does.
+    method : {"sigmoid", "isotonic"}, default "sigmoid"
+        Platt's sigmoid or isotonic regression. Any other value raises
+        ``ValueError``.
+    cv : int, splitter or iterable of (train, test), default None
+        An int is the number of unshuffled stratified folds (``>= 2``); None
+        means 5. A splitter object's ``split(X, y)`` or an iterable of index
+        pairs is used as given; with ``ensemble=False`` their test sets must
+        cover every row exactly once, else ``ValueError``.
+    n_jobs : None
+        Only None is accepted; any other value raises ``NotImplementedError``.
+    ensemble : bool, default True
+        True: one (classifier, calibrators) pair per fold, the classifier fitted
+        on the fold's training rows and calibrated on its test rows;
+        ``predict_proba`` averages the pairs. False: one set of calibrators fitted
+        on the out-of-fold scores, and the classifier refitted on all rows.
+        Values other than True or False raise ``NotImplementedError``.
+
+    Attributes
+    ----------
+    calibrated_classifiers_ : list
+        One (fitted classifier, calibrators) pair per fold, or a single pair
+        when ``ensemble=False``. The classifiers are fitted on integer class
+        codes.
+    classes_ : array
+        The class labels seen in ``fit``, sorted.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] + 0.2 * rng.random(1000) > 0.6).astype(np.int32)
+    >>> model = mojolearn.CalibratedClassifierCV(mojolearn.GaussianNB(), cv=3).fit(X, y)
+    >>> model.predict_proba(X[:5]).shape
+    (5, 2)
+    """
     _estimator_type = "classifier"
 
     def __init__(self, estimator=None, *, method="sigmoid", cv=None, n_jobs=None, ensemble=True):
@@ -2749,6 +4095,26 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         return acc
 
     def fit(self, X, y, sample_weight=None):
+        """Fit the classifier and its calibrators over the cross-validation folds.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : array of shape (n_samples,)
+            Class labels; fewer than two classes raise ``ValueError``.
+        sample_weight : None
+            Only None is accepted; weights raise ``NotImplementedError``.
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            When ``cv`` asks for more folds than some class has members.
+        """
         if sample_weight is not None:
             _refuse("CalibratedClassifierCV sample_weight", "not carried in pass 1.")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
@@ -2899,6 +4265,15 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         return pr.get(out, (n, K))
 
     def predict_proba(self, X):
+        """Calibrated class probabilities.
+
+        With ``ensemble=True`` the average of every fold's calibrated
+        probabilities.
+
+        Returns
+        -------
+        array of shape (n_samples, n_classes)
+        """
         Xa = self._check_X(X)
         if getattr(self, "_cal_fast", None) is not None:
             return self._predict_proba_fast(Xa, "proba")
@@ -2911,6 +4286,13 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         return acc.reshape((n, k))
 
     def predict(self, X):
+        """Predict the class with the highest calibrated probability.
+
+        Returns
+        -------
+        array of shape (n_samples,)
+            Labels from ``classes_``.
+        """
         if getattr(self, "_cal_fast", None) is not None:
             return decode_labels(self.classes_, self._predict_proba_fast(self._check_X(X), "predict"))
         p = self.predict_proba(X)
@@ -2980,15 +4362,66 @@ def _trees_dart_forest(b, model, K):
     return (Array.from_list(offs, "<i4"), col, q, lc, lv), tscale
 
 
+# GPU installs run it on the device (xtrees/shap_device.mojo), CPU-only
+# installs on the host (xtrees/shap_host.mojo); both run the units of
+# xtrees/shap.mojo in the same fixed orders, so the values are the same
+# bits on every column. Float32 throughout (Metal has no float64).
 class TreeExplainer(_TreesEnsembleBase):
-    """Exact TreeSHAP for this library's forests and DART models.
-    `shap_values(X)` is (n, d) for one output, else (n, d, k), float32;
-    `expected_value` is a float or a float32 Array of k.
+    """Exact SHAP values for mojolearn tree models.
 
-    GPU installs run it on the device (xtrees/shap_device.mojo), CPU-only
-    installs on the host (xtrees/shap_host.mojo); both run the units of
-    xtrees/shap.mojo in the same fixed orders, so the values are the same
-    bits on every column. Float32 throughout (Metal has no float64)."""
+    Computes the exact path-dependent TreeSHAP of the ``shap`` package for a
+    fitted ``RandomForestClassifier``, ``RandomForestRegressor``,
+    ``ExtraTreesClassifier``, ``ExtraTreesRegressor``,
+    ``DecisionTreeClassifier``, ``DecisionTreeRegressor``, ``DARTClassifier`` or
+    ``DARTRegressor``. On GPU installs it runs on the device. Values are
+    float32.
+
+    Differs from ``shap``: the tree models store no per-node training counts,
+    so ``data`` is required and each node's cover is the number of background
+    rows that reach it.
+
+    Parameters
+    ----------
+    model : estimator
+        A fitted mojolearn tree model from the list above. Any other model
+        raises ``NotImplementedError``; an unfitted DART model raises
+        ``RuntimeError``.
+    data : array of shape (n_background, n_features)
+        Background rows that define the node covers. Required: None raises
+        ``NotImplementedError``.
+    feature_perturbation : {"tree_path_dependent", "auto"}, default "tree_path_dependent"
+        Only the path-dependent algorithm is available; ``"interventional"``
+        raises ``NotImplementedError``.
+    model_output : {"raw"}, default "raw"
+        Only the raw model output is explained; other values raise
+        ``NotImplementedError``.
+
+    Attributes
+    ----------
+    expected_value : float or array of shape (n_outputs,)
+        The base value the SHAP values add up from: a float for one output,
+        else a float32 array.
+    n_outputs_ : int
+        Number of model outputs explained.
+    n_features_in_ : int
+        Number of features in ``data``.
+
+    Raises
+    ------
+    NotImplementedError
+        When a root-to-leaf path splits on more than 255 distinct features.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32)
+    >>> model = mojolearn.RandomForestRegressor().fit(X, y)
+    >>> explainer = mojolearn.TreeExplainer(model, X[:200])
+    >>> explainer.shap_values(X[:10]).shape
+    (10, 8)
+    """
 
     def __init__(self, model, data=None, *, feature_perturbation="tree_path_dependent", model_output="raw"):
         if feature_perturbation not in ("tree_path_dependent", "auto"):
@@ -3080,7 +4513,10 @@ class TreeExplainer(_TreesEnsembleBase):
                 self, native.x_trees_tree_shap_cache_release, self._shap_cache)
 
     def close(self):
-        """Release the optional native explanation snapshot."""
+        """Release the explainer's native resources.
+
+        After ``close``, ``shap_values`` raises ``RuntimeError``.
+        """
         finalizer = getattr(self, "_shap_cache_finalizer", None)
         if finalizer is not None and finalizer.alive:
             finalizer()
@@ -3088,6 +4524,20 @@ class TreeExplainer(_TreesEnsembleBase):
         self._shap_closed = True
 
     def shap_values(self, X):
+        """SHAP values of the rows of ``X``.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Rows to explain, converted to float32. A feature count different from
+            ``data`` raises ``ValueError``.
+
+        Returns
+        -------
+        array, float32
+            Shape (n_samples, n_features) for one output, else
+            (n_samples, n_features, n_outputs).
+        """
         if getattr(self, "_shap_closed", False):
             raise RuntimeError("this TreeExplainer has been closed")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
@@ -3266,8 +4716,60 @@ class _AgnosticExplainer(_TreesEnsembleBase):
 
 
 class KernelExplainer(_AgnosticExplainer):
-    """Kernel SHAP (shap `KernelExplainer`, cuML `kernel_shap.cu`) over a
-    mojolearn estimator or a callable. `shap_values(X, nsamples="auto")`."""
+    """Model-agnostic Kernel SHAP values.
+
+    Follows the ``shap`` package's ``KernelExplainer``: every coalition size
+    small enough is enumerated in full, the rest are sampled with Kernel SHAP
+    weights, and the values come from the efficiency-constrained weighted
+    least squares. Every step except the model call runs on the device on GPU
+    installs. The model is called on synthetic rows built from ``data``, so
+    explaining ``n`` rows makes ``n * n_coalitions * n_background`` model
+    evaluations.
+
+    Differs from ``shap``: random draws come from mojolearn's own seeded
+    generator, so values differ from ``shap``'s for the same seed; sampled
+    coalitions come in complementary pairs and are not de-duplicated (as in
+    cuML); there is no l1 feature selection; every feature is treated as
+    varying.
+
+    Parameters
+    ----------
+    model : estimator or callable
+        A fitted mojolearn estimator, or a function mapping an
+        (n, n_features) array to outputs. For a classifier with
+        ``predict_proba`` the probabilities are explained, otherwise
+        ``predict``.
+    data : array of shape (n_background, n_features)
+        Background rows that stand in for missing features.
+    link : {"identity", "logit"}, default "identity"
+        Applied to the model output before it is explained, by name; a link
+        object or any other name raises ``NotImplementedError``.
+    random_state : int or None, default None
+        Seed for the coalition sampling: None (seed 0) or a nonnegative int.
+        Anything else, including a ``RandomState`` object, raises
+        ``ValueError``.
+
+    Attributes
+    ----------
+    expected_value : float or array of shape (n_outputs,)
+        The mean model output over ``data``, through ``link``: a float for one
+        output, else a float64 array.
+    n_outputs_ : int
+        Number of model outputs explained.
+    n_features_in_ : int
+        Number of features in ``data``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32)
+    >>> model = mojolearn.RandomForestRegressor().fit(X, y)
+    >>> explainer = mojolearn.KernelExplainer(model, X[:50], random_state=0)
+    >>> explainer.shap_values(X[:10]).shape
+    (10, 8)
+    """
 
     def __init__(self, model, data, *, link="identity", random_state=None):
         if link not in ("identity", "logit"):
@@ -3302,6 +4804,26 @@ class KernelExplainer(_AgnosticExplainer):
         return m, nfixed, nfull, npaired, tables, L, wbits
 
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
+        """Kernel SHAP values of the rows of ``X``.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Rows to explain, converted to float32. A feature count different from
+            ``data`` raises ``ValueError``.
+        nsamples : int or "auto", default "auto"
+            Number of coalitions per row. ``"auto"`` is ``2 * n_features + 2048``.
+            With 30 features or fewer it is capped at ``2**n_features - 2``.
+        l1_reg : {"auto", False, 0}, default "auto"
+            Accepted for compatibility; no l1 feature selection is done, and any
+            other value raises ``NotImplementedError``.
+
+        Returns
+        -------
+        array, float64
+            Shape (n_samples, n_features) for one output, else
+            (n_samples, n_features, n_outputs).
+        """
         if l1_reg not in ("auto", False, 0):
             _refuse(f"l1_reg={l1_reg!r}", "no l1 feature selection is carried.")
         Xa = self._check(X)
@@ -3398,10 +4920,52 @@ class KernelExplainer(_AgnosticExplainer):
 
 
 class PermutationExplainer(_AgnosticExplainer):
-    """Permutation SHAP (shap `PermutationExplainer`, cuML
-    `permutation_shap.cu`): each permutation adds the features one by one
-    (forward) then removes them (backward), each marginal averaged over the
-    background. `shap_values(X, npermutations=10)`."""
+    """Model-agnostic Permutation SHAP values.
+
+    Follows the ``shap`` package's ``PermutationExplainer``: each random
+    permutation of the features adds them one by one (forward), then removes
+    them (backward), and each feature's marginal contribution is averaged over
+    the background rows and the permutations. Every step except the model call
+    runs on the device on GPU installs.
+
+    Differs from ``shap``: random permutations come from mojolearn's own
+    seeded generator, so values differ from ``shap``'s for the same seed.
+
+    Parameters
+    ----------
+    model : estimator or callable
+        A fitted mojolearn estimator, or a function mapping an
+        (n, n_features) array to outputs. For a classifier with
+        ``predict_proba`` the probabilities are explained, otherwise
+        ``predict``.
+    data : array of shape (n_background, n_features)
+        Background rows that stand in for missing features.
+    random_state : int or None, default None
+        Seed for the permutations: None (seed 0) or a nonnegative int.
+        Anything else, including a ``RandomState`` object, raises
+        ``ValueError``.
+
+    Attributes
+    ----------
+    expected_value : float or array of shape (n_outputs,)
+        The mean model output over ``data``: a float for one output, else a
+        float64 array.
+    n_outputs_ : int
+        Number of model outputs explained.
+    n_features_in_ : int
+        Number of features in ``data``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = X @ np.arange(8, dtype=np.float32)
+    >>> model = mojolearn.Ridge().fit(X, y)
+    >>> explainer = mojolearn.PermutationExplainer(model, X[:50], random_state=0)
+    >>> explainer.shap_values(X[:10], npermutations=5).shape
+    (10, 8)
+    """
 
     def __init__(self, model, data, *, random_state=None):
         super().__init__(model, data, random_state)
@@ -3433,6 +4997,23 @@ class PermutationExplainer(_AgnosticExplainer):
         return wb, int(m._link)
 
     def shap_values(self, X, npermutations=10):
+        """Permutation SHAP values of the rows of ``X``.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Rows to explain, converted to float32. A feature count different from
+            ``data`` raises ``ValueError``.
+        npermutations : int, default 10
+            Number of random feature permutations per row; less than 1 raises
+            ``ValueError``.
+
+        Returns
+        -------
+        array, float64
+            Shape (n_samples, n_features) for one output, else
+            (n_samples, n_features, n_outputs).
+        """
         Xa = self._check(X)
         n, d = Xa.shape
         k = self.n_outputs_
