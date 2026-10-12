@@ -861,6 +861,20 @@ python3 -m venv /tmp/v && /tmp/v/bin/pip install mojolearn==<version> \
 Run it on a Linux GPU box and on a Mac. Both wheels are listed at
 https://pypi.org/project/mojolearn/#files.
 
+## 7. Publish the docs (docs.mojolearn.org)
+
+After the macOS wheel is on PyPI, build the docs against it (on this Mac; nothing runs a model):
+
+```sh
+~/mojolearn-evidence/docs-venv/bin/pip install -q --upgrade "mojolearn==<version>"
+docs-site/tools/publish.sh            # api/*.rst regenerated; <version>/ and stable/ assembled
+(cd docs-site && npx wrangler deploy)
+```
+
+Commit any `docs-site/api/*.rst` changes the publish made. Older releases stay published under
+`/<version>/`. mojolearn.org needs no edit: its install picker reads the version and the vendor
+packages' architectures from PyPI.
+
 
 ## Verifier-only wheel updates
 
