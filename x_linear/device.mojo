@@ -656,10 +656,17 @@ comptime XL_LARS_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_
 #: (revert `-D MOJOLEARN_IDN_LARS_GRID_GRAM_OFF`; the A/B numbers, the open
 #: lars istella regression and the reason at x_linear/lars.mojo `LARS_GRID_GRAM`): LARS / LassoLars' means, centered
 #: Gram and X'y from core/blocked_moments.mojo (one block per leaf of rows,
-#: binary-counter fold) instead of main's moments grid. NVIDIA and AMD (and
-#: the host column) change bits together; Apple keeps main's grid (its
-#: completion witness wraps the moments grid's launches, not these).
-comptime XL_IDN_LARS_GRID_GRAM = LARS_GRID_GRAM and not has_apple_gpu_accelerator()
+#: binary-counter fold) instead of main's moments grid. NVIDIA, AMD, Apple
+#: and the host column take the same fold (lane/apple-lars, 2026-10-12: the
+#: Apple IDENTICAL column had kept main's grid and broke x-lars /
+#: x-lasso-lars identity on every part). No Metal chunking is needed: the
+#: blocked kernels put one block on each leaf of `contract_leaf_size(n)`
+#: rows and fold in log2 levels, each launch far shorter than the moments
+#: grid's one all-rows chain per cell it replaces, and they are unwitnessed
+#: like that grid was (the setup loop below reruns them from zeroed fw when
+#: the witnessed fit unit is cut). `_OFF` restores the moments grid on every
+#: vendor.
+comptime XL_IDN_LARS_GRID_GRAM = LARS_GRID_GRAM
 
 
 @always_inline
