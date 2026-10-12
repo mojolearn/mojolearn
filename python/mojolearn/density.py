@@ -75,117 +75,106 @@ _ARM_METRICS = {
 }
 
 
+# Maintainer notes (moved from the class docstring). House rule: a parameter that is accepted and
+# ignored is a wrong answer waiting for a caller; `tools/e2u_matrix_fit.py` measures every row.
+# - max_iterations: None runs to the fixed point, cuML's behavior (their loop has no cap; DEVIATION 519).
+#   Under NUMERIC_IDENTICAL a binding cap RAISES (DEVIATION 507: a truncated propagation is a snapshot
+#   of an atomic order, not a labelling); under FAST it returns truncated labels. This surface used to
+#   default to 200, which on a 1,000-point chain returned seven clusters for one, silently.
+# - metric L1: no reference implementation (cuML's DBSCAN offers euclidean, cosine and precomputed only,
+#   dbscan.pyx:110-115); per-pair arithmetic follows RAFT's l1.cuh:49, threshold not squared
+#   (DEVIATION 27). cosine: cuML's CosineExpanded, rows scaled to unit length and the L2 kernel run
+#   against 2 * eps (DEVIATION 5113). precomputed: entry <= eps is a neighbor (DEVIATION 5114).
+# - sample_weight: core when the sum of weights reaches min_samples (cuML runner.cuh:300-306,
+#   sklearn _dbscan.py:451-455). Uniform-1.0 and duplicate-equals-weight-2 checks gated since
+#   2026-09-01 (they had never compiled before: an LLVM pass assertion, cured by the build's
+#   optimization level). Measured on an Apple M4 only; a three-vendor leg is owed.
+# - prediction_data=True copies the fit's own core mask (`dbscan_fit_core`, a read back after every
+#   recorded stage; no arithmetic added). core_sample_indices_ on every fit, as scikit-learn and cuML's
+#   Python default (calc_core_sample_indices=True). predict: DEVIATION 2740.
+# - algorithm='rbc' default is not cuML's (DEVIATION 35, `dbscan/impl/runner.mojo`): cuML's Python
+#   default is 'brute', and on an int32-label build cuML's dispatch never reaches the ball cover.
+#   The ball cover measured 2.7x-27x faster at 16k-200k rows and `check_dbscan_rbc_matches_brute`
+#   holds the two labellings identical point for point. 'brute' is the arm
+#   `archive/evidence/E1U_RESULTS.md` certified bit-identical across Apple and AMD; 'rbc' has been
+#   through the arms-agree gate on both vendors but has no cross-vendor card of its own yet.
+# - labels_ numbering: cuML's `final_relabel` + `relabelForSkl`. n_iter_: `dbscan/estimator.mojo`
+#   records the history of the "not the batch count" sentence.
 class DBSCAN(NumericModeMixin):
-    """L2 DBSCAN backed by a GPU implementation (reference: cuML/RAFT).
+    """Density-based clustering (DBSCAN).
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
-    because a parameter that is accepted and ignored is a wrong answer
-    waiting for a caller (the house rule; `tools/e2u_matrix_fit.py`
-    measures every row of this table).
+    Groups points that lie in dense regions and marks isolated points as
+    noise, following scikit-learn's and cuML's DBSCAN. A point is a core
+    sample when at least ``min_samples`` points (itself included) lie
+    within ``eps`` of it; clusters are the connected core samples plus
+    their border points. Input is converted to float32; ``X`` must be
+    finite.
 
-        eps                  honored   the neighbourhood radius (Euclidean,
-                                       NOT squared)
-        min_samples          honored   cuML's min_pts: the core-point count,
-                                       INCLUDING the point itself (sklearn
-                                       and cuML agree on that)
-        algorithm            honored   'rbc' (default) or 'brute'; see below
-        max_mbytes_per_batch honored   the device workspace budget; None (0)
-                                       is cuML's own estimate. Changes the
-                                       batch count, NEVER the labels --
-                                       `check_dbscan_batch_count_invariance`
-                                       gates that
-        max_iterations       honored   None (the default) runs the label
-                                       propagation TO ITS FIXED POINT, which
-                                       is cuML's behaviour (their loop has no
-                                       cap; DEVIATION 519). An explicit
-                                       positive cap is honoured: under
-                                       NUMERIC_IDENTICAL a cap that binds
-                                       RAISES (DEVIATION 507: a truncated
-                                       propagation is a snapshot of an
-                                       atomic order, not a labelling); under
-                                       FAST it returns the truncated labels.
-                                       This surface used to default to 200,
-                                       which on a 1,000-point chain returned
-                                       seven clusters for one, silently
-        metric               honored   'euclidean'/'l2' (default), and
-                                       'manhattan'/'l1'/'cityblock' on
-                                       algorithm='brute'. The L1 arm has
-                                       no reference implementation: cuML's
-                                       DBSCAN offers euclidean, cosine and
-                                       precomputed only (dbscan.pyx:110-115).
-                                       Its per-pair arithmetic follows RAFT's
-                                       l1.cuh:49 and its threshold is NOT
-                                       squared, because an L1 sum has no
-                                       squared form (DEVIATION 27).
-                                       'cosine' (algorithm='brute'): cuML's
-                                       CosineExpanded, every row scaled to
-                                       unit length on the host and the L2
-                                       kernel run against 2 * eps (DEVIATION
-                                       5113); a zero row is refused by name.
-                                       'precomputed': X is the n x n
-                                       distance matrix and a pair is a
-                                       neighbor when its entry is <= eps
-                                       (DEVIATION 5114); there is no search,
-                                       so `algorithm` does not apply to it
-                                       (scikit-learn ignores it too).
-        sample_weight        honored   in fit() and fit_predict(). A point is
-                                       core when the SUM OF WEIGHTS in its
-                                       eps-neighborhood reaches min_samples,
-                                       not when the count does -- cuML's
-                                       runner.cuh:300-306 and sklearn's
-                                       _dbscan.py:451-455, which agree. A
-                                       sample whose own weight reaches
-                                       min_samples is by itself a core
-                                       sample. Uniform weights of 1.0 are
-                                       intended to reproduce the unweighted
-                                       labels exactly, and duplicating a
-                                       point to equal giving it weight 2.
-                                       BOTH ARE NOW GATED, 2026-09-01, and
-                                       neither was until that day: the checks
-                                       were written but had never compiled,
-                                       an LLVM pass assertion taking the lane
-                                       down, and the cure was the build's
-                                       optimization level rather than the
-                                       source. Measured on an Apple M4 only;
-                                       a three-vendor leg is owed
-        prediction_data      honored   False (the default) fits exactly as
-                                       before. True also copies the fit's
-                                       own core mask out of the fit
-                                       (`dbscan_fit_core`, a read back
-                                       after every recorded stage; no
-                                       arithmetic is added) and keeps
-                                       `core_sample_indices_` (int32, where
-                                       scikit-learn's is intp),
-                                       `components_` (the core rows,
-                                       float32) and their labels, which
-                                       `predict` and `save` need
-        core_sample_indices_ on every fit (int32), with components_, as
-                                       scikit-learn and cuML's Python default
-                                       (calc_core_sample_indices=True)
-        predict              NEW       DEVIATION 2740; neither cuML nor
-                                       scikit-learn has one. See `predict`
+    Differences from scikit-learn and cuML:
 
-    **`algorithm='rbc'` IS THE DEFAULT AND IT IS NOT cuML's** (DEVIATION 35,
-    `dbscan/impl/runner.mojo`): cuML's Python default is `'brute'`,
-    and on an int32-label build like this one cuML's dispatch never reaches
-    the ball cover at all. The ball cover is the default here because it
-    measured 2.7x-27x faster at 16k-200k rows on this hardware and
-    `check_dbscan_rbc_matches_brute` holds the two labellings identical
-    POINT FOR POINT. `'brute'` is the arm `archive/evidence/E1U_RESULTS.md` certified
-    bit-identical across Apple and AMD; `'rbc'` has been through the same
-    arms-agree gate on both vendors but has no cross-vendor card of its own
-    yet. Both arms are cells of `tools/e2u_matrix_fit.py`.
+    - ``algorithm`` defaults to ``'rbc'`` (a random ball cover), not
+      cuML's ``'brute'``. Both give the same labels. scikit-learn's
+      ``'kd_tree'`` and ``'ball_tree'`` are not offered.
+    - ``max_iterations=None`` runs label propagation to completion.
+    - :meth:`predict` labels new rows; neither library has it.
+
+    Parameters
+    ----------
+    eps : float, default=0.5
+        Neighborhood radius (a distance, not squared). Must be positive.
+    min_samples : int, default=5
+        Minimum (weighted) number of points within ``eps``, including the
+        point itself, for a point to be a core sample. Must be at least 1.
+    metric : str, default='euclidean'
+        ``'euclidean'`` / ``'l2'``; ``'manhattan'`` / ``'l1'`` /
+        ``'cityblock'`` and ``'cosine'`` (``algorithm='brute'`` only;
+        ``'cosine'`` raises ``ValueError`` for an all-zero row); or
+        ``'precomputed'``, where ``X`` is a square, non-negative distance
+        matrix and a pair is a neighbor when its entry is ``<= eps``
+        (``algorithm`` is then ignored, as in scikit-learn). Any other
+        name raises ``ValueError``.
+    algorithm : {'rbc', 'brute'}, default='rbc'
+        Neighborhood search: ``'rbc'`` is a random ball cover (Euclidean
+        only), ``'brute'`` an all-pairs scan (every metric).
+    max_mbytes_per_batch : int or None, default=None
+        Device workspace budget in megabytes; ``None`` picks it
+        automatically, as cuML does. It changes the number of batches,
+        never the labels.
+    max_iterations : int or None, default=None
+        Cap on label-propagation passes. ``None`` runs to completion. With
+        an explicit cap that is reached, ``'identical'`` mode raises an
+        error and ``'fast'`` mode returns the truncated labels.
+    prediction_data : bool, default=False
+        Keep the core samples and their labels so :meth:`predict` and
+        :meth:`save` can be used. Not allowed with
+        ``metric='precomputed'``.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default=None
+        Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
+        default.
 
     Attributes
     ----------
-    labels_ : ndarray (n_samples,) int32
-        scikit-learn's convention: -1 is noise, clusters are 0..n-1. The
-        numbering comes from cuML's `final_relabel` + `relabelForSkl`, so
-        it compares to scikit-learn's directly.
+    labels_ : Array of int32, shape (n_samples,)
+        Cluster label of each training row; -1 is noise and clusters are
+        numbered from 0, so labels compare directly with scikit-learn's.
+    core_sample_indices_ : Array of int32, shape (n_core,)
+        Training indices of the core samples, ascending (scikit-learn uses
+        intp).
+    components_ : Array of float32, shape (n_core, n_features)
+        The core samples.
     n_iter_ : int
-        The total label-propagation passes summed over the batches (NOT the
-        batch count; `dbscan/estimator.mojo` records the history of that
-        sentence).
+        Total label-propagation passes, summed over batches.
+    n_features_in_ : int
+        Number of features seen in :meth:`fit`.
+    n_samples_fit_ : int
+        Number of training rows.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.DBSCAN(eps=0.5, min_samples=5).fit(X)
+    >>> labels = model.labels_
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -240,6 +229,32 @@ class DBSCAN(NumericModeMixin):
         self.prediction_data = prediction_data
 
     def fit(self, X, y=None, sample_weight=None):
+        """Cluster ``X``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training rows, converted to float32; every value must be
+            finite. With ``metric='precomputed'``, a square distance
+            matrix of shape (n_samples, n_samples).
+        y : ignored
+        sample_weight : array-like of shape (n_samples,), default=None
+            Finite per-row weights. A point is a core sample when the sum
+            of weights within ``eps`` reaches ``min_samples``, as in
+            scikit-learn and cuML.
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            For a non-finite value, an unknown metric or algorithm, a
+            metric the chosen algorithm does not serve, a non-positive
+            ``eps``, ``min_samples < 1`` or a mismatched
+            ``sample_weight``.
+        """
         if not isinstance(self.prediction_data, bool):
             raise TypeError(
                 "mojolearn DBSCAN: prediction_data must be a bool, got "
@@ -397,46 +412,43 @@ class DBSCAN(NumericModeMixin):
         self._core_labels = frombytes(lab.tobytes(), "<i4", (m,)) if m else empty((0,), "<i4")
 
     def fit_predict(self, X, y=None, sample_weight=None):
+        """Fit and return ``labels_``; see :meth:`fit`."""
         return self.fit(X, y=y, sample_weight=sample_weight).labels_
 
+    # predict (DEVIATION 2740): the fit's eps predicate is the brute arm's accumulator
+    # (`dbscan/impl/neighbors/epsilon_neighborhood.mojo::_eps_acc`, features ascending, the core row
+    # flushed): squared distance vs `Float32(eps * eps)` on euclidean, L1 sum vs `Float32(eps)` on
+    # manhattan. Ties by (distance, core sample index). One thread per query row, no fold across rows;
+    # the GPU binding and the CPU host binding (`core/labeled_reference_host_predict.mojo`) compute the
+    # same bytes. On 'rbc' the noise guarantee holds where the ball cover's predicate agrees with the
+    # brute arm's (`check_dbscan_rbc_matches_brute`) and is not promised past that.
     def predict(self, X):
-        """Label NEW rows under the fitted clustering. NEW CAPABILITY
-        (DEVIATION 2740): neither scikit-learn's nor cuML's DBSCAN has a
-        `predict`, and this is not either library's behavior.
+        """Label new rows using the fitted clustering.
 
-        THE RULE. A row gets the label of the NEAREST CORE SAMPLE WITHIN EPS,
-        and -1 (noise) when no core sample is within eps. Distance and
-        "within eps" are the fit's own eps predicate: the brute arm's
-        accumulator (`dbscan/impl/neighbors/epsilon_neighborhood.mojo::
-        _eps_acc`, features ascending, the core row flushed), a squared
-        distance compared with `Float32(eps * eps)` on 'euclidean' and the
-        L1 sum compared with `Float32(eps)` on 'manhattan'. A point exactly
-        at eps is within eps, as in the fit. Ties go to the lowest
-        (distance, core sample index). One thread per query row and no
-        fold across rows, so the answer does not depend on the batch, and
-        the GPU binding and the CPU host binding
-        (`core/labeled_reference_host_predict.mojo`) compute the same bytes.
+        A row gets the label of the nearest core sample within ``eps``, and
+        -1 (noise) when no core sample is within ``eps``. Distance and
+        "within eps" use the same test as :meth:`fit`; a point exactly at
+        ``eps`` is within it. Ties go to the lowest core sample index. Each
+        row is labeled independently, so results do not depend on batching.
+        Neither scikit-learn nor cuML has this method.
 
-        ON THE TRAINING ROWS, what the rule guarantees and what it does not:
+        On the training rows, core samples get their fitted label. Noise
+        rows get -1 with ``algorithm='brute'``. Border rows may differ from
+        ``labels_``: the fit gives a border row the lowest-numbered nearby
+        cluster, while ``predict`` gives the nearest core sample's cluster.
 
-          core samples  predict their fitted label exactly. A core row is at
-                        distance 0 from itself, and a core row at distance 0
-                        from it is a neighbor in the fit on either arm, so
-                        it is in the same cluster.
-          noise rows    predict -1 exactly on algorithm='brute', where the
-                        fit's neighborhood is this same accumulator. On
-                        'rbc' the neighborhood is the ball cover's
-                        (`check_dbscan_rbc_matches_brute` holds its labels to
-                        the brute arm's), so this holds where the two
-                        predicates agree and is not promised past that.
-          border rows   are NOT guaranteed. The fit gives a border row the
-                        label of the lowest-numbered cluster among its core
-                        neighbors (the propagation's minimum); this rule
-                        gives the NEAREST core neighbor's. They differ for a
-                        border row within eps of two clusters.
+        Requires a fit with ``prediction_data=True``; otherwise raises
+        ``ValueError``.
 
-        Requires `prediction_data=True` at fit; refused by name otherwise.
-        Returns int32 labels, the dtype of `labels_`.
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Rows to label, converted to float32; at least one row, the
+            fitted feature count, and every value finite.
+
+        Returns
+        -------
+        labels : Array of int32, shape (n_queries,)
         """
         if not hasattr(self, "labels_"):
             raise ValueError("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
@@ -464,14 +476,22 @@ class DBSCAN(NumericModeMixin):
         )
         return out
 
+    # npz layout: `components` <f4 (core rows), `core_sample_indices` and `core_labels` <i4, `labels`
+    # <i4, `eps` <f8, `metric` and `algorithm` as names, `meta` <i8 [n_features_in_, n_samples_fit_,
+    # min_samples]. CPU-only predict runs `_mojolearn_estimators_host.labeled_reference_predict`.
     def save(self, path):
-        """Write the prediction data of a `prediction_data=True` fit to
-        `path` as an npz: `components` `<f4` (the core rows),
-        `core_sample_indices` and `core_labels` `<i4`, `labels` `<i4`,
-        `eps` `<f8`, `metric` and `algorithm` as names, `meta` `<i8`
-        [n_features_in_, n_samples_fit_, min_samples]. On a CPU-only install
-        `DBSCAN.load(path).predict(X)` runs through
-        `_mojolearn_estimators_host.labeled_reference_predict`."""
+        """Save a fitted model to ``path`` as an ``.npz`` file.
+
+        Stores the core samples, their indices and labels, ``labels_``,
+        ``eps``, ``metric``, ``algorithm`` and the fitted sizes. Requires a
+        fit with ``prediction_data=True`` (``ValueError`` otherwise); an
+        unfitted model raises ``RuntimeError``. A loaded model can
+        :meth:`predict`, including on a CPU-only install.
+
+        Parameters
+        ----------
+        path : str or path-like
+        """
         if not hasattr(self, "labels_"):
             raise RuntimeError("this estimator is not fitted yet")
         if not self.prediction_data or getattr(self, "components_", None) is None:
@@ -499,8 +519,20 @@ class DBSCAN(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts; every array is
-        read at its saved dtype and never cast."""
+        """Load a model written by :meth:`save`.
+
+        The returned model can :meth:`predict`. Arrays are read at their
+        saved dtype and never cast; a file that does not match raises
+        ``ValueError``.
+
+        Parameters
+        ----------
+        path : str or path-like
+
+        Returns
+        -------
+        DBSCAN
+        """
         arrays = _serialize.read_npz(path, _DBSCAN_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
@@ -537,85 +569,89 @@ class DBSCAN(NumericModeMixin):
         return obj
 
 
+# Maintainer notes (moved from the class docstring): `kde/`, DEVIATIONS 600-604, kde/README.md.
+# - kernel 'cosine': DEVIATION 602, scikit-learn's and cuML's cosine normalization is wrong for even d
+#   (NaN at d = 4); ours is the Simpson-verified constant and differs from theirs there on purpose.
+# - metric: nine of the seventeen names in cuML's dense table (pairwise_distances.pyx:68-86); 'cosine'
+#   and 'minkowski' since 2026-09-01. Normalization correct for Euclidean only, cuML's note too
+#   (kernel_density.py:168-170). Cosine refuses an all-zero row in X or the query (DEVIATION 553):
+#   cuVS has no guard, a zero row would make a whole row of distances NaN.
+# - metric_params: cuML forwards `list(metric_params.values())[0]` as `metric_arg`
+#   (kernel_density.py:302-313). Only p = 2 is accepted because `kde_score_samples_binding`
+#   length-checks its params list at exactly 5 entries (bindings/_mojolearn_estimators.mojo:647 and
+#   bindings/_mojolearn_estimators_host.mojo:213, which must change together);
+#   `kde/estimator.mojo::kde_score_samples_host` already takes `metric_arg` and the Mojo side computes
+#   any finite positive normal p; the two-line binding change is in kde/README.md's HAND-OFF.
+# - score_samples measured 2026-08-23 within 1e-6 of sklearn on every kernel. The compact-kernel
+#   sentinel is DEVIATION 603 (kde/README.md).
 class KernelDensity(NumericModeMixin):
-    """Kernel density estimation backed by a GPU implementation (`kde/`,
-    DEVIATIONS 600-604; kde/README.md), the scikit-learn surface.
+    """Kernel density estimation.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter:
+    Estimates the density of the training data with a brute-force sum
+    over every training row, following scikit-learn's ``KernelDensity``
+    interface and cuML's implementation. Input is converted to float32;
+    the fit set must be finite.
 
-        bandwidth      honored   a positive float. The strings 'scott' and
-                                 'silverman' are REFUSED by name: compute
-                                 them yourself (sklearn 1.6+: n ** (-1/(d+4))
-                                 and (n (d+2) / 4) ** (-1/(d+4))) and pass
-                                 the number, so the number that ran is the
-                                 number you passed.
-        kernel         honored   'gaussian' (default), 'tophat',
-                                 'epanechnikov', 'exponential', 'linear',
-                                 'cosine' -- the host refuses any other BY
-                                 NAME. NOTE DEVIATION 602: scikit-learn's
-                                 and cuML's cosine normalization is wrong
-                                 for even d (NaN at d = 4); this implementation's is
-                                 the Simpson-verified constant and will
-                                 DIFFER from theirs there, on purpose.
-        metric         honored   'euclidean'/'l2' (default), 'sqeuclidean',
-                                 'l1'/'cityblock'/'manhattan', 'chebyshev',
-                                 and -- since 2026-09-01 -- 'cosine' and
-                                 'minkowski'. That is nine of the
-                                 seventeen names in cuML's dense table
-                                 (pairwise_distances.pyx:68-86); the other
-                                 eight are refused BY NAME.
-                                 NOTE, and it is cuML's note too
-                                 (kernel_density.py:168-170): the density
-                                 NORMALIZATION is only correct for the
-                                 Euclidean metric. A non-Euclidean metric
-                                 gives a correctly computed kernel over a
-                                 correctly computed distance and a
-                                 normalizing constant that is not the
-                                 right one for that metric's unit ball.
-                                 We keep their behaviour and say so
-                                 rather than inventing a constant they
-                                 do not have.
-                                 COSINE ADDITIONALLY REFUSES an all-zero
-                                 row in X or in the query (DEVIATION 553):
-                                 cosine divides by ||x|| and cuVS has no
-                                 guard, so a zero row would make a whole
-                                 row of distances NaN.
-        algorithm      REFUSED   sklearn's tree choice; cuML is brute force
-                                 and so is this. Passing anything but
-                                 'auto'/None raises.
-        atol, rtol,    REFUSED   tree-traversal tolerances; no tree here.
-        breadth_first,
-        leaf_size
-        metric_params  partly    cuML forwards
-                       honored   `list(metric_params.values())[0]` as
-                                 `metric_arg`, i.e. Minkowski's p
-                                 (kernel_density.py:302-313), and refuses
-                                 a dict with more than one entry. Ours
-                                 accepts `None`, `{}` and a single-entry
-                                 dict whose value is 2; ANY OTHER p is
-                                 refused BY NAME, and the reason is a
-                                 BINDING SLOT and not the arithmetic:
-                                 `kde_score_samples_binding` length-checks
-                                 its params list at exactly 5 entries
-                                 (bindings/_mojolearn_estimators.mojo:647,
-                                 and the same check in the host twin
-                                 bindings/_mojolearn_estimators_host.mojo
-                                 :213, which must change with it)
-                                 and has no room for a sixth.
-                                 `kde/estimator.mojo::kde_score_samples_
-                                 host` already takes `metric_arg` and the
-                                 Mojo side computes any finite positive
-                                 normal p; the two-line binding change is
-                                 written out in kde/README.md's HAND-OFF.
-        sample_weight  honored   in fit(); non-negative, sums to > 0
-        sample()       REFUSED   (NotImplementedError; cuML has none)
+    Differences from scikit-learn:
 
-    `score_samples(X)` returns the log density per row (float32 in
-    mojolearn's IEEE contract; sklearn returns float64 of the same
-    quantity; measured 2026-08-23 within 1e-6 of sklearn on every kernel).
-    A row no training point reaches under a compact kernel is cuML's
-    sentinel -3.4028235e+38 where sklearn prints -inf (kde/README.md,
-    DEVIATION 603). `score(X)` is their sum.
+    - ``bandwidth`` must be a number; ``'scott'`` and ``'silverman'``
+      raise ``NotImplementedError``. Compute them yourself (scikit-learn:
+      ``n ** (-1/(d+4))`` and ``(n * (d+2) / 4) ** (-1/(d+4))``) and pass
+      the result.
+    - There is no tree: ``algorithm`` must be ``'auto'`` or ``None``, and
+      ``atol``, ``rtol``, ``breadth_first`` and ``leaf_size`` must keep
+      their defaults; other values raise ``ValueError``.
+    - :meth:`score_samples` returns float32. A row that no training point
+      reaches under a compact kernel scores ``-3.4028235e+38`` (cuML's
+      value) where scikit-learn returns ``-inf``.
+    - For the ``'cosine'`` kernel in an even number of dimensions the
+      normalization differs from scikit-learn's and cuML's, whose constant
+      is incorrect there (NaN at d = 4).
+    - :meth:`sample` is not available.
+
+    Parameters
+    ----------
+    bandwidth : float, default=1.0
+        Kernel bandwidth; must be positive.
+    algorithm : {'auto', None}, default='auto'
+        Accepted for compatibility; the search is always brute force.
+    kernel : str, default='gaussian'
+        ``'gaussian'``, ``'tophat'``, ``'epanechnikov'``,
+        ``'exponential'``, ``'linear'`` or ``'cosine'``.
+    metric : str, default='euclidean'
+        ``'euclidean'`` / ``'l2'``, ``'sqeuclidean'``, ``'l1'`` /
+        ``'cityblock'`` / ``'manhattan'``, ``'chebyshev'``, ``'cosine'`` or
+        ``'minkowski'``. As in cuML, the density normalization is correct
+        only for the Euclidean metric. ``'cosine'`` raises ``ValueError``
+        for an all-zero row in the training or query data. Other names
+        raise an error.
+    atol, rtol : float, default=0
+        Must be 0.
+    breadth_first : bool, default=True
+        Must be True.
+    leaf_size : int, default=40
+        Must be 40.
+    metric_params : dict or None, default=None
+        At most one entry, whose value is the Minkowski ``p``, as in cuML.
+        Only ``p = 2`` is supported; any other value raises
+        ``NotImplementedError``.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default=None
+        Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
+        default.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of features seen in :meth:`fit`.
+    n_samples_fit_ : int
+        Number of training rows.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> kde = mojolearn.KernelDensity(bandwidth=0.5).fit(X)
+    >>> log_density = kde.score_samples(X[:10])
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -758,6 +794,26 @@ class KernelDensity(NumericModeMixin):
         return state
 
     def fit(self, X, y=None, sample_weight=None):
+        """Store the training data.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training rows, converted to float32; every value must be
+            finite.
+        y : ignored
+        sample_weight : array-like of shape (n_samples,), default=None
+            Finite, non-negative per-row weights with a positive sum.
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            For a non-finite value or invalid ``sample_weight``.
+        """
         # A refit drops the device copy of the previous fit set HERE, as
         # NearestNeighbors.fit does (DEVIATION 2921's key rule).
         self._release_resident_fit()
@@ -807,6 +863,20 @@ class KernelDensity(NumericModeMixin):
         return self
 
     def score_samples(self, X):
+        """Log density at each row of ``X``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Query rows, converted to float32, with the fitted feature
+            count.
+
+        Returns
+        -------
+        log_density : Array of float32, shape (n_queries,)
+            Rows no training point reaches under a compact kernel get
+            ``-3.4028235e+38``.
+        """
         return self._scores(X, False)
 
     def _scores(self, X, want_total):
@@ -860,27 +930,49 @@ class KernelDensity(NumericModeMixin):
         )
         return float(got) if want_total else out
 
+    # The per-row float32 scores are summed in the binding's fixed order (`core/device_fold.mojo`: on the
+    # device on a GPU install, the same order on the host column); lane pyglue-numeric replaced a host
+    # sum of the downloaded scores.
     def score(self, X, y=None):
-        """The total log density: the float32 per-row scores summed in the
-        binding's fixed order (`core/device_fold.mojo`: on the device on a
-        GPU install, the same order on the host column; lane
-        pyglue-numeric, it was a host sum of the downloaded scores)."""
+        """Total log density of ``X``: the sum of :meth:`score_samples`.
+
+        The sum is taken in a fixed order, so it is reproducible.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+        y : ignored
+
+        Returns
+        -------
+        float
+        """
         return self._scores(X, True)
 
     def sample(self, n_samples=1, random_state=None):
+        """Not implemented; always raises ``NotImplementedError`` (cuML has
+        no ``sample`` either)."""
         raise NotImplementedError(
             "mojolearn KernelDensity: sample() is not implemented (cuML has none)"
         )
 
+    # npz layout (kde svc host lane, 2026-09-14): `x` <f4 as fitted, `weights` <f4 only when fit took
+    # sample_weight, `bandwidth` <f8, `kernel` and `metric` as the names score_samples passes to the
+    # binding, `meta` <i8 [n_features_in_, n_samples_fit_, has_weights]. CPU scoring runs
+    # `_mojolearn_estimators_host.kde_score_samples`.
     def save(self, path):
-        """Write the fitted model to `path` as an npz: the training matrix
-        `_x` as fitted (float32, the whole fitted state of a brute-force
-        KDE), `weights` (float32, present only when `fit` took a
-        `sample_weight`), `bandwidth` `<f8`, `kernel` and `metric` as the
-        names `score_samples` passes to the binding, `meta` `<i8`
-        [n_features_in_, n_samples_fit_, has_weights] (the kde svc host
-        lane, 2026-09-14). `mojolearn.host_model(path)` scores from it on a
-        CPU with no GPU through `_mojolearn_estimators_host.kde_score_samples`."""
+        """Save the fitted model to ``path`` as an ``.npz`` file.
+
+        Stores the float32 training data (the whole fitted state of a
+        brute-force KDE), the weights if any, ``bandwidth``, ``kernel``,
+        ``metric`` and the fitted sizes. ``mojolearn.host_model(path)``
+        scores from the file on a machine without a GPU. An unfitted model
+        raises ``RuntimeError``.
+
+        Parameters
+        ----------
+        path : str or path-like
+        """
         if not hasattr(self, "_x"):
             raise RuntimeError("this estimator is not fitted yet")
         arrays = {
@@ -903,8 +995,19 @@ class KernelDensity(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result scores; every array is
-        read at its saved dtype and never cast."""
+        """Load a model written by :meth:`save`.
+
+        The returned model can score. Arrays are read at their saved dtype
+        and never cast; a file that does not match raises ``ValueError``.
+
+        Parameters
+        ----------
+        path : str or path-like
+
+        Returns
+        -------
+        KernelDensity
+        """
         arrays = _serialize.read_npz(path, _KDE_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
