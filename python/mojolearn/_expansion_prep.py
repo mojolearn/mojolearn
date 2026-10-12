@@ -3061,9 +3061,7 @@ class GaussianNB(_Classifier):
 
     Follows scikit-learn's ``GaussianNB``. Fit learns each class's per-feature mean and population
     variance, adds ``var_smoothing`` times the largest feature variance to every variance, and predicts
-    with the Gaussian likelihood. Computation is float32; ``predict_proba`` returns float32 in
-    ``identical`` mode and float64 in ``fast`` mode (Apple), where float32 probabilities would round to
-    exactly 1.0 for well-separated classes.
+    with the Gaussian likelihood. Computation is float32.
 
     ``fit`` accepts ``sample_weight``, which weights the class means, variances and counts as in
     scikit-learn. ``partial_fit(X, y, classes=None, sample_weight=None)`` merges each batch into the
@@ -3743,21 +3741,88 @@ def _lda_binary(pr, coef, inter, K, d):
     return cd, ci
 
 
+# solver 'svd': sklearn's two SVDs are symmetric eigendecompositions of the
+# Gram matrices (cyclic Jacobi, x_prep/eigh.mojo), so scalings_ and transform
+# match sklearn up to each component's sign. 'lsqr' is the pooled class
+# covariance then lstsq's minimum-norm solve through its eigendecomposition
+# (sklearn's `_solve_lstsq`); 'eigen' solves Sb v = e Sw v as
+# Sw^-1/2 Sb Sw^-1/2 (`_solve_eigen`). covariance_estimator runs in Python on
+# host rows; its covariances enter the device solve as float32.
 class LinearDiscriminantAnalysis(_Classifier):
-    """sklearn.discriminant_analysis.LinearDiscriminantAnalysis, solver 'svd'
-    (the default): the reference's two SVDs are symmetric eigendecompositions
-    of the Gram matrices (cyclic Jacobi, x_prep/eigh.mojo), so `scalings_` and
-    `transform` match the reference up to each component's sign and the
-    decision function matches it outright. Solver 'lsqr' (the pooled class
-    covariance, then `lstsq`'s minimum-norm solve through its
-    eigendecomposition) and 'eigen' (the generalised eigenproblem Sb v = e Sw v
-    as Sw^-1/2 Sb Sw^-1/2), both with shrinkage None, 'auto' (Ledoit-Wolf on
-    standardised classes, as the reference) or a constant; store_covariance.
-    Float32; priors as the reference takes them (renormalised when they do
-    not sum to 1). covariance_estimator (solver 'lsqr' / 'eigen', as the
-    reference): any object with `fit` and `covariance_`, fitted in Python on
-    each class's rows (and, for 'eigen', on every row for the total scatter);
-    its covariances enter the device solve as float32."""
+    """Linear discriminant analysis classifier and supervised dimensionality reduction.
+
+    Follows scikit-learn's ``LinearDiscriminantAnalysis``. It fits one Gaussian per class with a shared
+    covariance, classifies by the resulting linear decision function, and ``transform`` projects onto the
+    most discriminative directions. Computation is float32.
+
+    With ``solver='svd'`` the projection directions (``scalings_`` and ``transform``) match
+    scikit-learn's up to the sign of each component, and the decision function matches outright.
+
+    Parameters
+    ----------
+    solver : {'svd', 'lsqr', 'eigen'}, default 'svd'
+        ``'svd'`` needs no covariance matrix. ``'lsqr'`` solves with the pooled class covariance
+        (minimum-norm least squares) and has no ``transform``. ``'eigen'`` solves the generalized
+        eigenproblem between the between-class and within-class scatter; it raises ``ValueError`` when
+        the within-class covariance is not positive definite.
+    shrinkage : {None, 'auto'} or float, default None
+        Covariance shrinkage for ``'lsqr'`` and ``'eigen'``: ``'auto'`` uses the Ledoit-Wolf estimate
+        on standardized classes, a float in ``[0, 1]`` sets it directly. With ``solver='svd'`` it raises
+        ``NotImplementedError``.
+    priors : array-like of shape (n_classes,), default None
+        Class priors (nonnegative); renormalized when they do not sum to one. None uses the class
+        frequencies.
+    n_components : int, default None
+        Number of components kept by ``transform``, at most ``min(n_classes - 1, n_features)``
+        (``ValueError`` otherwise). None keeps that maximum.
+    store_covariance : bool, default False
+        Store the pooled within-class covariance in ``covariance_`` (always stored by ``'lsqr'`` and
+        ``'eigen'``).
+    tol : float, default 1e-4
+        Threshold below which singular values are treated as zero by ``'svd'``.
+    covariance_estimator : object, default None
+        An estimator with ``fit`` and a ``covariance_`` attribute, used instead of the empirical
+        covariance with ``'lsqr'`` or ``'eigen'`` (``ValueError`` with ``'svd'`` or with ``shrinkage``
+        set). It is fitted on the host on each class's float32 rows (and, for ``'eigen'``, on all rows).
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    coef_ : array of shape (n_classes, n_features), or (1, n_features) for two classes
+        Weights of the decision function.
+    intercept_ : array of shape (n_classes,), or (1,) for two classes
+        Intercepts of the decision function.
+    means_ : array of shape (n_classes, n_features)
+        Class means.
+    priors_ : array of shape (n_classes,)
+        Class priors used.
+    xbar_ : array of shape (n_features,)
+        Overall mean.
+    scalings_ : array of shape (n_features, rank)
+        Projection directions.
+    explained_variance_ratio_ : array of shape (n_components,)
+        Share of between-class variance explained by each component.
+    covariance_ : array of shape (n_features, n_features)
+        Pooled within-class covariance, when stored.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Notes
+    -----
+    Fit raises ``ValueError`` with fewer than two classes or with no more rows than classes.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = rng.integers(0, 3, 1000)
+    >>> lda = mojolearn.LinearDiscriminantAnalysis(n_components=2).fit(X, y)
+    >>> Z = lda.transform(X)
+    """
     _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
                    "covariance_estimator")
 
@@ -3981,18 +4046,71 @@ class LinearDiscriminantAnalysis(_Classifier):
         return self.fit(X, y).transform(X)
 
 
+# Follows sklearn 1.9's QDA (solver, shrinkage, covariance_estimator). Per
+# class, the eigendecomposition of the class covariance (divisor n_k) stands
+# in for sklearn's SVD of the centered class rows (same S^2 / n_k, vectors up
+# to sign). solver 'eigen' takes sklearn's `_cov(X_k, shrinkage)`.
+# store_covariance under 'svd' is V diag(scalings) V^T, as sklearn forms it.
 class QuadraticDiscriminantAnalysis(_Classifier):
-    """sklearn.discriminant_analysis.QuadraticDiscriminantAnalysis (1.9): per
-    class, the eigendecomposition of the class covariance (divisor n_k) stands
-    in for the reference's SVD of the centred class rows (same S^2 / n_k,
-    vectors up to sign). solver 'eigen' takes the reference's `_cov(X_k,
-    shrinkage)` (None, 'auto' Ledoit-Wolf or a constant) and ignores
-    reg_param, as the reference does. A class whose scalings are not all
-    above `tol` is refused, as the reference refuses it. store_covariance
-    keeps covariance_ (svd: V diag(scalings) V^T, as the reference forms it).
-    Float32; priors as given. covariance_estimator (solver 'eigen' only, as
-    the reference): any object with `fit` and `covariance_`, fitted in Python
-    on each class's rows; its covariances enter the device eigh as float32."""
+    """Quadratic discriminant analysis classifier.
+
+    Follows scikit-learn's ``QuadraticDiscriminantAnalysis``. It fits one Gaussian per class, each with
+    its own covariance, and classifies by the resulting quadratic decision function. Computation is
+    float32.
+
+    Parameters
+    ----------
+    solver : {'svd', 'eigen'}, default 'svd'
+        ``'svd'`` regularizes with ``reg_param``. ``'eigen'`` uses the empirical (optionally shrunk)
+        class covariances and ignores ``reg_param``, as in scikit-learn.
+    shrinkage : {None, 'auto'} or float, default None
+        Covariance shrinkage for ``'eigen'``: ``'auto'`` uses the Ledoit-Wolf estimate, a float in
+        ``[0, 1]`` sets it directly. With ``solver='svd'`` it raises ``NotImplementedError``.
+    priors : array-like of shape (n_classes,), default None
+        Class priors (nonnegative). None uses the class frequencies.
+    reg_param : float, default 0.0
+        Regularization of the class covariances under ``'svd'``.
+    store_covariance : bool, default False
+        Store each class covariance in ``covariance_``.
+    tol : float, default 1e-4
+        A class whose scalings are not all above ``tol`` is rejected with ``ValueError`` (its
+        covariance is not full rank).
+    covariance_estimator : object, default None
+        An estimator with ``fit`` and a ``covariance_`` attribute, used instead of the empirical
+        covariance with ``solver='eigen'`` (``ValueError`` with ``'svd'`` or with ``shrinkage`` set). It
+        is fitted on the host on each class's float32 rows.
+
+    Attributes
+    ----------
+    classes_ : array of shape (n_classes,)
+        Class labels.
+    means_ : array of shape (n_classes, n_features)
+        Class means.
+    priors_ : array of shape (n_classes,)
+        Class priors used.
+    rotations_ : list of arrays
+        Per class, the (n_features, n_features) eigenvectors of its covariance.
+    scalings_ : list of arrays
+        Per class, the (n_features,) variances along those eigenvectors.
+    covariance_ : list of arrays
+        Per class covariance, when ``store_covariance=True``.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; prediction runs in the same mode.
+
+    Notes
+    -----
+    Fit raises ``ValueError`` with fewer than two classes or when a class has a single row.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 4), dtype=np.float32)
+    >>> y = rng.integers(0, 2, 1000)
+    >>> model = mojolearn.QuadraticDiscriminantAnalysis().fit(X, y)
+    """
     _parameters = ("solver", "shrinkage", "priors", "reg_param", "store_covariance", "tol", "covariance_estimator")
 
     def __init__(self, *, solver="svd", shrinkage=None, priors=None, reg_param=0.0, store_covariance=False,
@@ -4098,16 +4216,54 @@ class QuadraticDiscriminantAnalysis(_Classifier):
 
 
 # ---------------------------------------------------------------- additions: transformers
+# Transform is sklearn's two-sided interpolation; 'normal' uses Acklam's
+# inverse normal CDF in float32, clipped at sklearn's +-5.1993.
+# inverse_transform is sklearn's (norm.cdf as Cephes ndtr in float32 for
+# 'normal', then np.interp back onto the quantiles). The subsample is a
+# without-replacement draw from random_state by splitmix64.
 class QuantileTransformer(_PrepBase):
-    """sklearn.preprocessing.QuantileTransformer: per-column numpy linear
-    percentiles of the non-NaN entries at n_quantiles evenly spaced
-    references, then the reference's two-sided interpolation; output
-    'uniform' or 'normal' (Acklam's inverse normal CDF, float32, clipped at
-    the reference's +-5.1993). Above `subsample` rows the fit uses a
-    without-replacement draw from `random_state` by splitmix64. NaN is kept.
-    inverse_transform is the reference's (norm.cdf, Cephes ndtr in float32,
-    for 'normal', then np.interp back onto the quantiles). Sparse input is
-    refused."""
+    """Map each feature to a uniform or normal distribution through its quantiles.
+
+    Follows scikit-learn's ``QuantileTransformer``. Fit computes, per column, numpy's linear percentiles
+    of the non-NaN values at ``n_quantiles`` evenly spaced references; transform maps values through
+    them by interpolation. NaN values are kept as NaN. Input and output are float32. ``scipy.sparse``
+    input is not supported.
+
+    Parameters
+    ----------
+    n_quantiles : int, default 1000
+        Number of quantiles; capped at the number of rows used in fit.
+    output_distribution : {'uniform', 'normal'}, default 'uniform'
+        Target distribution. ``'normal'`` output is clipped to about ``+-5.2``, as in scikit-learn.
+    ignore_implicit_zeros : bool, default False
+        Accepted for scikit-learn compatibility (it applies to sparse input only).
+    subsample : int or None, default 10000
+        Above this many rows, fit uses ``subsample`` rows drawn without replacement. None uses every row.
+    random_state : int or None, default None
+        Seed for the subsample. None uses seed 0. The draw uses mojolearn's own generator, so the rows
+        differ from scikit-learn's for the same seed.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+
+    Attributes
+    ----------
+    n_quantiles_ : int
+        Number of quantiles used.
+    quantiles_ : array of shape (n_quantiles_, n_features)
+        Quantile values of each column.
+    references_ : array of shape (n_quantiles_,)
+        Quantile levels in ``[0, 1]``.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).exponential(size=(1000, 4)).astype(np.float32)
+    >>> Xt = mojolearn.QuantileTransformer(output_distribution="normal").fit_transform(X)
+    """
     _parameters = ("n_quantiles", "output_distribution", "ignore_implicit_zeros", "subsample", "random_state",
                    "copy")
 
@@ -4213,15 +4369,47 @@ def _pt_spec_depth(n, d):
     return s
 
 
+# Each column's lambda maximizes sklearn's log-likelihood by a fixed-step
+# golden-section search over [-8, 8] (sklearn: scipy's Brent from the bracket
+# (-2, 2)), float32. inverse_transform is x * scale + mean, then scipy's
+# inv_boxcox or sklearn's yeo-johnson inverse as exp(log1p(lambda x) / lambda)
+# in float32.
 class PowerTransformer(_PrepBase):
-    """sklearn.preprocessing.PowerTransformer: 'yeo-johnson' (default) or
-    'box-cox' (strictly positive input), then StandardScaler when
-    `standardize`. Each column's lambda maximises the reference's
-    log-likelihood by a fixed-step golden-section search over [-8, 8]
-    (the reference: scipy's Brent from the bracket (-2, 2)), float32. NaN is
-    ignored in fit and kept. inverse_transform undoes the standardisation
-    (x * scale + mean), then applies scipy's inv_boxcox or the reference's
-    yeo-johnson inverse, as exp(log1p(lambda x) / lambda) in float32."""
+    """Apply a power transform per feature to make the data more Gaussian.
+
+    Follows scikit-learn's ``PowerTransformer``. Each column gets the Yeo-Johnson or Box-Cox transform
+    with the lambda that maximizes the log-likelihood, then (by default) is standardized to zero mean and
+    unit variance. Lambda is searched in ``[-8, 8]``, so fitted lambdas can differ slightly from
+    scikit-learn's. NaN values are ignored in fit and kept as NaN. Input and output are float32.
+
+    Parameters
+    ----------
+    method : {'yeo-johnson', 'box-cox'}, default 'yeo-johnson'
+        ``'box-cox'`` requires strictly positive data (``ValueError`` otherwise).
+    standardize : bool, default True
+        Standardize the transformed columns.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+
+    Attributes
+    ----------
+    lambdas_ : array of shape (n_features,)
+        Fitted lambda of each column.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode the estimator was fitted in; transform runs in the same mode.
+
+    Notes
+    -----
+    ``inverse_transform`` undoes the standardization, then the power transform.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).lognormal(size=(1000, 4)).astype(np.float32)
+    >>> Xt = mojolearn.PowerTransformer().fit_transform(X)
+    """
     _parameters = ("method", "standardize", "copy")
 
     def __init__(self, method="yeo-johnson", *, standardize=True, copy=True):
@@ -4363,10 +4551,34 @@ class PowerTransformer(_PrepBase):
         return self._apply(X, "pt_inverse")
 
 
+# Row norms sum the columns in ascending order.
 class Normalizer(_PrepBase):
-    """sklearn.preprocessing.Normalizer: each row divided by its 'l1', 'l2'
-    or 'max' norm (columns summed in ascending order); a zero row is left
-    as it is. Stateless."""
+    """Scale each row to unit norm.
+
+    Follows scikit-learn's ``Normalizer``. Each row is divided by its ``'l1'``, ``'l2'`` or ``'max'``
+    norm; a row of zeros is left unchanged. The transformer is stateless: fit only records the number of
+    columns. Input and output are float32.
+
+    Parameters
+    ----------
+    norm : {'l1', 'l2', 'max'}, default 'l2'
+        Norm used for each row.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; transform always returns a new array.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of columns seen in fit.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> Xt = mojolearn.Normalizer(norm="l1").fit_transform(X)
+    """
     _parameters = ("norm", "copy")
 
     def __init__(self, norm="l2", *, copy=True):
@@ -4393,12 +4605,43 @@ class Normalizer(_PrepBase):
         return pr.get(out, (n, d))
 
 
+# Each output column is the product of its input columns left to right.
 class PolynomialFeatures(_PrepBase):
-    """sklearn.preprocessing.PolynomialFeatures: the reference's column
-    order (the bias, then combinations with replacement, or without when
-    interaction_only, degree by degree); each output is the product of its
-    input columns left to right on the device; order='F' returns the same
-    values in a column-major (Fortran-ordered) array."""
+    """Generate polynomial and interaction features.
+
+    Follows scikit-learn's ``PolynomialFeatures``, with the same output column order: the bias column,
+    then the products of input columns degree by degree (combinations with replacement, or without when
+    ``interaction_only``). Input and output are float32.
+
+    Parameters
+    ----------
+    degree : int or tuple of (int, int), default 2
+        Largest degree, or ``(min_degree, max_degree)``. Negative values or ``min_degree > max_degree``
+        raise ``ValueError``.
+    interaction_only : bool, default False
+        Only products of distinct columns (no powers of one column).
+    include_bias : bool, default True
+        Include the constant column of ones.
+    order : {'C', 'F'}, default 'C'
+        Memory order of the output array; ``'F'`` returns the same values column-major.
+
+    Attributes
+    ----------
+    powers_ : array of shape (n_output_features_, n_features_in_)
+        Exponent of each input column in each output column.
+    n_features_in_ : int
+        Number of columns seen in fit.
+    n_output_features_ : int
+        Number of output columns.
+    numeric_mode_ : str
+        Numeric mode at fit time; transform runs in the same mode.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.arange(6, dtype=np.float32).reshape(3, 2)
+    >>> mojolearn.PolynomialFeatures(degree=2).fit_transform(X)
+    """
     _parameters = ("degree", "interaction_only", "include_bias", "order")
 
     def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C"):
