@@ -139,13 +139,13 @@ class IVFIndex(NumericModeMixin):
         Squared norm of each center.
     list_offsets_ : ndarray of shape (n_lists + 1,), int32
         Start of each list in `list_indices_` and `list_data_`.
-    list_indices_ : ndarray of shape (n_rows_,), int32
+    list_indices_ : ndarray of shape (``n_rows_``,), int32
         Original row ids, grouped by list and ascending within each list.
-    list_data_ : ndarray of shape (n_rows_, n_features), float32
+    list_data_ : ndarray of shape (``n_rows_``, n_features), float32
         The indexed rows, in the order of `list_indices_`.
     n_features_in_ : int
         Number of features seen during `fit`.
-    n_rows_ : int
+    ``n_rows_`` : int
         Number of indexed rows, including rows added by `extend`.
     n_lists_ : int
         The fitted value of `n_lists`.
@@ -429,7 +429,7 @@ class IVFIndex(NumericModeMixin):
         ----------
         queries : array-like of shape (n_queries, n_features)
             Query rows, converted to float32.
-        filter : array-like of bool, shape (n_rows_,), optional
+        filter : array-like of bool, shape (``n_rows_``,), optional
             One flag per indexed row, by original row id; a row flagged False
             is never scored, returned or counted in `n_candidates_` (cuVS's
             sample filter, applied before any distance is computed).
@@ -519,7 +519,7 @@ class IVFIndex(NumericModeMixin):
         Follows cuVS's ``ivf_flat::extend`` with ``adaptive_centers=False``:
         each new row joins the list of its nearest center (an exact tie goes
         to the lower list id), and the centers do not move. The new rows take
-        the ids ``n_rows_, n_rows_ + 1, ...`` in the order given; unlike cuVS,
+        the ids ``n_rows_, ``n_rows_`` + 1, ...`` in the order given; unlike cuVS,
         custom ids are not accepted. Extending by a set of rows in one call
         or in several calls, in the same order, gives the same index. Works
         on a CPU-only install, since it trains nothing.

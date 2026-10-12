@@ -31,3 +31,12 @@ parallel_ivf	multi-GPU: physical qualification pending
 parallel_model_selection	multi-GPU: physical qualification pending
 DistributedIVFIndex	multi-GPU: physical qualification pending
 ExperimentalTwoLevelFeatureFreq	name marks it experimental (unfinished)
+OrderedRMSE	needs installed-artifact qualification (unverified)
+# Members (Class.member or module.member): skipped by conf.py's autodoc-skip-member hook.
+SmallMLPTrainer.train_steps	Apple FAST multistep build only; raises RuntimeError elsewhere
+TransformerBlock.forward_with_tape	tape API not in the shipped binding; unverified
+TransformerBlock.backward_from_tape	tape API not in the shipped binding; unverified
+Mamba3Block.install_owned_weights	owned-weights build only; raises RuntimeError elsewhere
+Mamba3Block.export_owned_weights	owned-weights build only; raises RuntimeError elsewhere
+Mamba3Block.release_owned_weights	owned-weights build only; raises RuntimeError elsewhere
+resample.fast_defines	internal build switches, no meaning to users

@@ -14,4 +14,3 @@ Gradient-boosted decision trees: classification, regression and ranking losses.
    GradientBoosting
    GradientBoostingClassifier
    GradientBoostingRegressor
-   OrderedRMSE

@@ -282,7 +282,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         Start of each list in `list_indices_`.
     list_indices_ : ndarray of shape (n_samples,), int32
         Original row ids, grouped by list.
-    codebooks_ : ndarray of shape (pq_dim, 2**pq_bits, pq_len_), float32
+    codebooks_ : ndarray of shape (pq_dim, 2**pq_bits, ``pq_len_``), float32
         One codebook per subspace.
     codes_ : ndarray of shape (n_samples, pq_dim), int32
         PQ code of every indexed row.
@@ -292,7 +292,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         Number of indexed rows.
     n_lists_, pq_dim_, pq_bits_ : int
         The fitted values of `n_lists`, `pq_dim` and `pq_bits`.
-    pq_len_ : int
+    ``pq_len_`` : int
         Features per subspace, ``ceil(n_features / pq_dim)``.
     n_candidates_ : ndarray of shape (n_queries,), int32
         Set by `search`: how many indexed rows each query scanned.
@@ -752,9 +752,9 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     ----------
     dataset_ : ndarray of shape (n_samples, n_features), float32
         The indexed rows.
-    graph_ : ndarray of shape (n_samples, graph_degree_), int32
+    graph_ : ndarray of shape (n_samples, ``graph_degree_``), int32
         Neighbor ids of each row in the search graph.
-    graph_degree_ : int
+    ``graph_degree_`` : int
         The graph degree used, after capping.
     n_features_in_ : int
         Number of features seen during `fit`.

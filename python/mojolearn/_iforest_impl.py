@@ -113,7 +113,7 @@ class IsolationForest(NumericModeMixin):
         Rows per tree: 'auto' means min(256, n_samples), a positive int is
         clipped to n_samples, a float in (0, 1] is a fraction of n_samples.
     max_depth : int or None, default None
-        Maximum tree depth. None means ceil(log2(max_samples_)).
+        Maximum tree depth. None means ceil(log2(``max_samples_``)).
     max_features : int or float, default 1.0
         Features per tree: an int in [1, n_features] or a float in (0, 1].
     bootstrap : bool, default False
@@ -138,7 +138,7 @@ class IsolationForest(NumericModeMixin):
         Shift used by `decision_function`: -0.5 for `contamination='auto'`,
         otherwise the `100 * contamination` percentile of the training
         scores (linear interpolation).
-    max_samples_ : int
+    ``max_samples_`` : int
         The resolved per-tree subsample size.
     n_features_in_ : int
         Number of features seen in `fit`.

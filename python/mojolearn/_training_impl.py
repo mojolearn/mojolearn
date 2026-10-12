@@ -832,14 +832,18 @@ class _Optimizer(NumericModeMixin):
             "buf_initialized": self.buf_initialized.copy(),
         }
 
+    # DEVIATION 2404: arrays go through _buffer.as_f32_c / as_i32_c and are copied (the NumPy spelling
+    # aliased a caller's float32 C-order array).
     def load_state_dict(self, state):
-        """DEVIATION 2404: the three arrays are taken through
-        `_buffer.as_f32_c` / `as_i32_c` (any buffer or nested list; a
-        float64 `exp_avg` is converted the way `np.ascontiguousarray(...,
-        dtype=np.float32)` converted it) and the optimizer then OWNS a copy
-        -- the NumPy spelling aliased a caller's float32 C-order array and
-        this one does not, so a later `step` can never write into the
-        dict you loaded from."""
+        """Restore the optimizer state saved by `state_dict`.
+
+        Parameters
+        ----------
+        state : dict
+            The dictionary returned by `state_dict`. Its arrays may be any buffer or
+            nested list and are converted to float32 (int32 for ``buf_initialized``).
+            The optimizer keeps its own copy, so later steps never modify ``state``.
+        """
         self.t = int(state["t"])
         ea, c1 = as_f32_c(state["exp_avg"], ndim=1, name="exp_avg")
         es, c2 = as_f32_c(state["exp_avg_sq"], ndim=1, name="exp_avg_sq")

@@ -198,8 +198,14 @@ class NumericModeMixin(ParamsMixin):
         )
 
     def numeric_mode_used(self):
-        """The tier THIS estimator will run on, resolved and read back from
-        the binary it actually holds -- not the string that was passed in."""
+        """The numeric mode this estimator runs in.
+
+        Returns
+        -------
+        str
+            ``'identical'``, ``'deterministic'`` or ``'fast'``, read from the compiled
+            binary the estimator uses, not from the argument it was given.
+        """
         module = self._bind()
         name = module.__name__.rsplit(".", 1)[-1]
         getter_name = _backend._vendor_fn(name).removesuffix("_vendor") + "_numeric_mode"
@@ -216,10 +222,15 @@ class NumericModeMixin(ParamsMixin):
         # Legacy artifacts without readback retain the historical path hint.
         return module.__name__.split(".")[-2]
 
+    # Read back from the binary's own compile-time constant (`<prefix>_vendor()`, checks/vendor.mojo), not
+    # from the directory it was loaded from or the platform; None for a binary built before the read-back.
     def vendor_used(self):
-        """'metal', 'cuda' or 'hip': the accelerator API of the binary THIS
-        estimator will call, read back from that binary's own compile-time
-        constant (`<prefix>_vendor()`, `checks/vendor.mojo`), not from
-        the directory it was loaded from and not from the platform. None
-        for a binary built before the read-back existed."""
+        """The GPU backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'`` or ``'hip'``, read from the compiled binary the
+            estimator uses.
+        """
         return _backend.read_vendor(self._bind())

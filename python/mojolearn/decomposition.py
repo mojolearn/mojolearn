@@ -170,19 +170,19 @@ class PCA(NumericModeMixin):
 
     Attributes
     ----------
-    components_ : Array of shape (n_components_, n_features), float32
+    components_ : Array of shape (``n_components_``, n_features), float32
         Principal axes, sorted by decreasing explained variance.
     mean_ : Array of shape (n_features,), float32
         Per-feature mean of the training data.
-    explained_variance_ : Array of shape (n_components_,), float32
+    explained_variance_ : Array of shape (``n_components_``,), float32
         Variance explained by each component.
-    explained_variance_ratio_ : Array of shape (n_components_,), float32
+    explained_variance_ratio_ : Array of shape (``n_components_``,), float32
         Fraction of total variance explained by each component.
-    singular_values_ : Array of shape (n_components_,), float32
+    singular_values_ : Array of shape (``n_components_``,), float32
         Singular values of the centered data for each component.
     noise_variance_ : float
         Mean of the discarded eigenvalues of the covariance.
-    n_components_ : int
+    ``n_components_`` : int
         Number of components kept.
     n_features_in_ : int
         Number of features seen during ``fit``.
@@ -486,7 +486,7 @@ class PCA(NumericModeMixin):
 
         Returns
         -------
-        Z : Array of shape (n_samples, n_components_), float32
+        Z : Array of shape (n_samples, ``n_components_``), float32
             The projected (and, with ``whiten=True``, whitened) data.
 
         Raises
@@ -534,7 +534,7 @@ class PCA(NumericModeMixin):
 
         Returns
         -------
-        Z : Array of shape (n_samples, n_components_), float32
+        Z : Array of shape (n_samples, ``n_components_``), float32
             The projected data.
         """
         return self.fit(X, y=y).transform(X)
@@ -544,7 +544,7 @@ class PCA(NumericModeMixin):
 
         Parameters
         ----------
-        X : array-like of shape (n_samples, n_components_)
+        X : array-like of shape (n_samples, ``n_components_``)
             Projected data, as returned by ``transform``.
 
         Returns
@@ -724,7 +724,7 @@ class TruncatedSVD(NumericModeMixin):
         Variance of each transformed column (scikit-learn's definition).
     explained_variance_ratio_ : Array of shape (n_components,), float32
         ``explained_variance_`` divided by the total variance of ``X``.
-    n_components_ : int
+    ``n_components_`` : int
         Number of components.
     n_features_in_ : int
         Number of features seen during ``fit``.

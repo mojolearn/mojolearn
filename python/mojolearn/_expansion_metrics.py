@@ -677,15 +677,23 @@ def _cm_count(true, pred, w, present, numeric_mode):
     return s.prog, s.tail, s.weighted
 
 
+# Engineering notes (moved from the docstring):
+# Per-label one-vs-rest 2x2 confusion matrices, `[[tn, fp], [fn, tp]]`.
+#
+# scikit-learn 1.9 `multilabel_confusion_matrix` for binary and multiclass
+# 1-D targets (strings or integers). Unweighted counts are exact Int64;
+# with sample_weight they are Float64 images of Float32 per-label PairSums
+# (DEVIATION 6100). Multilabel-indicator input and samplewise=True are
+# refused by name (metrics/NOT_IMPLEMENTED.tsv).
 def multilabel_confusion_matrix(y_true, y_pred, *, sample_weight=None, labels=None,
                                 samplewise=False, numeric_mode=None):
-    """Per-label one-vs-rest 2x2 confusion matrices, `[[tn, fp], [fn, tp]]`.
+    """Per-label one-vs-rest 2x2 confusion matrices, ``[[tn, fp], [fn, tp]]``.
 
-    scikit-learn 1.9 `multilabel_confusion_matrix` for binary and multiclass
-    1-D targets (strings or integers). Unweighted counts are exact Int64;
-    with sample_weight they are Float64 images of Float32 per-label PairSums
-    (DEVIATION 6100). Multilabel-indicator input and samplewise=True are
-    refused by name (metrics/NOT_IMPLEMENTED.tsv)."""
+    Follows scikit-learn's `multilabel_confusion_matrix` for binary and multiclass 1-D
+    targets (strings or integers). Unweighted counts are exact integers; with
+    `sample_weight` they are float64. Multilabel-indicator input and ``samplewise=True``
+    raise an error.
+    """
     if samplewise:
         raise NotImplementedError("mojolearn multilabel_confusion_matrix: samplewise=True applies to "
                                   "multilabel targets, which are NOT IMPLEMENTED")
@@ -708,14 +716,21 @@ import threading as _threading
 _REPORT = _threading.local()
 
 
+# Engineering notes (moved from the docstring):
+# scikit-learn 1.9 `precision_recall_fscore_support` for binary and
+# multiclass 1-D targets: per-label sums on the device (exact integers, or
+# Float32 PairSums of sample_weight), the ratios and averages in the
+# binary64 epilogue (DEVIATION 6106). zero_division is 'warn', 0.0, 1.0 or
+# np.nan; average='samples' (multilabel) is refused by name.
 def precision_recall_fscore_support(y_true, y_pred, *, beta=1.0, labels=None, pos_label=1,
                                     average=None, warn_for=("precision", "recall", "f-score"),
                                     sample_weight=None, zero_division="warn", numeric_mode=None):
-    """scikit-learn 1.9 `precision_recall_fscore_support` for binary and
-    multiclass 1-D targets: per-label sums on the device (exact integers, or
-    Float32 PairSums of sample_weight), the ratios and averages in the
-    binary64 epilogue (DEVIATION 6106). zero_division is 'warn', 0.0, 1.0 or
-    np.nan; average='samples' (multilabel) is refused by name."""
+    """Precision, recall, F-score and support for each label.
+
+    Follows scikit-learn's `precision_recall_fscore_support` for binary and multiclass
+    1-D targets. `zero_division` is ``'warn'``, 0.0, 1.0 or ``np.nan``.
+    ``average='samples'`` (multilabel) raises an error.
+    """
     if is_bool(beta) or not isinstance(beta, numbers.Real) or not beta >= 0:
         raise ValueError("beta should be >=0 in the F-beta score")
     _zero_division_value(zero_division)
@@ -1381,7 +1396,7 @@ def mean_pinball_loss(y_true, y_pred, *, sample_weight=None, alpha=0.5, multiout
 def median_absolute_error(y_true, y_pred, *, multioutput="uniform_average", sample_weight=None,
                           numeric_mode=None):
     """scikit-learn 1.9 `median_absolute_error`: the per-output median of
-    |y - p| (the weighted percentile at 50 with averaging when weighted, the
+    ``|y - p|`` (the weighted percentile at 50 with averaging when weighted, the
     same answer as numpy's median when not), from a stable device sort."""
     r = _Reg(y_true, y_pred, sample_weight, multioutput, "median_absolute_error")
     r.program()
@@ -1930,13 +1945,19 @@ def _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, 
     return arrays, m, F, T, classes
 
 
+# Engineering notes (moved from the docstring):
+# scikit-learn 1.9 `roc_curve` for binary targets: fpr, tpr, thresholds
+# (Float64; the first threshold is +inf). The sort, the cumulative
+# counts, the collinear drop and the rates run on the device (lane
+# cpu4-python: x_metrics/curve_out.mojo; an empty class's NaN rates
+# there too).
 def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=True,
               numeric_mode=None):
-    """scikit-learn 1.9 `roc_curve` for binary targets: fpr, tpr, thresholds
-    (Float64; the first threshold is +inf). The sort, the cumulative
-    counts, the collinear drop and the rates run on the device (lane
-    cpu4-python: x_metrics/curve_out.mojo; an empty class's NaN rates
-    there too)."""
+    """Receiver operating characteristic curve for binary targets.
+
+    Follows scikit-learn's `roc_curve`. Returns ``fpr``, ``tpr`` and ``thresholds`` as
+    float64 arrays; the first threshold is ``+inf``. Computed on the GPU.
+    """
     arrays, _, F, T, _ = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve",
                                     _CO_ROC, drop_intermediate)
     if F <= 0:
@@ -1959,11 +1980,17 @@ def precision_recall_curve_options(y_true, y_score, pos_label, sample_weight, dr
     return arrays
 
 
+# Engineering notes (moved from the docstring):
+# scikit-learn 1.9 `det_curve`: fpr, fnr, thresholds, formed on the
+# device (lane cpu4-python: x_metrics/curve_out.mojo); a zero class
+# weight raises as the Python division by zero did.
 def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=False,
               numeric_mode=None):
-    """scikit-learn 1.9 `det_curve`: fpr, fnr, thresholds, formed on the
-    device (lane cpu4-python: x_metrics/curve_out.mojo); a zero class
-    weight raises as the Python division by zero did."""
+    """Detection error tradeoff curve for binary targets.
+
+    Follows scikit-learn's `det_curve`. Returns ``fpr``, ``fnr`` and ``thresholds``,
+    computed on the GPU. A zero class weight raises ``ZeroDivisionError``.
+    """
     arrays, _, _, _, classes = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, "det_curve",
                                           _CO_DET, drop_intermediate)
     if len(classes) != 2:
@@ -1993,13 +2020,19 @@ def _f64_array_words(a):
     return Array._owned(store, (len(store),), "<i4", "C")
 
 
+# Engineering notes (moved from the docstring):
+# scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x, on
+# the device (lane cpu4-python: x_metrics/curve_out.mojo auc_xy; the host
+# column runs the same units): binary64 terms (x[i] - x[i-1]) * (y[i] +
+# y[i-1]) / 2, summed as a float-float in fixed chunks (the host fsum
+# left the route); a non-finite term's IEEE answer. A list or an integer
+# buffer is converted to Float64 first.
 def auc(x, y):
-    """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x, on
-    the device (lane cpu4-python: x_metrics/curve_out.mojo auc_xy; the host
-    column runs the same units): binary64 terms (x[i] - x[i-1]) * (y[i] +
-    y[i-1]) / 2, summed as a float-float in fixed chunks (the host fsum
-    left the route); a non-finite term's IEEE answer. A list or an integer
-    buffer is converted to Float64 first."""
+    """Area under a curve by the trapezoid rule.
+
+    Follows scikit-learn's `auc`. `x` must be monotonic. Lists and integer arrays are
+    converted to float64 first. Computed on the GPU.
+    """
     xa, ya = _auc_f64(x), _auc_f64(y)
     if xa is None:
         xa = Array.from_list(flatten_mo(x), "<f8")
@@ -2675,12 +2708,19 @@ def dcg_score(y_true, y_score, *, k=None, log_base=2, sample_weight=None, ignore
                            K=0 if k is None else int(k), Dt=Dt, prog=prog))
 
 
+# Engineering notes (moved from the docstring):
+# scikit-learn 1.9 `ndcg_score`: each row's DCG over its ideal DCG
+# (0 when the row has no relevant item), (weighted) averaged. The gains,
+# the per-row ratios (`rank_epi` NDCG_ROW: the binary64 quotient narrowed
+# to Float32), their (weighted) PairSum and the mean run in one device
+# program (lane cpu2-l7-metrics: no host epilogue over the rows).
 def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False, numeric_mode=None):
-    """scikit-learn 1.9 `ndcg_score`: each row's DCG over its ideal DCG
-    (0 when the row has no relevant item), (weighted) averaged. The gains,
-    the per-row ratios (`rank_epi` NDCG_ROW: the binary64 quotient narrowed
-    to Float32), their (weighted) PairSum and the mean run in one device
-    program (lane cpu2-l7-metrics: no host epilogue over the rows)."""
+    """Normalized discounted cumulative gain.
+
+    Follows scikit-learn's `ndcg_score`: each row's DCG divided by its ideal DCG (0 when
+    the row has no relevant item), averaged over rows, weighted when `sample_weight` is
+    given. Computed on the GPU.
+    """
     y, s = _relevance(y_true, y_score, "ndcg_score", indicator=False)
     n, c = y.shape
     if c <= 1:
@@ -2840,10 +2880,15 @@ def _generalized_average(U, V, method):
     raise ValueError("'average_method' must be 'min', 'geometric', 'arithmetic', or 'max'")
 
 
+# Engineering notes (moved from the docstring):
+# scikit-learn 1.9 `normalized_mutual_info_score`, in nats as scikit-learn
+# (exact device contingency counts; the logarithms are the portable binary64
+# ones of `_portable_math`, DEVIATION 6106).
 def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
-    """scikit-learn 1.9 `normalized_mutual_info_score`, in nats as scikit-learn
-    (exact device contingency counts; the logarithms are the portable binary64
-    ones of `_portable_math`, DEVIATION 6106)."""
+    """Normalized mutual information between two clusterings.
+
+    Follows scikit-learn's `normalized_mutual_info_score`, in nats.
+    """
     _generalized_average(1.0, 1.0, average_method)
     a, b, ca, cb = _clusterings(labels_true, labels_pred, "normalized_mutual_info_score")
     if len(ca) == len(cb) == 1 or len(ca) == len(cb) == 0:

@@ -85,6 +85,7 @@ def main():
     out = root / "api"
     excluded = {line.split("\t", 1)[0].strip() for line in (root / "api_exclude.txt").read_text().splitlines()
                 if line.strip() and not line.startswith("#")}
+    excluded = {e for e in excluded if "." not in e}  # dotted entries are members, skipped in conf.py
     stale = excluded - set(mojolearn.__all__)
     if stale:
         sys.exit(f"gen_api: api_exclude.txt names that are not public: {sorted(stale)}")

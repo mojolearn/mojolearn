@@ -11,7 +11,10 @@ cd "$(dirname "$0")/.."
 PY="${1:-$HOME/mojolearn-evidence/docs-venv/bin/python}"
 SITE="$HOME/mojolearn-evidence/docs-site-published"
 VERSION="$("$PY" -I -c 'import mojolearn; print(mojolearn.__version__)')"
-"$PY" -I tools/gen_api.py
+# The released code with this repo's docstrings (tools/docstring_overlay.py), imported ahead of site-packages.
+"$PY" -I tools/docstring_overlay.py .. _build/pkg
+export PYTHONPATH="$PWD/_build/pkg"
+"$PY" tools/gen_api.py
 rm -rf _build/html api/generated   # stubs regenerate; stale ones (excluded names) must not publish
 mkdir -p _build
 "$PY" -m sphinx -b html . _build/html -q -j 4 -w _build/warnings.log

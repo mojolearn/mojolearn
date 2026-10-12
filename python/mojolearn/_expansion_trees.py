@@ -2507,7 +2507,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         The fitted forest.
     n_trees_ : int
         Number of trees.
-    n_output_features_ : int
+    ``n_output_features_`` : int
         Width of the embedding: the total number of leaves.
     n_features_in_ : int
         Number of features seen in ``fit``.
@@ -2603,7 +2603,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         """One-hot encode the leaves of ``X``.
 
         Returns a dense float64 array of shape
-        (n_samples, n_output_features_).
+        (n_samples, ``n_output_features_``).
         """
         nodes = self.apply(X)
         n = nodes.shape[0]

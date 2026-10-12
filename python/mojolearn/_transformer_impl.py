@@ -635,17 +635,17 @@ class TransformerBlock(NumericModeMixin):
     head_dim and IT = intermediate size (read from ``gate_proj.weight``), the required
     weights are, in torch's ``[out, in]`` layout:
 
-    ==================================  ===============
-    ``input_layernorm.weight``          (d_model,)
-    ``post_attention_layernorm.weight`` (d_model,)
-    ``q_proj.weight``                   (QW, d_model)
-    ``k_proj.weight``                   (KW, d_model)
-    ``v_proj.weight``                   (KW, d_model)
-    ``o_proj.weight``                   (d_model, QW)
-    ``gate_proj.weight``                (IT, d_model)
-    ``up_proj.weight``                  (IT, d_model)
-    ``down_proj.weight``                (d_model, IT)
-    ==================================  ===============
+    ====================================  ===============
+    ``input_layernorm.weight``            (d_model,)
+    ``post_attention_layernorm.weight``   (d_model,)
+    ``q_proj.weight``                     (QW, d_model)
+    ``k_proj.weight``                     (KW, d_model)
+    ``v_proj.weight``                     (KW, d_model)
+    ``o_proj.weight``                     (d_model, QW)
+    ``gate_proj.weight``                  (IT, d_model)
+    ``up_proj.weight``                    (IT, d_model)
+    ``down_proj.weight``                  (d_model, IT)
+    ====================================  ===============
 
     Ungated MLPs (``mlp='gelu'`` or ``'gelu_tanh'``) have no ``gate_proj.weight``.
     Optional tensors, when their option is on: ``q_proj.bias``, ``k_proj.bias``,

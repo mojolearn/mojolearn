@@ -823,7 +823,7 @@ class RobustScaler(_PrepBase):
         Per-column median, or None when ``with_centering=False``.
     scale_ : array of shape (n_features,) or None
         Per-column scale, or None when ``with_scaling=False``.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; transform runs in the same mode.
@@ -907,7 +907,7 @@ class MaxAbsScaler(_PrepBase):
         Per-column maximum absolute value.
     scale_ : array of shape (n_features,)
         Per-column divisor (``max_abs_``, with zeros replaced by one).
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     n_samples_seen_ : int
         Number of rows seen in fit.
@@ -1344,7 +1344,7 @@ class OrdinalEncoder(_PrepBase):
     ----------
     categories_ : list of arrays
         Sorted categories of each column, float32, NaN last when present.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; transform runs in the same mode.
@@ -1517,7 +1517,7 @@ class OneHotEncoder(_PrepBase):
         Sorted categories of each column, float32, NaN last when present.
     drop_idx_ : list or None
         Index into ``categories_[j]`` of the dropped category of each column (None for no drop).
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; transform runs in the same mode.
@@ -1946,7 +1946,7 @@ class TargetEncoder(_PrepBase):
         Mean of the target (one value per class for a multiclass target).
     classes_ : array or None
         Class labels for a binary or multiclass target, None for a continuous one.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; transform runs in the same mode.
@@ -2237,7 +2237,7 @@ class SimpleImputer(_PrepBase):
     ----------
     statistics_ : array of shape (n_features,)
         Fill value of each column (NaN for an all-missing column unless ``keep_empty_features``).
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; transform runs in the same mode.
@@ -2419,7 +2419,7 @@ class KBinsDiscretizer(_PrepBase):
         Edges of each column's bins.
     n_bins_ : array of int64
         Number of bins of each column (fewer than requested for a constant column).
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; transform runs in the same mode.
@@ -3183,7 +3183,7 @@ class GaussianNB(_Classifier):
         Smoothed variance of each feature per class.
     epsilon_ : float
         Value added to the variances.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; prediction runs in the same mode.
@@ -3603,7 +3603,7 @@ class MultinomialNB(_DiscreteNB):
         Sum of each feature per class.
     feature_log_prob_ : array of shape (n_classes, n_features)
         Smoothed log probability of each feature given the class.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; prediction runs in the same mode.
@@ -3679,7 +3679,7 @@ class BernoulliNB(_DiscreteNB):
         Number of rows per class in which each feature is 1.
     feature_log_prob_ : array of shape (n_classes, n_features)
         Smoothed log probability that each feature is 1 given the class.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; prediction runs in the same mode.
@@ -3898,7 +3898,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         Share of between-class variance explained by each component.
     covariance_ : array of shape (n_features, n_features)
         Pooled within-class covariance, when stored.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; prediction runs in the same mode.
@@ -4187,7 +4187,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         Per class, the (n_features,) variances along those eigenvectors.
     covariance_ : list of arrays
         Per class covariance, when ``store_covariance=True``.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; prediction runs in the same mode.
@@ -4340,13 +4340,13 @@ class QuantileTransformer(_PrepBase):
 
     Attributes
     ----------
-    n_quantiles_ : int
+    ``n_quantiles_`` : int
         Number of quantiles used.
-    quantiles_ : array of shape (n_quantiles_, n_features)
+    quantiles_ : array of shape (``n_quantiles_``, n_features)
         Quantile values of each column.
-    references_ : array of shape (n_quantiles_,)
+    references_ : array of shape (``n_quantiles_``,)
         Quantile levels in ``[0, 1]``.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; transform runs in the same mode.
@@ -4488,7 +4488,7 @@ class PowerTransformer(_PrepBase):
     ----------
     lambdas_ : array of shape (n_features,)
         Fitted lambda of each column.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; transform runs in the same mode.
@@ -4661,7 +4661,7 @@ class Normalizer(_PrepBase):
 
     Attributes
     ----------
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode at fit time; transform runs in the same mode.
@@ -4720,11 +4720,11 @@ class PolynomialFeatures(_PrepBase):
 
     Attributes
     ----------
-    powers_ : array of shape (n_output_features_, n_features_in_)
+    powers_ : array of shape (``n_output_features_``, ``n_features_in_``)
         Exponent of each input column in each output column.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
-    n_output_features_ : int
+    ``n_output_features_`` : int
         Number of output columns.
     numeric_mode_ : str
         Numeric mode at fit time; transform runs in the same mode.
@@ -4905,7 +4905,7 @@ class SplineTransformer(_PrepBase):
     ----------
     bsplines_ : list of arrays
         Per feature, the full knot vector of its splines (scikit-learn stores ``BSpline`` objects here).
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     n_features_out_ : int
         Number of output columns.
@@ -5107,7 +5107,7 @@ class Binarizer(_PrepBase):
 
     Attributes
     ----------
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode at fit time; transform runs in the same mode.
@@ -6021,7 +6021,7 @@ class IterativeImputer(_PrepBase):
         Number of rounds run.
     n_features_with_missing_ : int
         Number of features with missing values in fit.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; transform runs in the same mode.
@@ -6564,7 +6564,7 @@ class VarianceThreshold(_SelectorMixin):
     ----------
     variances_ : array of shape (n_features,)
         Variance of each column.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; transform runs in the same mode.
@@ -6814,7 +6814,7 @@ class SelectKBest(_SelectorMixin):
         Score of each column.
     pvalues_ : array of shape (n_features,) or None
         p-value of each column, when ``score_func`` returns them.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode at fit time; transform runs in the same mode.
@@ -7164,7 +7164,7 @@ class RFE(_SelectorMixin):
         Mask of selected features.
     ranking_ : array of int64
         Rank of each feature; selected features have rank 1.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode at fit time; transform runs in the same mode.
@@ -7285,7 +7285,7 @@ class ComplementNB(_DiscreteNB):
         Sum of each feature per class.
     feature_log_prob_ : array of shape (n_classes, n_features)
         Class weights computed from the complement counts.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; prediction runs in the same mode.
@@ -7373,7 +7373,7 @@ class CategoricalNB(_DiscreteNB):
         Per feature, an array of shape (n_classes, n_categories) of smoothed log probabilities.
     n_categories_ : array of int64
         Number of categories of each feature.
-    n_features_in_ : int
+    ``n_features_in_`` : int
         Number of columns seen in fit.
     numeric_mode_ : str
         Numeric mode the estimator was fitted in; prediction runs in the same mode.
