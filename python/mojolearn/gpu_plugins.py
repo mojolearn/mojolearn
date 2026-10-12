@@ -29,8 +29,12 @@ PLUGINS = {
         # the PTX slot. Andrew 2026-10-10: PTX is a normal target; no flag.
         arches=("sm_89", "sm_90", "sm_90a", "sm_100", "sm_100a", "sm_103", "sm_103a",
                 "sm_120", "sm_120a", "sm_121", "sm_121a"), slots=(("sm_89",),),
-        # Andrew 2026-10-10: PTX is a normal target; no flag. The PTX slot is required like sm_89.
-        ptx=dict(arch=PTX_ARCH, directory=PTX_DIRECTORY),
+        # Andrew 2026-10-10: PTX is a normal target; no flag. The PTX slot is required like sm_89 ...
+        # ... once PyPI raises the mojolearn-nvidia file limit: with cuda_ptx/sm_80 beside sm_89 the 0.8.39
+        # wheel packed at 134.1 MiB (67.0 + 67.0 MiB compressed), over the 100 MiB limit, exactly the sm_90a
+        # case above. `ptx_shipped=False` (2026-10-12) keeps the slot registered (a wheel that carries it
+        # loads it) but lets a release ship without it; flip it back with the limit increase.
+        ptx=dict(arch=PTX_ARCH, directory=PTX_DIRECTORY), ptx_shipped=False,
         directory="cuda_native", code_format="native", release_enabled=True),
     "hip": dict(distribution="mojolearn-amd", wheel_name="mojolearn_amd",
         profile="amd", label="AMD (ROCm/HIP)", vendor="hip", role="vendor",
@@ -87,7 +91,7 @@ def required_sets(vendor):
     of every native slot, plus the PTX slot when the vendor has one."""
     row = PLUGINS[vendor]
     out = {(vendor, slot[0]) for slot in row["slots"]}  # glue: one entry per registered slot
-    if row.get("ptx"):
+    if row.get("ptx") and row.get("ptx_shipped", True):   # PTX slot out of the wheel while over PyPI's limit (2026-10-12)
         out.add((vendor, row["ptx"]["arch"]))
     return out
 

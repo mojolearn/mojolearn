@@ -21,6 +21,8 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## 0.8.39 (published 2026-10-12)
 
+- NVIDIA wheel: sm_89 only, as in 0.8.38. The PTX slot (sm_80, for Hopper and Blackwell) is built and recorded but
+  not shipped: with it the wheel is 134 MiB, over PyPI's 100 MiB limit. It ships when PyPI raises the limit.
 - Wave-2 IDENTICAL defaults, each decided by a same-box A/B on NVIDIA L40S and AMD MI325X (one run per arm, average of
   the two vendors, digests equal across vendors). New defaults, each with a `_OFF` define that restores the old path:
   CNN resident grads (no host waits inside conv/BN/pool calls; global pools 0.08x), BatchNorm grid statistics (0.47x,
