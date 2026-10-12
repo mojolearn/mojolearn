@@ -19,10 +19,17 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   exact reference folds the background mean in one fixed order. The opponents keep the NumPy ridge they were scored with
   (no re-score); `tools/shap_xvendor_probe.py` prints both models' digests per box.
 
-## 0.8.39 (published 2026-10-12)
+## 0.8.40 (published 2026-10-12)
 
+- Linux core, mojolearn-nvidia and mojolearn-amd from the 0.8.39 source plus one loader fix. 0.8.39 published macOS
+  only: its NVIDIA wheel packed at 134 MiB with the PTX slot beside sm_89, over PyPI's 100 MiB limit, and the 0.8.39
+  loader refused an NVIDIA wheel without that slot.
 - NVIDIA wheel: sm_89 only, as in 0.8.38. The PTX slot (sm_80, for Hopper and Blackwell) is built and recorded but
-  not shipped: with it the wheel is 134 MiB, over PyPI's 100 MiB limit. It ships when PyPI raises the limit.
+  not shipped (`gpu_plugins.ptx_shipped=False`); the loader accepts the wheel without it. It ships when PyPI raises
+  the mojolearn-nvidia file limit.
+
+## 0.8.39 (published 2026-10-12, macOS only)
+
 - Wave-2 IDENTICAL defaults, each decided by a same-box A/B on NVIDIA L40S and AMD MI325X (one run per arm, average of
   the two vendors, digests equal across vendors). New defaults, each with a `_OFF` define that restores the old path:
   CNN resident grads (no host waits inside conv/BN/pool calls; global pools 0.08x), BatchNorm grid statistics (0.47x,

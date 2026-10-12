@@ -674,7 +674,9 @@ def _check_plugins(pkg, present):
         _read_plugin_marker(dist, gpu_plugins.PLUGIN_MARKER, expected)
         # The PTX slot is required like a native slot (Andrew 2026-10-10: PTX is a
         # normal target; no flag): a vendor wheel whose marker binds it must carry it.
-        if row.get("ptx") and not _has_binaries(_ptx_directory(pkg)):
+        # ... while gpu_plugins ships it (`ptx_shipped`): 0.8.39/0.8.40 leave the slot out of the
+        # wheel because sm_89 + sm_80 is 134 MiB, over PyPI's 100 MiB limit (2026-10-12).
+        if row.get("ptx") and row.get("ptx_shipped", True) and not _has_binaries(_ptx_directory(pkg)):
             raise GpuPluginError(f"mojolearn: {row['distribution']} is missing its PTX set "
                                  f"{_ptx_directory(pkg)}; incomplete install; {fix}")
         _PLUGINS_FOUND[vendor] = {"distribution": row["distribution"], "version": dist.version,
