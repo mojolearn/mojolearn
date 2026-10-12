@@ -109,6 +109,8 @@ FAMILIES = (
             "x_trees_dart_rescale", "x_trees_kshap_schedule", "x_trees_normalized_weights",
             "x_trees_agn_pool_release",
             "x_trees_pshap_dsynth", "x_trees_pshap_dvalues",
+            # resident permutation SHAP over the linear model (IDN_PSHAP_RESIDENT, the IDENTICAL default since 2026-10-11)
+            "x_trees_pshap_linear_ok", "x_trees_pshap_values_linear",
         ),
         gate="tools/algos_lane_check.sh",
         wheel_note="Ships: the trees expansion lane's ensemble glue (pass 1, PENDING).",
