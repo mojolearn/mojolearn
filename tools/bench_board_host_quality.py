@@ -40,8 +40,27 @@ def compare(actual, reference):
 # The two refusals a host reference prints when the race job built no host twin for a binding it loads
 # (python/mojolearn/_backend.py load_host_module: "<dir>/_mojolearn_<x>_host.so is not built. Build it with
 # bindings/build_<x>_host.sh"; _no_cpu_implementation: "no host binding covers _mojolearn_<x>").
+# The base binding `_mojolearn` is covered too ("no host binding covers _mojolearn;"): a layer constructor draws its
+# init through `_buffer.InitStream` -> `_mojolearn.uniform_init_f32`, which the CPU vendor serves from
+# `_mojolearn_core_host` (host_surface family "core"). Until 2026-10-12 the regex required `_mojolearn_<x>`, so that
+# refusal named nothing, the box never built the core twin, and resnet-block's reference failed on every run
+# (nv2 v0140, amd a1721: "Own host reference failed (... no GPU set is loaded, on request (flat layout))").
 _NOT_BUILT_RE = re.compile(r'(_mojolearn_[A-Za-z0-9_]+?_host)\.so is not built')
-_NO_COVER_RE = re.compile(r'no host binding covers (_mojolearn_[A-Za-z0-9_]+)')
+_NO_COVER_RE = re.compile(r'no host binding covers (_mojolearn(?:_[A-Za-z0-9_]+)?)\b')
+_HOST_SURFACE = Path(__file__).resolve().parent.parent / 'python' / 'mojolearn' / 'host_surface.py'
+
+
+def _routed_host_bindings():
+    """Device binding name -> host twin basename (python/mojolearn/host_surface.py routed_modules, loaded by path:
+    the table `_backend._HOST_MODULES` routes a CPU-only install through). Empty when the file cannot be loaded."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('bbhq_host_surface', _HOST_SURFACE)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return dict(module.routed_modules())
+    except Exception:  # noqa: BLE001  (a tree without the manifest falls back to <name>_host)
+        return {}
 
 
 def failure_line(log_path, width=300):
@@ -67,8 +86,9 @@ def missing_host_bindings(log_path):
     for m in _NOT_BUILT_RE.finditer(text):
         if m.group(1) not in out:
             out.append(m.group(1))
+    routed = _routed_host_bindings() if _NO_COVER_RE.search(text) else {}
     for m in _NO_COVER_RE.finditer(text):
-        name = m.group(1) + '_host'
+        name = routed.get(m.group(1)) or m.group(1) + '_host'
         if name not in out:
             out.append(name)
     return out
