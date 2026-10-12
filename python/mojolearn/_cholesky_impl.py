@@ -76,8 +76,8 @@ class Cholesky(NumericModeMixin):
 
     `fit` factors a given float32 matrix once; `solve` answers ``A X = B`` from the
     factor and `logdet_` gives the log-determinant. A failed factorization is not an
-    exception: check `info_` (0 means success), and a failed factor's `solve` and
-    `logdet_` raise `ValueError`. The factor can be saved with `save` and loaded with
+    exception: check `info_` (0 means success); a failed factor's `solve` and
+    `logdet_` refuse. The factor can be saved with `save` and loaded with
     `load`, including on a CPU-only install, where `fit` and `solve` also run.
 
     Parameters
@@ -107,8 +107,8 @@ class Cholesky(NumericModeMixin):
 
     Notes
     -----
-    Non-finite or non-symmetric matrices, a non-square `A`, and a right-hand side whose
-    row count is not n are refused with `ValueError`.
+    A non-square `A` or a right-hand side whose row count is not n raises
+    `ValueError`; non-finite or non-symmetric matrices are refused before any work.
 
     Examples
     --------
@@ -238,8 +238,8 @@ class Cholesky(NumericModeMixin):
         Raises
         ------
         ValueError
-            Before `fit`, against a failed factor, or when `B` has the wrong row count or
-            no columns.
+            Before `fit`, or when `B` has the wrong row count or no columns. Solving
+            against a failed factor is also refused.
         """
         if not hasattr(self, "L_"):
             raise ValueError("mojolearn Cholesky: call fit before solve")
