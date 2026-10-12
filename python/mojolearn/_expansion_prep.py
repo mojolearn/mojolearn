@@ -1527,7 +1527,8 @@ class OneHotEncoder(_PrepBase):
     ``inverse_transform`` takes each block's largest entry. An all-zero block decodes to the dropped
     category; with no dropped category it decodes to NaN where scikit-learn would return ``None``
     (under ``handle_unknown='ignore'``, or under ``'infrequent_if_exist'`` or ``'warn'`` for a column
-    without an infrequent category), and raises ``ValueError`` otherwise. The infrequent column decodes to NaN where scikit-learn returns ``'infrequent_sklearn'``.
+    without an infrequent category), and raises ``ValueError`` otherwise. The infrequent column
+    decodes to NaN where scikit-learn returns ``'infrequent_sklearn'``.
 
     Examples
     --------
