@@ -67,124 +67,136 @@ PAIRWISE_MAX_ROWS = 46340
 # unbuilt binding to one broken estimator instead of an unimportable package.
 
 
+# Maintainer notes (moved from the docstring, 2026-10-12).
+#
+# Reference: `cuml.cluster.AgglomerativeClustering` and
+# `ML::linkage::single_linkage`; the Mojo entry is `hierarchy/impl/linkage.mojo`
+# and the host surface is `hierarchy/estimator.mojo`. Two routes: 'single' with
+# the euclidean metric, no connectivity matrix and no per-merge distances stays
+# on cuML's Boruvka route (`_mojolearn_solver.linkage_fit`); everything else
+# takes the x_cluster route (`x_cluster/agglo.mojo`, ENTRY_AGGLO).
+#
+# Defaults: connectivity 'pairwise' here; cuML's PYTHON default is 'knn'
+# (`agglomerative.pyx:123`), their C++ default is pairwise (`linkage.hpp:43-44`)
+# and scikit-learn's dense tree is pairwise too. DEVIATION 881: the k-NN graph
+# arm is rung 2 and NOT IMPLEMENTED, so 'knn' is refused by name rather than
+# downgraded. linkage 'single' here and in cuML (`agglomerative.pyx:124`);
+# scikit-learn's default is 'ward'.
+#
+# c: tunes `k = log(n) + c` for the k-NN graph and cuML forwards it only when
+# `use_knn` is true (`linkage.cu:40`, `use_knn ? c : 0`); with 'knn' refused it
+# can reach nothing, so any value but 15 raises. n_rows > 46340 on the Boruvka
+# route: the dense connectivity matrix is `m * m` of their `int` and overflows.
+#
+# labels_ on the Boruvka route: roots are labeled by descending position in the
+# children array (`extract_flattened_clusters`), cuVS's numbering, not
+# scikit-learn's. children_ there is in Boruvka's orientation (`src` is the
+# vertex that added the edge); scikit-learn's mergesort on `mst.data` keeps
+# scipy's coo order and this sort is the total order
+# `(weight_key, min(u,v), max(u,v))` (DEVIATIONS 620 and 621), so rows agree as
+# unordered pairs only when the MST is tie-free. n_connected_components_ is the
+# literal 1 there (`single_linkage.cuh:301`, the pairwise graph is complete).
+# n_boruvka_rounds_ is the identity card's integer stage `linkage.mst.rounds`;
+# -1 on a CPU-only install (the host binding runs Kruskal) and on the x_cluster
+# route.
+#
+# IDENTITY: `MOJOLEARN_IDENTITY_TRACE` does nothing on this path. The
+# `single_linkage` entry takes no trace object, and the certified eight-stage
+# `linkage.*` card is `hierarchy/linkage_main.mojo`'s, which re-runs the
+# distance and MST stages beside the fit to record them. This class calls the
+# same entry that driver calls; it does not itself emit a card.
+#
+# predict is DEVIATION 2740 (neither cuML nor scikit-learn has one).
 class AgglomerativeClustering:
-    """Single-linkage agglomerative clustering on the GPU.
+    """Agglomerative hierarchical clustering.
 
-    Reference: `cuml.cluster.AgglomerativeClustering` and
-    `ML::linkage::single_linkage`; the Mojo entry is
-    `hierarchy/impl/linkage.mojo` and the host surface is
-    `hierarchy/estimator.mojo`.
+    Builds a merge tree bottom-up and cuts it into `n_clusters` clusters or
+    at `distance_threshold`. Supports scikit-learn's single, complete,
+    average and Ward linkages, connectivity matrices and per-merge
+    distances. Input is a dense array, converted to float32.
 
-    TWO DEFAULTS DIFFER FROM THE ESTIMATORS THIS MIRRORS, AND BOTH CHANGE
-    THE ANSWER RATHER THAN THE SPEED:
+    Two defaults differ from scikit-learn's and change the result:
+    `linkage` is 'single' (scikit-learn: 'ward') and `connectivity` is
+    'pairwise', the full dense graph (scikit-learn's None). cuML's
+    ``AgglomerativeClustering`` also defaults to single linkage, but to
+    'knn' connectivity, which is not available here; pass
+    ``connectivity='pairwise'`` explicitly when moving cuML code.
 
-        connectivity  'pairwise' here; cuML's PYTHON default is 'knn'
-                      (`agglomerative.pyx:123`), their C++ default is
-                      pairwise (`linkage.hpp:43-44`) and scikit-learn's
-                      dense tree is pairwise too. DEVIATION 881: the k-NN
-                      graph arm is rung 2 and NOT IMPLEMENTED, so 'knn' is
-                      REFUSED BY NAME rather than downgraded. A cuML script
-                      moved here therefore gets a DIFFERENT GRAPH unless it
-                      passed connectivity explicitly, and that is why the
-                      default is called out rather than left implicit.
-        linkage       'single' here and in cuML (`agglomerative.pyx:124`);
-                      scikit-learn's default is 'ward'. Only single linkage
-                      exists in this implementation and in cuML, and every other value
-                      is refused by name, as cuML does
-                      (`agglomerative.pyx:157-158`).
+    Label integers can differ from scikit-learn's for the same partition:
+    compare partitions (for example with ``adjusted_rand_score``), not the
+    label values. Likewise, `children_` rows can differ in order and
+    orientation from scikit-learn's when merge distances tie.
 
-    WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
-    because a parameter accepted and ignored is a wrong answer waiting for a
-    caller:
+    Parameters
+    ----------
+    n_clusters : int or None, default 2
+        Number of clusters, between 1 and the number of samples. Must be
+        None when `distance_threshold` is set.
+    metric : str, default 'euclidean'
+        One of 'euclidean', 'l2', 'l1', 'manhattan', 'cityblock', 'cosine'
+        or 'precomputed' (`X` is then a square distance matrix). Any other
+        value, including a callable, raises NotImplementedError. Ward
+        linkage requires 'euclidean' or 'l2'; 'cosine' rejects rows that are
+        all zeros.
+    connectivity : 'pairwise', None, array-like, sparse matrix or callable, default 'pairwise'
+        'pairwise' and None both mean no constraint (the full dense graph).
+        A matrix of shape (n_samples, n_samples), or a callable that returns
+        one from `X`, restricts merges to its nonzero entries, as in
+        scikit-learn. 'knn' raises NotImplementedError.
+    linkage : {'single', 'complete', 'average', 'ward'}, default 'single'
+        Merge criterion.
+    c : int, default 15
+        Kept for cuML compatibility, where it tunes the 'knn' graph. Any
+        other value raises NotImplementedError.
+    memory : None
+        Must be None; anything else raises NotImplementedError.
+    compute_full_tree : 'auto' or bool, default 'auto'
+        With a connectivity matrix, whether to build the full tree or stop
+        at `n_clusters`, with scikit-learn's 'auto' rule. Without one the
+        full tree is always built. Must be True or 'auto' when
+        `distance_threshold` is set.
+    distance_threshold : float or None, default None
+        Merge distance at or above which clusters are no longer merged.
+        Exactly one of `n_clusters` and `distance_threshold` must be set.
+    compute_distances : bool, default False
+        Store the merge distances in `distances_` even without
+        `distance_threshold`.
+    prediction_data : bool, default False
+        Keep a copy of the training rows so that `predict` and `save` work.
+        Only single linkage with the 'euclidean' or 'l2' metric can predict.
 
-        n_clusters          honored   1 <= n_clusters <= n_rows, cuML's own
-                                      bound (`agglomerative.pyx:169-173`);
-                                      outside it the Mojo entry raises by
-                                      name too
-        metric              honored   'euclidean' and 'l2' -> L2SqrtExpanded.
-                                      'l1' / 'cityblock' / 'manhattan' and
-                                      'cosine' are REFUSED BY NAME: cuML maps
-                                      them to L1 and CosineExpanded, and the
-                                      distance step this implementation routes through
-                                      carries only the expanded-L2 identity.
-                                      'precomputed' is refused (this entry
-                                      takes points, not a distance matrix).
-                                      The kernels also accept L2Expanded (0,
-                                      squared distances), but no reference
-                                      NAME maps to it, so none is offered.
-        linkage             honored   'single' only (see above)
-        connectivity        honored   'pairwise' (the default) and None,
-                                      which is scikit-learn's spelling of
-                                      the same thing -- no connectivity
-                                      constraint, the full dense graph.
-                                      'knn' is REFUSED BY NAME (rung 2). A
-                                      connectivity MATRIX, which is what
-                                      scikit-learn's parameter means when it
-                                      is not None, is refused by name: there
-                                      is no arm that takes one.
-        c                   accepted, UNUSED, and refused when changed. It
-                                      tunes `k = log(n) + c` for the k-NN
-                                      graph and cuML forwards it only when
-                                      `use_knn` is true (`linkage.cu:40`,
-                                      `use_knn ? c : 0`); with 'knn'
-                                      refused it can reach nothing, so any
-                                      value but the default 15 raises rather
-                                      than being silently dropped.
-        distance_threshold  refused   NOT IMPLEMENTED. It needs the per-merge
-                                      distances (`out_delta`), which
-                                      `build_dendrogram_host` does produce
-                                      but `single_linkage` does not hand
-                                      back. Named as cheap-to-add in
-                                      `hierarchy/README.md`'s "What is left".
-        compute_distances   refused   same reason: `distances_` would come
-                                      from the same `out_delta`
-        compute_full_tree   honored   'auto' and True. The full dendrogram is
-                                      always built here (`children_` is
-                                      always (n-1, 2)), so False is refused
-                                      rather than accepted and ignored.
-        memory              refused   scikit-learn's joblib cache; there is
-                                      no host tree to cache
-        prediction_data     honored   False (the default) fits exactly as
-                                      before. True also keeps a copy of the
-                                      training rows, which `predict` and
-                                      `save` need; the fit is the same call
-        predict             NEW       DEVIATION 2740; neither cuML nor
-                                      scikit-learn has one. See `predict`
-        n_rows < 2          refused by name (`pairwise_distances`)
-        n_rows > 46340      refused by name: the dense connectivity matrix is
-                            `m * m` of their `int` and overflows past that
-        sparse X            refused   this entry takes a dense float32 matrix
+    Attributes
+    ----------
+    labels_ : Array of shape (n_samples,), int32
+        Cluster of each training row.
+    n_clusters_ : int
+        Number of clusters found.
+    children_ : Array of shape (n_merges, 2), int32
+        The merges, one per row; values below n_samples are rows, larger
+        values are earlier merges. n_merges is n_samples - 1 for a full
+        tree.
+    distances_ : Array of shape (n_merges,), float32
+        Merge distances. Set only with `distance_threshold` or
+        ``compute_distances=True``.
+    n_leaves_ : int
+        Number of leaves (n_samples).
+    n_connected_components_ : int
+        Connected components of the connectivity graph. A constrained fit
+        with more than one warns and completes the graph, as scikit-learn
+        does.
+    n_boruvka_rounds_ : int
+        Not a scikit-learn attribute: the number of Boruvka rounds of the
+        single-linkage euclidean fit without a connectivity matrix; -1 on
+        other fits and on a CPU-only install.
+    n_features_in_ : int
+        Number of features seen in `fit`.
 
-    OUTPUTS, AND WHAT MAY AND MAY NOT BE COMPARED TO scikit-learn:
-
-    `labels_` is a PARTITION equal to what scikit-learn's `_hc_cut` produces
-    for the same tree, but **the NUMBERING is cuVS's** -- roots are labeled
-    by descending position in the children array
-    (`extract_flattened_clusters`) -- and is not scikit-learn's. Compare the
-    partitions (e.g. with `adjusted_rand_score`), not the label integers.
-
-    `children_` is `(n_rows - 1, 2)` int32, one merge per row, in Boruvka's
-    orientation (`src` is the vertex that added the edge). scikit-learn's
-    rows come from scipy's MST in its own order. The two agree as UNORDERED
-    PAIRS when the MST is tie-free and both sorts see the same edge set;
-    under ties they need not, because scikit-learn's mergesort on
-    `mst.data` keeps scipy's coo order and this implementation's sort is the total
-    order `(weight_key, min(u,v), max(u,v))` (DEVIATIONS 620 and 621). **Row
-    equality with scikit-learn is not claimed.**
-
-    `n_leaves_` is `n_rows`. `n_connected_components_` is read back from the
-    implementation, which returns the literal 1 on this arm (`single_linkage.cuh:301`,
-    sound because the pairwise graph is complete). `n_boruvka_rounds_` is
-    NOT a scikit-learn attribute; it is the identity card's integer stage
-    `linkage.mst.rounds`, surfaced because a run that disagrees there
-    disagreed about how much work to do.
-
-    IDENTITY: `MOJOLEARN_IDENTITY_TRACE` DOES NOTHING ON THIS PATH. The
-    implemented `single_linkage` entry takes no trace object, and the certified
-    eight-stage `linkage.*` card is `hierarchy/linkage_main.mojo`'s, which
-    re-runs the distance and MST stages beside the fit to record them. This
-    class calls the same entry that driver calls; it does not itself emit a
-    card, and no claim is made that a Python fit was carded.
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.AgglomerativeClustering(n_clusters=4, prediction_data=True).fit(X)
+    >>> labels = model.predict(X[:10])
     """
 
     #: The binding `predict` calls. The FIT is `_mojolearn_solver`'s, a
@@ -286,6 +298,43 @@ class AgglomerativeClustering:
         return _backend.binding(name or self._BINDING, getattr(self, "numeric_mode", None))
 
     def fit(self, X, y=None):
+        """Build the merge tree of `X` and cut it into clusters.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dense training rows, or a square distance matrix with
+            ``metric='precomputed'``. Converted to float32. Sparse input
+            raises NotImplementedError.
+        y : ignored
+            Present for scikit-learn compatibility.
+
+        Returns
+        -------
+        self : AgglomerativeClustering
+            The fitted estimator.
+
+        Raises
+        ------
+        TypeError
+            If `prediction_data` is not a bool.
+        NotImplementedError
+            If `X` is sparse.
+        ValueError
+            If there are fewer than 2 rows, `n_clusters` exceeds the number
+            of rows, `X` contains NaN or infinity, a precomputed or
+            connectivity matrix has the wrong shape, or ``metric='cosine'``
+            meets an all-zero row. With single linkage, the euclidean
+            metric, no connectivity matrix and no merge distances requested,
+            more than 46,340 rows also raises (the dense graph would
+            overflow), except in ``fast`` mode on Apple with at most 64
+            features.
+
+        Warns
+        -----
+        UserWarning
+            If a connectivity matrix has more than one connected component.
+        """
         if not isinstance(self.prediction_data, bool):
             raise TypeError(
                 "mojolearn AgglomerativeClustering: prediction_data must be a "
@@ -481,49 +530,67 @@ class AgglomerativeClustering:
         return self
 
     def fit_predict(self, X, y=None):
+        """Fit the model on `X` and return the training labels.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dense training rows, or a square distance matrix with
+            ``metric='precomputed'``.
+        y : ignored
+            Present for scikit-learn compatibility.
+
+        Returns
+        -------
+        labels : Array of shape (n_samples,), int32
+            The fitted `labels_`.
+        """
         return self.fit(X).labels_
 
     def predict(self, X):
-        """Label NEW rows under the fitted clustering. NEW CAPABILITY
-        (DEVIATION 2740): neither scikit-learn's nor cuML's
-        AgglomerativeClustering has a `predict`, and this is not either
-        library's behavior.
+        """Label new rows with the cluster of their nearest training row.
 
-        THE RULE, BY LINKAGE. The rule is the linkage's own criterion taken
-        between the new row and each fitted cluster.
+        Neither scikit-learn nor cuML has this method. For single linkage,
+        the closest cluster to a new row is the one containing its nearest
+        training row (squared euclidean distance); ties go to the lowest
+        cluster label, then the lowest training index. A training row
+        predicts its own fitted label unless an exact duplicate of it was
+        cut into a cluster with a lower label, which happens only when
+        `n_clusters` exceeds the number of distinct rows.
 
-          single    (the only linkage this class fits) the cluster at the
-                    smallest single-linkage distance, which is the smallest
-                    distance from the row to ANY member: the cluster of the
-                    nearest training row.
-          average, complete, ward
-                    refused at construction, so there is no fitted model to
-                    predict from. Their criteria would be the mean distance
-                    to the members, the largest distance to a member, and
-                    the Ward increase in within-cluster sum of squares.
+        Only single linkage with the 'euclidean' or 'l2' metric can predict,
+        and only after a fit with ``prediction_data=True`` (or a model
+        loaded with `load`).
 
-        THE DISTANCE is DBSCAN's eps accumulator
-        (`dbscan/impl/neighbors/epsilon_neighborhood.mojo::_eps_acc`, L2
-        arm): the squared Euclidean distance summed features ascending,
-        never rooted, the training row flushed. It is NOT the fit's pairwise
-        distance (the expanded `||a||^2 + ||b||^2 - 2 a.b` of the MST, whose
-        value for a row against itself need not be 0). The unexpanded sum
-        is exactly 0 for a row against itself, which is what makes the
-        training-row property below hold. Ties go to the lowest cluster
-        label, then to the lowest training index. One thread per query row,
-        no fold across rows; the GPU binding and the CPU host binding
-        (`core/labeled_reference_host_predict.mojo`) compute the same bytes.
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Rows to label, with the number of features seen in `fit`.
 
-        ON THE TRAINING ROWS: a training row predicts its fitted label,
-        except where a row at distance 0 from it under this accumulator (a
-        duplicate, or a copy different only in subnormal amounts) was cut
-        into a cluster with a lower label. A single-linkage cut separates
-        such rows only when it cuts an edge of (near) zero weight, that is
-        when n_clusters exceeds the number of distinct rows.
+        Returns
+        -------
+        labels : Array of shape (n_queries,), int32
+            Cluster of each row, numbered as `labels_`.
 
-        Requires `prediction_data=True` at fit; refused by name otherwise.
-        Returns int32 labels, the dtype and numbering of `labels_`.
+        Raises
+        ------
+        ValueError
+            If the model is not fitted or was fitted without
+            ``prediction_data=True``.
+        NotImplementedError
+            If the linkage or metric has no prediction rule.
         """
+        # Maintainer notes (moved from the docstring): DEVIATION 2740. The rule
+        # is the linkage's own criterion between the new row and each fitted
+        # cluster; for single linkage that is the cluster of the nearest
+        # training row. THE DISTANCE is DBSCAN's eps accumulator
+        # (`dbscan/impl/neighbors/epsilon_neighborhood.mojo::_eps_acc`, L2 arm):
+        # the squared Euclidean distance summed features ascending, never
+        # rooted, the training row flushed. It is NOT the fit's expanded
+        # `||a||^2 + ||b||^2 - 2 a.b` distance, whose value for a row against
+        # itself need not be 0. One thread per query row, no fold across rows;
+        # the GPU binding and the CPU host binding
+        # (`core/labeled_reference_host_predict.mojo`) compute the same bytes.
         if not hasattr(self, "labels_"):
             raise ValueError(
                 "mojolearn AgglomerativeClustering.predict: this instance is not "
@@ -559,16 +626,28 @@ class AgglomerativeClustering:
         return out
 
     def save(self, path):
-        """Write the prediction data of a `prediction_data=True` fit to
-        `path` as an npz: `x` `<f4` (the training rows), `labels` `<i4`,
-        `meta` `<i8` [n_clusters, n_features_in_, n_leaves_]. The file holds
-        the prediction state and nothing the fit ALGORITHM decides:
-        `children_` (its row orientation) and `n_boruvka_rounds_` (a Boruvka
-        pass count, -1 on the CPU reference, which runs Kruskal) are not
-        saved, so the same fit writes the same bytes on every GPU and on the
-        CPU reference. A loaded model has neither attribute. On a CPU-only
-        install `AgglomerativeClustering.load(path).predict(X)` runs through
-        `_mojolearn_estimators_host.labeled_reference_predict`."""
+        """Save the model's prediction data to `path`.
+
+        Writes an npz file with the training rows, `labels_`, `n_clusters_`,
+        `n_features_in_`, `n_leaves_`, the metric and the numeric mode.
+        `children_` and `n_boruvka_rounds_` are not saved, so the same fit
+        writes the same bytes on every device; a loaded model has neither
+        attribute. A loaded model predicts, including on a CPU-only install.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File to write.
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            If it was fitted without ``prediction_data=True``.
+        NotImplementedError
+            If the linkage or metric has no prediction rule.
+        """
         if not hasattr(self, "labels_"):
             raise RuntimeError("this estimator is not fitted yet")
         if not self._predicts():
@@ -595,8 +674,27 @@ class AgglomerativeClustering:
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`. The result predicts; every array is
-        read at its saved dtype and never cast."""
+        """Load a model written by `save`.
+
+        The loaded model can `predict`. Every array is read at its saved
+        dtype and never cast.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `save`.
+
+        Returns
+        -------
+        model : AgglomerativeClustering
+            The loaded model.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a saved AgglomerativeClustering or its arrays
+            are inconsistent.
+        """
         arrays = _serialize.read_npz(path, _AGGLOMERATIVE_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
