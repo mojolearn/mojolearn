@@ -823,10 +823,15 @@ class SpectralClustering:
         ------
         ValueError
             If the model is not fitted, was fitted without
-            ``prediction_data=True``, ``X`` has the wrong shape, or an
-            eigenvalue of the normalized affinity has magnitude below 1e-3
-            (the projection would amplify it more than 1000x; the error names
-            the column).
+            ``prediction_data=True``, ``X`` has the wrong shape or no rows,
+            or a precomputed affinity is non-finite or negative.
+
+        Notes
+        -----
+        Every embedding column is kept. If an eigenvalue of the normalized
+        affinity has magnitude below 1e-3 (the projection would amplify that
+        column more than 1000x), the prediction is refused with an error
+        naming the column.
         """
         return self._predict_embedding(X)[0]
 
@@ -1050,37 +1055,80 @@ class _DenseCOO:
         return self
 
 
+# Maintainer notes (moved from the docstring). Reference: cuML's
+# manifold.SpectralEmbedding; the same stages SpectralClustering runs before
+# its k-means. The dense RBF affinity is the decomp cells (lane/algos-decomp,
+# 2026-09-27), as are 'precomputed_nearest_neighbors' and eigen_tol.
+# random_state=None means seed 0 (DEVIATION 891). eigen_tol <= 0 disables the
+# Lanczos convergence test (DEVIATION 890). eigen_solver names other than None
+# are refused: 'arpack', 'lobpcg' and 'amg' are other algorithms, and running
+# the Lanczos under their names would be a silent substitution
+# (spectral/NOT_IMPLEMENTED.tsv).
 class SpectralEmbedding:
-    """Laplacian eigenmaps. Reference: cuML's `manifold.SpectralEmbedding`.
+    """Spectral embedding (Laplacian eigenmaps) for nonlinear dimensionality reduction.
 
-    The kNN connectivity graph (or a precomputed affinity), the normalized
-    graph Laplacian and RAFT's thick-restart Lanczos, the same stages
-    `SpectralClustering` runs before its k-means; the trivial eigenvector is
-    dropped, so `embedding_` is `n_samples x n_components`.
+    Builds an affinity graph, forms the normalized graph Laplacian and returns
+    its smallest nontrivial eigenvectors, computed with a thick-restart
+    Lanczos solver. The first (trivial) eigenvector is dropped. Follows cuML's
+    ``manifold.SpectralEmbedding``. There is no ``transform``: the embedding
+    covers the fitted rows only, as in scikit-learn.
 
-    HONORED: `n_components`, `affinity` in {'nearest_neighbors',
-    'precomputed', 'rbf'} (`gamma` with 'rbf', None meaning 1/n_features,
-    scikit-learn's rule; the dense RBF affinity is the decomp lane's
-    identical cells, lane/algos-decomp 2026-09-27), `random_state`, `n_neighbors` (None means
-    `max(n_samples // 10, 1)`, the reference's rule). `random_state=None`
-    means seed 0 and is deterministic (DEVIATION 891). The eigensolver
-    tolerance defaults to cuVS's struct default `1e-5` (`eigen_tol`, below).
+    Parameters
+    ----------
+    n_components : int, default 2
+        Dimension of the embedding; at least 1, and the eigenpairs needed
+        must number fewer than ``n_samples``.
+    affinity : str, default "nearest_neighbors"
+        ``"nearest_neighbors"`` (symmetrized k-NN connectivity of ``X``),
+        ``"precomputed"`` (``X`` is a square affinity matrix, dense or
+        sparse), ``"rbf"`` (``exp(-gamma * ||x_i - x_j||**2)``) or
+        ``"precomputed_nearest_neighbors"`` (``X`` is a distance matrix or
+        sparse distance graph; the ``n_neighbors`` nearest per row,
+        symmetrized as ``0.5 * (C + C.T)``). A callable or any other name
+        raises ``ValueError``.
+    random_state : int or None, default None
+        Seed in ``[0, 2**32)``. None means seed 0, so results are
+        deterministic (unlike scikit-learn, where None draws a fresh seed).
+    n_neighbors : int or None, default None
+        Neighbors per row; None uses ``max(n_samples // 10, 1)``.
+    gamma : float or None, default None
+        Positive RBF coefficient, used only with ``affinity="rbf"``; None
+        means ``1 / n_features`` (scikit-learn's rule). Setting it with
+        another affinity raises ``NotImplementedError``.
+    eigen_solver : None
+        Only None is accepted; any other value raises ``NotImplementedError``.
+    eigen_tol : float, "auto" or None, default None
+        Eigensolver tolerance. ``"auto"`` and None use 1e-5; otherwise a
+        positive finite float.
+    n_jobs : int or None, default None
+        Accepted for compatibility; it does not change the result.
+    verbose : bool, default False
+        Accepted for compatibility; nothing is printed.
 
-    'precomputed_nearest_neighbors' (a distance graph, sparse or dense: the
-    n_neighbors nearest per row, symmetrized 0.5 (C + C^T)). `eigen_tol`:
-    'auto' (or None) is cuVS's 1e-5; a positive float is the thick-restart
-    Lanczos tolerance (lane/algos-decomp, 2026-09-27). n_jobs and verbose are
-    accepted and change nothing.
-    REFUSED BY NAME: a callable `affinity`, `gamma` without 'rbf', every
-    `eigen_solver` other than None ('arpack', 'lobpcg' and 'amg' are other
-    algorithms, and running the Lanczos under their names would be a silent
-    substitution; spectral/NOT_IMPLEMENTED.tsv), an `eigen_tol` <= 0 (it
-    disables the Lanczos convergence test, DEVIATION 890). A precomputed affinity with a repeated
-    `(row, col)` entry, a negative entry or a non-finite entry is refused;
-    its diagonal entries are dropped, as the reference drops them.
+    Attributes
+    ----------
+    embedding_ : Array of shape (n_samples, n_components), float32
+        The embedding of the training rows.
+    affinity_matrix_ : array
+        The dense affinity matrix built for ``"rbf"`` and
+        ``"precomputed_nearest_neighbors"``.
+    n_neighbors_ : int
+        Number of neighbors used, for the nearest-neighbor affinities.
+    gamma_ : float
+        The RBF coefficient used, for ``affinity="rbf"``.
+    n_features_in_ : int
+        Number of features of ``X``, for ``"nearest_neighbors"`` and ``"rbf"``.
 
-    There is no `transform`: the embedding is of the fitted rows only, in
-    the reference and in scikit-learn alike.
+    Notes
+    -----
+    A precomputed affinity must be nonnegative and finite and must not repeat
+    a ``(row, col)`` entry; its diagonal is ignored.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> Y = mojolearn.SpectralEmbedding(n_components=2).fit_transform(X)
     """
 
     _drop_first = True
@@ -1167,6 +1215,28 @@ class SpectralEmbedding:
         return self.n_neighbors if self.n_neighbors is not None else max(n // 10, 1)
 
     def fit(self, X, y=None):
+        """Compute the embedding of ``X``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
+            Training data, or a square affinity (``"precomputed"``) or
+            distance (``"precomputed_nearest_neighbors"``) matrix, dense or
+            sparse. Values must be finite.
+        y : ignored
+
+        Returns
+        -------
+        self : SpectralEmbedding
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``X`` is not finite, a precomputed matrix is not square or has
+            a negative or repeated entry, or ``n_components`` needs as many
+            eigenpairs as there are samples.
+        """
         k = self.n_components
         drop_first = bool(self._drop_first)
         norm_laplacian = bool(self._norm_laplacian)
@@ -1373,6 +1443,19 @@ class SpectralEmbedding:
             )
 
     def fit_transform(self, X, y=None):
+        """Fit to ``X`` and return the embedding.
+
+        Parameters
+        ----------
+        X : array-like
+            As in ``fit``.
+        y : ignored
+
+        Returns
+        -------
+        embedding : Array of shape (n_samples, n_components), float32
+            Same as ``embedding_``.
+        """
         return self.fit(X, y).embedding_
 
 
@@ -1386,10 +1469,40 @@ def spectral_embedding(
     norm_laplacian=True,
     drop_first=True,
 ):
-    """`SpectralEmbedding(...).fit_transform(A)` with the two switches the
-    class fixes: `norm_laplacian` (the symmetric normalized Laplacian) and
-    `drop_first` (drop the trivial eigenvector). Reference: cuML's
-    `manifold.spectral_embedding`."""
+    """Spectral embedding of a dataset or affinity matrix, as a function.
+
+    Equivalent to ``SpectralEmbedding(...).fit_transform(A)``, plus the two
+    switches the class fixes. Follows cuML's ``manifold.spectral_embedding``;
+    note that ``n_components`` defaults to 8 here, as in cuML.
+
+    Parameters
+    ----------
+    A : array-like
+        Data or matrix, interpreted according to ``affinity`` (see
+        :class:`SpectralEmbedding`).
+    n_components : int, default 8
+        Dimension of the embedding.
+    affinity : str, default "nearest_neighbors"
+        Affinity, as in :class:`SpectralEmbedding`.
+    random_state : int or None, default None
+        Seed; None means seed 0.
+    n_neighbors : int or None, default None
+        Neighbors per row; None uses ``max(n_samples // 10, 1)``.
+    norm_laplacian : bool, default True
+        Use the symmetric normalized graph Laplacian.
+    drop_first : bool, default True
+        Drop the first (trivial) eigenvector.
+
+    Returns
+    -------
+    embedding : Array of shape (n_samples, n_components), float32
+        The embedding.
+
+    Raises
+    ------
+    TypeError
+        If ``norm_laplacian`` or ``drop_first`` is not a bool.
+    """
     for name, value in (("norm_laplacian", norm_laplacian), ("drop_first", drop_first)):  # glue: checks two boolean flags
         if not isinstance(value, bool):
             raise TypeError(
