@@ -272,37 +272,543 @@ class _RecurrentClassifier(_RecurrentBase):
 
 
 class LSTMRegressor(_RecurrentRegressor):
-    """LSTM layers (`nn.LSTM`, batch_first) under a linear head, mean squared
-    error, trained by BPTT on the GPU. X is (n_samples, n_timesteps,
-    n_features)."""
+    """LSTM sequence regressor: recurrent layers under a linear head.
+
+    The recurrent layers are PyTorch's `nn.LSTM` with ``batch_first=True``: the same
+    parameter names, shapes, gate order and initialization (every weight and bias drawn
+    from U(-1/sqrt(hidden_size), 1/sqrt(hidden_size)), the head as `nn.Linear`), so
+    `state_dict()` loads into a torch module and back. A linear head reads the top
+    layer's last hidden state, and training minimizes the mean squared error by backpropagation
+    through time.
+
+    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
+    raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
+
+    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
+    hidden state, and packed or variable-length sequences.
+
+    Parameters
+    ----------
+    hidden_size : int, default 16
+        Size of the hidden state of each recurrent layer.
+    num_layers : int, default 1
+        Number of stacked recurrent layers.
+    optimizer : {'adam', 'adamw', 'sgd', 'rmsprop', 'adagrad', 'lion', 'adamax', 'nadam'}, default 'adam'
+        Optimizer, with PyTorch's update rule and defaults.
+    learning_rate : float, default 1e-3
+        Learning rate, used when `lr_schedule` is None.
+    batch_size : int, default 32
+        Minibatch size (capped at n_samples).
+    max_epochs : int, default 10
+        Number of passes over the data. ``max_epochs * n_samples`` must be below 2**31 - 1.
+    shuffle : bool, default True
+        Reshuffle the rows every epoch.
+    random_state : int or None, default 0
+        Seed of the weight initialization and the shuffle.
+    optimizer_options : dict or None, default None
+        Extra optimizer arguments under their PyTorch names (for example
+        ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
+    nonlinearity : str, default 'tanh'
+        Unused by this model; accepted for a common signature.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+    predict_chunk : int, default 4096
+        Rows processed per chunk at prediction time.
+    lr_schedule : object or None, default None
+        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
+        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of input features.
+    n_outputs_ : int
+        Number of head outputs.
+    n_timesteps_ : int
+        Sequence length seen in `fit`.
+    n_iter_ : int
+        Number of optimizer steps taken.
+    loss_curve_ : ndarray
+        Training loss at every optimizer step.
+    params_ : ndarray
+        All parameters as one flat float32 array.
+
+    Methods
+    -------
+    fit(X, y)
+        Train the model; returns self.
+    predict(X)
+        Predicted values.
+    hidden_sequence(X)
+        Top layer's hidden states, (n_samples, n_timesteps, hidden_size), as
+        ``nn.LSTM(..., batch_first=True)(X)[0]``.
+    state_dict()
+        Parameters as a dict of arrays under PyTorch names.
+    load_state_dict(state)
+        Load parameters from such a dict; returns self.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((256, 20, 4), dtype=np.float32)
+    >>> y = X[:, :, 0].sum(axis=1)
+    >>> model = mojolearn.LSTMRegressor(hidden_size=32, max_epochs=5).fit(X, y)
+    >>> pred = model.predict(X)
+    """
     _CELL = "lstm"
 
 
 class LSTMClassifier(_RecurrentClassifier):
-    """LSTM layers (`nn.LSTM`, batch_first) under a linear head, softmax
-    cross-entropy, trained by BPTT on the GPU."""
+    """LSTM sequence classifier: recurrent layers under a linear head.
+
+    The recurrent layers are PyTorch's `nn.LSTM` with ``batch_first=True``: the same
+    parameter names, shapes, gate order and initialization (every weight and bias drawn
+    from U(-1/sqrt(hidden_size), 1/sqrt(hidden_size)), the head as `nn.Linear`), so
+    `state_dict()` loads into a torch module and back. A linear head reads the top
+    layer's last hidden state, and training minimizes the softmax cross-entropy by backpropagation
+    through time.
+
+    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
+    raises `TypeError`). `y` holds class labels (at least two classes).
+
+    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
+    hidden state, and packed or variable-length sequences.
+
+    Parameters
+    ----------
+    hidden_size : int, default 16
+        Size of the hidden state of each recurrent layer.
+    num_layers : int, default 1
+        Number of stacked recurrent layers.
+    optimizer : {'adam', 'adamw', 'sgd', 'rmsprop', 'adagrad', 'lion', 'adamax', 'nadam'}, default 'adam'
+        Optimizer, with PyTorch's update rule and defaults.
+    learning_rate : float, default 1e-3
+        Learning rate, used when `lr_schedule` is None.
+    batch_size : int, default 32
+        Minibatch size (capped at n_samples).
+    max_epochs : int, default 10
+        Number of passes over the data. ``max_epochs * n_samples`` must be below 2**31 - 1.
+    shuffle : bool, default True
+        Reshuffle the rows every epoch.
+    random_state : int or None, default 0
+        Seed of the weight initialization and the shuffle.
+    optimizer_options : dict or None, default None
+        Extra optimizer arguments under their PyTorch names (for example
+        ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
+    nonlinearity : str, default 'tanh'
+        Unused by this model; accepted for a common signature.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+    predict_chunk : int, default 4096
+        Rows processed per chunk at prediction time.
+    lr_schedule : object or None, default None
+        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
+        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+
+    Attributes
+    ----------
+    classes_ : ndarray
+        Sorted class labels.
+    n_features_in_ : int
+        Number of input features.
+    n_outputs_ : int
+        Number of head outputs.
+    n_timesteps_ : int
+        Sequence length seen in `fit`.
+    n_iter_ : int
+        Number of optimizer steps taken.
+    loss_curve_ : ndarray
+        Training loss at every optimizer step.
+    params_ : ndarray
+        All parameters as one flat float32 array.
+
+    Methods
+    -------
+    fit(X, y)
+        Train the model; returns self.
+    predict(X)
+        Predicted class labels.
+    predict_proba(X)
+        Class probabilities, (n_samples, n_classes).
+    hidden_sequence(X)
+        Top layer's hidden states, (n_samples, n_timesteps, hidden_size), as
+        ``nn.LSTM(..., batch_first=True)(X)[0]``.
+    state_dict()
+        Parameters as a dict of arrays under PyTorch names.
+    load_state_dict(state)
+        Load parameters from such a dict; returns self.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((256, 20, 4), dtype=np.float32)
+    >>> y = (X[:, -1, 0] > 0.5).astype(np.int64)
+    >>> model = mojolearn.LSTMClassifier(hidden_size=32, max_epochs=5).fit(X, y)
+    >>> pred = model.predict(X)
+    """
     _CELL = "lstm"
 
 
 class GRURegressor(_RecurrentRegressor):
-    """GRU layers (`nn.GRU`, batch_first; gates r, z, n and
-    h' = n + z (h - n)) under a linear head, mean squared error."""
+    """GRU sequence regressor: recurrent layers under a linear head.
+
+    The GRU gates are r, z, n with ``h' = n + z * (h - n)``.
+    The recurrent layers are PyTorch's `nn.GRU` with ``batch_first=True``: the same
+    parameter names, shapes, gate order and initialization (every weight and bias drawn
+    from U(-1/sqrt(hidden_size), 1/sqrt(hidden_size)), the head as `nn.Linear`), so
+    `state_dict()` loads into a torch module and back. A linear head reads the top
+    layer's last hidden state, and training minimizes the mean squared error by backpropagation
+    through time.
+
+    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
+    raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
+
+    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
+    hidden state, and packed or variable-length sequences.
+
+    Parameters
+    ----------
+    hidden_size : int, default 16
+        Size of the hidden state of each recurrent layer.
+    num_layers : int, default 1
+        Number of stacked recurrent layers.
+    optimizer : {'adam', 'adamw', 'sgd', 'rmsprop', 'adagrad', 'lion', 'adamax', 'nadam'}, default 'adam'
+        Optimizer, with PyTorch's update rule and defaults.
+    learning_rate : float, default 1e-3
+        Learning rate, used when `lr_schedule` is None.
+    batch_size : int, default 32
+        Minibatch size (capped at n_samples).
+    max_epochs : int, default 10
+        Number of passes over the data. ``max_epochs * n_samples`` must be below 2**31 - 1.
+    shuffle : bool, default True
+        Reshuffle the rows every epoch.
+    random_state : int or None, default 0
+        Seed of the weight initialization and the shuffle.
+    optimizer_options : dict or None, default None
+        Extra optimizer arguments under their PyTorch names (for example
+        ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
+    nonlinearity : str, default 'tanh'
+        Unused by this model; accepted for a common signature.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+    predict_chunk : int, default 4096
+        Rows processed per chunk at prediction time.
+    lr_schedule : object or None, default None
+        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
+        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of input features.
+    n_outputs_ : int
+        Number of head outputs.
+    n_timesteps_ : int
+        Sequence length seen in `fit`.
+    n_iter_ : int
+        Number of optimizer steps taken.
+    loss_curve_ : ndarray
+        Training loss at every optimizer step.
+    params_ : ndarray
+        All parameters as one flat float32 array.
+
+    Methods
+    -------
+    fit(X, y)
+        Train the model; returns self.
+    predict(X)
+        Predicted values.
+    hidden_sequence(X)
+        Top layer's hidden states, (n_samples, n_timesteps, hidden_size), as
+        ``nn.GRU(..., batch_first=True)(X)[0]``.
+    state_dict()
+        Parameters as a dict of arrays under PyTorch names.
+    load_state_dict(state)
+        Load parameters from such a dict; returns self.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((256, 20, 4), dtype=np.float32)
+    >>> y = X[:, :, 0].sum(axis=1)
+    >>> model = mojolearn.GRURegressor(hidden_size=32, max_epochs=5).fit(X, y)
+    >>> pred = model.predict(X)
+    """
     _CELL = "gru"
 
 
 class GRUClassifier(_RecurrentClassifier):
-    """GRU layers (`nn.GRU`, batch_first) under a linear head, softmax
-    cross-entropy."""
+    """GRU sequence classifier: recurrent layers under a linear head.
+
+    The recurrent layers are PyTorch's `nn.GRU` with ``batch_first=True``: the same
+    parameter names, shapes, gate order and initialization (every weight and bias drawn
+    from U(-1/sqrt(hidden_size), 1/sqrt(hidden_size)), the head as `nn.Linear`), so
+    `state_dict()` loads into a torch module and back. A linear head reads the top
+    layer's last hidden state, and training minimizes the softmax cross-entropy by backpropagation
+    through time.
+
+    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
+    raises `TypeError`). `y` holds class labels (at least two classes).
+
+    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
+    hidden state, and packed or variable-length sequences.
+
+    Parameters
+    ----------
+    hidden_size : int, default 16
+        Size of the hidden state of each recurrent layer.
+    num_layers : int, default 1
+        Number of stacked recurrent layers.
+    optimizer : {'adam', 'adamw', 'sgd', 'rmsprop', 'adagrad', 'lion', 'adamax', 'nadam'}, default 'adam'
+        Optimizer, with PyTorch's update rule and defaults.
+    learning_rate : float, default 1e-3
+        Learning rate, used when `lr_schedule` is None.
+    batch_size : int, default 32
+        Minibatch size (capped at n_samples).
+    max_epochs : int, default 10
+        Number of passes over the data. ``max_epochs * n_samples`` must be below 2**31 - 1.
+    shuffle : bool, default True
+        Reshuffle the rows every epoch.
+    random_state : int or None, default 0
+        Seed of the weight initialization and the shuffle.
+    optimizer_options : dict or None, default None
+        Extra optimizer arguments under their PyTorch names (for example
+        ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
+    nonlinearity : str, default 'tanh'
+        Unused by this model; accepted for a common signature.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+    predict_chunk : int, default 4096
+        Rows processed per chunk at prediction time.
+    lr_schedule : object or None, default None
+        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
+        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+
+    Attributes
+    ----------
+    classes_ : ndarray
+        Sorted class labels.
+    n_features_in_ : int
+        Number of input features.
+    n_outputs_ : int
+        Number of head outputs.
+    n_timesteps_ : int
+        Sequence length seen in `fit`.
+    n_iter_ : int
+        Number of optimizer steps taken.
+    loss_curve_ : ndarray
+        Training loss at every optimizer step.
+    params_ : ndarray
+        All parameters as one flat float32 array.
+
+    Methods
+    -------
+    fit(X, y)
+        Train the model; returns self.
+    predict(X)
+        Predicted class labels.
+    predict_proba(X)
+        Class probabilities, (n_samples, n_classes).
+    hidden_sequence(X)
+        Top layer's hidden states, (n_samples, n_timesteps, hidden_size), as
+        ``nn.GRU(..., batch_first=True)(X)[0]``.
+    state_dict()
+        Parameters as a dict of arrays under PyTorch names.
+    load_state_dict(state)
+        Load parameters from such a dict; returns self.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((256, 20, 4), dtype=np.float32)
+    >>> y = (X[:, -1, 0] > 0.5).astype(np.int64)
+    >>> model = mojolearn.GRUClassifier(hidden_size=32, max_epochs=5).fit(X, y)
+    >>> pred = model.predict(X)
+    """
     _CELL = "gru"
 
 
 class RNNRegressor(_RecurrentRegressor):
-    """Elman RNN layers (`nn.RNN`, batch_first; nonlinearity 'tanh' or
-    'relu') under a linear head, mean squared error."""
+    """Elman RNN sequence regressor: recurrent layers under a linear head.
+
+    The nonlinearity is 'tanh' or 'relu'.
+    The recurrent layers are PyTorch's `nn.RNN` with ``batch_first=True``: the same
+    parameter names, shapes, gate order and initialization (every weight and bias drawn
+    from U(-1/sqrt(hidden_size), 1/sqrt(hidden_size)), the head as `nn.Linear`), so
+    `state_dict()` loads into a torch module and back. A linear head reads the top
+    layer's last hidden state, and training minimizes the mean squared error by backpropagation
+    through time.
+
+    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
+    raises `TypeError`). `y` is (n_samples,) or (n_samples, n_outputs).
+
+    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
+    hidden state, and packed or variable-length sequences.
+
+    Parameters
+    ----------
+    hidden_size : int, default 16
+        Size of the hidden state of each recurrent layer.
+    num_layers : int, default 1
+        Number of stacked recurrent layers.
+    optimizer : {'adam', 'adamw', 'sgd', 'rmsprop', 'adagrad', 'lion', 'adamax', 'nadam'}, default 'adam'
+        Optimizer, with PyTorch's update rule and defaults.
+    learning_rate : float, default 1e-3
+        Learning rate, used when `lr_schedule` is None.
+    batch_size : int, default 32
+        Minibatch size (capped at n_samples).
+    max_epochs : int, default 10
+        Number of passes over the data. ``max_epochs * n_samples`` must be below 2**31 - 1.
+    shuffle : bool, default True
+        Reshuffle the rows every epoch.
+    random_state : int or None, default 0
+        Seed of the weight initialization and the shuffle.
+    optimizer_options : dict or None, default None
+        Extra optimizer arguments under their PyTorch names (for example
+        ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
+    nonlinearity : {'tanh', 'relu'}, default 'tanh'
+        Activation of the recurrence, as `nn.RNN`.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+    predict_chunk : int, default 4096
+        Rows processed per chunk at prediction time.
+    lr_schedule : object or None, default None
+        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
+        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of input features.
+    n_outputs_ : int
+        Number of head outputs.
+    n_timesteps_ : int
+        Sequence length seen in `fit`.
+    n_iter_ : int
+        Number of optimizer steps taken.
+    loss_curve_ : ndarray
+        Training loss at every optimizer step.
+    params_ : ndarray
+        All parameters as one flat float32 array.
+
+    Methods
+    -------
+    fit(X, y)
+        Train the model; returns self.
+    predict(X)
+        Predicted values.
+    hidden_sequence(X)
+        Top layer's hidden states, (n_samples, n_timesteps, hidden_size), as
+        ``nn.RNN(..., batch_first=True)(X)[0]``.
+    state_dict()
+        Parameters as a dict of arrays under PyTorch names.
+    load_state_dict(state)
+        Load parameters from such a dict; returns self.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((256, 20, 4), dtype=np.float32)
+    >>> y = X[:, :, 0].sum(axis=1)
+    >>> model = mojolearn.RNNRegressor(hidden_size=32, max_epochs=5).fit(X, y)
+    >>> pred = model.predict(X)
+    """
     _CELL = "rnn"
 
 
 class RNNClassifier(_RecurrentClassifier):
-    """Elman RNN layers (`nn.RNN`, batch_first) under a linear head, softmax
-    cross-entropy."""
+    """Elman RNN sequence classifier: recurrent layers under a linear head.
+
+    The nonlinearity is 'tanh' or 'relu'.
+    The recurrent layers are PyTorch's `nn.RNN` with ``batch_first=True``: the same
+    parameter names, shapes, gate order and initialization (every weight and bias drawn
+    from U(-1/sqrt(hidden_size), 1/sqrt(hidden_size)), the head as `nn.Linear`), so
+    `state_dict()` loads into a torch module and back. A linear head reads the top
+    layer's last hidden state, and training minimizes the softmax cross-entropy by backpropagation
+    through time.
+
+    `X` has shape (n_samples, n_timesteps, n_features) and must be float32 (float64
+    raises `TypeError`). `y` holds class labels (at least two classes).
+
+    Not supported: bidirectional layers, dropout between layers, `proj_size`, an initial
+    hidden state, and packed or variable-length sequences.
+
+    Parameters
+    ----------
+    hidden_size : int, default 16
+        Size of the hidden state of each recurrent layer.
+    num_layers : int, default 1
+        Number of stacked recurrent layers.
+    optimizer : {'adam', 'adamw', 'sgd', 'rmsprop', 'adagrad', 'lion', 'adamax', 'nadam'}, default 'adam'
+        Optimizer, with PyTorch's update rule and defaults.
+    learning_rate : float, default 1e-3
+        Learning rate, used when `lr_schedule` is None.
+    batch_size : int, default 32
+        Minibatch size (capped at n_samples).
+    max_epochs : int, default 10
+        Number of passes over the data. ``max_epochs * n_samples`` must be below 2**31 - 1.
+    shuffle : bool, default True
+        Reshuffle the rows every epoch.
+    random_state : int or None, default 0
+        Seed of the weight initialization and the shuffle.
+    optimizer_options : dict or None, default None
+        Extra optimizer arguments under their PyTorch names (for example
+        ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
+    nonlinearity : {'tanh', 'relu'}, default 'tanh'
+        Activation of the recurrence, as `nn.RNN`.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+    predict_chunk : int, default 4096
+        Rows processed per chunk at prediction time.
+    lr_schedule : object or None, default None
+        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
+        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+
+    Attributes
+    ----------
+    classes_ : ndarray
+        Sorted class labels.
+    n_features_in_ : int
+        Number of input features.
+    n_outputs_ : int
+        Number of head outputs.
+    n_timesteps_ : int
+        Sequence length seen in `fit`.
+    n_iter_ : int
+        Number of optimizer steps taken.
+    loss_curve_ : ndarray
+        Training loss at every optimizer step.
+    params_ : ndarray
+        All parameters as one flat float32 array.
+
+    Methods
+    -------
+    fit(X, y)
+        Train the model; returns self.
+    predict(X)
+        Predicted class labels.
+    predict_proba(X)
+        Class probabilities, (n_samples, n_classes).
+    hidden_sequence(X)
+        Top layer's hidden states, (n_samples, n_timesteps, hidden_size), as
+        ``nn.RNN(..., batch_first=True)(X)[0]``.
+    state_dict()
+        Parameters as a dict of arrays under PyTorch names.
+    load_state_dict(state)
+        Load parameters from such a dict; returns self.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((256, 20, 4), dtype=np.float32)
+    >>> y = (X[:, -1, 0] > 0.5).astype(np.int64)
+    >>> model = mojolearn.RNNClassifier(hidden_size=32, max_epochs=5).fit(X, y)
+    >>> pred = model.predict(X)
+    """
     _CELL = "rnn"
