@@ -1,8 +1,8 @@
 {
   "board_notes": [
-    "MAIN BOARD amd-mi325x, version label main@a8fd6d926. Unreleased: not reproducible by pip install; the release boards are the reference.",
-    "Cells: 213 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@a8fd6d926 (2026-10-12T20:02:08Z). Boxes: AMD Instinct MI325X (amd, DO).",
-    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 57 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
+    "MAIN BOARD amd-mi325x, version label main@1658ba796. Unreleased: not reproducible by pip install; the release boards are the reference.",
+    "Cells: 213 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@1658ba796 (2026-10-12T21:25:50Z). Boxes: AMD Instinct MI325X (amd, DO).",
+    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 28 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
     "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: n/a 213).",
     "Opponents: copied from the stored opponent boards (opponents-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 4 races.",
     "Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax. A cell of ours whose output hash equals a copied opponent's shows quality identical_to=<arm> (the same bits) where the own-host reference gave none."
@@ -62,14 +62,14 @@
       "hostname": "AMD Instinct MI325X (amd, DO)"
     },
     "mojolearn": {
-      "version": "main@a8fd6d926",
+      "version": "main@1658ba796",
       "wheel": {
         "file": "none (unreleased; built from source at each cell's commit)",
         "sha256": "-"
       }
     },
     "repo": {
-      "commit": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4"
+      "commit": "1658ba7960a5c7962a454f37d05a0e889465dee7"
     }
   },
   "config": {
@@ -87,7 +87,7 @@
     "smoke": false,
     "vendor": "amd"
   },
-  "created": "2026-10-12T22:21:59Z",
+  "created": "2026-10-12T22:22:57Z",
   "main_board": {
     "backfill": {
       "filled": {
@@ -817,17 +817,17 @@
     },
     "inputs": {
       "branch": "main",
-      "generated": "2026-10-12T22:21:59Z",
+      "generated": "2026-10-12T22:22:57Z",
       "grid_logs": [
-        "amd=/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/r1012.q.ivf2.log"
+        "amd=/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/gridlogs.txt"
       ],
       "json_dir": null,
       "results": [
         "amd=/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt"
       ]
     },
-    "label": "main@a8fd6d926",
-    "newest_sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
+    "label": "main@1658ba796",
+    "newest_sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
     "oldest_sha": "89485bc9624fad07097aa6671c5b162b5221ae99",
     "opponent_boards": [
       {
@@ -839,7 +839,7 @@
         "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json"
       }
     ],
-    "replaced": 57,
+    "replaced": 28,
     "withheld_opponents": 4
   },
   "main_board_schema": "mojolearn-main-board/1",
@@ -62644,52 +62644,52 @@
           "library": "mojolearn",
           "main_board": {
             "box": "amd",
-            "commit_date": "2026-10-09T20:23:58Z",
+            "commit_date": "2026-10-12T21:25:50Z",
             "identity": {
               "other_column": "the nvidia columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "a1163",
+            "job": "a0009",
             "measured": null,
             "newer_failed": [],
             "observation": {
               "box": "amd",
               "column": "amd-mi325x",
               "comparability": {},
-              "ct": 1791577438,
+              "ct": 1791840350,
               "dataset": "istella",
               "digest": "cd5630b4fdd5fcea",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/gridlogs.txt",
               "family": "classical2",
               "gpu_recorded": null,
               "hardware": "AMD Instinct MI325X (amd, DO)",
               "infra": false,
-              "job": "a1163",
+              "job": "a0009",
               "kind": "gridbb",
               "lane": "ivf",
               "measured": null,
-              "median_ms": 194.8934049869422,
+              "median_ms": 196.00204300149926,
               "quality": {
                 "recall_at_k": 0.999925,
                 "rows_with_repeated_ids": 0
               },
               "race_id": "classical2/ivf/istella/rows=full",
               "reason": null,
-              "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
               "status": "ok",
               "status_raw": "ok",
-              "tag": "fg2.default-ivf-cluster",
+              "tag": "r1012.q.ivf2",
               "vendor": "amd",
-              "version": "mojolearn 0.8.37 (source build, main@0a7b206f1)"
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
             },
-            "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016"
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
           },
-          "max_ms": 194.8934049869422,
-          "median_ms": 194.8934049869422,
+          "max_ms": 196.00204300149926,
+          "median_ms": 196.00204300149926,
           "memory": {},
-          "min_ms": 194.8934049869422,
+          "min_ms": 196.00204300149926,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
@@ -62705,16 +62705,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (gridbb)"
           },
-          "source": "main@0a7b206f1 amd/a1163 2026-10-09; identity vs the nvidia columns: n/a",
+          "source": "main@1658ba796 amd/a0009 2026-10-12; identity vs the nvidia columns: n/a",
           "status": "ok",
           "times_ms": [
-            194.8934049869422
+            196.00204300149926
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@0a7b206f1)",
-          "version_source": "box table (job amd/a1163)",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0009)",
           "warmup_ms": null
         },
         {
@@ -62780,7 +62780,7 @@
           "peak_host_mb": 1286.6,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.05261351641409652,
+          "ratio_ours_identical_over": 0.052912804860414636,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -62819,7 +62819,7 @@
       "dataset": "istella",
       "family": "classical2",
       "host": {
-        "hostname": "AMD Instinct MI325X (amd, DO) job a1163"
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0009"
       },
       "id": "classical2/ivf/istella/rows=full",
       "infer_cells": [],
@@ -62834,12 +62834,12 @@
         "rows": "the classical knn lane's block (tools/knn_datasets.real_block): 400000 index rows, 4000 queries, raw",
         "timed": "build + search of every query"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt (amd/a1163)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/gridlogs.txt (amd/a0009)",
       "main_board": {
         "box": "amd",
         "identity": "n/a",
-        "job": "a1163",
-        "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016"
+        "job": "a0009",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
       },
       "opponent_source": {
         "boards": [
@@ -62869,52 +62869,52 @@
           "library": "mojolearn",
           "main_board": {
             "box": "amd",
-            "commit_date": "2026-10-09T20:23:58Z",
+            "commit_date": "2026-10-12T21:25:50Z",
             "identity": {
               "other_column": "the nvidia columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "a1163",
+            "job": "a0009",
             "measured": null,
             "newer_failed": [],
             "observation": {
               "box": "amd",
               "column": "amd-mi325x",
               "comparability": {},
-              "ct": 1791577438,
+              "ct": 1791840350,
               "dataset": "taxi",
               "digest": "d498b320bb4623b9",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/gridlogs.txt",
               "family": "classical2",
               "gpu_recorded": null,
               "hardware": "AMD Instinct MI325X (amd, DO)",
               "infra": false,
-              "job": "a1163",
+              "job": "a0009",
               "kind": "gridbb",
               "lane": "ivf",
               "measured": null,
-              "median_ms": 44.67995499726385,
+              "median_ms": 46.0584549982741,
               "quality": {
                 "recall_at_k": 0.9996499999999999,
                 "rows_with_repeated_ids": 0
               },
               "race_id": "classical2/ivf/taxi/rows=full",
               "reason": null,
-              "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016",
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
               "status": "ok",
               "status_raw": "ok",
-              "tag": "fg2.default-ivf-cluster",
+              "tag": "r1012.q.ivf2",
               "vendor": "amd",
-              "version": "mojolearn 0.8.37 (source build, main@0a7b206f1)"
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
             },
-            "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016"
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
           },
-          "max_ms": 44.67995499726385,
-          "median_ms": 44.67995499726385,
+          "max_ms": 46.0584549982741,
+          "median_ms": 46.0584549982741,
           "memory": {},
-          "min_ms": 44.67995499726385,
+          "min_ms": 46.0584549982741,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
@@ -62930,16 +62930,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (gridbb)"
           },
-          "source": "main@0a7b206f1 amd/a1163 2026-10-09; identity vs the nvidia columns: n/a",
+          "source": "main@1658ba796 amd/a0009 2026-10-12; identity vs the nvidia columns: n/a",
           "status": "ok",
           "times_ms": [
-            44.67995499726385
+            46.0584549982741
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@0a7b206f1)",
-          "version_source": "box table (job amd/a1163)",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0009)",
           "warmup_ms": null
         },
         {
@@ -63005,7 +63005,7 @@
           "peak_host_mb": 139.0,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.3125532413562296,
+          "ratio_ours_identical_over": 0.32219637200736173,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -63044,7 +63044,7 @@
       "dataset": "taxi",
       "family": "classical2",
       "host": {
-        "hostname": "AMD Instinct MI325X (amd, DO) job a1163"
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0009"
       },
       "id": "classical2/ivf/taxi/rows=full",
       "infer_cells": [],
@@ -63059,12 +63059,12 @@
         "rows": "the classical knn lane's block (tools/knn_datasets.real_block): 400000 index rows, 4000 queries, raw",
         "timed": "build + search of every query"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt (amd/a1163)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/gridlogs.txt (amd/a0009)",
       "main_board": {
         "box": "amd",
         "identity": "n/a",
-        "job": "a1163",
-        "sha": "0a7b206f18feddc0cbdc925bc6f4af498587a016"
+        "job": "a0009",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
       },
       "opponent_source": {
         "boards": [
@@ -74775,5 +74775,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-12T22:21:59Z"
+  "updated": "2026-10-12T22:22:57Z"
 }

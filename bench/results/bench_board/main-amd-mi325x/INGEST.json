@@ -1,23 +1,19 @@
 {
- "generated": "2026-10-12T22:21:59Z",
+ "generated": "2026-10-12T22:22:57Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-12T22:21:59Z",
+  "generated": "2026-10-12T22:22:57Z",
   "grid_logs": [
-   "amd=/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/r1012.q.ivf2.log"
+   "amd=/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/gridlogs.txt"
   ],
   "json_dir": null,
   "results": [
    "amd=/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt"
   ]
  },
- "skip_notes": [
-  "GRIDBB: no job line in results: amd/None r1012.q.ivf2",
-  "GRIDBB: no job line in results: amd/None r1012.q.ivf2"
- ],
+ "skip_notes": [],
  "skipped": {
-  "ALGOS: arm sklearn-cpu": 57,
-  "GRIDBB: no job line in results": 2
+  "ALGOS: arm sklearn-cpu": 57
  },
- "summary": "MAINBOARD column=amd-mi325x label=main@a8fd6d926 races=213 add=32 change=42 drop=0 failed=26 ledger=57 withheld_opponents=4 identity=n/a:213"
+ "summary": "MAINBOARD column=amd-mi325x label=main@1658ba796 races=213 add=0 change=2 drop=0 failed=26 ledger=28 withheld_opponents=4 identity=n/a:213"
 }
