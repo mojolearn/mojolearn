@@ -40,18 +40,17 @@
    }
   },
   {
-   "batch_hash": "d29d3fd253bd2ac1",
+   "batch_hash": "c3ad4d14baa3a62f",
    "bytes": 1642,
    "class": "LinearRegression",
    "file": "ols.base.npz",
    "fixture": "base",
    "lane": "ols",
    "load": "load",
-   "model_hash": "bb5b3a1e4e32cd6e",
+   "model_hash": "d6f4abe861e69f05",
    "trained_on": {
     "classes_agreeing": [
      "amd",
-     "cpu",
      "nvidia"
     ],
     "vendor": "cuda"
@@ -69,6 +68,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -600,6 +600,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -618,6 +619,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -636,6 +638,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -654,6 +657,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -672,6 +676,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -690,6 +695,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -708,6 +714,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -726,6 +733,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -744,6 +752,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -762,6 +771,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -780,6 +790,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -798,6 +809,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -816,6 +828,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -834,6 +847,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -852,6 +866,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -870,6 +885,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -888,6 +904,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -906,6 +923,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -924,6 +942,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -942,6 +961,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -960,6 +980,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -978,6 +999,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -996,6 +1018,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -1014,6 +1037,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -1032,6 +1056,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -1050,6 +1075,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
@@ -1068,6 +1094,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "cpu",
      "nvidia"
     ],
