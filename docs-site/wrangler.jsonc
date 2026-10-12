@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4.140.0/config-schema.json",
+  "name": "mojolearn-docs",
+  "account_id": "e5ba0319f9962a1aceb6a9f03245d1f5",
+  "compatibility_date": "2026-09-25",
+  // Static docs only. tools/publish.sh assembles the site directory: one folder per
+  // release, stable/ for the newest, and _redirects sending / to /stable/.
+  "assets": {
+    "directory": "../../mojolearn-evidence/docs-site-published",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "docs.mojolearn.org", "custom_domain": true }
+  ]
+}

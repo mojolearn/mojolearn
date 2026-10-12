@@ -1,0 +1,17 @@
+/* mojolearn colors (mojolearn.org brand/): indigo #30215A as the pop color, lifted for dark mode. */
+html[data-theme="light"] {
+  --pst-color-primary: #30215A;
+  --pst-color-secondary: #5A4890;
+  --pst-color-link: #30215A;
+  --pst-color-link-hover: #5A4890;
+  --pst-color-accent: #30215A;
+}
+html[data-theme="dark"] {
+  --pst-color-primary: #A99BE0;
+  --pst-color-secondary: #C9BFEF;
+  --pst-color-link: #A99BE0;
+  --pst-color-link-hover: #C9BFEF;
+  --pst-color-accent: #A99BE0;
+}
+.navbar-brand img { height: 1.6rem; }
+.sd-card-title { font-weight: 650; }

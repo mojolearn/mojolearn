@@ -1,0 +1,6 @@
+sphinx>=9
+pydata-sphinx-theme>=0.23
+myst-parser
+sphinx-copybutton
+sphinx-design
+numpy
