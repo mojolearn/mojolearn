@@ -54,7 +54,7 @@ capacity certification or a measured speedup. Physical two-GPU evidence is
 pending. Use `verify-causal-lm --device gpu --layer-devices 0 1 --output PATH`
 to capture the tiny two-layer proof through this route.
 
-The expanded 0.8.7 source also exposes fitted-model forecast scheduling:
+mojolearn also exposes fitted-model forecast scheduling:
 
 ```python
 from mojolearn.parallel_forecasting import forecast_arima, forecast_exponential_smoothing

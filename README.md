@@ -97,13 +97,14 @@ verifier.
 
 ## Numeric modes
 
-`identical` is the default and, outside the tree learners, the only mode.
-Gradient boosting, random forests and Extra Trees also offer two opt-in
-modes.
+`identical` is the default. `fast` is an opt-in for most families (tuned and
+measured on Apple), and gradient boosting, random forests and Extra Trees also
+offer `deterministic`. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
+the table by family.
 
 | mode | contract |
 |---|---|
-| `identical` | The same bits across Apple, NVIDIA and AMD GPUs and CPUs. |
+| `identical` | The same bits on NVIDIA and AMD GPUs (the release requirement); Apple GPU and CPU results are recorded beside them. |
 | `deterministic` | The same bits on repeated runs on one device. |
 | `fast` | Throughput only, with no repeatability promise. |
 

@@ -8,8 +8,7 @@ This is the same library wheel with NumPy added for fixture generation and
 array inspection; ordinary `pip install mojolearn` remains NumPy-free. If NumPy
 is already installed and satisfies the requirement, pip reuses it. Releases
 through 0.8.24 do not declare this extra: use `python -m pip install numpy`
-with those releases. The extra and the expanded `--all` scope below take effect
-in the next published release.
+with those releases.
 Optional ANN filtering and TSNE, CNN and sequence APIs, NumPy-global random-state
 adapters, and array-protocol resampling also use NumPy. Install their support with
 `python -m pip install "mojolearn[numpy]"`; `[verify]` supplies the same dependency.
@@ -368,8 +367,8 @@ you can CHECK and changed nothing about what the library will train for you.
 
 | flag | effect |
 |---|---|
-| `--all` | every lane this install runs, on the base fixture |
-| `--full` | every lane and all nine fixture variants (explicit extended check) |
+| `--all` | every lane this install runs, on all nine fixture variants |
+| `--full` | an alias for `--all` |
 | `--quick` | one lane per family on the base fixture |
 | `--lanes a,b` | only these lanes |
 | `--fixtures a,b` | only these fixtures |

@@ -26,12 +26,16 @@ CPython 3.10, 3.11, 3.12, 3.13 and 3.14 on both wheels.
 
 ## Verified devices
 
+Devices the identity results have been recorded on. A device verified from a source
+build or an earlier wheel is not covered by a wheel that does not carry its
+architecture: 0.8.41's NVIDIA package carries `sm_89` only (see the table above).
+
 | Vendor | Device | Architecture | Backend |
 |---|---|---|---|
 | Apple | M4 | Apple silicon | Metal |
 | NVIDIA | H100 | `sm_90a` | CUDA |
 | NVIDIA | A100 | `sm_80` | CUDA |
-| NVIDIA | RTX 4090 | `sm_89` | CUDA |
+| NVIDIA | RTX 4090, L40S | `sm_89` | CUDA |
 | AMD | MI325X | `gfx942` | HIP |
 | AMD | MI300X | `gfx942` | HIP |
 | CPU | x86-64 (Linux) | x86-64 | host bindings |
@@ -41,7 +45,7 @@ CPython 3.10, 3.11, 3.12, 3.13 and 3.14 on both wheels.
 
 | Mode | Contract |
 |---|---|
-| `identical` | The default. For a certified fixture and configuration, the raw result bits match across Apple Metal, NVIDIA CUDA, AMD HIP and the CPU host bindings. |
+| `identical` | The default. For a certified fixture and configuration, the raw result bits match across NVIDIA CUDA and AMD HIP; that is the release requirement. Apple Metal and CPU host-binding results are recorded beside them and agree for the configurations recorded, but are not required. |
 | `deterministic` | Repeated execution on the same device and build returns the same bits. No cross-vendor promise. |
 | `fast` | Performance oriented. No repeatability or cross-vendor promise. |
 
