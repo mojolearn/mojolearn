@@ -364,22 +364,73 @@ def _p2m_sort_rows(est, indptr, cols, dists, name=None):
 
 
 # ====================================================================== LOF
+# Reference: scikit-learn `neighbors/_lof.py` (1.9.0): `fit` (k = min(
+# n_neighbors, n_samples - 1), `kneighbors` on the training set without the
+# sample itself), `_local_reachability_density`, `negative_outlier_factor_`
+# = -mean(lrd[neighbors] / lrd), `offset_` (-1.5 at contamination='auto',
+# else the contamination percentile), `score_samples` / `decision_function`
+# / `predict` under novelty=True, `fit_predict` under novelty=False.
 class LocalOutlierFactor(_XNeighbors):
-    """Unsupervised outlier detection by the local outlier factor.
+    """Unsupervised outlier detection by the local outlier factor (LOF).
 
-    Reference: scikit-learn `neighbors/_lof.py` (1.9.0): `fit` (k = min(
-    n_neighbors, n_samples - 1), `kneighbors` on the training set without the
-    sample itself), `_local_reachability_density`, `negative_outlier_factor_`
-    = -mean(lrd[neighbors] / lrd), `offset_` (-1.5 at contamination='auto',
-    else the contamination percentile), `score_samples` / `decision_function`
-    / `predict` under novelty=True, `fit_predict` under novelty=False.
+    Scores each sample by how isolated it is relative to its k nearest
+    neighbors, following scikit-learn's ``LocalOutlierFactor``. Neighbor
+    searches are exact brute force with the euclidean metric; ties between
+    equal distances go to the lower training index, and a duplicate of a
+    training row counts as its neighbor. Computation is float32 (scikit-learn
+    uses float64).
 
-    EXACT brute-force neighbors, euclidean (metric 'minkowski' with p=2 or
-    'euclidean'); any other metric is refused by name. `algorithm`,
-    `leaf_size` and `n_jobs` are accepted and change nothing: every search is
-    exact. Ties between equal distances go to the lower training index, and a
-    duplicate of a training row is its neighbor (sklearn drops the query's
-    own index, and so does this). Float32 where sklearn is float64.
+    With ``novelty=False`` (the default) use :meth:`fit_predict` to label the
+    training data. With ``novelty=True`` fit on clean data and call
+    :meth:`predict`, :meth:`decision_function` or :meth:`score_samples` on new
+    data.
+
+    Parameters
+    ----------
+    n_neighbors : int, default 20
+        Number of neighbors. ``fit`` uses ``min(n_neighbors, n_samples - 1)``.
+    algorithm : str, default 'auto'
+        Accepted for scikit-learn compatibility; every search is exact brute
+        force.
+    leaf_size : int, default 30
+        Accepted for scikit-learn compatibility; unused.
+    metric : str, default 'minkowski'
+        ``'euclidean'``, or ``'minkowski'`` with ``p=2``. Any other metric
+        raises ``NotImplementedError``.
+    p : int, default 2
+        Minkowski power; only 2 is supported.
+    metric_params : dict or None, default None
+        Not supported; a non-empty value raises ``NotImplementedError``.
+    contamination : 'auto' or float, default 'auto'
+        Expected outlier fraction, in (0, 0.5]. ``'auto'`` sets ``offset_`` to
+        -1.5; a float sets it to that percentile of the training scores.
+    novelty : bool, default False
+        Whether the model scores new data (``predict``, ``decision_function``,
+        ``score_samples``) instead of the training data (``fit_predict``).
+    n_jobs : int or None, default None
+        Accepted for scikit-learn compatibility; unused.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    negative_outlier_factor_ : Array of shape (n_samples,)
+        Negative LOF of each training sample; lower is more abnormal.
+    offset_ : float
+        Threshold on the score; samples below it are outliers.
+    n_neighbors_ : int
+        Number of neighbors actually used.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+    n_samples_fit_ : int
+        Number of training samples.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> labels = mojolearn.LocalOutlierFactor(n_neighbors=20).fit_predict(X)
     """
 
     def __init__(self, n_neighbors=20, *, algorithm="auto", leaf_size=30, metric="minkowski", p=2,
@@ -407,6 +458,20 @@ class LocalOutlierFactor(_XNeighbors):
             raise ValueError("n_neighbors must be >= 1")
 
     def fit(self, X, y=None):
+        """Fit the model on the training data.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data; at least 2 samples. Sparse input is densified.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : LocalOutlierFactor
+            The fitted estimator.
+        """
         self._check_params()
         X = _f32(X)
         n, d = X.shape
@@ -445,6 +510,23 @@ class LocalOutlierFactor(_XNeighbors):
         return b - diff * (1.0 - t) if t >= 0.5 else a + diff * t
 
     def fit_predict(self, X, y=None):
+        """Fit the model and label the training samples.
+
+        Available only with ``novelty=False``; otherwise raises
+        ``AttributeError``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        labels : Array of shape (n_samples,), int64
+            -1 for outliers, 1 for inliers.
+        """
         if self.novelty:
             raise AttributeError("fit_predict is not available when novelty=True; use predict on new data")
         self.fit(X)
@@ -460,6 +542,20 @@ class LocalOutlierFactor(_XNeighbors):
             raise AttributeError(f"{what} is not available when novelty=False; use fit_predict")
 
     def score_samples(self, X):
+        """Negative local outlier factor of new samples.
+
+        Available only with ``novelty=True``; otherwise raises
+        ``AttributeError``. Lower scores are more abnormal.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            New samples.
+
+        Returns
+        -------
+        scores : Array of shape (n_queries,), float32
+        """
         self._novelty("score_samples")
         Q = _f32(X)
         k, nf = self.n_neighbors_, self.n_samples_fit_
@@ -472,10 +568,38 @@ class LocalOutlierFactor(_XNeighbors):
         return score
 
     def decision_function(self, X):
+        """Shifted outlier score of new samples: ``score_samples(X) - offset_``.
+
+        Available only with ``novelty=True``. Negative values are outliers.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            New samples.
+
+        Returns
+        -------
+        scores : Array of shape (n_queries,), float32
+        """
         self._novelty("decision_function")
         return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
 
     def predict(self, X):
+        """Label new samples as inliers or outliers.
+
+        Available only with ``novelty=True``; otherwise raises
+        ``AttributeError``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            New samples.
+
+        Returns
+        -------
+        labels : Array of shape (n_queries,), int64
+            -1 for outliers, 1 for inliers.
+        """
         self._novelty("predict")
         dec = self.decision_function(X)
         lab = empty((dec.size,), "<i4")
@@ -485,19 +609,65 @@ class LocalOutlierFactor(_XNeighbors):
 
 
 # ====================================================================== NearestCentroid
+# Reference: scikit-learn `neighbors/_nearest_centroid.py` (1.9.0): per-class
+# mean (euclidean) or per-class median (manhattan) centroids,
+# `within_class_std_dev_`, the shrunken centroids (`shrink_threshold`),
+# `class_prior_` ('uniform', 'empirical' or given), `predict` (the nearest
+# centroid when the priors are uniform, else the discriminant),
+# `decision_function` and `predict_proba` (euclidean only, as theirs).
+# `deviations_`, `predict_log_proba` (their log-softmax of the
+# discriminant) and `score`. DEVIATION 5201: a feature whose shrink
+# scale m*s is zero gets deviation 0 where theirs divides by zero.
 class NearestCentroid(_XNeighbors):
     """Nearest centroid classifier.
 
-    Reference: scikit-learn `neighbors/_nearest_centroid.py` (1.9.0): per-class
-    mean (euclidean) or per-class median (manhattan) centroids,
-    `within_class_std_dev_`, the shrunken centroids (`shrink_threshold`),
-    `class_prior_` ('uniform', 'empirical' or given), `predict` (the nearest
-    centroid when the priors are uniform, else the discriminant),
-    `decision_function` and `predict_proba` (euclidean only, as theirs).
-    `deviations_`, `predict_log_proba` (their log-softmax of the
-    discriminant) and `score`. Sparse input is densified (the same values).
-    Float32 where sklearn is float64. DEVIATION 5201: a feature whose shrink
-    scale m*s is zero gets deviation 0 where theirs divides by zero.
+    Represents each class by its centroid (the per-class mean for
+    ``metric='euclidean'``, the per-class median for ``'manhattan'``) and
+    assigns each sample to the nearest one, following scikit-learn's
+    ``NearestCentroid``, including shrunken centroids and class priors. With
+    non-uniform priors, ``predict`` uses the discriminant of
+    :meth:`decision_function`. Sparse input is densified. Computation is
+    float32 (scikit-learn uses float64). A feature whose shrink scale is zero
+    gets deviation 0 (scikit-learn divides by zero there).
+
+    Parameters
+    ----------
+    metric : {'euclidean', 'manhattan'}, default 'euclidean'
+        Distance used for centroids and prediction; anything else raises
+        ``ValueError``.
+    shrink_threshold : float or None, default None
+        Threshold for shrinking centroids toward the overall centroid; None
+        disables shrinking.
+    priors : {'uniform', 'empirical'} or array-like of shape (n_classes,), default 'uniform'
+        Class priors. ``'empirical'`` uses the class frequencies. Given priors
+        must be non-negative, one per class, and are rescaled to sum to one.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    centroids_ : Array of shape (n_classes, n_features)
+        Class centroids, after shrinking.
+    deviations_ : Array of shape (n_classes, n_features)
+        Shrunken deviations of each class centroid from the overall centroid.
+    within_class_std_dev_ : Array of shape (n_features,)
+        Pooled within-class standard deviation of each feature.
+    class_prior_ : Array of shape (n_classes,), float64
+        Class priors.
+    classes_ : list
+        Class labels.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int64)
+    >>> clf = mojolearn.NearestCentroid().fit(X, y)
+    >>> pred = clf.predict(X)
     """
 
     def __init__(self, metric="euclidean", *, shrink_threshold=None, priors="uniform"):
@@ -506,6 +676,26 @@ class NearestCentroid(_XNeighbors):
         self.priors = priors
 
     def fit(self, X, y):
+        """Fit the class centroids.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data.
+        y : array-like of shape (n_samples,)
+            Class labels; at least two classes.
+
+        Returns
+        -------
+        self : NearestCentroid
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If there are fewer than two classes, the priors are invalid, or
+            every feature has zero variance.
+        """
         if self.metric not in ("euclidean", "manhattan"):
             raise ValueError("NearestCentroid: metric must be 'euclidean' or 'manhattan'")
         X = _f32(X)
@@ -615,6 +805,21 @@ class NearestCentroid(_XNeighbors):
         return all(math.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())  # glue: uniform prior check over k classes
 
     def predict(self, X):
+        """Predict the class of each sample.
+
+        With uniform priors this is the class of the nearest centroid;
+        otherwise the class with the largest :meth:`decision_function` value.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Samples to classify.
+
+        Returns
+        -------
+        labels : Array or list of shape (n_queries,)
+            Predicted class labels.
+        """
         Q = _f32(X)
         if self._uniform():
             D = self._sqdist(Q, self.centroids_) if self.metric == "euclidean" else self._l1dist(Q, self.centroids_)
@@ -625,6 +830,20 @@ class NearestCentroid(_XNeighbors):
         return _argmax_labels(self, self.classes_, self.decision_function(Q))
 
     def decision_function(self, X):
+        """Discriminant score of each sample for each class.
+
+        Available for ``metric='euclidean'`` only; otherwise raises
+        ``AttributeError``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Samples to score.
+
+        Returns
+        -------
+        scores : Array of shape (n_queries, n_classes), float32
+        """
         if self.metric != "euclidean":
             raise AttributeError("decision_function is available for metric='euclidean' only")
         Q = _f32(X)
@@ -637,6 +856,20 @@ class NearestCentroid(_XNeighbors):
         return out
 
     def predict_proba(self, X):
+        """Class probabilities: the softmax of :meth:`decision_function`.
+
+        Available for ``metric='euclidean'`` only.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Samples to score.
+
+        Returns
+        -------
+        proba : Array of shape (n_queries, n_classes)
+            Probabilities, columns in the order of ``classes_``.
+        """
         dec = self.decision_function(X)
         if hasattr(self._bind(), "xn_softmax64"):
             # lane apple-fast-q-clf (x_neighbors/proba64_nc.mojo, QUALITY-FIX, FAST
@@ -651,12 +884,41 @@ class NearestCentroid(_XNeighbors):
         return out
 
     def predict_log_proba(self, X):
+        """Log class probabilities: the log-softmax of :meth:`decision_function`.
+
+        Available for ``metric='euclidean'`` only.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Samples to score.
+
+        Returns
+        -------
+        log_proba : Array of shape (n_queries, n_classes), float32
+        """
         dec = self.decision_function(X)
         out = empty(dec.shape, "<f4")
         self._op("log_softmax", [(dec, 0), (out, 1)], dec.shape)
         return out
 
     def score(self, X, y, sample_weight=None):
+        """Mean accuracy of :meth:`predict` on the given data.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,) or None, default None
+            Sample weights.
+
+        Returns
+        -------
+        score : float
+            (Weighted) fraction of correct predictions.
+        """
         return _accuracy(y, self.predict(X), sample_weight)
 
 
@@ -671,22 +933,78 @@ def _resolve_gamma(gamma, kernel, X, est):
 
 
 # ====================================================================== OneClassSVM
+# Reference: scikit-learn `svm/_classes.py` (OneClassSVM) over libsvm
+# `svm.cpp` (`solve_one_class`, `Solver::Solve` with WSS3 working-set
+# selection, `calculate_rho`). On the GPU each SMO iteration is three grid
+# launches (x_neighbors/ocsvm_dev.mojo); the host column runs the same
+# order as one item (x_neighbors/items.mojo `ocsvm_smo_item`) over the kernel matrix,
+# in float32 with the pinned spellings (DEVIATION 5200; libsvm is double).
+# `sample_weight` is libsvm's per-sample bound C_i (remove_zero_weight first).
+# Callable kernels are refused (a user arithmetic outside the pinned items).
 class OneClassSVM(_XNeighbors):
-    """Unsupervised outlier detection, the nu one-class SVM.
+    """Unsupervised outlier detection with the nu one-class SVM.
 
-    Reference: scikit-learn `svm/_classes.py` (OneClassSVM) over libsvm
-    `svm.cpp` (`solve_one_class`, `Solver::Solve` with WSS3 working-set
-    selection, `calculate_rho`). On the GPU each SMO iteration is three grid
-    launches (x_neighbors/ocsvm_dev.mojo); the host column runs the same
-    order as one item (x_neighbors/items.mojo `ocsvm_smo_item`) over the kernel matrix,
-    in float32 with the pinned spellings (DEVIATION 5200; libsvm is double).
-    `shrinking` and `cache_size` are accepted and change nothing (no
-    shrinking, the whole kernel matrix is formed). max_iter=-1 caps at
-    10_000_000 iterations. `sample_weight` is libsvm's per-sample bound C_i
-    (samples of weight 0 are dropped first, as libsvm's remove_zero_weight;
-    `support_` indexes the caller's rows). kernel='precomputed' takes the
-    n x n Gram matrix at fit and the n_test x n_train one after. Callable
-    kernels are refused (a user arithmetic outside the pinned items).
+    Learns a boundary around the training data with libsvm's SMO solver for
+    the one-class problem, following scikit-learn's ``OneClassSVM``.
+    Computation is float32 (libsvm uses float64). No shrinking heuristic is
+    used and the whole kernel matrix is formed, so ``shrinking`` and
+    ``cache_size`` change nothing.
+
+    Parameters
+    ----------
+    kernel : {'rbf', 'linear', 'poly', 'sigmoid', 'precomputed'}, default 'rbf'
+        Kernel. With ``'precomputed'``, ``fit`` takes the n x n Gram matrix
+        and later calls take the n_test x n_train kernel against the training
+        rows. Callable kernels and other names raise ``NotImplementedError``.
+    degree : int, default 3
+        Degree of the ``'poly'`` kernel.
+    gamma : {'scale', 'auto'} or float, default 'scale'
+        Kernel coefficient. ``'scale'`` is ``1 / (n_features * X.var())``
+        (1.0 when the variance is zero); ``'auto'`` is ``1 / n_features``.
+    coef0 : float, default 0.0
+        Independent term of the ``'poly'`` and ``'sigmoid'`` kernels.
+    tol : float, default 1e-3
+        Stopping tolerance of the solver.
+    nu : float, default 0.5
+        Upper bound on the fraction of training errors and lower bound on the
+        fraction of support vectors, in (0, 1].
+    shrinking : bool, default True
+        Accepted for scikit-learn compatibility; unused.
+    cache_size : float, default 200
+        Accepted for scikit-learn compatibility; unused.
+    verbose : bool, default False
+        Accepted for scikit-learn compatibility; unused.
+    max_iter : int, default -1
+        Iteration limit of the solver; -1 means 10,000,000.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    support_ : Array of shape (n_SV,), int32
+        Indices of the support vectors in the training data.
+    support_vectors_ : Array of shape (n_SV, n_features)
+        Support vectors (shape (n_SV, 0) for a precomputed kernel).
+    dual_coef_ : Array of shape (1, n_SV)
+        Coefficients of the support vectors.
+    intercept_ : Array of shape (1,)
+        Constant in the decision function.
+    offset_ : float
+        Offset subtracted from ``score_samples`` to give ``decision_function``.
+    n_iter_ : int
+        Solver iterations run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+    fit_status_ : int
+        0 when fitted.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.OneClassSVM(nu=0.1).fit(X)
+    >>> labels = model.predict(X)
     """
 
     def __init__(self, *, kernel="rbf", degree=3, gamma="scale", coef0=0.0, tol=1e-3, nu=0.5,
@@ -703,6 +1021,25 @@ class OneClassSVM(_XNeighbors):
         self.max_iter = max_iter
 
     def fit(self, X, y=None, sample_weight=None):
+        """Fit the one-class SVM.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data, or the (n_samples, n_samples) Gram matrix for
+            ``kernel='precomputed'``. Sparse input is densified.
+        y : None
+            Ignored.
+        sample_weight : array-like of shape (n_samples,) or None, default None
+            Per-sample weights that scale each sample's bound, as libsvm does.
+            Samples of weight 0 are dropped; negative weights raise
+            ``ValueError``, and so do all-zero weights.
+
+        Returns
+        -------
+        self : OneClassSVM
+            The fitted estimator.
+        """
         if callable(self.kernel) or self.kernel not in ("linear", "poly", "rbf", "sigmoid", "precomputed"):
             raise NotImplementedError(f"OneClassSVM: kernel={self.kernel!r} is not implemented")
         if not (0.0 < float(self.nu) <= 1.0):
@@ -800,6 +1137,18 @@ class OneClassSVM(_XNeighbors):
         return self
 
     def score_samples(self, X):
+        """Raw scoring function of the samples (not shifted by ``offset_``).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Samples, or the (n_queries, n_train) kernel for
+            ``kernel='precomputed'``.
+
+        Returns
+        -------
+        scores : Array of shape (n_queries,), float32
+        """
         Q = _f32(X)
         n_sv = self.dual_coef_.shape[1]
         coef = as_f32_c(self.dual_coef_, ndim=2, name="dual_coef_")[0].reshape((n_sv, 1))
@@ -820,9 +1169,33 @@ class OneClassSVM(_XNeighbors):
         return s.reshape((Q.shape[0],))
 
     def decision_function(self, X):
+        """Signed distance to the boundary: ``score_samples(X) - offset_``.
+
+        Positive for inliers, negative for outliers.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Samples (or kernel rows for ``kernel='precomputed'``).
+
+        Returns
+        -------
+        scores : Array of shape (n_queries,), float32
+        """
         return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
 
     def predict(self, X):
+        """Label samples as inliers (1) or outliers (-1).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Samples (or kernel rows for ``kernel='precomputed'``).
+
+        Returns
+        -------
+        labels : Array of shape (n_queries,), int64
+        """
         dec = self.decision_function(X)
         lab = empty((dec.size,), "<i4")
         if dec.size:
@@ -830,6 +1203,20 @@ class OneClassSVM(_XNeighbors):
         return lab.astype("<i8")
 
     def fit_predict(self, X, y=None):
+        """Fit on X and label X: ``fit(X).predict(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        labels : Array of shape (n_samples,), int64
+            1 for inliers, -1 for outliers.
+        """
         return self.fit(X).predict(X)
 
 
@@ -845,20 +1232,82 @@ def _kpca_clamp_count(kit, w):
     return wc, npos
 
 
+# Reference: scikit-learn `decomposition/_kernel_pca.py` (1.9.0) with
+# `preprocessing.KernelCenterer`: the kernel matrix, centered in their
+# order, the dense eigendecomposition (eigen_solver 'dense'; here
+# x_decomp's eigh, ascending, then
+# sklearn's `svd_flip(u, None)` sign rule), eigenvalues
+# below zero set to zero, components sorted by decreasing eigenvalue (equal
+# eigenvalues: the higher solver index first, as their reversed argsort),
+# zero components removed when n_components is None or remove_zero_eig.
+# Every eigen_solver is served by the dense solve (DEVIATION 5202: arpack
+# and randomized are approximations of it), except the top-k Lanczos route
+# for eigen_solver='auto', n > 200 and 0 < n_components < 10 (falls back to
+# the dense solve when its basis does not converge).
 class KernelPCA(_XNeighbors):
     """Kernel principal component analysis.
 
-    Reference: scikit-learn `decomposition/_kernel_pca.py` (1.9.0) with
-    `preprocessing.KernelCenterer`: the kernel matrix, centered in their
-    order, the dense eigendecomposition (eigen_solver 'dense'; here
-    x_decomp's eigh, ascending, then
-    sklearn's `svd_flip(u, None)` sign rule), eigenvalues
-    below zero set to zero, components sorted by decreasing eigenvalue (equal
-    eigenvalues: the higher solver index first, as their reversed argsort),
-    zero components removed when n_components is None or remove_zero_eig.
-    Every eigen_solver is served by the dense solve (DEVIATION 5202: arpack
-    and randomized are approximations of it). kernel='precomputed' takes the
-    Gram matrix; fit_inverse_transform and callables are refused by name.
+    Non-linear dimensionality reduction: forms the kernel matrix of the
+    training data, centers it, and projects onto its leading eigenvectors,
+    following scikit-learn's ``KernelPCA``. Negative eigenvalues are set to
+    zero, components are sorted by decreasing eigenvalue, and each
+    eigenvector's sign is fixed so its largest-magnitude entry is positive.
+    Computation is float32.
+
+    With ``eigen_solver='auto'``, more than 200 samples and
+    ``0 < n_components < 10``, the top components come from an iterative
+    (Lanczos) solver; every other case, including ``'arpack'`` and
+    ``'randomized'``, uses an exact dense eigendecomposition.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Number of components. None keeps every component with a positive
+        eigenvalue.
+    kernel : str, default 'linear'
+        ``'linear'``, ``'poly'`` (or ``'polynomial'``), ``'rbf'``,
+        ``'sigmoid'``, ``'laplacian'``, ``'cosine'``, ``'chi2'``,
+        ``'additive_chi2'`` or ``'precomputed'`` (``fit`` then takes the
+        n x n Gram matrix and ``transform`` the n_queries x n_train kernel).
+        Callable kernels raise ``NotImplementedError``.
+    gamma : float or None, default None
+        Kernel coefficient; None means ``1 / n_features``.
+    degree : int, default 3
+        Degree of the ``'poly'`` kernel.
+    coef0 : float, default 1
+        Independent term of the ``'poly'`` and ``'sigmoid'`` kernels.
+    kernel_params : dict or None, default None
+        Not supported; a non-empty value raises ``NotImplementedError``.
+    alpha : float, default 1.0
+        Accepted for scikit-learn compatibility; unused (no inverse transform).
+    fit_inverse_transform : bool, default False
+        Not supported; True raises ``NotImplementedError`` in ``fit``.
+    eigen_solver : str, default 'auto'
+        ``'auto'`` may use the iterative solver described above; any other
+        value uses the dense solver.
+    tol, max_iter, iterated_power, random_state, copy_X, n_jobs
+        Accepted for scikit-learn compatibility; unused.
+    remove_zero_eig : bool, default False
+        Drop components with zero eigenvalue even when ``n_components`` is
+        set.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    eigenvalues_ : Array of shape (n_components,)
+        Eigenvalues of the centered kernel matrix, decreasing.
+    eigenvectors_ : Array of shape (n_samples, n_components)
+        Eigenvectors of the centered kernel matrix.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> Z = mojolearn.KernelPCA(n_components=2, kernel="rbf").fit_transform(X)
     """
 
     def __init__(self, n_components=None, *, kernel="linear", gamma=None, degree=3, coef0=1,
@@ -888,6 +1337,21 @@ class KernelPCA(_XNeighbors):
         return self._kernel(A, B, self.kernel, self._gamma, self.coef0, self.degree)
 
     def fit(self, X, y=None):
+        """Fit the model on the training data.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data, or the (n_samples, n_samples) Gram matrix for
+            ``kernel='precomputed'``. Sparse input is densified.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : KernelPCA
+            The fitted estimator.
+        """
         if callable(self.kernel) or (self.kernel not in _KERNELS and self.kernel != "precomputed"):
             raise NotImplementedError(f"KernelPCA: kernel={self.kernel!r} is not implemented")
         if self.fit_inverse_transform:
@@ -1011,6 +1475,21 @@ class KernelPCA(_XNeighbors):
         return self
 
     def fit_transform(self, X, y=None, **params):
+        """Fit the model and return the projection of the training data.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data (or the Gram matrix for ``kernel='precomputed'``).
+        y : None
+            Ignored.
+        **params
+            Ignored.
+
+        Returns
+        -------
+        X_new : Array of shape (n_samples, n_components), float32
+        """
         self.fit(X)
         return self._alpha_scale(0)
 
@@ -1021,6 +1500,19 @@ class KernelPCA(_XNeighbors):
         return out
 
     def transform(self, X):
+        """Project new samples onto the fitted components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Samples, or for ``kernel='precomputed'`` the (n_queries, n_train)
+            kernel against the training rows (a different column count raises
+            ``ValueError``).
+
+        Returns
+        -------
+        X_new : Array of shape (n_queries, n_components), float32
+        """
         Q = _f32(X)
         nq = Q.shape[0]
         nf = self._fit_X.shape[0]
@@ -1047,9 +1539,21 @@ class KernelPCA(_XNeighbors):
         return self._matmul(Kc, alphas)
 
     def inverse_transform(self, X):
+        """Not supported: always raises ``NotImplementedError``."""
         raise NotImplementedError("KernelPCA: inverse_transform needs fit_inverse_transform, which is not implemented")
 
     def get_feature_names_out(self, input_features=None):
+        """Output feature names: ``kernelpca0``, ``kernelpca1``, ...
+
+        Parameters
+        ----------
+        input_features : None
+            Ignored.
+
+        Returns
+        -------
+        names : list of str
+        """
         return _prefixed_names(self, self.eigenvalues_.shape[0])
 
 
@@ -1076,17 +1580,58 @@ def _seed_word(seed):
 
 
 # ====================================================================== PolynomialCountSketch
+# Reference: scikit-learn `kernel_approximation.py` (PolynomialCountSketch,
+# 1.9.0): `indexHash_` (`randint(0, n_components, (degree, n_features))`)
+# and `bitHash_` (`choice([-1, 1], (degree, n_features))`); here drawn by the
+# device counter-based generator (x_neighbors/kfeat_rng.mojo, see
+# `_seed_word`), the same distribution, not their legacy RandomState words.
+# The transform is the count sketches' circular convolution, computed
+# directly instead of through an FFT (DEVIATION 5203).
 class PolynomialCountSketch(_XNeighbors):
     """Polynomial kernel approximation by tensor sketch.
 
-    Reference: scikit-learn `kernel_approximation.py` (PolynomialCountSketch,
-    1.9.0): `indexHash_` and `bitHash_` are drawn exactly as theirs
-    (`randint(0, n_components, (degree, n_features))`, then
-    `choice([-1, 1], (degree, n_features))`, one legacy RandomState stream);
-    the transform is the count sketches' circular convolution, computed
-    directly instead of through an FFT (DEVIATION 5203). random_state is an
-    int, a numpy RandomState or None, as sklearn's check_random_state. Sparse
-    input is densified (the same values).
+    Maps data to a feature space whose inner products approximate the
+    polynomial kernel ``(gamma * <x, y> + coef0) ** degree``, following
+    scikit-learn's ``PolynomialCountSketch``. The hash tables are drawn from
+    mojolearn's counter-based generator seeded by ``random_state``: the same
+    distribution as scikit-learn, reproducible for an int seed, but not
+    scikit-learn's exact numbers. The sketches' circular convolution is
+    computed directly rather than by FFT. Sparse input is densified;
+    computation is float32.
+
+    Parameters
+    ----------
+    gamma : float, default 1.0
+        Kernel coefficient.
+    degree : int, default 2
+        Degree of the polynomial kernel; at least 1.
+    coef0 : float, default 0
+        Constant term of the kernel.
+    n_components : int, default 100
+        Dimension of the output feature space; at least 1.
+    random_state : int, numpy.random.RandomState or None, default None
+        Seed for the hash tables. A RandomState or None contributes one draw
+        that seeds the generator. Anything else raises ``ValueError``.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    indexHash_ : Array of shape (degree, n_features_hashed), int32
+        Output bucket of each input feature, per degree.
+    bitHash_ : Array of shape (degree, n_features_hashed), int32
+        Sign (-1 or 1) of each input feature, per degree.
+        ``n_features_hashed`` is ``n_features + 1`` when ``coef0 != 0``,
+        else ``n_features``.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> Z = mojolearn.PolynomialCountSketch(n_components=64, random_state=0).fit_transform(X)
     """
 
     def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None):
@@ -1097,6 +1642,26 @@ class PolynomialCountSketch(_XNeighbors):
         self.random_state = random_state
 
     def fit(self, X, y=None):
+        """Draw the hash tables.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data; only its number of features is used.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : PolynomialCountSketch
+            The fitted transformer.
+
+        Raises
+        ------
+        ValueError
+            If ``degree`` or ``n_components`` is below 1, or ``random_state`` is
+            not an int, a numpy RandomState or None.
+        """
         X = _f32(X)
         d = X.shape[1]
         nf = d + (1 if self.coef0 != 0 else 0)
@@ -1130,6 +1695,18 @@ class PolynomialCountSketch(_XNeighbors):
         return self
 
     def transform(self, X):
+        """Map X to the sketched feature space.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Samples; the number of features must match ``fit`` (``ValueError``
+            otherwise). Sparse input is densified.
+
+        Returns
+        -------
+        X_new : Array of shape (n_samples, n_components), float32
+        """
         X = _f32(X)
         n, d = X.shape
         if d != self.n_features_in_:
@@ -1143,21 +1720,71 @@ class PolynomialCountSketch(_XNeighbors):
         return out
 
     def fit_transform(self, X, y=None):
+        """Fit to X, then transform X: ``fit(X).transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        X_new : Array of shape (n_samples, n_components), float32
+        """
         return self.fit(X).transform(X)
 
     def get_feature_names_out(self, input_features=None):
+        """Output feature names: ``polynomialcountsketch0``, ``polynomialcountsketch1``, ...
+
+        Parameters
+        ----------
+        input_features : None
+            Ignored.
+
+        Returns
+        -------
+        names : list of str
+        """
         return _prefixed_names(self, int(self.n_components))
 
 
 # ====================================================================== AdditiveChi2Sampler
+# Reference: scikit-learn `kernel_approximation.py` (AdditiveChi2Sampler,
+# `_transform_dense`, 1.9.0). A sparse input gives the dense map's nonzeros
+# as csr, as theirs (`_transform_sparse` maps only the stored entries, and a
+# zero maps to zeros).
 class AdditiveChi2Sampler(_XNeighbors):
     """Approximate feature map for the additive chi-squared kernel.
 
-    Reference: scikit-learn `kernel_approximation.py` (AdditiveChi2Sampler,
-    `_transform_dense`, 1.9.0). Deterministic: no random state. Negative input
-    is refused, as theirs. A sparse input gives a sparse (csr) output holding
-    the dense map's nonzeros, as theirs (`_transform_sparse` maps only the
-    stored entries, and a zero maps to zeros).
+    A deterministic Fourier sampling of the kernel's feature map, following
+    scikit-learn's ``AdditiveChi2Sampler``. Each input feature becomes
+    ``2 * sample_steps - 1`` output features. Input must be non-negative;
+    negative values raise ``ValueError``. A scipy.sparse input gives a sparse
+    (CSR) output. Computation is float32.
+
+    Parameters
+    ----------
+    sample_steps : int, default 2
+        Number of sampling points.
+    sample_interval : float or None, default None
+        Sampling interval. Required when ``sample_steps`` is not 1, 2 or 3
+        (``ValueError`` otherwise); by default 0.8, 0.5 or 0.4 for those.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> Z = mojolearn.AdditiveChi2Sampler(sample_steps=2).fit_transform(X)
     """
 
     def __init__(self, *, sample_steps=2, sample_interval=None):
@@ -1173,6 +1800,20 @@ class AdditiveChi2Sampler(_XNeighbors):
         return table[self.sample_steps]
 
     def fit(self, X, y=None):
+        """Validate the input and the sampling settings.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data; must be non-negative (``ValueError`` otherwise).
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : AdditiveChi2Sampler
+            The fitted transformer.
+        """
         X = _f32(X)
         first = -2
         if X.size and _kfeat_flags(self) & 1:
@@ -1193,6 +1834,18 @@ class AdditiveChi2Sampler(_XNeighbors):
         return self
 
     def transform(self, X):
+        """Apply the approximate feature map to X.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Non-negative samples (``ValueError`` otherwise).
+
+        Returns
+        -------
+        X_new : Array or scipy.sparse.csr_matrix of shape (n_samples, n_features * (2 * sample_steps - 1))
+            float32; sparse (CSR) when X is sparse.
+        """
         sparse = X if (hasattr(X, "toarray") and hasattr(X, "nnz")) else None
         X = _f32(X)
         n, d = X.shape
@@ -1211,9 +1864,37 @@ class AdditiveChi2Sampler(_XNeighbors):
         return out
 
     def fit_transform(self, X, y=None):
+        """Fit to X, then transform X: ``fit(X).transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Non-negative training data.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        X_new : Array or scipy.sparse.csr_matrix of shape (n_samples, n_features * (2 * sample_steps - 1))
+        """
         return self.fit(X).transform(X)
 
     def get_feature_names_out(self, input_features=None):
+        """Output feature names.
+
+        For each input name ``f``: ``additivechi2sampler_f_sqrt``, then for each
+        step ``j`` from 1 the ``..._cos{j}`` and ``..._sin{j}`` names.
+
+        Parameters
+        ----------
+        input_features : list of str or None, default None
+            Input feature names; None means ``x0``, ``x1``, ... Its length must
+            equal ``n_features_in_`` (``ValueError`` otherwise).
+
+        Returns
+        -------
+        names : list of str
+        """
         names = _feature_names_in(self, input_features)
         base = type(self).__name__.lower()
         out = [f"{base}_{nm}_sqrt" for nm in names]  # glue: feature names over the d columns
@@ -1224,15 +1905,52 @@ class AdditiveChi2Sampler(_XNeighbors):
 
 
 # ====================================================================== SkewedChi2Sampler
+# Reference: scikit-learn `kernel_approximation.py` (SkewedChi2Sampler,
+# 1.9.0). The weights and offsets come from the device counter-based
+# generator (x_neighbors/kfeat_rng.mojo, `x_neighbors_kfeat_schi2_fit_idn`);
+# the legacy-RandomState route (`x_neighbors_kfeat_schi2_fit`, sklearn's
+# uniforms, pi/2 * u and the offsets in IEEE double rounded once to float32)
+# runs only on a binary without the counter-based draw. The inverse sech CDF,
+# the log, the product and the cosine run in float32 on the portable spellings.
 class SkewedChi2Sampler(_XNeighbors):
     """Approximate feature map for the skewed chi-squared kernel.
 
-    Reference: scikit-learn `kernel_approximation.py` (SkewedChi2Sampler,
-    1.9.0). The uniforms are theirs exactly (legacy RandomState, see
-    `_LegacyRandomState`); pi/2 * u and the offsets are formed in IEEE double
-    and rounded once to float32; the inverse sech CDF, the log, the product
-    and the cosine run in float32 on the lane's portable spellings. Input at
-    or below -skewedness is refused, as theirs.
+    Monte Carlo approximation of the kernel's feature map, following
+    scikit-learn's ``SkewedChi2Sampler``. The random weights and offsets are
+    drawn from mojolearn's counter-based generator seeded by
+    ``random_state``: the same distribution as scikit-learn, reproducible
+    for an int seed, but not scikit-learn's exact numbers. Computation is
+    float32. Input values at or below ``-skewedness`` raise ``ValueError``.
+
+    Parameters
+    ----------
+    skewedness : float, default 1.0
+        Skewedness parameter of the kernel.
+    n_components : int, default 100
+        Number of Monte Carlo samples per feature (output dimension); at
+        least 1.
+    random_state : int, numpy.random.RandomState or None, default None
+        Seed for the weights and offsets. A RandomState or None contributes
+        one draw that seeds the generator. Anything else raises
+        ``ValueError``.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    random_weights_ : Array of shape (n_features, n_components)
+        Random projection weights.
+    random_offset_ : Array of shape (n_components,)
+        Random offsets.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> Z = mojolearn.SkewedChi2Sampler(n_components=64, random_state=0).fit_transform(X)
     """
 
     def __init__(self, *, skewedness=1.0, n_components=100, random_state=None):
@@ -1241,6 +1959,26 @@ class SkewedChi2Sampler(_XNeighbors):
         self.random_state = random_state
 
     def fit(self, X, y=None):
+        """Draw the random weights and offsets.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data; only its number of features is used.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : SkewedChi2Sampler
+            The fitted transformer.
+
+        Raises
+        ------
+        ValueError
+            If X has no features, ``n_components`` is below 1, or
+            ``random_state`` is not an int, a numpy RandomState or None.
+        """
         X = _f32(X)
         d = X.shape[1]
         nc = int(self.n_components)
@@ -1291,6 +2029,7 @@ class SkewedChi2Sampler(_XNeighbors):
 
     @property
     def random_weights_(self):
+        """Random projection weights, shape (n_features, n_components)."""
         # SCHI2_LAZYW: made from z on the first read (one binding call, main's
         # kernel and words) when no transform has made it yet. Stored under
         # `_random_weights` (an older pickle's plain attribute still reads).
@@ -1314,6 +2053,18 @@ class SkewedChi2Sampler(_XNeighbors):
         self.__dict__["_random_weights"] = value
 
     def transform(self, X):
+        """Apply the approximate feature map to X.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Samples; every value must be greater than ``-skewedness``
+            (``ValueError`` otherwise). Sparse input is densified.
+
+        Returns
+        -------
+        X_new : Array of shape (n_samples, n_components), float32
+        """
         X = _f32(X)
         n, d = X.shape
         if X.size and X.min() <= -float(self.skewedness):
@@ -1339,20 +2090,45 @@ class SkewedChi2Sampler(_XNeighbors):
         return out
 
     def fit_transform(self, X, y=None):
+        """Fit to X, then transform X: ``fit(X).transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        X_new : Array of shape (n_samples, n_components), float32
+        """
         return self.fit(X).transform(X)
 
     def get_feature_names_out(self, input_features=None):
+        """Output feature names: ``skewedchi2sampler0``, ``skewedchi2sampler1``, ...
+
+        Parameters
+        ----------
+        input_features : None
+            Ignored.
+
+        Returns
+        -------
+        names : list of str
+        """
         return _prefixed_names(self, int(self.n_components))
 
 
 # ====================================================================== LabelPropagation
+# scikit-learn `semi_supervised/_label_propagation.py` (1.9.0): the dense
+# RBF graph or compact kNN connectivity graph (including each row's own
+# point as its first neighbor), the product / clamp iteration with their stopping
+# rule (sum |L - L_prev| < tol, checked before each step), the final row
+# normalization and `transduction_`. Callable kernels are refused. Float32
+# where theirs is float64; the neighbor ties go to the lower index.
 class _LabelPropagationBase(_XNeighbors):
-    """scikit-learn `semi_supervised/_label_propagation.py` (1.9.0): the dense
-    RBF graph or compact kNN connectivity graph (including each row's own
-    point as its first neighbor), the product / clamp iteration with their stopping
-    rule (sum |L - L_prev| < tol, checked before each step), the final row
-    normalization and `transduction_`. Callable kernels are refused. Float32
-    where theirs is float64; the neighbor ties go to the lower index."""
+    """Shared implementation of LabelPropagation and LabelSpreading."""
 
     _variant = None
 
@@ -1388,6 +2164,20 @@ class _LabelPropagationBase(_XNeighbors):
         raise NotImplementedError(f"{type(self).__name__}: kernel={self.kernel!r} is not implemented ('rbf' or 'knn')")
 
     def fit(self, X, y):
+        """Fit the model and propagate labels to the unlabeled samples.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data. Sparse input is densified.
+        y : array-like of shape (n_samples,)
+            Labels; -1 marks an unlabeled sample.
+
+        Returns
+        -------
+        self
+            The fitted estimator.
+        """
         X = _f32(X)
         n = X.shape[0]
         # the labels by the native encoder, then the one-hot rows, the
@@ -1486,6 +2276,18 @@ class _LabelPropagationBase(_XNeighbors):
         return self
 
     def predict_proba(self, X):
+        """Class probabilities of new samples from the fitted label distributions.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Samples.
+
+        Returns
+        -------
+        proba : Array of shape (n_queries, n_classes), float32
+            Columns in the order of ``classes_``.
+        """
         Q = _f32(X)
         nq = Q.shape[0]
         n = self.X_.shape[0]
@@ -1501,14 +2303,96 @@ class _LabelPropagationBase(_XNeighbors):
         return out
 
     def predict(self, X):
+        """Predict the class of new samples.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Samples.
+
+        Returns
+        -------
+        labels : Array or list of shape (n_queries,)
+            The most probable class of each sample.
+        """
         return _argmax_labels(self, self.classes_, self.predict_proba(X))
 
     def score(self, X, y, sample_weight=None):
+        """Mean accuracy of :meth:`predict` on the given data.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,) or None, default None
+            Sample weights.
+
+        Returns
+        -------
+        score : float
+            (Weighted) fraction of correct predictions.
+        """
         return _accuracy(y, self.predict(X), sample_weight)
 
 
 class LabelPropagation(_LabelPropagationBase):
-    """Label propagation (hard clamping). See `_LabelPropagationBase`."""
+    """Semi-supervised classification by label propagation.
+
+    Spreads the known labels over a similarity graph of all samples, keeping
+    the labeled samples fixed (hard clamping), following scikit-learn's
+    ``LabelPropagation``. Mark unlabeled samples with -1 in ``y``. The graph
+    is a dense RBF affinity matrix or a k-nearest-neighbor connectivity
+    graph (each sample is its own first neighbor; distance ties go to the
+    lower index). Iteration stops when the summed absolute change of the
+    label distributions falls below ``tol`` or after ``max_iter`` steps.
+    Computation is float32 (scikit-learn uses float64).
+
+    Parameters
+    ----------
+    kernel : {'rbf', 'knn'}, default 'rbf'
+        Graph kernel. Other values, including callables, raise
+        ``NotImplementedError``.
+    gamma : float, default 20
+        Coefficient of the ``'rbf'`` kernel.
+    n_neighbors : int, default 7
+        Number of neighbors of the ``'knn'`` kernel.
+    max_iter : int, default 1000
+        Maximum number of iterations.
+    tol : float, default 1e-3
+        Convergence tolerance.
+    n_jobs : int or None, default None
+        Accepted for scikit-learn compatibility; unused.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    X_ : Array of shape (n_samples, n_features)
+        Training data.
+    classes_ : list
+        Class labels (without the -1 marker).
+    label_distributions_ : Array of shape (n_samples, n_classes)
+        Label distribution of each training sample.
+    transduction_ : Array or list of shape (n_samples,)
+        Label assigned to each training sample.
+    n_iter_ : int
+        Number of iterations run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int64)
+    >>> y[100:] = -1
+    >>> model = mojolearn.LabelPropagation(kernel="knn").fit(X, y)
+    >>> labels = model.transduction_
+    """
 
     _variant = "propagation"
 
@@ -1531,8 +2415,65 @@ class LabelPropagation(_LabelPropagationBase):
 
 
 class LabelSpreading(_LabelPropagationBase):
-    """Label spreading (the normalized graph Laplacian, soft clamping by
-    alpha). See `_LabelPropagationBase`."""
+    """Semi-supervised classification by label spreading.
+
+    Spreads the known labels over the normalized graph Laplacian of a
+    similarity graph, letting labeled samples change by a fraction ``alpha``
+    (soft clamping), following scikit-learn's ``LabelSpreading``. Mark
+    unlabeled samples with -1 in ``y``. The graph is a dense RBF affinity
+    matrix or a k-nearest-neighbor graph (each sample is its own first
+    neighbor; distance ties go to the lower index). Iteration stops when the
+    summed absolute change of the label distributions falls below ``tol`` or
+    after ``max_iter`` steps. Computation is float32 (scikit-learn uses
+    float64).
+
+    Parameters
+    ----------
+    kernel : {'rbf', 'knn'}, default 'rbf'
+        Graph kernel. Other values, including callables, raise
+        ``NotImplementedError``.
+    gamma : float, default 20
+        Coefficient of the ``'rbf'`` kernel.
+    n_neighbors : int, default 7
+        Number of neighbors of the ``'knn'`` kernel.
+    alpha : float, default 0.2
+        Clamping factor in (0, 1): the fraction of a sample's label taken
+        from its neighbors each step. Other values raise ``ValueError``.
+    max_iter : int, default 30
+        Maximum number of iterations.
+    tol : float, default 1e-3
+        Convergence tolerance.
+    n_jobs : int or None, default None
+        Accepted for scikit-learn compatibility; unused.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    X_ : Array of shape (n_samples, n_features)
+        Training data.
+    classes_ : list
+        Class labels (without the -1 marker).
+    label_distributions_ : Array of shape (n_samples, n_classes)
+        Label distribution of each training sample.
+    transduction_ : Array or list of shape (n_samples,)
+        Label assigned to each training sample.
+    n_iter_ : int
+        Number of iterations run.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int64)
+    >>> y[100:] = -1
+    >>> model = mojolearn.LabelSpreading(kernel="knn", alpha=0.2).fit(X, y)
+    >>> labels = model.transduction_
+    """
 
     _variant = "spreading"
 
@@ -1546,6 +2487,25 @@ class LabelSpreading(_LabelPropagationBase):
         self.n_jobs = n_jobs
 
     def fit(self, X, y):
+        """Fit the model and spread labels to the unlabeled samples.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data. Sparse input is densified.
+        y : array-like of shape (n_samples,)
+            Labels; -1 marks an unlabeled sample.
+
+        Returns
+        -------
+        self : LabelSpreading
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``alpha`` is not in (0, 1).
+        """
         if not (0.0 < float(self.alpha) < 1.0):
             raise ValueError("alpha must be in (0, 1)")
         return super().fit(X, y)
@@ -1567,19 +2527,60 @@ class LabelSpreading(_LabelPropagationBase):
 
 
 # ====================================================================== KNNImputer
+# Reference: scikit-learn `impute/_knn.py` (1.9.0): nan_euclidean distances
+# to the fit rows, donors = fit rows where the column is present, the k
+# nearest (ties: the lower row index), 'uniform' or 'distance' weights,
+# the masked column mean when no donor has a finite distance, all-missing
+# columns dropped (or zero with keep_empty_features), `add_indicator`,
+# `get_feature_names_out`. A numeric missing_values other than NaN is
+# replaced by NaN before the Mojo call (an exact equality test). Callable
+# metrics and weights are refused (a user arithmetic outside the pinned items).
 class KNNImputer(_XNeighbors):
     """Imputation of missing values by k nearest neighbors.
 
-    Reference: scikit-learn `impute/_knn.py` (1.9.0): nan_euclidean distances
-    to the fit rows, donors = fit rows where the column is present, the k
-    nearest (ties: the lower row index), 'uniform' or 'distance' weights,
-    the masked column mean when no donor has a finite distance, all-missing
-    columns dropped (or zero with keep_empty_features), `add_indicator`,
-    `get_feature_names_out`. A numeric missing_values other than NaN is
-    replaced by NaN before the Mojo call (an exact equality test), so it
-    imputes as sklearn's mask does. metric 'nan_euclidean' only; callable
-    metrics and weights are refused by name (a user arithmetic outside the
-    pinned items).
+    Fills each missing value from the ``n_neighbors`` nearest training rows
+    that have that feature, using NaN-aware euclidean distances, following
+    scikit-learn's ``KNNImputer``. Distance ties go to the lower row index.
+    When no donor is at a finite distance, the training column mean is used.
+    Features that are entirely missing at ``fit`` are dropped from the output
+    (or set to zero with ``keep_empty_features=True``). Computation is
+    float32.
+
+    Parameters
+    ----------
+    missing_values : float, default nan
+        Value marking a missing entry: NaN or another number. Strings,
+        None and booleans raise ``NotImplementedError``.
+    n_neighbors : int, default 5
+        Number of donor neighbors; at least 1.
+    weights : {'uniform', 'distance'}, default 'uniform'
+        Donor weighting: equal, or by inverse distance. Callables raise
+        ``NotImplementedError``.
+    metric : {'nan_euclidean'}, default 'nan_euclidean'
+        Distance; any other value raises ``NotImplementedError``.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; the output is always a new
+        array.
+    add_indicator : bool, default False
+        Append a 0/1 indicator column for each feature that had missing
+        values at ``fit``.
+    keep_empty_features : bool, default False
+        Keep features that are entirely missing at ``fit``, imputed as zero.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> X[::7, 3] = np.nan
+    >>> X_filled = mojolearn.KNNImputer(n_neighbors=5).fit_transform(X)
     """
 
     def __init__(self, *, missing_values=float("nan"), n_neighbors=5, weights="uniform",
@@ -1629,6 +2630,20 @@ class KNNImputer(_XNeighbors):
         return X
 
     def fit(self, X, y=None):
+        """Store the training data used as donors.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data, with missing values marked by ``missing_values``.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : KNNImputer
+            The fitted imputer.
+        """
         self._check()
         X = self._masked(X)
         n, d = X.shape
@@ -1642,6 +2657,21 @@ class KNNImputer(_XNeighbors):
         return self
 
     def transform(self, X):
+        """Impute the missing values of X.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Data to impute; the number of features must match ``fit``
+            (``ValueError`` otherwise).
+
+        Returns
+        -------
+        X_imputed : Array of shape (n_samples, n_features_out), float32
+            Imputed data, without the features that were entirely missing at
+            ``fit`` (unless ``keep_empty_features``), followed by the indicator
+            columns when ``add_indicator`` is True.
+        """
         X = self._masked(X)
         n, d = X.shape
         if d != self.n_features_in_:
@@ -1682,9 +2712,37 @@ class KNNImputer(_XNeighbors):
         return out
 
     def fit_transform(self, X, y=None):
+        """Fit to X, then impute X: ``fit(X).transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Data with missing values.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        X_imputed : Array of shape (n_samples, n_features_out), float32
+        """
         return self.fit(X).transform(X)
 
     def get_feature_names_out(self, input_features=None):
+        """Output feature names.
+
+        The kept input names, followed by ``missingindicator_<name>`` for each
+        indicator column when ``add_indicator`` is True.
+
+        Parameters
+        ----------
+        input_features : list of str or None, default None
+            Input feature names; None means ``x0``, ``x1``, ... Its length must
+            equal ``n_features_in_`` (``ValueError`` otherwise).
+
+        Returns
+        -------
+        names : list of str
+        """
         names = _feature_names_in(self, input_features)
         out = [nm for f, nm in enumerate(names) if self._valid[f] or self.keep_empty_features]  # glue: feature names over the d columns
         if self.add_indicator:
@@ -1700,25 +2758,61 @@ def _adjacency(A):
     return A
 
 
+# References: networkx `pagerank` (`_pagerank_scipy`: row-stochastic
+# transition matrix, dangling nodes redistributed by the personalization,
+# stop when sum |x - x_last| < n * tol) and cuGraph
+# cpp/src/link_analysis/pagerank_impl.cuh. Each step is the pinned-fold
+# GEMV of x_neighbors/items.mojo `pagerank_step_item`. A scipy.sparse input
+# is read as CSR with sorted indices; the device checks the column order.
 class PageRank(_XNeighbors):
-    """PageRank by power iteration on a weighted adjacency matrix
-    (A[i, j] = weight of the edge i -> j): dense, a scipy.sparse matrix
-    (any format, read as CSR with sorted indices: the device checks the
-    column order and raises) or an (indptr, indices, n) tuple (every edge
-    weighs 1.0).
+    """PageRank scores of a directed graph by power iteration.
 
-    References: networkx `pagerank` (`_pagerank_scipy`: row-stochastic
-    transition matrix, dangling nodes redistributed by the personalization,
-    stop when sum |x - x_last| < n * tol) and cuGraph
-    cpp/src/link_analysis/pagerank_impl.cuh. Each step is the pinned-fold
-    GEMV of x_neighbors/items.mojo `pagerank_step_item`. `personalization`
-    is a length-n vector (normalized to sum 1) or None (uniform); `nstart`
-    (the starting vector, normalized) and `dangling` (where a dangling node's
-    mass goes, normalized; the personalization when None) are length-n
-    vectors, as networkx's dicts over nodes 0..n-1. `weight` False (or None,
-    networkx's unweighted spelling) makes every edge weight 1; the dense
-    matrix carries the weights, so no attribute name is needed.
-    Non-convergence raises, as networkx's PowerIterationFailedConvergence.
+    Follows networkx's ``pagerank``: a row-stochastic transition matrix,
+    dangling nodes' mass redistributed by ``dangling`` (or the
+    personalization), and iteration until the summed absolute change is
+    below ``n * tol``. The graph is a weighted adjacency matrix with
+    ``A[i, j]`` the weight of the edge i -> j, given as a dense square
+    array, a scipy.sparse matrix (any format; its indices must be sorted
+    within each row), or an ``(indptr, indices, n)`` CSR tuple in which every
+    edge weighs 1. Vectors over nodes are length-n arrays (networkx uses
+    dicts over nodes 0..n-1). Computation is float32.
+
+    Parameters
+    ----------
+    alpha : float, default 0.85
+        Damping factor.
+    personalization : array-like of shape (n,) or None, default None
+        Teleport distribution, normalized to sum to one; None is uniform.
+    max_iter : int, default 100
+        Maximum number of iterations. Not converging raises ``RuntimeError``.
+    tol : float, default 1e-6
+        Per-node convergence tolerance.
+    nstart : array-like of shape (n,) or None, default None
+        Starting vector, normalized to sum to one; None is uniform.
+    weight : bool or None, default True
+        Use the edge weights. False or None treats every edge as weight 1.
+    dangling : array-like of shape (n,) or None, default None
+        Where the mass of nodes without out-edges goes, normalized to sum to
+        one; None uses the personalization.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    The ``personalization``, ``nstart`` and ``dangling`` vectors must have
+    length n, be non-negative and not all zero (``ValueError`` otherwise).
+
+    Attributes
+    ----------
+    pagerank_ : Array of shape (n,), float32
+        PageRank score of each node.
+    n_iter_ : int
+        Number of iterations run.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> A = (np.random.default_rng(0).random((500, 500)) < 0.01).astype(np.float32)
+    >>> scores = mojolearn.PageRank(alpha=0.85).fit(A).pagerank_
     """
 
     def __init__(self, alpha=0.85, *, personalization=None, max_iter=100, tol=1e-6, nstart=None, weight=True,
@@ -1757,6 +2851,27 @@ class PageRank(_XNeighbors):
         return out
 
     def fit(self, A, y=None):
+        """Compute the PageRank scores of the graph.
+
+        Parameters
+        ----------
+        A : array-like of shape (n, n), scipy.sparse matrix, or tuple
+            Weighted adjacency matrix (``A[i, j]`` is the weight of i -> j): a
+            dense square array, a scipy.sparse matrix, or an
+            ``(indptr, indices, n)`` CSR tuple.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : PageRank
+            The fitted estimator, with ``pagerank_`` and ``n_iter_``.
+
+        Raises
+        ------
+        RuntimeError
+            If the iteration does not converge within ``max_iter`` steps.
+        """
         binary = self.weight is None or self.weight is False
         csr = _csr_graph_of(A)
         if csr is not None:
@@ -1820,15 +2935,46 @@ class PageRank(_XNeighbors):
 
 
 # ====================================================================== connected components
+# The labels come from the min-label product iteration (DBSCAN's
+# weak_cc; cuGraph weakly_connected_components_impl.cuh), integers only.
 def connected_components(A, directed=True, connection="weak", return_labels=True, numeric_mode=None):
-    """(n_components, labels) of the graph with dense adjacency A, as
-    `scipy.sparse.csgraph.connected_components`: an edge is any nonzero
-    entry, `connection='weak'` ignores direction (for an undirected graph the
-    two agree); labels are numbered by the lowest node of each component, so
-    component 0 holds node 0 (scipy's numbering). The labels come from the
-    min-label product iteration (DBSCAN's weak_cc; cuGraph
-    weakly_connected_components_impl.cuh), integers only. connection='strong'
-    on a directed graph is refused by name."""
+    """Connected components of a graph.
+
+    Follows ``scipy.sparse.csgraph.connected_components``. An edge is any
+    nonzero entry of the adjacency matrix. Weak connectivity ignores edge
+    direction. Components are numbered in order of their lowest node, so
+    component 0 holds node 0, as scipy numbers them.
+
+    Parameters
+    ----------
+    A : array-like of shape (n, n), scipy.sparse matrix, or tuple
+        Adjacency matrix: a dense square array, a scipy.sparse matrix (any
+        format), or an ``(indptr, indices, n)`` CSR tuple.
+    directed : bool, default True
+        Whether the graph is directed.
+    connection : {'weak', 'strong'}, default 'weak'
+        Connectivity type. ``'strong'`` on a directed graph raises
+        ``NotImplementedError``; on an undirected graph it equals
+        ``'weak'``. Other values raise ``ValueError``.
+    return_labels : bool, default True
+        Also return the component label of each node.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for the call (``'fast'`` is Apple only). None uses the
+        process default.
+
+    Returns
+    -------
+    n_components : int
+        Number of connected components.
+    labels : Array of shape (n,), int32
+        Component of each node; returned only when ``return_labels`` is True.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> A = (np.random.default_rng(0).random((500, 500)) < 0.002).astype(np.float32)
+    >>> n_components, labels = mojolearn.connected_components(A, directed=False)
+    """
     if directed and connection == "strong":
         raise NotImplementedError("connected_components: connection='strong' is not implemented")
     if connection not in ("weak", "strong"):
@@ -1937,22 +3083,62 @@ def _csr_graph_of(A):
 
 
 # ====================================================================== Louvain
+# References: networkx `louvain_communities` / `louvain_partitions`
+# (`_one_level`, `_gen_graph`, `modularity`) and cuGraph
+# cpp/src/community/louvain_impl.cuh. Parallel local moving in a PINNED
+# order (x_neighbors/graph_par.mojo, DEVIATION 5204): the nodes of one
+# colour of a fixed graph colouring move together instead of networkx's
+# `seed` shuffle, candidate communities in ascending id, a strictly larger
+# gain to move, so ties go to the lowest community id; community totals
+# and the aggregation are fixed-order folds. A scipy.sparse input is read as
+# CSR with sorted indices; the device checks the column order and symmetry.
 class Louvain(_XNeighbors):
-    """Louvain community detection on a symmetric weighted adjacency: dense,
-    a scipy.sparse matrix (read as CSR with sorted indices; the device
-    checks the column order and the symmetry and raises) or an (indptr,
-    indices, n) tuple (every edge weighs 1.0).
+    """Louvain community detection on an undirected weighted graph.
 
-    References: networkx `louvain_communities` / `louvain_partitions`
-    (`_one_level`, `_gen_graph`, `modularity`) and cuGraph
-    cpp/src/community/louvain_impl.cuh. Parallel local moving in a PINNED
-    order (x_neighbors/graph_par.mojo, DEVIATION 5204): the nodes of one
-    colour of a fixed graph colouring move together instead of networkx's
-    `seed` shuffle, candidate communities in ascending id, a strictly larger
-    gain to move, so ties go to the lowest community id; community totals
-    and the aggregation are fixed-order folds. `labels_` numbers the
-    communities by their lowest node; `modularity_` is networkx's
-    modularity of that partition, in float32. `seed` is accepted and unused.
+    Finds communities by greedy modularity optimization, following
+    networkx's ``louvain_communities``. Local moving runs in parallel in a
+    fixed order (the nodes of one color of a fixed graph coloring move
+    together, ties go to the lowest community id) instead of networkx's
+    random shuffle, so the result is reproducible and does not depend on
+    ``seed``; it can differ from networkx's partition. The graph is a
+    symmetric weighted adjacency matrix given as a dense square array, a
+    scipy.sparse matrix (any format; indices sorted within each row), or an
+    ``(indptr, indices, n)`` CSR tuple in which every edge weighs 1. A
+    non-symmetric matrix or a graph without edges raises ``ValueError``.
+
+    Parameters
+    ----------
+    resolution : float, default 1.0
+        Resolution of the modularity; larger values favor smaller
+        communities.
+    threshold : float, default 1e-7
+        Minimum modularity gain for another level.
+    max_level : int or None, default None
+        Maximum number of levels (a positive integer); None means no limit.
+    seed : int or None, default None
+        Accepted for networkx compatibility; unused.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    labels_ : Array of shape (n,), int32
+        Community of each node, numbered in order of each community's lowest
+        node.
+    n_communities_ : int
+        Number of communities.
+    modularity_ : float
+        Modularity of the partition (computed in float32).
+    n_levels_ : int
+        Number of levels run.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> M = np.random.default_rng(0).random((500, 500)) < 0.02
+    >>> A = (M | M.T).astype(np.float32)
+    >>> labels = mojolearn.Louvain().fit_predict(A)
     """
 
     def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None):
@@ -1962,6 +3148,27 @@ class Louvain(_XNeighbors):
         self.seed = seed
 
     def fit(self, A, y=None):
+        """Detect communities in the graph.
+
+        Parameters
+        ----------
+        A : array-like of shape (n, n), scipy.sparse matrix, or tuple
+            Symmetric weighted adjacency matrix: a dense square array, a
+            scipy.sparse matrix, or an ``(indptr, indices, n)`` CSR tuple.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : Louvain
+            The fitted estimator.
+
+        Raises
+        ------
+        ValueError
+            If ``max_level`` is not a positive integer or None, the matrix is not
+            symmetric, or the graph has no edges.
+        """
         ml = 0 if self.max_level is None else int(self.max_level)
         if self.max_level is not None and ml < 1:
             raise ValueError("max_level must be a positive integer or None")
@@ -2015,25 +3222,86 @@ class Louvain(_XNeighbors):
         return self
 
     def fit_predict(self, A, y=None):
+        """Detect communities and return ``labels_``.
+
+        Parameters
+        ----------
+        A : array-like of shape (n, n), scipy.sparse matrix, or tuple
+            Symmetric weighted adjacency matrix.
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        labels : Array of shape (n,), int32
+            Community of each node.
+        """
         return self.fit(A).labels_
 
 
 # ====================================================================== SVGP
+# Reference: GPflow `gpflow/models/svgp.py` (SVGP with a Gaussian
+# likelihood, a squared-exponential kernel, zero mean). q(u) is set to its
+# optimum for the given hyperparameters (Titsias 2009), where GPflow's `elbo`
+# equals the collapsed bound reported as `elbo_` (DEVIATION 5205: GPflow
+# trains the hyperparameters and q by gradient steps). The m x m system runs
+# as staged items (x_neighbors/items.mojo `svgp_*_item`: a Cholesky column
+# per launch, one triangular solve per right-hand side); the fit is the
+# float-float resident chain `xn_svgp_fit_ff` (x_neighbors/svgp_ff.mojo).
 class SVGP(_XNeighbors):
     """Sparse variational Gaussian process regression with inducing points.
 
-    Reference: GPflow `gpflow/models/svgp.py` (SVGP with a Gaussian
-    likelihood, a squared-exponential kernel, zero mean). The variational
-    distribution q(u) = N(q_mu, q_sqrt q_sqrt^T) is set to its OPTIMUM for
-    the given hyperparameters (Titsias 2009), where GPflow's `elbo` equals the
-    collapsed bound reported as `elbo_`; hyperparameters are the caller's,
-    not optimized (DEVIATION 5205: GPflow trains them and q by gradient
-    steps). q_mu / q_sqrt are the non-whitened parameters. Inducing points:
-    `inducing_points`, or `n_inducing` training rows evenly spaced
-    (row i * n // M). The m x m system runs as staged items
-    (x_neighbors/items.mojo `svgp_*_item`: a Cholesky column per launch, one
-    triangular solve per right-hand side); the kernel matrices and products
-    are parallel items. Float32 throughout.
+    A Gaussian process regressor with a Gaussian likelihood, a
+    squared-exponential kernel and zero mean, in the form of GPflow's
+    ``SVGP``. The variational distribution q(u) = N(q_mu, q_sqrt q_sqrt^T)
+    is set to its optimum for the given hyperparameters (Titsias 2009), and
+    ``elbo_`` is the resulting bound. The hyperparameters are used as given
+    and are not optimized (GPflow trains them by gradient steps). Inputs and
+    outputs are float32; the fit solves the inducing-point system in
+    extended (float-float) precision.
+
+    Parameters
+    ----------
+    n_inducing : int, default 32
+        Number of inducing points when ``inducing_points`` is None: that
+        many training rows, evenly spaced (row ``i * n // M``), at most n.
+    inducing_points : array-like of shape (M, n_features) or None, default None
+        Inducing point locations.
+    kernel_variance : float, default 1.0
+        Signal variance of the kernel.
+    lengthscale : float, default 1.0
+        Kernel lengthscale.
+    noise_variance : float, default 1.0
+        Variance of the Gaussian likelihood.
+    jitter : float, default 1e-6
+        Diagonal jitter added to the inducing-point kernel matrix.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
+
+    Attributes
+    ----------
+    Z_ : Array of shape (M, n_features)
+        Inducing points.
+    q_mu_ : Array of shape (M,)
+        Mean of q(u) (non-whitened).
+    q_sqrt_ : Array of shape (M, M)
+        Square root of the covariance of q(u) (non-whitened).
+    elbo_ : float
+        Evidence lower bound at the optimal q(u).
+    precision_ : str
+        Precision of the fit's linear algebra, ``'float-float'``.
+    n_features_in_ : int
+        Number of features seen in ``fit``.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> X = rng.random((1000, 4), dtype=np.float32)
+    >>> y = np.sin(6 * X[:, 0]).astype(np.float32)
+    >>> model = mojolearn.SVGP(n_inducing=32, lengthscale=0.3, noise_variance=0.01).fit(X, y)
+    >>> mean, var = model.predict_y(X)
     """
 
     def __init__(self, n_inducing=32, *, inducing_points=None, kernel_variance=1.0, lengthscale=1.0,
@@ -2055,6 +3323,27 @@ class SVGP(_XNeighbors):
         return self._unary(K, _U_IDENTITY, _f32_scalar(self.kernel_variance), 0.0)
 
     def fit(self, X, y):
+        """Fit the variational distribution for the given hyperparameters.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training inputs.
+        y : array-like of shape (n_samples,)
+            Training targets.
+
+        Returns
+        -------
+        self : SVGP
+            The fitted model.
+
+        Raises
+        ------
+        ValueError
+            If X and y have different numbers of rows, or the inducing-point
+            system is not positive definite (raise ``jitter`` or
+            ``noise_variance``).
+        """
         X = _f32(X)
         n, d = X.shape
         yv = _f32_1d(y, "y")
@@ -2093,6 +3382,18 @@ class SVGP(_XNeighbors):
         return self
 
     def predict_f(self, X):
+        """Mean and variance of the latent function at X.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Query inputs.
+
+        Returns
+        -------
+        mean : Array of shape (n_queries,), float32
+        var : Array of shape (n_queries,), float32
+        """
         Q = _f32(X)
         M = self.Z_.shape[0]
         if not _OLD_ITEMS and Q.shape[0]:
@@ -2113,8 +3414,32 @@ class SVGP(_XNeighbors):
         return mean, var
 
     def predict_y(self, X):
+        """Mean and variance of the observations at X (latent variance plus
+        ``noise_variance``).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Query inputs.
+
+        Returns
+        -------
+        mean : Array of shape (n_queries,), float32
+        var : Array of shape (n_queries,), float32
+        """
         mean, var = self.predict_f(X)
         return mean, self._unary(var, _U_IDENTITY, 1.0, _f32_scalar(self.noise_variance))
 
     def predict(self, X):
+        """Predictive mean at X (the mean of :meth:`predict_f`).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_queries, n_features)
+            Query inputs.
+
+        Returns
+        -------
+        mean : Array of shape (n_queries,), float32
+        """
         return self.predict_f(X)[0]
