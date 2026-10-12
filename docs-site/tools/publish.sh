@@ -26,6 +26,18 @@ cat > "$SITE/404.html" <<'HTML'
 <body><h1>Page not found</h1><p>This page is not in the mojolearn documentation. Try the <a href="/stable/">current docs</a> or <a href="/stable/search.html">search</a>.</p></body></html>
 HTML
 printf '/ /stable/ 302\n' > "$SITE/_redirects"
+# Version switcher: every published release, newest first, with stable/ marked preferred.
+"$PY" -I - "$SITE" "$VERSION" <<'PYEOF'
+import json, pathlib, sys
+site, newest = pathlib.Path(sys.argv[1]), sys.argv[2]
+key = lambda v: tuple(int(x) for x in v.split(".") if x.isdigit())
+versions = sorted((d.name for d in site.iterdir() if d.is_dir() and d.name[0].isdigit()), key=key, reverse=True)
+entries = [{"name": f"{v} (stable)" if v == newest else v, "version": v,
+            "url": f"https://docs.mojolearn.org/{'stable' if v == newest else v}/",
+            **({"preferred": True} if v == newest else {})} for v in versions]
+(site / "switcher.json").write_text(json.dumps(entries, indent=2) + "\n")
+(site / "robots.txt").write_text("User-agent: *\nAllow: /\nSitemap: https://docs.mojolearn.org/stable/sitemap.xml\n")
+PYEOF
 echo "site: $SITE ($(ls "$SITE" | tr '\n' ' '))"
 rm -rf _site && cp -R "$SITE" _site
 echo "staged _site for: npx wrangler deploy"

@@ -18,6 +18,7 @@ extensions = [
     "myst_parser",
     "sphinx_copybutton",
     "sphinx_design",
+    "sphinx_sitemap",
 ]
 source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 exclude_patterns = ["_build", "tools", "README.md"]
@@ -70,6 +71,10 @@ html_theme_options = {
         {"name": "PyPI", "url": "https://pypi.org/project/mojolearn/", "icon": "fa-brands fa-python"},
     ],
     "navbar_align": "left",
+    # Version dropdown, like PyTorch's: tools/publish.sh writes /switcher.json listing every published release.
+    "switcher": {"json_url": "https://docs.mojolearn.org/switcher.json", "version_match": release},
+    "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
+    "check_switcher": False,
     "header_links_before_dropdown": 5,
     "show_toc_level": 2,
     "navigation_with_keys": False,
@@ -78,3 +83,6 @@ html_theme_options = {
 }
 html_context = {"default_mode": "auto"}
 html_show_sourcelink = False
+# Sitemap for search engines, under the stable/ alias so indexes point at the current release.
+html_baseurl = "https://docs.mojolearn.org/stable/"
+sitemap_url_scheme = "{link}"
