@@ -1,42 +1,39 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`HDBSCAN` on the GPU. Reference: cuML (workstream D, 2026-09-14).
+# Maintainer notes (moved from the module docstring; workstream D, 2026-09-14):
+# The Python door of `hdbscan/estimator.mojo::hdbscan_fit_host` through
+# `bindings/_mojolearn_hdbscan.mojo`. Reference: cuML. The path follows cuML's
+# `runner.h:152-234` (brute-force k-NN, Boruvka MST, single linkage, condensed
+# tree, excess-of-mass or leaf selection); the lane README lists what is
+# mirrored and what is refused.
+# Refusals: metric other than euclidean (here and Mojo host);
+# cluster_selection_epsilon < 0 or non-finite (here); min_samples < 1 or
+# > n_rows, min_cluster_size < 2 or > n_rows, alpha <= 0 or non-finite,
+# n_rows < 2, any NaN/inf (Mojo host, DEVIATION 1607). Past 46340 rows the MST
+# is built without the dense graph (DEVIATION 1620).
+# Held-out points (2026-09-15): prediction data per cuML
+# `prediction_data.cu:92-239` (`hdbscan/impl/prediction_data.mojo`);
+# approximate_predict per `hdbscan.pyx:1264`, `predict.cuh:220-262`.
+# Soft clustering (2026-09-15): `hdbscan.pyx:1180`, `:1114`,
+# `soft_clustering.cuh:385-627`; float32 with pinned seams on every column
+# (DEVIATION 1616, `hdbscan/impl/detail/soft_clustering.mojo`), where cuML
+# promotes four seams to float64. No speed claim.
+"""HDBSCAN density-based clustering.
 
-The Python door of `hdbscan/estimator.mojo::hdbscan_fit_host` through
-`bindings/_mojolearn_hdbscan.mojo`. The path follows the steps of cuML's
-`runner.h:152-234` (brute-force k-NN, Boruvka MST, single linkage, the
-condensed tree, excess-of-mass or leaf selection); the lane README lists
-what is mirrored and what is refused.
+`HDBSCAN` clusters the training data. When it is fitted with
+`prediction_data=True`, three functions in this module work on new or
+training points under the fitted clustering, following cuML's
+`cuml.cluster.hdbscan` functions of the same names:
 
-WHAT IS REFUSED, AND WHERE (the estimator's header):
-    metric other than euclidean          here by name, and on the Mojo host
-    cluster_selection_epsilon < 0 or non-finite   here, by name
-    min_samples < 1 or > n_rows          Mojo host
-    min_cluster_size < 2 or > n_rows     Mojo host
-    alpha <= 0 or non-finite             Mojo host
-    n_rows < 2                           Mojo host (past 46340 rows the MST is
-                                         built without the dense graph, DEVIATION 1620)
-    a NaN or infinite anywhere           Mojo host (DEVIATION 1607)
+- `approximate_predict` gives the cluster label and probability of new
+  points;
+- `membership_vector` gives the soft cluster membership of new points;
+- `all_points_membership_vectors` gives the soft cluster membership of
+  every training point.
 
-HELD-OUT POINTS (2026-09-15). `HDBSCAN(prediction_data=True)` keeps the
-condensed tree and builds cuML's prediction data at fit time
-(`prediction_data.cu:92-239`, `hdbscan/impl/prediction_data.mojo`), and the
-module function `approximate_predict(clusterer, points_to_predict)`
-(`hdbscan.pyx:1264`, `predict.cuh:220-262`) returns the label and the
-probability of new points under the fitted clustering. Without
-`prediction_data=True` it refuses by name, as cuML's `_check_clusterer`
-does (`hdbscan.pyx:1104-1108`). There is still no `predict` method and no
-model to save.
-
-SOFT CLUSTERING (2026-09-15). `membership_vector(clusterer,
-points_to_predict, batch_size)` and `all_points_membership_vectors(clusterer,
-batch_size)` (`hdbscan.pyx:1180`, `:1114`, `soft_clustering.cuh:385-627`)
-need the same prediction data and refuse by name without it. They compute in
-float32 with pinned seams on every column (DEVIATION 1616,
-`hdbscan/impl/detail/soft_clustering.mojo`), where cuML promotes four seams
-to float64.
-
-NO SPEED CLAIM. The lane has no published number and this door adds none.
+Each raises `ValueError` for a clusterer fitted without
+`prediction_data=True`, as cuML does. Soft membership is computed in
+float32 throughout, where cuML uses float64 in some steps.
 """
 import warnings
 
@@ -75,45 +72,80 @@ _HDBSCAN_INTS = 11
 _SELECTION = {"eom": SELECTION_EOM, "leaf": SELECTION_LEAF}
 
 
+# cluster_selection_epsilon: cuML's epsilon search (`select.cuh:301-363`), run
+# on the host by one function both routes call (DEVIATION 5115).
+# probabilities_: cuML `get_probabilities` (DEVIATION 5116).
+# prediction_data: cuML's parameter (`hdbscan.pyx:568`).
 class HDBSCAN(NumericModeMixin):
-    """`cuml.cluster.HDBSCAN` semantics on the GPU.
+    """Hierarchical density-based clustering (HDBSCAN).
+
+    Follows cuML's `cuml.cluster.HDBSCAN`: builds the mutual reachability
+    graph from exact nearest neighbors, its minimum spanning tree and the
+    condensed cluster tree, then selects clusters by excess of mass or by
+    leaf. Points in no cluster are labeled `-1` (noise). `X` is read as
+    float32; only the Euclidean metric is supported. A NaN or infinity in
+    `X`, or fewer than 2 rows, raises an error.
 
     Parameters
     ----------
     min_cluster_size : int, default 5
+        Smallest group of points that counts as a cluster. Must be between 2
+        and the number of rows.
     min_samples : int or None, default None
-        None means `min_cluster_size`, cuML's and scikit-learn's rule.
+        Number of neighbors used for the core distance. None means
+        `min_cluster_size`, as in cuML and scikit-learn. Must be between 1
+        and the number of rows.
     cluster_selection_epsilon : float, default 0.0
-        cuML's epsilon search (`select.cuh:301-363`), run on the host by one
-        function both routes call (DEVIATION 5115): a selected cluster
-        born below this distance is merged upward to the first ancestor
-        born above it. 0.0 disables it.
+        A selected cluster born below this distance is merged into its first
+        ancestor born above it. 0.0 disables merging. Must be finite and
+        non-negative.
     max_cluster_size : int, default 0
-        0 means no cap.
+        Largest cluster the excess-of-mass selection may return. 0 means no
+        limit.
     metric : {'euclidean'}, default 'euclidean'
+        Distance metric. Any other value raises `ValueError`.
     alpha : float, default 1.0
+        Distance scaling in the robust single linkage. Must be positive and
+        finite.
     cluster_selection_method : {'eom', 'leaf'}, default 'eom'
+        'eom' selects by excess of mass; 'leaf' selects the leaves of the
+        condensed tree.
     allow_single_cluster : bool, default False
+        Allow the result to be a single cluster.
     prediction_data : bool, default False
-        Keep the condensed tree and build the prediction data at fit time,
-        so `approximate_predict` can be called (cuML's parameter,
-        `hdbscan.pyx:568`). The fit itself is the same call either way.
+        Keep the condensed tree and build prediction data during `fit`, so
+        `approximate_predict`, `membership_vector`,
+        `all_points_membership_vectors` and `save` can be used. The
+        clustering itself is the same either way.
 
     Attributes
     ----------
-    labels_ : Array (n_samples,) int32
-        `0 .. n_clusters_-1`, `-1` for noise; cuML's numbering (ascending
-        condensed cluster id through `label_map`).
-    core_distances_ : Array (n_samples,) float32
-        Distance to the `min_samples`-th nearest neighbor excluding self.
+    labels_ : Array of shape (n_samples,), int32
+        Cluster of each training point, `0 .. n_clusters_ - 1`, or `-1` for
+        noise. Numbered as cuML numbers them.
+    probabilities_ : Array of shape (n_samples,), float32
+        Strength of each point's membership in its cluster, 0 for noise.
+    core_distances_ : Array of shape (n_samples,), float32
+        Distance from each point to its `min_samples`-th nearest neighbor,
+        not counting the point itself.
     n_clusters_ : int
+        Number of clusters found.
     n_outliers_ : int
+        Number of noise points.
     n_boruvka_rounds_ : int
-        An integer card stage.
+        Number of Boruvka rounds the minimum spanning tree took.
     n_condensed_clusters_ : int
-    probabilities_ : Array (n_samples,) float32
-        cuML's `get_probabilities` (DEVIATION 5116): the strength of each
-        point's membership in its cluster, 0 for noise.
+        Number of clusters in the condensed tree.
+    n_features_in_ : int
+        Number of features seen during `fit`.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.HDBSCAN(min_cluster_size=10, prediction_data=True).fit(X)
+    >>> labels = model.labels_
+    >>> new_labels, strengths = mojolearn.hdbscan.approximate_predict(model, X[:10])
     """
 
     _BINDING = "_mojolearn_hdbscan"
@@ -155,7 +187,30 @@ class HDBSCAN(NumericModeMixin):
         return mod
 
     def fit(self, X, y=None):
-        """Cluster row-major `X`. Returns `self`."""
+        """Cluster `X`.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, read as float32.
+        y : ignored
+            Present for scikit-learn API compatibility.
+
+        Returns
+        -------
+        self : HDBSCAN
+            The fitted estimator.
+
+        Raises
+        ------
+        TypeError
+            If an integer parameter is not an int, `alpha` or
+            `cluster_selection_epsilon` is not a number, or `prediction_data`
+            is not a bool.
+        ValueError
+            For an unknown `metric` or `cluster_selection_method`, or a
+            negative or non-finite `cluster_selection_epsilon`.
+        """
         x, copied = as_f32_c(X, ndim=2, name="X")
         n, d = x.shape
         for name in ("min_cluster_size", "max_cluster_size"):  # glue: checks two parameter names
@@ -283,12 +338,34 @@ class HDBSCAN(NumericModeMixin):
         return pd
 
     def fit_predict(self, X, y=None):
+        """Cluster `X` and return `labels_`.
+
+        Returns
+        -------
+        labels : Array of shape (n_samples,), int32
+        """
         return self.fit(X).labels_
 
     def save(self, path):
-        """Write what `approximate_predict` reads to `path` as an npz
-        (`_HDBSCAN_FORMAT`). `mojolearn.host_model(path)` predicts held-out
-        points from it on a CPU with no GPU."""
+        """Save the fitted model to `path` as an `.npz` file.
+
+        The file holds what `approximate_predict`, `membership_vector` and
+        `all_points_membership_vectors` read, including the training data.
+        Load it with `load`, or with `mojolearn.host_model(path)` to predict
+        new points on a machine with no GPU.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, was fitted without
+            `prediction_data=True`, or `metric` or
+            `cluster_selection_method` is not given by name.
+        """
         pd = _check_clusterer(self, "HDBSCAN.save")
         from .linear_model import _saved_mode
         if not isinstance(self.metric, str) or not isinstance(self.cluster_selection_method, str):
@@ -321,8 +398,27 @@ class HDBSCAN(NumericModeMixin):
 
     @classmethod
     def load(cls, path):
-        """Load a model saved by `save`; `approximate_predict` accepts the
-        result. Every array at its saved dtype, never cast."""
+        """Load a model written by `save`.
+
+        Arrays keep their saved dtypes. The result works with
+        `approximate_predict`, `membership_vector` and
+        `all_points_membership_vectors`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            File written by `HDBSCAN.save`.
+
+        Returns
+        -------
+        model : HDBSCAN
+
+        Raises
+        ------
+        ValueError
+            If the file is of another format or estimator, or is truncated or
+            inconsistent.
+        """
         from .linear_model import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, _HDBSCAN_FORMAT)
         _check_saved_by(arrays, path, cls)
@@ -389,12 +485,21 @@ def _check_clusterer(clusterer, where):
     return pd
 
 
+# cuML `approximate_predict` (`hdbscan.pyx:1264`, `predict.cuh:220-262`).
 def approximate_predict(clusterer, points_to_predict):
-    """Predict the cluster label of new points under the fitted clustering,
-    cuML's `approximate_predict` (`hdbscan.pyx:1264`, `predict.cuh:220-262`).
+    """Predict the cluster of new points under a fitted clustering.
 
-    The labels are those of the original clustering, not the labels a
-    re-clustering with the new points would find (hence 'approximate').
+    Follows cuML's `approximate_predict`. The labels are those of the
+    original clustering, not the labels a re-clustering with the new points
+    would find (hence "approximate"). If the clusterer found no clusters,
+    a warning is issued and every point is labeled noise.
+
+    Parameters
+    ----------
+    clusterer : HDBSCAN
+        A model fitted with `prediction_data=True`.
+    points_to_predict : array-like of shape (n_samples, n_features)
+        New points, read as float32, with the fitted number of features.
 
     Returns
     -------
@@ -402,6 +507,22 @@ def approximate_predict(clusterer, points_to_predict):
         `-1` where the nearest mutual reachability neighbor is noise or the
         point falls outside its cluster's lambda range.
     probabilities : Array (n_samples,) float32
+        Strength of each point's membership in its predicted cluster.
+
+    Raises
+    ------
+    TypeError
+        If `clusterer` is not a mojolearn `HDBSCAN`.
+    ValueError
+        If the clusterer is not fitted, was fitted without
+        `prediction_data=True`, or the feature count differs from the fit's.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.HDBSCAN(prediction_data=True).fit(X)
+    >>> labels, strengths = mojolearn.hdbscan.approximate_predict(model, X[:10])
     """
     pd = _check_clusterer(clusterer, "approximate_predict")
     if clusterer.n_clusters_ == 0:
@@ -456,27 +577,53 @@ def _soft_tree_addrs(pd):
             addr_ro(pd["exemplar_label_offsets"], name="exemplar_label_offsets")]
 
 
+# cuML `membership_vector` (`hdbscan.pyx:1180`, `soft_clustering.cuh:501-627`).
+# Float32 on every column (DEVIATION 1616,
+# `hdbscan/impl/detail/soft_clustering.mojo`): cuML computes four seams in
+# float64.
 def membership_vector(clusterer, points_to_predict, batch_size=4096):
-    """Soft cluster membership of new points, cuML's `membership_vector`
-    (`hdbscan.pyx:1180`, `soft_clustering.cuh:501-627`).
+    """Soft cluster membership of new points.
 
-    Row `i` gives, for each selected cluster `j`, the probability that point
+    Follows cuML's `membership_vector`. Row `i` gives, for each selected cluster `j`, the probability that point
     `i` is a member of cluster `j`: the distance to the cluster's exemplars
     and the merge height in the condensed tree, combined, normalized, and
     scaled by the probability that the point is in some cluster, so a row
     sums to at most 1 and a point far from every cluster has a row near 0.
 
-    Computed in float32 on every column (DEVIATION 1616,
-    `hdbscan/impl/detail/soft_clustering.mojo`): cuML computes four seams
-    in float64, and where cuML's row overflows to NaN (duplicated points)
-    this row is finite.
+    Computed in float32 throughout, where cuML uses float64 in some steps.
+    Where cuML's row overflows to NaN (duplicated points), this row is
+    finite.
 
-    batch_size bounds how many points one call computes; each row is
-    independent of the others, so it does not change a single byte.
+    Parameters
+    ----------
+    clusterer : HDBSCAN
+        A model fitted with `prediction_data=True`.
+    points_to_predict : array-like of shape (n_samples, n_features)
+        New points, read as float32, with the fitted number of features.
+    batch_size : int, default 4096
+        Maximum number of points computed per call. Rows are independent, so
+        it does not change the result. Must be positive.
 
     Returns
     -------
     membership_vectors : Array (n_samples, n_clusters_) float32
+
+    Raises
+    ------
+    TypeError
+        If `clusterer` is not a mojolearn `HDBSCAN` or `batch_size` is not an
+        int.
+    ValueError
+        If the clusterer is not fitted, was fitted without
+        `prediction_data=True`, `batch_size` is not positive, or the feature
+        count differs from the fit's.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.HDBSCAN(prediction_data=True).fit(X)
+    >>> soft = mojolearn.hdbscan.membership_vector(model, X[:10])
     """
     pd = _check_clusterer(clusterer, "membership_vector")
     _check_batch_size(batch_size, "membership_vector")
@@ -512,21 +659,45 @@ def membership_vector(clusterer, points_to_predict, batch_size=4096):
     return out
 
 
+# cuML `all_points_membership_vectors` (`hdbscan.pyx:1114`,
+# `soft_clustering.cuh:385-482`). Float32 on every column (DEVIATION 1616).
 def all_points_membership_vectors(clusterer, batch_size=4096):
-    """Soft cluster membership of every training point, cuML's
-    `all_points_membership_vectors` (`hdbscan.pyx:1114`,
-    `soft_clustering.cuh:385-482`), using that the points are already in
-    the condensed tree. Float32 on every column (DEVIATION 1616).
+    """Soft cluster membership of every training point.
 
-    batch_size bounds how many training rows one call computes; the rows are
-    independent, so it does not change a single byte.
+    Follows cuML's `all_points_membership_vectors`, using the fact that the
+    training points are already in the condensed tree. Each row has the
+    same meaning as a row of `membership_vector`. Computed in float32
+    throughout.
+
+    Parameters
+    ----------
+    clusterer : HDBSCAN
+        A model fitted with `prediction_data=True`.
+    batch_size : int, default 4096
+        Maximum number of training rows computed per call. Rows are
+        independent, so it does not change the result. Must be positive.
 
     Returns
     -------
     membership_vectors : Array (n_samples, n_clusters_) float32
         With no cluster the shape is (n_samples, 0). cuML returns a 1-D
-        zero vector of length n_samples there, which does not have the
-        documented shape; that is not reproduced.
+        zero vector of length n_samples there instead.
+
+    Raises
+    ------
+    TypeError
+        If `clusterer` is not a mojolearn `HDBSCAN` or `batch_size` is not an
+        int.
+    ValueError
+        If the clusterer is not fitted, was fitted without
+        `prediction_data=True`, or `batch_size` is not positive.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.HDBSCAN(prediction_data=True).fit(X)
+    >>> soft = mojolearn.hdbscan.all_points_membership_vectors(model)
     """
     pd = _check_clusterer(clusterer, "all_points_membership_vectors")
     _check_batch_size(batch_size, "all_points_membership_vectors")
