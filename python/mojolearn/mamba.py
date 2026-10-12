@@ -1,32 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Public FP32 Mamba-1, Mamba-2 and Mamba-3 block APIs for the alpha surface.
+"""Mamba-1, Mamba-2 and Mamba-3 blocks in float32.
 
-All six Block/State names are also exported from ``mojolearn``. Each block
-accepts caller-supplied weights and exposes ``forward(x, state=None)``,
-``step(x, state)``, ``allocate_state(...)`` and ``backward(x, grad_output)``.
-Forward supports fast/deterministic/identical modes; backward currently
-supports IDENTICAL zero-state prefill only and recomputes forward internally.
-Backward returns ``x`` plus every constructor weight gradient (11 leaves for
-Mamba1, 10 each for Mamba2 and Mamba3). No PyTorch dependency is required by
-these native-backed public methods.
+The block and state classes are also exported from ``mojolearn``. Each block takes
+caller-supplied weights and provides ``forward(x, state=None)``, ``step(x, state)``,
+``allocate_state(...)`` and ``backward(x, grad_output)``. The recurrent state is
+explicit and owned by the caller, so prefill, continuation and token-by-token decode
+give the same bits. Forward runs under ``numeric_mode`` 'identical' (the default) or
+'fast'. ``backward`` returns the gradients of a zero-state prefill with respect to
+``x`` and every constructor weight (11 arrays for Mamba-1, 10 each for Mamba-2 and
+Mamba-3), recomputing the forward internally; gradients through a carried state or a
+decode step are not available. Inputs are read through the buffer protocol, so PyTorch
+and NumPy are not required.
 
-Shapes and fixed architectural constants are documented on each class.
-FAST/DETERMINISTIC backward, carried-state or decode backward, final-state
-cotangents, automatic differentiation integration, and a complete Mamba model
-trainer are not exposed. The package requires a matching native extension
-for the selected vendor and numeric mode; Python symbols alone are not a
-working GPU wheel.
+`Mamba1DecodeSession` (from `Mamba1Block.decode_session`) keeps a Mamba-1 block and
+its state resident on the device for fast decoding.
 
-Evidence is fixture-scoped. Historical three-vendor native certificates and
-new Python API checks have separate scopes. The retained September 6 NVIDIA
-run3 reports 102 forward/API checks passing in each of FAST and IDENTICAL,
-and five Mamba2/3 backward surface tests passing. Those source-run results do
-not certify an unbuilt alpha wheel or every vendor/shape/mode. See
-``SUPPORT_MATRIX.md`` for the current scope and outstanding wheel
-qualification.
-
-Example with correctly shaped FP32 ``weights``, ``x`` and ``dy``::
+Examples
+--------
+With float32 ``weights``, ``x`` and ``dy`` of the right shapes::
 
     from mojolearn.mamba import Mamba2Block
     block = Mamba2Block(weights, numeric_mode="identical")
