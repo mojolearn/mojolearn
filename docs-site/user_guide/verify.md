@@ -22,8 +22,8 @@ python -m mojolearn verify --all       # the same scope on all nine fixtures
 ```
 
 The verifier selects the `identical` mode itself when `MOJOLEARN_NUMERIC_MODE` is unset. A mode you
-set explicitly is respected, and a process in `fast` is refused (exit 3), because `fast` makes no
-identity promise to check.
+set explicitly is respected, and a process in `fast` (an Apple GPU mode) is refused (exit 3), because
+`fast` makes no identity promise to check.
 
 ## Scopes
 
@@ -93,7 +93,6 @@ It does not:
 
 - re-measure the other vendors;
 - cover inputs, shapes or parameters other than the fixtures;
-- cover lanes added after the reference table was generated (they read `OWED`);
 - say anything about speed;
 - on a CPU-only install, check GPU training (it checks the CPU reference lanes and the saved models).
 
@@ -125,8 +124,7 @@ python -m mojolearn verify --compare mine.json theirs.json
 `--compare` checks every cell hash in the two documents, prints both provenance blocks side by side
 and says whether the machines were genuinely different. A cell present in only one document is
 `INCOMPARABLE`, never a match. Run the same scope on both machines. To prevent either side from
-tailoring its document after seeing the other, use `--commitment` first; see
-[docs/VERIFY.md](https://github.com/mojolearn/mojolearn/blob/main/docs/VERIFY.md).
+tailoring its document after seeing the other, use `--commitment` first (see `python -m mojolearn verify --help`).
 
 ## Sharing a report
 

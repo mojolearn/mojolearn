@@ -31,7 +31,7 @@ Estimators with `save` and `load` in 0.8.41:
 
 | Family | Estimators |
 |---|---|
-| Trees and boosting | `GradientBoosting`, `GradientBoostingClassifier`, `GradientBoostingRegressor`, `OrderedRMSE`, `ExperimentalTwoLevelFeatureFreq`, `RandomForestClassifier`, `RandomForestRegressor`, `ExtraTreesClassifier`, `ExtraTreesRegressor`, `DecisionTreeClassifier`, `DecisionTreeRegressor`, `IsolationForest` |
+| Trees and boosting | `GradientBoosting`, `GradientBoostingClassifier`, `GradientBoostingRegressor`, `OrderedRMSE`, `RandomForestClassifier`, `RandomForestRegressor`, `ExtraTreesClassifier`, `ExtraTreesRegressor`, `DecisionTreeClassifier`, `DecisionTreeRegressor`, `IsolationForest` |
 | Linear and kernel | `LinearRegression`, `Ridge`, `Lasso`, `ElasticNet`, `LogisticRegression`, `KernelRidge`, `Nystroem`, `RBFSampler`, `SVC`, `SVR` |
 | Neighbors and search | `NearestNeighbors`, `KNeighborsClassifier`, `KNeighborsRegressor`, `RadiusNeighbors`, `IVFIndex`, `IVFPQIndex`, `IVFSQIndex`, `IVFRaBitQIndex`, `CagraIndex` |
 | Clustering and density | `KMeans`, `DBSCAN`, `HDBSCAN`, `AgglomerativeClustering`, `SpectralClustering`, `GaussianMixture`, `KernelDensity` |
@@ -74,7 +74,7 @@ proba = mojolearn.host_predict_proba("forest.npz", X)
 | `mojolearn.host_predict(path, X)` | `host_model(path).predict(X)` |
 | `mojolearn.host_predict_proba(path, X)` | `host_model(path).predict_proba(X)` |
 | `mojolearn.HostForest.from_file(path)` | A saved random forest or Extra Trees model |
-| `mojolearn.HostGBDT.from_file(path)` | A saved `GradientBoosting`, `OrderedRMSE` or `ExperimentalTwoLevelFeatureFreq` model |
+| `mojolearn.HostGBDT.from_file(path)` | A saved `GradientBoosting` or `OrderedRMSE` model |
 
 `HostForest` and `HostGBDT` have `predict`, `predict_proba`, `n_trees`, `inference_engine` and
 `model_sha256`, a SHA-256 over the model's arrays that you can record to name the model a prediction
@@ -84,8 +84,8 @@ is refused with the format tag the file carries.
 
 The CPU bindings compute `identical` bits only. They return the same dtypes the GPU estimators return
 for the same file. On a CPU-only install, `Estimator.load(path)` followed by `predict` also runs on the
-CPU for the families listed under "Inference from a saved model" in the
-[support matrix](https://github.com/mojolearn/mojolearn/blob/main/SUPPORT_MATRIX.md#the-cpu-surface).
+CPU for the families listed under "Prediction from a saved model" in
+[Devices and the CPU](devices.md#the-cpu-surface).
 
 ## Forest inference engines
 
@@ -93,7 +93,7 @@ Random forests and Extra Trees have two prediction algorithms, chosen with `infe
 
 | `inference_engine` | Behavior |
 |---|---|
-| `auto` (default) | `parallel_groves` in `fast`; `sequential` in `deterministic` and `identical` |
+| `auto` (default) | `parallel_groves` in `fast` (Apple GPUs only); `sequential` in `deterministic` and `identical` |
 | `sequential` | Each row adds trees in increasing tree order, then divides by the tree count |
 | `parallel_groves` | 32 fixed tree groups in parallel, combined by a fixed 16/8/4/2/1 reduction |
 
@@ -109,8 +109,7 @@ p_seq = clf.predict_proba(X[:5])
 ```
 
 A saved forest keeps its engine. `HostForest` serves both on the CPU; a `parallel_groves` archive saved
-under a mode other than `identical` is refused by the CPU binding. Details are in
-[docs/FOREST_INFERENCE_ENGINES.md](https://github.com/mojolearn/mojolearn/blob/main/docs/FOREST_INFERENCE_ENGINES.md).
+under a mode other than `identical` is refused by the CPU binding.
 
 ## Language-model checkpoints
 

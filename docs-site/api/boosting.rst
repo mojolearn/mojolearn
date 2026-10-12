@@ -11,7 +11,6 @@ Gradient-boosted decision trees: classification, regression and ranking losses.
    :toctree: generated
    :nosignatures:
 
-   ExperimentalTwoLevelFeatureFreq
    GradientBoosting
    GradientBoostingClassifier
    GradientBoostingRegressor

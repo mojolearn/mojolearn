@@ -1,0 +1,33 @@
+# Public names left out of docs.mojolearn.org, one per line: name <TAB> reason.
+# Rule (CLAUDE.md "Public docs and docstrings"): broken, unverified or unfinished = not documented.
+# "Unverified" = no matching NVIDIA and AMD reference records in `python -m mojolearn verify --coverage`
+# for the shipped release, or (multi-GPU) no cross-vendor qualification. Remove a line once it qualifies.
+# Checked against 0.8.41 on 2026-10-12.
+Conv2d	CNN lanes (x-cnn-*): no NVIDIA+AMD reference records in 0.8.41
+Conv1d	CNN lanes: no NVIDIA+AMD reference records
+MaxPool2d	CNN lanes: no NVIDIA+AMD reference records
+AvgPool2d	CNN lanes: no NVIDIA+AMD reference records
+MaxPool1d	CNN lanes: no NVIDIA+AMD reference records
+AvgPool1d	CNN lanes: no NVIDIA+AMD reference records
+CNNClassifier	CNN lanes: no NVIDIA+AMD reference records
+BatchNorm2d	CNN lanes: no NVIDIA+AMD reference records
+BatchNorm1d	CNN lanes: no NVIDIA+AMD reference records
+Dropout2d	CNN lanes: no NVIDIA+AMD reference records
+AdaptiveAvgPool2d	CNN lanes: no NVIDIA+AMD reference records
+AdaptiveMaxPool2d	CNN lanes: no NVIDIA+AMD reference records
+BasicBlock	CNN lanes: no NVIDIA+AMD reference records
+GCNConv	CNN/GNN lanes: no NVIDIA+AMD reference records
+SAGEConv	CNN/GNN lanes: no NVIDIA+AMD reference records
+Adafactor	sequence-adafactor lane: no NVIDIA+AMD reference records
+LAMB	sequence-lamb lane: no NVIDIA+AMD reference records
+LanguageModelHostTrainer	byte-lm-host-train lane: no NVIDIA+AMD reference records
+OffloadedByteLanguageModelTrainer	multi-GPU: NVIDIA-only evidence, no cross-vendor qualification
+PooledByteLanguageModelTrainer	multi-GPU: NVIDIA-only evidence, no cross-vendor qualification
+ParallelByteLanguageModelTrainer	multi-GPU: no cross-vendor qualification
+ParallelNeuralTrainer	multi-GPU: no cross-vendor qualification
+parallel_forecasting	multi-GPU: physical qualification pending
+parallel_gaussian_process	multi-GPU: physical qualification pending
+parallel_ivf	multi-GPU: physical qualification pending
+parallel_model_selection	multi-GPU: physical qualification pending
+DistributedIVFIndex	multi-GPU: physical qualification pending
+ExperimentalTwoLevelFeatureFreq	name marks it experimental (unfinished)

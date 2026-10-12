@@ -38,9 +38,11 @@ clf = RandomForestClassifier(n_estimators=100).fit(X, y)
 `identical` is the default. Select another mode for the process or per call:
 
 ```python
-previous = mojolearn.set_numeric_mode("fast")   # returns the previous mode
-mojolearn.set_numeric_mode("identical")         # back to the default
+previous = mojolearn.set_numeric_mode("deterministic")   # returns the previous mode
+mojolearn.set_numeric_mode("identical")                  # back to the default
 ```
+
+On Apple GPUs, `fast` is also available; it runs on Apple GPUs only.
 
 or set `MOJOLEARN_NUMERIC_MODE` in the environment. Estimators that take a `numeric_mode=` argument, such as
 `RandomForestClassifier`, override the process mode per call. Asking a family for a mode it does not ship raises

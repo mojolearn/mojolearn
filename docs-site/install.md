@@ -25,7 +25,7 @@ Optional extras add NumPy without changing any numerical implementation:
 
 ```sh
 pip install "mojolearn[verify]"   # NumPy for verification fixtures
-pip install "mojolearn[numpy]"    # NumPy-backed conveniences (ANN filtering, TSNE, CNN and sequence APIs)
+pip install "mojolearn[numpy]"    # NumPy-backed conveniences (ANN filtering, TSNE, sequence APIs)
 ```
 
 A plain `pip install mojolearn` is NumPy-free; APIs that need NumPy say so and name the install command.
@@ -67,6 +67,5 @@ cd mojolearn
 pixi run probe        # reports the toolchain and the device it finds
 ```
 
-The repository's [START_HERE](https://github.com/mojolearn/mojolearn/blob/main/docs/START_HERE.md) and
-[CONTRIBUTING](https://github.com/mojolearn/mojolearn/blob/main/CONTRIBUTING.md) guides describe the build
-tasks. A source build is not a published wheel: its results are yours to check with `verify`.
+The repository's [CONTRIBUTING](https://github.com/mojolearn/mojolearn/blob/main/CONTRIBUTING.md) guide
+describes the build tasks. Check a source build's results with `verify`.

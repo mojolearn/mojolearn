@@ -10,19 +10,17 @@ every mode.
 |---|---|
 | `identical` | The default. The same output bits for the same release, input bytes, model state, settings and supported configuration on NVIDIA and AMD GPUs. |
 | `deterministic` | Repeated runs on the same device and build return the same bits. No promise across vendors. |
-| `fast` | Tuned for throughput. No identity or repeatability promise. |
+| `fast` | Apple GPUs only. Tuned for throughput. No identity or repeatability promise. |
 
-The `identical` promise across NVIDIA and AMD is the release policy: a release ships only when the
-recorded NVIDIA and AMD results agree. Apple GPU and CPU results are recorded too, and for the
-configurations the release tested they also agree, but the release requirement is NVIDIA and AMD.
+A release ships only when its recorded NVIDIA and AMD results agree. Apple GPU and CPU results are
+recorded beside them.
 
-A few limits apply to `identical`:
+Three things to know about `identical`:
 
 - It holds within one release. Bits may change between releases, for example when a kernel moves to a
   faster or more accurate fold order. Compare runs made with the same release.
-- It is a claim about the configurations the verification record covers, not about every shape,
-  parameter, driver or future build. The enforced paths are listed in the
-  [identity-path ledger](https://github.com/mojolearn/mojolearn/blob/main/IDENTITY_PATHS.md).
+- It covers the supported configurations: the families, settings and devices listed in the
+  [support matrix](../notes/support_matrix.md).
 - It is an FP32 guarantee about mojolearn's own arithmetic. Weights trained in another framework
   reproduce under mojolearn's arithmetic, not that framework's.
 
@@ -32,18 +30,15 @@ A few limits apply to `identical`:
 
 | Family | `identical` | `deterministic` | `fast` |
 |---|---|---|---|
-| Gradient boosting | yes | yes | yes |
-| Random forests | yes | yes | yes |
-| Extra Trees | yes | yes | yes |
-| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | no | yes |
-| Neural networks, GPU surface (`LanguageModelTrainer`, `TransformerBlock`, Mamba blocks, `SambaStack`, `SmallMLPTrainer`, `Embedding`, linalg GEMMs) | yes | no | Apple only |
-| Every other family | yes | no | yes |
+| Gradient boosting | yes | yes | Apple GPUs |
+| Random forests | yes | yes | Apple GPUs |
+| Extra Trees | yes | yes | Apple GPUs |
+| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | no | Apple GPUs |
+| Neural networks, GPU surface (`LanguageModelTrainer`, `TransformerBlock`, Mamba blocks, `SambaStack`, `SmallMLPTrainer`, `Embedding`, linalg GEMMs) | yes | no | Apple GPUs |
+| Every other family | yes | no | Apple GPUs |
 
-`fast` is opt-in and is tuned and measured on Apple GPUs. Every CPU binding runs in `identical` mode
-only (see [Devices and the CPU](devices.md)).
-
-The full table is in the
-[support matrix](https://github.com/mojolearn/mojolearn/blob/main/SUPPORT_MATRIX.md#numeric-modes).
+`fast` is opt-in and runs on Apple GPUs only. Every CPU binding runs in `identical` mode only (see
+[Devices and the CPU](devices.md)). The full table is in the [support matrix](../notes/support_matrix.md).
 
 ## Selecting a mode
 
@@ -51,8 +46,8 @@ There are three ways to choose a mode. A narrower choice overrides a wider one.
 
 | Scope | How |
 |---|---|
-| Process, before import | `MOJOLEARN_NUMERIC_MODE=fast` (or `deterministic`, `identical`) in the environment |
-| Process, at runtime | `mojolearn.set_numeric_mode("fast")`, which returns the previous mode |
+| Process, before import | `MOJOLEARN_NUMERIC_MODE=deterministic` (or `identical`, or `fast` on Apple GPUs) in the environment |
+| Process, at runtime | `mojolearn.set_numeric_mode("deterministic")`, which returns the previous mode |
 | One estimator | `numeric_mode=` on estimators whose constructor has it |
 
 ```python
@@ -69,8 +64,8 @@ fails on that line, not at a later `fit`.
 
 Estimators that take `numeric_mode=` include `RandomForestClassifier`, `RandomForestRegressor`,
 `ExtraTreesClassifier`, `ExtraTreesRegressor`, `DecisionTreeClassifier`, `GradientBoostingClassifier`,
-`GradientBoostingRegressor`, `StandardScaler`, `MinMaxScaler`, `MLPClassifier` and the sequence, CNN
-and time-series estimators. Check an estimator's signature in the [API reference](../api/index.rst).
+`GradientBoostingRegressor`, `StandardScaler`, `MinMaxScaler`, `MLPClassifier` and the sequence and
+time-series estimators. Check an estimator's signature in the [API reference](../api/index.rst).
 The default `numeric_mode=None` means "use the process mode".
 
 ```python
@@ -122,7 +117,7 @@ never changes the mode. See [Runtime and numeric modes](../api/runtime.rst).
 
 - **Report and publish in `identical`.** It is the default and the only mode whose results another
   person can reproduce on other supported hardware with the same release.
-- **Explore in `fast` where it is offered**, for example during hyperparameter search, then rerun the
+- **On Apple GPUs, explore in `fast`**, for example during hyperparameter search, then rerun the
   configuration you keep in `identical`.
 - **Use `deterministic`** for the tree learners when run-to-run repeatability on one machine is all
   you need and you do not need agreement across vendors.

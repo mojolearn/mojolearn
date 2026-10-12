@@ -12,10 +12,5 @@ If mojolearn is useful in your work, please cite the software and, for the metho
 > Hendel, A. *Bitwise-Identical Machine Learning Across Metal, CUDA, and HIP.* Preprint, October 2026.
 > [PDF](https://mojolearn.org/paper.pdf)
 
-**The 162M two-route model:**
-
-> [doi:10.57967/hf/10832](https://doi.org/10.57967/hf/10832) ·
-> [huggingface.co/mojolearn-ai/mojolearn-162m](https://huggingface.co/mojolearn-ai/mojolearn-162m)
-
 The repository's [CITATION.cff](https://github.com/mojolearn/mojolearn/blob/main/CITATION.cff) has the
 machine-readable record.

@@ -1,7 +1,7 @@
 # Language models
 
-mojolearn trains and runs decoder language models in FP32. The trainer runs on the GPU; inference and a
-reference training step also run on the CPU. Tokenization is part of the model and is chosen before the
+mojolearn trains and runs decoder language models in FP32. The trainer runs on the GPU; inference also runs
+on the CPU. Tokenization is part of the model and is chosen before the
 first step. The names are listed in the [language model API reference](../api/language_models.rst).
 
 | Class | Runs on | Purpose |
@@ -9,10 +9,9 @@ first step. The names are listed in the [language model API reference](../api/la
 | `LanguageModelConfig` | - | Model shape: batch, length, width, heads, layers, vocabulary |
 | `LanguageModelTrainer` | GPU | Forward, backward and AdamW update; logits, greedy next tokens, checkpoints |
 | `LanguageModelInference` | CPU | Forward only: `logits`, `loss`, `loss_bits`, greedy `next_bytes` |
-| `LanguageModelHostTrainer` | CPU | One training step on the CPU (reference path) |
 | `BpeTokenizer` | CPU | Byte-level BPE `encode` and `decode` in the GPT-2 format |
 | `lm_corpus` | CPU | Tokenize a corpus once and serve training batches |
-| `models.CausalLM` | GPU or CPU | Experimental loader for Hugging Face-format checkpoints |
+| `models.CausalLM` | GPU or CPU | Loader for Hugging Face-format checkpoints |
 
 `ByteLanguageModelConfig` and `SmallByteLanguageModelTrainer` are older names for `LanguageModelConfig`
 and `LanguageModelTrainer`.
@@ -64,11 +63,11 @@ check the descriptor against the batches you pass; after a restore, you feed the
 |---|---|---|
 | `export_checkpoint(path)` / `from_checkpoint(path)` | JSON, at most 2 MiB | Small models |
 | `export_checkpoint_binary(path)` / `from_checkpoint_binary(path)` | Binary `mojolearn.byte-lm-stream.v1` | Any size; returns the file's SHA-256 |
-| `state_dict()` / `load_state_dict(state)` | Python dict | In-process handoff, multi-GPU trainers |
+| `state_dict()` / `load_state_dict(state)` | Python dict | In-process handoff |
 
 A checkpoint holds the parameters, both AdamW moments, the step count and the data schedule, so
 training resumes where it stopped. In `identical` mode a checkpoint written on one supported GPU resumes
-on another vendor's GPU with the same bits; see [Cross-vendor training](cross_vendor_training.md).
+on another vendor's GPU with the same bits; see [Moving training between vendors](cross_vendor_training.md).
 
 ## Inference on the CPU
 
@@ -83,15 +82,7 @@ logits = model.logits(ids[:, :32], lengths=[32, 17])   # ragged, right-padded ro
 
 `LanguageModelInference(parameters, shape=shape)` builds the same model from a parameter array.
 By default calls split batch rows across threads (`threaded=True`); `threaded=False` runs the
-single-threaded reference path. Both give the same bits. The CPUs on which the forward pass has been checked
-against the recorded GPU bytes are listed in
-[BYTE_LM_CPU_INFERENCE.md](https://github.com/mojolearn/mojolearn/blob/main/docs/BYTE_LM_CPU_INFERENCE.md).
-
-`LanguageModelHostTrainer(parameters, m=..., v=..., shape=shape, completed_steps=...)` runs one forward,
-backward and AdamW step on the CPU. It has no threaded path. What its gate has shown is recorded in
-[BYTE_LM_CPU_TRAINING.md](https://github.com/mojolearn/mojolearn/blob/main/docs/BYTE_LM_CPU_TRAINING.md):
-on seven CI runners it reproduced every recorded step of the gate's small model from that step's own
-state. Treat it as a reference path, not a fast trainer.
+single-threaded reference path. Both give the same bits.
 
 ## Tokenizers and corpora
 
@@ -124,37 +115,7 @@ trainer.train_step(batches.ids(0))
 
 Batches read only the corpus's training range, so no step reads a validation or test token.
 
-## The published 162M model
-
-[mojolearn-ai/mojolearn-162m](https://huggingface.co/mojolearn-ai/mojolearn-162m) is a 162,147,840-parameter
-decoder (12 layers, width 768, 12 heads of 64, context 2,048, vocabulary 50,257) trained in FP32 in
-`identical` mode on 2.62 billion FineWeb-Edu tokens. It is a research artifact for reproducible training,
-not a production model. Download `checkpoint.blm` and `tokenizer.json`, then:
-
-```python
-import numpy as np
-from tokenizers import Tokenizer
-from mojolearn import ByteLanguageModelConfig, LanguageModelInference
-from mojolearn import _byte_lm_checkpoint as ck
-
-state = ck.load("checkpoint.blm")            # verifies every array digest
-shape = ByteLanguageModelConfig(**{**state["model_shape"], "batch": 1, "length": 128})
-model = LanguageModelInference(state["parameters"], shape=shape)
-tok = Tokenizer.from_file("tokenizer.json")
-
-ids = tok.encode("The water cycle describes how water").ids
-for _ in range(24):
-    ids.append(int(model.next_bytes(np.array([ids[-128:]], dtype=np.int32))[0]))
-print(tok.decode(ids))
-```
-
-This uses the Hugging Face `tokenizers` package (`pip install tokenizers numpy`). Use the model's own
-`tokenizer.json`; do not substitute the GPT-2 tokenizer. The model was trained without end-of-text
-separators and does not stop on its own. `LanguageModelTrainer.from_checkpoint_binary("checkpoint.blm")`
-restores the full training state, AdamW moments included. File formats are described in
-[ARTIFACTS.md](https://github.com/mojolearn/mojolearn/blob/main/release/gpt3-small-162m/ARTIFACTS.md).
-
-## Hugging Face checkpoints (experimental)
+## Hugging Face checkpoints
 
 `mojolearn.models.CausalLM.load` builds a model from a directory holding `config.json` and
 `model.safetensors` (or a sharded index). `models.Tokenizer.from_pretrained` reads `tokenizer.json` for
@@ -181,12 +142,9 @@ are also available. `weight_format` is `"float32"`, `"bfloat16"` or `"int8"` wei
 
 Arithmetic is FP32 (`fp32_v1`) by default. `numeric_profile="fixed15_v1"` opts transformer models into
 15-bit integer matrix products; it gives different bits from `fp32_v1`, and it is slower on Apple.
-SmolLM2-360M is the published model whose full logits are recorded through this loader on NVIDIA, AMD,
-Apple and the CPU. The other families are covered by the name mapping and refusals, not by recorded logits.
-See [CHANGELOG 0.8.29](https://github.com/mojolearn/mojolearn/blob/main/CHANGELOG.md).
+SmolLM2-360M logits through this loader are recorded equal across NVIDIA, AMD, Apple and the CPU.
 
 ## Related pages
 
 - [Neural networks](neural_networks.md): the blocks the language model is built from.
-- [Multi-GPU training](multi_gpu.md): train one language model on several GPUs.
-- [Cross-vendor training](cross_vendor_training.md): move a run between vendors.
+- [Moving training between vendors](cross_vendor_training.md): resume a run on another vendor's GPU.

@@ -4,12 +4,11 @@
 
 Run the same mojolearn release on the same input bytes, model state and settings, in a supported
 configuration, and NVIDIA and AMD GPUs return the same output bits. That covers predictions, fitted
-models, training updates and saved checkpoints. This is the release policy: every release checks
-the NVIDIA and AMD results against each other before it ships.
+models, training updates and saved checkpoints. Every release checks the NVIDIA and AMD results against
+each other before it ships.
 
-Apple GPU and CPU execution are also available. Their results are recorded beside the NVIDIA and AMD
-results, and the configurations the [paper](https://mojolearn.org/paper.pdf) tested also agreed on Apple
-and the CPU. The release requirement covers NVIDIA and AMD.
+mojolearn also runs on Apple GPUs and the CPU. Their results are recorded beside the NVIDIA and AMD
+results.
 
 `identical` is the default numeric mode. See [Numeric modes](../user_guide/numeric_modes.md) for the others.
 
@@ -17,11 +16,11 @@ and the CPU. The release requirement covers NVIDIA and AMD.
 
 - **Agreement with other libraries.** Agreement is between mojolearn executions. A mojolearn result
   can differ from scikit-learn's, PyTorch's or the framework that originally trained an imported model.
-- **Agreement across releases.** While mojolearn is in alpha, a release may change `identical` output
+- **Agreement across releases.** A release may change `identical` output
   bits, for example when a kernel needs a different summation order. Compare results produced by the
   same release, and keep the release version with any result you need to reproduce.
-- **Every input and every GPU.** The claim covers certified fixtures and configurations, recorded
-  per release. A GPU architecture the release does not carry is not covered.
+- **Every input and every GPU.** The claim covers the supported configurations of each release. A GPU
+  architecture the release does not carry is not covered.
 - **Accuracy, fairness or fitness for a use.** Bitwise agreement is evidence about computational
   reproducibility only. Model quality needs its own evaluation.
 
@@ -39,12 +38,11 @@ For each pathway that can move a bit, `identical` does one of three things:
 |---|---|---|
 | Pin | The operation is deterministic once a parameter is fixed | The same reduction width on every vendor |
 | Replace | The operation is order-dependent in itself | Floating-point atomics become fixed-point integer accumulation |
-| Refuse | Neither is available yet | A configuration without an identity path raises a named error |
+| Refuse | Neither applies | A configuration without an identity path raises a named error |
 
 Thread layout, memory placement and scheduling may still differ between devices; only the operations
 that determine the output bits are fixed. Neural training and inference use FP32 arithmetic
-throughout. The full enumeration is the
-[identity-path ledger](https://github.com/mojolearn/mojolearn/blob/main/IDENTITY_PATHS.md).
+throughout.
 
 ## What it costs
 

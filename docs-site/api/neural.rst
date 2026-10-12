@@ -11,31 +11,17 @@ Layers, blocks, inference sessions, trainers, optimizers and schedules.
    :toctree: generated
    :nosignatures:
 
-   Adafactor
    Adagrad
    Adam
    Adamax
    AdamW
-   AdaptiveAvgPool2d
-   AdaptiveMaxPool2d
-   AvgPool1d
-   AvgPool2d
-   BasicBlock
-   BatchNorm1d
-   BatchNorm2d
    clip_grad_norm_
-   CNNClassifier
-   Conv1d
-   Conv2d
    cross_entropy
-   Dropout2d
    Embedding
    embedding
    ExponentialLR
-   GCNConv
    GRUClassifier
    GRURegressor
-   LAMB
    layer_norm_backward
    layer_norm_forward
    LayerNorm
@@ -52,8 +38,6 @@ Layers, blocks, inference sessions, trainers, optimizers and schedules.
    Mamba3Block
    Mamba3BlockInference
    Mamba3State
-   MaxPool1d
-   MaxPool2d
    MLPClassifier
    MLPInference
    MLPRegressor
@@ -64,7 +48,6 @@ Layers, blocks, inference sessions, trainers, optimizers and schedules.
    RMSprop
    RNNClassifier
    RNNRegressor
-   SAGEConv
    SambaConfig
    SambaInference
    SambaStack

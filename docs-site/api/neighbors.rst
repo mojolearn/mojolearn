@@ -14,7 +14,6 @@ Exact neighbors, IVF, CAGRA and quantized indexes for vector search.
    AdditiveChi2Sampler
    CagraIndex
    connected_components
-   DistributedIVFIndex
    IVFIndex
    IVFPQIndex
    IVFRaBitQIndex

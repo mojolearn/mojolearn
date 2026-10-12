@@ -20,6 +20,5 @@ Every public name in ``mojolearn`` 0.8.41, by family. Estimators follow the scik
    time_series
    neural
    language_models
-   multi_gpu
    evaluation
    linalg

@@ -67,17 +67,15 @@ mojolearn and `vendor()` answers `cpu`.
 |---|---|
 | Training | `fit` trains on the CPU for every estimator with a CPU binding. Others refuse by name. |
 | Prediction from a saved model | Forests, gradient boosting, neighbors, linear models, PCA and SVD, scalers, kernel methods, SVMs, Gaussian mixtures and processes, HDBSCAN, UMAP transform, IVF-Flat search, ARIMA and Holt-Winters forecasts, among others. |
-| Language models | `LanguageModelInference` runs the forward pass and `LanguageModelHostTrainer` a training step. |
-| Numeric mode | `identical` only. |
+| Language models | `LanguageModelInference` runs the forward pass. |
+| Numeric mode | `identical` only (`fast` runs on Apple GPUs only). |
 
-Every CPU binding is checked bit for bit against the recorded GPU results, with a deliberately broken
-build required to fail the check. A model trained on any supported GPU can therefore be saved and
+Every CPU binding is checked bit for bit against the recorded GPU results. A model trained on any supported GPU can therefore be saved and
 served on a CPU machine; see [Saving and loading models](saving_models.md).
 
 Some configurations have no CPU path and refuse by name on a CPU-only install. Among them are gradient
 boosting training with sample weights, with CTR-encoded categorical columns, and some categorical or
-eval-set combinations outside symmetric trees. The full lists of CPU training and inference routes are
-in the [support matrix](https://github.com/mojolearn/mojolearn/blob/main/SUPPORT_MATRIX.md#the-cpu-surface).
+eval-set combinations outside symmetric trees. See the [support matrix](../notes/support_matrix.md#the-cpu-surface).
 
 A refusal looks like any other Python error: it names the estimator or binding and the missing
 function, and nothing else runs in its place.

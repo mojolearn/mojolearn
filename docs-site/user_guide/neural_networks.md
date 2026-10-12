@@ -4,8 +4,7 @@ mojolearn ships neural building blocks, forward-only inference classes, small tr
 and loss primitives they are built from. In `identical` mode (the default) all of them compute in FP32.
 The full list of names is in the [neural API reference](../api/neural.rst).
 
-These are bounded building blocks, not a general autograd framework or a drop-in PyTorch replacement.
-Each class documents the settings it supports, and anything else is refused by name.
+Each class documents the settings it supports, and refuses any other setting by name.
 
 ## What is available
 
@@ -15,15 +14,15 @@ Each class documents the settings it supports, and anything else is refused by n
 | Stacks | `SambaConfig`, `SambaStack` (Mamba-3 and attention layers in any order) |
 | Forward-only (CPU) | `TransformerBlockInference`, `Mamba1BlockInference`, `Mamba2BlockInference`, `Mamba3BlockInference`, `SambaInference`, `MLPInference` |
 | Decode state | `TransformerState`, `Mamba1State`, `Mamba2State`, `Mamba3State` |
-| Layers | `Embedding`, `LayerNorm`, `Conv1d`, `Conv2d`, `BatchNorm1d`, `BatchNorm2d`, `MaxPool1d`, `MaxPool2d`, `AvgPool1d`, `AvgPool2d`, `AdaptiveAvgPool2d`, `AdaptiveMaxPool2d`, `Dropout2d`, `BasicBlock`, `GCNConv`, `SAGEConv` |
-| Estimators | `MLPClassifier`, `MLPRegressor`, `CNNClassifier`, `RNNClassifier`, `RNNRegressor`, `LSTMClassifier`, `LSTMRegressor`, `GRUClassifier`, `GRURegressor` |
+| Layers | `Embedding`, `LayerNorm` |
+| Estimators | `MLPClassifier`, `MLPRegressor`, `RNNClassifier`, `RNNRegressor`, `LSTMClassifier`, `LSTMRegressor`, `GRUClassifier`, `GRURegressor` |
 | Trainers | `SmallMLPTrainer`, `SambaStack.train_step` |
-| Optimizers | `SGD`, `Adam`, `AdamW`, `Adagrad`, `Adamax`, `Adafactor`, `NAdam`, `RMSprop`, `LAMB`, `Lion` |
+| Optimizers | `SGD`, `Adam`, `AdamW`, `Adagrad`, `Adamax`, `NAdam`, `RMSprop`, `Lion` |
 | Schedules | `StepLR`, `ExponentialLR`, `OneCycleLR` |
 | Functions | `cross_entropy`, `clip_grad_norm_`, `layer_norm_forward`, `layer_norm_backward` |
 
 The GPU classes run on the GPU and have no CPU fallback. The `*Inference` classes run the same forward
-pass on the CPU, from the same weights. The CNN and sequence estimators take NumPy arrays and need
+pass on the CPU, from the same weights. The sequence estimators take NumPy arrays and need
 the `mojolearn[numpy]` extra (see [Install](../install.md)).
 
 ## Weights come from you
@@ -169,25 +168,18 @@ and updates in one call. `cross_entropy` takes `(N, V)` float32 logits and `(N,)
 and AdamW. It saves and restores its whole state, and `data_schedule` (a JSON object you write) is stored
 with the step counter so you can resume on the right batch.
 
-## CNN and sequence estimators
+## Sequence estimators
 
 These follow the scikit-learn interface:
 
 ```python
-X_img = rng.random((512, 1 * 8 * 8), dtype=np.float32)
-y_img = rng.integers(0, 3, size=512)
-cnn = mojolearn.CNNClassifier(input_shape=(1, 8, 8), conv_channels=(8,), max_iter=5).fit(X_img, y_img)
-
 X_seq = rng.random((256, 20, 4), dtype=np.float32)   # (n_samples, n_timesteps, n_features)
 y_seq = rng.integers(0, 2, size=256)
 lstm = mojolearn.LSTMClassifier(hidden_size=16, max_epochs=5).fit(X_seq, y_seq)
 print(lstm.predict(X_seq[:5]))
 ```
 
-`CNNClassifier` accepts `(n, C*H*W)` rows with `input_shape=(C, H, W)`, or `(n, C, H, W)`.
-
 ## Related pages
 
 - [Language models](language_models.md): decoder language models, tokenizers and checkpoints.
-- [Multi-GPU training](multi_gpu.md): ordered gradients across several GPUs.
-- [Numeric modes](numeric_modes.md): what `identical` and `fast` promise.
+- [Numeric modes](numeric_modes.md): what `identical` and `fast` (Apple GPUs only) promise.

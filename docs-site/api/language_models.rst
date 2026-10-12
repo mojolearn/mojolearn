@@ -16,7 +16,6 @@ Language-model training and inference, checkpoints, tokenizers and corpora.
    GPT2Tokenizer
    language_model
    LanguageModelConfig
-   LanguageModelHostTrainer
    LanguageModelInference
    LanguageModelTrainer
    lm_corpus
