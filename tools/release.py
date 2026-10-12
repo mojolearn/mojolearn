@@ -136,7 +136,18 @@ release and workflow dispatch (the workflow uploads it to its own PyPI
 project); column and ledger entries stay keyed to one wheel's sha256 (the
 plugin's, with the core's recorded beside it).
 """
+import os
 import argparse
+import ssl as _ssl
+# The pixi env's OpenSSL may carry a default CA path from the worktree the env was cloned from (2026-10-12: it
+# pointed at a removed ~/mojolearn-wt/af-sym-hist/... and every GitHub call failed CERTIFICATE_VERIFY_FAILED).
+# When the interpreter sees no CA bundle, point it at the system one so the release's own urllib calls verify.
+if _ssl.get_default_verify_paths().cafile is None and not os.environ.get("SSL_CERT_FILE"):
+    for _candidate in ("/private/etc/ssl/cert.pem", "/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"):
+        if os.path.exists(_candidate):
+            os.environ["SSL_CERT_FILE"] = _candidate
+            break
+
 import datetime as dt
 import hashlib
 import json
