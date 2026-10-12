@@ -1,16 +1,16 @@
 {
   "board_notes": [
     "MAIN BOARD amd-mi325x, version label main@1658ba796. Unreleased: not reproducible by pip install; the release boards are the reference.",
-    "Cells: 213 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@1658ba796 (2026-10-12T21:25:50Z). Boxes: AMD Instinct MI325X (amd, DO).",
-    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 28 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
-    "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: n/a 213).",
+    "Cells: 226 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@1658ba796 (2026-10-12T21:25:50Z). Boxes: AMD Instinct MI325X (amd, DO).",
+    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 30 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
+    "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: n/a 226).",
     "Opponents: copied from the stored opponent boards (opponents-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 4 races.",
     "Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax. A cell of ours whose output hash equals a copied opponent's shows quality identical_to=<arm> (the same bits) where the own-host reference gave none."
   ],
   "board_sections": [
     {
       "lines": [
-        "Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: n/a 213.",
+        "Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: n/a 226.",
         "",
         "DIFFER: none."
       ],
@@ -18,7 +18,7 @@
     },
     {
       "lines": [
-        "Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 26 failed runs.",
+        "Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 9 failed runs.",
         "",
         "| lane | dataset | commit | hardware | version | box/job | reason | ok cell on the board |",
         "|---|---|---|---|---|---|---|---|",
@@ -29,25 +29,8 @@
         "| gcn | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@6416999f7 amd/a1210 stays |",
         "| graphsage | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@6416999f7 amd/a1210 stays |",
         "| graphsage | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@6416999f7 amd/a1210 stays |",
-        "| min-cov-det | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
-        "| minmax-scaler | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
-        "| minmax-scaler | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
         "| moe | synthetic | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@a1c96a5ba amd/a1682 stays |",
-        "| resnet-block | synthetic | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@bac431c11 amd/a0004 stays |",
-        "| rfe | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
-        "| rfe | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
-        "| select-chi2 | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
-        "| select-chi2 | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
-        "| select-d | synthetic | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | error | none |",
-        "| select-d | taxi-hourly | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | error | none |",
-        "| select-f-classif | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
-        "| select-f-classif | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
-        "| select-mutual-info | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
-        "| select-mutual-info | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | none |",
-        "| standard-scaler | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | main@6416999f7 amd/a1210 stays |",
-        "| standard-scaler | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | main@6416999f7 amd/a1210 stays |",
-        "| target-encoder | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | main@8ed94710a amd/a1068 stays |",
-        "| target-encoder | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0005 | error | main@8ed94710a amd/a1068 stays |"
+        "| resnet-block | synthetic | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@bac431c11 amd/a0004 stays |"
       ],
       "title": "FAILED"
     }
@@ -87,16 +70,16 @@
     "smoke": false,
     "vendor": "amd"
   },
-  "created": "2026-10-12T22:22:57Z",
+  "created": "2026-10-12T22:57:32Z",
   "main_board": {
     "backfill": {
       "filled": {
-        "hardware<-box table": 213,
-        "hardware<-cell record": 311,
+        "hardware<-box table": 226,
+        "hardware<-cell record": 324,
         "hardware<-source board box": 66,
         "hardware<-stored record": 8,
-        "version<-cell record": 377,
-        "version<-git _version.py": 213,
+        "version<-cell record": 390,
+        "version<-git _version.py": 226,
         "version<-source board box packages": 8
       },
       "not_comparable_rows": 0,
@@ -302,87 +285,6 @@
         "column": "amd-mi325x",
         "comparability": {},
         "ct": 1791835328,
-        "dataset": "istella",
-        "digest": "e61cd2f8492f8946",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "min-cov-det",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/min-cov-det/istella/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "istella",
-        "digest": "4c57a2682d976591",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "minmax-scaler",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/minmax-scaler/istella/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "taxi",
-        "digest": "7a42e69e2a675d42",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "minmax-scaler",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/minmax-scaler/taxi/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
         "dataset": "synthetic",
         "digest": null,
         "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
@@ -431,393 +333,15 @@
         "tag": null,
         "vendor": "amd",
         "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "istella",
-        "digest": "efbd698c2e50f80b",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "rfe",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/rfe/istella/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "taxi",
-        "digest": "f12739eda2af1a06",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "rfe",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/rfe/taxi/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "istella",
-        "digest": "0cecab3cb1539549",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "select-chi2",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/select-chi2/istella/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "taxi",
-        "digest": "f12739eda2af1a06",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "select-chi2",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/select-chi2/taxi/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0006",
-        "kind": "algos",
-        "lane": "select-d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/select-d/synthetic/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "taxi-hourly",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0006",
-        "kind": "algos",
-        "lane": "select-d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/select-d/taxi-hourly/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "istella",
-        "digest": "a76213bc80114f04",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "select-f-classif",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/select-f-classif/istella/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "taxi",
-        "digest": "c1217e86bd2c518f",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "select-f-classif",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/select-f-classif/taxi/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "istella",
-        "digest": "370f0f8ac0ee8f12",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "select-mutual-info",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/select-mutual-info/istella/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "taxi",
-        "digest": "f12739eda2af1a06",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "select-mutual-info",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/select-mutual-info/taxi/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "istella",
-        "digest": "fa37f824d11d373d",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "standard-scaler",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/standard-scaler/istella/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "taxi",
-        "digest": "b877684de8a99593",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "standard-scaler",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/standard-scaler/taxi/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "istella",
-        "digest": "36a0e0dc2eb0338c",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "target-encoder",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/target-encoder/istella/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
-      },
-      {
-        "box": "amd",
-        "column": "amd-mi325x",
-        "comparability": {},
-        "ct": 1791835328,
-        "dataset": "taxi",
-        "digest": "5599105b21ff4958",
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "AMD Instinct MI325X (amd, DO)",
-        "infra": false,
-        "job": "a0005",
-        "kind": "algos",
-        "lane": "target-encoder",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/target-encoder/taxi/rows=full",
-        "reason": "error",
-        "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4",
-        "status": "REFUSED(error)",
-        "status_raw": "error",
-        "tag": null,
-        "vendor": "amd",
-        "version": "mojolearn 0.8.41 (source build, main@a8fd6d926)"
       }
     ],
-    "failed_runs": 26,
+    "failed_runs": 9,
     "identity": {
-      "n/a": 213
+      "n/a": 226
     },
     "inputs": {
       "branch": "main",
-      "generated": "2026-10-12T22:22:57Z",
+      "generated": "2026-10-12T22:57:32Z",
       "grid_logs": [
         "amd=/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/gridlogs.txt"
       ],
@@ -839,7 +363,7 @@
         "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json"
       }
     ],
-    "replaced": 28,
+    "replaced": 30,
     "withheld_opponents": 4
   },
   "main_board_schema": "mojolearn-main-board/1",
@@ -932,8 +456,11 @@
     "algos/maxabs-scaler/taxi/rows=full",
     "algos/maxpool1d/synthetic/rows=full",
     "algos/maxpool2d/synthetic/rows=full",
+    "algos/min-cov-det/istella/rows=full",
     "algos/minibatch-kmeans/istella/rows=full",
     "algos/minibatch-kmeans/taxi/rows=full",
+    "algos/minmax-scaler/istella/rows=full",
+    "algos/minmax-scaler/taxi/rows=full",
     "algos/moe/synthetic/rows=full",
     "algos/multilabel-binarizer/istella/rows=full",
     "algos/multilabel-binarizer/taxi/rows=full",
@@ -968,6 +495,8 @@
     "algos/randomized-svd/istella/rows=full",
     "algos/randomized-svd/taxi/rows=full",
     "algos/resnet-block/synthetic/rows=full",
+    "algos/rfe/istella/rows=full",
+    "algos/rfe/taxi/rows=full",
     "algos/ridge-cv/istella/rows=full",
     "algos/ridge-cv/taxi/rows=full",
     "algos/rmsprop/synthetic/rows=full",
@@ -977,10 +506,18 @@
     "algos/rnn-reg/taxi-hourly/rows=full",
     "algos/robust-scaler/istella/rows=full",
     "algos/robust-scaler/taxi/rows=full",
+    "algos/select-chi2/istella/rows=full",
+    "algos/select-chi2/taxi/rows=full",
+    "algos/select-d/synthetic/rows=full",
+    "algos/select-d/taxi-hourly/rows=full",
+    "algos/select-f-classif/istella/rows=full",
+    "algos/select-f-classif/taxi/rows=full",
     "algos/select-f-regression/istella/rows=full",
     "algos/select-f-regression/taxi/rows=full",
     "algos/select-mutual-info-reg/istella/rows=full",
     "algos/select-mutual-info-reg/taxi/rows=full",
+    "algos/select-mutual-info/istella/rows=full",
+    "algos/select-mutual-info/taxi/rows=full",
     "algos/select-r-regression/istella/rows=full",
     "algos/select-r-regression/taxi/rows=full",
     "algos/sgd-clf/istella/rows=full",
@@ -34078,6 +33615,238 @@
       "shape": null,
       "status": "done"
     },
+    "algos/min-cov-det/istella/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "min-cov-det",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "istella",
+              "digest": null,
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "min-cov-det",
+              "measured": null,
+              "median_ms": 268914.63235499756,
+              "quality": {},
+              "race_id": "algos/min-cov-det/istella/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 268914.63235499756,
+          "median_ms": 268914.63235499756,
+          "memory": {},
+          "min_ms": 268914.63235499756,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            268914.63235499756
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T19:37:41Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/min-cov-det/istella/rows=full"
+          },
+          "dataset": "istella",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "min-cov-det",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": 7
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "decomp",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [],
+              "ours_class": "mojolearn.MinCovDet",
+              "params": {
+                "random_state": 7
+              },
+              "quality": "relative Frobenius difference of covariance_ vs scikit-learn",
+              "sklearn": "sklearn.covariance:MinCovDet",
+              "stride_subsets": {
+                "X": 100000
+              },
+              "task": "covariance",
+              "timed_fit": "fit(X)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 100000x220; Xq 100000x220; y 100000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "REFUSED(timeout: null)",
+          "times_ms": [],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": null
+        }
+      ],
+      "dataset": "istella",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/min-cov-det/istella/rows=full",
+      "infer_cells": [],
+      "lane": "min-cov-det",
+      "lane_config": {
+        "block": "cls",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "decomp",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [],
+        "ours_class": "mojolearn.MinCovDet",
+        "params": {
+          "random_state": 7
+        },
+        "quality": "relative Frobenius difference of covariance_ vs scikit-learn",
+        "sklearn": "sklearn.covariance:MinCovDet",
+        "stride_subsets": {
+          "X": 100000
+        },
+        "task": "covariance",
+        "timed_fit": "fit(X)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
     "algos/minibatch-kmeans/istella/rows=full": {
       "cells": [
         {
@@ -34598,6 +34367,514 @@
         "identity": "n/a",
         "job": "a1688",
         "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
+    "algos/minmax-scaler/istella/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "4c57a2682d976591",
+          "hash_stable": null,
+          "lane": "minmax-scaler",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "istella",
+              "digest": "4c57a2682d976591",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "minmax-scaler",
+              "measured": null,
+              "median_ms": 21.866040995519143,
+              "quality": {
+                "max_abs_diff_vs_sklearn": 0.0,
+                "output_shape": "100000x220",
+                "rel_diff_vs_sklearn": 0.0
+              },
+              "race_id": "algos/minmax-scaler/istella/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 21.866040995519143,
+          "median_ms": 21.866040995519143,
+          "memory": {},
+          "min_ms": 21.866040995519143,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "max_abs_diff_vs_sklearn": 0.0,
+            "output_shape": "100000x220",
+            "rel_diff_vs_sklearn": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            21.866040995519143
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T20:04:09Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/minmax-scaler/istella/rows=full"
+          },
+          "dataset": "istella",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "4c57a2682d976591",
+          "hash_stable": null,
+          "lane": "minmax-scaler",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 100.88806499697967,
+          "median_ms": 100.88806499697967,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 1466.8,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 1215.0
+          },
+          "min_ms": 100.88806499697967,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 1466.8,
+          "quality": {
+            "output_shape": "100000x220"
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.21673565645424717,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw",
+              "cuml": "cuml.preprocessing:MinMaxScaler",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [],
+              "ours_class": "mojolearn.MinMaxScaler",
+              "params": {
+                "clip": false,
+                "feature_range": [
+                  0,
+                  1
+                ]
+              },
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:MinMaxScaler",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            100.88806499697967
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": 99.6678450028412
+        }
+      ],
+      "dataset": "istella",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/minmax-scaler/istella/rows=full",
+      "infer_cells": [],
+      "lane": "minmax-scaler",
+      "lane_config": {
+        "block": "raw",
+        "cuml": "cuml.preprocessing:MinMaxScaler",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [],
+        "ours_class": "mojolearn.MinMaxScaler",
+        "params": {
+          "clip": false,
+          "feature_range": [
+            0,
+            1
+          ]
+        },
+        "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+        "sklearn": "sklearn.preprocessing:MinMaxScaler",
+        "task": "transform",
+        "timed_fit": "fit(X)",
+        "timed_infer": "transform(Xq)"
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
+    "algos/minmax-scaler/taxi/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "7a42e69e2a675d42",
+          "hash_stable": null,
+          "lane": "minmax-scaler",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "taxi",
+              "digest": "7a42e69e2a675d42",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "minmax-scaler",
+              "measured": null,
+              "median_ms": 3.17819400515873,
+              "quality": {
+                "max_abs_diff_vs_sklearn": 0.0,
+                "output_shape": "100000x11",
+                "rel_diff_vs_sklearn": 0.0
+              },
+              "race_id": "algos/minmax-scaler/taxi/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 3.17819400515873,
+          "median_ms": 3.17819400515873,
+          "memory": {},
+          "min_ms": 3.17819400515873,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "max_abs_diff_vs_sklearn": 0.0,
+            "output_shape": "100000x11",
+            "rel_diff_vs_sklearn": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            3.17819400515873
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T20:03:59Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/minmax-scaler/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "7a42e69e2a675d42",
+          "hash_stable": null,
+          "lane": "minmax-scaler",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 47.28034499567002,
+          "median_ms": 47.28034499567002,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 271.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 258.3
+          },
+          "min_ms": 47.28034499567002,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 271.0,
+          "quality": {
+            "output_shape": "100000x11"
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.067220194891763,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw",
+              "cuml": "cuml.preprocessing:MinMaxScaler",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [],
+              "ours_class": "mojolearn.MinMaxScaler",
+              "params": {
+                "clip": false,
+                "feature_range": [
+                  0,
+                  1
+                ]
+              },
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:MinMaxScaler",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            47.28034499567002
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": 48.67615499824751
+        }
+      ],
+      "dataset": "taxi",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/minmax-scaler/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "minmax-scaler",
+      "lane_config": {
+        "block": "raw",
+        "cuml": "cuml.preprocessing:MinMaxScaler",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [],
+        "ours_class": "mojolearn.MinMaxScaler",
+        "params": {
+          "clip": false,
+          "feature_range": [
+            0,
+            1
+          ]
+        },
+        "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+        "sklearn": "sklearn.preprocessing:MinMaxScaler",
+        "task": "transform",
+        "timed_fit": "fit(X)",
+        "timed_infer": "transform(Xq)"
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
       },
       "opponent_source": {
         "boards": [
@@ -44188,6 +44465,514 @@
       "shape": null,
       "status": "done"
     },
+    "algos/rfe/istella/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "rfe",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "istella",
+              "digest": null,
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "rfe",
+              "measured": null,
+              "median_ms": 887.0141519946628,
+              "quality": {},
+              "race_id": "algos/rfe/istella/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 887.0141519946628,
+          "median_ms": 887.0141519946628,
+          "memory": {},
+          "min_ms": 887.0141519946628,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            887.0141519946628
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T20:16:23Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/rfe/istella/rows=full"
+          },
+          "dataset": "istella",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "efbd698c2e50f80b",
+          "hash_stable": null,
+          "lane": "rfe",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 26346.62654600106,
+          "median_ms": 26346.62654600106,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 1812.8,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 1811.3
+          },
+          "min_ms": 26346.62654600106,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 1812.8,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 110
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.033667086389445,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [
+                "nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"
+              ],
+              "notes": [],
+              "ours_class": "mojolearn.RFE",
+              "params": {
+                "estimator": "LogisticRegression(max_iter=200)",
+                "n_features_to_select": "half",
+                "step": 0.1
+              },
+              "quality": "selected-feature Jaccard against scikit-learn's selection",
+              "sklearn": "sklearn.feature_selection:RFE",
+              "stride_subsets": {
+                "X": 200000
+              },
+              "task": "select",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 200000x220; Xq 100000x220; y 200000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            26346.62654600106
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": 25391.392126999563
+        }
+      ],
+      "dataset": "istella",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/rfe/istella/rows=full",
+      "infer_cells": [],
+      "lane": "rfe",
+      "lane_config": {
+        "block": "cls",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [
+          "nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"
+        ],
+        "notes": [],
+        "ours_class": "mojolearn.RFE",
+        "params": {
+          "estimator": "LogisticRegression(max_iter=200)",
+          "n_features_to_select": "half",
+          "step": 0.1
+        },
+        "quality": "selected-feature Jaccard against scikit-learn's selection",
+        "sklearn": "sklearn.feature_selection:RFE",
+        "stride_subsets": {
+          "X": 200000
+        },
+        "task": "select",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
+    "algos/rfe/taxi/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "f12739eda2af1a06",
+          "hash_stable": null,
+          "lane": "rfe",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "taxi",
+              "digest": "f12739eda2af1a06",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "rfe",
+              "measured": null,
+              "median_ms": 103.3867200021632,
+              "quality": {
+                "jaccard_vs_sklearn": 1.0,
+                "n_selected": 5
+              },
+              "race_id": "algos/rfe/taxi/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 103.3867200021632,
+          "median_ms": 103.3867200021632,
+          "memory": {},
+          "min_ms": 103.3867200021632,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 5
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            103.3867200021632
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T20:15:17Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/rfe/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "f12739eda2af1a06",
+          "hash_stable": null,
+          "lane": "rfe",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 1156.0043019999284,
+          "median_ms": 1156.0043019999284,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 298.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 296.7
+          },
+          "min_ms": 1156.0043019999284,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 298.5,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 5
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.08943454606812493,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [
+                "nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"
+              ],
+              "notes": [],
+              "ours_class": "mojolearn.RFE",
+              "params": {
+                "estimator": "LogisticRegression(max_iter=200)",
+                "n_features_to_select": "half",
+                "step": 0.1
+              },
+              "quality": "selected-feature Jaccard against scikit-learn's selection",
+              "sklearn": "sklearn.feature_selection:RFE",
+              "stride_subsets": {
+                "X": 200000
+              },
+              "task": "select",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 200000x11; Xq 100000x11; y 200000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            1156.0043019999284
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": 886.6993350020493
+        }
+      ],
+      "dataset": "taxi",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/rfe/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "rfe",
+      "lane_config": {
+        "block": "cls",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [
+          "nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"
+        ],
+        "notes": [],
+        "ours_class": "mojolearn.RFE",
+        "params": {
+          "estimator": "LogisticRegression(max_iter=200)",
+          "n_features_to_select": "half",
+          "step": 0.1
+        },
+        "quality": "selected-feature Jaccard against scikit-learn's selection",
+        "sklearn": "sklearn.feature_selection:RFE",
+        "stride_subsets": {
+          "X": 200000
+        },
+        "task": "select",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
     "algos/ridge-cv/istella/rows=full": {
       "cells": [
         {
@@ -48446,6 +49231,1486 @@
       "shape": null,
       "status": "done"
     },
+    "algos/select-chi2/istella/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "0cecab3cb1539549",
+          "hash_stable": null,
+          "lane": "select-chi2",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "istella",
+              "digest": "0cecab3cb1539549",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "select-chi2",
+              "measured": null,
+              "median_ms": 26.39378499588929,
+              "quality": {
+                "jaccard_vs_sklearn": 1.0,
+                "n_selected": 110
+              },
+              "race_id": "algos/select-chi2/istella/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 26.39378499588929,
+          "median_ms": 26.39378499588929,
+          "memory": {},
+          "min_ms": 26.39378499588929,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 110
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            26.39378499588929
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T20:09:59Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/select-chi2/istella/rows=full"
+          },
+          "dataset": "istella",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "0cecab3cb1539549",
+          "hash_stable": null,
+          "lane": "select-chi2",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 282.92849600256886,
+          "median_ms": 282.92849600256886,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 3765.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 3764.4
+          },
+          "min_ms": 282.92849600256886,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 3765.1,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 110
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.09328782844005097,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "nonneg",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "k = d // 2; score_func = chi2 (ours: mojolearn.chi2)"
+              ],
+              "ours_class": "mojolearn.SelectKBest",
+              "params": {
+                "k": "half"
+              },
+              "quality": "selected-feature Jaccard against scikit-learn's selection",
+              "sklearn": "sklearn.feature_selection:SelectKBest",
+              "task": "select",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            282.92849600256886
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": 266.5311630044016
+        }
+      ],
+      "dataset": "istella",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/select-chi2/istella/rows=full",
+      "infer_cells": [],
+      "lane": "select-chi2",
+      "lane_config": {
+        "block": "nonneg",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [
+          "k = d // 2; score_func = chi2 (ours: mojolearn.chi2)"
+        ],
+        "ours_class": "mojolearn.SelectKBest",
+        "params": {
+          "k": "half"
+        },
+        "quality": "selected-feature Jaccard against scikit-learn's selection",
+        "sklearn": "sklearn.feature_selection:SelectKBest",
+        "task": "select",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
+    "algos/select-chi2/taxi/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "f12739eda2af1a06",
+          "hash_stable": null,
+          "lane": "select-chi2",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "taxi",
+              "digest": "f12739eda2af1a06",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "select-chi2",
+              "measured": null,
+              "median_ms": 10.554309999861289,
+              "quality": {
+                "jaccard_vs_sklearn": 1.0,
+                "n_selected": 5
+              },
+              "race_id": "algos/select-chi2/taxi/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 10.554309999861289,
+          "median_ms": 10.554309999861289,
+          "memory": {},
+          "min_ms": 10.554309999861289,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 5
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            10.554309999861289
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T20:09:48Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/select-chi2/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "f12739eda2af1a06",
+          "hash_stable": null,
+          "lane": "select-chi2",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 59.28689899883466,
+          "median_ms": 59.28689899883466,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 439.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 415.6
+          },
+          "min_ms": 59.28689899883466,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 439.0,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 5
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.17802094860904674,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "nonneg",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "k = d // 2; score_func = chi2 (ours: mojolearn.chi2)"
+              ],
+              "ours_class": "mojolearn.SelectKBest",
+              "params": {
+                "k": "half"
+              },
+              "quality": "selected-feature Jaccard against scikit-learn's selection",
+              "sklearn": "sklearn.feature_selection:SelectKBest",
+              "task": "select",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            59.28689899883466
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": 59.700598001654726
+        }
+      ],
+      "dataset": "taxi",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/select-chi2/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "select-chi2",
+      "lane_config": {
+        "block": "nonneg",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [
+          "k = d // 2; score_func = chi2 (ours: mojolearn.chi2)"
+        ],
+        "ours_class": "mojolearn.SelectKBest",
+        "params": {
+          "k": "half"
+        },
+        "quality": "selected-feature Jaccard against scikit-learn's selection",
+        "sklearn": "sklearn.feature_selection:SelectKBest",
+        "task": "select",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
+    "algos/select-d/synthetic/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "synthetic",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "12c97f719e95f054",
+          "hash_stable": null,
+          "lane": "select-d",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "synthetic",
+              "digest": "12c97f719e95f054",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "select-d",
+              "measured": null,
+              "median_ms": 0.9134849969996139,
+              "quality": {
+                "relative_error_vs_own_host": 0.0
+              },
+              "race_id": "algos/select-d/synthetic/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 0.9134849969996139,
+          "median_ms": 0.9134849969996139,
+          "memory": {},
+          "min_ms": 0.9134849969996139,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "relative_error_vs_own_host": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            0.9134849969996139
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "statsmodels-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "the differencing order of every series (KPSS at d = 0, 1)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T22:42:50Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/select-d/synthetic/rows=full"
+          },
+          "dataset": "synthetic",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "12c97f719e95f054",
+          "hash_stable": null,
+          "lane": "select-d",
+          "library": "statsmodels",
+          "library_version": "0.15.0",
+          "max_ms": 3.990913995949086,
+          "median_ms": 3.990913995949086,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 217.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 217.9
+          },
+          "min_ms": 3.990913995949086,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "statsmodels",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 217.9,
+          "quality": {
+            "d_agreement_vs_statsmodels": 1.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.22889117578750945,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "ts",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "extra",
+              "mismatches": [],
+              "notes": [
+                "statsmodels: kpss (regression='c', ours' lag count for the differenced length) on np.diff(y, d) for d = 0, 1; the first stationary d, else 2 (cuML's rule)"
+              ],
+              "ours_class": "mojolearn.select_d",
+              "params": {
+                "D": 0,
+                "pval_threshold": 0.05,
+                "s": 0
+              },
+              "quality": "agreement of the chosen d per series with statsmodels'",
+              "task": "selectd",
+              "timed_fit": "the differencing order of every series (KPSS at d = 0, 1)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "Yfit 64x1392; Yhold 64x48",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            3.990913995949086
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "statsmodels 0.15.0",
+          "version_source": "cell record",
+          "warmup_ms": 4.203652999422047
+        }
+      ],
+      "dataset": "synthetic",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/select-d/synthetic/rows=full",
+      "infer_cells": [],
+      "lane": "select-d",
+      "lane_config": {
+        "block": "ts",
+        "datasets": [
+          "taxi-hourly",
+          "synthetic"
+        ],
+        "expansion_lane": "sequence",
+        "kind": "extra",
+        "mismatches": [],
+        "notes": [
+          "statsmodels: kpss (regression='c', ours' lag count for the differenced length) on np.diff(y, d) for d = 0, 1; the first stationary d, else 2 (cuML's rule)"
+        ],
+        "ours_class": "mojolearn.select_d",
+        "params": {
+          "D": 0,
+          "pval_threshold": 0.05,
+          "s": 0
+        },
+        "quality": "agreement of the chosen d per series with statsmodels'",
+        "task": "selectd",
+        "timed_fit": "the differencing order of every series (KPSS at d = 0, 1)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
+    "algos/select-d/taxi-hourly/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "a9b53cf12395d554",
+          "hash_stable": null,
+          "lane": "select-d",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "taxi-hourly",
+              "digest": "a9b53cf12395d554",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "select-d",
+              "measured": null,
+              "median_ms": 0.8870549936546013,
+              "quality": {
+                "relative_error_vs_own_host": 0.0
+              },
+              "race_id": "algos/select-d/taxi-hourly/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 0.8870549936546013,
+          "median_ms": 0.8870549936546013,
+          "memory": {},
+          "min_ms": 0.8870549936546013,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "relative_error_vs_own_host": 0.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            0.8870549936546013
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "statsmodels-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "the differencing order of every series (KPSS at d = 0, 1)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T22:42:43Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/select-d/taxi-hourly/rows=full"
+          },
+          "dataset": "taxi-hourly",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "a9b53cf12395d554",
+          "hash_stable": null,
+          "lane": "select-d",
+          "library": "statsmodels",
+          "library_version": "0.15.0",
+          "max_ms": 2.6844250023714267,
+          "median_ms": 2.6844250023714267,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 217.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 217.6
+          },
+          "min_ms": 2.6844250023714267,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "statsmodels",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 217.6,
+          "quality": {
+            "d_agreement_vs_statsmodels": 1.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.3304450647237211,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "ts",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "extra",
+              "mismatches": [],
+              "notes": [
+                "statsmodels: kpss (regression='c', ours' lag count for the differenced length) on np.diff(y, d) for d = 0, 1; the first stationary d, else 2 (cuML's rule)"
+              ],
+              "ours_class": "mojolearn.select_d",
+              "params": {
+                "D": 0,
+                "pval_threshold": 0.05,
+                "s": 0
+              },
+              "quality": "agreement of the chosen d per series with statsmodels'",
+              "task": "selectd",
+              "timed_fit": "the differencing order of every series (KPSS at d = 0, 1)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "Yfit 64x1392; Yhold 64x48",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            2.6844250023714267
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "statsmodels 0.15.0",
+          "version_source": "cell record",
+          "warmup_ms": 2.843794005457312
+        }
+      ],
+      "dataset": "taxi-hourly",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/select-d/taxi-hourly/rows=full",
+      "infer_cells": [],
+      "lane": "select-d",
+      "lane_config": {
+        "block": "ts",
+        "datasets": [
+          "taxi-hourly",
+          "synthetic"
+        ],
+        "expansion_lane": "sequence",
+        "kind": "extra",
+        "mismatches": [],
+        "notes": [
+          "statsmodels: kpss (regression='c', ours' lag count for the differenced length) on np.diff(y, d) for d = 0, 1; the first stationary d, else 2 (cuML's rule)"
+        ],
+        "ours_class": "mojolearn.select_d",
+        "params": {
+          "D": 0,
+          "pval_threshold": 0.05,
+          "s": 0
+        },
+        "quality": "agreement of the chosen d per series with statsmodels'",
+        "task": "selectd",
+        "timed_fit": "the differencing order of every series (KPSS at d = 0, 1)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
+    "algos/select-f-classif/istella/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "a76213bc80114f04",
+          "hash_stable": null,
+          "lane": "select-f-classif",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "istella",
+              "digest": "a76213bc80114f04",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "select-f-classif",
+              "measured": null,
+              "median_ms": 27.39339499385096,
+              "quality": {
+                "jaccard_vs_sklearn": 1.0,
+                "n_selected": 110
+              },
+              "race_id": "algos/select-f-classif/istella/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 27.39339499385096,
+          "median_ms": 27.39339499385096,
+          "memory": {},
+          "min_ms": 27.39339499385096,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 110
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            27.39339499385096
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T20:09:40Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/select-f-classif/istella/rows=full"
+          },
+          "dataset": "istella",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "a76213bc80114f04",
+          "hash_stable": null,
+          "lane": "select-f-classif",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 343.00224999606144,
+          "median_ms": 343.00224999606144,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 3562.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 3556.0
+          },
+          "min_ms": 343.00224999606144,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 3562.9,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 110
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.0798636014608228,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "k = d // 2; score_func = f_classif (ours: mojolearn.f_classif)"
+              ],
+              "ours_class": "mojolearn.SelectKBest",
+              "params": {
+                "k": "half"
+              },
+              "quality": "selected-feature Jaccard against scikit-learn's selection",
+              "sklearn": "sklearn.feature_selection:SelectKBest",
+              "task": "select",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            343.00224999606144
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": 350.98356200614944
+        }
+      ],
+      "dataset": "istella",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/select-f-classif/istella/rows=full",
+      "infer_cells": [],
+      "lane": "select-f-classif",
+      "lane_config": {
+        "block": "cls",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [
+          "k = d // 2; score_func = f_classif (ours: mojolearn.f_classif)"
+        ],
+        "ours_class": "mojolearn.SelectKBest",
+        "params": {
+          "k": "half"
+        },
+        "quality": "selected-feature Jaccard against scikit-learn's selection",
+        "sklearn": "sklearn.feature_selection:SelectKBest",
+        "task": "select",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
+    "algos/select-f-classif/taxi/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": "c1217e86bd2c518f",
+          "hash_stable": null,
+          "lane": "select-f-classif",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "taxi",
+              "digest": "c1217e86bd2c518f",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "select-f-classif",
+              "measured": null,
+              "median_ms": 11.685119003232103,
+              "quality": {
+                "jaccard_vs_sklearn": 1.0,
+                "n_selected": 5
+              },
+              "race_id": "algos/select-f-classif/taxi/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 11.685119003232103,
+          "median_ms": 11.685119003232103,
+          "memory": {},
+          "min_ms": 11.685119003232103,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 5
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            11.685119003232103
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T20:09:29Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/select-f-classif/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "c1217e86bd2c518f",
+          "hash_stable": null,
+          "lane": "select-f-classif",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 49.73198100196896,
+          "median_ms": 49.73198100196896,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 383.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 372.9
+          },
+          "min_ms": 49.73198100196896,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 383.4,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 5
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.23496186493696022,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "k = d // 2; score_func = f_classif (ours: mojolearn.f_classif)"
+              ],
+              "ours_class": "mojolearn.SelectKBest",
+              "params": {
+                "k": "half"
+              },
+              "quality": "selected-feature Jaccard against scikit-learn's selection",
+              "sklearn": "sklearn.feature_selection:SelectKBest",
+              "task": "select",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            49.73198100196896
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": 53.9743159970385
+        }
+      ],
+      "dataset": "taxi",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/select-f-classif/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "select-f-classif",
+      "lane_config": {
+        "block": "cls",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [
+          "k = d // 2; score_func = f_classif (ours: mojolearn.f_classif)"
+        ],
+        "ours_class": "mojolearn.SelectKBest",
+        "params": {
+          "k": "half"
+        },
+        "quality": "selected-feature Jaccard against scikit-learn's selection",
+        "sklearn": "sklearn.feature_selection:SelectKBest",
+        "task": "select",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
     "algos/select-f-regression/istella/rows=full": {
       "cells": [
         {
@@ -49428,6 +51693,500 @@
         "identity": "n/a",
         "job": "a0005",
         "sha": "a8fd6d926f58e13e714367109f079e6fc9ba9eb4"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
+    "algos/select-mutual-info/istella/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "select-mutual-info",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "istella",
+              "digest": null,
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "select-mutual-info",
+              "measured": null,
+              "median_ms": 458.34054599981755,
+              "quality": {},
+              "race_id": "algos/select-mutual-info/istella/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 458.34054599981755,
+          "median_ms": 458.34054599981755,
+          "memory": {},
+          "min_ms": 458.34054599981755,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            458.34054599981755
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T20:12:00Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/select-mutual-info/istella/rows=full"
+          },
+          "dataset": "istella",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "370f0f8ac0ee8f12",
+          "hash_stable": null,
+          "lane": "select-mutual-info",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 41171.42451100517,
+          "median_ms": 41171.42451100517,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 1892.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 1888.4
+          },
+          "min_ms": 41171.42451100517,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": "none (no argument; draws random numbers, see exceptions)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 1892.1,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 110
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.011132491805749945,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "k = d // 2; score_func = mutual_info_classif (ours: mojolearn.mutual_info_classif)"
+              ],
+              "ours_class": "mojolearn.SelectKBest",
+              "params": {
+                "k": "half"
+              },
+              "quality": "selected-feature Jaccard against scikit-learn's selection",
+              "sklearn": "sklearn.feature_selection:SelectKBest",
+              "stride_subsets": {
+                "X": 100000
+              },
+              "task": "select",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 100000x220; Xq 100000x220; y 100000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            41171.42451100517
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": 41202.19629799976
+        }
+      ],
+      "dataset": "istella",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/select-mutual-info/istella/rows=full",
+      "infer_cells": [],
+      "lane": "select-mutual-info",
+      "lane_config": {
+        "block": "cls",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [
+          "k = d // 2; score_func = mutual_info_classif (ours: mojolearn.mutual_info_classif)"
+        ],
+        "ours_class": "mojolearn.SelectKBest",
+        "params": {
+          "k": "half"
+        },
+        "quality": "selected-feature Jaccard against scikit-learn's selection",
+        "sklearn": "sklearn.feature_selection:SelectKBest",
+        "stride_subsets": {
+          "X": 100000
+        },
+        "task": "select",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+      },
+      "opponent_source": {
+        "boards": [
+          "release-board-resume-r2"
+        ]
+      },
+      "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
+      "rc": null,
+      "rows": null,
+      "shape": null,
+      "status": "done"
+    },
+    "algos/select-mutual-info/taxi/rows=full": {
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {},
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "algos",
+          "hardware": "AMD Instinct MI325X (amd, DO)",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "box table (tools/board_hardware.py)",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "select-mutual-info",
+          "library": "mojolearn",
+          "main_board": {
+            "box": "amd",
+            "commit_date": "2026-10-12T21:25:50Z",
+            "identity": {
+              "other_column": "the nvidia columns",
+              "other_digest": null,
+              "other_job": null,
+              "status": "n/a"
+            },
+            "job": "a0010",
+            "measured": null,
+            "newer_failed": [],
+            "observation": {
+              "box": "amd",
+              "column": "amd-mi325x",
+              "comparability": {},
+              "ct": 1791840350,
+              "dataset": "taxi",
+              "digest": null,
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "family": "algos",
+              "gpu_recorded": null,
+              "hardware": "AMD Instinct MI325X (amd, DO)",
+              "infra": false,
+              "job": "a0010",
+              "kind": "algos",
+              "lane": "select-mutual-info",
+              "measured": null,
+              "median_ms": 190.23645199922612,
+              "quality": {},
+              "race_id": "algos/select-mutual-info/taxi/rows=full",
+              "reason": null,
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
+              "status": "ok",
+              "status_raw": "ok",
+              "tag": null,
+              "vendor": "amd",
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
+            },
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
+          },
+          "max_ms": 190.23645199922612,
+          "median_ms": 190.23645199922612,
+          "memory": {},
+          "min_ms": 190.23645199922612,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "rounds": 1,
+            "source": "main board: one scored run of ours (algos)"
+          },
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
+          "status": "ok",
+          "times_ms": [
+            190.23645199922612
+          ],
+          "verdict": "main board, one scored run",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
+          "warmup_ms": null
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "copied_from": {
+            "board": "release-board-resume-r2",
+            "box": "mojolearn-steward-do-amd",
+            "gpu": "AMD Instinct Mi325X VF",
+            "measured": "2026-09-30T20:10:28Z",
+            "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json",
+            "race": "algos/select-mutual-info/taxi/rows=full"
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": "AMD EPYC 9575F 64-Core Processor",
+          "family": "algos",
+          "hardware": "CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box)",
+          "hardware_comparable": true,
+          "hardware_cpu": "AMD EPYC 9575F 64-Core Processor",
+          "hardware_key": "AMD Instinct MI325X",
+          "hardware_source": "cell record",
+          "hash": "f12739eda2af1a06",
+          "hash_stable": null,
+          "lane": "select-mutual-info",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 2040.1334360067267,
+          "median_ms": 2040.1334360067267,
+          "memory": {
+            "children_mb": 4.1,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 296.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 293.0
+          },
+          "min_ms": 2040.1334360067267,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "seed": "none (no argument; draws random numbers, see exceptions)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 296.4,
+          "quality": {
+            "jaccard_vs_sklearn": 1.0,
+            "n_selected": 5
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": 0.09324706347227323,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "k = d // 2; score_func = mutual_info_classif (ours: mojolearn.mutual_info_classif)"
+              ],
+              "ours_class": "mojolearn.SelectKBest",
+              "params": {
+                "k": "half"
+              },
+              "quality": "selected-feature Jaccard against scikit-learn's selection",
+              "sklearn": "sklearn.feature_selection:SelectKBest",
+              "stride_subsets": {
+                "X": 100000
+              },
+              "task": "select",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 100000x11; Xq 100000x11; y 100000; yq 100000",
+          "source": "copied from release-board-resume-r2; measured this run",
+          "status": "ok",
+          "times_ms": [
+            2040.1334360067267
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "version": "scikit-learn 1.7.2",
+          "version_source": "cell record",
+          "warmup_ms": 2047.0140809993609
+        }
+      ],
+      "dataset": "taxi",
+      "family": "algos",
+      "host": {
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
+      },
+      "id": "algos/select-mutual-info/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "select-mutual-info",
+      "lane_config": {
+        "block": "cls",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [
+          "k = d // 2; score_func = mutual_info_classif (ours: mojolearn.mutual_info_classif)"
+        ],
+        "ours_class": "mojolearn.SelectKBest",
+        "params": {
+          "k": "half"
+        },
+        "quality": "selected-feature Jaccard against scikit-learn's selection",
+        "sklearn": "sklearn.feature_selection:SelectKBest",
+        "stride_subsets": {
+          "X": 100000
+        },
+        "task": "select",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": null
+      },
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "main_board": {
+        "box": "amd",
+        "identity": "n/a",
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
       },
       "opponent_source": {
         "boards": [
@@ -51934,66 +54693,60 @@
           "hardware": "AMD Instinct MI325X (amd, DO)",
           "hardware_key": "AMD Instinct MI325X",
           "hardware_source": "box table (tools/board_hardware.py)",
-          "hash": "cf00d661795e2db5",
+          "hash": null,
           "hash_stable": null,
           "lane": "standard-scaler",
           "library": "mojolearn",
           "main_board": {
             "box": "amd",
-            "commit_date": "2026-10-10T07:49:38Z",
+            "commit_date": "2026-10-12T21:25:50Z",
             "identity": {
               "other_column": "the nvidia columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "a1210",
+            "job": "a0010",
             "measured": null,
-            "newer_failed": [
-              "newer run a8fd6d926/a0005 failed: error"
-            ],
+            "newer_failed": [],
             "observation": {
               "box": "amd",
               "column": "amd-mi325x",
               "comparability": {},
-              "ct": 1791618578,
+              "ct": 1791840350,
               "dataset": "istella",
-              "digest": "cf00d661795e2db5",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+              "digest": null,
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
               "family": "algos",
               "gpu_recorded": null,
               "hardware": "AMD Instinct MI325X (amd, DO)",
               "infra": false,
-              "job": "a1210",
+              "job": "a0010",
               "kind": "algos",
               "lane": "standard-scaler",
               "measured": null,
-              "median_ms": 23.376660014037043,
-              "quality": {
-                "output_shape": "100000x220"
-              },
+              "median_ms": 24.61369999946328,
+              "quality": {},
               "race_id": "algos/standard-scaler/istella/rows=full",
               "reason": null,
-              "sha": "6416999f73ce99cb8290cedf0228a3b68db0ef9c",
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "amd",
-              "version": "mojolearn 0.8.37 (source build, main@6416999f7)"
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
             },
-            "sha": "6416999f73ce99cb8290cedf0228a3b68db0ef9c"
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
           },
-          "max_ms": 23.376660014037043,
-          "median_ms": 23.376660014037043,
+          "max_ms": 24.61369999946328,
+          "median_ms": 24.61369999946328,
           "memory": {},
-          "min_ms": 23.376660014037043,
+          "min_ms": 24.61369999946328,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
-          "quality": {
-            "output_shape": "100000x220"
-          },
+          "quality": {},
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
           "rounds": 1,
@@ -52001,16 +54754,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@6416999f7 amd/a1210 2026-10-10; identity vs the nvidia columns: n/a; newer run a8fd6d926/a0005 failed: error",
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
           "status": "ok",
           "times_ms": [
-            23.376660014037043
+            24.61369999946328
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@6416999f7)",
-          "version_source": "box table (job amd/a1210)",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
           "warmup_ms": null
         },
         {
@@ -52074,7 +54827,7 @@
             "output_shape": "100000x220"
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.04869776023469348,
+          "ratio_ours_identical_over": 0.05127473558424481,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -52124,7 +54877,7 @@
       "dataset": "istella",
       "family": "algos",
       "host": {
-        "hostname": "AMD Instinct MI325X (amd, DO) job a1210"
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
       },
       "id": "algos/standard-scaler/istella/rows=full",
       "infer_cells": [],
@@ -52151,12 +54904,12 @@
         "timed_fit": "fit(X)",
         "timed_infer": "transform(Xq)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1210)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
       "main_board": {
         "box": "amd",
         "identity": "n/a",
-        "job": "a1210",
-        "sha": "6416999f73ce99cb8290cedf0228a3b68db0ef9c"
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
       },
       "opponent_source": {
         "boards": [
@@ -52180,66 +54933,60 @@
           "hardware": "AMD Instinct MI325X (amd, DO)",
           "hardware_key": "AMD Instinct MI325X",
           "hardware_source": "box table (tools/board_hardware.py)",
-          "hash": "106faca24dd60690",
+          "hash": null,
           "hash_stable": null,
           "lane": "standard-scaler",
           "library": "mojolearn",
           "main_board": {
             "box": "amd",
-            "commit_date": "2026-10-10T07:49:38Z",
+            "commit_date": "2026-10-12T21:25:50Z",
             "identity": {
               "other_column": "the nvidia columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "a1210",
+            "job": "a0010",
             "measured": null,
-            "newer_failed": [
-              "newer run a8fd6d926/a0005 failed: error"
-            ],
+            "newer_failed": [],
             "observation": {
               "box": "amd",
               "column": "amd-mi325x",
               "comparability": {},
-              "ct": 1791618578,
+              "ct": 1791840350,
               "dataset": "taxi",
-              "digest": "106faca24dd60690",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+              "digest": null,
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
               "family": "algos",
               "gpu_recorded": null,
               "hardware": "AMD Instinct MI325X (amd, DO)",
               "infra": false,
-              "job": "a1210",
+              "job": "a0010",
               "kind": "algos",
               "lane": "standard-scaler",
               "measured": null,
-              "median_ms": 3.4216399944853038,
-              "quality": {
-                "output_shape": "100000x11"
-              },
+              "median_ms": 4.044556000735611,
+              "quality": {},
               "race_id": "algos/standard-scaler/taxi/rows=full",
               "reason": null,
-              "sha": "6416999f73ce99cb8290cedf0228a3b68db0ef9c",
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "amd",
-              "version": "mojolearn 0.8.37 (source build, main@6416999f7)"
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
             },
-            "sha": "6416999f73ce99cb8290cedf0228a3b68db0ef9c"
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
           },
-          "max_ms": 3.4216399944853038,
-          "median_ms": 3.4216399944853038,
+          "max_ms": 4.044556000735611,
+          "median_ms": 4.044556000735611,
           "memory": {},
-          "min_ms": 3.4216399944853038,
+          "min_ms": 4.044556000735611,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
-          "quality": {
-            "output_shape": "100000x11"
-          },
+          "quality": {},
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
           "rounds": 1,
@@ -52247,16 +54994,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@6416999f7 amd/a1210 2026-10-10; identity vs the nvidia columns: n/a; newer run a8fd6d926/a0005 failed: error",
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
           "status": "ok",
           "times_ms": [
-            3.4216399944853038
+            4.044556000735611
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@6416999f7)",
-          "version_source": "box table (job amd/a1210)",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
           "warmup_ms": null
         },
         {
@@ -52320,7 +55067,7 @@
             "output_shape": "100000x11"
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.05647366915092677,
+          "ratio_ours_identical_over": 0.06675480699783463,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -52370,7 +55117,7 @@
       "dataset": "taxi",
       "family": "algos",
       "host": {
-        "hostname": "AMD Instinct MI325X (amd, DO) job a1210"
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
       },
       "id": "algos/standard-scaler/taxi/rows=full",
       "infer_cells": [],
@@ -52397,12 +55144,12 @@
         "timed_fit": "fit(X)",
         "timed_infer": "transform(Xq)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1210)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
       "main_board": {
         "box": "amd",
         "identity": "n/a",
-        "job": "a1210",
-        "sha": "6416999f73ce99cb8290cedf0228a3b68db0ef9c"
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
       },
       "opponent_source": {
         "boards": [
@@ -53912,66 +56659,60 @@
           "hardware": "AMD Instinct MI325X (amd, DO)",
           "hardware_key": "AMD Instinct MI325X",
           "hardware_source": "box table (tools/board_hardware.py)",
-          "hash": "6b3d8967d553dbb0",
+          "hash": null,
           "hash_stable": null,
           "lane": "target-encoder",
           "library": "mojolearn",
           "main_board": {
             "box": "amd",
-            "commit_date": "2026-10-09T04:43:28Z",
+            "commit_date": "2026-10-12T21:25:50Z",
             "identity": {
               "other_column": "the nvidia columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "a1068",
+            "job": "a0010",
             "measured": null,
-            "newer_failed": [
-              "newer run a8fd6d926/a0005 failed: error"
-            ],
+            "newer_failed": [],
             "observation": {
               "box": "amd",
               "column": "amd-mi325x",
               "comparability": {},
-              "ct": 1791521008,
+              "ct": 1791840350,
               "dataset": "istella",
-              "digest": "6b3d8967d553dbb0",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+              "digest": null,
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
               "family": "algos",
               "gpu_recorded": null,
               "hardware": "AMD Instinct MI325X (amd, DO)",
               "infra": false,
-              "job": "a1068",
+              "job": "a0010",
               "kind": "algos",
               "lane": "target-encoder",
               "measured": null,
-              "median_ms": 89.65788999921642,
-              "quality": {
-                "output_shape": "100000x8"
-              },
+              "median_ms": 78.86781400156906,
+              "quality": {},
               "race_id": "algos/target-encoder/istella/rows=full",
               "reason": null,
-              "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "amd",
-              "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
             },
-            "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7"
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
           },
-          "max_ms": 89.65788999921642,
-          "median_ms": 89.65788999921642,
+          "max_ms": 78.86781400156906,
+          "median_ms": 78.86781400156906,
           "memory": {},
-          "min_ms": 89.65788999921642,
+          "min_ms": 78.86781400156906,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
-          "quality": {
-            "output_shape": "100000x8"
-          },
+          "quality": {},
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
           "rounds": 1,
@@ -53979,16 +56720,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@8ed94710a amd/a1068 2026-10-09; identity vs the nvidia columns: n/a; newer run a8fd6d926/a0005 failed: error",
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
           "status": "ok",
           "times_ms": [
-            89.65788999921642
+            78.86781400156906
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@8ed94710a)",
-          "version_source": "box table (job amd/a1068)",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
           "warmup_ms": null
         },
         {
@@ -54055,7 +56796,7 @@
             "output_shape": "100000x8"
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.44219412458701646,
+          "ratio_ours_identical_over": 0.38897729994337654,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -54116,7 +56857,7 @@
       "dataset": "istella",
       "family": "algos",
       "host": {
-        "hostname": "AMD Instinct MI325X (amd, DO) job a1068"
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
       },
       "id": "algos/target-encoder/istella/rows=full",
       "infer_cells": [],
@@ -54149,12 +56890,12 @@
         "timed_fit": "fit(X, y)",
         "timed_infer": "transform(Xq)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1068)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
       "main_board": {
         "box": "amd",
         "identity": "n/a",
-        "job": "a1068",
-        "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7"
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
       },
       "opponent_source": {
         "boards": [
@@ -54178,66 +56919,60 @@
           "hardware": "AMD Instinct MI325X (amd, DO)",
           "hardware_key": "AMD Instinct MI325X",
           "hardware_source": "box table (tools/board_hardware.py)",
-          "hash": "e662ed62eea3df89",
+          "hash": null,
           "hash_stable": null,
           "lane": "target-encoder",
           "library": "mojolearn",
           "main_board": {
             "box": "amd",
-            "commit_date": "2026-10-09T04:43:28Z",
+            "commit_date": "2026-10-12T21:25:50Z",
             "identity": {
               "other_column": "the nvidia columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "a1068",
+            "job": "a0010",
             "measured": null,
-            "newer_failed": [
-              "newer run a8fd6d926/a0005 failed: error"
-            ],
+            "newer_failed": [],
             "observation": {
               "box": "amd",
               "column": "amd-mi325x",
               "comparability": {},
-              "ct": 1791521008,
+              "ct": 1791840350,
               "dataset": "taxi",
-              "digest": "e662ed62eea3df89",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+              "digest": null,
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
               "family": "algos",
               "gpu_recorded": null,
               "hardware": "AMD Instinct MI325X (amd, DO)",
               "infra": false,
-              "job": "a1068",
+              "job": "a0010",
               "kind": "algos",
               "lane": "target-encoder",
               "measured": null,
-              "median_ms": 82.92498798982706,
-              "quality": {
-                "output_shape": "100000x5"
-              },
+              "median_ms": 71.93548000213923,
+              "quality": {},
               "race_id": "algos/target-encoder/taxi/rows=full",
               "reason": null,
-              "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7",
+              "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "amd",
-              "version": "mojolearn 0.8.37 (source build, main@8ed94710a)"
+              "version": "mojolearn 0.8.41 (source build, main@1658ba796)"
             },
-            "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7"
+            "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
           },
-          "max_ms": 82.92498798982706,
-          "median_ms": 82.92498798982706,
+          "max_ms": 71.93548000213923,
+          "median_ms": 71.93548000213923,
           "memory": {},
-          "min_ms": 82.92498798982706,
+          "min_ms": 71.93548000213923,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
-          "quality": {
-            "output_shape": "100000x5"
-          },
+          "quality": {},
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
           "rounds": 1,
@@ -54245,16 +56980,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@8ed94710a amd/a1068 2026-10-09; identity vs the nvidia columns: n/a; newer run a8fd6d926/a0005 failed: error",
+          "source": "main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a",
           "status": "ok",
           "times_ms": [
-            82.92498798982706
+            71.93548000213923
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@8ed94710a)",
-          "version_source": "box table (job amd/a1068)",
+          "version": "mojolearn 0.8.41 (source build, main@1658ba796)",
+          "version_source": "box table (job amd/a0010)",
           "warmup_ms": null
         },
         {
@@ -54321,7 +57056,7 @@
             "output_shape": "100000x5"
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.7116087189848745,
+          "ratio_ours_identical_over": 0.6173038551439303,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -54382,7 +57117,7 @@
       "dataset": "taxi",
       "family": "algos",
       "host": {
-        "hostname": "AMD Instinct MI325X (amd, DO) job a1068"
+        "hostname": "AMD Instinct MI325X (amd, DO) job a0010"
       },
       "id": "algos/target-encoder/taxi/rows=full",
       "infer_cells": [],
@@ -54415,12 +57150,12 @@
         "timed_fit": "fit(X, y)",
         "timed_infer": "transform(Xq)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1068)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
       "main_board": {
         "box": "amd",
         "identity": "n/a",
-        "job": "a1068",
-        "sha": "8ed94710ac8ef06fb3a58e44b4c90416f269dda7"
+        "job": "a0010",
+        "sha": "1658ba7960a5c7962a454f37d05a0e889465dee7"
       },
       "opponent_source": {
         "boards": [
@@ -74775,5 +77510,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-12T22:22:57Z"
+  "updated": "2026-10-12T22:57:32Z"
 }
