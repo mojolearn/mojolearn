@@ -1565,9 +1565,32 @@ class _Base:
     _parameters = ()
 
     def get_params(self, deep=True):
+        """Return this estimator's constructor parameters.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for scikit-learn compatibility; it has no effect.
+
+        Returns
+        -------
+        dict
+            Parameter name to current value.
+        """
         return {name: getattr(self, name) for name in self._parameters}  # glue: estimator parameter names (get_params)
 
     def set_params(self, **params):
+        """Set constructor parameters by keyword.
+
+        Raises
+        ------
+        ValueError
+            If a keyword is not a parameter of this estimator.
+
+        Returns
+        -------
+        self
+        """
         for k, v in params.items():  # glue: estimator keyword arguments (set_params)
             if k not in self._parameters:
                 raise ValueError(f"Invalid {type(self).__name__} parameter: {k}")
@@ -1575,6 +1598,18 @@ class _Base:
         return self
 
     def fit_transform(self, X, y=None):
+        """Fit to X, then return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self.fit(X, y).transform(X)
 
     def _kit(self):
@@ -1597,16 +1632,63 @@ def _ipca_dev_on(k):
     return k._res()
 
 
+# Reference: scikit-learn `decomposition/_incremental_pca.py`, `partial_fit`;
+# the running mean and variance are `utils/extmath.py::_incremental_mean_and_var`.
+# Each batch's SVD is the thin SVD of the stacked matrix sklearn builds,
+# computed as the eigendecomposition of its d x d Gram matrix (the Jacobi
+# eigh of decomposition/, device or host), then sklearn's `svd_flip` with
+# `u_based_decision=False`.
 class IncrementalPCA(_Base):
-    """sklearn.decomposition.IncrementalPCA (reference: scikit-learn
-    `decomposition/_incremental_pca.py`, `partial_fit`; the running mean and
-    variance are `utils/extmath.py::_incremental_mean_and_var`).
+    """Incremental principal component analysis, fitted batch by batch.
 
-    Each batch's SVD is the thin SVD of the stacked matrix sklearn builds,
-    computed as the eigendecomposition of its d x d Gram matrix (the Jacobi
-    eigh of decomposition/, device or host), then sklearn's `svd_flip` with
-    `u_based_decision=False`. A scipy.sparse X is densified one batch at a
-    time in fit (sklearn's route), whole in partial_fit and transform."""
+    Follows scikit-learn's ``IncrementalPCA``: the mean, variance and
+    components are updated one batch at a time, so a dataset larger than
+    memory can be fitted through ``partial_fit``. Component signs follow
+    scikit-learn's ``svd_flip`` on the rows of the components. A
+    ``scipy.sparse`` input is densified one batch at a time in ``fit`` and
+    whole in ``partial_fit`` and ``transform``.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Number of components to keep. None keeps ``n_features`` (or, in a
+        later ``partial_fit``, the number already fitted). Must be between 1
+        and ``n_features`` and at most the number of rows in each batch.
+    whiten : bool, default False
+        Divide the projected data by the square root of each component's
+        explained variance.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; the input is never modified.
+    batch_size : int or None, default None
+        Rows per batch in ``fit``. None uses ``5 * n_features``.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        Principal axes, sorted by decreasing explained variance.
+    explained_variance_ : ndarray of shape (n_components,)
+    explained_variance_ratio_ : ndarray of shape (n_components,)
+    singular_values_ : ndarray of shape (n_components,)
+    mean_ : ndarray of shape (n_features,)
+    var_ : ndarray of shape (n_features,)
+    noise_variance_ : float
+    n_components_ : int
+    n_samples_seen_ : int
+    n_features_in_ : int
+    batch_size_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.IncrementalPCA(n_components=3, batch_size=200).fit(X)
+    >>> model.transform(X).shape
+    (1000, 3)
+    """
     _parameters = ("n_components", "whiten", "copy", "batch_size", "numeric_mode")
 
     def __init__(self, n_components=None, *, whiten=False, copy=True, batch_size=None, numeric_mode=None):
@@ -1614,6 +1696,23 @@ class IncrementalPCA(_Base):
         self.batch_size, self.numeric_mode = batch_size, numeric_mode
 
     def fit(self, X, y=None):
+        """Fit the model on X in batches of ``batch_size`` rows.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+            Training data. Any earlier fit is discarded.
+        y : ignored
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If X is empty or ``n_components`` is out of range.
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         for a in ("components_", "n_samples_seen_"):  # glue: drops two fitted attribute names
             if hasattr(self, a):
@@ -1647,6 +1746,25 @@ class IncrementalPCA(_Base):
         return self
 
     def partial_fit(self, X, y=None):
+        """Update the model with one more batch.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The batch. ``n_features`` must match earlier batches and
+            ``n_samples`` must be at least ``n_components``.
+        y : ignored
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If the number of features changed or ``n_components`` is out of
+            range for this batch.
+        """
         if not hasattr(self, "numeric_mode_"):
             self.numeric_mode_ = _mode(self.numeric_mode)
         self._partial(_M.from_input(X))
@@ -1729,6 +1847,23 @@ class IncrementalPCA(_Base):
         self.noise_variance_ = nv.s[0]
 
     def transform(self, X):
+        """Project X onto the fitted components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            If X has a different number of features than the fitted data.
+        """
         self._check()
         k = self._kit()
         M = _M.from_input(X)
@@ -1740,6 +1875,16 @@ class IncrementalPCA(_Base):
         return Y.out()
 
     def inverse_transform(self, X):
+        """Map projected data back to the original feature space.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+        """
         self._check()
         k = self._kit()
         Y = _M.from_input(X)
@@ -1751,7 +1896,33 @@ class IncrementalPCA(_Base):
 
 # ================================================================ random projection
 def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
-    """sklearn `random_projection.johnson_lindenstrauss_min_dim` (scalar form)."""
+    """Minimum dimension for a random projection that keeps distances within eps.
+
+    Follows scikit-learn's ``johnson_lindenstrauss_min_dim`` for a single
+    ``n_samples`` and ``eps`` (scalars only): ``4 log(n_samples) /
+    (eps**2 / 2 - eps**3 / 3)``, truncated to an int.
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples; must be greater than zero.
+    eps : float, default 0.1
+        Maximum distortion, strictly between 0 and 1.
+
+    Returns
+    -------
+    int
+
+    Raises
+    ------
+    ValueError
+        If ``eps`` is not in (0, 1) or ``n_samples`` is not positive.
+
+    Examples
+    --------
+    >>> import mojolearn
+    >>> d = mojolearn.johnson_lindenstrauss_min_dim(1000, eps=0.5)
+    """
     if not 0 < eps < 1:
         raise ValueError("The JL bound is defined for eps in ]0, 1[")
     if n_samples <= 0:
@@ -1814,11 +1985,11 @@ class _RandomProjection(_Base):
     `rand_cell`), not numpy's generator: the same `random_state` gives the
     same matrix on every box, and a different one than sklearn's."""
 
+    # Under lane/apple-fast-gap-cls2's LAZY switch the fit leaves the matrix
+    # on the device and the first read downloads it once (the same words).
     @property
     def components_(self):
-        """The (n_components, n_features) matrix. Under lane/apple-fast-gap-cls2's
-        LAZY switch the fit leaves it on the device and the first read
-        downloads it once (the same words)."""
+        """The random projection matrix, shape (n_components, n_features)."""
         dct = self.__dict__
         v = dct.get("_rp_components")
         if v is None and "_rp_lazy" in dct:
@@ -1846,6 +2017,28 @@ class _RandomProjection(_Base):
         return dict(self.__dict__)
 
     def fit(self, X, y=None):
+        """Draw the projection matrix for X's shape.
+
+        Only X's shape is used (and X must be finite); the values are not.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+
+        Raises
+        ------
+        ValueError
+            If X is empty or non-finite, ``n_components`` is not positive, or
+            ``n_components="auto"`` gives a dimension larger than
+            ``n_features``.
+        TypeError
+            If ``random_state`` is not None or an int.
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         # fit reads only the input's shape and refuses a non-finite input;
         # the store (a copy of the whole input) is transform's to build
@@ -1954,6 +2147,22 @@ class _RandomProjection(_Base):
         return True
 
     def transform(self, X):
+        """Project X: ``X @ components_.T``.
+
+        Parameters
+        ----------
+        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+            Always a dense array.
+
+        Raises
+        ------
+        ValueError
+            If X has the wrong number of features or is non-finite.
+        """
         self._check()
         if not _is_sparse(X):
             out = self._project(X)
@@ -1996,6 +2205,21 @@ class _RandomProjection(_Base):
         return Array._owned(res, (m, nc), "<f4", "C")
 
     def inverse_transform(self, X):
+        """Map projected data back with the pseudo-inverse of the components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+
+        Raises
+        ------
+        ValueError
+            If the model was fitted without ``compute_inverse_components=True``.
+        """
         self._check()
         if not hasattr(self, "inverse_m_"):
             raise ValueError("inverse_transform needs compute_inverse_components=True")
@@ -2003,9 +2227,50 @@ class _RandomProjection(_Base):
         return self._kit().mm(M, self.inverse_m_, tb=True).out()
 
 
+# Box-Muller on the Philox stream.
 class GaussianRandomProjection(_RandomProjection):
-    """sklearn.random_projection.GaussianRandomProjection: components drawn
-    N(0, 1/n_components) (Box-Muller on the Philox stream)."""
+    """Reduce dimension with a Gaussian random matrix.
+
+    Follows scikit-learn's ``GaussianRandomProjection``: each component entry
+    is drawn from N(0, 1 / n_components).
+
+    Parameters
+    ----------
+    n_components : int or "auto", default "auto"
+        Target dimension. ``"auto"`` uses
+        ``johnson_lindenstrauss_min_dim(n_samples, eps=eps)``.
+    eps : float, default 0.1
+        Distortion bound used by ``n_components="auto"`` through
+        :func:`johnson_lindenstrauss_min_dim`.
+    compute_inverse_components : bool, default False
+        Compute ``inverse_components_`` (the pseudo-inverse of the
+        components) in ``fit``, needed by ``inverse_transform``. Raises
+        ValueError if the components are rank deficient.
+    random_state : int or None, default None
+        Seed of mojolearn's counter-based random generator; None means 0.
+        The same seed gives the same matrix on every device, but not the
+        matrix scikit-learn draws for that seed.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+    inverse_components_ : ndarray of shape (n_features, n_components)
+        Only with ``compute_inverse_components=True``.
+    n_components_ : int
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 64), dtype=np.float32)
+    >>> model = mojolearn.GaussianRandomProjection(n_components=8, random_state=0).fit(X)
+    >>> model.transform(X).shape
+    (1000, 8)
+    """
     _parameters = ("n_components", "eps", "compute_inverse_components", "random_state", "numeric_mode")
 
     def __init__(self, n_components="auto", *, eps=0.1, compute_inverse_components=False, random_state=None,
@@ -2018,12 +2283,58 @@ class GaussianRandomProjection(_RandomProjection):
         return k.ew("scale", _rp_rand(k, kc, d, seed, 1, 1, dev), s=1.0 / math.sqrt(kc))
 
 
+# Achlioptas / Li et al.
 class SparseRandomProjection(_RandomProjection):
-    """sklearn.random_projection.SparseRandomProjection (Achlioptas / Li et
-    al.): each entry is +-sqrt(1/density)/sqrt(n_components) with probability
-    density/2 each, else 0. `density='auto'` is 1/sqrt(n_features). The
-    components are held DENSE (`dense_output` only chooses sklearn's output
-    container; the values are the same)."""
+    """Reduce dimension with a sparse random matrix.
+
+    Follows scikit-learn's ``SparseRandomProjection``: each entry is
+    ``+sqrt(1/density)/sqrt(n_components)`` or its negative with probability
+    ``density/2`` each, and 0 otherwise. The components are stored as a dense
+    array, and ``transform`` always returns a dense array.
+
+    Parameters
+    ----------
+    n_components : int or "auto", default "auto"
+        Target dimension. ``"auto"`` uses
+        ``johnson_lindenstrauss_min_dim(n_samples, eps=eps)``.
+    density : float or "auto", default "auto"
+        Fraction of nonzero entries, in (0, 1]. ``"auto"`` is
+        ``1 / sqrt(n_features)``. Out-of-range values raise ValueError.
+    dense_output : bool, default False
+        Accepted for scikit-learn compatibility; the output is always dense.
+    eps : float, default 0.1
+        Distortion bound used by ``n_components="auto"`` through
+        :func:`johnson_lindenstrauss_min_dim`.
+    compute_inverse_components : bool, default False
+        Compute ``inverse_components_`` (the pseudo-inverse of the
+        components) in ``fit``, needed by ``inverse_transform``. Raises
+        ValueError if the components are rank deficient.
+    random_state : int or None, default None
+        Seed of mojolearn's counter-based random generator; None means 0.
+        The same seed gives the same matrix on every device, but not the
+        matrix scikit-learn draws for that seed.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+    inverse_components_ : ndarray of shape (n_features, n_components)
+        Only with ``compute_inverse_components=True``.
+    density_ : float
+    n_components_ : int
+    n_features_in_ : int
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 64), dtype=np.float32)
+    >>> model = mojolearn.SparseRandomProjection(n_components=8, random_state=0).fit(X)
+    >>> model.transform(X).shape
+    (1000, 8)
+    """
     _parameters = ("n_components", "density", "eps", "dense_output", "compute_inverse_components",
                    "random_state", "numeric_mode")
 
@@ -2082,18 +2393,86 @@ def _norm(k, v):
 _F32_EPS = 1.1920928955078125e-07
 
 
+# Reference: scikit-learn `decomposition/_nmf.py`: `_initialize_nmf`,
+# `_fit_multiplicative_update` with `_multiplicative_update_w/_h` for
+# beta_loss='frobenius', and `_fit_coordinate_descent` with
+# `_cdnmf_fast.pyx::_update_cdnmf_fast`. The NNDSVD SVD is exact (through
+# the Gram eigh) where sklearn calls randomized_svd. 'random' init and
+# shuffle use the lane's Philox stream, not numpy's. A general float beta
+# is refused by name.
 class NMF(_Base):
-    """sklearn.decomposition.NMF (reference: scikit-learn
-    `decomposition/_nmf.py`: `_initialize_nmf`, `_fit_multiplicative_update`
-    with `_multiplicative_update_w/_h` for beta_loss='frobenius', and
-    `_fit_coordinate_descent` with `_cdnmf_fast.pyx::_update_cdnmf_fast`).
+    """Non-negative matrix factorization ``X ~ W @ H``.
 
-    solver 'cd' (the default) and 'mu'; init 'random' (the lane's Philox
-    stream, not numpy's), 'nndsvd', 'nndsvda', 'nndsvdar' (the SVD is exact,
-    through the Gram eigh, where sklearn calls randomized_svd), 'custom'.
-    shuffle=True permutes the coordinates of every CD sweep with the Philox
-    stream. beta_loss 'frobenius', 'kullback-leibler' and 'itakura-saito'
-    (the last two with solver='mu'). REFUSED BY NAME: a general float beta."""
+    Follows scikit-learn's ``NMF``: finds non-negative ``W`` (n_samples,
+    n_components) and ``H`` (n_components, n_features) minimizing the chosen
+    beta divergence plus optional L1/L2 penalties. The NNDSVD initializations
+    use an exact SVD rather than scikit-learn's randomized one, and random
+    draws come from mojolearn's own generator, so results differ slightly
+    from scikit-learn's for the same seed.
+
+    Parameters
+    ----------
+    n_components : int, "auto" or None, default "auto"
+        Number of components. ``"auto"`` or None uses ``n_features`` (with
+        ``init="custom"``, the number of rows of the given ``H``).
+    init : {"random", "nndsvd", "nndsvda", "nndsvdar", "custom"} or None, default None
+        Initialization. None uses ``"nndsvda"`` when ``n_components <=
+        min(n_samples, n_features)``, else ``"random"``. The NNDSVD variants
+        need ``n_components <= min(n_samples, n_features)``. ``"custom"``
+        takes ``W`` and ``H`` from ``fit_transform``.
+    solver : {"cd", "mu"}, default "cd"
+        Coordinate descent or multiplicative update.
+    beta_loss : {"frobenius", "kullback-leibler", "itakura-saito"}, default "frobenius"
+        Divergence to minimize; the last two need ``solver="mu"``. The
+        numbers 2, 1 and 0 are accepted for the same three; any other float
+        beta raises ValueError.
+    tol : float, default 1e-4
+        Stopping tolerance.
+    max_iter : int, default 200
+        Maximum number of iterations.
+    random_state : int or None, default None
+        Seed for ``"random"`` and ``"nndsvdar"`` initialization and for
+        ``shuffle``; None means 0. Not scikit-learn's random stream.
+    alpha_W : float, default 0.0
+        Regularization strength on ``W``.
+    alpha_H : float or "same", default "same"
+        Regularization strength on ``H``; ``"same"`` uses ``alpha_W``.
+    l1_ratio : float, default 0.0
+        Mix of L1 (1.0) and L2 (0.0) regularization.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility; nothing is printed.
+    shuffle : bool, default False
+        Visit coordinates in random order in each ``"cd"`` sweep.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        The factor ``H``.
+    n_components_ : int
+    n_iter_ : int
+    reconstruction_err_ : float
+        Beta divergence between X and ``W @ H`` (square-rooted, as in
+        scikit-learn).
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        If X has negative values, or an unsupported solver, init or
+        beta_loss is requested.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> model = mojolearn.NMF(n_components=3, random_state=0)
+    >>> W = model.fit_transform(X)
+    >>> H = model.components_
+    """
     _parameters = ("n_components", "init", "solver", "beta_loss", "tol", "max_iter", "random_state",
                    "alpha_W", "alpha_H", "l1_ratio", "verbose", "shuffle", "numeric_mode")
 
@@ -2221,6 +2600,22 @@ class NMF(_Base):
         return W, H, it, nc
 
     def fit_transform(self, X, y=None, W=None, H=None):
+        """Fit the model and return ``W``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Non-negative data.
+        y : ignored
+        W : array-like of shape (n_samples, n_components), optional
+            Starting ``W``; used only with ``init="custom"``.
+        H : array-like of shape (n_components, n_features), optional
+            Starting ``H``; used only with ``init="custom"``.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         M = _M.from_input(X)
         self._validate(M)
@@ -2241,10 +2636,35 @@ class NMF(_Base):
         return Wm.out()
 
     def fit(self, X, y=None, **params):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Non-negative data.
+        y : ignored
+        **params
+            ``W`` and ``H`` for ``init="custom"``, as in ``fit_transform``.
+
+        Returns
+        -------
+        self
+        """
         self.fit_transform(X, **params)
         return self
 
     def transform(self, X):
+        """Solve for ``W`` with the fitted ``H`` held fixed.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Non-negative data.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self._check()
         M = _M.from_input(X)
         if M.c != self.n_features_in_:
@@ -2254,21 +2674,92 @@ class NMF(_Base):
         return W.out()
 
     def inverse_transform(self, X):
+        """Return ``X @ components_``, the data reconstructed from ``W``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+            A ``W`` matrix.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+        """
         self._check()
         return self._kit().mm(_M.from_input(X, "W"), self.components_m_).out()
 
 
 # ================================================================ FastICA
+# Reference: scikit-learn `decomposition/_fastica.py`: `_fit_transform`,
+# `_ica_par`, `_ica_def`, `_sym_decorrelation`, `_gs_decorrelation`,
+# `_logcosh`, `_exp`, `_cube`. The whitening SVD is the eigendecomposition
+# of X^T X (both of sklearn's whiten_solver values take this route); a
+# singular value below 10 float32 eps is clamped there, as sklearn's 'eigh'
+# solver clamps it. w_init defaults to a draw from the lane's Philox
+# stream, not numpy's. A callable `fun` is refused by name.
 class FastICA(_Base):
-    """sklearn.decomposition.FastICA (reference: scikit-learn
-    `decomposition/_fastica.py`: `_fit_transform`, `_ica_par`, `_ica_def`,
-    `_sym_decorrelation`, `_gs_decorrelation`, `_logcosh`, `_exp`, `_cube`).
+    """Independent component analysis with the FastICA algorithm.
 
-    The whitening SVD is the eigendecomposition of X^T X (both of sklearn's
-    whiten_solver values take this route); a singular value below 10 float32
-    eps is clamped there, as sklearn's 'eigh' solver clamps it. w_init
-    defaults to a draw from the lane's Philox stream, not numpy's.
-    REFUSED BY NAME: a callable `fun`."""
+    Follows scikit-learn's ``FastICA``. Whitening always uses the
+    eigendecomposition of ``X.T @ X`` (``whiten_solver`` is accepted but both
+    values take this route), and the default starting matrix is drawn from
+    mojolearn's own generator, so results can differ from scikit-learn's for
+    the same seed.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Number of components; None, or a value above ``min(n_samples,
+        n_features)``, uses ``min(n_samples, n_features)``. Ignored when
+        ``whiten=False``.
+    algorithm : {"parallel", "deflation"}, default "parallel"
+        Estimate all components together, or one at a time.
+    whiten : {"unit-variance", "arbitrary-variance"} or False, default "unit-variance"
+        Whitening strategy; False assumes X is already whitened.
+    fun : {"logcosh", "exp", "cube"}, default "logcosh"
+        Contrast function. A callable is not supported.
+    fun_args : dict or None, default None
+        For ``"logcosh"``, ``{"alpha": a}`` with ``1 <= a <= 2`` (default 1.0).
+    max_iter : int, default 200
+        Maximum number of iterations.
+    tol : float, default 1e-4
+        Convergence tolerance.
+    w_init : array-like of shape (n_components, n_components) or None, default None
+        Starting unmixing matrix; None draws one from ``random_state``.
+    whiten_solver : {"svd", "eigh"}, default "svd"
+        Accepted for scikit-learn compatibility; see above.
+    random_state : int or None, default None
+        Seed for the default ``w_init``; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        Unmixing matrix applied by ``transform``.
+    mixing_ : ndarray of shape (n_features, n_components)
+        Pseudo-inverse of ``components_``.
+    mean_ : ndarray of shape (n_features,)
+        Only when whitening.
+    whitening_ : ndarray of shape (n_components, n_features)
+        Only when whitening.
+    n_iter_ : int
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        For an unsupported ``algorithm``, ``whiten`` or ``fun``, ``alpha``
+        outside [1, 2], or a ``w_init`` of the wrong shape.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> S = mojolearn.FastICA(n_components=3, random_state=0).fit_transform(X)
+    """
     _parameters = ("n_components", "algorithm", "whiten", "fun", "fun_args", "max_iter", "tol", "w_init",
                    "whiten_solver", "random_state", "numeric_mode")
 
@@ -2299,9 +2790,31 @@ class FastICA(_Base):
         return W, it
 
     def fit_transform(self, X, y=None):
+        """Fit the model and return the estimated sources.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         return self._fit(X, True).out()
 
     def fit(self, X, y=None):
+        """Fit the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self._fit(X, False)
         return self
 
@@ -2370,6 +2883,18 @@ class FastICA(_Base):
         return S
 
     def transform(self, X, copy=True):
+        """Recover the sources from X.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        copy : bool, default True
+            Accepted for scikit-learn compatibility; X is never modified.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self._check()
         k = self._kit()
         M = _M.from_input(X)
@@ -2378,6 +2903,18 @@ class FastICA(_Base):
         return k.mm(M, self.components_m_, tb=True).out()
 
     def inverse_transform(self, X, copy=True):
+        """Map sources back to the feature space with ``mixing_``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+        copy : bool, default True
+            Accepted for scikit-learn compatibility; X is never modified.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+        """
         self._check()
         k = self._kit()
         Y = k.mm(_M.from_input(X), self.mixing_m_, tb=True)
@@ -2485,16 +3022,69 @@ def _fa_fast_defines(k):
     return got
 
 
+# Reference: scikit-learn `decomposition/_factor_analysis.py`: `fit`,
+# `transform`, `get_covariance`, `get_precision`, `score_samples`,
+# `_ortho_rotation`. Each iteration's SVD of the scaled data is the QR +
+# one-sided Jacobi SVD of decomposition/ (the eigh of the d x d Gram when
+# n < d). svd_method='randomized' takes the same exact route (sklearn's
+# randomized SVD is an approximation of it).
 class FactorAnalysis(_Base):
-    """sklearn.decomposition.FactorAnalysis (reference: scikit-learn
-    `decomposition/_factor_analysis.py`: `fit`, `transform`,
-    `get_covariance`, `get_precision`, `score_samples`, `_ortho_rotation`).
+    """Factor analysis: a linear Gaussian latent variable model.
 
-    Each iteration's SVD of the scaled data is the QR + one-sided Jacobi SVD
-    of decomposition/ (the eigh of the d x d Gram when n < d).
-    svd_method='randomized' takes the same exact route (sklearn's randomized
-    SVD is an approximation of it). `rotation` in {None, 'varimax',
-    'quartimax'}."""
+    Follows scikit-learn's ``FactorAnalysis``, fitted by EM. Both
+    ``svd_method`` values use an exact SVD at every iteration (scikit-learn's
+    ``"randomized"`` is an approximation of it), so ``iterated_power`` and
+    ``random_state`` have no effect.
+
+    Parameters
+    ----------
+    n_components : int or None, default None
+        Dimension of the latent space; None uses ``n_features``.
+    tol : float, default 1e-2
+        Stop when the log-likelihood gain falls below this.
+    copy : bool, default True
+        Accepted for scikit-learn compatibility; X is never modified.
+    max_iter : int, default 1000
+        Maximum number of EM iterations.
+    noise_variance_init : array-like of shape (n_features,) or None, default None
+        Starting noise variances; None uses ones.
+    svd_method : {"lapack", "randomized"}, default "randomized"
+        Accepted for scikit-learn compatibility; both run the exact SVD.
+    iterated_power : int, default 3
+        Accepted for scikit-learn compatibility; unused.
+    rotation : {"varimax", "quartimax"} or None, default None
+        Rotation applied to the fitted components.
+    random_state : int or None, default 0
+        Accepted for scikit-learn compatibility; unused.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this estimator. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Attributes
+    ----------
+    components_ : ndarray of shape (n_components, n_features)
+        Factor loadings.
+    noise_variance_ : ndarray of shape (n_features,)
+    mean_ : ndarray of shape (n_features,)
+    loglike_ : list of float
+        Log-likelihood at each iteration.
+    n_iter_ : int
+    n_features_in_ : int
+
+    Raises
+    ------
+    ValueError
+        For an unsupported ``svd_method`` or ``rotation``, or a
+        ``noise_variance_init`` of the wrong length.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> fa = mojolearn.FactorAnalysis(n_components=2).fit(X)
+    >>> Z = fa.transform(X)
+    """
     _parameters = ("n_components", "tol", "copy", "max_iter", "noise_variance_init", "svd_method",
                    "iterated_power", "rotation", "random_state", "numeric_mode")
 
@@ -2505,6 +3095,17 @@ class FactorAnalysis(_Base):
         self.rotation, self.random_state, self.numeric_mode = rotation, random_state, numeric_mode
 
     def fit(self, X, y=None):
+        """Fit the model with EM.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.svd_method not in ("lapack", "randomized"):
             raise ValueError("svd_method must be 'lapack' or 'randomized'")
@@ -2638,6 +3239,16 @@ class FactorAnalysis(_Base):
         return self
 
     def transform(self, X):
+        """Return the expected latent variables for each sample.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
         self._check()
         k = self._kit()
         W = self.components_m_
@@ -2667,15 +3278,42 @@ class FactorAnalysis(_Base):
         return k.diag_add(k.mm(W, W, ta=True), self.noise_variance_m_)
 
     def get_covariance(self):
+        """Return the model covariance ``components_.T @ components_ + diag(noise_variance_)``.
+
+        Returns
+        -------
+        ndarray of shape (n_features, n_features), float32
+        """
         self._check()
         return self._cov(self._kit()).out()
 
     def get_precision(self):
+        """Return the inverse of the model covariance.
+
+        Returns
+        -------
+        ndarray of shape (n_features, n_features), float32
+
+        Raises
+        ------
+        ValueError
+            If the covariance is singular.
+        """
         self._check()
         k = self._kit()
         return _inv(k, self._cov(k)).out()
 
     def score_samples(self, X):
+        """Return the log-likelihood of each sample under the model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+
+        Returns
+        -------
+        ndarray of shape (n_samples,), float32
+        """
         v = self._ss(X)
         return v.out((v.r,))
 
@@ -2690,6 +3328,17 @@ class FactorAnalysis(_Base):
         return k.ew("adds", k.ew("scale", q, s=-0.5), s=-0.5 * (Xr.c * _LOG_2PI - ld))
 
     def score(self, X, y=None):
+        """Return the average log-likelihood of the samples.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        float
+        """
         k = self._kit()
         v = self._ss(X)
         return k.ew("scale", k.total(v), s=1.0 / v.r).s[0]
@@ -2742,12 +3391,45 @@ def _pca_mle_rank(spectrum, n_samples, mode):
 
 
 # ================================================================ LU
+# LAPACK getrf semantics. Partial pivoting on the largest |a[i, k]|, ties
+# broken by the lowest row index. A zero pivot is kept (getrf's info > 0).
 def lu_factor(a, *, numeric_mode=None):
-    """scipy.linalg.lu_factor (LAPACK getrf semantics): `(lu, piv)` with L
-    unit-lower and U in one n x n float32 matrix and `piv` the 0-based row
-    interchanges, applied in order. Partial pivoting on the largest |a[i, k]|,
-    ties broken by the LOWEST row index. A zero pivot is kept (getrf's
-    info > 0) and warned about, as scipy warns."""
+    """LU factorization of a square matrix with partial pivoting.
+
+    Follows ``scipy.linalg.lu_factor``: returns ``(lu, piv)``, where ``lu``
+    holds the unit lower-triangular L (diagonal not stored) and U in one
+    float32 matrix, and ``piv`` holds the 0-based row interchanges, applied
+    in order. Pivoting picks the largest absolute value in the column; ties
+    go to the lowest row. A zero pivot is kept and a ``RuntimeWarning`` is
+    issued, as scipy does.
+
+    Parameters
+    ----------
+    a : array-like of shape (n, n)
+        The matrix to factor; must be finite.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    lu : ndarray of shape (n, n), float32
+    piv : ndarray of shape (n,), int32
+        Pass the pair to :func:`lu_solve`.
+
+    Raises
+    ------
+    ValueError
+        If ``a`` is not square, is empty, or contains NaN or infinity.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> A = np.random.default_rng(0).random((8, 8), dtype=np.float32) + 8 * np.eye(8, dtype=np.float32)
+    >>> lu, piv = mojolearn.lu_factor(A)
+    >>> x = mojolearn.lu_solve((lu, piv), np.ones(8, dtype=np.float32))
+    """
     k = _Kit(_mode(numeric_mode))
     sf = k.s_flags()
     if ((sf & 4 and k.qfix_flags() & 4) or sf & 8) and not _is_sparse(a):
@@ -2835,11 +3517,39 @@ class _LUPair(tuple):
         return obj
 
 
+# LAPACK getrs semantics.
 def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
-    """scipy.linalg.lu_solve (LAPACK getrs): solve A x = b (trans=0) or
-    A^T x = b (trans=1, and 2, which is the same for a real matrix) from
-    `lu_factor`'s pair. `b` is n or n x nrhs; a zero pivot yields 0 in that
-    component (never inf or NaN)."""
+    """Solve a linear system from an LU factorization.
+
+    Follows ``scipy.linalg.lu_solve``: solves ``A x = b`` (``trans=0``) or
+    ``A.T x = b`` (``trans=1`` or ``2``; the same for a real matrix) with the
+    pair returned by :func:`lu_factor`. A zero pivot gives 0 in that
+    component of x, never infinity or NaN.
+
+    Parameters
+    ----------
+    lu_and_piv : tuple (lu, piv)
+        The output of :func:`lu_factor`.
+    b : array-like of shape (n,) or (n, nrhs)
+        Right-hand side.
+    trans : {0, 1, 2}, default 0
+        Which system to solve.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    x : ndarray of shape (n,) or (n, nrhs), float32
+        Same shape as ``b``.
+
+    Raises
+    ------
+    ValueError
+        If ``trans`` is not 0, 1 or 2, ``piv`` holds an index outside
+        [0, n), ``b`` has the wrong number of rows, or ``b`` is not finite.
+    """
     if trans not in (0, 1, 2):
         raise ValueError("trans must be 0, 1 or 2")
     lu, piv = lu_and_piv
@@ -2870,12 +3580,41 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     return X.out((n,)) if vec else X.out()
 
 
+# lu_factor + lu_solve (gesv). Lane idn-dense-linalg: one binding entry
+# (`x_decomp_lu_gesv`) when the binding routes there (`x_decomp_idn_flags`
+# bit 1): the same launches with the factor and the pivots resident, so
+# only A and B go up and X comes down; the same words, warning and refusals.
 def solve(a, b, *, numeric_mode=None):
-    """numpy.linalg.solve through lu_factor + lu_solve (gesv). Lane
-    idn-dense-linalg: one binding entry (`x_decomp_lu_gesv`) when the
-    binding routes there (`x_decomp_idn_flags` bit 1): the same launches
-    with the factor and the pivots resident, so only A and B go up and X
-    comes down; the same words, warning and refusals."""
+    """Solve the square linear system ``a @ x = b``.
+
+    Follows ``numpy.linalg.solve``, computed by LU factorization with partial
+    pivoting (as :func:`lu_factor` and :func:`lu_solve`). A singular matrix
+    gives a ``RuntimeWarning`` rather than an exception.
+
+    Parameters
+    ----------
+    a : array-like of shape (n, n)
+    b : array-like of shape (n,) or (n, nrhs)
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    x : ndarray of shape (n,) or (n, nrhs), float32
+
+    Raises
+    ------
+    ValueError
+        If ``a`` is not square or ``b`` has the wrong number of rows.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> A = np.random.default_rng(0).random((8, 8), dtype=np.float32) + 8 * np.eye(8, dtype=np.float32)
+    >>> x = mojolearn.solve(A, np.ones(8, dtype=np.float32))
+    """
     k = _Kit(_mode(numeric_mode))
     try:
         flags = int(getattr(k._raw(), "x_decomp_idn_flags")())
@@ -2925,15 +3664,67 @@ def _flip_u(U, Vt):
     return k.ew("mul", U, sg), k.ew("mul", Vt, sg.T)
 
 
+# Halko et al.; RAFT `linalg/rsvd.cuh` is the same scheme. The Gaussian
+# test matrix is the lane's Philox stream. Every power iteration
+# re-orthonormalizes by the two-pass Householder-R solve whatever
+# `power_iteration_normalizer` says: 'LU', 'QR' and 'none' span the same
+# subspace, only the rounding of the basis differs. The small SVD of
+# Q^T M is exact (Gram eigh).
 def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_iteration_normalizer="auto",
                    transpose="auto", flip_sign=True, random_state=None, numeric_mode=None):
-    """sklearn.utils.extmath.randomized_svd (Halko et al.; RAFT
-    `linalg/rsvd.cuh` is the same scheme). The Gaussian test matrix is the
-    lane's Philox stream (random_state None means 0). Every power iteration
-    re-orthonormalizes by the two-pass Householder-R solve whatever `power_iteration_normalizer`
-    says: 'LU', 'QR' and 'none' span the same subspace, only the rounding of
-    the basis differs. The small SVD of Q^T M is exact (Gram eigh).
-    Returns (U, s, Vt)."""
+    """Truncated SVD by randomized range finding.
+
+    Follows scikit-learn's ``utils.extmath.randomized_svd`` (Halko et al.).
+    Every power iteration re-orthonormalizes with a QR step whatever
+    ``power_iteration_normalizer`` says (all choices span the same
+    subspace), and the random test matrix comes from mojolearn's own
+    generator, so results differ slightly from scikit-learn's for the same
+    seed.
+
+    Parameters
+    ----------
+    M : array-like or scipy.sparse matrix of shape (n_samples, n_features)
+    n_components : int
+        Number of singular values and vectors; between 1 and
+        ``min(n_samples, n_features)``.
+    n_oversamples : int, default 10
+        Extra random vectors used to sample the range.
+    n_iter : int or "auto", default "auto"
+        Power iterations. ``"auto"`` uses 7 when ``n_components < 0.1 *
+        min(M.shape)``, else 4.
+    power_iteration_normalizer : {"auto", "QR", "LU", "none"}, default "auto"
+        Accepted for scikit-learn compatibility; see above.
+    transpose : bool or "auto", default "auto"
+        Work on ``M.T``; ``"auto"`` does so when M has more columns than rows.
+    flip_sign : bool, default True
+        Make the largest-magnitude entry of each column of U positive, as
+        scikit-learn's ``svd_flip``.
+    random_state : int or None, default None
+        Seed of the random test matrix; None means 0.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    U : ndarray of shape (n_samples, n_components), float32
+    s : ndarray of shape (n_components,), float32
+        Singular values, descending.
+    Vt : ndarray of shape (n_components, n_features), float32
+
+    Raises
+    ------
+    ValueError
+        If ``n_components`` is out of range, ``power_iteration_normalizer`` is
+        unknown, or M is numerically zero.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 50), dtype=np.float32)
+    >>> U, s, Vt = mojolearn.randomized_svd(X, 5, random_state=0)
+    """
     k = _Kit(_mode(numeric_mode))
     A = _rsvd_direct_input(k, M, transpose) if k.w4_flags() & 2 else None
     U, S, Vt = _rsvd_core(k, A if A is not None else _M.from_input(M, "M"), n_components, n_oversamples, n_iter,
@@ -3126,14 +3917,50 @@ def _lstsq_tsqr(k, a, b, vec, rcond):
     return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((nn,))
 
 
+# A tall a with N + nrhs <= 512 takes the blocked TSQR of [a | b] and the
+# SVD of its small R (`_tsqr_lstsq_core`); any other shape the QR +
+# one-sided Jacobi SVD of a (or of a^T).
 def lstsq(a, b, rcond=None, *, numeric_mode=None):
-    """numpy.linalg.lstsq: (x, residuals, rank, s), singular values
-    descending, those at or below rcond * s_max treated as zero (rcond None:
-    float32 eps * max(M, N)); residuals are the squared column norms of
-    b - a x when rank == N < M, else empty. A tall a with N + nrhs <= 512
-    takes the blocked TSQR of [a | b] and the SVD of its small R
-    (`_tsqr_lstsq_core`, lane neural-pass140); any other shape the QR + one-sided Jacobi SVD of a (or
-    of a^T)."""
+    """Least-squares solution of ``a @ x = b``.
+
+    Follows ``numpy.linalg.lstsq``, solved through the SVD of ``a``.
+    Singular values at or below ``rcond * s.max()`` are treated as zero.
+
+    Parameters
+    ----------
+    a : array-like of shape (M, N)
+    b : array-like of shape (M,) or (M, K)
+    rcond : float or None, default None
+        Relative cutoff for small singular values. None uses float32
+        machine epsilon times ``max(M, N)``.
+    numeric_mode : {"identical", "fast"} or None, default None
+        Numeric mode for this call. None uses the package default
+        (``"identical"`` unless changed). ``"identical"`` gives the same bits
+        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+
+    Returns
+    -------
+    x : ndarray of shape (N,) or (N, K), float32
+    residuals : ndarray of shape (K,) or (0,), float32
+        Squared column norms of ``b - a @ x`` when ``rank == N < M``;
+        otherwise empty.
+    rank : int
+        Effective rank of ``a``.
+    s : ndarray of shape (min(M, N),), float32
+        Singular values of ``a``, descending.
+
+    Raises
+    ------
+    ValueError
+        If ``a`` and ``b`` have different numbers of rows.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> rng = np.random.default_rng(0)
+    >>> A = rng.random((100, 4), dtype=np.float32)
+    >>> x, res, rank, s = mojolearn.lstsq(A, rng.random(100, dtype=np.float32))
+    """
     k = _Kit(_mode(numeric_mode))
     vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
     got = _lstsq_tsqr(k, a, b, vec, rcond)
