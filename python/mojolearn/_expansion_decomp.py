@@ -7103,8 +7103,9 @@ class AlternatingLeastSquares(_Base):
     The method of Hu, Koren and Volinsky (2008), following the ``implicit``
     library: confidence is ``alpha * user_items``, and each iteration solves
     for every user's factors and then every item's. Unlike ``implicit``,
-    ``use_cg`` defaults to False (the exact solve), and ``user_items`` is a
-    dense array (0 means no interaction).
+    ``use_cg`` defaults to False (the exact solve), and ``user_items`` is
+    held dense (0 means no interaction; a ``scipy.sparse`` matrix is
+    densified).
 
     Parameters
     ----------
@@ -7160,7 +7161,8 @@ class AlternatingLeastSquares(_Base):
         Parameters
         ----------
         user_items : array-like of shape (n_users, n_items)
-            Dense interaction strengths; 0 means no interaction.
+            Interaction strengths; 0 means no interaction. A
+            ``scipy.sparse`` matrix is densified.
         show_progress : bool, default False
             Accepted for ``implicit`` compatibility; nothing is shown.
 
