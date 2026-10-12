@@ -48,6 +48,8 @@ napoleon_google_docstring = True
 napoleon_use_param = False
 napoleon_use_rtype = False
 napoleon_use_ivar = True
+# Keep trailing underscores in attribute names (labels_, coef_); without this rST eats them as link syntax.
+strip_signature_backslash = True
 # Docstrings cite source paths and references in prose; keep warnings from them non-fatal.
 suppress_warnings = ["autosummary.import_cycle"]
 

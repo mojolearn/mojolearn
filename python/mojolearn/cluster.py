@@ -161,6 +161,8 @@ class KMeans(NumericModeMixin):
     n_features_in_ : int
         Number of features seen during `fit`.
 
+    Notes
+    -----
     Attributes are mojolearn `Array`s; `np.asarray(model.labels_)` gives a
     zero-copy NumPy view.
 
