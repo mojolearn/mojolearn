@@ -19,7 +19,13 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   exact reference folds the background mean in one fixed order. The opponents keep the NumPy ridge they were scored with
   (no re-score); `tools/shap_xvendor_probe.py` prints both models' digests per box.
 
-## 0.8.40 (published 2026-10-12)
+## 0.8.41 (published 2026-10-12)
+
+- Linux core, mojolearn-nvidia and mojolearn-amd (0.8.39 and 0.8.40 published macOS only: the packer still demanded the
+  PTX slot in the NVIDIA wheel). The NVIDIA wheel is sm_89 only, as in 0.8.38; the PTX slot (sm_80) stays registered,
+  built and recorded but unshipped while the 134 MiB wheel is over PyPI's 100 MiB limit.
+
+## 0.8.40 (published 2026-10-12, macOS only)
 
 - Linux core, mojolearn-nvidia and mojolearn-amd from the 0.8.39 source plus one loader fix. 0.8.39 published macOS
   only: its NVIDIA wheel packed at 134 MiB with the PTX slot beside sm_89, over PyPI's 100 MiB limit, and the 0.8.39

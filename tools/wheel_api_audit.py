@@ -193,10 +193,12 @@ def split_audit(wheels):
                 bundle = actual_marker.get('bundled_ptx')
             except (KeyError, ValueError, AttributeError):
                 bundle = None
-            if package.get('ptx'):
+            if package.get('ptx') and (bundle is not None or package.get('ptx_shipped', True)):
                 # THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag):
                 # required in the NVIDIA wheel, its manifest bound by the marker,
-                # its bytes the manifest's and the release inventory's.
+                # its bytes the manifest's and the release inventory's ... while the registry ships it
+                # (`ptx_shipped`; off since 2026-10-12 while the wheel is over PyPI's 100 MiB limit: a wheel
+                # without the slot and without a bundle passes; one that carries a bundle is checked as before).
                 try:
                     if bundle is None:
                         raise ValueError('the vendor marker binds no PTX set')

@@ -377,8 +377,16 @@ class SplitWheels(unittest.TestCase):
         self.assertEqual(marker["bundled_ptx"], bundle)
         self.assertEqual(marker["ptx"], dict(arch="sm_80", directory="cuda_ptx"))
         self.assertEqual(marker["arches"], ["sm_89"])
-        with self.assertRaisesRegex(ValueError, "PTX manifest digest is required"):
-            gp.plugin_marker("cuda", self.version, ["sm_89"])
+        # the digest is required only while the registry ships the slot (gpu_plugins ptx_shipped; off since
+        # 2026-10-12 while the wheel is over PyPI's 100 MiB limit): without it the marker names the slot unbundled
+        from unittest.mock import patch
+        with patch.dict(gp.PLUGINS["cuda"], {"ptx_shipped": True}):
+            with self.assertRaisesRegex(ValueError, "PTX manifest digest is required"):
+                gp.plugin_marker("cuda", self.version, ["sm_89"])
+        with patch.dict(gp.PLUGINS["cuda"], {"ptx_shipped": False}):
+            bare = gp.plugin_marker("cuda", self.version, ["sm_89"])
+            self.assertNotIn("bundled_ptx", bare)
+            self.assertEqual(bare["ptx"], dict(arch="sm_80", directory="cuda_ptx"))
         with self.assertRaisesRegex(ValueError, "only the NVIDIA"):
             gp.plugin_marker("hip", self.version, ["gfx942"], bundled_ptx=bundle)
         for whl in self.split.values():
@@ -412,33 +420,43 @@ class SplitWheels(unittest.TestCase):
             self.pack("--profile", "generic", "--wheels", "nvidia")
 
     def test_release_split_slots(self):
-        # Andrew 2026-10-10: the PTX slot is a release set like sm_89
-        self.assertEqual(pw.split_release_slots({"cuda"}), {("cuda", "sm_89"), ("cuda", "sm_80")})
+        # Andrew 2026-10-10: the PTX slot is a release set like sm_89 ... while the registry ships it
+        # (ptx_shipped; off since 2026-10-12 while the wheel is over PyPI's 100 MiB limit)
+        from unittest.mock import patch
+        with patch.dict(pw.gpu_plugins.PLUGINS["cuda"], {"ptx_shipped": True}):
+            self.assertEqual(pw.split_release_slots({"cuda"}), {("cuda", "sm_89"), ("cuda", "sm_80")})
+        with patch.dict(pw.gpu_plugins.PLUGINS["cuda"], {"ptx_shipped": False}):
+            self.assertEqual(pw.split_release_slots({"cuda"}), {("cuda", "sm_89")})
         self.assertEqual(pw.split_release_slots({"hip"}), {("hip", "gfx942")})
         self.assertEqual(pw.split_release_slots({"cuda", "hip"}), pw.RELEASE_SPLIT_SETS)
-        self.assertEqual(pw.RELEASE_SPLIT_SETS, set(SETS))
+        shipped = {k for v in ("cuda", "hip") for k in pw.gpu_plugins.required_sets(v)}
+        self.assertEqual(pw.RELEASE_SPLIT_SETS, shipped)
+        self.assertTrue(shipped <= set(SETS))
         # one definition: the admission side's per-plugin share agrees
         import verify_linux_surface_qualification as surface
         for vendor in ("cuda", "hip"):
             slots = {"/".join(k) for k in pw.split_release_slots({vendor})}
             self.assertEqual(slots, set(surface.PLUGIN_ARCHES[vendor]))
             self.assertTrue(surface.plugin_arch_set_ok(vendor, slots))
-        self.assertFalse(surface.plugin_arch_set_ok("cuda", {"cuda/sm_89"}))
+        self.assertEqual(surface.plugin_arch_set_ok("cuda", {"cuda/sm_89"}),
+                         ("cuda", "sm_80") not in pw.gpu_plugins.required_sets("cuda"))
         self.assertFalse(surface.plugin_arch_set_ok("cuda", {"cuda/sm_89", "cuda/sm_90a"}))
         self.assertFalse(surface.plugin_arch_set_ok("hip", {"hip/gfx942", "cuda/sm_89"}))
-        hip = pw.SetDir("hip", "gfx942", {}, {}, {}, {}, None)
-        with self.assertRaises(SystemExit) as ctx:
-            pw.release_inventory([hip], [], self.version, required=pw.split_release_slots({"cuda"}),
-                                 profile=pw.RELEASE_SPLIT_PROFILE)
-        self.assertIn("release-split requires exactly the sets cuda/sm_80, cuda/sm_89", str(ctx.exception))
-        # the PTX set is proved like any set: a release-split nvidia pack with the
-        # sm_89 proof alone is short one proof
-        sm89 = pw.SetDir("cuda", "sm_89", {"cuda/sm_89/a.so": Path(__file__)}, {}, {}, {}, None)
-        sm80 = pw.SetDir("cuda", "sm_80", {"cuda/sm_80/a.so": Path(__file__)}, {}, {}, {}, None)
-        with self.assertRaises(SystemExit) as ctx:
-            pw.release_inventory([sm89, sm80], [Path("cuda-sm_89.json")], self.version,
-                                 required=pw.split_release_slots({"cuda"}), profile=pw.RELEASE_SPLIT_PROFILE)
-        self.assertIn("2 proof(s) needed, 1 given", str(ctx.exception))
+        # the rest of this test covers the shipped PTX slot (ptx_shipped; off since 2026-10-12, PyPI 100 MiB limit)
+        with patch.dict(pw.gpu_plugins.PLUGINS["cuda"], {"ptx_shipped": True}):
+            hip = pw.SetDir("hip", "gfx942", {}, {}, {}, {}, None)
+            with self.assertRaises(SystemExit) as ctx:
+                pw.release_inventory([hip], [], self.version, required=pw.split_release_slots({"cuda"}),
+                                     profile=pw.RELEASE_SPLIT_PROFILE)
+            self.assertIn("release-split requires exactly the sets cuda/sm_80, cuda/sm_89", str(ctx.exception))
+            # the PTX set is proved like any set: a release-split nvidia pack with the
+            # sm_89 proof alone is short one proof
+            sm89 = pw.SetDir("cuda", "sm_89", {"cuda/sm_89/a.so": Path(__file__)}, {}, {}, {}, None)
+            sm80 = pw.SetDir("cuda", "sm_80", {"cuda/sm_80/a.so": Path(__file__)}, {}, {}, {}, None)
+            with self.assertRaises(SystemExit) as ctx:
+                pw.release_inventory([sm89, sm80], [Path("cuda-sm_89.json")], self.version,
+                                     required=pw.split_release_slots({"cuda"}), profile=pw.RELEASE_SPLIT_PROFILE)
+            self.assertIn("2 proof(s) needed, 1 given", str(ctx.exception))
 
     def test_payload_paths_cannot_be_removed_by_an_old_vendor_record(self):
         old_owned = {n for n in members(self.single) if n.startswith(("mojolearn/cuda/", "mojolearn/hip/"))}
@@ -462,12 +480,15 @@ class SplitWheels(unittest.TestCase):
             self.pack("--wheels", "nvidia-ptx80", sets=dirs)
 
     def test_the_nvidia_wheel_requires_the_ptx_slot(self):
+        from unittest.mock import patch
         root = Path(tempfile.mkdtemp(dir=self.root))
         dirs = make_sets(root, sets=(("cuda", "sm_89"),))
-        with self.assertRaisesRegex(SystemExit, "the PTX slot cuda/sm_80 included"):
-            self.pack("--wheels", "nvidia", sets=dirs)
-        with self.assertRaisesRegex(SystemExit, "the PTX slot cuda/sm_80 included"):
-            self.pack(sets=dirs)
+        # while the registry ships the slot (ptx_shipped; off since 2026-10-12, PyPI's 100 MiB limit)
+        with patch.dict(pw.gpu_plugins.PLUGINS["cuda"], {"ptx_shipped": True}):
+            with self.assertRaisesRegex(SystemExit, "the PTX slot cuda/sm_80 included"):
+                self.pack("--wheels", "nvidia", sets=dirs)
+            with self.assertRaisesRegex(SystemExit, "the PTX slot cuda/sm_80 included"):
+                self.pack(sets=dirs)
 
     def test_the_ptx_slot_never_enters_the_combined_wheel(self):
         with self.assertRaisesRegex(SystemExit, "packs only into the split"):

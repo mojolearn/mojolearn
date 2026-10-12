@@ -13,6 +13,14 @@ import pytest
 from test_split_wheels import make_sets, members, pw, write_ptx_manifest, wheel_api_audit
 
 
+@pytest.fixture(autouse=True)
+def _ptx_slot_shipped(monkeypatch):
+    # These tests cover the NVIDIA wheel that ships its PTX slot. The registry marks the slot unshipped while the
+    # wheel is over PyPI's 100 MiB limit (gpu_plugins ptx_shipped=False, 2026-10-12); the behaviour under test is
+    # the shipped state, so switch it on here and let monkeypatch restore it.
+    monkeypatch.setitem(pw.gpu_plugins.PLUGINS['cuda'], 'ptx_shipped', True)
+
+
 def inputs(root, include_byte_lm=False):
     dirs = make_sets(root, sets=(("cuda", "sm_89"), ("cuda", "sm_80")), include_byte_lm=include_byte_lm)
     return dirs, root / 'sets/cuda/sm_80'

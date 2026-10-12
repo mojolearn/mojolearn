@@ -209,10 +209,13 @@ def plugin_marker(vendor, version, arches, bundled_ptx=None):
             "distribution": row["distribution"], "requires": f"{CORE_DISTRIBUTION}=={version}",
             "arches": sorted(arches), "directory": row["directory"], "code_format": "native"}  # glue: canonicalize architecture identifiers in metadata
     if row.get("ptx"):
-        if bundled_ptx is None:
+        if bundled_ptx is None and row.get("ptx_shipped", True):
             raise ValueError(f"{row['distribution']} carries the PTX slot; its PTX manifest digest is required")
-        validate_bundle_descriptor(bundled_ptx)
-        marker["bundled_ptx"] = dict(bundled_ptx)
+        if bundled_ptx is not None:
+            validate_bundle_descriptor(bundled_ptx)
+            marker["bundled_ptx"] = dict(bundled_ptx)
+        # the slot stays named in the marker; without `bundled_ptx` the wheel ships without it (ptx_shipped=False,
+        # PyPI's 100 MiB limit, 2026-10-12) and the loader runs the native sets alone
         marker["ptx"] = dict(row["ptx"])
     elif bundled_ptx is not None:
         raise ValueError("only the NVIDIA vendor package carries a PTX slot")

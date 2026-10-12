@@ -441,6 +441,9 @@ class ArchitecturePayloadLoader(PluginLoader):
 
     def test_the_nvidia_wheel_must_carry_and_bind_its_ptx_set(self):
         import shutil
+        from unittest.mock import patch
+        # while the registry ships the slot (ptx_shipped; off since 2026-10-12, PyPI's 100 MiB limit)
+        self.enterContext(patch.dict(self.B.gpu_plugins.PLUGINS["cuda"], {"ptx_shipped": True}))
         self.split_core()
         self.plugin("cuda", ["sm_89"])
         shutil.rmtree(self.ptx_root())

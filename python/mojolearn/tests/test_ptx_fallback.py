@@ -275,7 +275,10 @@ class Provenance(Install):
         self.assertIn("source differs from the clean installed core", self.refusal("identical"))
 
     def test_a_marker_without_the_ptx_slot_refuses(self):
+        from unittest.mock import patch
         gp = self.B.gpu_plugins
+        # while the registry ships the slot (ptx_shipped; off since 2026-10-12, PyPI's 100 MiB limit)
+        self.enterContext(patch.dict(gp.PLUGINS["cuda"], {"ptx_shipped": True}))
         doc = gp.plugin_marker("cuda", self.version, self.arches, bundled_ptx=dict(manifest_sha256=self.manifest_hash))
         del doc["bundled_ptx"]
         self.marker_path().write_text(json.dumps(doc))

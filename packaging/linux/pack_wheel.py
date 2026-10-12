@@ -1438,7 +1438,8 @@ def split_kinds(text, vendors_given, keys=None):
                 arches = [a for v, a in keys if v == row["vendor"] and a in row["arches"]]
                 if not gpu_plugins.valid_arches(kind, arches):
                     raise SystemExit(f"pack_wheel: {kind} requires one set per registered architecture slot; found {arches}")
-                if row.get("ptx") and (row["vendor"], row["ptx"]["arch"]) not in keys:
+                if (row.get("ptx") and row.get("ptx_shipped", True)   # the PTX slot is out while over PyPI's limit (2026-10-12)
+                        and (row["vendor"], row["ptx"]["arch"]) not in keys):
                     raise SystemExit(f"pack_wheel: {kind} requires one set per registered architecture slot, "
                                      f"the PTX slot {row['vendor']}/{row['ptx']['arch']} included; found {arches}")
     return tuple(k for k in WHEEL_KINDS if k in kinds)
