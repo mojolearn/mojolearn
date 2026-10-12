@@ -45577,7 +45577,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1928.3,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 1.5306605707775985e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -45626,7 +45628,8 @@
       1588.3287920150906
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 1649.4360830110963
+     "warmup_ms": 1649.4360830110963,
+     "quality_source": "fit quality of arm ours in adafactor-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -45680,7 +45683,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1926.4,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 1.4501727192185377e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -45743,7 +45748,8 @@
       "baseline_ms": 184.14587501320057,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in adafactor-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -46188,7 +46194,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1928.5,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 3.297102559384023e-09
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -46233,7 +46241,8 @@
       130.8084579941351
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 163.076083001215
+     "warmup_ms": 163.076083001215,
+     "quality_source": "fit quality of arm ours in adagrad-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -46284,7 +46293,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1925.8,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 3.297102559384023e-09
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -46343,7 +46354,8 @@
       "baseline_ms": 131.3406249973923,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in adagrad-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -46866,7 +46878,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2051.9,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 3.339567549659422e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -46929,7 +46943,8 @@
       "baseline_ms": 125.0,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in adam-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -47391,7 +47406,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2055.9,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 4.266753451639912e-09
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -47438,7 +47455,8 @@
       176.10895799589343
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 214.16108301491477
+     "warmup_ms": 214.16108301491477,
+     "quality_source": "fit quality of arm ours in adamax-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -47493,7 +47511,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2055.3,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 4.266753451639912e-09
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -47554,7 +47574,8 @@
       "baseline_ms": 176.48100000224076,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in adamax-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -48112,7 +48133,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2051.6,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 3.340046254639848e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -48175,7 +48198,8 @@
       "baseline_ms": 114.0,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in adamw-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -212931,7 +212955,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2055.8,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 2.939167100299875e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -212980,7 +213006,8 @@
       179.56091699306853
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 214.5640839880798
+     "warmup_ms": 214.5640839880798,
+     "quality_source": "fit quality of arm ours in nadam-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -213035,7 +213062,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2056.2,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 2.939167100299875e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -213098,7 +213127,8 @@
       "baseline_ms": 177.5058750063181,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in nadam-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -258740,7 +258770,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1926.2,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 3.7722225114111386e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -258786,7 +258818,8 @@
       131.1359589744825
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 162.1713339991402
+     "warmup_ms": 162.1713339991402,
+     "quality_source": "fit quality of arm ours in rmsprop-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -258839,7 +258872,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1926.5,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 3.7722225114111386e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -258899,7 +258934,8 @@
       "baseline_ms": 129.43862500833347,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in rmsprop-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -276456,7 +276492,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2051.9,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 8.219036231602629e-10
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -276517,7 +276555,8 @@
       "baseline_ms": 121.0,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in sgd-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
