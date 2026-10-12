@@ -135,7 +135,9 @@ DEFAULT_SKIP_TAG_RE = r"^g[0-9a-f]{8}[A-Za-z0-9_-]*\.|smoke"
 RESULT_RE = re.compile(r"^(?P<id>[A-Za-z]\d+) (?P<vendor>nvidia|amd) (?P<branch>\S+?)@(?P<head>[0-9a-f]+)(?P<rest>.*)$")
 ALGOS_RE = re.compile(r"(?:^|\s)ALGOS lane=(?P<lane>\S+) dataset=(?P<ds>\S+) arm=(?P<arm>\S+) status=(?P<status>\S+) "
                       r"median_ms=(?P<ms>\S+)(?: quality=(?P<q>.*))?$")
-DIGEST_TAIL_RE = re.compile(r" digest=([0-9a-f]+|none)$")
+# ROUNDS-DIFFER(<d0>,<d1>,...) is lq's tail when its per-run digests disagreed (before 2026-10-12 it pooled the arms,
+# so most such tails were artifacts); the quality dict in front of it is still valid, the digest is unknown.
+DIGEST_TAIL_RE = re.compile(r" digest=([0-9a-f]+|none|ROUNDS-DIFFER\([^)]*\))$")
 GRIDBB_RE = re.compile(r"^GRIDBB tag=(?P<tag>\S+) vendor=(?P<vendor>\S+) head=(?P<head>\S+) family=(?P<family>\S+) "
                        r"lane=(?P<lane>\S+) dataset=(?P<ds>\S+) status=(?P<status>\S+) median_ms=(?P<ms>\S+) "
                        r"hash=(?P<hash>\S+) quality=(?P<q>.*)$")
@@ -250,7 +252,7 @@ def parse_algos(text):
     if q is not None:
         d = DIGEST_TAIL_RE.search(q)
         if d:
-            digest = None if d.group(1) == "none" else d.group(1)[:DIGEST_CHARS]
+            digest = None if d.group(1) == "none" or d.group(1).startswith("ROUNDS-DIFFER") else d.group(1)[:DIGEST_CHARS]
             q = q[:d.start()]
         try:
             q = json.loads(q)
