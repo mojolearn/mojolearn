@@ -179,11 +179,107 @@ class _BaseMLP:
 
 
 class MLPRegressor(_BaseMLP):
-    """sklearn MLPRegressor: squared loss (mean / 2) plus L2, identity
-    output."""
+    """Multi-layer perceptron regressor, as scikit-learn's `MLPRegressor`.
+
+    Minimizes half the mean squared error plus an L2 penalty, with an identity output
+    layer, using Adam or SGD. Parameters, attributes, losses, update rules,
+    learning-rate schedules and the stopping rule follow scikit-learn. Weights use
+    scikit-learn's Glorot-uniform bounds but are drawn from mojolearn's own seeded
+    generator, and the shuffle order is mojolearn's own, so results for a given
+    `random_state` differ from scikit-learn's.
+
+    `X` must be 2-D float32 (float64 raises `TypeError`); `y` is (n_samples,) or
+    (n_samples, n_outputs). Not supported: ``solver='lbfgs'``, ``early_stopping=True``,
+    `warm_start`, `partial_fit` and `verbose`.
+
+    Parameters
+    ----------
+    hidden_layer_sizes : int or tuple of int, default (100,)
+        Width of each hidden layer; every width must be > 0.
+    activation : {'identity', 'logistic', 'tanh', 'relu'}, default 'relu'
+        Hidden-layer activation.
+    solver : {'adam', 'sgd'}, default 'adam'
+        Optimizer. 'lbfgs' raises `NotImplementedError`.
+    alpha : float, default 0.0001
+        L2 penalty strength (>= 0).
+    batch_size : int or 'auto', default 'auto'
+        Minibatch size; 'auto' is ``min(200, n_samples)``.
+    learning_rate : {'constant', 'invscaling', 'adaptive'}, default 'constant'
+        Learning-rate schedule of the 'sgd' solver, as scikit-learn.
+    learning_rate_init : float, default 0.001
+        Initial learning rate (> 0).
+    power_t : float, default 0.5
+        Exponent of the 'invscaling' schedule.
+    max_iter : int, default 200
+        Maximum number of epochs (>= 1).
+    shuffle : bool, default True
+        Shuffle the rows every epoch.
+    random_state : int or None, default None
+        Seed of the weight initialization and the shuffle.
+    tol : float, default 1e-4
+        Tolerance of the stopping rule.
+    verbose : bool, default False
+        Must be False; True raises `NotImplementedError`.
+    warm_start : bool, default False
+        Must be False; True raises `NotImplementedError`.
+    momentum : float, default 0.9
+        Momentum of the 'sgd' solver.
+    nesterovs_momentum : bool, default True
+        Use Nesterov momentum with the 'sgd' solver.
+    early_stopping : bool, default False
+        Must be False; True raises `NotImplementedError`.
+    validation_fraction : float, default 0.1
+        Accepted for compatibility; unused because early stopping is not supported.
+    beta_1 : float, default 0.9
+        Adam's first-moment decay.
+    beta_2 : float, default 0.999
+        Adam's second-moment decay.
+    epsilon : float, default 1e-8
+        Adam's denominator term.
+    n_iter_no_change : int, default 10
+        Epochs without `tol` improvement before stopping.
+    max_fun : int, default 15000
+        Accepted for compatibility (lbfgs only); unused.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Attributes
+    ----------
+    coefs_ : list of ndarray
+        Weight matrix of each layer, (n_in, n_out).
+    intercepts_ : list of ndarray
+        Bias vector of each layer.
+    loss_ : float
+        Loss of the last epoch.
+    best_loss_ : float
+        Lowest loss seen.
+    loss_curve_ : list of float
+        Loss of every epoch.
+    n_iter_ : int
+        Number of epochs run.
+    t_ : int
+        Number of training samples seen.
+    n_features_in_ : int
+        Number of input features.
+    n_layers_ : int
+        Number of layers, input and output included.
+    n_outputs_ : int
+        Number of outputs.
+    out_activation_ : str
+        Output activation.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> y = X.sum(axis=1)
+    >>> model = mojolearn.MLPRegressor(hidden_layer_sizes=(64,), max_iter=50).fit(X, y)
+    >>> pred = model.predict(X)
+    """
     _LOSS_CODE = 0
 
     def fit(self, X, y):
+        """Train on `X` (n_samples, n_features) float32 and targets `y`; returns self."""
         y = np.asarray(y)
         if y.dtype == np.float64:
             raise TypeError("float64 is refused; pass float32")
@@ -191,15 +287,114 @@ class MLPRegressor(_BaseMLP):
         return self._fit(X, y.reshape(len(y), -1).astype(np.float32), 0)
 
     def predict(self, X):
+        """Predicted values, (n_samples,) for a 1-D training target, else (n_samples, n_outputs)."""
         out = self._forward(X)
         return out[:, 0].copy() if self._y_1d else out
 
 
 class MLPClassifier(_BaseMLP):
-    """sklearn MLPClassifier: log loss plus L2; a logistic output for two
-    classes, softmax beyond."""
+    """Multi-layer perceptron classifier, as scikit-learn's `MLPClassifier`.
+
+    Minimizes the log loss plus an L2 penalty, with a logistic output for two classes
+    and softmax for more, using Adam or SGD. Parameters, attributes, losses, update
+    rules, learning-rate schedules and the stopping rule follow scikit-learn. Weights
+    use scikit-learn's Glorot-uniform bounds but are drawn from mojolearn's own seeded
+    generator, and the shuffle order is mojolearn's own, so results for a given
+    `random_state` differ from scikit-learn's.
+
+    `X` must be 2-D float32 (float64 raises `TypeError`); `y` is a 1-D array of labels
+    with at least two classes. Not supported: multilabel targets, ``solver='lbfgs'``,
+    ``early_stopping=True``, `warm_start`, `partial_fit` and `verbose`.
+
+    Parameters
+    ----------
+    hidden_layer_sizes : int or tuple of int, default (100,)
+        Width of each hidden layer; every width must be > 0.
+    activation : {'identity', 'logistic', 'tanh', 'relu'}, default 'relu'
+        Hidden-layer activation.
+    solver : {'adam', 'sgd'}, default 'adam'
+        Optimizer. 'lbfgs' raises `NotImplementedError`.
+    alpha : float, default 0.0001
+        L2 penalty strength (>= 0).
+    batch_size : int or 'auto', default 'auto'
+        Minibatch size; 'auto' is ``min(200, n_samples)``.
+    learning_rate : {'constant', 'invscaling', 'adaptive'}, default 'constant'
+        Learning-rate schedule of the 'sgd' solver, as scikit-learn.
+    learning_rate_init : float, default 0.001
+        Initial learning rate (> 0).
+    power_t : float, default 0.5
+        Exponent of the 'invscaling' schedule.
+    max_iter : int, default 200
+        Maximum number of epochs (>= 1).
+    shuffle : bool, default True
+        Shuffle the rows every epoch.
+    random_state : int or None, default None
+        Seed of the weight initialization and the shuffle.
+    tol : float, default 1e-4
+        Tolerance of the stopping rule.
+    verbose : bool, default False
+        Must be False; True raises `NotImplementedError`.
+    warm_start : bool, default False
+        Must be False; True raises `NotImplementedError`.
+    momentum : float, default 0.9
+        Momentum of the 'sgd' solver.
+    nesterovs_momentum : bool, default True
+        Use Nesterov momentum with the 'sgd' solver.
+    early_stopping : bool, default False
+        Must be False; True raises `NotImplementedError`.
+    validation_fraction : float, default 0.1
+        Accepted for compatibility; unused because early stopping is not supported.
+    beta_1 : float, default 0.9
+        Adam's first-moment decay.
+    beta_2 : float, default 0.999
+        Adam's second-moment decay.
+    epsilon : float, default 1e-8
+        Adam's denominator term.
+    n_iter_no_change : int, default 10
+        Epochs without `tol` improvement before stopping.
+    max_fun : int, default 15000
+        Accepted for compatibility (lbfgs only); unused.
+    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+        Numeric mode. None uses the library default.
+
+    Attributes
+    ----------
+    classes_ : ndarray
+        Sorted class labels.
+    coefs_ : list of ndarray
+        Weight matrix of each layer, (n_in, n_out).
+    intercepts_ : list of ndarray
+        Bias vector of each layer.
+    loss_ : float
+        Loss of the last epoch.
+    best_loss_ : float
+        Lowest loss seen.
+    loss_curve_ : list of float
+        Loss of every epoch.
+    n_iter_ : int
+        Number of epochs run.
+    t_ : int
+        Number of training samples seen.
+    n_features_in_ : int
+        Number of input features.
+    n_layers_ : int
+        Number of layers, input and output included.
+    n_outputs_ : int
+        Number of outputs.
+    out_activation_ : str
+        Output activation.
+
+    Examples
+    --------
+    >>> import numpy as np, mojolearn
+    >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+    >>> y = (X[:, 0] > 0.5).astype(np.int64)
+    >>> model = mojolearn.MLPClassifier(hidden_layer_sizes=(32,), max_iter=50).fit(X, y)
+    >>> proba = model.predict_proba(X)
+    """
 
     def fit(self, X, y):
+        """Train on `X` (n_samples, n_features) float32 and 1-D labels `y`; returns self."""
         y = np.asarray(y)
         if y.ndim != 1:
             raise NotImplementedError("multilabel targets are not implemented")
@@ -220,12 +415,14 @@ class MLPClassifier(_BaseMLP):
         return self._fit(X, codes, 4, n_out=k)
 
     def predict_proba(self, X):
+        """Class probabilities, (n_samples, n_classes), columns in `classes_` order."""
         if self.n_outputs_ == 1:
             # cpu2-l11-neural: [1 - p, p] written by the binding (`OP_PROBA2`)
             return self._forward(X, proba2=True)
         return self._forward(X)
 
     def predict(self, X):
+        """Predicted class labels."""
         p = self._forward(X)
         if p.shape[1] == 1:
             # p > 0.5 per row in Mojo (`threshold_codes`; NaN takes class 0)
