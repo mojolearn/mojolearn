@@ -61,7 +61,7 @@ class NeighborsWeightedLargeK(unittest.TestCase):
         np.testing.assert_allclose(reg.predict(q), [30/7], rtol=2e-6, atol=1e-7)
 
     def test_strided_rank_boundaries_and_index_ties(self):
-        if self.mode not in ("identical", "deterministic"):
+        if self.mode != "identical":
             self.skipTest("The pinned selector is not the FAST selector")
         # Duplicate distances cross every thread-stride boundary. Values are
         # exact dyadics, so the independent FP64 Manhattan oracle rounds

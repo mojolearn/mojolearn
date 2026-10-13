@@ -10,7 +10,7 @@ requested, so the two arms can be compared in one process: setting
 MOJOLEARN_IDENTITY_TRACE before a call selects the staged path (the trace is
 read once per call).
 
-These tests are FAST-only. Under IDENTICAL or DETERMINISTIC both calls take
+These tests are FAST-only. Under IDENTICAL both calls take
 the staged path and the comparison is trivially exact, so they skip.
 """
 import math

@@ -62,7 +62,6 @@ def test_backend_registers_both_places():
         assert _backend._build_script(name) == script, (name, _backend._build_script(name))
         # classical, and since 2026-09-27 (lane neural) the embedding too
         assert name in _backend._CLASSICAL_FAST, name + " ships fast"
-        assert not _backend._offers(name, "deterministic"), name
     assert mojolearn._NOT_YET == {}, sorted(mojolearn._NOT_YET)
 
 
@@ -127,9 +126,8 @@ def test_build_scripts_exist_and_name_their_binding():
             assert "MOJOLEARN_NUMERIC_MODE=identical only" in text or "identical only" in text, script
         else:
             # classical (and the embedding, lane neural 2026-09-27): fast and
-            # identical build, deterministic refuses by name
-            assert '!= deterministic ]' in text and ("classical bindings build" in text
-                                                     or "this binding builds" in text), script
+            # identical build, any other mode refuses
+            assert "must be fast or identical" in text, script
 
 
 def test_classes_exported():

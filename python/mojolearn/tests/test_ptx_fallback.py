@@ -17,7 +17,7 @@ Andrew 2026-10-10: PTX is a normal target; no flag):
 
   * native first: a device with a native set loads it;
   * every other NVIDIA device of compute capability 8.0 or newer loads the PTX
-    set, in FAST, DETERMINISTIC and IDENTICAL alike, with no admission;
+    set, in FAST and IDENTICAL alike, with no admission;
   * MOJOLEARN_GPU_ARCH=sm_80 selects the PTX set by name;
   * an older device, or a PTX set that fails its provenance, refuses and never
     selects the CPU set;
@@ -37,7 +37,7 @@ from unittest.mock import patch
 PKG_SRC = Path(__file__).resolve().parents[1]
 ALIAS = "mojolearn_ptx_fallback_under_test"
 SOURCE = "a" * 40
-MODES = ("fast", "deterministic", "identical")
+MODES = ("fast", "identical")
 
 
 def fresh(module="_backend"):
@@ -92,7 +92,7 @@ class Install(unittest.TestCase):
         self.dist_info("mojolearn", (gp.CORE_MARKER, json.dumps(gp.core_marker(self.version))))
         self.arches = ["sm_89"]
         for arch in self.arches:
-            for tier in ("", "deterministic", "identical"):
+            for tier in ("", "identical"):
                 d = self.pkg / gp.native_directory("cuda") / arch / tier
                 d.mkdir(parents=True, exist_ok=True)
                 (d / "_mojolearn_gbdt.so").write_bytes(b"inert native")

@@ -21,7 +21,7 @@ class Binding:
         self.mode, self.calls = mode, []
 
     def metrics_numeric_mode(self):
-        return {'fast': 0, 'deterministic': 2, 'identical': 1}[self.mode]
+        return {'fast': 0, 'identical': 1}[self.mode]
 
     def arrays(self, a, b, n):
         return [np.ctypeslib.as_array((ctypes.c_int32*n).from_address(p)).copy()
@@ -67,13 +67,13 @@ class Binding:
 
 @pytest.fixture
 def binding(monkeypatch):
-    modules = {m: Binding(m) for m in ('fast', 'deterministic', 'identical')}
+    modules = {m: Binding(m) for m in ('fast', 'identical')}
     monkeypatch.setattr(_backend, 'default_mode', lambda: 'fast')
     monkeypatch.setattr(_backend, 'binding', lambda name, mode=None: modules[mode])
     return modules
 
 
-@pytest.mark.parametrize('mode', ['fast', 'deterministic', 'identical'])
+@pytest.mark.parametrize('mode', ['fast', 'identical'])
 @pytest.mark.parametrize('normalize', [None, 'true', 'pred', 'all'])
 def test_confusion_order_subset_normalize_and_mode(binding, mode, normalize):
     yt = np.array(['a', 'b', 'c', 'b', 'a'])

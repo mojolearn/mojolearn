@@ -9,7 +9,7 @@ from mojolearn import metrics
 from mojolearn import _backend
 
 NAMES = ("mean_squared_error", "mean_absolute_error", "root_mean_squared_error")
-MODES = {"fast": 0, "identical": 1, "deterministic": 2}
+MODES = {"fast": 0, "identical": 1}
 
 
 class Binding:
@@ -148,8 +148,7 @@ def test_shared_loader_resolves_live_default_and_explicit_mode(monkeypatch):
     """`_mojolearn_metrics` ships fast and identical (classical FAST,
     2026-09-25): the live default resolves the identical set, an explicit
     'identical' does too, 'fast' explicit or as the process default resolves
-    the fast set, and 'deterministic' (tree lanes only) refuses BY NAME
-    before `load_set` is reached.
+    the fast set.
 
     This is the GPU install's resolution, so the CPU-only marker is cleared:
     on a CPU-only install `binding()` never reaches `load_set` (it serves
@@ -178,11 +177,6 @@ def test_shared_loader_resolves_live_default_and_explicit_mode(monkeypatch):
         current[0] = default
         metrics.mean_squared_error(x, x, numeric_mode=explicit)
     assert loaded == ["identical", "identical", "fast", "fast"]
-    for explicit, default in [("deterministic", "identical"), (None, "deterministic")]:
-        current[0] = default
-        with pytest.raises(ValueError, match="tree lanes"):
-            metrics.mean_squared_error(x, x, numeric_mode=explicit)
-    assert len(loaded) == 4, "the deterministic tier reached load_set"
 
 
 def test_cpu_only_install_serves_the_installed_module_without_load_set(monkeypatch):
@@ -207,7 +201,7 @@ def test_cpu_only_install_serves_the_installed_module_without_load_set(monkeypat
     assert metrics.mean_squared_error(x, x) == 2.5
     assert metrics.mean_squared_error(x, x, numeric_mode="identical") == 2.5
     assert [c[0] for c in fake.calls] == ["mean_squared_error"] * 2
-    for explicit in ("fast", "deterministic"):
+    for explicit in ("fast",):
         with pytest.raises(ValueError, match="IDENTICAL only"):
             metrics.mean_squared_error(x, x, numeric_mode=explicit)
     assert len(fake.calls) == 2

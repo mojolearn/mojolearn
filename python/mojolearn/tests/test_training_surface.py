@@ -400,7 +400,7 @@ def arm_provenance(rep):
             "    MOJOLEARN_NUMERIC_MODE=identical bash "
             "bindings/build_training.sh" % (type(exc).__name__, exc))
     vendor = T.vendor_used()
-    rep.check("PROVENANCE", mode in ("fast", "deterministic", "identical"),
+    rep.check("PROVENANCE", mode in ("fast", "identical"),
               "the binary reports its tier: %s" % mode)
     rep.check("PROVENANCE", vendor in ("metal", "cuda", "hip"),
               "the binary reports its accelerator API: %s" % vendor,

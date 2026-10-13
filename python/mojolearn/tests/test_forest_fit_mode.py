@@ -59,7 +59,7 @@ def test_capture_default_refit_reset_pickle(cls, monkeypatch, boundary):
         model._bind()
     model.fit(np.ones((2, 1)), np.array([0, 1]))
     assert calls[-1] == 'fast'
-    model.set_params(numeric_mode='deterministic')
+    model.set_params(numeric_mode='identical')
     assert not model.__sklearn_is_fitted__()
     assert not hasattr(model, '_fit_numeric_mode')
 
@@ -106,6 +106,6 @@ def test_legacy_archive_fallback(cls, boundary):
     boundary[0][0] = 'fast'
     model._bind()
     assert boundary[1][-1] == 'fast'
-    model.numeric_mode = 'deterministic'
+    model.numeric_mode = 'identical'
     model._bind()
-    assert boundary[1][-1] == 'deterministic'
+    assert boundary[1][-1] == 'identical'

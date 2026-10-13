@@ -5,7 +5,7 @@ from mojolearn import _backend
 
 
 @pytest.mark.parametrize('name', ['_mojolearn', '_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees', '_mojolearn_estimators', '_mojolearn_svm'])
-@pytest.mark.parametrize('mode,code', [('fast', 0), ('identical', 1), ('deterministic', 2)])
+@pytest.mark.parametrize('mode,code', [('fast', 0), ('identical', 1)])
 def test_actual_module_mode(monkeypatch, name, mode, code):
     if not _backend._offers(name, mode):
         # The base binding (and every neural family) has no lower tier and
@@ -42,7 +42,7 @@ def test_legacy_without_readback(monkeypatch):
     assert _backend.binding('_mojolearn_rf', 'fast') is module
 
 
-@pytest.mark.parametrize('mode', ['', 0, False, 1, 'unknown', []])
+@pytest.mark.parametrize('mode', ['', 0, False, 1, 'unknown', 'deterministic', []])
 def test_invalid_mode_never_falls_back(monkeypatch, mode):
     def unexpected_load(_):
         raise AssertionError('invalid mode reached loader')
@@ -51,31 +51,24 @@ def test_invalid_mode_never_falls_back(monkeypatch, mode):
         _backend.binding('_mojolearn_rf', mode)
 
 
-@pytest.mark.parametrize('mode', ['fast', 'deterministic'])
-def test_lanes_refuse_tiers_they_do_not_ship_by_name(monkeypatch, mode):
-    """Trees ship fast and deterministic, classical ML and the neural blocks
-    ship fast, the byte LM ships fast too (2026-10-03). Every refusal happens
+def test_lanes_refuse_tiers_they_do_not_ship_by_name(monkeypatch):
+    """Trees, classical ML and the neural blocks ship fast, the byte LM ships fast too (2026-10-03). Every refusal happens
     at the choke point, before any set is loaded, with a sentence that names
     the rule and the binding."""
+    mode = 'fast'
     monkeypatch.setattr(_backend, 'load_set', lambda _: pytest.fail('load_set reached'))
     assert _backend._TIERED == frozenset({'_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees'})
     assert _backend._FAST_TIERED == _backend._TIERED | _backend._CLASSICAL_FAST
     assert _backend._IDENTICAL_ONLY == frozenset(_backend._MODULES) - _backend._FAST_TIERED
     # The neural blocks ship fast and identical (lane neural, 2026-09-27),
     # and the byte LM joined FAST on 2026-10-03 (afn-lm, _backend.py), so
-    # FAST may refuse nothing at all; DETERMINISTIC still refuses every
-    # binding but the three tree lanes.
+    # FAST may refuse nothing at all.
     for neural in ('_mojolearn_byte_lm', '_mojolearn_training', '_mojolearn_mamba',
                    '_mojolearn_transformer', '_mojolearn_embedding'):
         assert neural in _backend._CLASSICAL_FAST, neural
     refused = [n for n in _backend._MODULES if not _backend._offers(n, mode)]
-    if mode != 'fast':
-        assert refused
     for name in refused:
-        with pytest.raises(ValueError, match='tree lanes') as info:
+        with pytest.raises(ValueError, match='IDENTICAL only') as info:
             _backend.binding(name, mode)
         assert name in str(info.value) and mode in str(info.value)
-    if mode == 'fast':
-        assert set(refused) == set(_backend._IDENTICAL_ONLY)
-    else:
-        assert set(refused) == set(_backend._MODULES) - _backend._TIERED
+    assert set(refused) == set(_backend._IDENTICAL_ONLY)

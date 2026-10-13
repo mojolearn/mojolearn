@@ -4,7 +4,7 @@ import pytest
 from mojolearn._mode import NumericModeMixin
 
 
-@pytest.mark.parametrize('code,expected', [(0, 'fast'), (1, 'identical'), (2, 'deterministic')])
+@pytest.mark.parametrize('code,expected', [(0, 'fast'), (1, 'identical')])
 @pytest.mark.parametrize('getter', ['metrics_numeric_mode', 'umap_numeric_mode'])
 def test_metrics_compiled_mode_without_tier_in_name(code, expected, getter):
     module = SimpleNamespace(__name__='mojolearn._mojolearn_metrics',

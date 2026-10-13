@@ -88,7 +88,7 @@ HOW TO RUN IT
         python3 -m mojolearn.tests.test_svr_surface
 
 ENVIRONMENT
-    MOJOLEARN_NUMERIC_MODE   fast (default), deterministic or identical
+    MOJOLEARN_NUMERIC_MODE   fast (default) or identical
 """
 
 import os
@@ -306,9 +306,9 @@ def arm_provenance(rep):
               "the loaded binary exports svr_fit")
     rep.check(arm, hasattr(ext, "svr_predict"),
               "the loaded binary exports svr_predict")
-    compiled = {0: "fast", 1: "identical", 2: "deterministic"}.get(
+    compiled = {0: "fast", 1: "identical"}.get(
         int(ext.svm_numeric_mode()), "unknown")
-    rep.check(arm, compiled in ("fast", "identical", "deterministic"),
+    rep.check(arm, compiled in ("fast", "identical"),
               "the binary reports a tier it knows", compiled)
     # The VENDOR read back out of THIS binary rather than off an estimator:
     # `NumericModeMixin.vendor_used` resolves through `_BINDING`, which is
