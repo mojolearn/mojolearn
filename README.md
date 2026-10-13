@@ -14,9 +14,9 @@ not merely within a numerical tolerance.
 
 - **Training and inference for transformers and hybrids.** Decoder language
   models, Mamba-1/2/3 state-space models and Samba attention/state-space
-  hybrids train and serve under the same contract, alongside CNNs, recurrent
-  and graph networks.
-- **100+ machine-learning algorithms and model components across 13 families**,
+  hybrids train and serve under the same contract, alongside recurrent
+  networks.
+- **100+ machine-learning algorithms and model components across 12 families**,
   from neural networks to tree ensembles and classical models.
 - **Serve models trained elsewhere.** Neural models trained in other
   frameworks can be served with identical outputs across vendors.
@@ -72,9 +72,8 @@ The table shows representative methods, with related estimator variants grouped 
 
 | family | algorithms and components |
 |---|---|
-| neural blocks and optimizers | transformers, Mamba-1/2/3, Samba, MLPs, RNNs, LSTMs, GRUs, mixture of experts, Adam, AdamW, SGD, RMSprop, Adagrad, Lion, Adafactor, LAMB |
+| neural blocks and optimizers | transformers, Mamba-1/2/3, Samba, MLPs, RNNs, LSTMs, GRUs, mixture of experts, Adam, AdamW, SGD, RMSprop, Adagrad, Lion |
 | language models and tokenization | decoder language models, byte-level BPE tokenization |
-| convolutional and graph networks | 1-D and 2-D convolutions, pooling, batch normalization, residual blocks, CNN classifiers, GCN and GraphSAGE convolutions |
 | boosting | symmetric-tree, depth-wise, loss-guided and ordered boosting; AdaBoost, DART |
 | trees and ensembles | decision trees, random forests, Extra Trees, isolation forests, bagging, voting, stacking |
 | clustering | k-means, mini-batch and bisecting k-means, DBSCAN, HDBSCAN, agglomerative, spectral, mean shift, OPTICS, affinity propagation, Gaussian and Bayesian Gaussian mixtures |
@@ -88,8 +87,7 @@ The table shows representative methods, with related estimator variants grouped 
 
 Also provided are evaluation metrics, cross-validation, CPU training and
 inference, Hugging Face checkpoint loading and decoding, BF16 and INT8
-weight storage, tokenized corpora, multi-GPU execution plans and a built-in
-verifier.
+weight storage, tokenized corpora and a built-in verifier.
 
 ## Numeric modes
 
@@ -189,7 +187,7 @@ CPU, and a verifier that checks your machine against them.
 Install verification support with
 `python -m pip install "mojolearn[verify]"`: the same library plus its optional
 verification dependency.
-Optional ANN, CNN and sequence APIs that use NumPy are supported by
+Optional ANN and sequence APIs that use NumPy are supported by
 `mojolearn[numpy]`; the verification extra includes that same dependency.
 The base install does not require NumPy. See [verification support](docs/VERIFY.md).
 

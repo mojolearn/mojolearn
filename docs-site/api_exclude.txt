@@ -32,6 +32,7 @@ parallel_model_selection	multi-GPU: physical qualification pending
 DistributedIVFIndex	multi-GPU: physical qualification pending
 ExperimentalTwoLevelFeatureFreq	name marks it experimental (unfinished)
 OrderedRMSE	needs installed-artifact qualification (unverified)
+GPT2Tokenizer	deprecated alias of BpeTokenizer; its page renders blank
 # Members (Class.member or module.member): skipped by conf.py's autodoc-skip-member hook.
 SmallMLPTrainer.train_steps	Apple FAST multistep build only; raises RuntimeError elsewhere
 TransformerBlock.forward_with_tape	tape API not in the shipped binding; unverified
@@ -40,3 +41,4 @@ Mamba3Block.install_owned_weights	owned-weights build only; raises RuntimeError 
 Mamba3Block.export_owned_weights	owned-weights build only; raises RuntimeError elsewhere
 Mamba3Block.release_owned_weights	owned-weights build only; raises RuntimeError elsewhere
 resample.fast_defines	internal build switches, no meaning to users
+parallel_causal_lm.ParallelCausalLM	multi-GPU layer ownership: no cross-vendor qualification
