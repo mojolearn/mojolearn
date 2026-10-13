@@ -1,6 +1,6 @@
 # Support matrix
 
-What mojolearn 0.8.41 supports: platforms, Python versions, devices and numeric modes. Release notes
+What mojolearn {{release}} supports: platforms, Python versions, devices and numeric modes. Release notes
 are in [Release notes](../community/release_notes.md).
 `mojolearn doctor` reports what the installed wheel supports on your machine.
 
@@ -9,16 +9,16 @@ are in [Release notes](../community/release_notes.md).
 | Platform | Packages | GPU backend | GPU architectures | CPU |
 |---|---|---|---|---|
 | macOS arm64 | `mojolearn` | Apple Metal | Apple silicon, built at the M1 instruction-set floor | Apple silicon |
-| Linux x86-64 | `mojolearn` plus `mojolearn-nvidia` and `mojolearn-amd`, installed automatically | NVIDIA CUDA, AMD HIP | CUDA `sm_89`; HIP `gfx942` | x86-64 |
+| Linux x86-64 | `mojolearn` plus `mojolearn-nvidia` and `mojolearn-amd`, installed automatically | NVIDIA CUDA, AMD HIP | CUDA {{nvidia_arches}}; HIP {{amd_arches}} | x86-64 |
 
 Both platforms carry the CPU bindings, so both train and predict on a machine with no GPU.
 
 NVIDIA needs only the driver (`libcuda`); no CUDA toolkit is required. AMD needs the `amdgpu` driver and
 the ROCm HIP runtime (ROCm 6 or 7).
 
-In 0.8.41 the NVIDIA package ships `sm_89` code only. A device loads the exact architecture the install
-carries, or the highest carried architecture of the same NVIDIA family that does not exceed it, so
-other NVIDIA generations (for example A100 and H100) are not served by this release. On AMD the match
+In {{release}} the NVIDIA package ships {{nvidia_arches}} code only. A device loads the exact architecture the
+install carries, or the highest carried architecture of the same NVIDIA family that does not exceed it, so
+other NVIDIA generations are not served by this release. On AMD the match
 must be exact. An architecture the wheel does not carry needs a source build. mojolearn never
 substitutes the CPU for a GPU it cannot serve.
 
