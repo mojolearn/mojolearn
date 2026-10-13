@@ -520,22 +520,50 @@ _add("svgp", xlane="neighbors", ours=("SVGP", "SparseVariationalGP"), kind="svgp
            "mean cache only (the covariance cache would add an n x M^2 product ours does not do)"])
 
 # ---- lane decomp + linalg -------------------------------------------------
+# FAIRNESS FIX (2026-10-13 audit): the per-batch algorithm differed and was undeclared (mismatches
+# were []): ours takes each batch's thin SVD as the eigendecomposition of the d x d Gram matrix of
+# the stacked batch (python/mojolearn/_expansion_decomp.py `_gram_svd`, IncrementalPCA._partial),
+# while cuML (cuml/decomposition/incremental_pca.py: cp.linalg.svd(X, full_matrices=False)) and
+# scikit-learn (scipy.linalg.svd) run a full thin SVD of the stacked (n_components + batch + 1) x d
+# matrix, several times the work. Neither library has a Gram/eigh option and ours has no SVD
+# option, so the algorithms cannot be matched: the difference is now declared and both opponents
+# are refused (`refused`: not planned, and a named arm refuses with this reason). The race has no
+# opponent until they can be matched. Results raced before this change were wrong for this lane;
+# apply extra scrutiny.
+_IPCA_REFUSED = ("fairness audit 2026-10-13: a different per-batch algorithm, the work "
+                 "differs. Ours: thin SVD of each stacked batch through eigh of its d x d Gram "
+                 "matrix; this library: a full thin SVD (LAPACK/cuSOLVER gesvd-family) of the "
+                 "stacked batch. No setting on either side selects the other's algorithm")
 _add("incremental-pca", xlane="decomp", ours="IncrementalPCA", task="transform", block="tsvd",
      quality="pca", sk="sklearn.decomposition:IncrementalPCA",
      params=dict(n_components=10, batch_size=65536),     # cuML benchmark IncrementalPCA
-     cuml="cuml.decomposition:IncrementalPCA", cuml_params=dict(n_components=10, batch_size=65536))
+     cuml="cuml.decomposition:IncrementalPCA", cuml_params=dict(n_components=10, batch_size=65536),
+     refused={"cuml-gpu": _IPCA_REFUSED, "sklearn-cpu": _IPCA_REFUSED},
+     mism=["per-batch SVD: ours eigh of the d x d Gram matrix of the stacked batch (Jacobi eigh); "
+           "cuML cp.linalg.svd and scikit-learn scipy.linalg.svd of the stacked batch: different "
+           "algorithms, so both opponents are refused"])
+# FAIRNESS FIX (2026-10-13 audit): commit fcef3cd62 gave cuML HOST input in the two random-projection
+# lanes only (cuml_host_input=True), so cuML's host-side input check/transfer sat inside its clock
+# (gaussian-rp Istella fit 31.4 ms with host input against 2.4 ms with device input on the same
+# L40S), unlike every other cuML lane. The flag is removed: cuML gets its input on the device before
+# its clock, as in every other cuML lane (ours includes its upload: the disclosed clock asymmetry).
+# Results raced before this change were wrong for this lane; apply extra scrutiny.
 _add("gaussian-rp", xlane="decomp", ours="GaussianRandomProjection", task="transform",
      block="tsvd", quality="distortion", sk="sklearn.random_projection:GaussianRandomProjection",
      params=dict(n_components=10, random_state=SEED),   # cuML benchmark GaussianRandomProjection
      cuml="cuml.random_projection:GaussianRandomProjection",
-     cuml_host_input=True,
-     notes=["n_components = 10, the cuML benchmark's"])
+     notes=["n_components = 10, the cuML benchmark's",
+            "cuML's X and Xq are on the device before its clock, as in every cuML lane"],
+     mism=["the random matrix: each library draws its own from its own generator seeded 7"])
 _add("sparse-rp", xlane="decomp", ours="SparseRandomProjection", task="transform", block="tsvd",
      quality="distortion", sk="sklearn.random_projection:SparseRandomProjection",
      params=dict(n_components=10, density="auto", random_state=SEED),  # cuML benchmark
      cuml="cuml.random_projection:SparseRandomProjection",
-     cuml_host_input=True,
-     notes=["n_components = 10, the cuML benchmark's"])
+     notes=["n_components = 10, the cuML benchmark's",
+            "cuML's X and Xq are on the device before its clock, as in every cuML lane"],
+     mism=["the random matrix: each library draws its own from its own generator seeded 7 "
+           "(cuML a fixed nonzero count density x n_features x n_components, scikit-learn a "
+           "binomial count per row)"])
 _add("nmf", xlane="decomp", ours="NMF", task="transform", block="nonneg", quality="nmf",
      sk="sklearn.decomposition:NMF",
      params=dict(n_components=8, init="nndsvda", solver="mu", max_iter=200, tol=1e-4,
@@ -924,15 +952,43 @@ _TS = ("taxi-hourly", "synthetic")
 _TSNOTE = ("taxi-hourly: hourly pickup counts of the 64 busiest pickup zones over January and "
            "February 2024 (1,440 hours; the last 48 held out), from the taxi npz; synthetic: 64 "
            "seed-7 series of the same length")
+# FAIRNESS FIX (2026-10-13 audit): (1) the cuML arm cast Y to float64 (cuML AutoARIMA is float64
+# only: cuml/tsa/auto_arima.pyx 26.08 check_array(endog, dtype="float64"), "Float64 only for now")
+# on an L40S with 1/64-rate FP64, while ours runs float32 (it refuses float64): no same-precision
+# comparison exists, so cuml-gpu is refused (`refused`; _build_ts also probes the dtype). (2) The
+# search space differed: ours and cuML searched k = 1 only for d <= 1 (fit_intercept='auto'),
+# statsforecast every order with AND without the constant (statsforecast/arima.py search_arima:
+# `for K in range(max_K + 1)`), twice the candidates; ours (and a future cuML arm) now pass
+# fit_intercept=[0, 1], statsforecast's grid. (3) The optimizer budget was implicit: maxiter
+# (search and fit) and method are now pinned on ours and cuML (both were 1000 by default in
+# cuML 26.08, ours searched at 1000 explicitly). Results raced before this change were wrong for
+# this lane; apply extra scrutiny.
+_ARIMA_CUML_REFUSED = ("fairness audit 2026-10-13: cuML AutoARIMA computes in float64 "
+                       "only (cuml/tsa/auto_arima.pyx, cuML 26.08: check_array(endog, "
+                       "dtype='float64')), ours in float32 only; FP64 runs at 1/64 rate on the "
+                       "L40S, so there is no same-precision comparison")
 _add("autoarima", xlane="sequence", ours="AutoARIMA", kind="ts", task="forecast", block="ts",
      datasets=_TS, sf="AutoARIMA", params=dict(max_p=3, max_q=3, max_d=1, seasonal=False, ic="aicc",
-                               stepwise=False, allow_intercept=True),
-     other={"statsforecast-cpu": "statsforecast", "cuml-gpu": "cuml"}, notes=[_TSNOTE,
-     "ours and cuML: search(s=1, d=0..1, p=0..3, q=0..3, no seasonal part, ic='aicc') then fit, "
-     "d chosen by the KPSS test; statsforecast AutoARIMA(season_length=1, seasonal=False, "
-     "max_p=3, max_q=3, max_d=1, max_order=6, stepwise=False, ic='aicc', allowmean=True, "
-     "allowdrift=True): the same exhaustive grid with an intercept or drift allowed, d by KPSS"],
-     mism=["the likelihood optimizer and its stopping rule are each library's own"])
+                               stepwise=False, allow_intercept=True,
+                               fit_intercept=[0, 1], maxiter=1000, method="ml"),
+     other={"statsforecast-cpu": "statsforecast", "cuml-gpu": "cuml"},
+     refused={"cuml-gpu": _ARIMA_CUML_REFUSED}, notes=[_TSNOTE,
+     "ours (and cuML when it can run float32): search(s=1, d=0..1, p=0..3, q=0..3, no seasonal "
+     "part, fit_intercept=[0, 1], ic='aicc', maxiter=1000, method='ml') then fit(maxiter=1000, "
+     "method='ml'), d chosen by the KPSS test; statsforecast AutoARIMA(season_length=1, "
+     "seasonal=False, max_p=3, max_q=3, max_d=1, max_order=6, stepwise=False, ic='aicc', "
+     "allowmean=True, allowdrift=True, approximation=False): the same exhaustive grid, every "
+     "order with and without the mean (d = 0) or drift (d = 1), d by KPSS"],
+     mism=["the likelihood optimizer and its stopping rule are each library's own (ours L-BFGS-B "
+           "ML, maxiter 1000; statsforecast 2.1.1 CSS-ML, scipy BFGS with optim_control "
+           "maxiter 100; it has no maxiter argument on AutoARIMA)",
+           "precision: statsforecast computes in float64 on the CPU (its only precision), ours "
+           "float32 on the GPU",
+           "the no-constant white-noise / random-walk order (0, d, 0) without constant: "
+           "statsforecast fits it, ours (cuML's rule) skips p + q + k = 0",
+           "ours adopts each chosen order's search fit (same start, optimizer and maxiter) instead "
+           "of refitting it in fit(); statsforecast also keeps the search's fit",
+           "KPSS d choice: ours cuML's KPSS rule, statsforecast its ndiffs (KPSS, alpha 0.05)"])
 _add("stl", xlane="sequence", ours="STL", kind="ts", task="decompose", block="ts", datasets=_TS,
      params=dict(period=24, robust=False, seasonal=7, trend=None, low_pass=None, seasonal_deg=1,
                  trend_deg=1, low_pass_deg=1, seasonal_jump=1, trend_jump=1, low_pass_jump=1), other={"statsmodels-cpu": "statsmodels"}, notes=[_TSNOTE])
@@ -2932,13 +2988,16 @@ def _build_est(lane, arm, D):
     make, what, params = _est_factory(lane, arm, D)
     S = {}
     sync = None
-    if arm == "cuml-gpu" and s.get("cuml_host_input"):
-        # Host input on both arms: cuML gets the numpy arrays, so its upload (and the numpy result's
-        # download) sits inside the clock exactly as ours does (Andrew, Oct 1: random projection).
-        _, info, sync = _cuml_up({})
-        dev = D
-        info.update(input_home="host", upload_ms_untimed=None)
-    elif arm == "cuml-gpu":
+    # FAIRNESS FIX (2026-10-13 audit): a `cuml_host_input` branch here handed cuML the numpy arrays
+    # in the two random-projection lanes only (fcef3cd62), putting cuML's host-side input handling
+    # inside its clock unlike every other cuML lane. The branch is removed; every cuML lane gets
+    # its inputs on the device before the clock (the upload is timed apart, upload_ms_untimed), and
+    # a lane that still sets the flag is refused. Results raced before this change were wrong for
+    # gaussian-rp and sparse-rp; apply extra scrutiny.
+    if s.get("cuml_host_input"):
+        raise SystemExit("lane %r sets cuml_host_input, removed by the 2026-10-13 fairness audit: "
+                         "cuML takes its inputs on the device as in every cuML lane" % lane)
+    if arm == "cuml-gpu":
         keys = [k for k in ("X", "y", "Xq") if k in D]
         dev, info, sync = _cuml_up({k: D[k] for k in keys})
         if t == "clf" and "y" in dev:
@@ -3635,9 +3694,14 @@ def _PROPHET_KW(params):
 
 def _sf_autoarima_kw(p):
     """statsforecast AutoARIMA over ours' / cuML's exhaustive grid."""
+    # FAIRNESS FIX (2026-10-13 audit): statsforecast's fitting method and d test were left at its
+    # defaults (None -> 'CSS-ML' at approximation=False; 'kpss'). Both are now passed explicitly
+    # (the same values, so the same computation); ours is pinned to method='ml' and test='kpss'.
+    # Results raced before this change were wrong for this lane; apply extra scrutiny.
     return dict(season_length=1, seasonal=False, max_p=p["max_p"], max_q=p["max_q"], max_d=p["max_d"],
                 max_order=p["max_p"] + p["max_q"], stepwise=p["stepwise"], ic=p["ic"],
-                allowmean=p["allow_intercept"], allowdrift=p["allow_intercept"], approximation=False)
+                allowmean=p["allow_intercept"], allowdrift=p["allow_intercept"], approximation=False,
+                method="CSS-ML", test="kpss")
 
 
 def _ts_one(lib, task, params, y, h):
@@ -3693,6 +3757,9 @@ def _build_ts(lane, arm, D):
         Y32 = D["Yfit"]
         # prophet's time axis, as the prophet arm builds it: hourly from 2024-01-01
         ds = np.datetime64("2024-01-01T00", "h") + np.arange(Y32.shape[1] + h).astype("timedelta64[h]")
+        # autoarima: the search's maxiter, the lane's pinned maxiter; the env switch of the
+        # 2026-10-04 quality A/B (below) restores 20 and the params record says so
+        _sm = 20 if os.environ.get("MOJOLEARN_AUTOARIMA_SEARCH_QOLD") == "1" else int(p.get("maxiter", 1000))
 
         def fit():
             if lane == "autoarima":           # the cuML shape: construct on the batch, search, fit
@@ -3705,11 +3772,17 @@ def _build_ts(lane, arm, D):
                 # taxi-hourly forecast_rmse FAST 74.66, IDENTICAL 73.63,
                 # statsforecast 68.21). The candidates now get the fit's own
                 # maxiter (1000), the opponent's rule.
-                _sm = 20 if os.environ.get("MOJOLEARN_AUTOARIMA_SEARCH_QOLD") == "1" else 1000
+                # FAIRNESS FIX (2026-10-13 audit): the search space and budget were implicit:
+                # fit_intercept='auto' (k = 1 only, half of statsforecast's grid) and fit() at its
+                # default maxiter. Now the lane's pinned values: fit_intercept=[0, 1] (every order
+                # with and without the constant, statsforecast's grid), maxiter and method on both
+                # search and fit, test='kpss'. Results raced before this change were wrong for
+                # this lane; apply extra scrutiny.
                 m.search(s=1, d=range(0, p["max_d"] + 1), p=range(0, p["max_p"] + 1),
                          q=range(0, p["max_q"] + 1), P=range(1), D=range(1), Q=range(1), ic=p["ic"],
-                         fit_intercept="auto", maxiter=_sm)
-                m.fit()
+                         fit_intercept=list(p["fit_intercept"]), test="kpss", maxiter=_sm,
+                         method=p["method"])
+                m.fit(maxiter=int(p["maxiter"]), method=p["method"])
                 S["est"] = m
             elif lane == "stl":               # statsmodels' shape: STL(endog, period).fit() -> result
                 S["est"] = cls(Y32, **_STL_KW(p)).fit()
@@ -3756,8 +3829,13 @@ def _build_ts(lane, arm, D):
             return o
         rec = {"__library__": "mojolearn"}
         if lane == "autoarima":
-            rec.update(p, search="s=1, d 0..%d, p 0..%d, q 0..%d, fit_intercept='auto', KPSS"
-                       % (p["max_d"], p["max_p"], p["max_q"]))
+            # FAIRNESS FIX (2026-10-13 audit): the record said fit_intercept='auto' and carried no
+            # optimizer budget. It now carries what the calls above are given (fit_intercept and
+            # maxiter, compared by tools/bench_board_params.py against a cuML arm). Results raced
+            # before this change were wrong for this lane; apply extra scrutiny.
+            rec.update(p, maxiter=_sm, fit_maxiter=int(p["maxiter"]), test="kpss",
+                       search="s=1, d 0..%d, p 0..%d, q 0..%d, fit_intercept=%r, KPSS"
+                       % (p["max_d"], p["max_p"], p["max_q"], list(p["fit_intercept"])))
         elif lane not in ("stl", "var"):
             try:
                 rec = _BP().arm_record(cls(**p))
@@ -3797,18 +3875,39 @@ def _build_ts(lane, arm, D):
             S["fc"] = np.stack(_joblib_map(one, list(Y)))
         return Runner(info, fit, lambda: {"forecast": S["fc"]}, None, record=rec)
     if lib == "cuml":
+        # FAIRNESS FIX (2026-10-13 audit): this arm cast Y to float64 (Y above) for cuML, whose
+        # AutoARIMA is float64 only, on an L40S with 1/64-rate FP64, while ours runs float32; and
+        # it left maxiter, method and the constant grid at cuML's defaults. The lane refuses this
+        # arm (LANES["autoarima"]["refused"]); should that entry go, this arm still runs only if
+        # cuML keeps float32 input as float32 (probed here, outside the clock), and then with
+        # ours' float32 series and the lane's pinned search (fit_intercept, maxiter, method).
+        # Results raced before this change were wrong for this lane; apply extra scrutiny.
         from cuml.tsa.auto_arima import AutoARIMA
-        dev, info, sync = _cuml_up({"Yt": np.ascontiguousarray(Y.T)})
-        info["config"] = "cuml.tsa.auto_arima.AutoARIMA(Yt).search(s=1, d=range(2), p=range(4), q=range(4), ic='aicc'); fit()"
+        Yt32 = np.ascontiguousarray(D["Yfit"].T, dtype=np.float32)
+        try:
+            got = str(np.asarray(AutoARIMA(Yt32, output_type="numpy").d_y).dtype)
+        except Exception as exc:  # noqa: BLE001  (a refusal of float32, or no dtype to read)
+            got = "unverified (%s: %s)" % (type(exc).__name__, exc)
+        if got != "float32":
+            raise Skipped("REFUSED: cuML AutoARIMA does not compute in float32 (it holds float32 "
+                          "input as %s); ours is float32 only, so there is no same-precision "
+                          "comparison" % got)
+        dev, info, sync = _cuml_up({"Yt": Yt32})
+        info["config"] = ("cuml.tsa.auto_arima.AutoARIMA(Yt float32).search(s=1, d=range(%d), "
+                          "p=range(%d), q=range(%d), fit_intercept=%r, ic=%r, maxiter=%d, "
+                          "method=%r); fit(maxiter=%d, method=%r)"
+                          % (p["max_d"] + 1, p["max_p"] + 1, p["max_q"] + 1, list(p["fit_intercept"]),
+                             p["ic"], p["maxiter"], p["method"], p["maxiter"], p["method"]))
 
         def fit():
             m = AutoARIMA(dev["Yt"], output_type="numpy")
             m.search(s=1, d=range(0, p["max_d"] + 1), p=range(0, p["max_p"] + 1),
                      q=range(0, p["max_q"] + 1), P=range(1), D=range(1), Q=range(1), ic=p["ic"],
-                     fit_intercept="auto")
-            m.fit()
+                     fit_intercept=list(p["fit_intercept"]), test="kpss", maxiter=int(p["maxiter"]),
+                     method=p["method"])
+            m.fit(maxiter=int(p["maxiter"]), method=p["method"])
             S["fc"] = m.forecast(h)
-        rec = dict(p, __library__="cuml")
+        rec = dict(p, __library__="cuml", fit_maxiter=int(p["maxiter"]), test="kpss")
         return Runner(info, fit, lambda: {"forecast": _arr(S["fc"], np.float64).T}, None, sync,
                       record=rec)
     import importlib as il

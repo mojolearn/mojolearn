@@ -158,6 +158,10 @@ has_phase() {
     return 1
 }
 arms_for() {  # <lane>: the arms a race runs on this vendor
+    # FAIRNESS FIX (2026-10-13 audit): pca raced torch-gpu, a covariance eigh our harness wrote
+    # from torch ops (classical_two_datasets.TorchPCA), as an opponent. pca now falls through to
+    # the library arms only. Results raced before this change were wrong for this lane; apply
+    # extra scrutiny.
     if [ "$VENDOR" = nvidia ]; then
         case "$1" in
             # FAIRNESS FIX (2026-10-13 audit): the OLS torch arms are harness-written, not
@@ -170,7 +174,6 @@ arms_for() {  # <lane>: the arms a race runs on this vendor
             # raced before this change were wrong for these lanes; apply extra
             # scrutiny.
             kmeans|knn) _a="ours,cuml-gpu" ;;
-            pca) _a="ours,cuml-gpu,torch-gpu" ;;
             *) _a="ours,cuml-gpu" ;;
         esac
     else
@@ -181,7 +184,6 @@ arms_for() {  # <lane>: the arms a race runs on this vendor
             # CPU is the only opponent. Results raced before this change were
             # wrong for these lanes; apply extra scrutiny.
             kmeans|knn) _a="ours,sklearn-cpu" ;;
-            pca) _a="ours,sklearn-cpu,torch-gpu" ;;
             *) _a="ours,sklearn-cpu" ;;
         esac
     fi

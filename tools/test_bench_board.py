@@ -747,11 +747,12 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # Oct 7 2026: the six GPU inference lanes (transformer-decode, mamba1/2/3-decode, samba-decode,
 # mlp-predict) add 6 races and 18 Apple / 15 NVIDIA / 12 AMD neural cells
 # FAIRNESS FIX (2026-10-13 audit): the harness-written torch arms are no opponents. NVIDIA
-# kmeans and knn lose torch-gpu (-4) and ols torch-gpu and torch-gpu-eigh (-4): 275 -> 267;
-# AMD ols keeps one CPU cell where two torch cells raced (-2): 234 -> 232; Apple keeps its
-# count (scikit-learn races where torch-gpu did, no GPU opponent left).
+# kmeans and knn lose torch-gpu (-4), ols torch-gpu and torch-gpu-eigh (-4) and pca torch-gpu
+# (-2): 275 -> 265; AMD ols keeps one CPU cell where two torch cells raced (-2): 234 -> 232;
+# Apple keeps its count (scikit-learn races where torch-gpu did, no GPU opponent left), and so
+# do AMD kmeans, knn and pca.
 @pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 346, 134, 82),
-                                                      ("nvidia", 267, 88, 88),
+                                                      ("nvidia", 265, 88, 88),
                                                       ("amd", 232, 90, 64)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",

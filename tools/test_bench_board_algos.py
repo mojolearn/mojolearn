@@ -116,7 +116,10 @@ def test_tables_are_complete_and_stdlib_only():
     # torch.optim has no Lion and no LAMB: those race ours alone, named in not_planned.
     # FAIRNESS FIX (2026-10-13 audit): the SGD lanes refuse scikit-learn's per-sample SGD (a
     # different algorithm from ours' minibatch SGD), so off NVIDIA they race ours alone too.
-    assert alone == {"lion", "lamb", "sgd-clf", "sgd-reg"}
+    # FAIRNESS FIX (2026-10-13 audit): incremental-pca's opponents (cuML, scikit-learn) run a
+    # different per-batch algorithm and are refused, so it races ours alone too.
+    assert alone == {"lion", "lamb", "sgd-clf", "sgd-reg", "incremental-pca"}
+    assert any(w.startswith("cuml-gpu on incremental-pca: refused") for w in A.not_planned("nvidia"))
     assert any("Lion and LAMB" in w for w in A.not_planned("nvidia"))
     assert any(w.startswith("sklearn-cpu on sgd-clf: refused") for w in A.not_planned("amd"))
     code = ("import sys, importlib.util; sys.modules['numpy'] = None; "
@@ -171,7 +174,10 @@ def test_opponent_rosters():
     assert nv["pagerank"] == ("networkx-cpu", "cugraph-gpu")
     assert nv["lstm-clf"][0] == "torch-eager-fp32" and "torch-compile-tf32" in nv["lstm-clf"]
     assert nv["dart-reg"] == ("lightgbm-cpu", "xgboost-cpu", "xgboost-gpu")
-    assert nv["autoarima"] == ("statsforecast-cpu", "cuml-gpu")
+    # FAIRNESS FIX (2026-10-13 audit): cuML AutoARIMA is float64 only and ours float32: refused
+    assert nv["autoarima"] == ("statsforecast-cpu",)
+    assert nv["gaussian-rp"] == nv["sparse-rp"] == ("sklearn-cpu", "cuml-gpu")
+    assert not A.LANES["gaussian-rp"].get("cuml_host_input")
     assert A.opponents("amd", "ivf-pq") == ("faiss-cpu",)
     assert not any("tf32" in a for a in A.opponents("apple", "conv2d"))
 
@@ -192,6 +198,17 @@ def test_skipped_when_the_wheel_lacks_the_class(monkeypatch):
     # a nested base estimator the wheel lacks is a skip too, not an error
     with pytest.raises(A.Skipped, match="GaussianNB"):
         A._resolve(A._E("GaussianNB"), "ours")
+
+
+def test_refused_opponents_skip_by_name():
+    # FAIRNESS FIX (2026-10-13 audit): a refused opponent named on the command line refuses with
+    # the lane's reason before anything is built (no cuML or scikit-learn import needed)
+    for lane, arm in (("incremental-pca", "cuml-gpu"), ("incremental-pca", "sklearn-cpu"),
+                      ("autoarima", "cuml-gpu")):
+        with pytest.raises(RuntimeError, match="REFUSED: %s is not raced on %s: fairness audit "
+                                               "2026-10-13" % (arm, lane)):
+            A.build(lane, arm, {})
+        assert arm in A.lane_config(lane)["refused_opponents"]
 
 
 def test_board_marks_skipped_cells():

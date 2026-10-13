@@ -275,10 +275,14 @@ def tree_devices(vendor, lane):
 #: have no library GPU k-means or kNN installed, so those races have only the
 #: CPU opponent. Results raced before this change were wrong for these lanes;
 #: apply extra scrutiny.
+# FAIRNESS FIX (2026-10-13 audit): pca raced torch-gpu, a covariance eigh our harness wrote from
+# torch ops (classical_two_datasets.TorchPCA), as an opponent on every vendor. It is removed from
+# the pca rosters below (Apple and AMD keep scikit-learn, NVIDIA cuML). Results raced before this
+# change were wrong for this lane; apply extra scrutiny.
 CLASSICAL_OPPONENTS = {
     "apple": {
         "kmeans": ("sklearn-cpu",),
-        "pca": ("sklearn-cpu", "torch-gpu"),
+        "pca": ("sklearn-cpu",),
         # FAIRNESS FIX (2026-10-13 audit): the OLS torch arms are harness-written, not an
         # opponent (classical_two_datasets.REFUSED_ARMS); here and on nvidia and amd below.
         # Results raced before this change were wrong for this lane; apply extra scrutiny.
@@ -291,7 +295,7 @@ CLASSICAL_OPPONENTS = {
     },
     "nvidia": {                              # bench_all_ours.sh's classical_arms_for
         "kmeans": ("cuml-gpu",),
-        "pca": ("cuml-gpu", "torch-gpu"),
+        "pca": ("cuml-gpu",),
         "ols": ("cuml-gpu",),                # FAIRNESS FIX (2026-10-13 audit): torch arms refused
         "knn": ("cuml-gpu",),
         "kde": ("cuml-gpu",),
@@ -301,7 +305,7 @@ CLASSICAL_OPPONENTS = {
     },
     "amd": {                                 # tools/classical_hotaisle_leg.sh's arms
         "kmeans": ("sklearn-cpu",),
-        "pca": ("sklearn-cpu", "torch-gpu"),
+        "pca": ("sklearn-cpu",),
         "ols": ("sklearn-cpu",),             # FAIRNESS FIX (2026-10-13 audit): torch arms refused
         "knn": ("sklearn-cpu",),
         "kde": ("sklearn-cpu",),
@@ -367,9 +371,10 @@ THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
               "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
 
 #: Torch pins. Mac: the version the skgpu pixi env solved (pixi.lock
-#: osx-arm64/pytorch-2.13.0). AMD: the ROCm 6.4.1 wheels (cp312, hash-pinned)
-#: of tools/classical_two_datasets_leg.sh, so the venv must be Python 3.12
-#: there (tools/bench_board_leg.sh arranges it). NVIDIA: the Mac's torch
+#: osx-arm64/pytorch-2.13.0). AMD: torch==2.13.0+rocm7.1 from the PyTorch
+#: ROCm 7.1 index since the 2026-10-13 fairness audit (before: the ROCm 6.4.1
+#: cp312 wheels of tools/classical_two_datasets_leg.sh, torch 2.6.0; see
+#: AMD_TORCH_ROCM below). NVIDIA: the Mac's torch
 #: version built for CUDA 12.9 (torch==2.13.0+cu129 from the PyTorch cu129
 #: index, which requires cuda-toolkit 12.9.1, inside the RAPIDS 26.8 sets'
 #: cuda-toolkit 12.*), in a CLEAN venv. 2026-09-29: the image's torch
@@ -378,17 +383,28 @@ THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 #: venv's `nvidia` namespace, so nvidia.libnvcomp did not import, libcudf.so
 #: did not load, and every cuML arm refused (ImportError: libcudf.so).
 #: --system-site-packages is refused on NVIDIA for that reason.
-AMD_TORCH_ROCM = (
+# FAIRNESS FIX (2026-10-13 audit): the AMD default was torch 2.6.0+rocm6.4.1 (the hash-pinned
+# repo.radeon.com cp312 wheels kept here as AMD_TORCH_ROCM_OLD), an outdated release: the
+# opponents-20261006 AMD board's /root/opponent-venv held it, and on the same MI325X host torch
+# 2.13.0+rocm7.1 (the 2026-09-30 board, --torch-spec torch==2.13.0+rocm7.1 --torch-index-url
+# https://download.pytorch.org/whl/rocm7.1) ran the same torch arms 1.7-9.4x faster. The AMD default
+# is now the current release, torch==2.13.0+rocm7.1 from the PyTorch ROCm 7.1 index, the same
+# torch version as Apple and NVIDIA. A venv built before this change (or with --skip-install over
+# an old venv) must be rebuilt. Results raced before this change were wrong for every AMD torch
+# arm; apply extra scrutiny.
+AMD_TORCH_ROCM_OLD = (
     "https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1."
     "git6da9e660-cp312-cp312-linux_x86_64.whl"
     "#sha256=1d97c15798bf178299328032141a21d9777e7cdef59d5a7e3ac74e297c17198e "
     "https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-"
     "cp312-cp312-linux_x86_64.whl"
     "#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d")
+AMD_TORCH_ROCM = "torch==2.13.0+rocm7.1"
 DEFAULT_TORCH_SPEC = {"apple": "torch==2.13.0", "nvidia": "torch==2.13.0+cu129",
                       "amd": AMD_TORCH_ROCM}
 #: an EXTRA index for the default torch spec (PyPI stays the main index)
-DEFAULT_TORCH_EXTRA_INDEX = {"nvidia": "https://download.pytorch.org/whl/cu129"}
+DEFAULT_TORCH_EXTRA_INDEX = {"nvidia": "https://download.pytorch.org/whl/cu129",
+                             "amd": "https://download.pytorch.org/whl/rocm7.1"}
 #: OUR CPU IS NEVER RACED (Andrew, Oct 2 2026, hard rule). `ours-cpu` is the
 #: name old records used for our IDENTICAL estimator under MOJOLEARN_VENDOR=cpu;
 #: nothing plans, runs, times, ratios or renders it now, and strip_our_cpu drops
@@ -3423,8 +3439,9 @@ def build_parser():
     p.add_argument("--opponent-wheels", default=None,
                    help="offline opponent install from this staged wheel dir (tools/opponent_wheels.sh)")
     p.add_argument("--torch-spec", default=None,
-                   help="pip spec for torch; default per vendor: Apple torch==2.13.0, AMD the "
-                        "hash-pinned ROCm 6.4.1 cp312 wheels, NVIDIA none (the image's torch)")
+                   help="pip spec for torch; default per vendor: Apple torch==2.13.0, AMD "
+                        "torch==2.13.0+rocm7.1 (PyTorch ROCm 7.1 index; 2026-10-13 fairness "
+                        "audit, was 2.6.0+rocm6.4.1), NVIDIA torch==2.13.0+cu129")
     p.add_argument("--torch-index-url", default=None)
     p.add_argument("--data-root", default=os.environ.get(
         "GBM_BENCH_DATA", os.path.join(os.path.expanduser("~"), "datasets", "gbm-bench")),

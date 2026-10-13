@@ -152,7 +152,10 @@ classical_arms_for() {
         # (classical_two_datasets.REFUSED_ARMS refuses it). Results raced before
         # this change were wrong for these lanes; apply extra scrutiny.
         kmeans|knn)     echo "ours,cuml-gpu" ;;
-        pca)            echo "ours,cuml-gpu,torch-gpu" ;;
+        # FAIRNESS FIX (2026-10-13 audit): pca's torch-gpu arm was harness-written (a covariance
+        # eigh from torch ops), not a library opponent; pca races cuML only. Results raced before
+        # this change were wrong for this lane; apply extra scrutiny.
+        pca)            echo "ours,cuml-gpu" ;;
         # FAIRNESS FIX (2026-10-13 audit): the OLS torch arms are harness-written, not
         # opponents (classical_two_datasets.REFUSED_ARMS). Results raced before this change
         # were wrong for this lane; apply extra scrutiny.

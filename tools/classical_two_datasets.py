@@ -206,7 +206,11 @@ ARMS = {
     # boxes, so those races have no GPU opponent there. Results raced before
     # this change were wrong for this lane; apply extra scrutiny.
     "kmeans": ("ours", "cuml-gpu", "sklearn-cpu"),
-    "pca": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
+    # FAIRNESS FIX (2026-10-13 audit): pca's torch-gpu arm (TorchPCA) is harness code, a
+    # covariance eigh written from torch ops, not a library's PCA, and was raced as an opponent.
+    # It is removed from the roster and refused (REFUSED_ARMS). Results raced before this change
+    # were wrong for this lane; apply extra scrutiny.
+    "pca": ("ours", "cuml-gpu", "sklearn-cpu"),
     # FAIRNESS FIX (2026-10-13 audit): torch-gpu and torch-gpu-eigh are OLS written by this
     # harness from torch primitives (TorchOLS, TorchOLSEigh), not a library's estimator; they
     # are no longer opponents (REFUSED_ARMS). Results raced before this change were wrong for
@@ -255,6 +259,12 @@ REFUSED_ARMS = {
                           "ops (torch.cdist plus topk per query chunk), not a library's "
                           "implementation; no library GPU kNN is installed on AMD or Apple, so "
                           "those races have no GPU opponent",
+    # FAIRNESS FIX (2026-10-13 audit): pca's torch-gpu arm was raced as an opponent; it is a
+    # covariance eigh this harness wrote (TorchPCA). Results raced before this change were wrong
+    # for this lane; apply extra scrutiny.
+    ("pca", "torch-gpu"): "harness-written: PCA assembled by this harness from torch ops (mean, "
+                          "xc.T @ xc, torch.linalg.eigh); torch has no PCA estimator of this "
+                          "algorithm (torch.pca_lowrank is randomized, a different algorithm)",
 }
 BLOCK_OF = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
             "kde": "kde", "svc": "svc", "dbscan": "dbscan", "hdbscan": "dbscan"}
@@ -361,9 +371,14 @@ CONFIG = {
                   "svd_solver='covariance_eigh'",
         "timed": "fit",
         "mismatches": [
-            "svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'",
-            "torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it "
-            "draws nothing)",
+            "svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full' (cuML's "
+            "COV_EIG_DQ: the eigendecomposition of the covariance, ours' algorithm)",
+            # FAIRNESS FIX (2026-10-13 audit): torch-gpu was a harness-written covariance eigh
+            # raced as an opponent; it is refused (TorchPCA). Results raced before this change
+            # were wrong for this lane; apply extra scrutiny.
+            "torch-gpu: refused (fairness audit 2026-10-13): torch has no PCA estimator of this "
+            "algorithm; the old arm was a covariance eigh our harness wrote from torch ops, not "
+            "an opponent (torch.pca_lowrank is a randomized method, a different algorithm)",
             "random_state is read by none of the covariance solvers; set to 7 on every arm",
         ],
     },
@@ -1516,32 +1531,18 @@ class TorchKMeans:
 
 
 class TorchPCA:
+    """REFUSED. FAIRNESS FIX (2026-10-13 audit): this arm was a covariance eigh our harness wrote
+    from torch ops (mean, xc.T @ xc, torch.linalg.eigh), raced as the torch-gpu PCA opponent. An
+    opponent must be a library's own implementation through its public API; torch has no PCA
+    estimator of this algorithm (torch.pca_lowrank is randomized, a different algorithm). The arm
+    is out of the pca roster, race() drops it by name (REFUSED_ARMS), and a worker started for it
+    refuses here. Results raced before this change were wrong for this lane; apply extra
+    scrutiny."""
+    REFUSED = ("REFUSED (fairness audit 2026-10-13): torch-gpu pca was harness-written (a "
+               "covariance eigh from torch ops), not a library opponent")
+
     def __init__(self, data, rec):
-        self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"]})
-        self.x = t["X"]
-        self.info["config"] = "mean; xc = x - mean; cov = xc.T @ xc / (n - 1); torch.linalg.eigh(cov); top 8"
-        self.components = self.ev = self.mean = None
-        self.params_obj = {"__library__": "torch", "seed": SEED, "n_components": PCA_COMPONENTS,
-                           "svd_solver": "covariance_eigh", "whiten": False}
-
-    def call(self):
-        torch = self.torch
-        x = self.x
-        mean = x.mean(dim=0)
-        xc = x - mean
-        cov = (xc.T @ xc) / float(x.shape[0] - 1)
-        evals, evecs = torch.linalg.eigh(cov)
-        self.components = evecs[:, -PCA_COMPONENTS:].flip(1).T.contiguous()
-        self.ev = evals[-PCA_COMPONENTS:].flip(0)
-        self.mean = mean
-
-    def sync(self):
-        _torch_sync()
-
-    def outputs(self):
-        return {"components": _to_host(self.components).astype(np.float32),
-                "explained_variance": _to_host(self.ev).astype(np.float32),
-                "mean": _to_host(self.mean).astype(np.float32)}
+        raise RuntimeError(self.REFUSED)
 
 
 class TorchOLS:
