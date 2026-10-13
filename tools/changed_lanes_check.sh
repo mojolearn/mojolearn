@@ -2,20 +2,17 @@
 # changed_lanes_check.sh <outdir> <column>
 #
 # THE CHANGED LANES, CHECKED WHERE THE BINDINGS WERE JUST BUILT (Andrew, 2026-10-13: fold light
-# verification of what changed into compiling, so a release needs no separate GPU rental for
-# re-records). Runs in a BUILT tree (every binding of <column> built in python/mojolearn/), once:
+# verification of what changed into compiling). Runs in a BUILT tree (the bindings of <column> built in
+# python/mojolearn/), once: `python -m mojolearn verify --lanes <changed lanes> --json` on <column>, the
+# default fixture, one run, against the table committed in this tree, then one line per lane
+# (tools/changed_lanes_summary.py): VERIFIED, DIVERGENT with the first differing cell's hashes, or
+# NO-REFERENCE. On the Mac, tools/mac_changed_lanes.sh runs it for Metal and the CPU column after a
+# compile. Apple and host digests are recorded, never required (identity is NVIDIA == AMD; those
+# columns are recorded through lq, tools/record_changed_lanes.sh). A changed lane reads DIVERGENT
+# against the old table whenever its bits moved; that is information, never a reason to rerun.
 #
-#   1. RECORD_LABEL set (the release's NVIDIA and AMD build legs): one identity record of the changed
-#      lanes, `LANES=<lanes> REPEATS=1 tools/record_identity_column.sh <label> <outdir>/record`, which
-#      tools/release.py's identity-admit step admits at home (NVIDIA == AMD, 0 conflicts);
-#   2. `python -m mojolearn verify --lanes <lanes> --json` on <column>, the default fixture, one run,
-#      against the table committed in this tree;
-#   3. one line per lane (tools/changed_lanes_summary.py): VERIFIED, DIVERGENT with the first differing
-#      cell's hashes, or NO-REFERENCE. Before the admit, a changed lane reads DIVERGENT against the old
-#      table whenever its bits moved; that is what the record is for, never a reason to rerun.
-#
-#   <outdir>   absolute, outside the tree; created. Writes summary.txt (appended), verify-<column>.json
-#              and .log, lanes-<column>.txt, record/ (with RECORD_LABEL)
+#   <outdir>   absolute; created. Writes summary.txt (appended), verify-<column>.json and .log,
+#              lanes-<column>.txt
 #   <column>   cuda | hip | metal | cpu   (cpu sets MOJOLEARN_VENDOR=cpu: the host column)
 #
 # Environment:
@@ -23,12 +20,11 @@
 #                    --scope routine --backend <column>` (needs git history; honors
 #                    MOJOLEARN_RELEASE_BUILD_ONLY through tools/lane_select.py). Empty or `none`:
 #                    prints NOTHING-CHANGED and exits 0
-#   RECORD_LABEL=x   also record (step 1); nvidia-*/amd-* labels only
 #   PYTHON=...       the interpreter (default: the tree's .pixi default env python, else python3)
-#   CPU_THREADS=3    verify --cpu-threads and the record's thread pools
+#   CPU_THREADS=3    verify --cpu-threads
 #
 # Exit: 0 when every step ran (whatever the verdicts say; the summary carries them), 1 when a step could
-# not run (no report, no record). Never compiles, never rents, never reruns: identity runs ONCE.
+# not run (no lane list, no report). Never compiles, never rents, never reruns: identity runs ONCE.
 set -uo pipefail
 
 die() { echo "changed_lanes_check: $*" >&2; exit 2; }
@@ -65,18 +61,7 @@ n=$(tr ',' '\n' <<< "$LANES" | grep -c .)
 echo "# changed lanes on $COL: $n (list $OUT/lanes-$COL.txt)"
 rc=0
 
-# --- 1. the record (GPU build legs) ------------------------------------------------
-if [ -n "${RECORD_LABEL:-}" ]; then
-    case $RECORD_LABEL in nvidia-*|amd-*) ;; *) die "RECORD_LABEL $RECORD_LABEL: only nvidia-* or amd-* columns are recorded here" ;; esac
-    LANES="$LANES" REPEATS=1 CPU_THREADS="$T" PYTHON="${PY[*]}" \
-        bash tools/record_identity_column.sh "$RECORD_LABEL" "$OUT/record" > "$OUT/record.log" 2>&1
-    rrc=$?
-    line=$(grep -m 1 '^RECORDED' "$OUT/record.log" | cut -c1-300)
-    echo "CHANGED-LANES-RECORD column=$COL label=$RECORD_LABEL rc=$rrc ${line:-NO RECORDED LINE (see $OUT/record.log)}" | tee -a "$SUMMARY"
-    [ $rrc = 0 ] || rc=1
-fi
-
-# --- 2. verify against the committed table ---------------------------------------------
+# --- verify against the committed table ---------------------------------------------
 venv=(env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python")
 [ "$COL" = cpu ] && venv+=(MOJOLEARN_VENDOR=cpu)
 "${venv[@]}" "${PY[@]}" -m mojolearn verify --lanes "$LANES" --json --cpu-threads "$T" \
@@ -84,7 +69,7 @@ venv=(env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python")
 vrc=$?
 echo "# verify --lanes ($n) on $COL exited $vrc (log $OUT/verify-$COL.log)"
 
-# --- 3. one line per lane ----------------------------------------------------------------
+# --- one line per lane ----------------------------------------------------------------
 "${PY[@]}" tools/changed_lanes_summary.py "$OUT/verify-$COL.json" --column "$COL" --lanes "$LANES" --out "$SUMMARY" \
     || rc=1
 exit $rc

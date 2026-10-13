@@ -166,6 +166,13 @@ SELECTION_MACHINERY = (
     os.path.join("tools", "lane_map_import_graph.py"),
     os.path.join("tools", "tests", "test_lane_map_import_graph.py"),
     os.path.join("tools", "bincache.py"),
+    # The changed-lanes checks (2026-10-13): they list the changed lanes, print the lq lines that record them
+    # and summarize a verify report; they run lanes through the public CLI and the record script, never inside one.
+    os.path.join("tools", "record_changed_lanes.py"),
+    os.path.join("tools", "changed_lanes_check.sh"),
+    os.path.join("tools", "changed_lanes_summary.py"),
+    os.path.join("tools", "mac_changed_lanes.sh"),
+    os.path.join("tools", "test_changed_lanes_summary.py"),
 )
 
 #: FILES THE HARNESS IMPORTS WHILE IT RECORDS A COLUMN. `lane_applicability.py`
