@@ -1148,9 +1148,16 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                     rebuilt = sha256(target) if target.is_file() else None
                     got = extract_member(z, r["archive_path"], target, want)
                     if rebuilt is not None and rebuilt != got:
-                        raise SystemExit(f"release_reuse: the {key} leg built host binding {r['name']} with bytes "
-                                         f"{rebuilt[:12]}, the published copy is {got[:12]}, and its identity is "
-                                         "unchanged. A host build must reproduce; find the cause.")
+                        # RELEASE OWNER OVERRIDE (Andrew 2026-10-13): as for the GPU rows above, a host row reused only
+                        # because it is not in MOJOLEARN_RELEASE_BUILD_ONLY has a changed source closure, so the leg's
+                        # rebuild differs; the published bytes ship with a note. A truly unchanged host row must reproduce.
+                        if not str(r.get("reason", "")).startswith("release owner:"):
+                            raise SystemExit(f"release_reuse: the {key} leg built host binding {r['name']} with bytes "
+                                             f"{rebuilt[:12]}, the published copy is {got[:12]}, and its identity is "
+                                             "unchanged. A host build must reproduce; find the cause.")
+                        say(f"  NOTE {key} host {r['name']}: the leg's build differs ({rebuilt[:12]}); the published "
+                            f"bytes {got[:12]} are packed (reused by the release owner's MOJOLEARN_RELEASE_BUILD_ONLY; "
+                            "its source changed)")
                     reused[r["set_rel"]] = dict(sha256=got, archive_path=r["archive_path"], identity_digest=r["identity_digest"],
                                                 rebuilt_sha256=rebuilt)
                 elif not target.is_file():
