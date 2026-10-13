@@ -93,7 +93,7 @@ order exists to define), `lm_center` and `lm_scale_rows` (one binary32 operation
 cell, subnormal operands and results flushed), on the device on a GPU install and over
 the same items on the CPU column. The OLS/ridge bits moved with it.
 `ensemble.py` routes the sigmoid of every tier through the existing `gbdt_sigmoid`
-binding (fast/deterministic predict_proba bits move; IDENTICAL does not).
+binding (fast predict_proba bits move; IDENTICAL does not).
 `randomforest.py` computes `max_features='log2'` from `math.log2` in float64 and then
 passes the resulting integer feature count in the params slot if the kernel accepts a
 count, else keeps the fraction and records DEVIATION 2304 with the boundary case.

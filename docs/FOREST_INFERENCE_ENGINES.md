@@ -5,7 +5,7 @@ trained forest can now be evaluated with either inference algorithm:
 
 | `inference_engine` | Execution and arithmetic |
 | --- | --- |
-| `auto` (default) | `parallel_groves` in FAST; `sequential` in DETERMINISTIC and IDENTICAL. |
+| `auto` (default) | `parallel_groves` in FAST; `sequential` in IDENTICAL. |
 | `sequential` | Existing host traversal. Each row accumulates trees in increasing tree order, then divides by the tree count. |
 | `parallel_groves` | Shared GPU traversal for RF and ET. Rows, output components and 32 fixed tree groups run in parallel. Each group accumulates trees g, g+32, ...; a fixed 16/8/4/2/1 reduction combines the groups before division. |
 

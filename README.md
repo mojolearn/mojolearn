@@ -94,14 +94,12 @@ verifier.
 ## Numeric modes
 
 `identical` is the default. On Apple GPUs, `fast` is an opt-in for most
-families; it is not offered on NVIDIA, AMD or the CPU. Gradient boosting, random
-forests and Extra Trees also offer `deterministic`. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
+families; it is not offered on NVIDIA, AMD or the CPU. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
 the table by family.
 
 | mode | contract |
 |---|---|
 | `identical` | The same bits on Apple, NVIDIA and AMD GPUs within one release. Apple FAST is a separate mode and does not relax this requirement. |
-| `deterministic` | The same bits on repeated runs on one device. |
 | `fast` | Apple GPUs only: throughput, with no repeatability promise. |
 
 The `identical` contract is across hardware within one release. mojolearn is

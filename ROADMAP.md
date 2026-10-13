@@ -41,7 +41,7 @@ the [support matrix](SUPPORT_MATRIX.md) and [identity paths](IDENTITY_PATHS.md).
   training API beyond experimental status, and extend multi-GPU execution
   plans to more estimators with a placement check for each.
 - **Algorithm breadth.** New estimators enter in the `identical` mode and
-  join the verifier when they land. The `fast` and `deterministic` modes stay
+  join the verifier when they land. The `fast` mode stays
   limited to the tree learners.
 - **Verifier usability.** Quicker checks, clearer coverage reports, and
   a verifier that states exactly what an installed wheel has and has not

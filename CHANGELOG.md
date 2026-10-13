@@ -4,6 +4,7 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- The `deterministic` numeric mode has been removed; use `identical`.
 - Correct the IDENTICAL verifier: Apple, NVIDIA and AMD must use the same reference hashes.
   Remove the Apple-only lookup introduced in 0.8.43 and restore Apple participation in reference
   conflicts and corroboration. Apple FAST has no identity promise; it does not exempt IDENTICAL.

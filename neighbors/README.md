@@ -25,8 +25,8 @@ pixi run mojo build -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
 “Opt-in” means supplying these defines explicitly. Omit either define to
 disable that optimization: these are presence flags, so `=0` still enables
 them. An environment variable alone does not add a compiler define, and
-released Python wheels are not changed by these source-build flags. FAST and
-DETERMINISTIC ignore the two optimizations. The IDENTICAL flag remains the
+released Python wheels are not changed by these source-build flags. FAST
+ignores the two optimizations. The IDENTICAL flag remains the
 arithmetic contract; the optimization flags must preserve its output bits.
 
 The adversarial gate exercises non-dyadic values, duplicate rows, large

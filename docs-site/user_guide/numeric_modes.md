@@ -1,6 +1,6 @@
 # Numeric modes
 
-Every mojolearn computation runs under one of three numeric modes. The mode is a promise about the
+Every mojolearn computation runs under one of two numeric modes. The mode is a promise about the
 output bits, not a different algorithm: the estimator, its hyperparameters and its API are the same in
 every mode.
 
@@ -9,8 +9,9 @@ every mode.
 | Mode | Promise |
 |---|---|
 | `identical` | The default. The same output bits for the same release, input bytes, model state, settings and supported configuration on Apple, NVIDIA and AMD GPUs. |
-| `deterministic` | Repeated runs on the same device and build return the same bits. No promise across vendors. |
 | `fast` | Apple GPUs only. Tuned for throughput. No identity or repeatability promise. |
+
+The `deterministic` numeric mode has been removed; use `identical`.
 
 The identity requirement applies equally to Apple, NVIDIA and AMD. An Apple mismatch is a bug to
 fix, not a separate passing reference. Apple FAST does not change the IDENTICAL contract.
@@ -26,16 +27,16 @@ Three things to know about `identical`:
 
 ## Which families offer which mode
 
-`identical` is available everywhere. `deterministic` is offered only by the three tree learners.
+`identical` is available everywhere.
 
-| Family | `identical` | `deterministic` | `fast` |
-|---|---|---|---|
-| Gradient boosting | yes | yes | Apple GPUs |
-| Random forests | yes | yes | Apple GPUs |
-| Extra Trees | yes | yes | Apple GPUs |
-| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | no | Apple GPUs |
-| Neural networks, GPU surface (`LanguageModelTrainer`, `TransformerBlock`, Mamba blocks, `SambaStack`, `SmallMLPTrainer`, `Embedding`, linalg GEMMs) | yes | no | Apple GPUs |
-| Every other family | yes | no | Apple GPUs |
+| Family | `identical` | `fast` |
+|---|---|---|
+| Gradient boosting | yes | Apple GPUs |
+| Random forests | yes | Apple GPUs |
+| Extra Trees | yes | Apple GPUs |
+| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | Apple GPUs |
+| Neural networks, GPU surface (`LanguageModelTrainer`, `TransformerBlock`, Mamba blocks, `SambaStack`, `SmallMLPTrainer`, `Embedding`, linalg GEMMs) | yes | Apple GPUs |
+| Every other family | yes | Apple GPUs |
 
 `fast` is opt-in and runs on Apple GPUs only. Every CPU binding runs in `identical` mode only (see
 [Devices and the CPU](devices.md)). The full table is in the [support matrix](../notes/support_matrix.md).
@@ -46,16 +47,16 @@ There are three ways to choose a mode. A narrower choice overrides a wider one.
 
 | Scope | How |
 |---|---|
-| Process, before import | `MOJOLEARN_NUMERIC_MODE=deterministic` (or `identical`, or `fast` on Apple GPUs) in the environment |
-| Process, at runtime | `mojolearn.set_numeric_mode("deterministic")`, which returns the previous mode |
+| Process, before import | `MOJOLEARN_NUMERIC_MODE=identical` (or `fast` on Apple GPUs) in the environment |
+| Process, at runtime | `mojolearn.set_numeric_mode("fast")`, which returns the previous mode |
 | One estimator | `numeric_mode=` on estimators whose constructor has it |
 
 ```python
 import mojolearn
 
 print(mojolearn.numeric_mode())                  # "identical" unless you changed it
-previous = mojolearn.set_numeric_mode("deterministic")
-# ... work under deterministic ...
+previous = mojolearn.set_numeric_mode("fast")
+# ... work under fast ...
 mojolearn.set_numeric_mode(previous)             # restore
 ```
 
@@ -86,15 +87,9 @@ loaded rather than from the string you passed. Record it alongside results.
 ## Refusals
 
 Asking a family for a mode it does not ship raises a `ValueError` that names the binding and the
-missing mode. mojolearn never runs a weaker mode in its place. For example, a neural or classical
-estimator asked for `deterministic` refuses with a message like:
+missing mode. mojolearn never runs a weaker mode in its place.
 
-```text
-mojolearn: <binding> has no 'deterministic' tier. ... Drop numeric_mode= (identical is the default)
-or pass numeric_mode='identical'.
-```
-
-An unknown mode name raises `ValueError("numeric_mode must be fast, deterministic, identical or None")`.
+An unknown mode name raises `ValueError("numeric_mode must be fast, identical or None")`.
 The verifier also refuses to run under `fast` (see [Verify on your hardware](verify.md)).
 
 ## Numeric profiles
@@ -119,7 +114,5 @@ never changes the mode. See [Runtime and numeric modes](../api/runtime.rst).
   person can reproduce on other supported hardware with the same release.
 - **On Apple GPUs, explore in `fast`**, for example during hyperparameter search, then rerun the
   configuration you keep in `identical`.
-- **Use `deterministic`** for the tree learners when run-to-run repeatability on one machine is all
-  you need and you do not need agreement across vendors.
 - Record `mojolearn.__version__`, `numeric_mode_used()`, `mojolearn.vendor()` and
   `mojolearn.gpu_arch()` with any result you intend to compare.

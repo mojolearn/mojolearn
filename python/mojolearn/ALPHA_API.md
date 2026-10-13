@@ -6,9 +6,9 @@ numeric tier. A Python export alone does not qualify an installed wheel or
 establish cross-vendor bitwise identity. There is no CPU fallback.
 
 Tiers (DEVIATION 2490, 0.8.0): `_mojolearn_gbdt`, `_mojolearn_rf` and
-`_mojolearn_trees` ship `fast`, `deterministic` and `identical`. Every other
+`_mojolearn_trees` ship `fast` and `identical`. Every other
 extension in this table ships `identical` only; passing `numeric_mode="fast"`
-or `"deterministic"` to those components, or importing under
+to those components, or importing under
 `MOJOLEARN_NUMERIC_MODE=fast`, raises by name.
 
 | Component | Public import | Native extension | Implemented scope |

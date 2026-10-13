@@ -12,7 +12,7 @@ state, not trainable estimator or complete language-model APIs.
 | Mamba 2 | implemented | implemented | implemented | all ten public prefill leaves; explicit incoming-state gradient; decode/window backward unsupported |
 | Mamba 3 | implemented | implemented | implemented | all ten public prefill leaves; decode/window backward unsupported |
 
-All forward families expose `fast`, `deterministic`, and `identical` builds.
+All forward families expose `fast` and `identical` builds.
 FAST is allowed to differ from the IDENTICAL oracle; recording that difference
 is not a FAST failure. Cross-vendor claims require matching cards from a named
 commit and configuration.

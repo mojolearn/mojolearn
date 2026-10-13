@@ -46,22 +46,21 @@ architecture: 0.8.41's NVIDIA package carries `sm_89` only (see the table above)
 | Mode | Contract |
 |---|---|
 | `identical` | The default. For the same release, inputs and supported configuration, raw result bits must match across Apple Metal, NVIDIA CUDA and AMD HIP. Apple has no separate acceptable reference hash. CPU host-binding coverage is documented per API. |
-| `deterministic` | Repeated execution on the same device and build returns the same bits. No cross-vendor promise. |
 | `fast` | Apple GPUs only. Performance oriented; no repeatability or cross-vendor promise. |
 
-| Family | `identical` | `deterministic` | `fast` |
-|---|---|---|---|
-| Gradient boosting | yes | yes | Apple only (opt-in) |
-| Random Forest | yes | yes | Apple only (opt-in) |
-| Extra Trees | yes | yes | Apple only (opt-in) |
-| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | no | Apple only (opt-in) |
-| Neural networks, GPU surface (LanguageModelTrainer, TransformerBlock, Mamba1/2/3Block, SambaStack, SmallMLPTrainer, Embedding, linalg GEMMs) | yes | no | Apple only (opt-in) |
-| Every other family (the rest of classical ML and the expansion lanes) | yes | no | Apple only (opt-in) |
+| Family | `identical` | `fast` |
+|---|---|---|
+| Gradient boosting | yes | Apple only (opt-in) |
+| Random Forest | yes | Apple only (opt-in) |
+| Extra Trees | yes | Apple only (opt-in) |
+| Other tree models (decision trees, AdaBoost, random-trees embedding, isolation forest) | yes | Apple only (opt-in) |
+| Neural networks, GPU surface (LanguageModelTrainer, TransformerBlock, Mamba1/2/3Block, SambaStack, SmallMLPTrainer, Embedding, linalg GEMMs) | yes | Apple only (opt-in) |
+| Every other family (the rest of classical ML and the expansion lanes) | yes | Apple only (opt-in) |
 
 Select a process mode with `mojolearn.set_numeric_mode(...)` or the
 `MOJOLEARN_NUMERIC_MODE` environment variable. Estimators that accept
 `numeric_mode=` override the process mode per call. Asking a
-family for a mode it does not ship (only the tree learners ship `deterministic`)
+family for a mode it does not ship
 raises a named error rather than returning something weaker.
 
 `identical` is a claim about certified fixtures and configurations, not about

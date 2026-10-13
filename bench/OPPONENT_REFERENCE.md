@@ -1118,7 +1118,7 @@ step on the same VM.
 - Aug 26 and Aug 27 H100 forest legs: 3 rounds, and three different driver
   builds across what reads as one campaign (580.159.04, 580.126.09,
   580.126.20). The Aug 28 030908 leg is the row.
-- Our own FAST or DETERMINISTIC arms, on any vendor.
+- Our own FAST arms, on any vendor.
 
 ## How to add a row
 

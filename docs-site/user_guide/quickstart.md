@@ -38,7 +38,7 @@ clf = RandomForestClassifier(n_estimators=100).fit(X, y)
 `identical` is the default. Select another mode for the process or per call:
 
 ```python
-previous = mojolearn.set_numeric_mode("deterministic")   # returns the previous mode
+previous = mojolearn.set_numeric_mode("fast")            # returns the previous mode
 mojolearn.set_numeric_mode("identical")                  # back to the default
 ```
 

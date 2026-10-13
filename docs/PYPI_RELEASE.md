@@ -45,7 +45,7 @@ The release may contain:
 - optionally one prebuilt Linux x86-64 wheel carrying CUDA and HIP sets.
 
 There is no sdist. Each wheel contains the requested numeric-mode sets; normal
-releases carry FAST, DETERMINISTIC, and IDENTICAL. The extension inventory is
+releases carry FAST and IDENTICAL. The extension inventory is
 15 per mode and is checked mechanically by `packaging/check_ext_lists.py`.
 
 ## 1. Prepare the source state
