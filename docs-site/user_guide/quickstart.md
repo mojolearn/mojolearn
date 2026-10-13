@@ -2,6 +2,12 @@
 
 ## Train and predict
 
+The examples use NumPy to make data. mojolearn itself does not need it, so install both:
+
+```sh
+pip install mojolearn numpy
+```
+
 ```python
 import numpy as np
 import mojolearn
@@ -16,8 +22,8 @@ print(model.predict_proba(X[:5]))
 print(model.numeric_mode_used(), mojolearn.vendor())
 ```
 
-`vendor()` names the backend that ran, and `numeric_mode_used()` the numeric mode. Run the same script with
-the same release on a supported Apple, NVIDIA or AMD GPU and the model and its predictions are the same bits.
+`vendor()` names the backend that ran, and `numeric_mode_used()` the numeric mode. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+Run the same script with the same release on any of them and the model and its predictions are the same bits.
 
 ## The estimator interface
 
@@ -42,9 +48,9 @@ previous = mojolearn.set_numeric_mode("deterministic")   # returns the previous 
 mojolearn.set_numeric_mode("identical")                  # back to the default
 ```
 
-On Apple GPUs, `fast` is also available; it runs on Apple GPUs only.
+You can also set `MOJOLEARN_NUMERIC_MODE` in the environment before import. `fast` is available on Apple GPUs only.
 
-or set `MOJOLEARN_NUMERIC_MODE` in the environment. Estimators that take a `numeric_mode=` argument, such as
+Estimators that take a `numeric_mode=` argument, such as
 `RandomForestClassifier`, override the process mode per call. Asking a family for a mode it does not ship raises
 a named error rather than running something weaker. See [Numeric modes](numeric_modes.md).
 

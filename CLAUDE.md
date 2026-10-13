@@ -73,7 +73,7 @@ The orchestrator saves every lane brief as `~/mojolearn-evidence/briefs-<date>/<
 ## GPU rules (summary; the plans in docs/plans/ have the details)
 
 - The GPU path is GPU only and parallel. No host steps inside a GPU fit, transform or predict, and no serial one-thread, one-block or per-sample default.
-- (IDENTICAL) Same bits on NVIDIA and AMD, within one version (Andrew, 2026-10-07: identity is required across the two GPU vendors only; Apple and host digests are recorded, never required). Identity is decided by the output hash each measurement run already stores: equal on NVIDIA and AMD means identical. Bits may change between versions: when a parallel kernel needs a different fold order, change the order on every vendor and in the host column together. Never keep a serial chain to preserve old bits.
+- (IDENTICAL) Same bits on Apple, NVIDIA and AMD, within one version (Andrew, 2026-10-13: Apple IDENTICAL works and must match NVIDIA and AMD; this replaces the 2026-10-07 two-vendor rule). Identity is decided by the output hash each measurement run already stores: equal on Apple, NVIDIA and AMD means identical. Host digests are recorded, not required. Bits may change between versions: when a parallel kernel needs a different fold order, change the order on every vendor and in the host column together. Never keep a serial chain to preserve old bits.
 - **FAST mode needs no identical anything.** Not the same bits across vendors, not the same bits as arm A, not the same digests run to run, not an exact match with IDENTICAL. FAST is judged on two things only: speed, and quality that does not go down. The board's quality metric (AUC, recall, error, trustworthiness, inertia, p-value, ...) must show no material drop against FAST main (arm A), and must be at least as good as the best opponent's. A FAST candidate is never held for a noise-level metric change, a different fold order or different bits. It is held for any real quality loss against FAST main or the opponent. The same-bits rules above apply to IDENTICAL only.
 - **NO PYTHON COMPUTE IN THE RUNTIME, EVER.** Python is only the public API surface: argument checks, routing, and calling compiled Mojo. No arithmetic on data, no loops or comprehensions over values, no NumPy math, no per-element work in Python at runtime, not even for a handful of values. Every computed number (including small ones like criteria, penalties and statistics) comes from Mojo, on the GPU for GPU paths. If a value is missing, add it to the Mojo kernel; never patch it in Python. The no-host-routes push hook enforces this.
 - Never time a CPU or host route. The CPU is for verification digests, CPU-only installs and inference.
@@ -104,7 +104,7 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 2. IDENTICAL switches are decided by NVIDIA and AMD together: the verdict is the AVERAGE of the two vendors' ratios against the
    average noise floor (Andrew, 2026-10-08: "the average of the two must be better"); a vendor pulling the other way is flagged
    on the cell (vendor split) but does not block the average. Apple never votes on IDENTICAL switches and IDENTICAL is never
-   tuned for Apple; Apple digests are recorded but not required to match (2026-10-07).
+   tuned for Apple; Apple IDENTICAL digests must still match NVIDIA and AMD (correctness, not a vote; 2026-10-13).
 3. Measure IDENTICAL on NVIDIA, AMD and Apple and update every board (main board included) as results land, through the
    board tools only. A full-board run is IDENTICAL on the three; FAST is not rerun.
 4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.
@@ -139,3 +139,12 @@ and no change may add one.
 - `fast` is Apple only. Docs never offer `fast` on NVIDIA, AMD or the CPU.
 - The 162M two-route model is research and marketing material (mlsys paper, mojolearn.org), not library
   documentation: it never appears in docs-site or the library docs.
+
+Additions (Andrew, 2026-10-13):
+- Public docs state the contract in one sentence, verbatim: "In `identical` mode, mojolearn returns the same bits on Apple,
+  NVIDIA and AMD GPUs." Every `numeric_mode` doc that lists `'fast'` says Apple only.
+- Omit, never caveat: no "Known defect" or other status notes, no all-caps IDENTICAL/FAST asides (write `identical`/`fast`),
+  no "NOT IMPLEMENTED" in docstrings. Excluded or unverified names (`docs-site/api_exclude.txt`) and unverified features
+  never appear in public docs, the README or the site.
+- We are alpha: no enterprise-grade checks. The docs, mojolearn.org and the measurements are generated from the latest
+  origin/main by one publish command, run only when Andrew says so. Old URLs may break; no redirects.

@@ -2,13 +2,9 @@
 
 ## What `identical` promises
 
-Run the same mojolearn release on the same input bytes, model state and settings, in a supported
-configuration, and Apple, NVIDIA and AMD GPUs must return the same output bits. That covers predictions, fitted
-models, training updates and saved checkpoints. A differing Apple hash is an IDENTICAL failure,
-even if it matches an older Apple recording.
-
-Apple FAST is a separate mode with no cross-vendor bitwise guarantee. It does not weaken
-Apple IDENTICAL. CPU execution and its supported configurations are documented per API.
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. That holds for the same release, input bytes, model state and settings in a supported
+configuration, and covers predictions, fitted models, training updates and saved checkpoints. Every release
+checks the Apple, NVIDIA and AMD results against each other before it ships.
 
 `identical` is the default numeric mode. See [Numeric modes](../user_guide/numeric_modes.md) for the others.
 

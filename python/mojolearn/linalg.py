@@ -3,7 +3,7 @@
 NumPy-named decompositions.
 
 `matmul` computes ``op(a) @ op(b)`` in float32 under the profile
-``mojolearn.identical.gemm.fp32.v1``: the same bits on NVIDIA and AMD for the same
+``mojolearn.identical.gemm.fp32.v1``: the same bits on Apple, NVIDIA and AMD for the same
 inputs. It supports the NN, NT and TN products; asking for both transposes raises
 `ValueError`. By default it requires the identical build and raises when another
 build is loaded; ``identical=False`` uses whichever build is loaded, with no

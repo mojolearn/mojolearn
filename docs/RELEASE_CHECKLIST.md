@@ -861,19 +861,21 @@ python3 -m venv /tmp/v && /tmp/v/bin/pip install mojolearn==<version> \
 Run it on a Linux GPU box and on a Mac. Both wheels are listed at
 https://pypi.org/project/mojolearn/#files.
 
-## 7. Publish the docs (docs.mojolearn.org)
+## 7. Publish the docs and the site (docs.mojolearn.org, mojolearn.org)
 
-After the macOS wheel is on PyPI, build the docs against it (on this Mac; nothing runs a model):
+After the macOS wheel is on PyPI, run the one command (on this Mac; nothing runs a model):
 
 ```sh
-~/mojolearn-evidence/docs-venv/bin/pip install -q --upgrade "mojolearn==<version>"
-docs-site/tools/publish.sh            # api/*.rst regenerated; <version>/ and stable/ assembled
-(cd docs-site && npx wrangler deploy)
+tools/publish_sites.sh --dry-run   # optional: everything except the deploy
+tools/publish_sites.sh
 ```
 
-Commit any `docs-site/api/*.rst` changes the publish made. Older releases stay published under
-`/<version>/`. mojolearn.org needs no edit: its install picker reads the version and the vendor
-packages' architectures from PyPI.
+It builds from the latest origin/main of both repos in its own worktrees (your checkouts' state does not
+matter), documents the latest mojolearn on PyPI, regenerates measurements.json from the origin/main boards,
+builds both sites, deploys both with wrangler, and writes a build record (`/build.json` on each site:
+version, both commits, UTC time). Release facts are never hand-edited: versions, Python range and GPU
+architectures are filled from the release and PyPI on both sites, and the homepage numbers come from the
+boards. Only the current release is published; older docs URLs are not kept.
 
 
 ## Verifier-only wheel updates

@@ -9,6 +9,56 @@ copyright = "2026, Andrew Hendel"
 release = mojolearn.__version__
 version = release
 
+
+# Release facts the prose restates, filled in at build time so no page hand-types them: {{release}} is the
+# documented version; {{nvidia_arches}} / {{amd_arches}} (and *_examples) are the GPU architectures that
+# release's vendor packages ship, read from their PyPI summaries ("... binaries for mojolearn <version>
+# (<arch>, <arch>); ..." written by packaging/linux/pack_wheel.py), the same source mojolearn.org uses.
+# MOJOLEARN_DOCS_NVIDIA_ARCHES / MOJOLEARN_DOCS_AMD_ARCHES ("sm_89" or "a,b") override that for an offline build.
+ARCH_EXAMPLES = {
+    "sm_80": "A100, A30", "sm_86": "RTX 30, A40", "sm_89": "L40S, L40, L4, RTX 4090, RTX 6000 Ada",
+    "sm_90": "H100, H200", "sm_90a": "H100, H200", "sm_100": "B200", "sm_120": "RTX 50",
+    "gfx90a": "Instinct MI210, MI250X", "gfx942": "Instinct MI300X, MI325X", "gfx950": "Instinct MI350X, MI355X",
+    "gfx1100": "Radeon RX 7900",
+}
+
+
+def _shipped_arches(package, env):
+    import json
+    import os
+    import re
+    import urllib.request
+    if os.environ.get(env):
+        return [a.strip() for a in os.environ[env].split(",") if a.strip()]
+    url = f"https://pypi.org/pypi/{package}/{release}/json"
+    try:
+        with urllib.request.urlopen(url, timeout=20) as r:
+            summary = json.load(r)["info"]["summary"]
+    except Exception as e:
+        raise RuntimeError(f"conf.py: cannot read {url} ({e}); set {env} for an offline build") from e
+    m = re.search(r"mojolearn [0-9][^ ]* \(([^)]*)\)", summary)
+    if not m:
+        raise RuntimeError(f"conf.py: no architecture list in the {package} {release} summary: {summary!r}")
+    return [a.strip() for a in m.group(1).split(",") if a.strip()]
+
+
+def _facts():
+    facts = {"release": release}
+    for vendor, package in (("nvidia", "mojolearn-nvidia"), ("amd", "mojolearn-amd")):
+        arches = _shipped_arches(package, f"MOJOLEARN_DOCS_{vendor.upper()}_ARCHES")
+        facts[f"{vendor}_arches"] = ", ".join(f"`{a}`" for a in arches)
+        facts[f"{vendor}_examples"] = ", ".join(ARCH_EXAMPLES.get(a, a) for a in arches)
+    return facts
+
+
+FACTS = _facts()
+
+
+def _fill_facts(app, docname, source):
+    # Every page's source, before parsing: works in prose, tables and code blocks alike.
+    for key, value in FACTS.items():
+        source[0] = source[0].replace("{{" + key + "}}", value)
+
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
@@ -20,7 +70,8 @@ extensions = [
     "sphinx_sitemap",
 ]
 source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
-exclude_patterns = ["_build", "tools", "README.md"]
+exclude_patterns = ["_build", "_site", "site_root", "tools", "README.md"]
+templates_path = ["_templates"]
 myst_enable_extensions = ["colon_fence", "deflist"]
 myst_heading_anchors = 3
 
@@ -40,9 +91,9 @@ autosummary_filename_map = {f"mojolearn.{n}": f"mojolearn.{n}-module"
 #   from shared bases), but not the members that tuple or Exception supply.
 # - No "Bases:" line: the bases are mostly private helpers. autodoc reads any value of a flag option as on,
 #   False included, so the key is left out rather than set to False.
-# - _templates/autosummary/class.rst drops the __init__ block that repeated the class signature.
+# - _templates/autosummary/class.rst (templates_path above) drops the __init__ block that repeated the
+#   class signature.
 # - _ext/mojolearn_nav.py links API names on the guide pages and adds "See also" lines to class pages.
-templates_path = ["_templates"]
 autodoc_default_options = {"members": True, "inherited-members": "object,tuple,BaseException",
                            "exclude-members": "__init__"}
 import pathlib as _pathlib, sys as _sys  # noqa: E401,E402
@@ -91,10 +142,8 @@ html_theme_options = {
         {"name": "PyPI", "url": "https://pypi.org/project/mojolearn/", "icon": "fa-brands fa-python"},
     ],
     "navbar_align": "left",
-    # Version dropdown, like PyTorch's: tools/publish.sh writes /switcher.json listing every published release.
-    "switcher": {"json_url": "https://docs.mojolearn.org/switcher.json", "version_match": release},
-    "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
-    "check_switcher": False,
+    # One published release (the current one), so no version switcher.
+    "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "header_links_before_dropdown": 5,
     "show_toc_level": 2,
     "navigation_with_keys": False,
@@ -103,8 +152,13 @@ html_theme_options = {
 }
 html_context = {"default_mode": "auto"}
 html_show_sourcelink = False
-# Sitemap for search engines, under the stable/ alias so indexes point at the current release.
-html_baseurl = "https://docs.mojolearn.org/stable/"
+# Publish no page sources (_sources/); the build tooling also keeps doctrees and .buildinfo out of the output.
+html_copy_source = False
+# The site root is the current release (older releases are not kept).
+html_baseurl = "https://docs.mojolearn.org/"
+# Link previews: the same card as every mojolearn.org page (_templates/layout.html writes the og:/twitter: tags).
+html_context["share_image"] = "https://mojolearn.org/social-v3.png"
+html_context["share_description"] = "mojolearn documentation: install, user guide and API reference for reproducible GPU machine learning."
 sitemap_url_scheme = "{link}"
 
 
@@ -145,6 +199,7 @@ def _unlink_prose_types(app, doctree):
 
 
 def setup(app):
+    app.connect("source-read", _fill_facts)
     app.connect("autodoc-skip-member", _skip_member)
     app.connect("doctree-read", _unlink_prose_types)
 

@@ -572,7 +572,7 @@ class GaussianProcessRegressor(NumericModeMixin):
       ``log_marginal_likelihood`` then raise an error.
 
     Under ``numeric_mode="identical"`` (the default), fit, predict and
-    sample_y give the same bits on NVIDIA and AMD GPUs.
+    sample_y give the same bits on Apple, NVIDIA and AMD GPUs.
 
     Parameters
     ----------

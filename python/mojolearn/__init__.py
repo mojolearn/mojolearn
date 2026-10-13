@@ -3,12 +3,11 @@
 """GPU machine learning in Mojo with explicit numerical contracts.
 
 The same source tree targets Apple Metal, NVIDIA CUDA, and AMD HIP.
-``identical`` is the default mode and promises cross-vendor bit identity for
-configurations certified in the project's support matrix. Public estimator
-training generally requires a GPU; private CPU verifier paths are not a
-general-purpose CPU training API. Explicit CPU saved-model inference includes
-classical estimators, forests/boosting, neural blocks and loaded language models.
-Their supported configurations and qualification scope are documented per API.
+``identical`` is the default mode. In ``identical`` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+On a machine with no GPU, ``fit`` trains on the CPU for every estimator with a CPU binding and
+refuses by name otherwise, and saved models predict on the CPU: classical
+estimators, forests and boosting, neural blocks and loaded language models.
+Their supported configurations are documented per API.
 ``LanguageModelInference`` runs the byte-LM forward pass
 (docs/BYTE_LM_CPU_INFERENCE.md). ``LanguageModelHostTrainer`` runs one training
 step, forward, backward and the AdamW update
@@ -18,12 +17,10 @@ and the post-step parameters and both Adam moments. Both are one model profile
 at one batch shape; identity is claimed per shape, because the weight gradients
 contract over the token count.
 
-The tree and classical estimators additionally offer ``fast`` and
-``deterministic``. THE NEURAL SURFACE DOES NOT: ``TransformerBlock``, the
-Mamba blocks, the training ops and the byte LM build ``identical`` only,
-because their fused kernels are gated on the identical contract and the lower
-tiers ran the unfused path -- slower than the default, promising less. Asking
-for one raises. See ``_backend._IDENTICAL_ONLY``.
+The tree and classical estimators additionally offer ``fast`` (Apple GPUs
+only) and ``deterministic``. The neural surface (``TransformerBlock``, the
+Mamba blocks, the training ops and the byte LM) offers ``identical`` and, on
+Apple GPUs, ``fast``; asking it for another mode raises.
 
 The API uses familiar scikit-learn shapes but is not a drop-in replacement.
 Defaults may follow the mirrored GPU implementation, and unsupported behavior

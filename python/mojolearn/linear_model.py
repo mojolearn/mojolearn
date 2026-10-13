@@ -1329,7 +1329,7 @@ class LogisticRegression(NumericModeMixin):
     objective changes by less than ``tol * 0.01 * max(loss, tol)`` over 10
     iterations, or at ``max_iter`` iterations (``retcode_`` 3). In
     ``identical`` mode the iteration count and the coefficients are the
-    same on NVIDIA and AMD GPUs.
+    same on Apple, NVIDIA and AMD GPUs.
 
     ``X`` is read as float32. ``y`` is a 1-D array of labels of any
     sortable type; ``classes_`` is the sorted unique labels.

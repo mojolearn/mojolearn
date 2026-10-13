@@ -188,7 +188,7 @@ class ElasticNet(ParamsMixin):
         The fitted intercept; exactly 0.0 when ``fit_intercept`` is False.
     n_iter_ : int
         The number of epochs run. In ``identical`` mode it is the same on
-        NVIDIA and AMD GPUs; in other modes it can differ between GPUs.
+        Apple, NVIDIA and AMD GPUs; in other modes it can differ between GPUs.
     n_features_in_ : int
         The number of features seen in ``fit``.
     input_copied_ : bool

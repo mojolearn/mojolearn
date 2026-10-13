@@ -241,7 +241,7 @@ class MLPRegressor(_BaseMLP):
     max_fun : int, default 15000
         Accepted for compatibility (lbfgs only); unused.
     numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -355,7 +355,7 @@ class MLPClassifier(_BaseMLP):
     max_fun : int, default 15000
         Accepted for compatibility (lbfgs only); unused.
     numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------

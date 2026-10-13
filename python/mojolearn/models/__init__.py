@@ -9,8 +9,6 @@ runs them on the GPU.
 - :class:`CausalLM`: embedding, decoder blocks, final norm and head built
   from a checkpoint, with ``forward``, ``allocate_state``, ``step`` and greedy
   ``generate``.
-- :class:`ParallelCausalLM`: the same model with each layer assigned to a
-  device (``layer_devices``).
 - :class:`Tokenizer`: ``Tokenizer.from_pretrained`` over ``tokenizer.json``
   for byte-level BPE tokenizers, with the pre-tokenization pattern
   (``PATTERNS``: GPT-2, Llama 3, Qwen 2) as a parameter.
