@@ -38,22 +38,46 @@ def test_cpu_counts_no_model_bytes_and_reload_errors_still_fail():
     assert bad["state"] == "REFUSED"
 
 
-def test_apple_uses_its_record_and_does_not_vote_on_gpu_pair():
+def test_apple_disagreement_conflicts_with_other_gpu_model_bytes():
     data = table()
     data["cells"][LANE + "/base"]["model"]["cols"]["nvidia"] = [2, "0" * 16]
     ent = ref.entry(data, LANE, "base", "model", device_class="apple")
-    assert ent["reference_scope"] == "apple"
-    assert ref.judge(HASH, ent)[0] == "IDENTICAL"
-    assert ref.judge("0" * 16, ent)[0] == "DIVERGENT"
+    assert ent["conflict"]
+    assert ref.judge(HASH, ent)[0] == "OWED"
+    assert ref.judge("0" * 16, ent)[0] == "OWED"
 
 
 def test_nvidia_amd_disagreement_still_has_no_reference():
     data = table()
     data["cells"][LANE + "/base"]["model"]["cols"].update(
         nvidia=[2, HASH], amd=[3, "0" * 16])
-    for device in ("nvidia", "amd"):
+    for device in ("apple", "nvidia", "amd"):
         ent = ref.entry(data, LANE, "base", "model", device_class=device)
         assert ent["conflict"] and ref.judge(HASH, ent)[0] == "OWED"
+
+
+def test_apple_cannot_pass_against_its_own_differing_record():
+    shared = "a" * 16
+    apple = "b" * 16
+    data = dict(cells={"x/base": {"train": dict(ref=shared, cols={
+        "apple": [0, apple], "nvidia": 1, "amd": 2})}}, records=[
+        dict(dir="run", file=name + ".json", vendor=name, commit="a" * 40)
+        for name in ("apple", "nvidia", "amd")])
+    for device in ("apple", "nvidia", "amd"):
+        good, = verify.judge_rows([dict(lane="x", fixture="base", part="train", value=shared)],
+                                 data, device_class=device)
+        bad, = verify.judge_rows([dict(lane="x", fixture="base", part="train", value=apple)],
+                                data, device_class=device)
+        assert good["state"] == "IDENTICAL"
+        assert bad["state"] == "DIVERGENT"
+        assert bad["reference"] == shared and bad["reference_scope"] == "shared"
+
+
+def test_apple_uses_shared_reference_without_an_apple_observation():
+    ent = dict(ref=HASH, cols={"nvidia": 0, "amd": 1})
+    data = dict(cells={"x/base": {"train": ent}})
+    assert ref.entry(data, "x", "base", "train", device_class="apple") is ent
+    assert ref.judge(HASH, ent)[0] == "IDENTICAL"
 
 
 def test_unrecorded_cpu_exemption_and_other_lane_na_are_not_invented():

@@ -4,6 +4,12 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- Correct the IDENTICAL verifier: Apple, NVIDIA and AMD must use the same reference hashes.
+  Remove the Apple-only lookup introduced in 0.8.43 and restore Apple participation in reference
+  conflicts and corroboration. Apple FAST has no identity promise; it does not exempt IDENTICAL.
+  This corrects verification and the documented contract, not numerical kernels: the known 72
+  Apple feature-frequency differences remain failures pending numerical repair.
+
 ## 0.8.43 (published 2026-10-13)
 
 - MinCovDet and EllipticEnvelope fit data with many features: the chi-squared distribution function no longer

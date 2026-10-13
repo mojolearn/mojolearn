@@ -194,9 +194,9 @@ def compare(left, right, notes=None):
         return out
     a, b = cells(left), cells(right)
     if {left.get('device'), right.get('device')} == {'cpu', 'gpu'}:
-        # Andrew 2026-10-07: identity is required NVIDIA vs AMD only; host and Apple digests are recorded, never
-        # required. Host vs device: logits, checkpoints and every other part must match; the 'state' part is
+        # Host vs device: logits, checkpoints and every other part must match; the 'state' part is
         # recorded (in `notes`) and not required. Device vs device (split, reversed) still compares every part.
+        # Apple is a GPU participant and has no exemption from device identity.
         differ = sorted(k for k in a if a[k][1]['state'] != b[k][1]['state'])  # glue: names the recorded cases
         if notes is not None:
             notes.append({'host_device_state': 'DIFFERS' if differ else 'EQUAL', 'cases': len(a),

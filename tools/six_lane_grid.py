@@ -1165,7 +1165,7 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP, crosses='fu
             workload_mapping='grid workload -> saved harness ids: classical/more/expanded X -> X@dataset=<taxi|istella> (registered full-input variant replaces a capped original); trees:L -> L:<every saved dataset>; neural:L -> neural:L (bench_board_neural LANES); aliases ' + json.dumps({k: v[0] for k, v in ALIASES.items()}) + '. Unmapped workloads are reported, never substituted.'),
         verdict_rule=dict(
             timing='tools/six_lane_timing.py verdicts: FASTER/SLOWER only when |log(A/B)| of the scored clock exceeds that box\'s A/A floor for the same workload on BOTH NVIDIA and AMD and both agree in direction; otherwise NO_VERDICT',
-            identity='NVIDIA output hash == AMD output hash for the same config (owner 2026-10-07: identity across the two GPU vendors only); tools/six_lane_compare_results.py',
+            identity='tools/six_lane_compare_results.py checks NVIDIA output hash == AMD output hash for the same config. Apple IDENTICAL must also match those hashes; this two-vendor grid alone does not complete three-vendor identity qualification (owner 2026-10-13).',
             quality='the board quality metric must not drop vs B on either vendor',
             promotion='combined faster, neither vendor materially slower, identity and quality preserved; then flip the switch in source with the evidence beside it',
             default_state='every switch is NOT MEASURED until then'),

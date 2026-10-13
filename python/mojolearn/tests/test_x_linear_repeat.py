@@ -124,9 +124,4 @@ def test_every_entry_twice_host_and_gpu():
     g1, g2 = _run(gpu), _run(gpu)
     assert g1 == g2, [n for (n, a), (_, b) in zip(g1, g2) if a != b]
     moved = [n for (n, a), (_, b) in zip(g1, h1) if a != b]
-    # Identity is required across NVIDIA and AMD; the Apple and host columns are recorded, never required
-    # (Andrew 2026-10-07). On a Mac the GPU here is Metal, so a GPU-vs-host difference is reported, not failed
-    # (lars, lasso-lars on the M4, 2026-10-12: equal at 04:40Z, different from 07:10Z with the same binaries; OWED).
-    if moved and _backend.vendor() in ("apple", "metal"):
-        pytest.xfail(f"Apple GPU column differs from the host column for {moved} (recorded, not required)")
     assert not moved, moved
