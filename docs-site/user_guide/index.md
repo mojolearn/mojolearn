@@ -4,6 +4,15 @@
 :maxdepth: 1
 
 quickstart
+choosing_an_estimator
+trees
+linear
+clustering
+decomposition
+neighbors
+gaussian_process
+time_series
+preprocessing
 numeric_modes
 verify
 devices
