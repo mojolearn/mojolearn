@@ -1121,12 +1121,19 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                 rebuilt = sha256(target) if target.is_file() else None
                 got = extract_member(z, r["archive_path"], target, want)
                 if rebuilt is not None and rebuilt != got:
-                    if vendor == "cuda":
+                    # RELEASE OWNER OVERRIDE (Andrew 2026-10-13): a row reused only because it is not in
+                    # MOJOLEARN_RELEASE_BUILD_ONLY has a changed source closure by definition (for example the dead
+                    # deterministic tier deleted in 0.8.44), so a leg's rebuild differs from the published bytes in
+                    # embedded source line numbers. That is expected: the published bytes ship, with a note. A row
+                    # whose identity is really unchanged still has to reproduce on NVIDIA.
+                    if vendor == "cuda" and not str(r.get("reason", "")).startswith("release owner:"):
                         raise SystemExit(f"release_reuse: the {key} leg rebuilt {r['set_rel']} with different bytes "
                                          f"({rebuilt[:12]} against the published {got[:12]}) although its identity is "
                                          "unchanged; an NVIDIA rebuild must reproduce. Find the cause before reusing.")
+                    why = ("reused by the release owner's MOJOLEARN_RELEASE_BUILD_ONLY; its source changed"
+                           if vendor == "cuda" else "gfx942 codegen is not reproducible run to run")
                     say(f"  NOTE {key} {r['set_rel']}: the leg's rebuild differs ({rebuilt[:12]}); the published "
-                        f"bytes {got[:12]} are packed (gfx942 codegen is not reproducible run to run)")
+                        f"bytes {got[:12]} are packed ({why})")
                 reused[r["set_rel"]] = dict(sha256=got, archive_path=r["archive_path"], identity_digest=r["identity_digest"],
                                             rebuilt_sha256=rebuilt)
             # the host bindings: the published copy where the plan says so,
@@ -1141,9 +1148,16 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                     rebuilt = sha256(target) if target.is_file() else None
                     got = extract_member(z, r["archive_path"], target, want)
                     if rebuilt is not None and rebuilt != got:
-                        raise SystemExit(f"release_reuse: the {key} leg built host binding {r['name']} with bytes "
-                                         f"{rebuilt[:12]}, the published copy is {got[:12]}, and its identity is "
-                                         "unchanged. A host build must reproduce; find the cause.")
+                        # RELEASE OWNER OVERRIDE (Andrew 2026-10-13): as for the GPU rows above, a host row reused only
+                        # because it is not in MOJOLEARN_RELEASE_BUILD_ONLY has a changed source closure, so the leg's
+                        # rebuild differs; the published bytes ship with a note. A truly unchanged host row must reproduce.
+                        if not str(r.get("reason", "")).startswith("release owner:"):
+                            raise SystemExit(f"release_reuse: the {key} leg built host binding {r['name']} with bytes "
+                                             f"{rebuilt[:12]}, the published copy is {got[:12]}, and its identity is "
+                                             "unchanged. A host build must reproduce; find the cause.")
+                        say(f"  NOTE {key} host {r['name']}: the leg's build differs ({rebuilt[:12]}); the published "
+                            f"bytes {got[:12]} are packed (reused by the release owner's MOJOLEARN_RELEASE_BUILD_ONLY; "
+                            "its source changed)")
                     reused[r["set_rel"]] = dict(sha256=got, archive_path=r["archive_path"], identity_digest=r["identity_digest"],
                                                 rebuilt_sha256=rebuilt)
                 elif not target.is_file():

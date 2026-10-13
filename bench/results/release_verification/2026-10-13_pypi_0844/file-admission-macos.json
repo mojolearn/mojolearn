@@ -1,0 +1,22 @@
+{
+  "files": {
+    "mojolearn-0.8.44-py3-none-macosx_11_0_arm64.whl": "cc450c2220077b5c00307b7c98b91782808017354595cfe848021ba01f7b3655"
+  },
+  "linux_qualification": null,
+  "manifest_sha256": "3360794e54ec469a1e2ae3e8e4c7b1e5506f132071ab037f4d74aa03fd5038e6",
+  "passed": true,
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "b6c49ce419c47b224b5d257440dadc6210d33151"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-artifact-verification.v1",
+  "scope": "File integrity, alpha metadata and recorded overlay provenance only; no package execution. A listed fresh Linux payload additionally requires its exact final-wheel three-architecture installed admission; overlay artifacts inherit no current numerical qualification",
+  "tags": {
+    "mojolearn-0.8.44-py3-none-macosx_11_0_arm64.whl": [
+      "py3-none-macosx_11_0_arm64"
+    ]
+  },
+  "version": "0.8.44"
+}

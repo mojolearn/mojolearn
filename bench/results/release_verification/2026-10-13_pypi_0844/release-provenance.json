@@ -1,0 +1,36 @@
+{
+ "columns": {
+  "amd": null,
+  "nvidia": null,
+  "nvidia-hopper": null
+ },
+ "earlier_commits": [],
+ "legs": {
+  "cuda-sm_89": {
+   "origin": "built",
+   "overlay": null,
+   "set_identity_digest": "526e74b80ece0d0db5d384cc2c38fc61fb7169bda5bd22902f47a5b7eb59510b",
+   "source_commit": "b6c49ce419c47b224b5d257440dadc6210d33151",
+   "tooling_commit": "284052f0f51409d1d928ffd49b269f9f49d53af9",
+   "tooling_digest": "22265d1ba7d07dc9eb74f8307c4fcccf958d0c0487d610c6e622ad0fe3c0e236"
+  },
+  "hip-gfx942": {
+   "origin": "built",
+   "overlay": null,
+   "set_identity_digest": "92c2d0aa310d4d937f64bfe1585218b5a4ef3418b3db6d8efafa6f3c1733bc8d",
+   "source_commit": "b6c49ce419c47b224b5d257440dadc6210d33151",
+   "tooling_commit": "284052f0f51409d1d928ffd49b269f9f49d53af9",
+   "tooling_digest": "22265d1ba7d07dc9eb74f8307c4fcccf958d0c0487d610c6e622ad0fe3c0e236"
+  }
+ },
+ "published": [
+  "macos",
+  "linux",
+  "nvidia",
+  "amd"
+ ],
+ "schema": "mojolearn.release-provenance.v1",
+ "source_commit": "b6c49ce419c47b224b5d257440dadc6210d33151",
+ "tooling_commit": "2f0295555bb692ee90851f7365f14007f0588076",
+ "version": "0.8.44"
+}
