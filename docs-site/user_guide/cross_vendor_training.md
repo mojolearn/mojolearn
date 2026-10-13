@@ -1,9 +1,8 @@
 # Moving training between vendors
 
-In `identical` mode, a training step gives the same bits on NVIDIA and AMD GPUs for the same release,
-input bytes, model state, settings and supported configuration. Apple GPU and CPU results are recorded
-beside them. So you can stop a language model run on one vendor's GPU and resume it from its checkpoint,
-optimizer state included, on another vendor's GPU. See [Numeric modes](numeric_modes.md).
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. That includes every training step, for the same release, input bytes, model state, settings
+and supported configuration. So you can stop a language model run on one vendor's GPU and resume it from its
+checkpoint, optimizer state included, on another vendor's GPU. See [Numeric modes](numeric_modes.md).
 
 ## Checkpoint handoff
 

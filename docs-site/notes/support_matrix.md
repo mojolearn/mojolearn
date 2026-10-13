@@ -45,7 +45,7 @@ same code. Use [`verify`](../user_guide/verify.md) to check them.
 
 | Mode | Contract |
 |---|---|
-| `identical` | The default. The same output bits for the same release, input bytes, model state, settings and supported configuration on NVIDIA and AMD GPUs. Apple GPU and CPU results are recorded beside them. |
+| `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
 | `deterministic` | Repeated runs on the same device and build give the same bits. No cross-vendor promise. |
 | `fast` | Apple GPUs only. Tuned for throughput. No identity or repeatability promise. |
 
@@ -59,7 +59,7 @@ same code. Use [`verify`](../user_guide/verify.md) to check them.
 | Every other family | yes | no | Apple GPUs |
 | CPU bindings (all families) | yes | no | no |
 
-`fast` is opt-in, tuned on Apple and runs on Apple GPUs only. Asking a family for a mode it does not ship raises
+`fast` is opt-in and tuned on Apple. `fast` is available on Apple GPUs only. Asking a family for a mode it does not ship raises
 a named error. Bits may change between releases. See [Numeric modes](../user_guide/numeric_modes.md).
 
 ## The CPU surface

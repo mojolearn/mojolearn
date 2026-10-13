@@ -12,8 +12,8 @@ backend.
 
 ## What exactly does `identical` promise?
 
-The same output bits for the same release, input bytes, model state, settings and supported
-configuration on NVIDIA and AMD GPUs. Apple GPU and CPU results are recorded beside them. See [Numeric modes](../user_guide/numeric_modes.md).
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. That holds for the same release, input bytes, model state, settings and supported
+configuration. See [Numeric modes](../user_guide/numeric_modes.md).
 
 ## Does mojolearn match PyTorch or scikit-learn bit for bit?
 
@@ -25,12 +25,12 @@ framework's.
 ## Will bits change between releases?
 
 They can. A release may change `identical` output bits, for example when a
-kernel moves to a faster or more accurate fold order. The new bits must still agree on NVIDIA and AMD.
+kernel moves to a faster or more accurate fold order. Every release keeps the contract: in `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 Compare runs made with the same release, and record `mojolearn.__version__` with your results.
 
 ## Is `identical` slower than `fast`?
 
-`fast` runs on Apple GPUs only. There it can be faster: `identical` pins the operations that decide the
+`fast` is available on Apple GPUs only. There it can be faster: `identical` pins the operations that decide the
 bits, while `fast` is tuned for Apple GPUs and makes no identity or repeatability promise. `identical` is
 the default and the mode to report results in; `fast` is opt-in.
 
