@@ -5274,7 +5274,7 @@
         "identical/fit": {
           "verdict": "TIE",
           "rerace": "",
-          "reason": "a tie (0.96): same algorithm and settings; AMD opponent is torch 2.6.0+rocm6.4.1 (older version; not a reason when settings match); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 0.71",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (0.96): same algorithm and settings; AMD opponent is torch 2.6.0+rocm6.4.1 (older version; not a reason when settings match); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 0.71",
           "evidence": "cell copied_from/version",
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 0.96,
@@ -37986,7 +37986,7 @@
         "identical/fit": {
           "verdict": "TIE",
           "rerace": "",
-          "reason": "a tie (ours/theirs 1.03): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.03): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
           "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 1.03,
@@ -41310,7 +41310,7 @@
         "identical/fit": {
           "verdict": "TIE",
           "rerace": "",
-          "reason": "a tie (ours/theirs 0.95): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; statsforecast OptimizedTheta, the same season and decomposition; forecast RMSE equal",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.95): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; statsforecast OptimizedTheta, the same season and decomposition; forecast RMSE equal",
           "evidence": "tools/bench_board_algos.py",
           "opponent": "statsforecast-cpu",
           "ours_over_theirs": 0.95,
@@ -75149,7 +75149,7 @@
         "identical/fit": {
           "verdict": "TIE",
           "rerace": "",
-          "reason": "a tie (ours/theirs 0.99): not cited until rerun (Andrew, 2026-10-13); a tie (0.99), one run each; Mamba-3 layers are the reference",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.99): a tie (0.99), one run each; Mamba-3 layers are the reference",
           "evidence": "cells source/copied_from",
           "opponent": "torch-compile-bf16",
           "ours_over_theirs": 0.99,

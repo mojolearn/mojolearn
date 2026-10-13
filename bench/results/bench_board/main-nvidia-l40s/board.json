@@ -776,9 +776,9 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.58,
           "pairing": "2c137e778a4c9ca2",
-          "reason": "torch.optim.adagrad with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: torch.optim.adagrad with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -1145,6 +1145,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -1562,9 +1563,9 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.54,
           "pairing": "b4ac1d7a490f406a",
-          "reason": "torch.optim.adamax with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: torch.optim.adamax with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -1945,6 +1946,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -3426,9 +3428,9 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.73,
           "pairing": "e2077c79609e3c27",
-          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules)",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules)",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -4230,6 +4232,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -5067,9 +5070,9 @@
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 0.75,
           "pairing": "1dd6073dcd0239f7",
-          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules)",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules)",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -5883,6 +5886,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -7385,7 +7389,7 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 1.05,
           "pairing": "c575ba589348b358",
-          "reason": "a tie (ours/theirs 1.05, inside 0.95-1.05): alpha, binarize, fit_prior match, accuracy equal; cuML's upload (58 ms) is outside its clock while ours' includes it; the stored span says input_home host, so the table lacks its dagger (relabel to device at ingest)",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.05, inside 0.95-1.05): alpha, binarize, fit_prior match, accuracy equal; cuML's upload (58 ms) is outside its clock while ours' includes it; the stored span says input_home host, so the table lacks its dagger (relabel to device at ingest)",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -9761,9 +9765,9 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.44,
           "pairing": "487e894f571bf9a9",
-          "reason": "good under Andrew's rule (host, version and random initial weights only); audit note: opponent on the slow host cc560ebdaf91 (the same torch harness takes 172.9 ms on the MI325X vs 458.6 ms here); weights/order mismatch",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: opponent on the slow host cc560ebdaf91 (the same torch harness takes 172.9 ms on the MI325X vs 458.6 ms here); weights/order mismatch",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -10729,6 +10733,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -12651,9 +12656,9 @@
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 2.99,
           "pairing": "6fd0232847efc283",
-          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 2.56",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 2.56",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -13483,6 +13488,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -15089,7 +15095,7 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 1.02,
           "pairing": "337db2753ecba300",
-          "reason": "a tie (1.02): same algorithm and settings",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (1.02): same algorithm and settings",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -15918,7 +15924,7 @@
           "opponent": "statsforecast-cpu",
           "ours_over_theirs": 0.98,
           "pairing": "09d599239605a42c",
-          "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); statsforecast DynamicOptimizedTheta with ours' settings; CPU float64 is the library's only precision (declared)",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: tie (0.95-1.05, shown under the 2026-10-13 rules); statsforecast DynamicOptimizedTheta with ours' settings; CPU float64 is the library's only precision (declared)",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -21321,9 +21327,9 @@
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 0.22,
           "pairing": "066bf55f76fbc036",
-          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 0.19",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 0.19",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -22097,6 +22103,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -24575,9 +24582,9 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.42,
           "pairing": "5f0f0dab8ee92ce9",
-          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -25535,6 +25542,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -26521,9 +26529,9 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.44,
           "pairing": "a5f417707c1f3b82",
-          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -27495,6 +27503,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -32374,7 +32383,7 @@
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 1.03,
           "pairing": "5f0d3fa4f2e8178c",
-          "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); same kernel and gamma; top-8 eigenpairs by an iterative Krylov solver on both (ours Lanczos, scikit-learn ARPACK at n > 200, k < 10); subspace agrees to 1e-11",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: tie (0.95-1.05, shown under the 2026-10-13 rules); same kernel and gamma; top-8 eigenpairs by an iterative Krylov solver on both (ours Lanczos, scikit-learn ARPACK at n > 200, k < 10); subspace agrees to 1e-11",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -37554,9 +37563,9 @@
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 0.59,
           "pairing": "cd81aaa5f16a5496",
-          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 0.32",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 0.32",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -38357,6 +38366,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -40751,9 +40761,9 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.44,
           "pairing": "0b6aba92769bf214",
-          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -41711,6 +41721,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -41724,7 +41735,7 @@
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 0.97,
           "pairing": "be38c61af4184623",
-          "reason": "a tie (ours/theirs 0.97): not cited until rerun (Andrew, 2026-10-13); a tie (0.97) on one run each; since 86b2bc254/4bdc5487e ours draws its initial weights and row order in Mojo while the torch arm still uses numpy default_rng(7) weights and order; one run each, different sessions",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.97): a tie (0.97) on one run each; since 86b2bc254/4bdc5487e ours draws its initial weights and row order in Mojo while the torch arm still uses numpy default_rng(7) weights and order; one run each, different sessions",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -42711,9 +42722,9 @@
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 0.44,
           "pairing": "292311382bb34b6b",
-          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -43685,6 +43696,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -47082,9 +47094,9 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.68,
           "pairing": "61d9bf0debee6755",
-          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules)",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules)",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -47886,6 +47898,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -48956,7 +48969,7 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.98,
           "pairing": "b08effc0105621d4",
-          "reason": "a tie (ours/theirs 0.98): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.98): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -61315,6 +61328,19 @@
       "status": "done"
     },
     "algos/resnet-block/synthetic/rows=full": {
+      "audit": {
+        "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _basic_block; cell copied_from/version",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 5.28,
+          "pairing": "ac30b1a36ca69f13",
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: the torch arm is the harness's BasicBlock (bench_board_algos.py _basic_block), not torchvision.models.resnet.BasicBlock: code our harness wrote; no valid opponent (every opponent arm excluded); opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules)",
+          "rerace": "x",
+          "verdict": "UNFAIR"
+        }
+      },
       "cells": [
         {
           "arm": "ours",
@@ -62105,6 +62131,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -63617,9 +63644,9 @@
           "opponent": "torch-compile-bf16",
           "ours_over_theirs": 0.28,
           "pairing": "bbfdb0a333f539e0",
-          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -64584,6 +64611,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -65577,9 +65605,9 @@
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 0.27,
           "pairing": "c74ac577dd70c5e4",
-          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -66558,6 +66586,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -73525,9 +73554,9 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 14.41,
           "pairing": "71d68f3bd486f03f",
-          "reason": "torch.optim.sgd with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); ours' training optimizer moves the parameter between host and device every step inside its clock (not broken; harness fix listed); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the opponent ran on the L40S host cc560ebdaf91, which runs identical work about 2x slower than the other L40S host (lstm-clf eager-fp32 1246 vs 516 ms); a broken measurement box, not a different host (Andrew, 2026-10-13); audit note: torch.optim.sgd with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); ours' training optimizer moves the parameter between host and device every step inside its clock (not broken; harness fix listed); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -73904,6 +73933,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -73917,7 +73947,7 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.96,
           "pairing": "93c5c4547885d781",
-          "reason": "a tie (ours/theirs 0.96): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.96): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -84669,7 +84699,7 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.95,
           "pairing": "17241cc05a5c18d7",
-          "reason": "iterations differ: ours 33, cuml-gpu 21; audit note: a tie (ours/theirs 0.95): not cited until rerun (Andrew, 2026-10-13); each arm draws its own k-means++ start; ours ran MORE iterations (accepted: Andrew, 2026-10-13)",
+          "reason": "iterations differ: ours 33, cuml-gpu 21; audit note: a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.95): each arm draws its own k-means++ start; ours ran MORE iterations (accepted: Andrew, 2026-10-13)",
           "rerace": "x",
           "verdict": "UNFAIR"
         }
@@ -88877,7 +88907,7 @@
           "opponent": "cuvs-gpu",
           "ours_over_theirs": 1.03,
           "pairing": "55dbd469e62b5e57",
-          "reason": "a tie (0.95-1.05), not cited until rerun; IVF-Flat 1024 lists, 32 probes, k=10, 20 k-means iterations on both, both train on 200,000 strided rows (ours stride, cuVS fraction 0.5); recall 0.99993 vs 0.99998",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (0.95-1.05), not cited until rerun; IVF-Flat 1024 lists, 32 probes, k=10, 20 k-means iterations on both, both train on 200,000 strided rows (ours stride, cuVS fraction 0.5); recall 0.99993 vs 0.99998",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -89859,7 +89889,7 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.97,
           "pairing": "8965e571341a92fe",
-          "reason": "a tie (ours/theirs 0.97): not cited until rerun (Andrew, 2026-10-13); noise-level margin, accepted (Andrew, 2026-10-13): both qn; ours ranges 1778-1887 ms against cuML's single 1855 ms",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.97): noise-level margin, accepted (Andrew, 2026-10-13): both qn; ours ranges 1778-1887 ms against cuML's single 1855 ms",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -95403,7 +95433,7 @@
           "opponent": "mamba-ssm-tf32",
           "ours_over_theirs": 1.0,
           "pairing": "fff1f1b4bebe0943",
-          "reason": "a tie (ours/theirs 1.00): not cited until rerun (Andrew, 2026-10-13); a tie (1.00), one run each on different hosts and dates; mamba-ssm bf16 not raced",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.00): a tie (1.00), one run each on different hosts and dates; mamba-ssm bf16 not raced",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -98063,7 +98093,7 @@
           "opponent": "torch-compile-tf32",
           "ours_over_theirs": 0.98,
           "pairing": "0e48a518adef5530",
-          "reason": "a tie (ours/theirs 0.98): not cited until rerun (Andrew, 2026-10-13); a tie (0.98); torch-compile-bf16 timed out; torch Mamba-3 layers are the pure-PyTorch reference",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.98): a tie (0.98); torch-compile-bf16 timed out; torch Mamba-3 layers are the pure-PyTorch reference",
           "rerace": "",
           "verdict": "TIE"
         }
@@ -101112,9 +101142,9 @@
           "opponent": "xgboost-gpu",
           "ours_over_theirs": 0.77,
           "pairing": "77fc403ee5df33fb",
-          "reason": "a same-session race (Oct 9) gives 0.80 with equal leaf counts; ours splits with Cosine, XGBoost L2",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "the split score differs: ours Cosine, XGBoost Newton L2 (a work-changing setting; Andrew, 2026-10-13); audit note: a same-session race (Oct 9) gives 0.80 with equal leaf counts; ours splits with Cosine, XGBoost L2",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -101691,6 +101721,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -106199,7 +106230,7 @@
           "opponent": "catboost-gpu",
           "ours_over_theirs": 0.99,
           "pairing": "0ade5bd03b8b4ca8",
-          "reason": "a tie (ours/theirs 0.99): not cited until rerun (Andrew, 2026-10-13); noise-level margin, accepted (Andrew, 2026-10-13): config and quality match; a 1-10% margin between single rounds on different hosts is noise",
+          "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.99): noise-level margin, accepted (Andrew, 2026-10-13): config and quality match; a 1-10% margin between single rounds on different hosts is noise",
           "rerace": "",
           "verdict": "TIE"
         }

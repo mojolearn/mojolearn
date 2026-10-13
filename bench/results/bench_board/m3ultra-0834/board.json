@@ -49602,7 +49602,7 @@
     "identical/infer": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 1.02): predict/transform of the fitted model: the same work on both arms whatever was fitted",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.02): predict/transform of the fitted model: the same work on both arms whatever was fitted",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.02,
@@ -86686,7 +86686,7 @@
     "fast/infer": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 0.96): predict/transform of the fitted model: the same work on both arms whatever was fitted",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.96): predict/transform of the fitted model: the same work on both arms whatever was fitted",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.96,
@@ -86708,7 +86708,7 @@
     "identical/infer": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 1.01): predict/transform of the fitted model: the same work on both arms whatever was fitted",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.01): predict/transform of the fitted model: the same work on both arms whatever was fitted",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.01,
@@ -96921,7 +96921,7 @@
     "identical/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 0.98): not cited until raced again; same leaf-wise DART settings, but LightGBM's model is clearly better (r2 0.565 vs 0.551), more than the drop RNG explains, so equal work is not settled; ours' stored median 31757 ms disagrees with its own round 61244 ms",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.98): not cited until raced again; same leaf-wise DART settings, but LightGBM's model is clearly better (r2 0.565 vs 0.551), more than the drop RNG explains, so equal work is not settled; ours' stored median 31757 ms disagrees with its own round 61244 ms",
      "evidence": "dart istella quality; ours cell times_ms vs median_ms",
      "opponent": "lightgbm-cpu",
      "ours_over_theirs": 0.98,
@@ -104897,7 +104897,7 @@
     "fast/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); same settings (cd / lasso_cd, alpha 1, max_iter 100, tol 1e-8); reconstruction error equal",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: tie (0.95-1.05, shown under the 2026-10-13 rules); same settings (cd / lasso_cd, alpha 1, max_iter 100, tol 1e-8); reconstruction error equal",
      "evidence": "board cells (params MATCHED); bench_board_algos.py lane spec",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.95,
@@ -116536,7 +116536,7 @@
     "fast/infer": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); inference with each arm's own fitted model: same settings (MATCHED read-back), same algorithm, comparable quality",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: tie (0.95-1.05, shown under the 2026-10-13 rules); inference with each arm's own fitted model: same settings (MATCHED read-back), same algorithm, comparable quality",
      "evidence": "board cells (params MATCHED); bench_board_algos.py lane spec",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.99,
@@ -160065,7 +160065,7 @@
     "identical/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 1.04): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.04): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.04,
@@ -196202,7 +196202,7 @@
     "identical/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 0.95): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.95): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.95,
@@ -215396,7 +215396,7 @@
     "identical/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 1.05): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.05): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.05,
@@ -218480,7 +218480,7 @@
     "identical/infer": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 1.01): predict/transform of the fitted model: the same work on both arms whatever was fitted",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.01): predict/transform of the fitted model: the same work on both arms whatever was fitted",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.01,
@@ -224292,7 +224292,7 @@
     "identical/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); same settings (mu, nndsvda, tol 1e-4, max_iter 200); reconstruction error equal",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: tie (0.95-1.05, shown under the 2026-10-13 rules); same settings (mu, nndsvda, tol 1e-4, max_iter 200); reconstruction error equal",
      "evidence": "board cells (params MATCHED); bench_board_algos.py lane spec",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.98,
@@ -229004,7 +229004,7 @@
     "fast/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 0.99): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.99): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.99,
@@ -233220,7 +233220,7 @@
     "fast/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 0.98): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.98): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.98,
@@ -242991,7 +242991,7 @@
     "fast/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 1.03): not cited until raced again; same model on both (ours at af93ebe0a, before e371dda39, explains the same NumPy closed-form ridge callable shap does), same background and 10 permutations; but the ours FAST number is an A/B candidate run (SHAP_PERM_CACHE d51f4b4bf M3 A/B 2026-10-04)",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.03): not cited until raced again; same model on both (ours at af93ebe0a, before e371dda39, explains the same NumPy closed-form ridge callable shap does), same background and 10 permutations; but the ours FAST number is an A/B candidate run (SHAP_PERM_CACHE d51f4b4bf M3 A/B 2026-10-04)",
      "evidence": "ours-fast source kind A/B",
      "opponent": "shap-cpu",
      "ours_over_theirs": 1.03,
@@ -246217,7 +246217,7 @@
     "fast/infer": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); inference with each arm's own fitted model: same settings (MATCHED read-back), same algorithm, comparable quality; scikit-learn's _PLS converts to float64 (its only path), declared",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: tie (0.95-1.05, shown under the 2026-10-13 rules); inference with each arm's own fitted model: same settings (MATCHED read-back), same algorithm, comparable quality; scikit-learn's _PLS converts to float64 (its only path), declared",
      "evidence": "board cells (params MATCHED); bench_board_algos.py lane spec",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.97,
@@ -246239,7 +246239,7 @@
     "identical/infer": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); inference with each arm's own fitted model: same settings (MATCHED read-back), same algorithm, comparable quality; scikit-learn's _PLS converts to float64 (its only path), declared",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: tie (0.95-1.05, shown under the 2026-10-13 rules); inference with each arm's own fitted model: same settings (MATCHED read-back), same algorithm, comparable quality; scikit-learn's _PLS converts to float64 (its only path), declared",
      "evidence": "board cells (params MATCHED); bench_board_algos.py lane spec",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.03,
@@ -249298,7 +249298,7 @@
     "fast/infer": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 0.97): predict/transform of the fitted model: the same work on both arms whatever was fitted",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.97): predict/transform of the fitted model: the same work on both arms whatever was fitted",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.97,
@@ -249320,7 +249320,7 @@
     "identical/infer": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 0.97): predict/transform of the fitted model: the same work on both arms whatever was fitted",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.97): predict/transform of the fitted model: the same work on both arms whatever was fitted",
      "evidence": "tools/bench_board_algos.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.97,
@@ -304767,7 +304767,7 @@
     "fast/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); torch 2.13 runs linalg_svd on an MPS tensor through its built-in CPU fallback (aten/src/ATen/mps/MPSFallback.mm:115), so this 'torch-gpu' cell is torch's CPU LAPACK svd plus two copies; it is torch's own behaviour, labelled GPU; other opponent numpy-cpu is FP64 internally (unfair, replaced by scipy-cpu)",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: tie (0.95-1.05, shown under the 2026-10-13 rules); torch 2.13 runs linalg_svd on an MPS tensor through its built-in CPU fallback (aten/src/ATen/mps/MPSFallback.mm:115), so this 'torch-gpu' cell is torch's CPU LAPACK svd plus two copies; it is torch's own behaviour, labelled GPU; other opponent numpy-cpu is FP64 internally (unfair, replaced by scipy-cpu)",
      "evidence": "pytorch v2.13.0 MPSFallback.mm:115-116",
      "opponent": "torch-gpu",
      "ours_over_theirs": 0.98,
@@ -313091,7 +313091,7 @@
     "fast/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); statsmodels VAR(maxlags=2, ols, trend c) jointly, one call; CPU float64 is the library's only precision (declared)",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: tie (0.95-1.05, shown under the 2026-10-13 rules); statsmodels VAR(maxlags=2, ols, trend c) jointly, one call; CPU float64 is the library's only precision (declared)",
      "evidence": "board cells; bench_board_algos.py / bench_board_more.py lane spec",
      "opponent": "statsmodels-cpu",
      "ours_over_theirs": 1.02,
@@ -330841,7 +330841,7 @@
     "identical/fit": {
      "verdict": "TIE",
      "rerace": "",
-     "reason": "a tie (ours/theirs 1.04): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+     "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.04): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "evidence": "tools/classical_two_datasets.py",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.04,
