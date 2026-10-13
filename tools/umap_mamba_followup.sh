@@ -33,12 +33,11 @@ run umap-transform-native pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=
 run umap-sparse-graph pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/sparse_graph_check.mojo
 run umap-sparse-fit pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . umap/checks/sparse_estimator_check.mojo
 run umap-sparse-fast env MOJOLEARN_UMAP_SPARSE_FAST_LARGE=1 pixi run mojo run -j 4 -I . umap/checks/sparse_estimator_check.mojo
-run umap-sparse-deterministic pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_DETERMINISTIC=1 -I . umap/checks/sparse_estimator_check.mojo
 run knn-dispatch-legacy pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . bench/knn_smallk_dispatch_check.mojo
 run knn-dispatch-experimental pixi run mojo run -j 4 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL=1 -I . bench/knn_smallk_dispatch_check.mojo
 # Qualify the complete public UMAP fit/transform surface in every numeric mode.
 # IDENTICAL was built and checked above; the other builds run one at a time.
-for mode in fast deterministic; do
+for mode in fast; do
     if run "build-metrics-$mode" env MOJOLEARN_NUMERIC_MODE="$mode" bash bindings/build_metrics.sh; then
         run "umap-api-$mode" env MOJOLEARN_NUMERIC_MODE="$mode" pixi run -e skgpu python -m unittest discover -s python/mojolearn/tests -p 'test_umap*.py'
         run "umap-transform-quality-$mode" env MOJOLEARN_NUMERIC_MODE="$mode" pixi run -e skgpu python tools/umap_transform_quality_check.py --mode "$mode" --profile expanded --device "${MOJOLEARN_MAMBA_CERT_VENDOR:-remote}" --output "$OUT/transform-quality-$mode.json"

@@ -409,7 +409,7 @@ def gpu_package(out, set_dir, vendor):
     rental that built the set.
 
     `set_dir` is a leg's `release-build/build/sets/<vendor>` (holding
-    `<arch>/{identical,deterministic,host,.libs,...}`). The package is the
+    `<arch>/{identical,host,.libs,...}`). The package is the
     Python sources as symlinks (identity_iterate.cpu_package's staging, so no
     product file is copied or edited), `mojolearn/<vendor>` -> that set, which
     `_backend._layout` reads as the wheel's vendor layout, and
@@ -444,7 +444,7 @@ def gpu_package(out, set_dir, vendor):
     for src in source.rglob("*"):
         rel = src.relative_to(source)
         if (not src.is_file() or src.suffix in (".py", ".pyc", ".so", ".dylib") or "__pycache__" in rel.parts
-                or rel.parts[0] in ("tests", vendor, "host", "cuda", "hip", "identical", "deterministic")):
+                or rel.parts[0] in ("tests", vendor, "host", "cuda", "hip", "identical")):
             continue
         dst = pkg / rel
         if not (dst.exists() or dst.is_symlink()):
