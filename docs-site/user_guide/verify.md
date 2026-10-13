@@ -82,7 +82,7 @@ neither a pass nor a failure.
 | 0 | `VERIFIED`: every judged part matched; nothing divergent, refused or owed |
 | 1 | `MISMATCH`: at least one part differs from its reference |
 | 2 | Invalid usage |
-| 3 | Refused: the process loaded a mode other than `identical` |
+| 3 | Refused: the process loaded the `fast` binaries |
 | 4 | `INCOMPLETE` or cannot run: a part was refused, the import failed, or the fixtures differ |
 | 5 | Missing reference or incomplete scope: a part is `OWED` |
 
