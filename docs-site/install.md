@@ -9,7 +9,7 @@ for your platform and GPU. This page has the details.
 |---|---|
 | Python | CPython 3.10, 3.11, 3.12, 3.13 and 3.14 |
 | macOS | Apple silicon (arm64). One wheel with Apple Metal GPU support and CPU support. |
-| Linux | x86-64. The core wheel plus the `mojolearn-nvidia` and `mojolearn-amd` GPU packages, installed automatically. |
+| Linux | x86-64, glibc 2.35 or newer. The core wheel plus the `mojolearn-nvidia` and `mojolearn-amd` GPU packages, installed automatically. |
 
 ## pip
 
@@ -44,16 +44,33 @@ build; mojolearn never substitutes the CPU for a GPU it cannot serve.
 NVIDIA needs only the driver (`libcuda`); no CUDA toolkit is required. AMD needs the `amdgpu` driver
 and the ROCm HIP runtime (`libamdhip64`, ROCm 6 or 7).
 
-## Check your machine
+The 0.8.42 NVIDIA wheel contains native `sm_89` code and **no PTX fallback**. Its Ada binaries do not
+run on A100 (`sm_80`), RTX 30-series/A40 (`sm_86`), H100/H200 (`sm_90`) or Blackwell GPUs.
+The source loader supports an `sm_80` PTX set for compute capability 8.0 and newer when that set is
+included in a build, but it is not shipped in this release because of PyPI's per-file size limit.
+
+## Verify the results
 
 ```sh
-mojolearn doctor
+python -m pip install "mojolearn[verify]"
 python -m mojolearn verify --quick
 ```
 
-`mojolearn doctor` reports what the installed wheel supports on this machine. `verify` checks the
-installed package against the reference bits recorded for this release; see
+The extra adds NumPy for verification. `verify` checks computations against the reference bits recorded for this release; see
 [Verify on your hardware](user_guide/verify.md).
+
+## Troubleshooting
+
+If the package fails to load, run the optional diagnostics command:
+
+```sh
+mojolearn doctor
+```
+
+It reports the installed packages, GPU architecture sets, selected backend and numerical mode, and
+whether the package imports. An import pass is not a numerical verification result. Older versions,
+including 0.8.42, contain a stale support note claiming no Linux wheel is published; use the platform
+and GPU requirements above instead of that note.
 
 (from-source)=
 ## From source

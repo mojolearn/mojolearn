@@ -2,8 +2,22 @@
 
 Andrew 2026-10-10: PTX is a normal target; no flag.
 
-`mojolearn-nvidia` carries two kinds of set, both regular slots of the same
-wheel (`python/mojolearn/gpu_plugins.py`):
+## Published wheel: 0.8.42
+
+The published `mojolearn-nvidia` wheel carries **native `sm_89` only, with no
+PTX fallback**. This supports Ada GPUs such as RTX 40-series, L4, L40, L40S
+and RTX 6000 Ada. It does not support A100, RTX 30-series/A40, H100/H200 or
+Blackwell GPUs out of the box; those need an appropriate source build.
+
+The loader and build system support the PTX slot described below, but
+`gpu_plugins.PLUGINS["cuda"]["ptx_shipped"]` is currently false. The native
+and PTX sets together packed at 134.1 MiB, over the NVIDIA project's 100 MiB
+PyPI file limit. A registered or built target is not a shipped target.
+
+## Available build slots
+
+`mojolearn-nvidia` supports two kinds of set, both regular slots of the same
+wheel when included (`python/mojolearn/gpu_plugins.py`):
 
 | Slot | Directory | Code | Runs on |
 | --- | --- | --- | --- |
@@ -24,10 +38,11 @@ pack time and fails with the per-set sizes).
    `MOJOLEARN_GPU_ARCH=sm_80` selects the PTX set.
 2. A native set the device can run (exact match, the `a` suffix, or the
    same-family rule) is loaded.
-3. Otherwise, on any NVIDIA device of compute capability 8.0 or newer (A100
+3. Otherwise, **if the PTX set is installed**, on any NVIDIA device of compute capability 8.0 or newer (A100
    sm_80, A10/A40 sm_86, H100/H200 sm_90, Blackwell sm_100/sm_120, ...), the
    PTX set is loaded, in every numeric mode, IDENTICAL included. A device older
-   than 8.0 refuses. The CPU is never substituted.
+   than 8.0 refuses. Without a compatible native set or an installed PTX set,
+   the GPU is unsupported by that install. The CPU is never substituted.
 
 There is no flag, no admission record and no local qualification step. The
 PTX set is checked like a native set before any binding loads: the vendor
@@ -105,6 +120,7 @@ places the two can produce different bits, and what holds each one:
   keeps the rounding-pinned PTX and writes `PTX_BASELINE.json` instead of
   converting the IDENTICAL modules to cubins. It needs no GPU.
 - `cross-compile-check` compiles sm_80 like any arch.
-- `pack_wheel.py --profile release-split` packs the PTX set into
-  `mojolearn-nvidia` with its own build proof; there is no separate PTX wheel
-  and no `--bundle-ptx` option.
+- When PTX is shipped, `pack_wheel.py --profile release-split` packs the PTX
+  set into `mojolearn-nvidia` with its own build proof. Current releases omit
+  it under the file-size limit above; there is no separate PTX wheel and no
+  `--bundle-ptx` option.

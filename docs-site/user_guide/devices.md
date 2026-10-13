@@ -85,17 +85,20 @@ the CPU (`0` or unset is one
 per physical core, `1` is the calling thread). Each thread owns whole rows, so no output bit depends on
 the thread count.
 
-## Check your installation
+## Troubleshooting
 
 ```sh
 mojolearn doctor
 mojolearn doctor --json --output doctor.json
 ```
 
-`mojolearn doctor` reports what the installed wheel supports on this machine: the version, the numeric
-mode, the vendor and GPU architecture selected, and why. It runs in a separate module, so it still works
+`mojolearn doctor` is an optional installation diagnostic: it reports the version, numerical
+mode, selected backend and GPU architecture, and whether the package imports. It runs in a separate module, so it still works
 when importing `mojolearn` fails, which is when you most need it. It omits private environment data such
 as usernames and home directories.
+
+Older versions, including 0.8.42, incorrectly claim no Linux wheel is published. Linux wheels are
+available; consult the architecture table above. An import pass does not certify numerical results.
 
 For an issue, `mojolearn bug-report reproducer.py` builds a support bundle for you to review before
 uploading.

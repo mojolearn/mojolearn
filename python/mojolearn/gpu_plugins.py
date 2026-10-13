@@ -4,8 +4,9 @@
 
 The core pins mojolearn-nvidia and mojolearn-amd automatically. Each vendor
 wheel contains its registered architecture sets; architecture selection
-happens in the loader. mojolearn-nvidia carries the PTX set
-(`cuda_ptx/sm_80`) as a regular slot beside its native sets (Andrew
+happens in the loader. mojolearn-nvidia supports the PTX set
+(`cuda_ptx/sm_80`) as a regular slot beside its native sets, but 0.8.42
+omits it under PyPI's file-size limit (`ptx_shipped=False`). (Andrew
 2026-10-10: PTX is a normal target; no flag). Native directory depth stays
 unchanged to preserve binding RUNPATHs.
 """
@@ -88,7 +89,7 @@ def set_directory(row, arch):
 
 def required_sets(vendor):
     """{(vendor, arch)} a complete vendor wheel carries: the first spelling
-    of every native slot, plus the PTX slot when the vendor has one."""
+    of every native slot, plus the PTX slot when enabled for shipping."""
     row = PLUGINS[vendor]
     out = {(vendor, slot[0]) for slot in row["slots"]}  # glue: one entry per registered slot
     if row.get("ptx") and row.get("ptx_shipped", True):   # PTX slot out of the wheel while over PyPI's limit (2026-10-12)

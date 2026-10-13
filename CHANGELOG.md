@@ -4,6 +4,11 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- `mojolearn doctor` recognizes published Linux wheels, inventories the separate NVIDIA and AMD
+  packages and their actual native/PTX directories, and distinguishes an import failure from a
+  loaded backend. Import success is explicitly not numerical certification. Installation guides
+  put doctor under troubleshooting and clarify that 0.8.42 ships sm_89 without PTX.
+
 - Release (lane release-no-rented-smoke): releases rent nothing. `tools/release.py --smoke-via lq` (the default) runs
   the NVIDIA and AMD wheel columns on the nv and amd boxes we already hold: `tools/release_lq_smoke.py` copies the final
   wheels there, queues `tools/release_wheel_smoke.sh --local` with `lq add --front` (next after the running job, ahead of

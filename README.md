@@ -135,12 +135,6 @@ architectures need a source build. See [NVIDIA PTX](docs/NVIDIA_PTX_IDENTITY.md)
 
 mojolearn never substitutes the CPU for a GPU it cannot serve.
 
-```sh
-mojolearn doctor
-```
-
-reports what the installed wheel supports on this machine.
-
 Verification combines inference and classical training in one routine scope.
 Neural training is a separate opt-in:
 
@@ -207,6 +201,15 @@ references read OWED and inapplicable properties are named explicitly.
 [docs/VERIFY.md](docs/VERIFY.md) describes the verifier and
 [docs/VERIFY_EXTERNALLY.md](docs/VERIFY_EXTERNALLY.md) shows how to check
 the claims from outside the project.
+
+## Troubleshooting
+
+If the package fails to load, run `mojolearn doctor`. This optional command
+reports the installation, backend and numerical mode, and whether the package
+imports; it does not verify numerical results. Older versions, including
+0.8.42, may incorrectly report that no Linux wheel is published. Linux wheels
+are available; use the [support matrix](SUPPORT_MATRIX.md) for the GPU targets
+the release actually carries.
 
 ## Scope
 
