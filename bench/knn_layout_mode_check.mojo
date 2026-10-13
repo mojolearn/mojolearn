@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Refuse experimental layout activation outside IDENTICAL mode.
 
-Build in FAST and DETERMINISTIC, with neither and both experimental defines.
+Build in FAST, with neither and both experimental defines.
 The effective flags must remain false. Run the existing public estimator
 host-reference, alternate-method and query-tile checks in each build.
 This gate deliberately refuses IDENTICAL, whose four arms have a separate
@@ -19,7 +19,7 @@ from neighbors.checks.estimator_check import (
 
 def main() raises:
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        raise Error("layout mode isolation gate requires FAST or DETERMINISTIC")
+        raise Error("layout mode isolation gate requires FAST")
     if EXPERIMENTAL_SMALLK_IDENTICAL or EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
         raise Error("IDENTICAL k-NN experiment activated in another numeric mode")
     print("LAYOUT_MODE_FLAGS", "mode", numeric_mode_name(),

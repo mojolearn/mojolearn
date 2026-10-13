@@ -63,8 +63,7 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
 
 
 def mixture_numeric_mode_binding() raises -> PythonObject:
-    """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL, 2
-    DETERMINISTIC (the GP's shape, for its reason)."""
+    """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL (the GP's shape, for its reason)."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 

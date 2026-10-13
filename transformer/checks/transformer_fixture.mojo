@@ -623,5 +623,5 @@ def f32_report(v: Float32) -> String:
 
 
 def mode_name() -> String:
-    """The build's tier, from the ONE definition of it. This used to be a local two-way `IDENTICAL`-or-`FAST`, written when there were two tiers, and it answered "FAST" for a DETERMINISTIC build -- so a driver run under the middle tier printed the wrong arm onto every line it produced."""
+    """The build's tier, from the ONE definition of it."""
     return numeric_mode_name()

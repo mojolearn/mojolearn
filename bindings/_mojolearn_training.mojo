@@ -181,12 +181,11 @@ def _negate_through_device(
 
 def training_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
-    IDENTICAL, 2 DETERMINISTIC. The same shape as `gbdt_numeric_mode`, and
+    IDENTICAL. The same shape as `gbdt_numeric_mode`, and
     for the same reason: the wrapper reads it once and refuses to run if the
     binary it loaded disagrees with the mode the package asked for. A
     wrong-arm measurement that is correctly labelled by accident is the
-    failure this prevents, and a boolean could not do that job once a third
-    tier existed, because DETERMINISTIC answered 0 and read back as "fast".
+    failure this prevents.
 
     **UNDER FAST THIS LANE HAS NO CONTRACT AT ALL.** `checks/numerics.mojo`
     compiles the pinned helpers away, so the loss and the optimizer are the
@@ -1815,16 +1814,7 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
     # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those
     # fallbacks are gone: FAST runs the same kernels and the same launches with
     # the pins in checks/numerics.mojo compiled to the free schedule. FAST
-    # promises quality, never bits. The
-    # DETERMINISTIC tier stays tree-only: refuse to exist under it.
-    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
-        abort(
-            String(
-                "_mojolearn_training: refusing to initialize -- this lane builds"
-                " FAST and IDENTICAL only. Rebuild with"
-                " MOJOLEARN_NUMERIC_MODE=identical (or fast) bash bindings/build_training.sh"
-            )
-        )
+    # promises quality, never bits.
     try:
         var m = PythonModuleBuilder("_mojolearn_training")
         m.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")

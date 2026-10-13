@@ -40,8 +40,8 @@ from std.sys.info import has_apple_gpu_accelerator
 #: Default since the M3 A/B (lane/apple-fast-olsne 9f5cf2a77, n=1): taxi
 #: 286 -> 110 ms, r2 .9088 same; istella 2,921 -> 842 ms, r2 .3325 -> .3319.
 #: MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF turns it off; the old
-#: MOJOLEARN_FAST_OLS_NORMAL_EQ define is now harmless. IDENTICAL,
-#: DETERMINISTIC and the other vendors keep main's route. Read by Python
+#: MOJOLEARN_FAST_OLS_NORMAL_EQ define is now harmless. IDENTICAL
+#: and the other vendors keep main's route. Read by Python
 #: through `ols_normal_eq_default`.
 comptime OLS_FAST_NORMAL_EQ = (
     GLOBAL_NUMERIC_MODE == _OLS_FAST
@@ -1490,7 +1490,7 @@ def kde_score_samples_resident_binding(
 
 def estimators_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
-    IDENTICAL, 2 DETERMINISTIC. The same shape as `svm_numeric_mode`. This
+    IDENTICAL. The same shape as `svm_numeric_mode`. This
     binding had no read-back until 2026-09-10, so
     `NumericModeMixin.numeric_mode_used()` fell through to the module path
     hint, which for the FAST tier is the package directory itself and read

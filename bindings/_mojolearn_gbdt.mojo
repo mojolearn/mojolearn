@@ -107,19 +107,7 @@ def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
 
 def gbdt_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST,
-    1 IDENTICAL, 2 DETERMINISTIC.
-
-    It returned a BOOLEAN (1 for identical, else 0) until
-    2026-08-29, and a boolean stopped being able to tell the truth
-    the moment the middle tier existed: a DETERMINISTIC binary
-    answered 0 and every reader printed it as "fast". That is the
-    mislabelled measurement this read-back exists to make
-    impossible. Widening it is backward compatible because the two
-    old answers are the two codes they already were.
-
-    A caller gating the CROSS-VENDOR guarantee still tests `== 1`,
-    and should: 2 promises reproducibility on one device and says
-    nothing about a second."""
+    1 IDENTICAL."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 

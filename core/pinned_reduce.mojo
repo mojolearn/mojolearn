@@ -89,7 +89,7 @@ def halving_block_sum[block_size: Int](value: Float32) -> Float32:
     DEVIATION 2291 (2026-09-08): `block_sum` refuses block sizes that are
     not greater than the warp size ("Block size must be a greater than warp
     size", block.mojo:186), so a 32-thread block cannot use the library
-    fold on a 64-wide wavefront at all: the FAST and DETERMINISTIC builds of
+    fold on a 64-wide wavefront at all: the FAST build of
     the estimators binding failed to instantiate `qr_panel_kernel` on
     gfx942 (the 0.7.0 release build, 2026-09-08). A kernel whose block is
     narrower than every vendor's widest warp calls this tree directly; the

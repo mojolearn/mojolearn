@@ -12,14 +12,12 @@ that function opens with
         if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
             return
 
-(DEVIATION 1876). So under FAST **and under DETERMINISTIC** the shape is
+(DEVIATION 1876). So under FAST the shape is
 handed to the vendor's own kernel, which is free to tile differently at
-different `m`, and the pinned partition never runs. `PIN_DETERMINISM` is
-true under DETERMINISTIC, but the pin this claim rests on is guarded by
+different `m`, and the pinned partition never runs. The pin this claim rests on is guarded by
 `PIN_CROSS_VENDOR`, so:
 
     IDENTICAL      ASSERTED, bitwise, and a difference is a FAILURE
-    DETERMINISTIC  REPORTED  (the vendor GEMM is live; nothing promises it)
     FAST           REPORTED  ([[fast-is-not-identical]]: FAST promises speed
                              only and is never asked a bitwise question)
 
@@ -1271,8 +1269,8 @@ def check_block_batch_invariance() raises:
             + numeric_mode_name()
             + ". The comparison below is REPORTED, NOT ASSERTED."
             + " identical_gemm's DEVIATION 1876 branch hands every"
-            + " projection to the vendor kernel under both FAST and"
-            + " DETERMINISTIC, so the pinned partition never runs and"
+            + " projection to the vendor kernel under FAST, so the"
+            + " pinned partition never runs and"
             + " nothing here promises a bit. [[fast-is-not-identical]]:"
             + " FAST promises SPEED ONLY and is never asked a bitwise"
             + " question."

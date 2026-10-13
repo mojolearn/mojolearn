@@ -145,19 +145,15 @@ struct ForestIOWorkspace(Defaultable, Movable):
 
 comptime RF_IO = _Global[StorageType=ForestIOWorkspace,
     name=("MojoRFResidentIOIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFResidentIODeterministic" if GLOBAL_NUMERIC_MODE == 2 else
           "MojoRFResidentIOFast"), init_fn=ForestIOWorkspace.__init__]
 comptime ET_IO = _Global[StorageType=ForestIOWorkspace,
     name=("MojoETResidentIOIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoETResidentIODeterministic" if GLOBAL_NUMERIC_MODE == 2 else
           "MojoETResidentIOFast"), init_fn=ForestIOWorkspace.__init__]
 comptime RF_CTX_SLOT = (
     "MojoRFResidentContextIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-    "MojoRFResidentContextDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
     "MojoRFResidentContextFast")
 comptime ET_CTX_SLOT = (
     "MojoETResidentContextIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-    "MojoETResidentContextDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
     "MojoETResidentContextFast")
 
 
@@ -649,11 +645,9 @@ struct ForestRegistry(Defaultable, Movable):
 # One registry per RF_INPUT specialization avoids RF/ET policy confusion.
 comptime RF_REGISTRY = _Global[StorageType=ForestRegistry,
     name=("MojoRFResidentForestIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFResidentForestDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
           "MojoRFResidentForestFast"), init_fn=ForestRegistry.__init__]
 comptime ET_REGISTRY = _Global[StorageType=ForestRegistry,
     name=("MojoETResidentForestIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoETResidentForestDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
           "MojoETResidentForestFast"), init_fn=ForestRegistry.__init__]
 
 

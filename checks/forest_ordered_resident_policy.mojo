@@ -2,7 +2,7 @@
 """Pure policy gate for default ordered resident forest inference."""
 from core.forest_inference_model import forest_ordered_resident_policy
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
-from checks.numerics import NUMERIC_FAST, NUMERIC_DETERMINISTIC, NUMERIC_IDENTICAL
+from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 
 
 def main() raises:
@@ -18,8 +18,6 @@ def main() raises:
         raise Error("AMD IDENTICAL must select ordered resident")
     if not forest_ordered_resident_policy[COLUMN_AMD, NUMERIC_FAST, False, False]():
         raise Error("AMD FAST must select ordered resident")
-    if forest_ordered_resident_policy[COLUMN_AMD, NUMERIC_DETERMINISTIC, False, False]():
-        raise Error("DETERMINISTIC must retain its prior route")
     if not forest_ordered_resident_policy[COLUMN_APPLE, NUMERIC_IDENTICAL, True, False]():
         raise Error("explicit experimental force did not select the route")
     if forest_ordered_resident_policy[COLUMN_NVIDIA, NUMERIC_IDENTICAL, True, True]():

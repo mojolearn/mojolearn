@@ -14,7 +14,7 @@ nvForest's device/launch-derived grove count. It can differ from ordered bits.
 FOREST-INFER-3: IDENTICAL adds flush both operands/result; final division uses
 identical_div. This explicitly defined arithmetic may differ from legacy
 unflushed host inference for cancellation/subnormals. No legacy equivalence
-or speed claim is implied. FAST/DETERMINISTIC use their existing scalar seams.
+or speed claim is implied. FAST uses its existing scalar seams.
 FOREST-INFER-4: finite Float32 comparison uses integer keys, preserving ET
 subnormals and equating signed zeros. RF flushes ONLY the input feature in
 IDENTICAL, matching ensemble/decisiontree/decisiontree.mojo:651; thresholds

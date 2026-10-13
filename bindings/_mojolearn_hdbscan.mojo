@@ -64,8 +64,7 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
 
 
 def hdbscan_numeric_mode_binding() raises -> PythonObject:
-    """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL, 2
-    DETERMINISTIC."""
+    """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 

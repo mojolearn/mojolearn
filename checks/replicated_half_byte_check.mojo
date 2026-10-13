@@ -77,12 +77,7 @@ from checks.numerics import NUMERIC_IDENTICAL, PIN_DETERMINISM
 #: kernel branches on (`hist_half_byte.mojo`, both writeback sites). Arm 3 has
 #: to know it, because the two flushes fail in OPPOSITE directions and a
 #: sabotage aimed at the wrong one proves nothing.
-#: `PIN_DETERMINISM`, not `== NUMERIC_IDENTICAL`, since 2026-08-29. This
-#: predicate must name the SAME expression the kernel branches on, and the
-#: kernel side moved to `PIN_DETERMINISM` when the middle tier landed. Left
-#: as it was, a DETERMINISTIC build would compile the fixed-point flush and
-#: this check would predict the float atomic -- so arm 3 would aim its
-#: sabotage at the flush that is not there and pass by missing.
+#: This predicate must name the SAME expression the kernel branches on.
 comptime FLUSH_IS_FIXED_POINT = deterministic_flush_for[
     TARGET_COLUMN, PIN_DETERMINISM
 ]()

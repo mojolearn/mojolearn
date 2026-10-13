@@ -89,7 +89,6 @@ from forest_export_binding import (
 )
 comptime ET_EXPORTS = _Global[StorageType=ForestExportRegistry[FitResult],
     name=("MojoETFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoETFitExportDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
           "MojoETFitExportFast"), init_fn=ForestExportRegistry[FitResult].__init__]
 
 

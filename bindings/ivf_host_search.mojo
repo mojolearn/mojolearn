@@ -164,7 +164,6 @@ comptime HOST_IVF_REGISTRY = _Global[
     StorageType=HostIvfRegistry,
     name=(
         "MojoIvfFlatHostResidentIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoIvfFlatHostResidentDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
         "MojoIvfFlatHostResidentFast"
     ),
     init_fn=HostIvfRegistry.__init__,
