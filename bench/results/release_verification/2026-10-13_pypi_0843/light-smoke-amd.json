@@ -1,0 +1,141 @@
+{
+  "wheel": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/mojolearn-0.8.43-py3-none-manylinux_2_35_x86_64.whl",
+  "wheel_sha256": "e7674768bf29bdc034184e818de0a89ffbcc1fb8561ebc4547a8771f83b8bb48",
+  "status": "PASSED",
+  "jobs": [
+    {
+      "name": "create-venv",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/create-venv.log"
+    },
+    {
+      "name": "install",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/install.log"
+    },
+    {
+      "name": "dependencies",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/dependencies.log"
+    },
+    {
+      "name": "installed",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/installed.json"
+    },
+    {
+      "name": "expanded-api",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/expanded-api.json"
+    },
+    {
+      "name": "loaded-lm-cpu",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/loaded-lm-cpu.log"
+    },
+    {
+      "name": "loaded-lm-gpu",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/loaded-lm-gpu.log"
+    },
+    {
+      "name": "loaded-lm-cpu-gpu-compare",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/loaded-lm-cpu-gpu-compare.log"
+    },
+    {
+      "name": "coverage",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/coverage.json"
+    },
+    {
+      "name": "models",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/models.json"
+    },
+    {
+      "name": "extended",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/extended.json"
+    },
+    {
+      "name": "self-test",
+      "exit_code": 0,
+      "output": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/out/self-test.json"
+    }
+  ],
+  "scope": "expanded",
+  "source_commit": "b99b0900e457fa5f2205384e3985f7433d704d5a",
+  "release_qualified": false,
+  "expanded": {
+    "scope": "expanded",
+    "release_qualified": false,
+    "physical_execution_trace": "OWED",
+    "native_fault_controls": "SEPARATE_GATE",
+    "cross_validation": "OWED",
+    "multi_gpu": "OWED",
+    "apis": {
+      "apis": {
+        "mojolearn.models": [
+          "CausalLM",
+          "ParallelCausalLM"
+        ],
+        "mojolearn.parallel_ivf": [
+          "DistributedIVFIndex"
+        ],
+        "mojolearn.parallel_model_selection": [
+          "cross_val_score"
+        ],
+        "mojolearn.parallel_gaussian_process": [
+          "fit_gaussian_process_classifier",
+          "predict_gaussian_process_classifier"
+        ],
+        "mojolearn.parallel_forecasting": [
+          "predict_arima",
+          "forecast_arima",
+          "predict_exponential_smoothing",
+          "forecast_exponential_smoothing"
+        ]
+      },
+      "ivf_symbols": [
+        "ivf_flat_partial_search",
+        "ivf_finalize_distances"
+      ],
+      "gbdt_symbols": [
+        "gbdt_fit"
+      ],
+      "gbdt_binding": "/tmp/mojolearn-verifier-wheel-75l0iv_s/venv/lib/python3.12/site-packages/mojolearn/hip_native/gfx942/identical/_mojolearn_gbdt.so",
+      "gbdt_sha256": "afaa751708e7da02cb220e5a30b47b542db97b2a76bee319418932364d1c3f83",
+      "binding": "/tmp/mojolearn-verifier-wheel-75l0iv_s/venv/lib/python3.12/site-packages/mojolearn/hip_native/gfx942/identical/_mojolearn_ivf.so",
+      "binding_sha256": "a84ea064cc91cdd2a998bf663b17b490f276c090322d76dfc8ca1481bf155868"
+    }
+  },
+  "plugins": [
+    {
+      "wheel": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/mojolearn_amd-0.8.43-py3-none-manylinux_2_35_x86_64.whl",
+      "wheel_sha256": "fe958125c23ddd9c5adffa245c2cd4978d808b05e3c460bad3815f6c331007c1",
+      "distribution": "mojolearn-amd"
+    },
+    {
+      "wheel": "/root/release-smoke/0.8.43/amd/out.run/wheel-smoke/mojolearn_nvidia-0.8.43-py3-none-manylinux_2_35_x86_64.whl",
+      "wheel_sha256": "214bcb97de6bde9d57dcb1d34682c8b3062a15ecdaf4efff4cf8886427ab95ba",
+      "distribution": "mojolearn-nvidia"
+    }
+  ],
+  "installed": {
+    "package": "/tmp/mojolearn-verifier-wheel-75l0iv_s/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+    "version": "0.8.43",
+    "vendor": "hip",
+    "gpu_arch": "gfx942",
+    "gpu_plugin": {
+      "distribution": "mojolearn-amd",
+      "version": "0.8.43",
+      "location": "/tmp/mojolearn-verifier-wheel-75l0iv_s/venv/lib/python3.12/site-packages",
+      "code_format": "native",
+      "payloads": [
+        "mojolearn-amd"
+      ]
+    }
+  },
+  "unqualified_properties": []
+}

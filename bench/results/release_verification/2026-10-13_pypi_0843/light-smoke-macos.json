@@ -1,0 +1,121 @@
+{
+  "wheel": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/macos/mojolearn-0.8.43-py3-none-macosx_11_0_arm64.whl",
+  "wheel_sha256": "56d10eb9d5a4356e6bfd6b092443c365496bb6a78bc9b12451280b1c0ca3e719",
+  "status": "PASSED",
+  "jobs": [
+    {
+      "name": "create-venv",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/create-venv.log"
+    },
+    {
+      "name": "install",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/install.log"
+    },
+    {
+      "name": "dependencies",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/dependencies.log"
+    },
+    {
+      "name": "installed",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/installed.json"
+    },
+    {
+      "name": "expanded-api",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/expanded-api.json"
+    },
+    {
+      "name": "loaded-lm-cpu",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/loaded-lm-cpu.log"
+    },
+    {
+      "name": "loaded-lm-gpu",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/loaded-lm-gpu.log"
+    },
+    {
+      "name": "loaded-lm-cpu-gpu-compare",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/loaded-lm-cpu-gpu-compare.log"
+    },
+    {
+      "name": "coverage",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/coverage.json"
+    },
+    {
+      "name": "models",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/models.json"
+    },
+    {
+      "name": "extended",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/extended.json"
+    },
+    {
+      "name": "self-test",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/release/0.8.43/b99b0900e457/smoke-macos/self-test.json"
+    }
+  ],
+  "scope": "expanded",
+  "source_commit": "b99b0900e457fa5f2205384e3985f7433d704d5a",
+  "release_qualified": false,
+  "expanded": {
+    "scope": "expanded",
+    "release_qualified": false,
+    "physical_execution_trace": "OWED",
+    "native_fault_controls": "SEPARATE_GATE",
+    "cross_validation": "OWED",
+    "multi_gpu": "NOT_APPLICABLE",
+    "apis": {
+      "apis": {
+        "mojolearn.models": [
+          "CausalLM",
+          "ParallelCausalLM"
+        ],
+        "mojolearn.parallel_ivf": [
+          "DistributedIVFIndex"
+        ],
+        "mojolearn.parallel_model_selection": [
+          "cross_val_score"
+        ],
+        "mojolearn.parallel_gaussian_process": [
+          "fit_gaussian_process_classifier",
+          "predict_gaussian_process_classifier"
+        ],
+        "mojolearn.parallel_forecasting": [
+          "predict_arima",
+          "forecast_arima",
+          "predict_exponential_smoothing",
+          "forecast_exponential_smoothing"
+        ]
+      },
+      "ivf_symbols": [
+        "ivf_flat_partial_search",
+        "ivf_finalize_distances"
+      ],
+      "gbdt_symbols": [
+        "gbdt_fit"
+      ],
+      "gbdt_binding": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-verifier-wheel-c15i21ht/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_gbdt.so",
+      "gbdt_sha256": "67bfd1dbad56a370f1d19779a7ae0d7229ae3488840bc2f009136c01febebdac",
+      "binding": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-verifier-wheel-c15i21ht/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_ivf.so",
+      "binding_sha256": "d9786f680144132ffa8ed8af9b40f943823f057ee490bbd624610f23900b1adf"
+    }
+  },
+  "installed": {
+    "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-verifier-wheel-c15i21ht/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+    "version": "0.8.43",
+    "vendor": "metal",
+    "gpu_arch": null,
+    "gpu_plugin": null
+  },
+  "unqualified_properties": []
+}
