@@ -239,5 +239,44 @@ class MainBoardIngest(unittest.TestCase):
         self.assertEqual(len(keys), len(set(keys)))
 
 
+class FairnessMarks(unittest.TestCase):
+    """apply_fairness: a row is shown only with a MATCHED parity check or an audit; ties are raced again."""
+
+    @staticmethod
+    def race(ours_ms, opp_ms, params_check="not checked on the main board"):
+        return {"params_check": params_check, "cells": [
+            {"arm": "ours", "mode": "identical", "status": "ok", "median_ms": ours_ms},
+            {"arm": "cuml-gpu", "mode": "opponent", "device": "gpu", "status": "ok", "median_ms": opp_ms}],
+            "infer_cells": []}
+
+    def board(self, **races):
+        return {"config": {"modes": ["identical"]}, "races": races}
+
+    def test_unchecked_rows_are_marked(self):
+        b = self.board(r=self.race(5.0, 10.0))
+        self.assertEqual(MB.apply_fairness(b, None, "2026-10-13"), 1)
+        e = b["races"]["r"]["audit"]["identical/fit"]
+        self.assertEqual((e["verdict"], e["rerace"], b["races"]["r"]["rerace"]), ("UNCHECKED", "x", "x"))
+
+    def test_matched_rows_pass_and_ties_are_marked(self):
+        b = self.board(win=self.race(5.0, 10.0, "MATCHED"), tie=self.race(9.8, 10.0, "MATCHED"))
+        MB.apply_fairness(b, None, "2026-10-13")
+        self.assertNotIn("rerace", b["races"]["win"])
+        self.assertEqual(b["races"]["tie"]["audit"]["identical/fit"]["verdict"], "TIE")
+        self.assertEqual(b["races"]["tie"]["rerace"], "x")
+
+    def test_an_audit_survives_only_while_its_measurements_are_unchanged(self):
+        prev = self.board(r=self.race(5.0, 10.0))
+        prev["races"]["r"]["audit"] = {"identical/fit": {
+            "verdict": "FAIR", "rerace": "", "pairing": MB.pairing(prev["races"]["r"], "identical", "fit")}}
+        same = self.board(r=self.race(5.0, 10.0))
+        MB.apply_fairness(same, prev, "2026-10-13")
+        self.assertEqual(same["races"]["r"]["audit"]["identical/fit"]["verdict"], "FAIR")
+        self.assertNotIn("rerace", same["races"]["r"])
+        changed = self.board(r=self.race(4.0, 10.0))
+        MB.apply_fairness(changed, prev, "2026-10-13")
+        self.assertEqual(changed["races"]["r"]["audit"]["identical/fit"]["verdict"], "UNCHECKED")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -83,6 +83,36 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 5. Read logs with grep and short tails; never paste whole logs. Tell every subagent the same.
 6. OPPONENT CLOCKS (Andrew, 2026-10-07/08; audit tools/board_clock_audit.py): every stored opponent cell carries a comparability span (input_home, inside_clock, upload_ms_untimed). Our board fit clock includes the host-to-device copy of X. The neural torch twins move inputs inside their clock too (whole/whole, comparable as is). The classical torch-gpu columns and the algos torch/cupy/gpytorch GPU arms time with inputs already on the device (kernel-only); cuML/cuVS/cuGraph record their copy separately. The board shows both clocks per cell where derivable (whole = kernel + copy): torch-GPU ratios kernel/kernel, every other opponent whole/whole, never an invented copy time. NO opponent re-score. Our arm records its copy separately (upload_ms_separate; classical since freeze-20261007; algos driver owes the probe), then only OUR cells on the MIXED lanes are re-raced.
 
+## Race fairness (Andrew, 2026-10-13)
+
+A 2026-10-13 audit found that many board races were not like-for-like. These rules apply to every race,
+whether ours is faster or slower, on every vendor and in every mode.
+
+- **Same settings.** Every setting that changes the work is pinned to one explicit value on both arms (never a
+  library default on one side), read back from the constructed objects by `tools/bench_board_params.py`, and
+  must report `MATCHED`. A race whose arms were never compared is not shown.
+- **Same work.** Same algorithm, same model, same problem, same stopping rule, same precision, and inputs
+  prepared the same way inside or outside both clocks. Ours silently ignoring a declared setting is unfair.
+- **A real opponent.** An opponent is a library's own implementation called through its public API. Code our
+  harness writes from primitives (a torch k-means, a cdist+topk kNN, an eigh OLS, a pure-PyTorch reference
+  model) is never an opponent. A reference implementation, an outdated library version, a slow host, a slow code
+  path, FP64 on a GPU built for FP32, or a compile timeout that silently promotes a slower arm cripples the
+  opponent and is unfair.
+- **More iterations is unfair.** An opponent that runs more iterations than ours is not doing the same work.
+- **Fair both ways.** A race that is unfair to ours is just as wrong.
+- **Accepted:** different random starts (for example each arm's own k-means++ draw) and margins inside
+  run-to-run noise.
+- **Ties are not cited.** ours/theirs between 0.95 and 1.05 is a tie: it is raced again before it is shown.
+- **Marks live on the race.** Every (mode, phase) row of a race in `board.json` carries an entry in
+  `race["audit"]` (verdict, reason, evidence, opponent, ratio, date, pairing fingerprint); an entry with
+  `rerace: "x"` must be raced again, and `race["rerace"]` is `"x"` when any entry is. Audits write these by hand;
+  `tools/main_board_ingest.py` (`apply_fairness`) keeps an entry only while the measurements it judged are
+  unchanged and judges every other row by `fairness_rule`: no MATCHED parity check and no audit means `x`.
+  The paper (mlsys) and mojolearn.org omit every row marked `x`.
+- **Code fixes are labelled.** Every race-code change from the audit carries a `FAIRNESS FIX (2026-10-13 audit)`
+  comment saying what was wrong before; results raced before such a change get extra scrutiny.
+- **Audits never rerun anything.** They read boards, logs and code; reruns happen only when the owner asks.
+
 ## Incremental experiment delivery (owner, 2026-10-05)
 
 - Keep experiment code, the selectable runner, decisions and retained result summaries in `main`.

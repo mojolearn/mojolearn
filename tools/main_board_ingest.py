@@ -82,6 +82,7 @@ from __future__ import annotations
 import argparse
 import copy
 import datetime
+import hashlib
 import importlib.util
 import json
 import os
@@ -1036,6 +1037,98 @@ def collect(BB, args, resolve, skips):
     return obs
 
 
+# ---------------------------------------------------------------------------
+# Fairness marks (Andrew, 2026-10-13 audit)
+# ---------------------------------------------------------------------------
+# FAIRNESS FIX (2026-10-13 audit): before this, the main boards paired our one scored run with opponent cells
+# copied from other boards and never compared the two arms' settings ("params_check: not checked"), and an audit
+# mark written on a race was lost at the next rebuild. Now every (mode, phase) row of a race carries an entry in
+# race["audit"]: a verdict from a human audit (FAIR, SUSPECT, UNFAIR, TIE; written by hand) or one from
+# fairness_rule(). An entry with rerace "x" must be raced again before it is shown; the paper (mlsys) and
+# mojolearn.org omit those rows, and race["rerace"] is "x" when any of its entries is. An entry survives a rebuild
+# only while the measurements it judged are unchanged (its "pairing" fingerprint); a changed row is judged again.
+TIE_BAND = (0.95, 1.05)
+
+
+def _phase_cells(race, phase):
+    return (race.get("cells") if phase == "fit" else race.get("infer_cells")) or []
+
+
+def _completed(cell):
+    ms = cell.get("median_ms")
+    return cell.get("status") == "ok" and isinstance(ms, (int, float)) and ms > 0
+
+
+def _our_arm(mode):
+    return "ours-fast" if mode == "fast" else "ours"
+
+
+def pairing(race, mode, phase):
+    """Fingerprint of what one (mode, phase) row measures: our arm's and every opponent's status and median."""
+    rows = sorted((str(c.get("arm")), str(c.get("status")),
+                   round(c["median_ms"], 6) if isinstance(c.get("median_ms"), (int, float)) else None)
+                  for c in _phase_cells(race, phase)
+                  if c.get("arm") == _our_arm(mode) or c.get("mode") == "opponent")
+    return hashlib.sha256(json.dumps(rows).encode()).hexdigest()[:16]
+
+
+def fairness_rule(race, mode, phase, today):
+    """The entry for a row no audit covers, or None when there is no row (no our cell, no completed opponent).
+    A row is shown only after a MATCHED settings-parity check of both arms (tools/bench_board_params.py); a tie
+    (ours/theirs within TIE_BAND against the fastest completed GPU opponent, else the fastest completed opponent)
+    is never shown: it is raced again first."""
+    cells = _phase_cells(race, phase)
+    ours = next((c for c in cells if c.get("arm") == _our_arm(mode)), None)
+    opps = [c for c in cells if c.get("mode") == "opponent" and _completed(c)]
+    if ours is None or not opps:
+        return None
+    best = min([c for c in opps if c.get("device") == "gpu"] or opps, key=lambda c: c["median_ms"])
+    ratio = ours["median_ms"] / best["median_ms"] if _completed(ours) else None
+    entry = {"rule": "main_board_ingest.fairness_rule (2026-10-13)", "date": today, "opponent": best.get("arm"),
+             "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
+             "pairing": pairing(race, mode, phase)}
+    if race.get("params_check") != "MATCHED":
+        entry.update(verdict="UNCHECKED", rerace="x",
+                     reason="no MATCHED settings-parity check of both arms and no audit")
+    elif ratio is not None and TIE_BAND[0] <= ratio <= TIE_BAND[1]:
+        entry.update(verdict="TIE", rerace="x", reason="a tie is not cited until it is raced again")
+    else:
+        entry.update(verdict="MATCHED", rerace="", reason="settings-parity check MATCHED")
+    return entry
+
+
+def apply_fairness(board, prev, today):
+    """Give every row of every race of `board` its audit entry: the previous board's entry while its pairing is
+    unchanged, otherwise fairness_rule(). Sets race["audit"] and race["rerace"]; returns the number of races
+    marked "x"."""
+    prev_races = (prev or {}).get("races") or {}
+    modes = (board.get("config") or {}).get("modes") or ["identical"]
+    marked = 0
+    for section in ("races", "extra_races"):
+        for rid, rr in ((board.get(section) or {}).items()):
+            old = ((prev_races.get(rid) or ((prev or {}).get("extra_races") or {}).get(rid) or {})
+                   .get("audit") or {})
+            audit = {}
+            for mode in modes:
+                for phase in ("fit", "infer"):
+                    key = "%s/%s" % (mode, phase)
+                    entry = old.get(key)
+                    if not (entry and entry.get("pairing") == pairing(rr, mode, phase)):
+                        entry = fairness_rule(rr, mode, phase, today)
+                    if entry:
+                        audit[key] = entry
+            if audit:
+                rr["audit"] = audit
+            else:
+                rr.pop("audit", None)
+            if any(e.get("rerace") == "x" for e in audit.values()):
+                rr["rerace"] = "x"
+                marked += 1
+            else:
+                rr.pop("rerace", None)
+    return marked
+
+
 def build_parser():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--results", action="append", help="BOX=PATH lq results file (repeatable; default %s)"
@@ -1098,6 +1191,7 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
         archive = HW.archive_index(os.path.join(args.opponent_archive or "", column, "opponent-cells-all.jsonl.gz"))
         backfill = {}
         result = assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failures, archive, backfill)
+        apply_fairness(result, prev, generated[:10])
         # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
         unknown, notcmp = [], 0
         for rid, rr in sorted(result["races"].items()):
