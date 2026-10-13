@@ -12,14 +12,11 @@ read the marks and omit rows with rerace "x" and opponent arms in race["opponent
     python3 tools/race_fairness.py --check <board.json>...    # print what would change, write nothing
     python3 tools/race_fairness.py --review <board.json>...   # list warning signs on rows still shown
 
-What it applies, in order:
- 1. Opponent arms that are not opponents are excluded from the race (race["opponents_excluded"]), and the race is
-    judged against its remaining opponents: code our harness wrote (HARNESS_ARMS) and torch arms measured on a
-    host shown to run identical work measurably slower (SLOW_HOSTS).
- 2. A row a human audit judged (race["audit"][key]["audit"] set) keeps that verdict while the measurements it
-    judged are unchanged (its "pairing" fingerprint); UNFAIR hides it, FAIR/SUSPECT/TIE show it.
- 3. Every other row is judged by fairness_rule(): different iteration counts on the two arms -> UNFAIR (hidden);
-    otherwise MATCHED (settings read back and equal), TIE or UNCHECKED, all shown.
+Publication requires sufficient evidence (Andrew, 2026-10-13, later clarification).
+Existing supported audits remain usable; no blanket rerun is required. Unknown,
+unresolved or unfair pairings are excluded individually. Each row carries the
+admitted opponent arms, and is hidden only when none remain. Full measurement
+fingerprints invalidate a decision when its supporting evidence changes.
 Nothing here edits a measurement.
 """
 import argparse
@@ -46,13 +43,8 @@ for _lane in ("lm-forward", "lm-train-step", "lm-infer", "lm-host-train-step", "
               "resnet-block"):
     HARNESS_ARMS[_lane] = _TORCH                   # harness twins and pure-PyTorch references (the stored cells)
 
-# 1b. A host shown, by the board's own measurements, to run identical work measurably slower than another host of
-# the same GPU model is a broken measurement box: every opponent cell measured there is excluded, any library, any
-# lane (Andrew, 2026-10-13). slow_hosts() finds them: cells of the same lane, arm and input shape measured on two
-# hosts, and a host whose median time over at least MIN_MATCHED such pairs is SLOW_FACTOR or more times another
-# host's. SLOW_HOSTS adds hosts known from evidence outside the board.
-SLOW_FACTOR = 1.3
-MIN_MATCHED = 5
+# Existing evidence-backed host finding is retained. The former automatic
+# lane/arm/shape timing heuristic was insufficient to establish equal work.
 SLOW_HOSTS = {
     "cc560ebdaf91": "L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same "
                     "shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
@@ -85,7 +77,7 @@ def cell_host(cell):
     return host or (cell.get("hardware") or "")
 
 
-def pairing(race, mode, phase):
+def legacy_pairing(race, mode, phase):
     """Fingerprint of what one (mode, phase) row measures: our arm's and every opponent's status and median."""
     rows = sorted((str(c.get("arm")), str(c.get("status")),
                    round(c["median_ms"], 6) if isinstance(c.get("median_ms"), (int, float)) else None)
@@ -94,34 +86,29 @@ def pairing(race, mode, phase):
     return hashlib.sha256(json.dumps(rows).encode()).hexdigest()[:16]
 
 
+def pairing(race, mode, phase):
+    """Bind approval to actual evidence, never just unchanged median times."""
+    cells = sorted((c for c in phase_cells(race, phase)
+                    if c.get("arm") == our_arm(mode) or c.get("mode") == "opponent"),
+                   key=lambda c: str(c.get("arm")))
+    # Computed display ratios are not observations and can change on rebuild.
+    ignored = {"ratio_ours_identical_over", "ratio_ours_fast_over", "ratio_ours_identical_clock",
+               "ratio_ours_fast_clock", "clock"}
+    basis = dict(cells=[{k: v for k, v in c.items() if k not in ignored} for c in cells],
+                 params=race.get("params"), params_check=race.get("params_check"),
+                 lane=race.get("lane"), dataset=race.get("dataset"),
+                 lane_config=race.get("lane_config"))
+    return "v2:" + hashlib.sha256(json.dumps(basis, sort_keys=True, default=str).encode()).hexdigest()
+
+
 def slow_hosts(board):
-    """{host: reason}: SLOW_HOSTS plus hosts this board itself shows to be slow (see 1b)."""
-    import statistics
-    found = dict(SLOW_HOSTS)
-    groups = {}
-    for section in ("races", "extra_races"):
-        for rr in (board.get(section) or {}).values():
-            for c in phase_cells(rr, "fit"):
-                host = (c.get("copied_from") or {}).get("box")
-                shape = c.get("shape") or rr.get("shape")
-                if c.get("mode") == "opponent" and completed(c) and host and shape:
-                    groups.setdefault((rr.get("lane"), c.get("arm"), str(shape)), {}).setdefault(host, []).append(c["median_ms"])
-    pairs = {}
-    for by in groups.values():
-        hosts = sorted(by)
-        for i, a in enumerate(hosts):
-            for b in hosts[i + 1:]:
-                ratio = statistics.median(by[a]) / statistics.median(by[b])
-                pairs.setdefault((a, b), []).append(ratio)
-    for (a, b), ratios in pairs.items():
-        if len(ratios) < MIN_MATCHED:
-            continue
-        m = statistics.median(ratios)
-        if m >= SLOW_FACTOR:
-            found.setdefault(a, "%.2fx slower than %s on %d matched cells of this board" % (m, b, len(ratios)))
-        elif 1 / m >= SLOW_FACTOR:
-            found.setdefault(b, "%.2fx slower than %s on %d matched cells of this board" % (1 / m, a, len(ratios)))
-    return found
+    """Only recorded host findings; timing ratios alone do not establish cause.
+
+    FAIRNESS FIX (2026-10-13 audit): matching lane/arm/shape did not verify
+    matching settings, versions or resource allocation. Do not automatically
+    turn that heuristic into a blanket exclusion of an entire host.
+    """
+    return dict(SLOW_HOSTS)
 
 
 def exclusions(race, slow=None):
@@ -134,8 +121,13 @@ def exclusions(race, slow=None):
         if c.get("mode") != "opponent" or arm in out:
             continue
         if pred and pred(arm):
-            out[arm] = "code our harness wrote, not a library's own implementation"
-            continue
+            implementation = (c.get("params") or {}).get("implementation") or {}
+            module = implementation.get("module", "")
+            # New real-library replacements retain the actual class read-back.
+            # Historical harness arms keep their original exclusion.
+            if not module.startswith(("transformers.", "mamba_ssm.", "hipvs.", "cuml.", "sklearn.")):
+                out[arm] = "code our harness wrote, not a library's own implementation"
+                continue
         for host, why in slow.items():
             if host in cell_host(c):
                 out[arm] = "measured on %s, a slow box: %s" % (host, why)
@@ -157,37 +149,132 @@ def exclude(race, today, slow=None):
         ex["reason"] = "; ".join("%s: %s" % kv for kv in sorted(why.items()))
 
 
-def fairness_rule(race, mode, phase, today):
+def exclusion_basis(race):
+    cells = [c for phase in ("fit", "infer") for c in phase_cells(race, phase) if c.get("mode") == "opponent"]
+    return hashlib.sha256(json.dumps(cells, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _parameters(race, cell):
+    record = cell.get("params") or ((race.get("params") or {}).get("arms") or {}).get(cell.get("arm"))
+    if not record:
+        fit = next((c for c in phase_cells(race, "fit") if c.get("arm") == cell.get("arm")), {})
+        record = fit.get("params")
+    return (record or {}).get("params") or {}
+
+
+def _pair_problems(race, ours, opp):
+    bad, missing = [], []
+    if not completed(ours):
+        missing.append("our measurement did not complete")
+    for c in (ours, opp):
+        q = c.get("quality") or {}
+        if q.get("error") or q.get("finite") is False or q.get("host_reference_passed") is False:
+            bad.append("recorded quality failure: " + str(c.get("arm")))
+    a, b = n_iter(ours), n_iter(opp)
+    if a is not None and b is not None and a != b:
+        bad.append("iterations differ: ours %s, %s %s" % (a, opp.get("arm"), b))
+    po, pt = _parameters(race, ours), _parameters(race, opp)
+    exceptions = list((race.get("params") or {}).get("exceptions") or [])
+    exceptions.extend((opp.get("measurement") or {}).get("parameter_exceptions") or [])
+    allowed = {e.get("param") for e in exceptions if e.get("arm") == opp.get("arm") and e.get("reason")}
+    for key in sorted(set(po) & set(pt) - {"seed"}):
+        if key in allowed:
+            continue
+        if po[key] is None or pt[key] is None:
+            missing.append("unresolved setting: " + key)
+        elif po[key] != pt[key]:
+            bad.append("setting %s differs: %r vs %r" % (key, po[key], pt[key]))
+    for cell in (ours, opp):
+        m = cell.get("measurement")
+        if m:
+            if m.get("completeness") != "complete":
+                missing.extend(m.get("missing") or ["incomplete measurement record"])
+            if any((m.get(k) or {}).get("status") != "verified" for k in ("source", "artifacts")):
+                missing.append("measurement source/logs not verified in R2")
+    mo, mt = ours.get("measurement") or {}, opp.get("measurement") or {}
+    if mo and mt:
+        if (mo.get("dataset") or {}).get("identity") != (mt.get("dataset") or {}).get("identity"):
+            bad.append("different dataset identity")
+        if mo.get("shape") and mt.get("shape") and mo["shape"] != mt["shape"]:
+            bad.append("different measured input shape")
+    return bad, missing, bool(po and pt and (set(po) & set(pt) - {"seed"}))
+
+
+def fairness_rule(race, mode, phase, today, prior=None):
     """The entry for a row no audit covers, or None when there is no row (no our cell, or no completed opponent that
     is not excluded)."""
     cells = phase_cells(race, phase)
-    ours = next((c for c in cells if c.get("arm") == our_arm(mode)), None)
+    our_cells = [c for c in cells if c.get("arm") == our_arm(mode)]
+    ours = next(iter(our_cells), None)
     excluded = set((race.get("opponents_excluded") or {}).get("arms") or [])
     opps = [c for c in cells if c.get("mode") == "opponent" and completed(c) and c.get("arm") not in excluded]
-    if ours is None or not opps:
+    if ours is None:
         return None
-    best = min([c for c in opps if c.get("device") == "gpu"] or opps, key=lambda c: c["median_ms"])
-    ratio = ours["median_ms"] / best["median_ms"] if completed(ours) else None
-    entry = {"rule": "race_fairness.fairness_rule (2026-10-13)", "date": today, "opponent": best.get("arm"),
+    judged, admitted = {}, []
+    def batch(c):
+        return c.get("batch"), c.get("batch_rows")
+    for arm in sorted({c["arm"] for c in opps}):
+        group = [c for c in opps if c["arm"] == arm]
+        opp = next((c for c in group if batch(c) == batch(ours)), group[0])
+        arm = opp["arm"]
+        bad, missing, readback = [], [], True
+        for candidate in group:
+            own = next((c for c in our_cells if batch(c) == batch(candidate)), None)
+            if own is None:
+                missing.append("no matching inference batch")
+                continue
+            problems, gaps, checked = _pair_problems(race, own, candidate)
+            bad.extend(problems); missing.extend(gaps); readback = readback and checked
+        if any(not any(batch(c) == batch(o) for c in group) for o in our_cells):
+            missing.append("opponent lacks a matching batch")
+        # Historical hand verdicts judged rows, not an explicit per-arm map.
+        # A problem in our result (or an unscoped old finding) cannot be cured
+        # by silently choosing a different opponent. A later audit can scope it.
+        hand = prior and not prior.get("rule") and (prior.get("opponent") == arm or
+            (prior.get("verdict") in ("UNFAIR", "SUSPECT", "INSUFFICIENT") and prior.get("scope") != "opponent"))
+        old_pair = ((prior or {}).get("opponents") or {}).get(arm)
+        if old_pair and old_pair.get("audit"):
+            hand = old_pair
+        else:
+            hand = prior if hand else None
+        if bad:
+            verdict, reason = "UNFAIR", "; ".join(bad)
+        elif missing:
+            verdict, reason = "INSUFFICIENT", "; ".join(sorted(set(missing)))
+        elif hand and hand.get("verdict") in ("UNFAIR", "SUSPECT", "INSUFFICIENT"):
+            verdict, reason = hand["verdict"], hand.get("reason", "audit unresolved")
+        elif hand and hand.get("verdict") in ("FAIR", "TIE", "MATCHED") and hand.get("evidence"):
+            verdict, reason = hand["verdict"], hand.get("reason", "retained supported audit")
+        elif readback and (race.get("params_check") == "MATCHED" or
+                           (ours.get("measurement") and opp.get("measurement"))):
+            verdict, reason = "MATCHED", "recorded effective settings compared on both arms"
+        else:
+            verdict, reason = "INSUFFICIENT", "no supported audit or matched effective settings for this pairing"
+        row = dict(verdict=verdict, reason=reason, rerace="" if verdict in ("FAIR", "TIE", "MATCHED") else "x")
+        if hand:
+            row.update({k: hand[k] for k in ("audit", "evidence", "date") if k in hand})
+        judged[arm] = row
+        if not row["rerace"]:
+            admitted.append(opp)
+    best = min([c for c in admitted if c.get("device") == "gpu"] or admitted,
+               key=lambda c: c["median_ms"]) if admitted else None
+    ratio = ours["median_ms"] / best["median_ms"] if completed(ours) and best else None
+    entry = {"rule": "race_fairness.fairness_rule (2026-10-13)", "date": today, "opponent": best.get("arm") if best else None,
              "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
-             "pairing": pairing(race, mode, phase)}
-    differ = [(c.get("arm"), n_iter(c)) for c in opps
-              if n_iter(ours) is not None and n_iter(c) is not None and n_iter(c) != n_iter(ours)]
-    if differ:
-        # Either arm running more iterations than the other is a broken comparison.
-        entry.update(verdict="UNFAIR", rerace="x",
-                     reason="iterations differ: ours %s, %s" % (n_iter(ours), ", ".join("%s %s" % d for d in differ)))
-    elif race.get("params_check") != "MATCHED":
-        entry.update(verdict="UNCHECKED", rerace="",
-                     reason="no MATCHED settings-parity check of both arms and no audit yet; shown until audited")
-    elif ratio is not None and TIE_BAND[0] <= ratio <= TIE_BAND[1]:
-        entry.update(verdict="TIE", rerace="", reason="a tie (ours/theirs within TIE_BAND); shown")
+             "pairing": pairing(race, mode, phase), "opponents": judged,
+             "admitted_opponents": [c["arm"] for c in admitted]}
+    if best is None:
+        entry.update(verdict="UNFAIR" if any(e["verdict"] == "UNFAIR" for e in judged.values()) else "INSUFFICIENT",
+                     rerace="x", reason="no opponent with sufficient valid comparison evidence")
     else:
-        entry.update(verdict="MATCHED", rerace="", reason="settings-parity check MATCHED")
+        accepted = judged[best["arm"]]
+        entry.update(verdict=accepted["verdict"], rerace="", reason=accepted["reason"])
+        if ratio is not None and TIE_BAND[0] <= ratio <= TIE_BAND[1]:
+            entry["verdict"] = "TIE"
     return entry
 
 
-def apply(board, prev=None, today=None):
+def apply(board, prev=None, today=None, upgrade_legacy=False):
     """Mark every row of every race of `board` (rules 1-3). `prev`: the previous version of the board, whose audit
     entries and exclusions carry over while unchanged (None: the board's own). Returns the races marked "x"."""
     today = today or datetime.date.today().isoformat()
@@ -200,16 +287,33 @@ def apply(board, prev=None, today=None):
             prev_rr = (((prev or {}).get("races") or {}).get(rid)
                        or ((prev or {}).get("extra_races") or {}).get(rid) or {})
             old = prev_rr.get("audit") or {}
-            if prev_rr.get("opponents_excluded") and not rr.get("opponents_excluded"):
-                rr["opponents_excluded"] = prev_rr["opponents_excluded"]
+            old_ex = rr.get("opponents_excluded") or prev_rr.get("opponents_excluded")
+            basis = exclusion_basis(rr)
+            if old_ex and (old_ex.get("basis") == basis or (upgrade_legacy and not old_ex.get("basis"))):
+                rr["opponents_excluded"] = json.loads(json.dumps(old_ex))
+            elif old_ex:
+                rr.pop("opponents_excluded", None)
             exclude(rr, today, slow)
+            if rr.get("opponents_excluded"):
+                rr["opponents_excluded"]["basis"] = basis
             audit = {}
             for mode in modes:
                 for phase in ("fit", "infer"):
                     key = "%s/%s" % (mode, phase)
                     entry = old.get(key)
-                    keep = entry and entry.get("pairing") == pairing(rr, mode, phase) and not entry.get("rule")
-                    entry = entry if keep else fairness_rule(rr, mode, phase, today)
+                    keep = entry and entry.get("pairing") == pairing(rr, mode, phase)
+                    if upgrade_legacy and entry and entry.get("pairing") == legacy_pairing(rr, mode, phase):
+                        keep = True
+                        history = rr.setdefault("audit_history", [])
+                        archived = dict(entry, row=key)
+                        if archived not in history:
+                            history.append(archived)
+                    prior = entry if keep else None
+                    if entry and not keep:
+                        history = rr.setdefault("audit_history", [])
+                        if entry not in history:
+                            history.append(entry)
+                    entry = fairness_rule(rr, mode, phase, today, prior=prior)
                     if entry:
                         audit[key] = entry
             if audit:
@@ -277,6 +381,8 @@ def main(argv=None):
     ap.add_argument("--check", action="store_true", help="print what would change; write nothing")
     ap.add_argument("--review", action="store_true", help="list warning signs on rows still shown")
     ap.add_argument("--date", default=datetime.date.today().isoformat())
+    ap.add_argument("--upgrade-legacy-audits", action="store_true",
+                    help="explicitly bind existing supported hand audits to the current full evidence (no measurements)")
     args = ap.parse_args(argv)
     for path in args.boards:
         board, raw, fmt = _load(path)
@@ -287,7 +393,7 @@ def main(argv=None):
                 print("  %-22s %-14s %-15s %-9s %s" % (lane, ds, key, verdict, "; ".join(signs)))
             continue
         before = json.loads(raw)
-        marked = apply(board, None, args.date)
+        marked = apply(board, None, args.date, upgrade_legacy=args.upgrade_legacy_audits)
         changed = []
         for section in ("races", "extra_races"):
             for rid, rr in (board.get(section) or {}).items():

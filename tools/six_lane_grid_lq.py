@@ -721,7 +721,7 @@ RESULT_RE = re.compile(r'^(?P<id>[A-Za-z]\d+) (?P<vendor>nvidia|amd) (?P<branch>
 ALGOS_RE = re.compile(r'(?:^|\s)ALGOS lane=(?P<lane>\S+) dataset=(?P<ds>\S+) arm=(?P<arm>\S+) status=(?P<status>\S+) '
                       r'median_ms=(?P<ms>\S+)(?: quality=(?P<q>.*))?$')
 TAG_RE = re.compile(TAG_ENV + r'=([A-Za-z0-9_.-]+)')
-DIGEST_TAIL_RE = re.compile(r' digest=([0-9a-f]+|none)$')
+DIGEST_TAIL_RE = re.compile(r' digest=([0-9a-f]+|none|ROUNDS-DIFFER\([^)]*\))$')
 GRIDBB_RE = re.compile(r'^GRIDBB tag=(?P<tag>\S+) vendor=(?P<vendor>\S+) head=(?P<head>\S+) family=(?P<family>\S+) '
                        r'lane=(?P<lane>\S+) dataset=(?P<ds>\S+) status=(?P<status>\S+) median_ms=(?P<ms>\S+) '
                        r'hash=(?P<hash>\S+) quality=(?P<q>.*)$')
@@ -746,7 +746,7 @@ def parse_algos(text):
         d = DIGEST_TAIL_RE.search(q)
         if d:
             tail = True
-            digest = None if d.group(1) == 'none' else d.group(1)[:DIGEST_CHARS]
+            digest = d.group(1)[:DIGEST_CHARS] if re.fullmatch(r'[0-9a-f]+', d.group(1)) else None
             q = q[:d.start()]
         try:
             q = json.loads(q)

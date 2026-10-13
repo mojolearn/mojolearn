@@ -240,25 +240,25 @@ class MainBoardIngest(unittest.TestCase):
 
 
 class FairnessMarks(unittest.TestCase):
-    """apply_fairness: a row is shown only with a MATCHED parity check or an audit; ties are raced again."""
+    """Supported historical measurements survive; missing evidence does not publish."""
 
     @staticmethod
     def race(ours_ms, opp_ms, params_check="not checked on the main board"):
         return {"params_check": params_check, "cells": [
-            {"arm": "ours", "mode": "identical", "status": "ok", "median_ms": ours_ms},
-            {"arm": "cuml-gpu", "mode": "opponent", "device": "gpu", "status": "ok", "median_ms": opp_ms}],
+            {"arm": "ours", "mode": "identical", "status": "ok", "median_ms": ours_ms, "params":{"params":{"alpha":1}}},
+            {"arm": "cuml-gpu", "mode": "opponent", "device": "gpu", "status": "ok", "median_ms": opp_ms, "params":{"params":{"alpha":1}}}],
             "infer_cells": []}
 
     def board(self, **races):
         return {"config": {"modes": ["identical"]}, "races": races}
 
-    def test_unchecked_rows_are_recorded_and_shown(self):
+    def test_unchecked_rows_are_recorded_and_excluded(self):
         b = self.board(r=self.race(5.0, 10.0), slow=self.race(20.0, 10.0))
-        self.assertEqual(MB.apply_fairness(b, None, "2026-10-13"), 0)
+        self.assertEqual(MB.apply_fairness(b, None, "2026-10-13"), 2)
         for rid in ("r", "slow"):
             e = b["races"][rid]["audit"]["identical/fit"]
-            self.assertEqual((e["verdict"], e["rerace"]), ("UNCHECKED", ""))
-            self.assertNotIn("rerace", b["races"][rid])
+            self.assertEqual((e["verdict"], e["rerace"]), ("INSUFFICIENT", "x"))
+            self.assertEqual(b["races"][rid]["rerace"], "x")
 
     def test_matched_rows_pass_and_ties_are_marked(self):
         b = self.board(win=self.race(5.0, 10.0, "MATCHED"), tie=self.race(9.8, 10.0, "MATCHED"))
@@ -285,19 +285,20 @@ class FairnessMarks(unittest.TestCase):
         self.assertEqual(b["races"]["r"]["audit"]["identical/fit"]["opponent"], "cuml-gpu")
         nxt = self.board(r=self.race(5.0, 10.0, "MATCHED"))
         MB.apply_fairness(nxt, b, "2026-10-13")
-        self.assertEqual(nxt["races"]["r"]["opponents_excluded"]["arms"], ["torch-gpu"])
+        self.assertNotIn("opponents_excluded", nxt["races"]["r"])
 
     def test_an_audit_survives_only_while_its_measurements_are_unchanged(self):
         prev = self.board(r=self.race(5.0, 10.0))
         prev["races"]["r"]["audit"] = {"identical/fit": {
-            "verdict": "FAIR", "rerace": "", "pairing": MB.pairing(prev["races"]["r"], "identical", "fit")}}
+            "verdict": "FAIR", "rerace": "", "opponent":"cuml-gpu", "audit":"human", "evidence":"retained source and settings",
+            "pairing": MB.pairing(prev["races"]["r"], "identical", "fit")}}
         same = self.board(r=self.race(5.0, 10.0))
         MB.apply_fairness(same, prev, "2026-10-13")
         self.assertEqual(same["races"]["r"]["audit"]["identical/fit"]["verdict"], "FAIR")
         self.assertNotIn("rerace", same["races"]["r"])
         changed = self.board(r=self.race(4.0, 10.0))
         MB.apply_fairness(changed, prev, "2026-10-13")
-        self.assertEqual(changed["races"]["r"]["audit"]["identical/fit"]["verdict"], "UNCHECKED")
+        self.assertEqual(changed["races"]["r"]["audit"]["identical/fit"]["verdict"], "INSUFFICIENT")
 
 
 class TreeSettingsDrift(unittest.TestCase):

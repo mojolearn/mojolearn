@@ -373,6 +373,9 @@ class MemProbe(object):
         if os.environ.get("MOJOLEARN_BOARD_ARTIFACT_MANIFEST"):
             import bench_board_provenance
             bench_board_provenance.register_worker(self.library)
+        if os.environ.get("MOJOLEARN_MEASUREMENT_RECEIPTS"):
+            import bench_board_evidence
+            bench_board_evidence.register_worker(self.library)
         try:
             self._reset_gpu()
             self._reset_host()

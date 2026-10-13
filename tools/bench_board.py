@@ -977,6 +977,8 @@ def child_env(ctx, extra=None):
     env["MOJOLEARN_REPO_COMMIT"] = ctx.get("commit") or "unknown"
     env["PYTHONUNBUFFERED"] = "1"
     env["MOJOLEARN_BOARD_VENDOR"] = ctx["vendor"]     # tools/bench_board_probe.py
+    if ctx.get("measurement_receipts"):
+        env["MOJOLEARN_MEASUREMENT_RECEIPTS"] = ctx["measurement_receipts"]
     if ctx["vendor"] == "nvidia" and ctx.get("ptxas"):
         env.setdefault("MODULAR_NVPTX_COMPILER_PATH", ctx["ptxas"])
     if ctx.get("artifact_manifest"):
@@ -1760,6 +1762,9 @@ def tree_cells(ctx, race, parsed):
                                     if arm in parsed.get("state_receipts", {}) else []),
                     fit=a["fit"], shape=parsed["shape"],
                     comparability={"fit_verdict": parsed["verdict"] or "UNKNOWN",
+                                   "span": {"input_home": "host", "inside_clock": "model construction, fit, arm.sync",
+                                            "outside_clock": "operation_prepare, score, consumed-output hashing",
+                                            "source": "tools/speed_gbdt_arm.py run"},
                                    "fit_verdict_line": parsed["verdict_line"]},
                     verdict=parsed["verdict"] or "UNKNOWN")
         cell.update(memory_fields(parsed.get("mem", {}).get(arm)))
@@ -2175,7 +2180,8 @@ _SETTINGS_CACHE = {}
 
 
 def race_settings(ctx, race):
-    key = (race["family"], race["lane"], race.get("shape"))
+    key = (race["family"], race["lane"], race.get("shape"), race.get("rows"),
+           ctx["rounds"], ctx["vendor"], tuple(race.get("modes") or []))
     if key not in _SETTINGS_CACHE:
         s = {"seed": SEED, "rounds": ctx["rounds"], "warmup_rounds": 1,
              "interleaved": True, "rows_cap": race["rows"]}
@@ -2472,6 +2478,7 @@ def params_probe(ctx, race, arms):
             if a is None or arm not in libs:
                 continue
             out[arm] = {"params": a.get("params"), "version": libs[arm].get("version"),
+                        "record": a, "exceptions": rep.get("exceptions", []),
                         "device_name": libs[arm].get("device_name")}
         return out
     cmd, extra, ceiling = globals()[_PARAMS_ONLY_CMD[race["family"]]](ctx, sub)
@@ -2494,6 +2501,7 @@ def params_probe(ctx, race, arms):
             continue
         info = a.get("info") or {}
         out[arm] = {"params": p.get("params"), "version": info.get("version"),
+                    "record": p, "exceptions": rep.get("exceptions", []),
                     "device_name": info.get("device_name")}
     return out
 
@@ -2738,6 +2746,16 @@ def run_race(ctx, race):
     the race (tools/bench_board_store.py). Default is our arm(s) only: an
     opponent the store does not hold is skipped unless ctx["with_opponents"]
     (--with-opponents / --retime-opponents)."""
+    evidence = None
+    if ctx.get("capture_measurements"):
+        E = _load_tool("bench_board_evidence")
+        files = race_data_files(ctx, race)
+        data = {"name": race["dataset"], "rows_requested": race.get("rows"),
+                "identity": race_data_sha(ctx, race, ctx["box"]),
+                "files": {name: sha256_file(path) if os.path.isfile(path) else None for name, path in files},
+                "generator": "retained source and recorded seed" if not files else None}
+        evidence = E.begin(ctx, race, race_settings(ctx, race), data)
+        ctx = dict(ctx, measurement_receipts=str(evidence[0] / "workers"))
     stored = stored_opponents(ctx, race)
     skipped = [] if (ctx.get("with_opponents") or ctx.get("retime")) else [
         a for a in race.get("opponents") or [] if a not in stored]
@@ -2765,7 +2783,39 @@ def run_race(ctx, race):
         os.makedirs(root, exist_ok=True)
         ctx["receipt_dir"] = tempfile.mkdtemp(prefix="race-", dir=root)
     if race["arms"]:
-        rec = _run_race(ctx, race)
+        # FAIRNESS FIX (2026-10-13 audit): check both newly executed and reused
+        # arms before timing. A cached opponent is not proof of pairing parity.
+        preflight = None
+        if evidence:
+            probe_arms = race["arms"] + list(stored)
+            probes = params_probe(ctx, full, probe_arms)
+            missing = [a for a in probe_arms if a not in probes or not probes[a].get("version")]
+            records = {a: dict(p["record"], __record__=True) for a, p in probes.items() if p.get("record")}
+            lane = ("algos/" if full["family"] == "algos" else "") + full["lane"]
+            exceptions = [(e["param"], e["arm"], e["reason"]) for p in probes.values()
+                          for e in p.get("exceptions", []) if all(k in e for k in ("param", "arm", "reason"))]
+            preflight = _params_mod().check(lane, records, family=full["family"], extra_exceptions=exceptions)
+            preflight["problems"].extend("missing parameter/version probe: " + a for a in missing)
+            for arm in probe_arms:
+                if arm in full.get("our_arms", {}):
+                    continue
+                impl = (records.get(arm) or {}).get("implementation") or {}
+                module = impl.get("module") or ""
+                if not module or module == "__main__" or module.startswith(("bench_", "tools.")):
+                    preflight["problems"].append("missing real library implementation read-back: " + arm +
+                        " (functional adapters must record the actual callable as __implementation__)")
+            if preflight["problems"]:
+                preflight["verdict"] = "REFUSED"
+            E.write(evidence[0] / "preflight.json", preflight)
+        if preflight and preflight["verdict"] == "REFUSED":
+            rec = dict(id=race["id"], family=race["family"], lane=race["lane"], dataset=race["dataset"],
+                       rows=race["rows"], cells=[], started=now_utc(), finished=now_utc(),
+                       status="failed", rc=2, params=preflight, params_check="REFUSED",
+                       failure="preflight refused before timing", preflight=preflight)
+        else:
+            rec = _run_race(ctx, race)
+            if preflight:
+                rec["preflight"] = preflight
     else:
         rec = dict(id=race["id"], family=race["family"], lane=race["lane"], dataset=race["dataset"],
                    rows=race["rows"], our_arms=declared_race["our_arms"], cells=[],
@@ -2814,6 +2864,8 @@ def run_race(ctx, race):
     if ctx.get("opponents_only"):
         cells = {c["arm"]: c for c in rec["cells"]}
         rec["status"] = "done" if rec["rc"] == 0 and all(successful_opponent_cell(cells.get(a, {})) for a in full["opponents"]) and (not ctx.get("infer") or successful_opponent_inference(full, full["opponents"], rec.get("infer_cells") or [])) else "failed"
+    if evidence:
+        E.seal(ctx, *evidence, rec)
     rec["stored_now"] = store_opponents(ctx, full, rec)
     return rec
 
@@ -2950,7 +3002,7 @@ def attach_params(ctx, rec):
     rep = reports[-1]
     rec["params"] = rep
     rec["params_check"] = rep.get("verdict")
-    for c in rec.get("cells") or []:
+    for c in (rec.get("cells") or []) + (rec.get("infer_cells") or []):
         arm = rep.get("arms", {}).get(c.get("arm"))
         if arm is not None:
             c["params"] = arm
@@ -3657,6 +3709,8 @@ def build_parser():
                         "says SMOKE). --rows does not apply to neural lanes")
     p.add_argument("--rounds", type=int, default=DEFAULT_ROUNDS,
                    help="timed rounds after one warm-up (default 1)")
+    p.add_argument("--evidence-local-only", action="store_true",
+                   help="retain evidence locally for an offline smoke; full measurements require verified R2 retention")
     p.add_argument("--mojolearn-version", default=None, help="pip install mojolearn==<V>")
     p.add_argument("--mojolearn-wheel", default=None,
                    help="install this wheel file instead of downloading one (sha256 recorded)")
@@ -4035,6 +4089,8 @@ def main(argv=None):
     # after every planned race passed a smoke run of these board and driver files
     full = not args.smoke and rows is None and not (
         any(r["family"] == "neural" for r in races) and args.neural_shape != "full")
+    if args.evidence_local_only and not args.smoke:
+        raise SystemExit("bench_board: --evidence-local-only is for smoke runs only")
     try:
         artifact_identity = _load_tool("bench_board_provenance").identity(args.artifact_manifest)
     except (OSError, ValueError) as exc:
@@ -4103,6 +4159,8 @@ def main(argv=None):
             "cuda" if vendor == "nvidia" else "hip")
         ctx["artifact_hardware"] = box["artifact_hardware"]
     ctx["box"] = box
+    ctx["capture_measurements"] = True
+    ctx["evidence_r2"] = not args.evidence_local_only
     ctx["retime"] = args.retime_opponents
     ctx["retime_cpu_opponents"] = args.retime_cpu_opponents
     ctx["opponents_only"] = args.opponents_only
@@ -4151,13 +4209,9 @@ def main(argv=None):
     todo = []
     for r in races:
         prev = result["races"].get(r["id"])
-        if prev and prev.get("status") == "done" and not prev.get("no_execution") and prev.get("params_check") != "MATCHED" \
-                and _driver_has_params_check(ctx, r["family"]):
-            print("bench_board: RERUN %s (done %s without a MATCHED parameter check: %s; its "
-                  "driver now has the check)" % (r["id"], prev.get("finished"),
-                                                 prev.get("params_check") or "NOT CHECKED"), flush=True)
-            result.setdefault("superseded", []).append(prev)
-        elif prev and prev.get("status") == "done" and not _rerun_wanted(args, r["id"], prev):
+        # Missing historical evidence changes publication eligibility, not the
+        # operator's requested work. Never silently remeasure a completed cell.
+        if prev and prev.get("status") == "done" and not _rerun_wanted(args, r["id"], prev):
             print("bench_board: skip %s (done %s)" % (r["id"], prev.get("finished")), flush=True)
             continue
         if prev and prev.get("status") == "done":
@@ -4185,9 +4239,13 @@ def main(argv=None):
         rec = run_race(ctx, r)
         rec["wall_s"] = round(time.time() - t0, 1)
         result["races"][r["id"]] = rec
+        _load_tool("race_fairness").apply(result)
         save_result(rpath, result)
         write_board(out, result)
         print("bench_board:   %s rc=%s %.0fs" % (rec["status"], rec["rc"], rec["wall_s"]), flush=True)
+        if rec.get("evidence_failure"):
+            print("bench_board: stopped after retaining local evidence: " + rec["evidence_failure"], flush=True)
+            return 1
     print("bench_board: board %s" % os.path.join(out, "BOARD.md"), flush=True)
     if args.smoke:
         return 1 if write_smoke(out, races, result, vendor, args.shard) else 0

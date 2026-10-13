@@ -516,10 +516,10 @@ def read_params(obj):
     """(library, source, {name: value}) of what the constructed arm holds."""
     if isinstance(obj, dict) and obj.get("__record__"):
         # read back in another process (a worker) by arm_record()
-        return obj["library"], obj["source"], dict(obj["params"])
+        return obj["library"], obj["source"], dict(obj.get("raw_params", obj["params"]))
     if isinstance(obj, dict):
         return obj.get("__library__", "declared"), "declared", {
-            k: v for k, v in obj.items() if k != "__library__"}
+            k: v for k, v in obj.items() if k not in ("__library__", "__implementation__")}
     lib = library_of(obj)
     # torch optimizer: its defaults are the hyperparameters every group starts from
     defaults = getattr(obj, "defaults", None)
@@ -576,9 +576,24 @@ def arm_record(obj):
     """What a WORKER process sends back to its conductor for one arm: the
     read-back of the object it constructed, JSON-safe. The conductor passes
     the records to enforce() in place of the objects."""
+    # FAIRNESS FIX (2026-10-13 audit): ignored and unrecognized settings were
+    # discarded, making the recorded recipe incomplete. Keep all raw values;
+    # canonical() alone decides which names can be compared across libraries.
     lib, source, raw = read_params(obj)
     return {"__record__": True, "library": lib, "source": source,
-            "params": {k: _jsonable(v) for k, v in raw.items() if k not in IGNORE}}
+            "implementation": implementation_of(obj),
+            "params": {k: _jsonable(v) for k, v in raw.items()}}
+
+
+def implementation_of(obj):
+    if isinstance(obj, dict):
+        if obj.get("__record__"):
+            return obj.get("implementation")
+        fn = obj.get("__implementation__")
+        if callable(fn):
+            return {"module": fn.__module__, "name": fn.__qualname__}
+        return None
+    return {"module": type(obj).__module__, "name": type(obj).__qualname__}
 
 
 def canonical(lib, params):
@@ -611,6 +626,8 @@ def _jsonable(v):
         return v
     if isinstance(v, (tuple, list)):
         return [_jsonable(x) for x in v]
+    if isinstance(v, dict):
+        return {str(k): _jsonable(x) for k, x in v.items()}
     try:
         import numpy as np                              # noqa: PLC0415
         if isinstance(v, np.generic):
@@ -685,10 +702,11 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
     adds for this race (the same shape as EXCEPTIONS without the lane).
     `seed`: None is `seed_for(lane)`."""
     seed = seed_for(lane) if seed is None else seed
-    resolved, sources, libs, no_seed, draws = {}, {}, {}, set(), set()
+    resolved, sources, libs, raw_params, no_seed, draws = {}, {}, {}, {}, set(), set()
     for name, obj in arms.items():
         lib, source, raw = read_params(obj)
         libs[name], sources[name] = lib, source
+        raw_params[name] = {k: _jsonable(v) for k, v in raw.items()}
         resolved[name] = canonical(lib, raw)
         if "seed" not in resolved[name] and has_no_seed_argument(obj, raw):
             no_seed.add(name)
@@ -753,6 +771,8 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
                                 % (name, param, rval, rname, ref, val, own_name, name))
     return {"lane": lane, "family": family, "reference": ref, "seed": seed,
             "arms": {n: {"library": libs[n], "source": sources[n],
+                         "implementation": implementation_of(arms[n]),
+                         "raw_params": raw_params[n],
                          "params": dict(sorted(
                              [(p, v) for p, (v, _) in c.items()]
                              + ([("seed", NO_SEED_DRAWS if n in draws else NO_SEED_ARGUMENT)]

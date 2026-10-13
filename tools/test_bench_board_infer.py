@@ -37,6 +37,13 @@ fsa = _load("forest_speed_arm_for_infer", os.path.join(REPO, "bench", "speed", "
 
 env = bbt.env            # the shared fixture (stub drivers, fake data)
 
+
+@pytest.fixture(autouse=True)
+def fake_driver_evidence(monkeypatch):
+    # Fake timing drivers have no worker receipts; test retention separately.
+    run_race = bb.run_race
+    monkeypatch.setattr(bb, "run_race", lambda ctx, race: run_race(dict(ctx, capture_measurements=False), race))
+
 # The trees stub, extended: with --infer it emits the FSPEED-INFER protocol.
 STUB_TREES_INFER = bbt.STUB_TREES + r'''
 if a.infer:

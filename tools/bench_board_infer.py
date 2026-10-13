@@ -193,7 +193,15 @@ def tree_cells(bb, ctx, race, log_path, fit_cells):
                     pass
             cell["quality"] = q
             cell["verdict"] = fit_verdict
+            fitted = next((c for c in fit_cells if c["arm"] == arm), {})
+            # FAIRNESS FIX (2026-10-13 audit): inference cells lost the worker's
+            # version/device record even though fit and inference share it.
+            for field in ("library_version", "device_name", "mode_witness"):
+                cell[field] = fitted.get(field)
             cell["comparability"] = {"fit_verdict": fit_verdict,
+                                     "span": {"input_home": "host", "inside_clock": "inference call",
+                                              "outside_clock": "post-processing, quality and consumed-output hashing",
+                                              "source": "bench/speed/forest_speed_arm.py inference rounds"},
                                      "clock": "host rows in, host predictions out"}
             cells.append(cell)
     return _ratios(cells, bb)
@@ -226,6 +234,10 @@ def classical_cells(bb, ctx, race, r):
         cell["quality"] = {k: v for k, v in (qual.get(arm) or {}).items() if k != "error"}
         span = ((fit.get(arm) or {}).get("span") or {})
         info = a.get("info") or {}
+        fitted_info = (fit.get(arm) or {}).get("info") or {}
+        cell["library_version"] = info.get("version") or fitted_info.get("version")
+        cell["device_name"] = info.get("device_name") or fitted_info.get("device_name")
+        cell["shape"] = {"batch": cell.get("batch"), "rows": cell.get("batch_rows")}
         ours_span = ((fit.get("ours") or {}).get("span") or {})
         asym = []
         if bb.arm_library(arm) != "mojolearn" and span.get("input_home") == "device" \

@@ -244,6 +244,10 @@ STUB_MORE = textwrap.dedent(r"""
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
+    # These fake-driver schema tests cannot produce real worker receipts or
+    # upload evidence. Evidence/preflight integration has separate CPU tests.
+    run_race = bb.run_race
+    monkeypatch.setattr(bb, "run_race", lambda ctx, race: run_race(dict(ctx, capture_measurements=False), race))
     data = tmp_path / "data"
     for rel in bb.DATA_FILES.values():
         f = data / rel

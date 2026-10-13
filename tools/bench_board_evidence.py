@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+"""Retain benchmark recipes, source bytes and logs independently of timings.
+
+This is benchmark tooling, never product execution. Source is captured before
+the race; logs and resolved worker records are sealed afterwards. Object names
+are content hashes, and R2 uploads are verified by reading the bytes back.
+"""
+import argparse
+import atexit
+import hashlib
+import gzip
+import importlib.metadata
+import io
+import json
+import os
+from pathlib import Path
+import platform
+import subprocess
+import sys
+import tarfile
+import urllib.error
+
+SCHEMA = "mojolearn.measurement.v1"
+ROOT = Path(__file__).resolve().parents[1]
+PREFIX = "measurements/records/v1"
+RECEIPTS = "MOJOLEARN_MEASUREMENT_RECEIPTS"
+_registered = False
+_libraries = set()
+ENV_KEYS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+            "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS",
+            "MOJOLEARN_BENCH_CPU_POLICY", "MOJOLEARN_NUMERIC_MODE",
+            "MOJOLEARN_GPU_ARCH", "CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES")
+
+
+def encoded(value):
+    return (json.dumps(value, sort_keys=True, indent=2, default=str) + "\n").encode()
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def file_hash(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def write(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_bytes(encoded(value))
+    tmp.replace(path)
+
+
+def archive(path, members):
+    """Deterministic archive; names are controlled, never command strings."""
+    with open(path, "wb") as raw, gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as zipped:
+        with tarfile.open(fileobj=zipped, mode="w") as out:
+            for name, data in sorted(members.items()):
+                info = tarfile.TarInfo(name)
+                info.size = len(data)
+                info.mode = 0o644
+                out.addfile(info, io.BytesIO(data))
+    return dict(sha256=file_hash(path), bytes=Path(path).stat().st_size,
+                local_path=str(Path(path).resolve()), status="local")
+
+
+def source_snapshot(directory, repo=ROOT, drivers=()):
+    repo, directory = Path(repo), Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    names = subprocess.check_output(["git", "-C", str(repo), "ls-files", "-z"]).decode().split("\0")
+    suffixes = {".py", ".mojo", ".sh", ".c", ".h", ".cpp", ".hpp", ".toml", ".lock"}
+    members, inventory = {}, {}
+    for name in names:
+        p = repo / name
+        if (not name or p.suffix not in suffixes or not p.is_file()
+                or name.startswith(("bench/results/", "docs/", "docs-site/"))):
+            continue
+        members[name] = p.read_bytes()
+        inventory[str(p.resolve())] = digest(members[name])
+    for driver in drivers:
+        p = Path(driver).resolve()
+        if str(p) not in inventory:
+            name = "external/" + digest(str(p).encode())[:16] + "/" + p.name
+            members[name] = p.read_bytes()
+            inventory[str(p)] = digest(members[name])
+    commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    manifest = dict(commit=commit, files={k: digest(v) for k, v in members.items()},
+                    scope="tracked repository code and explicit driver files, actual working bytes")
+    members["source-manifest.json"] = encoded(manifest)
+    ref = archive(directory / "source.tar.gz", members)
+    ref.update(commit=commit, manifest_sha256=digest(encoded(manifest)))
+    return ref, inventory
+
+
+def credentials():
+    # Never record credentials, signed URLs, arbitrary environment variables or
+    # pip direct_url metadata in the public board or the source archive.
+    env = dict(os.environ)
+    p = Path(os.environ.get("MOJOLEARN_R2_CREDS", str(Path.home() / ".mojolearn_r2")))
+    if p.exists():
+        for line in p.read_text().splitlines():
+            line = line.strip().removeprefix("export ")
+            if line.startswith("R2_") and "=" in line:
+                k, v = line.split("=", 1)
+                env.setdefault(k.strip(), v.strip().strip("\"'"))
+    import bincache
+    return bincache.creds_from_env(env)
+
+
+def upload(ref, request=None):
+    """PUT then GET; keep the local bytes on every failure. Retry is idempotent."""
+    bucket = ref.get("r2_bucket")
+    if request is None:
+        import bincache
+        creds = credentials()
+        bucket = creds["R2_BUCKET"]
+        request = lambda method, key, data=None: bincache.r2_request(creds, method, key, data=data)
+    body = Path(ref["local_path"]).read_bytes()
+    if digest(body) != ref["sha256"]:
+        raise ValueError("local evidence bytes changed")
+    key = "%s/%s.tar.gz" % (PREFIX, ref["sha256"])
+    try:
+        status, _ = request("PUT", key, body)
+        if status not in (200, 201):
+            raise ValueError("R2 upload failed (HTTP %s)" % status)
+        status, back = request("GET", key)
+        if status != 200 or digest(back) != ref["sha256"]:
+            raise ValueError("R2 evidence read-back mismatch")
+    except urllib.error.URLError:
+        # URLError can contain a credential-bearing presigned URL.
+        raise ValueError("R2 evidence request failed; local bytes retained") from None
+    return dict(ref, r2_key=key, r2_bucket=bucket, status="verified", verification="GET sha256")
+
+
+def public_ref(ref):
+    return {k: v for k, v in ref.items() if k != "local_path"}
+
+
+def fetch(ref, destination, request=None):
+    """Download exactly the board's retained object, verifying before writing."""
+    if request is None:
+        import bincache
+        creds = credentials()
+        if ref.get("r2_bucket") and ref["r2_bucket"] != creds["R2_BUCKET"]:
+            raise ValueError("configured R2 bucket differs from the measurement record")
+        request = lambda key: bincache.r2_request(creds, "GET", key)
+    try:
+        status, body = request(ref["r2_key"])
+    except urllib.error.URLError:
+        raise ValueError("R2 evidence download failed") from None
+    if status != 200 or digest(body) != ref["sha256"]:
+        raise ValueError("downloaded evidence checksum mismatch")
+    path = Path(destination)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(body)
+
+
+def worker_context():
+    """The actual worker's environment, collected outside the fit clock."""
+    try:
+        from threadpoolctl import threadpool_info
+        pools = threadpool_info()
+    except ImportError:
+        pools = None
+    quota = Path("/sys/fs/cgroup/cpu.max")
+    return dict(python=sys.version, executable=sys.executable, host=platform.node(),
+                packages={d.metadata["Name"]: d.version for d in importlib.metadata.distributions()
+                          if d.metadata.get("Name")},
+                environment={k: os.environ[k] for k in ENV_KEYS if k in os.environ},
+                cpu_quota=quota.read_text().strip() if quota.exists() else None,
+                affinity=sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
+                thread_pools=pools)
+
+
+def register_worker(library):
+    global _registered
+    if not os.environ.get(RECEIPTS):
+        return
+    _libraries.add(library)
+    if _registered:
+        return
+    _registered = True
+    def finish():
+        row = dict(library=library, libraries=sorted(_libraries), argv=sys.argv, pid=os.getpid(), final=True)
+        try:
+            row.update(worker_context())
+            files = {}
+            for name, mod in list(sys.modules.items()):
+                filename = getattr(mod, "__file__", None)
+                if not filename or not name.startswith("mojolearn"):
+                    continue
+                p = Path(filename)
+                if p.is_file() and p.suffix in (".py", ".so", ".dylib"):
+                    files[str(p.resolve())] = file_hash(p)
+            row.update(status="recorded", loaded_mojolearn_files=files)
+        except Exception as exc:
+            row.update(status="failed", error=type(exc).__name__)
+        write(Path(os.environ[RECEIPTS]) / (str(os.getpid()) + ".json"), row)
+    atexit.register(finish)
+
+
+def begin(ctx, race, settings, data):
+    """Snapshot before any parameter probe or scored execution."""
+    import tempfile
+    if not data.get("identity") or any(v is None for v in data.get("files", {}).values()):
+        raise ValueError("measurement input identity is missing; refused before timing")
+    if "measurement_source" not in ctx:
+        source, inventory = source_snapshot(Path(ctx["out"]) / "evidence" / "source",
+            drivers=[ctx[k] for k in ("tree_driver", "classical_driver", "more_driver", "neural_driver", "algos_driver") if ctx.get(k)])
+        if ctx.get("evidence_r2", True):
+            source = upload(source)  # refuse before spending GPU time if storage is unavailable
+        ctx["measurement_source"], ctx["measurement_inventory"] = source, inventory
+    parent = Path(ctx["out"]) / "evidence" / "runs"
+    parent.mkdir(parents=True, exist_ok=True)
+    directory = Path(tempfile.mkdtemp(prefix="race-", dir=parent))
+    (directory / "workers").mkdir()
+    recipe = dict(schema=SCHEMA, source=public_ref(ctx["measurement_source"]), race=race,
+                  settings=settings, dataset=data, hardware=ctx.get("box"),
+                  artifact_identity=ctx.get("artifact_identity"),
+                  policy="one excluded warmup; scored rounds recorded individually; no timer changes")
+    write(directory / "recipe.json", recipe)
+    return directory, recipe
+
+
+def seal(ctx, directory, recipe, rec):
+    """Capture measured records and logs, then attach the durable refs per arm."""
+    directory = Path(directory)
+    changed = [p for p, h in ctx["measurement_inventory"].items() if not Path(p).is_file() or file_hash(p) != h]
+    workers = [json.loads(p.read_text()) for p in sorted((directory / "workers").glob("*.json"))]
+    members = {"recipe.json": encoded(recipe), "result.json": encoded(rec), "workers.json": encoded(workers)}
+    for p in directory.glob("*.json"):
+        if p.name != "upload.json":
+            members["records/" + p.name] = p.read_bytes()
+    started = (directory / "recipe.json").stat().st_mtime
+    for sub in ("logs", "raw"):
+        for p in (Path(ctx["out"]) / sub).rglob("*"):
+            if p.is_file() and p.suffix in (".log", ".json") and p.stat().st_mtime >= started:
+                members["run/" + str(p.relative_to(ctx["out"]))] = p.read_bytes()
+    missing = []
+    for field in ("log", "race_json"):
+        if rec.get(field):
+            p = Path(ctx["out"]) / rec[field]
+            if p.is_file():
+                members["run/" + rec[field]] = p.read_bytes()
+            else:
+                missing.append(field)
+    # Retain actual loaded product code/binary bytes, not only their hashes.
+    for worker in workers:
+        for filename, sha in worker.get("loaded_mojolearn_files", {}).items():
+            p = Path(filename)
+            if p.is_file() and file_hash(p) == sha:
+                members["loaded/" + sha + "/" + p.name] = p.read_bytes()
+            else:
+                missing.append("loaded bytes: " + filename)
+    if changed:
+        missing.append("source changed during run")
+    before = (rec.get("preflight") or {}).get("arms") or {}
+    after = (rec.get("params") or {}).get("arms") or {}
+    for arm, params in after.items():
+        if arm in before and params.get("params") != before[arm].get("params"):
+            missing.append("effective parameters changed after preflight: " + arm)
+    ref = archive(directory / "run.tar.gz", members)
+    write(directory / "upload.json", dict(source=ctx["measurement_source"], run=ref))
+    error = None
+    if ctx.get("evidence_r2", True):
+        try:
+            ref = upload(ref)
+        except (OSError, ValueError, SystemExit) as exc:
+            error = "R2 retention failed; retry sync without rerunning the measurement"
+    write(directory / "upload.json", dict(source=ctx["measurement_source"], run=ref))
+    for phase, field in (("fit", "cells"), ("infer", "infer_cells")):
+        for cell in rec.get(field) or []:
+            if cell.get("stored") or cell.get("arm") in rec.get("stored_arms", []):
+                continue
+            params = cell.get("params") or ((rec.get("params") or {}).get("arms") or {}).get(cell.get("arm"))
+            absent = list(missing)
+            if not params:
+                absent.append("effective parameters")
+            if cell.get("mode") == "opponent" and not (params or {}).get("implementation"):
+                absent.append("library implementation read-back")
+            if not (cell.get("library_version") or cell.get("version")):
+                absent.append("worker library version")
+            witnessed = [w for w in workers if w.get("status") == "recorded" and
+                         (w.get("library") == cell.get("library") or cell.get("library") in w.get("libraries", [])
+                          or cell.get("arm") in w.get("argv", []))]
+            if not witnessed:
+                absent.append("worker receipt")
+            if cell.get("mode") != "opponent" and not any(w.get("loaded_mojolearn_files") for w in witnessed):
+                absent.append("loaded product code receipt")
+            if not (cell.get("shape") or rec.get("inputs") or cell.get("batch_rows")):
+                absent.append("actual measured input shape")
+            if not (cell.get("comparability") or {}).get("span"):
+                absent.append("timing boundary")
+            record = dict(schema=SCHEMA, phase=phase, source=recipe["source"], artifacts=public_ref(ref),
+                          software=dict(library=cell.get("library"), version=cell.get("library_version") or cell.get("version")),
+                          parameters=params, dataset=recipe["dataset"], shape=cell.get("shape") or rec.get("inputs"),
+                          parameter_exceptions=[e for e in (rec.get("params") or {}).get("exceptions", [])
+                                                if e.get("arm") == cell.get("arm")],
+                          hardware=recipe["hardware"], numeric_mode=cell.get("mode_witness") or cell.get("mode"),
+                          timing=dict(span=(cell.get("comparability") or {}).get("span"), rounds=cell.get("rounds"),
+                                      warmup_ms=cell.get("warmup_ms"), times_ms=cell.get("times_ms")),
+                          command=rec.get("command"), workers=witnessed,
+                          completeness="complete" if not absent else "incomplete", missing=absent)
+            record["id"] = digest(encoded(record))
+            cell["measurement"] = record
+    rec["evidence_directory"] = str(directory.relative_to(Path(ctx["out"])))
+    if error or changed:
+        rec["evidence_failure"] = error or "source changed during measurement"
+    return rec
+
+
+def sync(board_path):
+    """Retry retention only; never launch a measurement or replace timing data."""
+    path = Path(board_path)
+    board = json.loads(path.read_text())
+    for rr in board.get("races", {}).values():
+        if not rr.get("evidence_directory"):
+            continue
+        state_path = path.parent / rr["evidence_directory"] / "upload.json"
+        state = json.loads(state_path.read_text())
+        state = {k: upload(v) if v.get("status") != "verified" else v for k, v in state.items()}
+        write(state_path, state)
+        for cell in (rr.get("cells") or []) + (rr.get("infer_cells") or []):
+            record = cell.get("measurement")
+            if record and record["artifacts"]["sha256"] == state["run"]["sha256"]:
+                record.update(source=public_ref(state["source"]), artifacts=public_ref(state["run"]))
+                record.pop("id", None)
+                record["id"] = digest(encoded(record))
+        rr.pop("evidence_failure", None)
+    write(path, board)
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("command", choices=["sync", "fetch"])
+    ap.add_argument("board")
+    ap.add_argument("--race")
+    ap.add_argument("--arm", default="ours")
+    ap.add_argument("--kind", choices=["source", "artifacts"], default="artifacts")
+    ap.add_argument("--destination")
+    args = ap.parse_args()
+    if args.command == "sync":
+        sync(args.board)
+    else:
+        if not args.race or not args.destination:
+            ap.error("fetch requires --race and --destination")
+        board = json.loads(Path(args.board).read_text())
+        race = board["races"][args.race]
+        cell = next(c for c in race["cells"] if c.get("arm") == args.arm)
+        fetch(cell["measurement"][args.kind], args.destination)

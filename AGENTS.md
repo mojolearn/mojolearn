@@ -86,8 +86,9 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 ## Race fairness: what the measurements are for (Andrew, 2026-10-13)
 
 The boards measure the cost of bitwise identity: mojolearn's IDENTICAL mode against the best real library
-implementation of the same algorithm, on the same kind of hardware, with the same settings. Every result is
-shown, wins and losses alike. Only a broken comparison is hidden.
+implementation of the same algorithm, on the same kind of hardware, with the same settings. Every supported result is
+shown, wins and losses alike. Owner clarification later on 2026-10-13: keep measurements with sufficient
+evidence; exclude pairings with missing, suspect or bad evidence. Do not rerun everything.
 
 A race is GOOD when both arms run the same algorithm with the same settings on the same kind of box. These do
 not make a race bad:
@@ -99,7 +100,7 @@ not make a race bad:
 - the opponent's own fast settings and modes (bf16 or TF32 arms, torch.compile, its GPU defaults);
 - the library version or host the opponent was measured on, when the settings match, unless the board shows the
   host to run identical work measurably slower than another box of the same GPU model (tools/race_fairness.py
-  slow_hosts: the L40S host cc560ebdaf91 is 1.75x slower on matched torch cells, 5x on cuML AutoARIMA): that is a
+  SLOW_HOSTS retains the audited finding for the L40S host cc560ebdaf91): that is a
   broken measurement box, and every opponent cell measured on it is excluded, any library, any lane;
 - a tie (ours/theirs between 0.95 and 1.05): it is shown like any other result.
 
@@ -122,7 +123,16 @@ are where a new harness-written arm or slow box is recorded. The paper (mlsys) a
 Every (mode, phase) row of a race in board.json carries an entry in race["audit"] (verdict, reason, evidence,
 opponent, ratio, date, pairing fingerprint); an entry with rerace "x" is broken, and race["rerace"] is "x" when
 any of its entries is. tools/main_board_ingest.py (apply_fairness) keeps an entry only while the measurements it
-judged are unchanged; a row no audit covers is recorded UNCHECKED and shown until an audit judges it.
+judged are unchanged; missing or unresolved evidence excludes the pairing. Each row lists its `admitted_opponents`;
+the paper and website publish only those arms for that mode and phase.
+
+New measurements retain actual source bytes before execution and full logs afterwards using
+`tools/bench_board_evidence.py`. Each cell's `measurement` includes versions, open-ended raw and canonical
+parameters, data identity and actual shape, worker resources, timing boundaries and content-hashed R2 references.
+The board checks effective parameters before timing, preserves records when reusing opponents or importing
+cells, and binds audit decisions to the full evidence rather than just median times. Retention failures stop
+the next race; retry uploads without rerunning completed measurements. Timing ratios alone never establish
+a slow-host exclusion; record a supported audit finding first.
 
 Fix the race code rather than dropping an opponent; drop an opponent only when no real library implementation
 exists for that vendor. Every race-code fix from an audit carries a `FAIRNESS FIX (2026-10-13 audit)` comment

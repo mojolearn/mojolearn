@@ -153,7 +153,7 @@ SETTINGS_KEYS = ("params", "dataset_params", "block", "task", "kind", "stride_su
 PRIORITY = {"json": 3, "algos": 2, "gridbb": 2, "previous": 1}
 OB_FIELDS = ("column", "vendor", "box", "job", "sha", "ct", "kind", "family", "lane", "dataset", "race_id",
              "status_raw", "status", "infra", "median_ms", "quality", "digest", "comparability", "evidence",
-             "measured", "tag", "reason", "hardware", "version", "gpu_recorded")
+             "measured", "tag", "reason", "hardware", "version", "gpu_recorded", "measured_cell")
 #: A line that records the GPU a job ran on (FSPEED-HEADER device=, an ALGOS/GRIDBB device header); a value with
 #: spaces is quoted or written with '_'. Text naming no GPU ("gpu", "selftest") is not judged.
 DEVICE_LINE_RE = re.compile(r"(?:^|[\s:])(?:FSPEED-HEADER|ALGOS-HEADER|ALGOS-DEVICE|GRIDBB-DEVICE)\b.*?"
@@ -534,6 +534,9 @@ def json_observations(BB, json_dir, jobs, branch, skip_tag_re, resolve, skips):
                          full=r[0], gpu_recorded=cell.get("device_name") or gpu_name)
             if ob is not None and ob["status_raw"] != "REFUSED(hardware mismatch)":
                 ob["status"] = cell.get("status") or ob["status"]
+                # Preserve the measuring worker's evidence. Never reconstruct
+                # its parameters, versions or source from today's checkout.
+                ob["measured_cell"] = copy.deepcopy(cell)
                 out.append(ob)
     return out
 
@@ -818,6 +821,12 @@ def our_cell(BB, ob, ident, newer_failed=()):
                        "measured": ob.get("measured"), "identity": ident, "newer_failed": flags,
                        "observation": stored_ob(ob)},
     }
+    original = ob.get("measured_cell") or {}
+    for field in ("measurement", "params", "settings", "library_version", "device_name", "shape",
+                  "times_ms", "warmup_ms", "min_ms", "max_ms", "rounds", "state_receipts", "operations",
+                  "comparability", "memory", "peak_host_mb", "peak_gpu_mb", "hash_stable", "installed_wheel"):
+        if field in original:
+            cell[field] = copy.deepcopy(original[field])
     # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
     return HW.our_fields(cell, box=ob["box"], version_text=ob.get("version") or "mojolearn (source build, main@%s)"
                          % ob["sha"][:9], source="box table (job %s/%s)" % (ob["box"], ob["job"]))
