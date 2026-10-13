@@ -62,6 +62,7 @@ within float32, not bit for bit. X is uploaded once. d <= MF_DMAX; larger
 d or a p == 1 input keeps main's path.
 """
 from std.gpu import block_dim, block_idx, thread_idx
+from std.atomic import Atomic
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -877,14 +878,14 @@ def _u(buf: DeviceBuffer[DType.uint64]) -> U64Ptr:
 
 
 #: lane apple-holes (2026-10-12): the words of one centered-row plane
-#: (`MfPhase.mm_x` / `mm_y`), 512 MB. Cause: istella 100,000 x 220 FAST
+#: (`MfPhase.mm_x` / `mm_y`), 256 MB. Cause: istella 100,000 x 220 FAST
 #: allocated two 3,330 x 1,500 x 220 planes (4.4 GB each) beside phase A's
 #: still-live buffers, ~20 GB peak; on a Mac without that headroom the
 #: launches over swapped memory ran for seconds, macOS cut them silently
 #: (kIOGPUCommandBufferCallbackErrorImpactingInteractivity leaves outputs
 #: stale) and the fit returned an EMPTY support. A memory bound, not a
 #: shape rule: a phase whose planes fit runs in one chunk, as before.
-comptime MCD_MMA_CHUNK_WORDS = 1 << 27
+comptime MCD_MMA_CHUNK_WORDS = 1 << 26
 
 
 #: lane apple-holes (2026-10-12): the d^3 units of one launch of the
@@ -1380,12 +1381,97 @@ def _handoff(ctx: DeviceContext, src: MfPhase, order: DeviceBuffer[DType.int32],
     )
 
 
+def mf_count_kernel(sup: I32Ptr, n: Int32, cnt: I32Ptr):
+    """cnt[0] += the support rows (lane apple-holes: `_finish`'s check)."""
+    var i = Int(block_idx.x) * MF_TPB + Int(thread_idx.x)
+    if i < Int(n) and sup.unsafe_load(i) != Int32(0):
+        _ = Atomic.fetch_add(cnt, Int32(1))
+
+
+def mf_take_det_kernel(
+    order: I32Ptr, fin: I32Ptr, det0: F32Ptr, det1: F32Ptr, c0: Int32, dst_det: F32Ptr, dst_idx: I32Ptr, nk: Int32,
+):
+    """A phase-B group's kept candidates: their chosen log determinant (the
+    rank key) and their phase index c0 + local (the tie key)."""
+    var j = Int(block_idx.x) * MF_TPB + Int(thread_idx.x)
+    if j < Int(nk):
+        var src = Int(order.unsafe_load(j))
+        var pr = Int(fin.unsafe_load(src))
+        dst_det.unsafe_store(j, det1.unsafe_load(src) if pr == 1 else det0.unsafe_load(src))
+        dst_idx.unsafe_store(j, Int32(src) + c0)
+
+
+def mf_rank_global_kernel(det: F32Ptr, idx: I32Ptr, nf: Int32, keep: Int32, order: I32Ptr):
+    """`mf_rank_kernel` over the groups' finalists: rank by (det image,
+    phase index); ranks below keep write order[rank] = finalist."""
+    var c = Int(block_idx.x) * MF_TPB + Int(thread_idx.x)
+    if c < Int(nf):
+        var mine = _image(det.unsafe_load(c))
+        var mi = idx.unsafe_load(c)
+        var rank = 0
+        for o in range(Int(nf)):
+            var im = _image(det.unsafe_load(o))
+            if im < mine or (im == mine and idx.unsafe_load(o) < mi):
+                rank += 1
+        if rank < Int(keep):
+            order.unsafe_store(rank, Int32(c))
+
+
+def mf_take_kernel(order: I32Ptr, sloc: F32Ptr, scov: F32Ptr, dloc: F32Ptr, dcov: F32Ptr, nc: Int32, d: Int32):
+    """Candidate c of the next phase takes finalist order[c]'s (mean,
+    covariance) (one thread per element)."""
+    var t = Int(block_idx.x) * MF_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var cells = dd + dd * dd
+    if t < Int(nc) * cells:
+        var c = t // cells
+        var e = t - c * cells
+        var src = Int(order.unsafe_load(c))
+        if e < dd:
+            dloc.unsafe_store(c * dd + e, sloc.unsafe_load(src * dd + e))
+        else:
+            var q = e - dd
+            dcov.unsafe_store(c * dd * dd + q, scov.unsafe_load(src * dd * dd + q))
+
+
+#: lane apple-holes (2026-10-12): device bytes one phase group may hold.
+#: Cause: istella 100,000 x 220 FAST sized every phase buffer by its whole
+#: candidate count (eight 3,330 x 220 x 220 planes, 645 MB each, plus phase
+#: A's), more than a 16 GB Mac's GPU could map; Metal dropped the work
+#: without a status and the fit returned all zeros. Phases A and B now run
+#: in candidate groups of this budget (a memory bound, not a shape rule).
+comptime MCD_GROUP_BYTES = 1 << 30
+
+
+def mf_cand_bytes(r: Int, h: Int, d: Int, npair: Int) -> Int:
+    """An upper bound of one candidate's MfPhase bytes: the eight d x d
+    planes, its r-long masks, distances and selection, two means and dets,
+    and its share of the moment partials (the centered-row planes are
+    bounded on their own by MCD_MMA_CHUNK_WORDS)."""
+    var tiles = max(max((r + MF_TILE - 1) // MF_TILE, (h + FOLD_BLOCK - 1) // FOLD_BLOCK), 1)
+    var words = 8 * d * d + 4 * r + 2 * d + 8 + tiles * max(d, npair)
+    return 4 * words
+
+
+def mf_group(nc: Int, per: Int, r: Int, h: Int, d: Int, npair: Int) -> Int:
+    """Candidates per group: what MCD_GROUP_BYTES holds, in whole groups of
+    `per` (at least one group, at most nc)."""
+    var cap = max(1, MCD_GROUP_BYTES // max(mf_cand_bytes(r, h, d, npair), 1))
+    var g = max(1, cap // max(per, 1)) * max(per, 1)
+    return max(1, min(nc, g))
+
+
 def _finish(
     ctx: DeviceContext, ph: MfPhase, order: DeviceBuffer[DType.int32], rows: DeviceBuffer[DType.int32], n: Int,
     d: Int, loc_out: F32Ptr, cov_out: F32Ptr, sup_out: I32Ptr, dist_out: F32Ptr, err: DeviceBuffer[DType.int32],
+    want: Int,
 ) raises:
     """The best candidate (order[0]) home: its mean, covariance, support
-    mask and distances scattered to its rows' ids; zeros elsewhere."""
+    mask and distances scattered to its rows' ids; zeros elsewhere. Lane
+    apple-holes: the support's row count is counted on the device and must
+    be `want` (the phase's h): a device search that silently did not run
+    (an allocation or command buffer Metal dropped returned all zeros at
+    100,000 x 220 on a 16 GB Mac) raises instead of fitting on nothing."""
     var dsup = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     var ddist = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var dloc = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
@@ -1401,6 +1487,11 @@ def _finish(
         _i(order), _i(ph.fin), _f(ph.loc0), _f(ph.loc1), _f(ph.cov0), _f(ph.cov1), _f(dloc), _f(dcov), Int32(1), Int32(d),
         grid_dim=_blocks(d + d * d), block_dim=MF_TPB,
     )
+    var dcnt = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_function[mf_fill_i_kernel](_i(dcnt), Int32(1), Int32(0), grid_dim=1, block_dim=MF_TPB)
+    ctx.enqueue_function[mf_count_kernel](_i(dsup), Int32(n), _i(dcnt), grid_dim=_blocks(n), block_dim=MF_TPB)
+    var hcnt = List[Int32](length=1, fill=Int32(-1))
+    ctx.enqueue_copy(dst_ptr=hcnt.unsafe_ptr(), src_buf=dcnt)
     var herr = List[Int32](length=MF_ERR, fill=Int32(0))
     ctx.enqueue_copy(dst_ptr=herr.unsafe_ptr(), src_buf=err)
     _down(ctx, dloc, loc_out, d)
@@ -1421,6 +1512,12 @@ def _finish(
     if Int(herr[3]) != 0:
         raise Error("x_decomp MinCovDet: batched round-robin eigensolve failed Frobenius gate")
     _ = herr^
+    _ = dcnt^
+    if Int(hcnt[0]) != want:
+        raise Error(
+            "MinCovDet: device search failed (the support has " + String(Int(hcnt[0])) + " rows, expected "
+            + String(want) + "); the GPU did not complete the search"
+        )
 
 
 def mf_pair_table_kernel(pj: I32Ptr, pk: I32Ptr, d_in: Int32):
@@ -1491,66 +1588,137 @@ def fast_mcd_fast(
         # draw 1: the subsets' shuffle
         var shuf = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
         _perm(ctx, keys, npad, n, seed, 1000 + 1, shuf, n)
-        # phase A: n_sub subsets x n_trials candidates, draws 2 .. 1 + nc_a
+        # phase A: n_sub subsets x n_trials candidates, draws 2 .. 1 + nc_a,
+        # in groups of whole subsets (lane apple-holes: MCD_GROUP_BYTES);
+        # every subset's kept (mean, covariance) packed for phase B
         var nc_a = n_sub * n_trials
         var keep_a = min(10, n_trials)
-        var pa = MfPhase(ctx, nc_a, n_trials, n_ss, 0, h_sub, 2, d, npair)
+        var nc_b = n_sub * keep_a
+        var bloc = ctx.enqueue_create_buffer[DType.float32](max(nc_b * d, 1))
+        var bcov = ctx.enqueue_create_buffer[DType.float32](max(nc_b * d * d, 1))
         _lap(ctx, fprof, 0, ftp)
-        ctx.enqueue_function[mf_draw_kernel](
-            _f(pa.dist), Int32(nc_a), Int32(n_ss), UInt32(seed & 0xFFFFFFFF), UInt32((1000 + 2) & 0xFFFFFFFF), _i(err),
-            grid_dim=_blocks(nc_a * n_ss), block_dim=MF_TPB,
-        )
-        _run_phase(ctx, pa, dx, shuf, pj, pk, d, npair, False, False, err, anyb, hany)
+        var subs_per = max(1, mf_group(nc_a, n_trials, n_ss, h_sub, d, npair) // n_trials)
+        var s0 = 0
+        while s0 < n_sub:
+            var sg = min(subs_per, n_sub - s0)
+            var nca = sg * n_trials
+            var pa = MfPhase(ctx, nca, n_trials, n_ss, 0, h_sub, 2, d, npair)
+            ctx.enqueue_function[mf_draw_kernel](
+                _f(pa.dist), Int32(nca), Int32(n_ss), UInt32(seed & 0xFFFFFFFF),
+                UInt32((1000 + 2 + s0 * n_trials) & 0xFFFFFFFF), _i(err),
+                grid_dim=_blocks(nca * n_ss), block_dim=MF_TPB,
+            )
+            var rows_a = shuf.create_sub_buffer[DType.int32](s0 * n_ss, sg * n_ss)
+            _run_phase(ctx, pa, dx, rows_a, pj, pk, d, npair, False, False, err, anyb, hany)
+            var order_a = ctx.enqueue_create_buffer[DType.int32](max(sg * keep_a, 1))
+            _rank(ctx, pa, keep_a, order_a)
+            ctx.enqueue_function[mf_handoff_kernel](
+                _i(order_a), _i(pa.fin), _f(pa.loc0), _f(pa.loc1), _f(pa.cov0), _f(pa.cov1),
+                _f(bloc) + s0 * keep_a * d, _f(bcov) + s0 * keep_a * d * d, Int32(sg * keep_a), Int32(d),
+                grid_dim=_blocks(sg * keep_a * (d + d * d)), block_dim=MF_TPB,
+            )
+            ctx.synchronize()
+            _ = rows_a^
+            _ = order_a^
+            _ = pa^
+            s0 += sg
         comptime if MCD_PROFILE:
             ftp = _pms(ctx)
-        var order_a = ctx.enqueue_create_buffer[DType.int32](max(n_sub * keep_a, 1))
-        _rank(ctx, pa, keep_a, order_a)
         # draw 2 + nc_a: the merged selection
         var sel = ctx.enqueue_create_buffer[DType.int32](max(n_m, 1))
         _perm(ctx, keys, npad, n, seed, 1000 + 2 + nc_a, sel, n_m)
-        # phase B: the pool on the n_m selected rows, up to 30 steps
-        var nc_b = n_sub * keep_a
-        var pb = MfPhase(ctx, nc_b, nc_b, n_m, 0, h_m, 30, d, npair)
-        _handoff(ctx, pa, order_a, pb, d)
-        # lane apple-holes: phase A's planes are dead once handed off; free
-        # them before phase B allocates its own (peak memory, see
-        # MCD_MMA_CHUNK_WORDS)
-        ctx.synchronize()
-        _ = pa^
-        _ = order_a^
-        _lap(ctx, fprof, 1, ftp)
-        _run_phase(ctx, pb, dx, sel, pj, pk, d, npair, True, n < 1500, err, anyb, hany)
-        var order_b = ctx.enqueue_create_buffer[DType.int32](max(n_best_m, 1))
-        _rank(ctx, pb, n_best_m, order_b)
-        comptime if MCD_PROFILE:
-            ftp = _pms(ctx)
         if n < 1500:
-            _finish(ctx, pb, order_b, sel, n, d, loc_out, cov_out, sup_out, dist_out, err)
+            # phase B on the n_m = n selected rows, one group (nc_b <= 40),
+            # its best candidate's support and distances are the answer
+            var pb = MfPhase(ctx, nc_b, nc_b, n_m, 0, h_m, 30, d, npair)
+            ctx.enqueue_copy(dst_buf=pb.loc1.create_sub_buffer[DType.float32](0, nc_b * d), src_buf=bloc)
+            ctx.enqueue_copy(dst_buf=pb.cov1.create_sub_buffer[DType.float32](0, nc_b * d * d), src_buf=bcov)
+            _lap(ctx, fprof, 1, ftp)
+            _run_phase(ctx, pb, dx, sel, pj, pk, d, npair, True, True, err, anyb, hany)
+            var order_b = ctx.enqueue_create_buffer[DType.int32](max(n_best_m, 1))
+            _rank(ctx, pb, n_best_m, order_b)
+            _finish(ctx, pb, order_b, sel, n, d, loc_out, cov_out, sup_out, dist_out, err, h_m)
             _lap(ctx, fprof, 3, ftp)
             _ = pb^
-            _ = keys^
-            _ = shuf^
-            _ = sel^
             _ = order_b^
         else:
+            # phase B in groups (MCD_GROUP_BYTES): each group's best
+            # n_best_m by (det, phase index), then the global best n_best_m
+            # of those by the same key -- the same set and order as one
+            # group of nc_b, since every candidate steps alone
+            var gb = mf_group(nc_b, 1, n_m, h_m, d, npair)
+            var ngr = (nc_b + gb - 1) // gb
+            var fcap = max(ngr * n_best_m, 1)
+            var floc = ctx.enqueue_create_buffer[DType.float32](fcap * d)
+            var fcov = ctx.enqueue_create_buffer[DType.float32](fcap * d * d)
+            var fdet = ctx.enqueue_create_buffer[DType.float32](fcap)
+            var fidx = ctx.enqueue_create_buffer[DType.int32](fcap)
+            var nf = 0
+            var c0 = 0
+            _lap(ctx, fprof, 1, ftp)
+            while c0 < nc_b:
+                var cn = min(gb, nc_b - c0)
+                var pb = MfPhase(ctx, cn, cn, n_m, 0, h_m, 30, d, npair)
+                ctx.enqueue_copy(
+                    dst_buf=pb.loc1.create_sub_buffer[DType.float32](0, cn * d),
+                    src_buf=bloc.create_sub_buffer[DType.float32](c0 * d, cn * d),
+                )
+                ctx.enqueue_copy(
+                    dst_buf=pb.cov1.create_sub_buffer[DType.float32](0, cn * d * d),
+                    src_buf=bcov.create_sub_buffer[DType.float32](c0 * d * d, cn * d * d),
+                )
+                _run_phase(ctx, pb, dx, sel, pj, pk, d, npair, True, False, err, anyb, hany)
+                var kb = min(n_best_m, cn)
+                var order_g = ctx.enqueue_create_buffer[DType.int32](max(kb, 1))
+                _rank(ctx, pb, kb, order_g)
+                ctx.enqueue_function[mf_handoff_kernel](
+                    _i(order_g), _i(pb.fin), _f(pb.loc0), _f(pb.loc1), _f(pb.cov0), _f(pb.cov1),
+                    _f(floc) + nf * d, _f(fcov) + nf * d * d, Int32(kb), Int32(d),
+                    grid_dim=_blocks(kb * (d + d * d)), block_dim=MF_TPB,
+                )
+                ctx.enqueue_function[mf_take_det_kernel](
+                    _i(order_g), _i(pb.fin), _f(pb.det0), _f(pb.det1), Int32(c0), _f(fdet) + nf, _i(fidx) + nf,
+                    Int32(kb), grid_dim=_blocks(kb), block_dim=MF_TPB,
+                )
+                ctx.synchronize()
+                _ = order_g^
+                _ = pb^
+                nf += kb
+                c0 += cn
+            var order_b = ctx.enqueue_create_buffer[DType.int32](max(n_best_m, 1))
+            ctx.enqueue_function[mf_rank_global_kernel](
+                _f(fdet), _i(fidx), Int32(nf), Int32(n_best_m), _i(order_b),
+                grid_dim=_blocks(nf), block_dim=MF_TPB,
+            )
+            comptime if MCD_PROFILE:
+                ftp = _pms(ctx)
             # phase C: the n_best_m on every row, up to 30 steps, distances kept
             var pc = MfPhase(ctx, n_best_m, n_best_m, n, 1, h, 30, d, npair)
-            _handoff(ctx, pb, order_b, pc, d)
+            ctx.enqueue_function[mf_take_kernel](
+                _i(order_b), _f(floc), _f(fcov), _f(pc.loc1), _f(pc.cov1), Int32(n_best_m), Int32(d),
+                grid_dim=_blocks(n_best_m * (d + d * d)), block_dim=MF_TPB,
+            )
+            ctx.synchronize()
+            _ = floc^
+            _ = fcov^
+            _ = fdet^
+            _ = fidx^
             _lap(ctx, fprof, 2, ftp)
             _run_phase(ctx, pc, dx, ident, pj, pk, d, npair, True, True, err, anyb, hany)
             var order_c = ctx.enqueue_create_buffer[DType.int32](1)
             _rank(ctx, pc, 1, order_c)
             comptime if MCD_PROFILE:
                 ftp = _pms(ctx)
-            _finish(ctx, pc, order_c, ident, n, d, loc_out, cov_out, sup_out, dist_out, err)
+            _finish(ctx, pc, order_c, ident, n, d, loc_out, cov_out, sup_out, dist_out, err, h)
             _lap(ctx, fprof, 3, ftp)
-            _ = pb^
             _ = pc^
-            _ = keys^
-            _ = shuf^
-            _ = sel^
             _ = order_b^
             _ = order_c^
+        _ = bloc^
+        _ = bcov^
+        _ = keys^
+        _ = shuf^
+        _ = sel^
     else:
         # 30 random starts on every row (draws 1 .. 30), two steps, keep 10;
         # then the 10 on every row, up to 30 steps
@@ -1567,7 +1735,7 @@ def fast_mcd_fast(
         _run_phase(ctx, pc, dx, ident, pj, pk, d, npair, True, True, err, anyb, hany)
         var order_c = ctx.enqueue_create_buffer[DType.int32](1)
         _rank(ctx, pc, 1, order_c)
-        _finish(ctx, pc, order_c, ident, n, d, loc_out, cov_out, sup_out, dist_out, err)
+        _finish(ctx, pc, order_c, ident, n, d, loc_out, cov_out, sup_out, dist_out, err, h)
         _ = pa^
         _ = pc^
         _ = order_a^
