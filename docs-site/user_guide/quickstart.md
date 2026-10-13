@@ -2,12 +2,6 @@
 
 ## Train and predict
 
-The examples use NumPy to make data. mojolearn itself does not need it, so install both:
-
-```sh
-pip install mojolearn numpy
-```
-
 ```python
 import numpy as np
 import mojolearn
