@@ -46,15 +46,16 @@ for _lane in ("lm-forward", "lm-train-step", "lm-infer", "lm-host-train-step", "
               "resnet-block"):
     HARNESS_ARMS[_lane] = _TORCH                   # harness twins and pure-PyTorch references (the stored cells)
 
-# 1b. Hosts shown to run identical work measurably slower than another box of the same GPU model. A torch arm
-# measured there is excluded, except on the GPU-bound linear-algebra lanes below: the slowness was measured on small
-# neural workloads where host overhead dominates, and torch's linear-algebra times on the host reproduce elsewhere
-# (randomized-svd 66.1 vs 65.7 ms). Other libraries' cells from the host are not judged.
-GPU_BOUND_LANES = {"cholesky", "eigh", "lstsq", "lu-factor", "lu-solve", "qr", "svd", "svdvals", "randomized-svd",
-                   "ols", "pca", "gemm", "gemm-bf16"}
+# 1b. A host shown, by the board's own measurements, to run identical work measurably slower than another host of
+# the same GPU model is a broken measurement box: every opponent cell measured there is excluded, any library, any
+# lane (Andrew, 2026-10-13). slow_hosts() finds them: cells of the same lane, arm and input shape measured on two
+# hosts, and a host whose median time over at least MIN_MATCHED such pairs is SLOW_FACTOR or more times another
+# host's. SLOW_HOSTS adds hosts known from evidence outside the board.
+SLOW_FACTOR = 1.3
+MIN_MATCHED = 5
 SLOW_HOSTS = {
-    "cc560ebdaf91": "L40S host about 2x slower than host 24a11adce16e on identical torch work "
-                    "(lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+    "cc560ebdaf91": "L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same "
+                    "shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
 }
 
 
@@ -93,26 +94,57 @@ def pairing(race, mode, phase):
     return hashlib.sha256(json.dumps(rows).encode()).hexdigest()[:16]
 
 
-def exclusions(race):
+def slow_hosts(board):
+    """{host: reason}: SLOW_HOSTS plus hosts this board itself shows to be slow (see 1b)."""
+    import statistics
+    found = dict(SLOW_HOSTS)
+    groups = {}
+    for section in ("races", "extra_races"):
+        for rr in (board.get(section) or {}).values():
+            for c in phase_cells(rr, "fit"):
+                host = (c.get("copied_from") or {}).get("box")
+                shape = c.get("shape") or rr.get("shape")
+                if c.get("mode") == "opponent" and completed(c) and host and shape:
+                    groups.setdefault((rr.get("lane"), c.get("arm"), str(shape)), {}).setdefault(host, []).append(c["median_ms"])
+    pairs = {}
+    for by in groups.values():
+        hosts = sorted(by)
+        for i, a in enumerate(hosts):
+            for b in hosts[i + 1:]:
+                ratio = statistics.median(by[a]) / statistics.median(by[b])
+                pairs.setdefault((a, b), []).append(ratio)
+    for (a, b), ratios in pairs.items():
+        if len(ratios) < MIN_MATCHED:
+            continue
+        m = statistics.median(ratios)
+        if m >= SLOW_FACTOR:
+            found.setdefault(a, "%.2fx slower than %s on %d matched cells of this board" % (m, b, len(ratios)))
+        elif 1 / m >= SLOW_FACTOR:
+            found.setdefault(b, "%.2fx slower than %s on %d matched cells of this board" % (1 / m, a, len(ratios)))
+    return found
+
+
+def exclusions(race, slow=None):
     """{arm: reason} for the opponent arms rules 1a and 1b exclude from this race."""
     out = {}
     pred = HARNESS_ARMS.get(race.get("lane"))
+    slow = SLOW_HOSTS if slow is None else slow
     for c in phase_cells(race, "fit") + phase_cells(race, "infer"):
         arm = c.get("arm")
         if c.get("mode") != "opponent" or arm in out:
             continue
         if pred and pred(arm):
             out[arm] = "code our harness wrote, not a library's own implementation"
-        elif str(c.get("library")) == "torch" and race.get("lane") not in GPU_BOUND_LANES:
-            for host, why in SLOW_HOSTS.items():
-                if host in cell_host(c):
-                    out[arm] = "measured on %s: %s" % (host, why)
+            continue
+        for host, why in slow.items():
+            if host in cell_host(c):
+                out[arm] = "measured on %s, a slow box: %s" % (host, why)
     return out
 
 
-def exclude(race, today):
+def exclude(race, today, slow=None):
     """Merge rule 1 into race["opponents_excluded"] (arms a human audit excluded stay)."""
-    found = exclusions(race)
+    found = exclusions(race, slow)
     if not found:
         return
     ex = race.setdefault("opponents_excluded", {"arms": [], "reason": "", "date": today})
@@ -161,6 +193,7 @@ def apply(board, prev=None, today=None):
     today = today or datetime.date.today().isoformat()
     prev = board if prev is None else prev
     modes = (board.get("config") or {}).get("modes") or ["identical"]
+    slow = slow_hosts(board)
     marked = 0
     for section in ("races", "extra_races"):
         for rid, rr in ((board.get(section) or {}).items()):
@@ -169,7 +202,7 @@ def apply(board, prev=None, today=None):
             old = prev_rr.get("audit") or {}
             if prev_rr.get("opponents_excluded") and not rr.get("opponents_excluded"):
                 rr["opponents_excluded"] = prev_rr["opponents_excluded"]
-            exclude(rr, today)
+            exclude(rr, today, slow)
             audit = {}
             for mode in modes:
                 for phase in ("fit", "infer"):

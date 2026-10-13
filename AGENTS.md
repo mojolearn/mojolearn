@@ -97,9 +97,10 @@ not make a race bad:
   or bf16, fixed reduction order, exact instead of approximate kernels, extra deterministic work, its
   host-to-device copy inside its clock. That is the identity penalty the boards exist to measure;
 - the opponent's own fast settings and modes (bf16 or TF32 arms, torch.compile, its GPU defaults);
-- the library version or host the opponent was measured on, when the settings match, unless the host is shown
-  to run identical work measurably slower than another box of the same GPU model (for example the L40S host
-  cc560ebdaf91, about 2x slower on identical torch work): that is a broken measurement box, and its rows are broken;
+- the library version or host the opponent was measured on, when the settings match, unless the board shows the
+  host to run identical work measurably slower than another box of the same GPU model (tools/race_fairness.py
+  slow_hosts: the L40S host cc560ebdaf91 is 1.75x slower on matched torch cells, 5x on cuML AutoARIMA): that is a
+  broken measurement box, and every opponent cell measured on it is excluded, any library, any lane;
 - a tie (ours/theirs between 0.95 and 1.05): it is shown like any other result.
 
 A race is BROKEN, marked rerace "x" and omitted from the paper and mojolearn.org, when:

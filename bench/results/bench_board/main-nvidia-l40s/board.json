@@ -3045,6 +3045,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -7438,6 +7448,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -8198,6 +8218,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -8962,6 +8992,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -9813,6 +9853,18 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cupy-gpu",
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cupy-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cupy-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -11606,6 +11658,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -12361,6 +12423,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cugraph-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cugraph-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cugraph-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -16739,6 +16811,18 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cupy-gpu",
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cupy-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cupy-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -18598,6 +18682,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -19362,6 +19456,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -29076,6 +29180,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -29833,6 +29947,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuvs-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuvs-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuvs-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -30596,6 +30720,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuvs-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuvs-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuvs-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -31878,6 +32012,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -33253,6 +33397,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -34571,6 +34725,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -35323,6 +35487,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -36227,6 +36401,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -39996,6 +40180,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cugraph-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cugraph-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cugraph-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -44876,6 +45070,18 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cupy-gpu",
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cupy-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cupy-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -45788,6 +45994,18 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cupy-gpu",
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cupy-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cupy-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -46525,6 +46743,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -50010,6 +50238,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -51769,6 +52007,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -52552,6 +52800,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -53848,6 +54106,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -54603,6 +54871,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -56414,6 +56692,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cugraph-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cugraph-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cugraph-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -57174,6 +57462,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -57948,6 +58246,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -58706,6 +59014,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -59552,6 +59870,18 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cupy-gpu",
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cupy-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cupy-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -61238,6 +61568,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -68312,6 +68652,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -72527,6 +72877,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -73426,6 +73786,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -75050,6 +75420,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -76404,6 +76784,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -77682,6 +78072,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -78624,6 +79024,18 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cupy-gpu",
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cupy-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cupy-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -79433,6 +79845,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "gpytorch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "gpytorch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "gpytorch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -80235,6 +80657,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -82225,6 +82657,16 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "xgboost-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "xgboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "xgboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -83058,6 +83500,16 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -84061,6 +84513,16 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -84558,6 +85020,16 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -85035,6 +85507,16 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -85737,11 +86219,13 @@
       },
       "opponents_excluded": {
         "arms": [
+          "cuml-gpu",
           "torch-gpu"
         ],
         "date": "2026-10-13",
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
         "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
           "torch-gpu": "code our harness wrote, not a library's own implementation"
         }
       },
@@ -86436,11 +86920,13 @@
       },
       "opponents_excluded": {
         "arms": [
+          "cuml-gpu",
           "torch-gpu"
         ],
         "date": "2026-10-13",
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
         "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
           "torch-gpu": "code our harness wrote, not a library's own implementation"
         }
       },
@@ -87325,11 +87811,15 @@
       },
       "opponents_excluded": {
         "arms": [
+          "cuml-gpu",
+          "torch-gpu",
           "torch-gpu-eigh"
         ],
         "date": "2026-10-13",
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
         "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
           "torch-gpu-eigh": "code our harness wrote, not a library's own implementation"
         }
       },
@@ -87683,18 +88173,6 @@
       "status": "done"
     },
     "classical/pca/taxi/rows=full": {
-      "audit": {
-        "identical/fit": {
-          "date": "2026-10-13",
-          "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.559,
-          "pairing": "f7ba2d7790b13a60",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
-          "rerace": "",
-          "rule": "race_fairness.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
-        }
-      },
       "cells": [
         {
           "arm": "ours",
@@ -88010,11 +88488,13 @@
       },
       "opponents_excluded": {
         "arms": [
+          "cuml-gpu",
           "torch-gpu"
         ],
         "date": "2026-10-13",
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
         "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
           "torch-gpu": "code our harness wrote, not a library's own implementation"
         }
       },
@@ -88504,6 +88984,16 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -88754,6 +89244,16 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -89748,6 +90248,16 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuvs-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuvs-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuvs-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -90248,6 +90758,16 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -90758,6 +91278,16 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -91257,6 +91787,16 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -91743,6 +92283,16 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -102156,6 +102706,22 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "catboost-cpu",
+          "catboost-gpu",
+          "xgboost-cpu",
+          "xgboost-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "catboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); catboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "catboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "catboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "xgboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "xgboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -103571,6 +104137,24 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "catboost-cpu",
+          "catboost-gpu",
+          "lightgbm-cuda",
+          "xgboost-cpu",
+          "xgboost-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "catboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); catboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); lightgbm-cuda: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "catboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "catboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "lightgbm-cuda": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "xgboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "xgboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -105323,6 +105907,24 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "catboost-cpu",
+          "catboost-gpu",
+          "lightgbm-cuda",
+          "xgboost-cpu",
+          "xgboost-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "catboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); catboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); lightgbm-cuda: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "catboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "catboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "lightgbm-cuda": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "xgboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "xgboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -106652,6 +107254,18 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "catboost-cpu",
+          "catboost-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "catboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); catboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "catboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "catboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -107667,6 +108281,22 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "catboost-cpu",
+          "catboost-gpu",
+          "xgboost-cpu",
+          "xgboost-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "catboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); catboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "catboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "catboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "xgboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "xgboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -108030,6 +108660,18 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "catboost-cpu",
+          "catboost-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "catboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); catboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "catboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+          "catboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -108637,6 +109279,16 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "cuml-rf-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "cuml-rf-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
+        "why": {
+          "cuml-rf-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
