@@ -876,6 +876,24 @@ def _u(buf: DeviceBuffer[DType.uint64]) -> U64Ptr:
     return U64Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))
 
 
+#: lane apple-holes (2026-10-12): the words of one centered-row plane
+#: (`MfPhase.mm_x` / `mm_y`), 512 MB. Cause: istella 100,000 x 220 FAST
+#: allocated two 3,330 x 1,500 x 220 planes (4.4 GB each) beside phase A's
+#: still-live buffers, ~20 GB peak; on a Mac without that headroom the
+#: launches over swapped memory ran for seconds, macOS cut them silently
+#: (kIOGPUCommandBufferCallbackErrorImpactingInteractivity leaves outputs
+#: stale) and the fit returned an EMPTY support. A memory bound, not a
+#: shape rule: a phase whose planes fit runs in one chunk, as before.
+comptime MCD_MMA_CHUNK_WORDS = 1 << 27
+
+
+def mf_mma_chunk(nc: Int, r: Int, d: Int) -> Int:
+    """Candidates per centered-row chunk: as many as MCD_MMA_CHUNK_WORDS
+    holds (at least one, at most nc)."""
+    var per = max(r * d, 1)
+    return max(1, min(max(nc, 1), MCD_MMA_CHUNK_WORDS // per))
+
+
 struct MfPhase(Movable):
     """One phase: nc candidates in groups of `per`, each over r rows (row
     group g of `rows`, or the identity), support size h, n_iter steps."""
@@ -888,6 +906,7 @@ struct MfPhase(Movable):
     var h: Int
     var n_iter: Int
     var tiles: Int
+    var mchunk: Int
     var mm_x: DeviceBuffer[DType.float32]
     var mm_y: DeviceBuffer[DType.float32]
     var mm_out: DeviceBuffer[DType.float32]
@@ -932,8 +951,15 @@ struct MfPhase(Movable):
         var cr = max(nc * r, 1)
         var cd = max(nc * d, 1)
         var cdd = max(nc * d * d, 1)
-        self.mm_x = ctx.enqueue_create_buffer[DType.float32](cr*d if MCD_BATCH_MMA else 1)
-        self.mm_y = ctx.enqueue_create_buffer[DType.float32](cr*d if MCD_BATCH_MMA else 1)
+        # lane apple-holes: the centered rows and their products (two
+        # nc x r x d planes, 4.4 GB each in phase B at 100,000 x 220, ~20 GB
+        # with the rest) are scratch of one step's GEMMs, so they hold
+        # MCD_MMA_CHUNK_WORDS of candidates at a time; the helpers below
+        # walk the phase in chunks (a memory bound, not a shape rule)
+        self.mchunk = mf_mma_chunk(nc, r, d)
+        var cxr = max(self.mchunk * r * d, 1)
+        self.mm_x = ctx.enqueue_create_buffer[DType.float32](cxr if MCD_BATCH_MMA else 1)
+        self.mm_y = ctx.enqueue_create_buffer[DType.float32](cxr if MCD_BATCH_MMA else 1)
         self.mm_out = ctx.enqueue_create_buffer[DType.float32](cdd if MCD_BATCH_MMA else 1)
         self.mm_v = ctx.enqueue_create_buffer[DType.float32](cdd if MCD_BATCH_MMA else 1)
         self.mm_vw = ctx.enqueue_create_buffer[DType.float32](cdd if MCD_BATCH_MMA else 1)
@@ -1006,24 +1032,37 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
     var gate = _i(ph.active)
     comptime if MCD_FAST_COV_REUSE:
         if Bool(ph.reuse): gate = _i(ph.reuse[].gate)
-    ctx.enqueue_function[mc_center_kernel[MCD_BMMA]](
-        _f(dx), _i(rows), _i(ph.selected), _f(ph.loc0), _f(ph.loc1),
-        _f(ph.mm_x), gate, _i(ph.fin), Int32(ph.nc), Int32(ph.r), Int32(d),
-        Int32(ph.per), Int32(ph.ident), Int32(ph.h), Int32(1), Int32(par), Int32(0),
-        grid_dim=_blocks(ph.nc*ph.h*d), block_dim=MF_TPB,
-    )
-    comptime if MCD_BMMA:
-        comptime if MCD_ORDERED_COV:
-            note_cov_route(True, ph.h, d)
-            launch_mcd_cov_ordered(ctx, _f(ph.mm_x), _f(ph.mm_out), _f(ph.part),
-                ph.h, d, ph.nc, ph.r*d, d*d, gate, False)
+    var one = ph.mchunk >= ph.nc
+    var c0 = 0
+    while c0 < ph.nc:
+        var cn = min(ph.mchunk, ph.nc - c0)
+        if c0 > 0:
+            # bound each Apple submission (see MCD_MMA_CHUNK_WORDS)
+            ctx.synchronize()
+        ctx.enqueue_function[mc_center_kernel[MCD_BMMA]](
+            _f(dx), _i(rows), _i(ph.selected), _f(ph.loc0), _f(ph.loc1),
+            _f(ph.mm_x), gate, _i(ph.fin), Int32(cn), Int32(ph.r), Int32(d),
+            Int32(ph.per), Int32(ph.ident), Int32(ph.h), Int32(1), Int32(par), Int32(0), Int32(c0),
+            grid_dim=_blocks(cn*ph.h*d), block_dim=MF_TPB,
+        )
+        var out = _f(ph.mm_out) + c0*d*d
+        comptime if MCD_BMMA:
+            comptime if MCD_ORDERED_COV:
+                note_cov_route(True, ph.h, d)
+                launch_mcd_cov_ordered(ctx, _f(ph.mm_x), out, _f(ph.part),
+                    ph.h, d, cn, ph.r*d, d*d, gate + c0, False)
+            else:
+                if one:
+                    launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
+                                            cn, ph.r*d, ph.r*d, d*d, gate, False, ph.compact)
+                else:
+                    launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
+                                            cn, ph.r*d, ph.r*d, d*d, gate + c0, False)
         else:
-            launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), _f(ph.mm_out), d, ph.h, d, True, False,
-                                    ph.nc, ph.r*d, ph.r*d, d*d, gate, False, ph.compact)
-    else:
-        for c in range(ph.nc):
-            var x = _f(ph.mm_x)+c*ph.r*d
-            _launch_gemm_mma(ctx, x, x, _f(ph.mm_out)+c*d*d, d, ph.h, d, True, False)
+            for c in range(cn):
+                var x = _f(ph.mm_x)+c*ph.r*d
+                _launch_gemm_mma(ctx, x, x, out+c*d*d, d, ph.h, d, True, False)
+        c0 += cn
     ctx.enqueue_function[mc_publish_matrix_kernel](
         _f(ph.mm_out), _f(ph.cov1) if par == 1 else _f(ph.cov0), gate,
         Int32(ph.nc), Int32(d), hinv, grid_dim=_blocks(ph.nc*d*d), block_dim=MF_TPB,
@@ -1033,26 +1072,38 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
 def _mma_distance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float32],
                   rows: DeviceBuffer[DType.int32], d: Int, par: Int, use_fin: Bool,
                   err: DeviceBuffer[DType.int32]) raises:
-    ctx.enqueue_function[mc_center_kernel[MCD_BMMA]](
-        _f(dx), _i(rows), _i(ph.selected), _f(ph.loc0), _f(ph.loc1),
-        _f(ph.mm_x), _i(ph.active), _i(ph.fin), Int32(ph.nc), Int32(ph.r), Int32(d),
-        Int32(ph.per), Int32(ph.ident), Int32(ph.r), Int32(0), Int32(par), Int32(1 if use_fin else 0),
-        grid_dim=_blocks(ph.nc*ph.r*d), block_dim=MF_TPB,
-    )
-    comptime if MCD_BMMA:
-        # gate = active, every candidate for the final distances (use_fin)
-        launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm), _f(ph.mm_y), ph.r, d, d, False, False,
-                                ph.nc, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin, ph.compact)
-    else:
-        for c in range(ph.nc):
-            var off = c*ph.r*d
-            _launch_gemm_mma(ctx, _f(ph.mm_x)+off, _f(ph.pm)+c*d*d,
-                             _f(ph.mm_y)+off, ph.r, d, d, False, False)
-    ctx.enqueue_function[mc_mahal_reduce_kernel](
-        _f(ph.mm_x), _f(ph.mm_y), _f(ph.dist), _i(ph.active), _i(err),
-        Int32(ph.nc), Int32(ph.r), Int32(d), Int32(1 if use_fin else 0),
-        grid_dim=_blocks(ph.nc*ph.r), block_dim=MF_TPB,
-    )
+    var one = ph.mchunk >= ph.nc
+    var c0 = 0
+    while c0 < ph.nc:
+        var cn = min(ph.mchunk, ph.nc - c0)
+        if c0 > 0:
+            # bound each Apple submission (see MCD_MMA_CHUNK_WORDS)
+            ctx.synchronize()
+        ctx.enqueue_function[mc_center_kernel[MCD_BMMA]](
+            _f(dx), _i(rows), _i(ph.selected), _f(ph.loc0), _f(ph.loc1),
+            _f(ph.mm_x), _i(ph.active), _i(ph.fin), Int32(cn), Int32(ph.r), Int32(d),
+            Int32(ph.per), Int32(ph.ident), Int32(ph.r), Int32(0), Int32(par), Int32(1 if use_fin else 0), Int32(c0),
+            grid_dim=_blocks(cn*ph.r*d), block_dim=MF_TPB,
+        )
+        comptime if MCD_BMMA:
+            # gate = active, every candidate for the final distances (use_fin)
+            if one:
+                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm), _f(ph.mm_y), ph.r, d, d, False, False,
+                                        cn, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin, ph.compact)
+            else:
+                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm) + c0*d*d, _f(ph.mm_y), ph.r, d, d, False, False,
+                                        cn, ph.r*d, d*d, ph.r*d, _i(ph.active) + c0, use_fin)
+        else:
+            for c in range(cn):
+                var off = c*ph.r*d
+                _launch_gemm_mma(ctx, _f(ph.mm_x)+off, _f(ph.pm)+(c0+c)*d*d,
+                                 _f(ph.mm_y)+off, ph.r, d, d, False, False)
+        ctx.enqueue_function[mc_mahal_reduce_kernel](
+            _f(ph.mm_x), _f(ph.mm_y), _f(ph.dist) + c0*ph.r, _i(ph.active) + c0, _i(err),
+            Int32(cn), Int32(ph.r), Int32(d), Int32(1 if use_fin else 0),
+            grid_dim=_blocks(cn*ph.r), block_dim=MF_TPB,
+        )
+        c0 += cn
 
 
 def _compat_pinvh(ctx: DeviceContext, ph: MfPhase, cov: F32Ptr, d: Int,
@@ -1422,6 +1473,12 @@ def fast_mcd_fast(
         var nc_b = n_sub * keep_a
         var pb = MfPhase(ctx, nc_b, nc_b, n_m, 0, h_m, 30, d, npair)
         _handoff(ctx, pa, order_a, pb, d)
+        # lane apple-holes: phase A's planes are dead once handed off; free
+        # them before phase B allocates its own (peak memory, see
+        # MCD_MMA_CHUNK_WORDS)
+        ctx.synchronize()
+        _ = pa^
+        _ = order_a^
         _lap(ctx, fprof, 1, ftp)
         _run_phase(ctx, pb, dx, sel, pj, pk, d, npair, True, n < 1500, err, anyb, hany)
         var order_b = ctx.enqueue_create_buffer[DType.int32](max(n_best_m, 1))
@@ -1431,12 +1488,10 @@ def fast_mcd_fast(
         if n < 1500:
             _finish(ctx, pb, order_b, sel, n, d, loc_out, cov_out, sup_out, dist_out, err)
             _lap(ctx, fprof, 3, ftp)
-            _ = pa^
             _ = pb^
             _ = keys^
             _ = shuf^
             _ = sel^
-            _ = order_a^
             _ = order_b^
         else:
             # phase C: the n_best_m on every row, up to 30 steps, distances kept
@@ -1450,13 +1505,11 @@ def fast_mcd_fast(
                 ftp = _pms(ctx)
             _finish(ctx, pc, order_c, ident, n, d, loc_out, cov_out, sup_out, dist_out, err)
             _lap(ctx, fprof, 3, ftp)
-            _ = pa^
             _ = pb^
             _ = pc^
             _ = keys^
             _ = shuf^
             _ = sel^
-            _ = order_a^
             _ = order_b^
             _ = order_c^
     else:
