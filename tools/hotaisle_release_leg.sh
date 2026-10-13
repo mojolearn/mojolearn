@@ -95,10 +95,6 @@ BOX_GUARD=/var/lib/mojolearn-hotaisle-release
 [ "$BR" = /root ] || BOX_GUARD="${BR}-guard"
 REMOTE_PY=${MOJOLEARN_HOTAISLE_REMOTE_PY:-/usr/bin/python3}   # the VM's stdlib 3.12, as the droplet's
 REMOTE_OUT=$BR/rel061-build; REMOTE_LOG=$BR/rel061-build.log
-# The changed lanes tools/release.py asks this leg to record and verify on its box after the build
-# (tools/release_leg_changed_lanes.sh, Andrew 2026-10-13). They go into a remote shell string: lane names only.
-case "${MOJOLEARN_RELEASE_CHANGED_LANES:-}${MOJOLEARN_RELEASE_CHANGED_LABEL:-}" in *[!a-z0-9,_.-]*)
-  echo 'MOJOLEARN_RELEASE_CHANGED_LANES/_LABEL: lane names, commas and a lowercase label only' >&2; exit 2;; esac
 FETCH_RESERVE=${FETCH_RESERVE:-600}
 # `auto` (default): the box sizes the build (tools/build_sizing.py, run on
 # the box by release_ubuntu22_build.sh or release061_remote_build.sh); N is an
@@ -354,28 +350,6 @@ BUILD_SECONDS=$(( $(date +%s) - BUILD_T0 ))
 echo "build_exit=${BUILD_EXIT:-NO_EXIT_BEFORE_FETCH_RESERVE}" >> "$STATE"
 echo "build_seconds=$BUILD_SECONDS" >> "$STATE"
 log "build exit ${BUILD_EXIT:-none} after ${BUILD_SECONDS}s; $(ha_ssh 30 "tail -3 $REMOTE_LOG" < /dev/null 2>/dev/null | tr '\n' '|')"
-
-# THE CHANGED LANES, ON THIS BOX, ONCE (Andrew, 2026-10-13): as tools/do_release061_leg.sh does, on the
-# host outside the build container, into $REMOTE_OUT/changed-lanes/ (fetched below with the proof).
-if [ "${BUILD_EXIT:-}" = 0 ] && [ -n "${MOJOLEARN_RELEASE_CHANGED_LANES:-}" ]; then
-  CL_SECONDS=$(( HA_T_CREATE + LEASE * 60 - FETCH_RESERVE - $(date +%s) - 20 ))
-  if [ "$CL_SECONDS" -ge 300 ]; then
-    ha_ssh 60 "cd $BR/mojolearn && rm -f $BR/changed-lanes.exit && if command -v setsid > /dev/null 2>&1; then S=setsid; else S=; fi; \$S nohup bash -c 'export HOME=$BR PATH=$BR/release-tools/bin:$BR/.pixi/bin:\$PATH; \
-      MOJOLEARN_RELEASE_CHANGED_LANES=$MOJOLEARN_RELEASE_CHANGED_LANES MOJOLEARN_RELEASE_CHANGED_LABEL=${MOJOLEARN_RELEASE_CHANGED_LABEL:-} \
-      MOJOLEARN_COMMIT=$COMMIT timeout -k 20 $CL_SECONDS bash tools/release_leg_changed_lanes.sh hip gfx942 $REMOTE_OUT \
-      > $REMOTE_OUT/changed-lanes.log 2>&1; echo \$? > $BR/changed-lanes.exit' > /dev/null 2>&1 < /dev/null & echo STARTED" < /dev/null | grep -q STARTED \
-      || log "could not start the changed-lanes check"
-    CL_EXIT=""
-    while [ "$(date +%s)" -lt $(( HA_T_CREATE + LEASE * 60 - FETCH_RESERVE + 60 )) ]; do
-      CL_EXIT=$(ha_ssh 45 "cat $BR/changed-lanes.exit 2>/dev/null; true" < /dev/null 2>/dev/null | tr -d '[:space:]')
-      [ -n "$CL_EXIT" ] && break
-      sleep "${MOJOLEARN_HOTAISLE_BUILD_POLL_SECONDS:-30}"
-    done
-    echo "changed_lanes_exit=${CL_EXIT:-NO_EXIT_BEFORE_FETCH_RESERVE}" >> "$STATE"
-  else
-    echo "changed_lanes_exit=NOT_RUN_${CL_SECONDS}s_LEFT" >> "$STATE"
-  fi
-fi
 
 log "fetch evidence"
 mkdir -p "$OUT/release-build"

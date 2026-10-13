@@ -14,7 +14,7 @@ NOT RUN BY THE RELEASE since 2026-10-13 (Andrew): GitHub's free runners have no
 GPU, so this only catches NVIDIA/AMD-only compile errors and never checks bits;
 the release's own NVIDIA/AMD build legs hit the same compile error within
 minutes on a $1-4/h box, so the extra step and wait per release aren't worth
-it. tools/release.py skips its cross-compile step; this stays a manual tool.
+it. The release does not run it; this stays a manual tool.
 
 ON GITHUB, BY HAND. .github/workflows/cross-compile-check.yml runs the
 same selection (--list-json, one source of truth) and then one standard

@@ -698,10 +698,6 @@ LEG_EXTRA="${MOJOLEARN_GEMM_LEG_EXTRA:-}"
 # campaign 7 keeps every permitted core (BUILD_CORES=0) until then.
 # MOJOLEARN_BUILD_JOBS=N (1..16) is an explicit override, as before.
 BUILD_JOBS="${MOJOLEARN_BUILD_JOBS:-auto}"
-# The changed lanes tools/release.py asks this leg to record and verify on its box after the build
-# (release body only; tools/release_leg_changed_lanes.sh). Lane names only: [a-z0-9-] and commas.
-CHANGED_LANES="${MOJOLEARN_RELEASE_CHANGED_LANES:-none}"
-case "$CHANGED_LANES" in *[!a-z0-9,_.-]*) echo "MOJOLEARN_RELEASE_CHANGED_LANES: lane names and commas only" >&2; exit 2;; esac
 BUILD_CORES=2
 if [ "$BUILD_JOBS" != auto ]; then
     case "$BUILD_JOBS" in ''|*[!0-9]*) echo "MOJOLEARN_BUILD_JOBS must be auto or 1..16" >&2; exit 2;; esac
@@ -3156,24 +3152,6 @@ RELEASE_TOOLS_SETUP
           timeout -k 20 "$work_remaining" bash tools/release061_remote_build.sh \
             cuda '@GPUARCHS@' "$OUT/release-build" > "$OUT/release-build-console.log" 2>&1
         release_rc=$?
-        # THE CHANGED LANES, ON THIS BOX, ONCE (Andrew, 2026-10-13: fold light verification of what
-        # changed into compiling; no separate GPU rental for re-records). tools/release.py sends the
-        # lanes (MOJOLEARN_RELEASE_CHANGED_LANES) to the sm_89 leg only; the record and the verify
-        # lines land in release-build/changed-lanes/, fetched with the proof. Bounded by the work
-        # timeout and never changing release_rc. Here, not in release061_remote_build.sh: that file
-        # is a binding-identity builder (release_reuse.LINUX_BUILDERS), and editing it rebuilds every binding.
-        changed_lanes='@CHANGEDLANES@'
-        if [ "$release_rc" = 0 ] && [ -n "$changed_lanes" ] && [ "$changed_lanes" != none ]; then
-            changed_seconds=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started - 20))
-            if [ "$changed_seconds" -ge 300 ]; then
-                MOJOLEARN_RELEASE_CHANGED_LANES="$changed_lanes" MOJOLEARN_COMMIT='@COMMIT@' \
-                  timeout -k 20 "$changed_seconds" bash tools/release_leg_changed_lanes.sh \
-                    cuda '@GPUARCHS@' "$OUT/release-build" > "$OUT/release-build/changed-lanes.log" 2>&1
-                echo "changed_lanes_exit=$?" >> "$OUT/leg.txt"
-            else
-                echo "changed_lanes_exit=NOT_RUN_${changed_seconds}s_LEFT" >> "$OUT/leg.txt"
-            fi
-        fi
         fi
     fi
     echo "release_build_exit=$release_rc" >> "$OUT/leg.txt"
@@ -4590,7 +4568,6 @@ leg_check_remote_body() {
         -e "s|@RELEASEBUILDCAP@|$RUNPOD_RELEASE_BUILD_CAP|g" \
         -e "s|@NVIDIACAMPAIGN@|$NVIDIA_CAMPAIGN|g" \
         -e "s|@BUILDJOBS@|$BUILD_JOBS|g" \
-        -e "s|@CHANGEDLANES@|$CHANGED_LANES|g" \
         -e "s|@BUILDCORES@|$BUILD_CORES|g" \
         -e "s|@QUALIFY@|$LEG_QUALIFY|g" \
         -e "s|@QUALWHEEL@|$QUAL_BASE|g" \

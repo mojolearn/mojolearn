@@ -68,8 +68,8 @@ FOUR PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 
 - **macos**: macos-build, macos-smoke (its self-test job is the bundled-table
   gate: publish-macos refuses without its PASSED receipt), publish-macos.
-- **core-linux**: cross-compile (step 0b: skipped since 2026-10-13, a manual
-  tool now), linux-builds (the legs of step 2, launched together,
+- **core-linux**: cross-compile (step 0b, beside the rehearsal; it gates
+  linux-builds, the first rental), linux-builds (the legs of step 2, launched together,
   detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
   plugins, 3b), publish-core-linux (last, after both plugins).
 - **nvidia**: gpu-column-nvidia (the expanded smoke, on the
@@ -227,11 +227,9 @@ the NVIDIA and AMD release legs. Each of these failed 0.8.12 after boxes were
 rented or after a 16-minute macOS compile. `--list` prints the steps; `--only`
 reruns some of them.
 
-## 0b. Cross-compile on GitHub (manual only; the release skips it)
+## 0b. Cross-compile on GitHub (the release does this; nothing is rented)
 
-Since 2026-10-13 the release prints SKIPPED for this step and linux-builds no longer waits for it: GitHub's
-runners have no GPU, so it only caught compile errors the NVIDIA/AMD build legs hit within minutes. By hand it
-works as below (`Release.RUN_CROSS_COMPILE = True` turns the step back on). The step dispatches
+The `cross-compile` step of `pixi run release` dispatches
 `.github/workflows/cross-compile-check.yml` on the frozen commit, diffed
 against the previous release's source commit (the reuse plan's base), and
 waits for it (`gh run watch --exit-status`). The plan job runs

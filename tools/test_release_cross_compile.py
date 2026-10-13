@@ -87,7 +87,6 @@ class CrossCompileStep(unittest.TestCase):
         r.lines = []
         r.say = r.lines.append
         r.sleep = lambda s: None
-        r.RUN_CROSS_COMPILE = True       # the step's own behavior, as when turned back on by hand
         return r
 
     def calls(self):
@@ -137,19 +136,13 @@ class CrossCompileStep(unittest.TestCase):
         self.assertIn("would dispatch", out)
         self.assertEqual(self.calls(), [])
 
-    def test_the_release_skips_it_and_nothing_waits_for_it(self):
-        # Andrew 2026-10-13: no GPU on GitHub's runners, compile-only; the NVIDIA/AMD build legs catch the
-        # same compile errors within minutes, so the release neither dispatches nor waits.
-        self.assertFalse(release.Release.RUN_CROSS_COMPILE)
-        r = self.release()
-        r.RUN_CROSS_COMPILE = False
-        self.assertTrue(r.step_cross_compile().startswith("SKIPPED"))
-        self.assertEqual(self.calls(), [])
-        for step, needs in release.NEEDS.items():
-            self.assertNotIn("cross-compile", needs, step)
-        for pipeline in release.PIPELINES.values():
-            self.assertNotIn("cross-compile", pipeline["checks"])
+    def test_it_gates_the_first_rental_and_nothing_on_the_mac(self):
+        self.assertIn("cross-compile", release.NEEDS["linux-builds"])
         self.assertEqual(release.NEEDS["cross-compile"], ["freeze-commit"])
+        self.assertEqual(release.PIPELINE_OF["cross-compile"], "core-linux")
+        for mac in ("macos-build", "macos-smoke", "publish-macos", "reuse-plan", "rehearsal"):
+            self.assertNotIn("cross-compile", release.NEEDS[mac])
+        self.assertIn("cross-compile", release.Release.SKIP_IF_RECORDED)
 
     def test_the_workflow_is_dispatch_only(self):
         text = (ROOT / ".github" / "workflows" / "cross-compile-check.yml").read_text()
