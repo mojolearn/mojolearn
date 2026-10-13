@@ -168,3 +168,16 @@ all product paths are native. Repair in separate source freezes, preserving
 original measurement/failure evidence and valid completed cells. If supported
 Mojo/Modular functionality is missing, record the blocker and wait for support;
 do not invent a Python fallback or unsupported toolchain workaround.
+
+## Public docs and docstrings (Andrew, 2026-10-12, additions 2026-10-13)
+
+- Docstrings of public names are user documentation (docs.mojolearn.org): what it does, parameters, returns, a short
+  example. Engineering notes belong in `#` comments.
+- Public docs state the contract in one sentence, verbatim: "In `identical` mode, mojolearn returns the same bits on Apple,
+  NVIDIA and AMD GPUs." Every `numeric_mode` doc that lists `'fast'` says Apple only.
+- Omit, never caveat: no "Known defect" or other status notes, no all-caps IDENTICAL/FAST asides (write `identical`/`fast`),
+  no "NOT IMPLEMENTED" in docstrings. Excluded or unverified names (`docs-site/api_exclude.txt`) and unverified features
+  never appear in public docs, the README or the site.
+- We are alpha: no enterprise-grade checks. The docs, mojolearn.org and the measurements are generated from the latest
+  origin/main by one publish command, run only when Andrew says so. Old URLs may break; no redirects.
+- `fast` is Apple only. The 162M two-route model never appears in docs-site or the library docs.

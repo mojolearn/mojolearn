@@ -163,7 +163,7 @@ def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-
     eps : float, default 1e-5
         Added to the variance inside the square root.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -205,7 +205,7 @@ def layer_norm_backward(dy, x, normalized_shape=None, weight=None, bias=None, ep
     eps : float, default 1e-5
         The forward's epsilon.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -259,7 +259,7 @@ class LayerNorm:
     bias : bool, default True
         Learn a bias. Ignored when `elementwise_affine` is False.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------

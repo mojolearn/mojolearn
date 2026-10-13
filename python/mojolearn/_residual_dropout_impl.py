@@ -49,7 +49,7 @@ def _entry(name):
 
 
 def residual_dropout(values, residual, *, p=0.5, seed=0, stream=0, offset=0):
-    """Return ``residual + dropout(values)`` as one explicit IDENTICAL layer.
+    """Return ``residual + dropout(values)`` as one explicit ``identical``-mode layer.
 
     Inputs must have identical shapes and C-contiguous float32 storage. The
     native implementation admits finite values and p in [0,1), computes

@@ -640,7 +640,7 @@ class RandomForestClassifier(_RandomForestBase):
     `X` is converted to float32; NaN or infinity in `X` raises `ValueError`.
     `y` may hold numbers or strings; NaN labels are refused. The fit is
     reproducible from `random_state`, and `random_state=None` means seed 0
-    (deterministic), unlike scikit-learn. Supports the `fast`
+    (deterministic), unlike scikit-learn. Supports the `fast` (Apple GPUs only)
     and `identical` numeric modes through `numeric_mode`.
 
     Parameters
@@ -705,6 +705,7 @@ class RandomForestClassifier(_RandomForestBase):
         `fast` mode and 'sequential' otherwise.
     numeric_mode : {'fast', 'identical'} or None, default None
         Numeric mode for this estimator; None uses the package default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -926,7 +927,7 @@ class RandomForestRegressor(_RandomForestBase):
 
     `X` and `y` are converted to float32; NaN or infinity in `X` raises
     `ValueError`. `random_state=None` means seed 0 (deterministic), unlike
-    scikit-learn. Supports the `fast` and `identical`
+    scikit-learn. Supports the `fast` (Apple GPUs only) and `identical`
     numeric modes through `numeric_mode`.
 
     Parameters
@@ -991,6 +992,7 @@ class RandomForestRegressor(_RandomForestBase):
         `fast` mode and 'sequential' otherwise.
     numeric_mode : {'fast', 'identical'} or None, default None
         Numeric mode for this estimator; None uses the package default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------

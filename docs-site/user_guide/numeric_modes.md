@@ -8,13 +8,12 @@ every mode.
 
 | Mode | Promise |
 |---|---|
-| `identical` | The default. The same output bits for the same release, input bytes, model state, settings and supported configuration on Apple, NVIDIA and AMD GPUs. |
+| `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
 | `fast` | Apple GPUs only. Tuned for throughput. No identity or repeatability promise. |
 
 The `deterministic` numeric mode has been removed; use `identical`.
 
-The identity requirement applies equally to Apple, NVIDIA and AMD. An Apple mismatch is a bug to
-fix, not a separate passing reference. Apple FAST does not change the IDENTICAL contract.
+A release ships only when its recorded Apple, NVIDIA and AMD results agree.
 
 Three things to know about `identical`:
 
@@ -38,7 +37,7 @@ Three things to know about `identical`:
 | Neural networks, GPU surface (`LanguageModelTrainer`, `TransformerBlock`, Mamba blocks, `SambaStack`, `SmallMLPTrainer`, `Embedding`, linalg GEMMs) | yes | Apple GPUs |
 | Every other family | yes | Apple GPUs |
 
-`fast` is opt-in and runs on Apple GPUs only. Every CPU binding runs in `identical` mode only (see
+`fast` is opt-in. `fast` is available on Apple GPUs only. Every CPU binding runs in `identical` mode only (see
 [Devices and the CPU](devices.md)). The full table is in the [support matrix](../notes/support_matrix.md).
 
 ## Selecting a mode
@@ -66,7 +65,7 @@ fails on that line, not at a later `fit`.
 Estimators that take `numeric_mode=` include `RandomForestClassifier`, `RandomForestRegressor`,
 `ExtraTreesClassifier`, `ExtraTreesRegressor`, `DecisionTreeClassifier`, `GradientBoostingClassifier`,
 `GradientBoostingRegressor`, `StandardScaler`, `MinMaxScaler`, `MLPClassifier` and the sequence and
-time-series estimators. Check an estimator's signature in the [API reference](../api/index.rst).
+time-series estimators except `ExponentialSmoothing` and `AutoARIMA`, which always use the process mode. Check an estimator's signature in the [API reference](../api/index.rst).
 The default `numeric_mode=None` means "use the process mode".
 
 ```python

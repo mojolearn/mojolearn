@@ -7,16 +7,16 @@
 
 The same machine-learning workload can produce different bits on different
 GPUs, changing predictions, learned models and subsequent training updates.
-mojolearn is a GPU machine-learning library whose default **identical** mode
-produces bitwise-identical results across verified Apple, NVIDIA and AMD GPUs
-and x86-64 and Arm CPUs. Results agree bit for bit, not merely within a
-numerical tolerance.
+mojolearn is a GPU machine-learning library whose default mode is **identical**.
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+Its x86-64 Linux and Apple silicon CPU bindings give the same bits too. Results agree
+bit for bit, not merely within a numerical tolerance.
 
 - **Training and inference for transformers and hybrids.** Decoder language
   models, Mamba-1/2/3 state-space models and Samba attention/state-space
-  hybrids train and serve under the same contract, alongside CNNs, recurrent
-  and graph networks.
-- **100+ machine-learning algorithms and model components across 13 families**,
+  hybrids train and serve under the same contract, alongside recurrent
+  networks.
+- **100+ machine-learning algorithms and model components across 12 families**,
   from neural networks to tree ensembles and classical models.
 - **Serve models trained elsewhere.** Neural models trained in other
   frameworks can be served with identical outputs across vendors.
@@ -72,9 +72,8 @@ The table shows representative methods, with related estimator variants grouped 
 
 | family | algorithms and components |
 |---|---|
-| neural blocks and optimizers | transformers, Mamba-1/2/3, Samba, MLPs, RNNs, LSTMs, GRUs, mixture of experts, Adam, AdamW, SGD, RMSprop, Adagrad, Lion, Adafactor, LAMB |
+| neural blocks and optimizers | transformers, Mamba-1/2/3, Samba, MLPs, RNNs, LSTMs, GRUs, mixture of experts, Adam, AdamW, SGD, RMSprop, Adagrad, Lion |
 | language models and tokenization | decoder language models, byte-level BPE tokenization |
-| convolutional and graph networks | 1-D and 2-D convolutions, pooling, batch normalization, residual blocks, CNN classifiers, GCN and GraphSAGE convolutions |
 | boosting | symmetric-tree, depth-wise, loss-guided and ordered boosting; AdaBoost, DART |
 | trees and ensembles | decision trees, random forests, Extra Trees, isolation forests, bagging, voting, stacking |
 | clustering | k-means, mini-batch and bisecting k-means, DBSCAN, HDBSCAN, agglomerative, spectral, mean shift, OPTICS, affinity propagation, Gaussian and Bayesian Gaussian mixtures |
@@ -88,18 +87,17 @@ The table shows representative methods, with related estimator variants grouped 
 
 Also provided are evaluation metrics, cross-validation, CPU training and
 inference, Hugging Face checkpoint loading and decoding, BF16 and INT8
-weight storage, tokenized corpora, multi-GPU execution plans and a built-in
-verifier.
+weight storage, tokenized corpora and a built-in verifier.
 
 ## Numeric modes
 
-`identical` is the default. On Apple GPUs, `fast` is an opt-in for most
-families; it is not offered on NVIDIA, AMD or the CPU. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
+`identical` is the default. `fast` is available on Apple GPUs only, as an
+opt-in for most families. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
 the table by family.
 
 | mode | contract |
 |---|---|
-| `identical` | The same bits on Apple, NVIDIA and AMD GPUs within one release. Apple FAST is a separate mode and does not relax this requirement. |
+| `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
 | `fast` | Apple GPUs only: throughput, with no repeatability promise. |
 
 The `identical` contract is across hardware within one release. mojolearn is
@@ -176,8 +174,8 @@ print(model.predict_proba(X[:5]))
 print(model.numeric_mode_used(), mojolearn.vendor())
 ```
 
-Run the same script on an Apple, NVIDIA or AMD GPU and the model and its
-predictions are the same bits.
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. Run the same script on
+any of them and the model and its predictions are the same bits.
 
 ## Verify it yourself
 
@@ -187,7 +185,7 @@ CPU, and a verifier that checks your machine against them.
 Install verification support with
 `python -m pip install "mojolearn[verify]"`: the same library plus its optional
 verification dependency.
-Optional ANN, CNN and sequence APIs that use NumPy are supported by
+Optional ANN and sequence APIs that use NumPy are supported by
 `mojolearn[numpy]`; the verification extra includes that same dependency.
 The base install does not require NumPy. See [verification support](docs/VERIFY.md).
 
@@ -253,3 +251,5 @@ license; see [NOTICE](NOTICE).
 
 To cite mojolearn, use [CITATION.cff](CITATION.cff). The concept DOI is
 [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632).
+The paper, *Bitwise-Identical Machine Learning Across Metal, CUDA, and HIP*, is at
+[mojolearn.org/paper.pdf](https://mojolearn.org/paper.pdf).

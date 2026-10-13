@@ -1663,8 +1663,9 @@ class IncrementalPCA(_Base):
         Rows per batch in ``fit``. None uses ``5 * n_features``.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -2252,8 +2253,9 @@ class GaussianRandomProjection(_RandomProjection):
         matrix scikit-learn draws for that seed.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -2315,8 +2317,9 @@ class SparseRandomProjection(_RandomProjection):
         matrix scikit-learn draws for that seed.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -2445,8 +2448,9 @@ class NMF(_Base):
         Visit coordinates in random order in each ``"cd"`` sweep.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -2732,8 +2736,9 @@ class FastICA(_Base):
         Seed for the default ``w_init``; None means 0.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -3058,8 +3063,9 @@ class FactorAnalysis(_Base):
         Accepted for scikit-learn compatibility; unused.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -3409,8 +3415,9 @@ def lu_factor(a, *, numeric_mode=None):
         The matrix to factor; must be finite.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this call. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Returns
     -------
@@ -3536,8 +3543,9 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
         Which system to solve.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this call. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Returns
     -------
@@ -3597,8 +3605,9 @@ def solve(a, b, *, numeric_mode=None):
     b : array-like of shape (n,) or (n, nrhs)
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this call. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Returns
     -------
@@ -3703,8 +3712,9 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
         Seed of the random test matrix; None means 0.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this call. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Returns
     -------
@@ -3935,8 +3945,9 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
         machine epsilon times ``max(M, N)``.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this call. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Returns
     -------
@@ -4218,8 +4229,9 @@ class PLSRegression(_PLS):
         Accepted for scikit-learn compatibility; inputs are never modified.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -4287,8 +4299,9 @@ class PLSCanonical(_PLS):
         Accepted for scikit-learn compatibility; inputs are never modified.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -4341,8 +4354,9 @@ class CCA(_PLS):
         Accepted for scikit-learn compatibility; inputs are never modified.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -4431,8 +4445,9 @@ def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None
         Force the code to be non-negative (Lasso methods and ``"threshold"``).
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this call. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Returns
     -------
@@ -4600,8 +4615,9 @@ class DictionaryLearning(_SparseCoding):
         Maximum iterations of the Lasso methods during fit and transform.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -4747,8 +4763,9 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         smoothed cost; None disables this test.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -4936,8 +4953,9 @@ class SparsePCA(_BaseSparsePCA):
         Seed used to resample unused atoms; None means 0.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -5043,8 +5061,9 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
         this test.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -5170,8 +5189,9 @@ class LatentDirichletAllocation(_Base):
         Seed; None means 0.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -5740,8 +5760,9 @@ class Isomap(_Base):
         NotImplementedError.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -5958,8 +5979,9 @@ class ClassicalMDS(_Base):
         Only ``{"p": ...}`` is supported.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -6074,8 +6096,9 @@ class MDS(_Base):
         for non-metric MDS and False otherwise.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -6431,8 +6454,9 @@ class LocallyLinearEmbedding(_Base):
     n_jobs : ignored
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -6696,8 +6720,9 @@ class MinCovDet(_Base):
         Seed for the random subsets; None means 0.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -6918,8 +6943,9 @@ class EllipticEnvelope(MinCovDet):
         Seed for the random subsets; None means 0.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------
@@ -7126,8 +7152,9 @@ class AlternatingLeastSquares(_Base):
         Seed of the starting factors; None means 0.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
     cg_steps : int, default 3
         Conjugate-gradient steps per row with ``use_cg=True``; must be at
         least 1.
@@ -7335,8 +7362,9 @@ class SparseCoder(_SparseCoding):
         Maximum iterations of the Lasso methods.
     numeric_mode : {"identical", "fast"} or None, default None
         Numeric mode for this estimator. None uses the package default
-        (``"identical"`` unless changed). ``"identical"`` gives the same bits
-        on NVIDIA and AMD GPUs; ``"fast"`` applies on Apple GPUs.
+        (``"identical"`` unless changed). In ``identical`` mode, mojolearn returns
+        the same bits on Apple, NVIDIA and AMD GPUs. ``"fast"`` is available on
+        Apple GPUs only.
 
     Attributes
     ----------

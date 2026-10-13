@@ -3,8 +3,7 @@
 mojolearn is a GPU machine-learning library written in Mojo whose results are reproducible down to
 the bits across GPU vendors. One codebase runs on Apple, NVIDIA and AMD GPUs and on the CPU, and covers
 over 100 algorithms and model components, from gradient boosting and forests to transformers and
-state space models. In the default `identical` mode, the same release, inputs and settings give the
-same output bits on supported Apple, NVIDIA and AMD GPUs.
+state space models. `identical` is the default mode. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 
 ::::{grid} 1 2 2 2
 :gutter: 3

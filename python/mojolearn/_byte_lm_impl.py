@@ -642,7 +642,7 @@ class SmallByteLanguageModelTrainer:
     padding, truncation or random number generation inside), and a
     ``data_schedule`` describing them. All arithmetic runs on the GPU in the
     process numeric mode: ``"identical"`` (the default) gives the same bits on
-    NVIDIA and AMD.
+    Apple, NVIDIA and AMD.
 
     Resident sessions. On a GPU install ``resident`` defaults to True: the
     parameters, AdamW moments and last gradient live on the device between

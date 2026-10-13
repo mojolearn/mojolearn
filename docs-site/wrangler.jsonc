@@ -3,8 +3,8 @@
   "name": "mojolearn-docs",
   "account_id": "e5ba0319f9962a1aceb6a9f03245d1f5",
   "compatibility_date": "2026-09-25",
-  // Static docs only. tools/publish.sh assembles ~/mojolearn-evidence/docs-site-published (one folder per
-  // release, stable/, _redirects) and stages it here as _site/ (git-ignored) for this deploy.
+  // Static docs only: tools/build.sh writes the current release to _site/ (git-ignored); mojolearn's
+  // tools/publish_sites.sh builds it in its own worktree of origin/main and deploys from there.
   "assets": {
     "directory": "./_site",
     "not_found_handling": "404-page"

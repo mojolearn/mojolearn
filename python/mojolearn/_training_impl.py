@@ -1486,7 +1486,7 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
         Only True is supported (False raises `NotImplementedError`): a non-finite
         total norm always raises.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -1618,7 +1618,7 @@ def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
     return_grad : bool, default False
         Also return the gradient with respect to `logits`.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -1781,7 +1781,7 @@ def numeric_mode_used(numeric_mode=None):
     Parameters
     ----------
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -1799,7 +1799,7 @@ def vendor_used(numeric_mode=None):
     Parameters
     ----------
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -2183,7 +2183,7 @@ def accumulation_is_aligned(tokens, accumulation_steps, numeric_mode=None):
     accumulation_steps : int
         Number of microbatches.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -2211,7 +2211,7 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
     tokens : int or None
         Token count of the whole step, or None.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -2308,7 +2308,7 @@ class Generator(object):
     seed : int
         Seed in [0, 2**64); otherwise `ValueError`.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Examples
     --------
@@ -2530,7 +2530,7 @@ def embedding_forward(weight, ids, numeric_mode=None):
     ids : array, shape (N,)
         Integer row indices.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -2563,7 +2563,7 @@ def embedding_backward(dy, ids, vocab, numeric_mode=None):
     vocab : int
         Number of table rows V.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -2596,7 +2596,7 @@ def rms_norm_forward(x, weight, eps, numeric_mode=None):
     eps : float
         Added to the mean square.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -2628,7 +2628,7 @@ def rms_norm_backward(dy, x, weight, eps, numeric_mode=None):
     eps : float
         The forward's epsilon.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -2808,7 +2808,7 @@ def linear_forward(a, weight, numeric_mode=None):
     weight : array, shape (N, K)
         float32 weight, in torch's layout.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -2887,7 +2887,7 @@ def linear_backward(dc, a, weight, numeric_mode=None):
     weight : array, shape (N, K)
         The forward weight.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -2949,7 +2949,7 @@ def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
     return_grad : bool, default False
         Also return the gradients.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------
@@ -3027,7 +3027,7 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
     bias2 : array, shape (out_width,)
         Second layer bias.
     numeric_mode : {'identical', 'fast'}, default 'identical'
-        Numeric mode.
+        Numeric mode. ``'fast'`` is available on Apple GPUs only.
 
     Returns
     -------

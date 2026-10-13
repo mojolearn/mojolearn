@@ -708,7 +708,7 @@ class TransformerBlock(NumericModeMixin):
         Arithmetic profile. None and 'fp32_v1' are float32. 'fixed15_v1' quantizes the
         projection weights once to 15-bit fixed point and is inference only.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Examples
     --------

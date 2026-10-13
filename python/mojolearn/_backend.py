@@ -108,9 +108,12 @@ order:
 
 THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag)
 -----------------------------------------------------------------
-The native sets above carry no PTX. `mojolearn-nvidia` also carries one PTX
+The native sets above carry no PTX. The loader also supports one PTX
 set, `cuda_ptx/sm_80` (gpu_plugins.PTX_ARCH), as a regular slot, which the
-driver compiles on the machine. The loader takes a native set when the
+driver compiles on the machine. A published wheel omits this set while
+`gpu_plugins.PLUGINS['cuda']['ptx_shipped']` is False (PyPI's file-size limit);
+the following fallback requires it to be installed. The loader takes a native
+set when the
 device's architecture has one (sm_89 today) and the PTX set on every other
 NVIDIA GPU of compute capability 8.0 or newer (A100 sm_80, H100/H200 sm_90,
 Blackwell sm_100/sm_120, ...), in every numeric mode, IDENTICAL included:
@@ -2234,15 +2237,17 @@ def set_default_mode(mode):
     loaded immediately, so a mode that cannot be used fails here rather than at
     a later fit.
 
-    - ``"identical"`` (default): the same bits on NVIDIA and AMD GPUs.
-    - ``"fast"``: the fastest arithmetic, for Apple GPUs; no bitwise promise.
+    - ``"identical"`` (default): in ``identical`` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+    - ``"fast"``: the fastest arithmetic, available on Apple GPUs only; no
+      bitwise promise.
 
     Using a family under a mode it does not ship raises ImportError.
 
     Parameters
     ----------
     mode : {"identical", "fast"} or None
-        The new default; None keeps the current one.
+        The new default; None keeps the current one. ``'fast'`` is available on
+        Apple GPUs only.
 
     Returns
     -------

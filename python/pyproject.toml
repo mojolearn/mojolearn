@@ -15,7 +15,7 @@ name = "mojolearn"
 # Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
 # version bump is a visible edit in both places rather than one.
 version = "0.8.43"
-description = "GPU machine learning in Mojo for Apple silicon Metal, NVIDIA CUDA, and AMD HIP, with fast and cross-vendor identical modes for certified configurations"
+description = "GPU machine learning in Mojo for Apple silicon Metal, NVIDIA CUDA, and AMD HIP, with fast (Apple GPUs only) and identical modes. In identical mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -136,7 +136,7 @@ numpy = ["numpy>=1.26.4"]
 verify = ["numpy>=1.26.4"]
 
 [project.urls]
-Paper = "https://github.com/mojolearn/mojolearn/blob/main/python/mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf"
+Paper = "https://mojolearn.org/paper.pdf"
 Homepage = "https://mojolearn.org"
 Documentation = "https://docs.mojolearn.org"
 Repository = "https://github.com/mojolearn/mojolearn"

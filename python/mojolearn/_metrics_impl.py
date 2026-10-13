@@ -18,7 +18,7 @@ silently accepted and ignored. Inputs are checked here: non-finite values are
 refused where the docstring says so.
 
 Functions that take ``numeric_mode`` accept ``'identical'`` (the same bits
-on NVIDIA and AMD) or ``'fast'`` (Apple only); None
+on Apple, NVIDIA and AMD GPUs) or ``'fast'`` (Apple only); None
 uses the library default. Other functions run in the library default mode.
 
 Examples

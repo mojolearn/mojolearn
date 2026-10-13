@@ -311,7 +311,7 @@ class LSTMRegressor(_RecurrentRegressor):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
@@ -399,7 +399,7 @@ class LSTMClassifier(_RecurrentClassifier):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
@@ -492,7 +492,7 @@ class GRURegressor(_RecurrentRegressor):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
@@ -580,7 +580,7 @@ class GRUClassifier(_RecurrentClassifier):
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
@@ -673,7 +673,7 @@ class RNNRegressor(_RecurrentRegressor):
     nonlinearity : {'tanh', 'relu'}, default 'tanh'
         Activation of the recurrence, as `nn.RNN`.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
@@ -762,7 +762,7 @@ class RNNClassifier(_RecurrentClassifier):
     nonlinearity : {'tanh', 'relu'}, default 'tanh'
         Activation of the recurrence, as `nn.RNN`.
     numeric_mode : {'identical', 'fast'} or None, default None
-        Numeric mode. None uses the library default.
+        Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None

@@ -1,6 +1,6 @@
 # Support matrix
 
-What mojolearn 0.8.41 supports: platforms, Python versions, devices and numeric modes. Release notes
+What mojolearn {{release}} supports: platforms, Python versions, devices and numeric modes. Release notes
 are in [Release notes](../community/release_notes.md).
 `mojolearn doctor` reports what the installed wheel supports on your machine.
 
@@ -9,16 +9,16 @@ are in [Release notes](../community/release_notes.md).
 | Platform | Packages | GPU backend | GPU architectures | CPU |
 |---|---|---|---|---|
 | macOS arm64 | `mojolearn` | Apple Metal | Apple silicon, built at the M1 instruction-set floor | Apple silicon |
-| Linux x86-64 | `mojolearn` plus `mojolearn-nvidia` and `mojolearn-amd`, installed automatically | NVIDIA CUDA, AMD HIP | CUDA `sm_89`; HIP `gfx942` | x86-64 |
+| Linux x86-64 | `mojolearn` plus `mojolearn-nvidia` and `mojolearn-amd`, installed automatically | NVIDIA CUDA, AMD HIP | CUDA {{nvidia_arches}}; HIP {{amd_arches}} | x86-64 |
 
 Both platforms carry the CPU bindings, so both train and predict on a machine with no GPU.
 
 NVIDIA needs only the driver (`libcuda`); no CUDA toolkit is required. AMD needs the `amdgpu` driver and
 the ROCm HIP runtime (ROCm 6 or 7).
 
-In 0.8.41 the NVIDIA package ships `sm_89` code only. A device loads the exact architecture the install
-carries, or the highest carried architecture of the same NVIDIA family that does not exceed it, so
-other NVIDIA generations (for example A100 and H100) are not served by this release. On AMD the match
+In {{release}} the NVIDIA package ships {{nvidia_arches}} code only. A device loads the exact architecture the
+install carries, or the highest carried architecture of the same NVIDIA family that does not exceed it, so
+other NVIDIA generations are not served by this release. On AMD the match
 must be exact. An architecture the wheel does not carry needs a source build. mojolearn never
 substitutes the CPU for a GPU it cannot serve.
 
@@ -45,7 +45,7 @@ same code. Use [`verify`](../user_guide/verify.md) to check them.
 
 | Mode | Contract |
 |---|---|
-| `identical` | The default. The same output bits for the same release, input bytes, model state, settings and supported configuration on NVIDIA and AMD GPUs. Apple GPU and CPU results are recorded beside them. |
+| `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
 | `fast` | Apple GPUs only. Tuned for throughput. No identity or repeatability promise. |
 
 | Family | `identical` | `fast` |
@@ -58,7 +58,7 @@ same code. Use [`verify`](../user_guide/verify.md) to check them.
 | Every other family | yes | Apple GPUs |
 | CPU bindings (all families) | yes | no |
 
-`fast` is opt-in, tuned on Apple and runs on Apple GPUs only. Asking a family for a mode it does not ship raises
+`fast` is opt-in and tuned on Apple. `fast` is available on Apple GPUs only. Asking a family for a mode it does not ship raises
 a named error. Bits may change between releases. See [Numeric modes](../user_guide/numeric_modes.md).
 
 ## The CPU surface

@@ -375,7 +375,7 @@ def _operand(x, name):
 # protocol by DEVIATION 2401; operands by DEVIATION 2400.
 def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
            identical=True):
-    """Float32 matrix product ``op(a) @ op(b)`` with the same bits on NVIDIA and AMD.
+    """Float32 matrix product ``op(a) @ op(b)`` with the same bits on Apple, NVIDIA and AMD.
 
     Computes under the profile ``mojolearn.identical.gemm.fp32.v1``. Each output cell
     accumulates its `k` products in a fixed order that depends only on the input bits,

@@ -252,6 +252,7 @@ class KernelRidge(_KernelMethodBase):
         Independent term of the 'poly' and 'sigmoid' kernels.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -512,6 +513,7 @@ class Nystroem(_KernelMethodBase):
         Seed of the basis selection.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -756,6 +758,7 @@ class RBFSampler(_KernelMethodBase):
         Seed of the random draws.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
