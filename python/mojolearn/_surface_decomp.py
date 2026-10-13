@@ -63,11 +63,4 @@ TRAINING_LANE_NAMES = {"x-decomp-umap-options": "UMAP options", "x-decomp-pca-ra
                        "x-decomp-eigh-wide-factor-analysis": "FactorAnalysis with fewer rows than features at 64 or more features",
                        "x-decomp-eigh-wide-mincovdet": "MinCovDet at 64 or more features",
                        "x-decomp-eigh-wide-kpca": "KernelPCA dense solver at 64 or more samples"}
-PUBLIC_PENDING_LANES = {
-    "x-decomp-eigh-wide-linalg": "no reference",
-    "x-decomp-eigh-wide-fastica": "no reference",
-    "x-decomp-eigh-wide-rotation": "no reference",
-    "x-decomp-eigh-wide-factor-analysis": "no reference",
-    "x-decomp-eigh-wide-mincovdet": "no reference",
-    "x-decomp-eigh-wide-kpca": "no reference",
-}
+PUBLIC_PENDING_LANES = {}

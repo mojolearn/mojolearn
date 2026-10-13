@@ -1,0 +1,9 @@
+commit=8f9ef96d6c6038ee1b81670b6af1dd0435d9d654
+label=nvidia-l40s-sm_89
+backend=cuda
+scope=routine shard= lanes_override=yes
+repeats=1 cpu_threads=3
+host=Linux 6.17.0-29-generic x86_64 3b993bb8f6a2
+date=2026-10-13T16:42:08Z
+dirty_tracked=none
+record_sha256=4a47bf8675812ceba844aa4558827b56da9b0a90a352a6e70f36ae48a074e24d
