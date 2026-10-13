@@ -45577,9 +45577,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1928.3,
-     "quality": {
-      "rel_fro_vs_torch_eager_fp32": 1.5306605707775985e-08
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -45628,8 +45626,7 @@
       1588.3287920150906
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 1649.4360830110963,
-     "quality_source": "fit quality of arm ours in adafactor-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "warmup_ms": 1649.4360830110963
     },
     {
      "arm": "ours-fast",
@@ -45683,9 +45680,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1926.4,
-     "quality": {
-      "rel_fro_vs_torch_eager_fp32": 1.4501727192185377e-08
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -45748,8 +45743,7 @@
       "baseline_ms": 184.14587501320057,
       "baseline_quality_text": "-",
       "display_rounded": true
-     },
-     "quality_source": "fit quality of arm ours-fast in adafactor-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     }
     },
     {
      "arm": "torch-compile-fp32",
@@ -46194,9 +46188,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1928.5,
-     "quality": {
-      "rel_fro_vs_torch_eager_fp32": 3.297102559384023e-09
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -46241,8 +46233,7 @@
       130.8084579941351
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 163.076083001215,
-     "quality_source": "fit quality of arm ours in adagrad-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "warmup_ms": 163.076083001215
     },
     {
      "arm": "ours-fast",
@@ -46293,9 +46284,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1925.8,
-     "quality": {
-      "rel_fro_vs_torch_eager_fp32": 3.297102559384023e-09
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -46354,8 +46343,7 @@
       "baseline_ms": 131.3406249973923,
       "baseline_quality_text": "-",
       "display_rounded": true
-     },
-     "quality_source": "fit quality of arm ours-fast in adagrad-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     }
     },
     {
      "arm": "torch-compile-fp32",
@@ -46826,7 +46814,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 136.6988749941811,
-     "quality_source": "fit quality of arm ours in adam-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0 (vs torch eager fp32)): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
+     "quality_source": "fit quality of arm ours in adam-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -46947,7 +46935,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in adam-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in adam-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -47409,9 +47397,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2055.9,
-     "quality": {
-      "rel_fro_vs_torch_eager_fp32": 4.266753451639912e-09
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -47458,8 +47444,7 @@
       176.10895799589343
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 214.16108301491477,
-     "quality_source": "fit quality of arm ours in adamax-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "warmup_ms": 214.16108301491477
     },
     {
      "arm": "ours-fast",
@@ -47514,9 +47499,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2055.3,
-     "quality": {
-      "rel_fro_vs_torch_eager_fp32": 4.266753451639912e-09
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -47577,8 +47560,7 @@
       "baseline_ms": 176.48100000224076,
       "baseline_quality_text": "-",
       "display_rounded": true
-     },
-     "quality_source": "fit quality of arm ours-fast in adamax-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     }
     },
     {
      "arm": "torch-compile-fp32",
@@ -48084,7 +48066,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 134.67337499605492,
-     "quality_source": "fit quality of arm ours in adamw-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0 (vs torch eager fp32)): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
+     "quality_source": "fit quality of arm ours in adamw-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -48205,7 +48187,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in adamw-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in adamw-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -55448,7 +55430,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 131.1742500110995,
-     "quality_source": "fit quality of arm ours in avgpool1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in avgpool1d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -55545,7 +55527,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 128.8230000063777,
-     "quality_source": "fit quality of arm ours-fast in avgpool1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in avgpool1d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -56667,7 +56649,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 278.3694159879815,
-     "quality_source": "fit quality of arm ours in avgpool2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in avgpool2d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -56765,7 +56747,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 298.4993330028374,
-     "quality_source": "fit quality of arm ours-fast in avgpool2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in avgpool2d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -60854,7 +60836,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1018.5,
      "quality": {
-      "relative_error_vs_own_host": 4.089591594664184e-06
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -60902,7 +60884,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 298.49841599934734,
-     "quality_source": "fit quality of arm ours in batchnorm1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in batchnorm1d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -61001,7 +60983,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 275.890666001942,
-     "quality_source": "fit quality of arm ours-fast in batchnorm1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in batchnorm1d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -62103,7 +62085,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 883.7,
      "quality": {
-      "relative_error_vs_own_host": 2.3470175712962522e-05
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -62151,7 +62133,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 362.69291598000564,
-     "quality_source": "fit quality of arm ours in batchnorm2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in batchnorm2d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -62250,7 +62232,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 334.63987498544157,
-     "quality_source": "fit quality of arm ours-fast in batchnorm2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in batchnorm2d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -68008,7 +67990,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours in binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in binarizer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -68111,7 +68093,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours-fast in binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in binarizer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -68688,7 +68670,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours in binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in binarizer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -68791,7 +68773,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours-fast in binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in binarizer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -85463,7 +85445,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 870.9919589746278,
-     "quality_source": "fit quality of arm ours in conv1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in conv1d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -85564,7 +85546,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 800.2339169906918,
-     "quality_source": "fit quality of arm ours-fast in conv1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in conv1d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -86730,7 +86712,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 461.925625015283,
-     "quality_source": "fit quality of arm ours in conv2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in conv2d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -86831,7 +86813,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 401.4491249981802,
-     "quality_source": "fit quality of arm ours-fast in conv2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in conv2d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -102759,7 +102741,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 191.38633299735375,
-     "quality_source": "fit quality of arm ours in dropout2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in dropout2d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -102853,7 +102835,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 218.41375000076368,
-     "quality_source": "fit quality of arm ours-fast in dropout2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in dropout2d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -105361,10 +105343,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": null,
-     "quality": {
-      "max_eigenvalue_error": 3.6918872203006057e-07,
-      "relative_residual": 6.672270099310256e-07
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 0,
@@ -105403,8 +105382,7 @@
      "status": "REFUSED(timeout: null)",
      "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": null,
-     "quality_source": "fit quality of arm ours in eigh-synthetic.json (quality-only rerun on this Mac with mojolearn 0.8.42 (the 0.8.34 wheel cannot score this cell: its own host reference does not load, or the 0.8.34 run failed)): a quality-only rerun; this cell's timing is the board run's and its status (REFUSED(timeout: null)) is the board run's"
+     "warmup_ms": null
     },
     {
      "arm": "ours-fast",
@@ -107361,7 +107339,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 359.7227910067886,
-     "quality_source": "fit quality of arm ours in embedding-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
+     "quality_source": "fit quality of arm ours in embedding-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -107461,7 +107439,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 423.5454580048099,
-     "quality_source": "fit quality of arm ours-fast in embedding-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested fast, read back unknown)) is the board run's"
+     "quality_source": "fit quality of arm ours-fast in embedding-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested fast, read back unknown)) is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -116732,7 +116710,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1739.8,
      "quality": {
-      "relative_error_vs_own_host": 1.389011747758016
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -116781,7 +116759,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 619.7032500058413,
-     "quality_source": "fit quality of arm ours in gcn-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in gcn-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -116831,7 +116809,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1913.8,
      "quality": {
-      "relative_error_vs_own_host": 1.389011747758016
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -116880,7 +116858,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 603.6977910262067,
-     "quality_source": "fit quality of arm ours-fast in gcn-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in gcn-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -117976,7 +117954,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1532.8,
      "quality": {
-      "relative_error_vs_own_host": 1.4468896588427946
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -118025,7 +118003,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 402.7936249913182,
-     "quality_source": "fit quality of arm ours in gcn-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in gcn-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -118075,7 +118053,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1550.6,
      "quality": {
-      "relative_error_vs_own_host": 1.4468896588427946
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -118124,7 +118102,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 392.73041699198075,
-     "quality_source": "fit quality of arm ours-fast in gcn-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in gcn-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -119263,7 +119241,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 14.928916993085295,
-     "quality_source": "fit quality of arm ours in global-avgpool-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in global-avgpool-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -119356,7 +119334,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 38.85016599087976,
-     "quality_source": "fit quality of arm ours-fast in global-avgpool-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in global-avgpool-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -120429,7 +120407,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 13.832124997861683,
-     "quality_source": "fit quality of arm ours in global-maxpool-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in global-maxpool-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -120522,7 +120500,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 35.98012498696335,
-     "quality_source": "fit quality of arm ours-fast in global-maxpool-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in global-maxpool-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -121552,7 +121530,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1843.2,
      "quality": {
-      "relative_error_vs_own_host": 1.410360608225113
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -121602,7 +121580,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 740.6499159988016,
-     "quality_source": "fit quality of arm ours in graphsage-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in graphsage-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -121652,7 +121630,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2015.1,
      "quality": {
-      "relative_error_vs_own_host": 1.410360608225113
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -121702,7 +121680,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 724.0879579912871,
-     "quality_source": "fit quality of arm ours-fast in graphsage-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in graphsage-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -122809,7 +122787,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1479.3,
      "quality": {
-      "relative_error_vs_own_host": 1.4512292630816335
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -122859,7 +122837,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 367.4476250016596,
-     "quality_source": "fit quality of arm ours in graphsage-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in graphsage-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -122909,7 +122887,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1499.5,
      "quality": {
-      "relative_error_vs_own_host": 1.4512292630816335
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -122959,7 +122937,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 354.7366250131745,
-     "quality_source": "fit quality of arm ours-fast in graphsage-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in graphsage-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -146968,7 +146946,7 @@
       "previous_hash": "baa7d556f04c86b9",
       "previous_status": "ok"
      },
-     "quality_source": "fit quality of arm ours in jl-min-dim-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in jl-min-dim-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -147058,7 +147036,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 5.866207997314632,
-     "quality_source": "fit quality of arm ours-fast in jl-min-dim-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in jl-min-dim-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -147391,7 +147369,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours in kbins-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in kbins-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -147503,7 +147481,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours-fast in kbins-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in kbins-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -148149,7 +148127,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours in kbins-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in kbins-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -148261,7 +148239,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours-fast in kbins-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in kbins-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -148844,8 +148822,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2637.6,
      "quality": {
-      "rbf_feature_distance_relative_stress": 0.6101116359640374,
-      "subspace_cos_vs_sklearn": 0.9999999999961598
+      "rbf_feature_distance_relative_stress": 0.6101130554401708,
+      "subspace_cos_vs_sklearn": 0.9999999999954597
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -148912,7 +148890,7 @@
       "previous_hash": "1f95716fae428c82",
       "previous_status": "ok"
      },
-     "quality_source": "fit quality of arm ours in kernel-pca-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in kernel-pca-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -148969,8 +148947,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2680.7,
      "quality": {
-      "rbf_feature_distance_relative_stress": 0.6101116286319956,
-      "subspace_cos_vs_sklearn": 0.9999999999995857
+      "rbf_feature_distance_relative_stress": 0.6101130669544843,
+      "subspace_cos_vs_sklearn": 0.9999999999941235
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -149043,7 +149021,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in kernel-pca-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in kernel-pca-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -149711,8 +149689,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1731.8,
      "quality": {
-      "rbf_feature_distance_relative_stress": 0.5457090496879297,
-      "subspace_cos_vs_sklearn": 0.9999999999936111
+      "rbf_feature_distance_relative_stress": 0.5457109146861396,
+      "subspace_cos_vs_sklearn": 0.9999999999935376
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -149779,7 +149757,7 @@
       "previous_hash": "b2fa7c2d3c246cd9",
       "previous_status": "ok"
      },
-     "quality_source": "fit quality of arm ours in kernel-pca-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in kernel-pca-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -149836,8 +149814,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1772.4,
      "quality": {
-      "rbf_feature_distance_relative_stress": 0.545709853077397,
-      "subspace_cos_vs_sklearn": 0.9999999999993305
+      "rbf_feature_distance_relative_stress": 0.5457109589246019,
+      "subspace_cos_vs_sklearn": 0.999999999993085
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -149910,7 +149888,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in kernel-pca-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in kernel-pca-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -153853,7 +153831,7 @@
      "quality_superseded": {
       "output_shape": "100000x16"
      },
-     "quality_source": "fit quality of arm ours in label-binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in label-binarizer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -153969,7 +153947,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in label-binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in label-binarizer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -154556,7 +154534,7 @@
      "quality_superseded": {
       "output_shape": "100000x259"
      },
-     "quality_source": "fit quality of arm ours in label-binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in label-binarizer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -154672,7 +154650,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in label-binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in label-binarizer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -155258,7 +155236,7 @@
      "quality_superseded": {
       "output_shape": "100000"
      },
-     "quality_source": "fit quality of arm ours in label-encoder-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in label-encoder-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -155377,7 +155355,7 @@
      "quality_superseded": {
       "output_shape": 100000.0
      },
-     "quality_source": "fit quality of arm ours-fast in label-encoder-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in label-encoder-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -155958,7 +155936,7 @@
      "quality_superseded": {
       "output_shape": "100000"
      },
-     "quality_source": "fit quality of arm ours in label-encoder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in label-encoder-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -156077,7 +156055,7 @@
      "quality_superseded": {
       "output_shape": 100000.0
      },
-     "quality_source": "fit quality of arm ours-fast in label-encoder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in label-encoder-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -159702,9 +159680,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": null,
-     "quality": {
-      "relative_error_vs_own_host": 0.0
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 0,
@@ -159749,8 +159725,7 @@
      "status": "REFUSED(error: {\"error\": \"Exception('lamb_step: offsets must rise strictly from 0, below 2^24')\", \"event\": \"error\", \"stage\": \"round 0\"})",
      "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": null,
-     "quality_source": "fit quality of arm ours in lamb-synthetic.json (quality-only rerun on this Mac with mojolearn 0.8.42 (the 0.8.34 wheel cannot score this cell: its own host reference does not load, or the 0.8.34 run failed)): a quality-only rerun; this cell's timing is the board run's and its status (REFUSED(error: {\"error\": \"Exception('lamb_step: offsets must) is the board run's"
+     "warmup_ms": null
     },
     {
      "arm": "ours-fast",
@@ -159799,9 +159774,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": null,
-     "quality": {
-      "relative_error_vs_own_host": 0.0
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -159862,8 +159835,7 @@
       "baseline_ms": null,
       "baseline_quality_text": "-",
       "display_rounded": true
-     },
-     "quality_source": "fit quality of arm ours-fast in lamb-synthetic.json (quality-only rerun on this Mac with mojolearn 0.8.42 (the 0.8.34 wheel cannot score this cell: its own host reference does not load, or the 0.8.34 run failed)): a quality-only rerun; this cell's timing is the board run's"
+     }
     }
    ],
    "command": [
@@ -164987,7 +164959,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1275.3,
      "quality": {
-      "relative_error_vs_own_host": 2.2703361307204486e-07
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -165033,7 +165005,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 200.0120829907246,
-     "quality_source": "fit quality of arm ours in layernorm-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in layernorm-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -165143,7 +165115,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in layernorm-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in layernorm-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -169128,9 +169100,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1863.1,
-     "quality": {
-      "relative_error_vs_own_host": 0.0
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -169176,8 +169146,7 @@
       135.2143330150284
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 165.0587500189431,
-     "quality_source": "fit quality of arm ours in lion-synthetic.json (quality-only rerun on this Mac with mojolearn 0.8.42 (the 0.8.34 wheel cannot score this cell: its own host reference does not load, or the 0.8.34 run failed)): a quality-only rerun; this cell's timing is the board run's"
+     "warmup_ms": 165.0587500189431
     },
     {
      "arm": "ours-fast",
@@ -169231,9 +169200,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1863.1,
-     "quality": {
-      "relative_error_vs_own_host": 0.0
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -169293,8 +169260,7 @@
       "baseline_ms": 137.30770800611936,
       "baseline_quality_text": "-",
       "display_rounded": true
-     },
-     "quality_source": "fit quality of arm ours-fast in lion-synthetic.json (quality-only rerun on this Mac with mojolearn 0.8.42 (the 0.8.34 wheel cannot score this cell: its own host reference does not load, or the 0.8.34 run failed)): a quality-only rerun; this cell's timing is the board run's"
+     }
     }
    ],
    "command": [
@@ -188513,7 +188479,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours in maxabs-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in maxabs-scaler-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -188626,7 +188592,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in maxabs-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in maxabs-scaler-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -189195,7 +189161,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours in maxabs-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in maxabs-scaler-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -189308,7 +189274,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in maxabs-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in maxabs-scaler-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -189868,7 +189834,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 146.61779199377634,
-     "quality_source": "fit quality of arm ours in maxpool1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in maxpool1d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -189965,7 +189931,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 147.1403749892488,
-     "quality_source": "fit quality of arm ours-fast in maxpool1d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in maxpool1d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -191086,7 +191052,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 295.2988750184886,
-     "quality_source": "fit quality of arm ours in maxpool2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in maxpool2d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -191183,7 +191149,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 317.9754999873694,
-     "quality_source": "fit quality of arm ours-fast in maxpool2d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in maxpool2d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -200493,7 +200459,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours in minmax-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in minmax-scaler-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -200607,7 +200573,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in minmax-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in minmax-scaler-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -201187,7 +201153,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours in minmax-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in minmax-scaler-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -201301,7 +201267,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in minmax-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in minmax-scaler-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -205456,7 +205422,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1924.2,
      "quality": {
-      "relative_error_vs_own_host": 1.3268446575123108e-06
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -205504,7 +205470,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 917.2012910130434,
-     "quality_source": "fit quality of arm ours in moe-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in moe-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -205616,7 +205582,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in moe-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in moe-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -206768,7 +206734,7 @@
      "quality_superseded": {
       "output_shape": "20000x119"
      },
-     "quality_source": "fit quality of arm ours in multilabel-binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in multilabel-binarizer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -206881,7 +206847,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in multilabel-binarizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in multilabel-binarizer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -207455,7 +207421,7 @@
      "quality_superseded": {
       "output_shape": "20000x489"
      },
-     "quality_source": "fit quality of arm ours in multilabel-binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in multilabel-binarizer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -207568,7 +207534,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in multilabel-binarizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in multilabel-binarizer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -212983,9 +212949,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2055.8,
-     "quality": {
-      "rel_fro_vs_torch_eager_fp32": 2.939167100299875e-08
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -213034,8 +212998,7 @@
       179.56091699306853
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 214.5640839880798,
-     "quality_source": "fit quality of arm ours in nadam-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "warmup_ms": 214.5640839880798
     },
     {
      "arm": "ours-fast",
@@ -213090,9 +213053,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2056.2,
-     "quality": {
-      "rel_fro_vs_torch_eager_fp32": 2.939167100299875e-08
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -213155,8 +213116,7 @@
       "baseline_ms": 177.5058750063181,
       "baseline_quality_text": "-",
       "display_rounded": true
-     },
-     "quality_source": "fit quality of arm ours-fast in nadam-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     }
     },
     {
      "arm": "torch-compile-fp32",
@@ -216611,7 +216571,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours in normalizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in normalizer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -216714,7 +216674,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours-fast in normalizer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in normalizer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -217291,7 +217251,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours in normalizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in normalizer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -217394,7 +217354,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours-fast in normalizer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in normalizer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -219577,7 +219537,7 @@
      "quality_superseded": {
       "output_shape": "100000x119"
      },
-     "quality_source": "fit quality of arm ours in onehot-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in onehot-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -219694,7 +219654,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in onehot-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in onehot-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -220287,7 +220247,7 @@
      "quality_superseded": {
       "output_shape": "100000x508"
      },
-     "quality_source": "fit quality of arm ours in onehot-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in onehot-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -220404,7 +220364,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in onehot-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in onehot-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -223565,7 +223525,7 @@
      "quality_superseded": {
       "output_shape": "100000x8"
      },
-     "quality_source": "fit quality of arm ours in ordinal-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in ordinal-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -223681,7 +223641,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in ordinal-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in ordinal-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -224268,7 +224228,7 @@
      "quality_superseded": {
       "output_shape": "100000x5"
      },
-     "quality_source": "fit quality of arm ours in ordinal-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in ordinal-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -224384,7 +224344,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in ordinal-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in ordinal-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -238723,7 +238683,7 @@
      "quality_superseded": {
       "output_shape": "100000x152"
      },
-     "quality_source": "fit quality of arm ours in poly-features-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in poly-features-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -238832,7 +238792,7 @@
      "quality_superseded": {
       "output_shape": "100000x152"
      },
-     "quality_source": "fit quality of arm ours-fast in poly-features-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in poly-features-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -239456,7 +239416,7 @@
      "quality_superseded": {
       "output_shape": "100000x77"
      },
-     "quality_source": "fit quality of arm ours in poly-features-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in poly-features-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -239565,7 +239525,7 @@
      "quality_superseded": {
       "output_shape": "100000x77"
      },
-     "quality_source": "fit quality of arm ours-fast in poly-features-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in poly-features-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -240122,8 +240082,8 @@
      "peak_host_mb": 4784.8,
      "quality": {
       "output_shape": "100000x220",
-      "max_abs_diff_vs_sklearn": 5.5750226974487305,
-      "rel_diff_vs_sklearn": 0.1050543857273591
+      "max_abs_diff_vs_sklearn": 353.5519714355469,
+      "rel_diff_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -240184,7 +240144,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours in power-transformer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in power-transformer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -240233,8 +240193,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 8279.9,
      "quality": {
-      "max_abs_diff_vs_sklearn": 4.190239906311035,
-      "rel_diff_vs_sklearn": 0.1056460301609967
+      "max_abs_diff_vs_sklearn": 5.248893737792969,
+      "rel_diff_vs_sklearn": 0.1089866861972855
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -240300,7 +240260,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in power-transformer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in power-transformer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -240825,8 +240785,8 @@
      "peak_host_mb": 1082.1,
      "quality": {
       "output_shape": "100000x11",
-      "max_abs_diff_vs_sklearn": 0.06457020714879036,
-      "rel_diff_vs_sklearn": 0.0008076224618225516
+      "max_abs_diff_vs_sklearn": 0.19176006317138672,
+      "rel_diff_vs_sklearn": 0.025551112105844754
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -240887,7 +240847,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours in power-transformer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in power-transformer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -240936,8 +240896,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 753.6,
      "quality": {
-      "max_abs_diff_vs_sklearn": 0.06331869587302208,
-      "rel_diff_vs_sklearn": 9.212192378257204e-05
+      "max_abs_diff_vs_sklearn": 0.06276930123567581,
+      "rel_diff_vs_sklearn": 0.0005187331475821217
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -241003,7 +240963,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in power-transformer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in power-transformer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -246178,7 +246138,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours in quantile-transformer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in quantile-transformer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -246286,7 +246246,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours-fast in quantile-transformer-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in quantile-transformer-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -246904,7 +246864,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours in quantile-transformer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in quantile-transformer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -247012,7 +246972,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours-fast in quantile-transformer-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in quantile-transformer-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -253548,7 +253508,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2453.2,
      "quality": {
-      "relative_error_vs_own_host": 0.889088765901747
+      "relative_error_vs_own_host": 0.0
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -253593,7 +253553,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 966.6114580177236,
-     "quality_source": "fit quality of arm ours in resnet-block-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in resnet-block-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -253642,7 +253602,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2627.9,
      "quality": {
-      "relative_error_vs_own_host": 0.8890987373124306
+      "relative_error_vs_own_host": 1.0951611423068424e-07
      },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
@@ -253687,7 +253647,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 857.7208750066347,
-     "quality_source": "fit quality of arm ours-fast in resnet-block-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in resnet-block-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-bf16",
@@ -254722,7 +254682,8 @@
      "peak_host_mb": 2273.7,
      "quality": {
       "n_selected": 110,
-      "jaccard_vs_sklearn": 0.864406779661017
+      "jaccard_vs_exact": 0.7741935483870968,
+      "jaccard_vs_sklearn": 0.8487394957983193
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -254783,7 +254744,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours in rfe-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in rfe-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -254833,7 +254794,8 @@
      "peak_host_mb": 2273.1,
      "quality": {
       "n_selected": 110,
-      "jaccard_vs_sklearn": 0.896551724137931
+      "jaccard_vs_exact": 0.7741935483870968,
+      "jaccard_vs_sklearn": 0.8803418803418803
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -254886,7 +254848,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours-fast in rfe-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in rfe-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -255168,6 +255130,7 @@
      "peak_host_mb": 437.1,
      "quality": {
       "n_selected": 5,
+      "jaccard_vs_exact": 1.0,
       "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
@@ -255229,7 +255192,7 @@
      "quality_superseded": {
       "n_selected": 5
      },
-     "quality_source": "fit quality of arm ours in rfe-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in rfe-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -255279,6 +255242,7 @@
      "peak_host_mb": 436.0,
      "quality": {
       "n_selected": 5,
+      "jaccard_vs_exact": 1.0,
       "jaccard_vs_sklearn": 1.0
      },
      "ratio_ours_fast_over": null,
@@ -255332,7 +255296,7 @@
      "quality_superseded": {
       "n_selected": 5
      },
-     "quality_source": "fit quality of arm ours-fast in rfe-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in rfe-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -258798,9 +258762,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1926.2,
-     "quality": {
-      "rel_fro_vs_torch_eager_fp32": 3.7722225114111386e-08
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -258846,8 +258808,7 @@
       131.1359589744825
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 162.1713339991402,
-     "quality_source": "fit quality of arm ours in rmsprop-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "warmup_ms": 162.1713339991402
     },
     {
      "arm": "ours-fast",
@@ -258900,9 +258861,7 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1926.5,
-     "quality": {
-      "rel_fro_vs_torch_eager_fp32": 3.7722225114111386e-08
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -258962,8 +258921,7 @@
       "baseline_ms": 129.43862500833347,
       "baseline_quality_text": "-",
       "display_rounded": true
-     },
-     "quality_source": "fit quality of arm ours-fast in rmsprop-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     }
     },
     {
      "arm": "torch-compile-fp32",
@@ -267152,7 +267110,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours in robust-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in robust-scaler-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -267261,7 +267219,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours-fast in robust-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in robust-scaler-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -267874,7 +267832,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours in robust-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in robust-scaler-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -267983,7 +267941,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours-fast in robust-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in robust-scaler-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -268529,7 +268487,7 @@
      "peak_host_mb": 3956.4,
      "quality": {
       "n_selected": 110,
-      "jaccard_vs_sklearn": 1.0
+      "jaccard_vs_sklearn": 0.9819819819819819
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -268585,7 +268543,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours in select-chi2-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-chi2-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -268683,7 +268641,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours-fast in select-chi2-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-chi2-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -269011,7 +268969,7 @@
      "quality_superseded": {
       "n_selected": 5
      },
-     "quality_source": "fit quality of arm ours in select-chi2-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-chi2-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -269109,7 +269067,7 @@
      "quality_superseded": {
       "n_selected": 5
      },
-     "quality_source": "fit quality of arm ours-fast in select-chi2-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-chi2-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -269434,7 +269392,7 @@
       "previous_hash": "12c97f719e95f054",
       "previous_status": "ok"
      },
-     "quality_source": "fit quality of arm ours in select-d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -269543,7 +269501,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in select-d-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-d-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "statsmodels-cpu",
@@ -269873,7 +269831,7 @@
       "previous_hash": "a9b53cf12395d554",
       "previous_status": "ok"
      },
-     "quality_source": "fit quality of arm ours in select-d-taxi-hourly.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-d-taxi-hourly.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -269982,7 +269940,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in select-d-taxi-hourly.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-d-taxi-hourly.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "statsmodels-cpu",
@@ -270315,7 +270273,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours in select-f-classif-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-f-classif-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -270413,7 +270371,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours-fast in select-f-classif-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-f-classif-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -270741,7 +270699,7 @@
      "quality_superseded": {
       "n_selected": 5
      },
-     "quality_source": "fit quality of arm ours in select-f-classif-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-f-classif-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -270855,7 +270813,7 @@
      "quality_superseded": {
       "n_selected": 5.0
      },
-     "quality_source": "fit quality of arm ours-fast in select-f-classif-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-f-classif-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -271187,7 +271145,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours in select-f-regression-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-f-regression-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -271285,7 +271243,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours-fast in select-f-regression-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-f-regression-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -271613,7 +271571,7 @@
      "quality_superseded": {
       "n_selected": 5
      },
-     "quality_source": "fit quality of arm ours in select-f-regression-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-f-regression-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -271727,7 +271685,7 @@
      "quality_superseded": {
       "n_selected": 5.0
      },
-     "quality_source": "fit quality of arm ours-fast in select-f-regression-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-f-regression-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -272054,7 +272012,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours in select-mutual-info-reg-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-mutual-info-reg-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -272171,7 +272129,7 @@
      "quality_superseded": {
       "n_selected": 110.0
      },
-     "quality_source": "fit quality of arm ours-fast in select-mutual-info-reg-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-mutual-info-reg-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -272518,7 +272476,7 @@
      "quality_superseded": {
       "n_selected": 5
      },
-     "quality_source": "fit quality of arm ours in select-mutual-info-reg-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-mutual-info-reg-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -272635,7 +272593,7 @@
      "quality_superseded": {
       "n_selected": 5.0
      },
-     "quality_source": "fit quality of arm ours-fast in select-mutual-info-reg-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-mutual-info-reg-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -272978,7 +272936,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours in select-mutual-info-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-mutual-info-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -273095,7 +273053,7 @@
      "quality_superseded": {
       "n_selected": 110.0
      },
-     "quality_source": "fit quality of arm ours-fast in select-mutual-info-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-mutual-info-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -273442,7 +273400,7 @@
      "quality_superseded": {
       "n_selected": 5
      },
-     "quality_source": "fit quality of arm ours in select-mutual-info-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-mutual-info-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -273559,7 +273517,7 @@
      "quality_superseded": {
       "n_selected": 5.0
      },
-     "quality_source": "fit quality of arm ours-fast in select-mutual-info-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-mutual-info-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -273907,7 +273865,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours in select-r-regression-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-r-regression-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -274005,7 +273963,7 @@
      "quality_superseded": {
       "n_selected": 110
      },
-     "quality_source": "fit quality of arm ours-fast in select-r-regression-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-r-regression-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -274333,7 +274291,7 @@
      "quality_superseded": {
       "n_selected": 5
      },
-     "quality_source": "fit quality of arm ours in select-r-regression-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in select-r-regression-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -274447,7 +274405,7 @@
      "quality_superseded": {
       "n_selected": 5.0
      },
-     "quality_source": "fit quality of arm ours-fast in select-r-regression-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in select-r-regression-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -276470,7 +276428,7 @@
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 139.33254199218936,
-     "quality_source": "fit quality of arm ours in sgd-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0 (vs torch eager fp32)): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
+     "quality_source": "fit quality of arm ours in sgd-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -276524,7 +276482,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2051.9,
      "quality": {
-      "rel_fro_vs_torch_eager_fp32": 8.219036231602629e-10
+      "rel_fro_vs_torch_eager_fp32": 6.095239964123602e-10
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -276587,7 +276545,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in sgd-synthetic.json (quality-only rerun on this Mac against torch eager fp32, mojolearn 0.8.34, py3.13, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in sgd-synthetic.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -279937,7 +279895,7 @@
      "quality_superseded": {
       "output_shape": "100000x64"
      },
-     "quality_source": "fit quality of arm ours in sparse-coder-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in sparse-coder-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -280046,7 +280004,7 @@
      "quality_superseded": {
       "output_shape": "100000x64"
      },
-     "quality_source": "fit quality of arm ours-fast in sparse-coder-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in sparse-coder-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -280664,7 +280622,7 @@
      "quality_superseded": {
       "output_shape": "100000x64"
      },
-     "quality_source": "fit quality of arm ours in sparse-coder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in sparse-coder-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -280773,7 +280731,7 @@
      "quality_superseded": {
       "output_shape": "100000x64"
      },
-     "quality_source": "fit quality of arm ours-fast in sparse-coder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in sparse-coder-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -284409,7 +284367,7 @@
      "quality_superseded": {
       "output_shape": "100000x112"
      },
-     "quality_source": "fit quality of arm ours in spline-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in spline-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -284526,7 +284484,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in spline-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in spline-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -285135,7 +285093,7 @@
      "quality_superseded": {
       "output_shape": "100000x77"
      },
-     "quality_source": "fit quality of arm ours in spline-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in spline-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -285252,7 +285210,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in spline-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in spline-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -288783,7 +288741,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours in standard-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in standard-scaler-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -288882,7 +288840,7 @@
      "quality_superseded": {
       "output_shape": "100000x220"
      },
-     "quality_source": "fit quality of arm ours-fast in standard-scaler-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in standard-scaler-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -289440,7 +289398,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours in standard-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in standard-scaler-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -289539,7 +289497,7 @@
      "quality_superseded": {
       "output_shape": "100000x11"
      },
-     "quality_source": "fit quality of arm ours-fast in standard-scaler-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in standard-scaler-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -294514,7 +294472,7 @@
      "quality_superseded": {
       "output_shape": "100000x8"
      },
-     "quality_source": "fit quality of arm ours in target-encoder-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in target-encoder-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -295291,7 +295249,7 @@
      "quality_superseded": {
       "output_shape": "100000x5"
      },
-     "quality_source": "fit quality of arm ours in target-encoder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in target-encoder-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -295416,7 +295374,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in target-encoder-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in target-encoder-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -300594,7 +300552,7 @@
      "quality_superseded": {
       "output_shape": "100000x142"
      },
-     "quality_source": "fit quality of arm ours in variance-threshold-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in variance-threshold-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -300691,7 +300649,7 @@
      "quality_superseded": {
       "output_shape": "100000x142"
      },
-     "quality_source": "fit quality of arm ours-fast in variance-threshold-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in variance-threshold-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -301237,7 +301195,7 @@
      "quality_superseded": {
       "output_shape": "100000x10"
      },
-     "quality_source": "fit quality of arm ours in variance-threshold-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in variance-threshold-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -301334,7 +301292,7 @@
      "quality_superseded": {
       "output_shape": "100000x10"
      },
-     "quality_source": "fit quality of arm ours-fast in variance-threshold-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in variance-threshold-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "sklearn-cpu",
@@ -323723,7 +323681,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2038.5,
      "quality": {
-      "recall_at_k": 0.999925
+      "recall_at_k": 0.923025
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -323765,7 +323723,7 @@
       "previous_hash": "02e9d691d28f8953",
       "previous_status": "ok"
      },
-     "quality_source": "fit quality of arm ours in ivf-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13 (classical2 ivf blocks from gbm-bench speed npz)): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in ivf-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -323818,7 +323776,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 2417.2,
      "quality": {
-      "recall_at_k": 0.9999750000000001
+      "recall_at_k": 1.0
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -323866,7 +323824,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in ivf-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13 (classical2 ivf blocks from gbm-bench speed npz)): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in ivf-istella.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "faiss-cpu",
@@ -324186,7 +324144,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 775.0,
      "quality": {
-      "recall_at_k": 0.9996499999999999
+      "recall_at_k": 0.99915
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -324228,7 +324186,7 @@
       "previous_hash": "e00141a7605ff662",
       "previous_status": "ok"
      },
-     "quality_source": "fit quality of arm ours in ivf-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13 (classical2 ivf blocks from gbm-bench speed npz)): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours in ivf-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -324329,7 +324287,7 @@
       "baseline_quality_text": "-",
       "display_rounded": true
      },
-     "quality_source": "fit quality of arm ours-fast in ivf-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13 (classical2 ivf blocks from gbm-bench speed npz)): a quality-only rerun; this cell's timing is the board run's"
+     "quality_source": "fit quality of arm ours-fast in ivf-taxi.json (quality-only rerun on an Apple M4, installed mojolearn 0.8.34 wheel (MOJOLEARN_BENCH_INSTALLED=1), py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "faiss-cpu",
