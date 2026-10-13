@@ -2844,8 +2844,9 @@ def _contingency(a, b, ca, cb, numeric_mode, eps=None, mi=False, emi=False):
 def contingency_matrix(labels_true, labels_pred, *, eps=None, sparse=False, dtype="int64", numeric_mode=None):
     """scikit-learn 1.9 `contingency_matrix` (dense): exact counts from the
     device grouping, rows the sorted classes, columns the sorted clusters;
-    `eps` adds a constant and makes the result Float64. sparse=True is
-    NOT IMPLEMENTED (no sparse container in this package)."""
+    `eps` adds a constant and makes the result Float64. The result is always
+    dense; `sparse=True` raises `NotImplementedError`."""
+    # metrics/NOT_IMPLEMENTED.tsv: no sparse matrix type in this package.
     if eps is not None and sparse:
         raise ValueError("Cannot set 'eps' when sparse=True")
     if sparse:

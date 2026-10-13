@@ -640,7 +640,7 @@ class RandomForestClassifier(_RandomForestBase):
     `X` is converted to float32; NaN or infinity in `X` raises `ValueError`.
     `y` may hold numbers or strings; NaN labels are refused. The fit is
     reproducible from `random_state`, and `random_state=None` means seed 0
-    (deterministic), unlike scikit-learn. Supports the `fast`,
+    (deterministic), unlike scikit-learn. Supports the `fast` (Apple GPUs only),
     `deterministic` and `identical` numeric modes through `numeric_mode`.
 
     Parameters
@@ -927,7 +927,7 @@ class RandomForestRegressor(_RandomForestBase):
 
     `X` and `y` are converted to float32; NaN or infinity in `X` raises
     `ValueError`. `random_state=None` means seed 0 (deterministic), unlike
-    scikit-learn. Supports the `fast`, `deterministic` and `identical`
+    scikit-learn. Supports the `fast` (Apple GPUs only), `deterministic` and `identical`
     numeric modes through `numeric_mode`.
 
     Parameters
