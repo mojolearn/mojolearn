@@ -580,7 +580,8 @@ def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
 
 
 def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """numpy's eigh: x_decomp's round-robin Jacobi (`HostExec.eigh`, the one eigh
+    """numpy's eigh: x_decomp's eigh (`HostExec.eigh`: in IDENTICAL the tridiagonal
+    route from n = 64, the round-robin Jacobi below it; DevExec.eigh's words, the one eigh
     order of every column; cgr-decomp 2026-10-03 replaced the one-block cyclic
     solver here). `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out (n x n,
     eigenvector i in COLUMN i), 3 scalars_out (converged = 1, executed = 0:

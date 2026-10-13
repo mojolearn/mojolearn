@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`xn_eigh` on the CPU column (the host binding only): x_decomp's eigh
-(`HostExec.eigh`, the pinned round-robin Jacobi of x_decomp/rr.mojo with the
-cyclic fallback), the same rounds as the GPU binding's
+(`HostExec.eigh`: in IDENTICAL the tridiagonal route of
+x_decomp/eigh_tridiag_host.mojo from n = 64, below it the pinned round-robin
+Jacobi of x_decomp/rr.mojo), the same rounds as the GPU binding's
 `x_neighbors/eigh_device.mojo` (`DevExec.eigh`), so the eigenproblem is the
 same words on every column (cpu-gpu-cleanup c-xneighbors, 2026-10-02; the
 GPU binding ran the host cyclic Jacobi of
