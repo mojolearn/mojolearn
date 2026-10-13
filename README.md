@@ -255,3 +255,5 @@ license; see [NOTICE](NOTICE).
 
 To cite mojolearn, use [CITATION.cff](CITATION.cff). The concept DOI is
 [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632).
+The paper, *Bitwise-Identical Machine Learning Across Metal, CUDA, and HIP*, is at
+[mojolearn.org/paper.pdf](https://mojolearn.org/paper.pdf).

@@ -136,7 +136,7 @@ numpy = ["numpy>=1.26.4"]
 verify = ["numpy>=1.26.4"]
 
 [project.urls]
-Paper = "https://github.com/mojolearn/mojolearn/blob/main/python/mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf"
+Paper = "https://mojolearn.org/paper.pdf"
 Homepage = "https://mojolearn.org"
 Documentation = "https://docs.mojolearn.org"
 Repository = "https://github.com/mojolearn/mojolearn"
