@@ -342,7 +342,7 @@ class MinMaxScaler(_ScalerProtocol):
         Clip transformed values to ``feature_range``. Values lost to clipping
         are not recovered by ``inverse_transform``.
     numeric_mode : {"fast", "deterministic", "identical"} or None, default None
-        Numeric mode; None uses the library default.
+        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -735,7 +735,7 @@ class StandardScaler(_ScalerProtocol):
     with_std : bool, default True
         Scale the data to unit variance.
     numeric_mode : {"fast", "deterministic", "identical"} or None, default None
-        Numeric mode; None uses the library default.
+        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------

@@ -491,6 +491,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         `fast` mode and 'sequential' otherwise.
     numeric_mode : {'fast', 'deterministic', 'identical'} or None, default None
         Numeric mode for this estimator; None uses the package default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -734,6 +735,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         `fast` mode and 'sequential' otherwise.
     numeric_mode : {'fast', 'deterministic', 'identical'} or None, default None
         Numeric mode for this estimator; None uses the package default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
