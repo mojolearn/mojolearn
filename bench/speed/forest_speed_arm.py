@@ -1305,6 +1305,7 @@ def main(argv=None):
             "version": bench_board_probe.library_version(lib),
             "device": "gpu" if gpu else "cpu",
             "hardware_receipt": hardware_receipt if gpu else None,
+            "runtime_environment": bench_board_evidence.runtime_environment() if hardware_receipt else None,
             "device_name": bench_board_probe.gpu_device_name() if gpu else None},
             sort_keys=True), flush=True)
     if args.opponents_only:

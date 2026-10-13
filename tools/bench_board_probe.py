@@ -505,6 +505,7 @@ def library_identity(info):
     if os.environ.get("MOJOLEARN_MEASUREMENT_RECEIPTS") and info.get("device") == "gpu":
         import bench_board_evidence
         out["hardware_receipt"] = bench_board_evidence.hardware_context()
+        out["runtime_environment"] = bench_board_evidence.runtime_environment()
     if info.get("device") == "cpu" and info.get("library") != "mojolearn":
         try:
             from threadpoolctl import threadpool_info

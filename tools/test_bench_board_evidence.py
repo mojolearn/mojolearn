@@ -127,6 +127,19 @@ class Evidence(unittest.TestCase):
         self.assertEqual(rec["params_check"],"REFUSED")
         self.assertTrue((directory/"preflight.json").exists())
 
+    def test_failed_probe_keeps_parameters_but_never_admits(self):
+        B=load("bench_board")
+        record=P.check("ridge", {"ours":{"__library__":"library","alpha":1,"seed":7}})["arms"]["ours"]
+        record["implementation"]={"module":"library.ridge","name":"Ridge"}
+        probes={a:dict(record=record,version="1",probe_rc=2,hardware={"status":"verified"})
+                for a in ("ours","torch-gpu")}
+        race=dict(family="classical",lane="ridge",our_arms={"ours":"identical"})
+        with patch.object(B,"params_probe",return_value=probes):
+            rep=B.preflight_check(dict(vendor="amd"),race,list(probes))
+        self.assertEqual(rep["verdict"],"REFUSED")
+        self.assertEqual(rep["arms"]["torch-gpu"]["raw_params"]["alpha"],1)
+        self.assertTrue(any("probe failed" in s for s in rep["problems"]))
+
     def sealed_cell(self, receipt_arm="lib-gpu", worker_version="1", worker_hardware=None,
                     changed_params=False):
         d=self.root/"evidence/runs/r1";(d/"workers").mkdir(parents=True)
@@ -136,7 +149,7 @@ class Evidence(unittest.TestCase):
                                 "lib-gpu":{"__library__":"library", "alpha":1, "seed":7}})["arms"]["lib-gpu"]
         record["implementation"]={"module":"library.ridge", "name":"Ridge"}
         pre=dict(verdict="MATCHED",arms={"lib-gpu":copy.deepcopy(record)},
-                 probe_workers={"lib-gpu":dict(version="1",hardware=hardware)})
+                 probe_workers={"lib-gpu":dict(version="1",hardware=hardware,environment={})})
         if changed_params:
             record["raw_params"]["alpha"]=2
         cell=dict(arm="lib-gpu",library="library",mode="opponent",device="gpu",status="ok",
@@ -145,7 +158,7 @@ class Evidence(unittest.TestCase):
         rec=dict(arms=["lib-gpu"],cells=[cell],preflight=pre,
                  params=dict(schema="mojolearn.parameter-parity.v2",arms={"lib-gpu":record}),
                  command=["python", "driver.py", "--seed", "7"])
-        E.write(d/"workers/1.json",dict(status="recorded",arms={receipt_arm:"library"},
+        E.write(d/"workers/1.json",dict(status="recorded",arms={receipt_arm:"library"},environment={},
                 versions={receipt_arm:worker_version},hardware=hardware if worker_hardware is None else worker_hardware))
         E.seal(dict(out=str(self.root),measurement_inventory={},measurement_source={"status":"local"},
                     evidence_r2=False), d, dict(source={},dataset={"identity":"abc"},hardware={}),rec)
@@ -180,6 +193,12 @@ class Evidence(unittest.TestCase):
         rec,cell=self.sealed_cell(changed_params=True)
         self.assertIn("evidence_failure",rec)
         self.assertTrue(any("changed after preflight" in s for s in cell["measurement"]["missing"]))
+
+    def test_runtime_flags_are_retained_without_credentials_or_receipt_paths(self):
+        got=E.runtime_environment(dict(MOJOLEARN_IDN_ALL_OFF="1", CUBLAS_WORKSPACE_CONFIG=":4096:8",
+            MOJOLEARN_R2_CREDS="private", MODULAR_AUTH_TOKEN="secret", MOJOLEARN_BOARD_SESSION="run",
+            MOJOLEARN_MEASUREMENT_RECEIPTS="changing-directory", UNRELATED="value"))
+        self.assertEqual(got,dict(MOJOLEARN_IDN_ALL_OFF="1",CUBLAS_WORKSPACE_CONFIG=":4096:8"))
 
     def test_main_board_retains_exact_worker_cell_evidence(self):
         M=load("main_board_ingest")

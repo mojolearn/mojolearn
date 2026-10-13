@@ -2469,8 +2469,6 @@ def params_probe(ctx, race, arms):
         cmd, extra = tree_cmd(ctx, sub)
         cmd = cmd + ["--params-only"]
         rc = run_logged(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
-        if rc:
-            return {}  # partial/stale stdout from a failed probe is not admission
         try:
             with open(log, errors="replace") as fh:
                 text = fh.read()
@@ -2490,9 +2488,10 @@ def params_probe(ctx, race, arms):
             a = (rep.get("arms") or {}).get(arm)
             if a is None or arm not in libs:
                 continue
-            out[arm] = {"params": a.get("params"), "version": libs[arm].get("version"),
+            out[arm] = {"probe_rc": rc, "params": a.get("params"), "version": libs[arm].get("version"),
                         "record": a, "exceptions": rep.get("exceptions", []),
                         "hardware": libs[arm].get("hardware_receipt"),
+                        "environment": libs[arm].get("runtime_environment"),
                         "device_name": libs[arm].get("device_name")}
         return out
     cmd, extra, ceiling = globals()[_PARAMS_ONLY_CMD[race["family"]]](ctx, sub)
@@ -2503,8 +2502,6 @@ def params_probe(ctx, race, arms):
         if f.endswith(".params.json"):
             os.remove(os.path.join(probe_dir, f))
     rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
-    if rc:
-        return {}
     found = [f for f in os.listdir(probe_dir) if f.endswith(".params.json")]
     if not found:
         return {}
@@ -2516,9 +2513,10 @@ def params_probe(ctx, race, arms):
         if a.get("status") not in (None, "ok", "params_only") or p is None:
             continue
         info = a.get("info") or {}
-        out[arm] = {"params": p.get("params"), "version": info.get("version"),
+        out[arm] = {"probe_rc": rc, "params": p.get("params"), "version": info.get("version"),
                     "record": p, "exceptions": rep.get("exceptions", []),
                     "hardware": info.get("hardware_receipt"),
+                    "environment": info.get("runtime_environment"),
                     "device_name": info.get("device_name")}
     return out
 
@@ -2537,6 +2535,10 @@ def preflight_check(ctx, race, arms):
     except P.ParamsRefused as exc:
         report = dict(verdict="REFUSED", arms=records, problems=[str(exc)], exceptions=[])
     report["problems"].extend("missing parameter/version probe: " + a for a in missing)
+    # Failed probes still retain their settings for diagnosis; partial output
+    # from a failed process can never admit a timed race.
+    report["problems"].extend("parameter probe failed (rc %s): %s" % (p["probe_rc"], a)
+                              for a, p in probes.items() if p.get("probe_rc"))
     hardware = None
     for arm in arms:
         if arm_device(arm, ctx.get("vendor")) == "gpu":
@@ -2558,7 +2560,7 @@ def preflight_check(ctx, race, arms):
                  hardware=((probes.get(arm) or {}).get("hardware") or {}).get("host", ""))]))
         if arm in exclusions:
             report["problems"].append(arm + ": " + exclusions[arm])
-    report["probe_workers"] = {a: {k: p.get(k) for k in ("version", "device_name", "hardware")}
+    report["probe_workers"] = {a: {k: p.get(k) for k in ("version", "device_name", "hardware", "environment")}
                                for a, p in probes.items()}
     if report["problems"]:
         report["verdict"] = "REFUSED"
@@ -2578,7 +2580,10 @@ def audit_plan(ctx, races):
                     files={name: sha256_file(path) if os.path.isfile(path) else None for name, path in files})
         directory, recipe = E.begin(ctx, race, race_settings(ctx, race), data)
         sub = dict(ctx, measurement_receipts=str(directory / "workers"))
-        entry = preflight_check(sub, race, arms) if arms else dict(verdict="UNSUPPORTED", problems=[])
+        has_ours = any(a in arms for a in race.get("our_arms", {}))
+        entry = (preflight_check(sub, race, arms) if arms and has_ours else
+                 dict(verdict="UNSUPPORTED", problems=["no supported own arm; no opponent-only timing"],
+                      unsupported_arms=unsupported))
         E.write(directory / "preflight.json", entry)
         report["races"][race["id"]] = dict(recipe=recipe, audit=entry)
         if entry["verdict"] == "REFUSED":

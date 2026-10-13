@@ -33,6 +33,17 @@ ENV_KEYS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
             "MOJOLEARN_GPU_ARCH", "CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES")
 
 
+def runtime_environment(environ=None):
+    """Retain numerical/runtime switches, excluding credentials and receipt paths."""
+    environ = os.environ if environ is None else environ
+    prefixes = ("MOJOLEARN_", "CUDA_", "HIP_", "ROCR_", "ROCM_", "OMP_", "OPENBLAS_",
+                "MKL_", "TORCH_", "PYTORCH_", "CUBLAS_", "CUDNN_", "NCCL_", "MODULAR_", "MAX_")
+    ignored = {RECEIPTS, "MOJOLEARN_BOARD_RECEIPTS", "MOJOLEARN_BOARD_SESSION"}
+    return {k: v for k, v in sorted(environ.items())
+            if (k in ENV_KEYS or k.startswith(prefixes)) and k not in ignored
+            and not any(word in k.upper() for word in ("TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "CREDS", "API_KEY", "R2_"))}
+
+
 def encoded(value):
     return (json.dumps(value, sort_keys=True, indent=2, default=str) + "\n").encode()
 
@@ -214,7 +225,7 @@ def worker_context():
                 hardware=hardware_context(), runtime=runtime,
                 packages={d.metadata["Name"]: d.version for d in importlib.metadata.distributions()
                           if d.metadata.get("Name")},
-                environment={k: os.environ[k] for k in ENV_KEYS if k in os.environ},
+                environment=runtime_environment(),
                 cpu_quota=quota.read_text().strip() if quota.exists() else None,
                 affinity=sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
                 thread_pools=pools)
@@ -355,6 +366,8 @@ def seal(ctx, directory, recipe, rec):
                 if cell.get("device") == "gpu" and ((w.get("hardware") or {}).get("status") != "verified"
                         or w.get("hardware") != probe.get("hardware")):
                     absent.append("worker GPU/driver/OS changed or missing: " + cell.get("arm", "?"))
+                if w.get("environment") != probe.get("environment") or "environment" not in probe:
+                    absent.append("worker runtime settings changed or missing: " + cell.get("arm", "?"))
             if cell.get("mode") != "opponent" and not any(w.get("loaded_mojolearn_files") for w in witnessed):
                 absent.append("loaded product code receipt")
             if not (cell.get("shape") or rec.get("inputs") or cell.get("batch_rows")):
