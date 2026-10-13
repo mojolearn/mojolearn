@@ -248,7 +248,6 @@ comptime ANN_REGISTRY = _Global[
     StorageType=AnnRegistry,
     name=(
         "MojoXAnnResidentIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoXAnnResidentDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
         "MojoXAnnResidentFast"
     ),
     init_fn=AnnRegistry.__init__,

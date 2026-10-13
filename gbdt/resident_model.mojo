@@ -1055,7 +1055,6 @@ comptime GBDT_MODEL_REGISTRY = _Global[
     StorageType=GbdtModelRegistry,
     name=(
         "MojoGbdtResidentModelIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoGbdtResidentModelDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
         "MojoGbdtResidentModelFast"
     ),
     init_fn=GbdtModelRegistry.__init__,

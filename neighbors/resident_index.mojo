@@ -113,7 +113,6 @@ comptime KNN_INDEX_REGISTRY = _Global[
     StorageType=KnnIndexRegistry,
     name=(
         "MojoKnnResidentIndexIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoKnnResidentIndexDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
         "MojoKnnResidentIndexFast"
     ),
     init_fn=KnnIndexRegistry.__init__,
