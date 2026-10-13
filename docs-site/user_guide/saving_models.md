@@ -27,7 +27,7 @@ print(loaded.predict_proba(X[:5]))
 A loaded model predicts or transforms; it does not refit. Loading a file written by a different
 estimator class raises instead of reinterpreting it.
 
-Estimators with `save` and `load` in 0.8.41:
+Estimators with `save` and `load` in {{release}}:
 
 | Family | Estimators |
 |---|---|

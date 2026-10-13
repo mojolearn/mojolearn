@@ -41,9 +41,9 @@ across vendors. Only gradient boosting, random forests and Extra Trees offer it.
 
 ## Which GPUs are supported?
 
-In 0.8.41: Apple silicon GPUs (M1 to M4 families) on macOS; NVIDIA `sm_89` GPUs (for example L40S, L40,
-L4, RTX 4090 and RTX 6000 Ada); and AMD `gfx942` GPUs (Instinct MI300X and MI325X). Other NVIDIA
-generations, such as A100 and H100, are not served by the 0.8.41 wheel and need a source build. See the
+In {{release}}: Apple silicon GPUs (M1 to M4 families) on macOS; NVIDIA {{nvidia_arches}} GPUs (for example
+{{nvidia_examples}}); and AMD {{amd_arches}} GPUs ({{amd_examples}}). Other NVIDIA and AMD architectures are
+not served by the {{release}} wheels and need a source build. See the
 [support matrix](support_matrix.md).
 
 ## Can I use mojolearn without a GPU?

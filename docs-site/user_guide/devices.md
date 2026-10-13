@@ -26,21 +26,21 @@ The backend is chosen in this order:
 
 ## Architecture matching
 
-GPU device code is specific to an architecture. In 0.8.41 the wheels carry:
+GPU device code is specific to an architecture. In {{release}} the wheels carry:
 
 | Vendor | Package | Architectures | Examples |
 |---|---|---|---|
 | Apple | `mojolearn` (macOS arm64) | Apple silicon, built at the M1 instruction-set floor | M1 to M4 families |
-| NVIDIA | `mojolearn-nvidia` | `sm_89` | L40S, L40, L4, RTX 4090, RTX 6000 Ada |
-| AMD | `mojolearn-amd` | `gfx942` | Instinct MI300X, MI325X |
+| NVIDIA | `mojolearn-nvidia` | {{nvidia_arches}} | {{nvidia_examples}} |
+| AMD | `mojolearn-amd` | {{amd_arches}} | {{amd_examples}} |
 
 The loader matches the device against what the install carries:
 
 - **NVIDIA:** an exact match, or else the highest carried architecture of the same compute-capability
-  family that does not exceed the device. It never crosses a major version, so in 0.8.41 an `sm_80`
-  (A100) or `sm_90` (H100) device has no compatible build and the import refuses.
-- **AMD:** the match must be exact. AMD code objects are ISA-specific, so a device other than `gfx942`
-  refuses.
+  family that does not exceed the device. It never crosses a major version, so a device whose family
+  has no carried architecture has no compatible build and the import refuses.
+- **AMD:** the match must be exact. AMD code objects are ISA-specific, so a device other than
+  {{amd_arches}} refuses.
 - `MOJOLEARN_GPU_ARCH` names an architecture directory explicitly; it must be one the install carries.
 
 A GPU architecture the release does not carry needs a [source build](../install.md#from-source).
@@ -53,7 +53,7 @@ because a GPU machine silently computing on the host would mislabel every result
 to reinstall so the core and both GPU packages are at the same version:
 
 ```sh
-pip install --force-reinstall "mojolearn==0.8.41"
+pip install --force-reinstall "mojolearn=={{release}}"
 ```
 
 To compute on the CPU on such a machine anyway, set `MOJOLEARN_VENDOR=cpu` before import.

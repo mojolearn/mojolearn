@@ -1,3 +1,5 @@
 _build/
 _site/
 api/generated/
+# Written by tools/gen_api.py at every build from the documented release.
+api/*.rst
