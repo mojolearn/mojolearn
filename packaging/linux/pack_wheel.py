@@ -590,6 +590,8 @@ def plugin_project(proj, vendor, version, arches):
     row = gpu_plugins.package(vendor)
     out = {k: proj[k] for k in ("authors", "maintainers", "license", "urls", "keywords",
                                 "classifiers", "requires-python", "license-files") if k in proj}
+    # A vendor wheel is Linux-only: drop the core's macOS classifier from it.
+    out["classifiers"] = [c for c in out.get("classifiers", []) if not c.startswith("Operating System :: MacOS")]  # glue: metadata filter
     out.update(name=row["distribution"], version=version,
                description=(f"{row['label']} GPU binaries for mojolearn {version} "
                             f"({', '.join(sorted(arches))}); installed by pip install mojolearn"),
