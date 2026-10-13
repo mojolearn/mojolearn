@@ -18,6 +18,13 @@ class WorkerFailure(RuntimeError):
     pass
 
 
+class WorkerCrash(WorkerFailure):
+    """The worker process died (non-zero exit or signal) without a timeout
+    or an unhealthy-device signal. Its cell did not run, but the next cell's
+    fresh process starts from a clean native context, so the controller can
+    record this cell as refused and continue."""
+
+
 def unhealthy(value):
     text = json.dumps(value, default=str).lower()
     return any(marker in text for marker in (
@@ -91,10 +98,10 @@ def run(request, timeout=120, log=None):
                 output.seek(0, os.SEEK_END)
                 output.seek(max(0, output.tell() - 8192))
                 tail = output.read().decode("utf-8", "replace")
-                if process.returncode:
-                    raise WorkerFailure(f"{label}: worker exited {process.returncode}; {tail[-2000:]}")
                 if unhealthy(tail):
                     raise WorkerFailure(f"{label}: unhealthy-device signal; {tail[-2000:]}")
+                if process.returncode:
+                    raise WorkerCrash(f"{label}: worker exited {process.returncode}; {tail[-2000:]}")
                 try:
                     with open(result_path, encoding="utf-8") as stream:
                         result = json.load(stream)

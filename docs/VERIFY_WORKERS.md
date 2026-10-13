@@ -16,10 +16,13 @@ A timeout is an incomplete verification, never a successful skipped check.
 
 The parent announces each cell, prints a heartbeat every ten seconds while
 waiting, and judges its parts immediately on completion. Ordinary divergences
-remain visible while subsequent cells run in fresh processes. A native crash,
-timeout, malformed worker result or explicit unhealthy-device signal stops
-the sweep. Outstanding cells become refused, and the overall report cannot
-say verified. All child processes in the worker process group are killed
+remain visible while subsequent cells run in fresh processes. A cell worker
+that crashes (non-zero exit or signal, without a timeout or an
+unhealthy-device signal) refuses its own cell, is listed under
+`execution.crashed_cells`, and the sweep continues; three crashes in a row
+stop it. A timeout, malformed worker result, explicit unhealthy-device signal
+or a crash outside the cell sweep stops the sweep. Outstanding cells become
+refused, and the overall report cannot say verified. All child processes in the worker process group are killed
 when the worker exits or exceeds its limit.
 
 With `--json-out evidence.json`, intermediate evidence is available as:

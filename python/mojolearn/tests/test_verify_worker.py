@@ -56,6 +56,7 @@ def test_timeout_reaps_worker_group(monkeypatch):
 
 @pytest.mark.parametrize("script, message", [
     ("import sys; print('native crash'); sys.exit(7)", "exited 7"),
+    ("import sys; print('device lost'); sys.exit(7)", "unhealthy-device"),
     ("print('successful exit without result')", "missing or invalid"),
     ("import sys; open(sys.argv[2], 'w').write('broken json')", "missing or invalid"),
     ("import sys; open(sys.argv[2], 'w').write('{\"error\": \"fixture changed\"}')", "fixture changed"),
@@ -99,7 +100,7 @@ def test_device_failure_stops_remaining_probes():
     assert all(value is None and "dead/saturated" in error for value, error in parts.values())
 
 
-@pytest.mark.parametrize("failure", ["timeout", "preflight", "mismatch", None])
+@pytest.mark.parametrize("failure", ["timeout", "crash", "preflight", "mismatch", None])
 def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_path, failure):
     """Exercise actual controller/report assembly with disposable workers mocked.
 
@@ -149,6 +150,8 @@ def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_pa
             return dict(value=dict(passed=failure != "preflight"), bindings=[])
         if failure == "timeout":
             raise worker.WorkerFailure("test worker exceeded limit")
+        if failure == "crash" and request["lane"] == "one":
+            raise worker.WorkerCrash("cell/one/base: worker exited -5; ")
         return dict(value={part: ["abcdef0123456789", None] for part in reference.PARTS}, bindings=[])
 
     monkeypatch.setattr(worker, "run", run)
@@ -165,6 +168,13 @@ def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_pa
         assert code == verifier.EXIT_CANNOT_RUN
         assert {r["lane"] for r in report["cells"]} == {"one", "two"}
         assert all(r["state"] == reference.REFUSED for r in report["cells"])
+    elif failure == "crash":
+        # one crashed worker refuses its own cell; the sweep goes on
+        assert len(cells_dispatched) == 2
+        assert code == verifier.EXIT_CANNOT_RUN
+        assert {r["lane"] for r in report["cells"] if r["state"] == reference.REFUSED} == {"one"}
+        assert [c["lane"] for c in progress["execution"]["crashed_cells"]] == ["one"]
+        assert progress["execution"]["interrupted"] is None
     elif failure == "preflight":
         assert not cells_dispatched
         assert code == verifier.EXIT_MISMATCH

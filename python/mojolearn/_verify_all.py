@@ -3865,7 +3865,15 @@ def cmd_verify_all(args):
         return _finish(args, EXIT_USAGE, "USAGE", "--cell-timeout must be finite and positive")
     lane_seconds, cell_seconds = {}, {}
     execution = dict(mode="fresh-process-per-cell", timeout_s=timeout, completed_cells=0,
-                     total_cells=len(lanes) * len(fixtures), interrupted=None)
+                     total_cells=len(lanes) * len(fixtures), interrupted=None, crashed_cells=[])
+    # A crashed cell worker (non-zero exit or signal, no timeout and no
+    # unhealthy-device signal) refuses its own cell and the sweep goes on:
+    # every cell runs in a fresh process, so one crash cannot taint the
+    # next. The 0.8.43 run on an Apple M4 stopped 315 lanes on a single
+    # SIGTRAP. Consecutive crashes still stop the sweep: past this many in a
+    # row the device or the install is the likelier cause than one cell.
+    crash_streak_limit = 3
+    crash_streak = 0
     worker_bindings = {}
     checkpoint = getattr(args, "json_out", None)
     progress_path = str(checkpoint) + ".progress.json" if checkpoint else None
@@ -3920,6 +3928,14 @@ def cmd_verify_all(args):
                                  extra_parts=extra_parts,
                                  fixture_hashes=dict(X=harness._h(X), y_clf=harness._h(yc),
                                                      y_reg=harness._h(yr), held=harness._h(held[f])))
+                crash_streak = 0
+            except worker.WorkerCrash as exc:
+                crash_streak += 1
+                execution["crashed_cells"].append(dict(lane=lane, fixture=f, error=str(exc)[:500]))
+                log(f"    CRASHED (cell refused, sweep continues): {str(exc)[:300]}")
+                if crash_streak >= crash_streak_limit:
+                    execution["interrupted"] = f"{crash_streak} consecutive cell workers crashed; last: {exc}"
+                parts = {p: (None, str(exc)) for p in tuple(vref.PARTS) + tuple(extra_parts)}
             except worker.WorkerFailure as exc:
                 execution["interrupted"] = str(exc)
                 parts = {p: (None, str(exc)) for p in tuple(vref.PARTS) + tuple(extra_parts)}
@@ -3936,6 +3952,9 @@ def cmd_verify_all(args):
         lane_seconds[lane] = round(time.monotonic() - t0, 3)
         if execution["interrupted"]:
             break
+    if execution["crashed_cells"]:
+        log(f"# CRASHED: {len(execution['crashed_cells'])} cell worker(s), each refused: "
+            + ", ".join(f"{c['lane']}/{c['fixture']}" for c in execution["crashed_cells"][:20]))
     # Unfinished cells are explicit refusals; they cannot disappear from a
     # subset's denominator or turn an aborted run into a successful comparison.
     if execution["interrupted"]:
@@ -4098,6 +4117,10 @@ def cmd_verify_all(args):
     for binding in report.get("bindings", []):
         worker_bindings[(binding["module"], binding["sha256"])] = binding
     report["bindings"] = list(worker_bindings.values())
+    if execution["crashed_cells"]:
+        report.update(detail=report["detail"] + f"; {len(execution['crashed_cells'])} cell worker(s) crashed "
+                      "(those cells refused): " + ", ".join(
+                          f"{c['lane']}/{c['fixture']}" for c in execution["crashed_cells"][:20]))
     if execution["interrupted"]:
         code, headline = EXIT_CANNOT_RUN, "CANNOT RUN"
         report.update(exit=code, verdict=headline,
