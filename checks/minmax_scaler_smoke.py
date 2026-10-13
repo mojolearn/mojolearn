@@ -27,7 +27,7 @@ def main():
         rng.uniform(-8, 8, (7, 259)).astype(np.float32).T,
         np.array([[0, 0], [2**-22, 2**-18]], np.float32),
     ]
-    for mode in ("fast", "deterministic", "identical"):
+    for mode in ("fast", "identical"):
         for x in cases:
             original = x.copy()
             for bounds in ((0, 1), (-2, 3)):

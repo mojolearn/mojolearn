@@ -16,7 +16,7 @@ from mojolearn import metrics, set_numeric_mode
 from mojolearn import _backend
 
 NAMES = ("mean_squared_error", "mean_absolute_error", "root_mean_squared_error")
-CODES = {"fast": 0, "identical": 1, "deterministic": 2}
+CODES = {"fast": 0, "identical": 1}
 
 
 def oracle(y, p):
@@ -55,7 +55,7 @@ def main():
     observed = {}
     checks = 0
     # Interleave same-process artifacts, then revisit each mode. Repetition
-    # checks are within mode; FAST/DETERMINISTIC are not claimed cross-vendor.
+    # checks are within mode; FAST is not claimed cross-vendor.
     for mode in [*args.modes, *reversed(args.modes)]:
         binding = metrics._get_binding(mode)
         readback = getattr(binding, "metrics_numeric_mode", None)

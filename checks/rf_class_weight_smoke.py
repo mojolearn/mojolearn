@@ -17,7 +17,7 @@ def fingerprint(model):
 
 def main():
     mode = os.environ.get('MOJOLEARN_NUMERIC_MODE')
-    assert mode in ('fast', 'identical', 'deterministic'), 'explicit numeric mode required'
+    assert mode in ('fast', 'identical'), 'explicit numeric mode required'
     rng = np.random.default_rng(17)
     x = rng.normal(size=(257, 5)).astype(np.float32)
     y = ((x[:, 0] + rng.normal(size=257) > 1.0)).astype(np.int32)
@@ -29,7 +29,7 @@ def main():
                 random_state=7, n_streams=1, class_weight=weight, numeric_mode=mode)
             binding = model._bind()
             assert model.vendor_used() == 'cuda'
-            assert binding.rf_numeric_mode() == {'fast': 0, 'identical': 1, 'deterministic': 2}[mode]
+            assert binding.rf_numeric_mode() == {'fast': 0, 'identical': 1}[mode]
             model.fit(x, y)
             p = model.predict_proba(x)
             assert np.isfinite(p).all() and (p >= 0).all() and (p <= 1).all()

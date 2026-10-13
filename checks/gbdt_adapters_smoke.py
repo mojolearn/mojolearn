@@ -9,7 +9,7 @@ from mojolearn._gbdt_adapters import GradientBoostingClassifier, GradientBoostin
 def main():
     X = np.tile(np.array([[-2., 0.], [-1., 1.], [1., 1.], [2., 0.]], np.float32), (8, 1))
     codes = (X[:, 0] > 0).astype(np.float32)
-    for mode in ('fast', 'deterministic', 'identical'):
+    for mode in ('fast', 'identical'):
         for policy in ('SymmetricTree', 'Depthwise', 'Lossguide'):
             options = dict(n_estimators=2, max_depth=2, learning_rate=.5,
                            random_state=7, numeric_mode=mode, grow_policy=policy,

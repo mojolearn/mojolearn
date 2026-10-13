@@ -11,7 +11,7 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=['fast', 'deterministic', 'identical'], required=True)
+    parser.add_argument('--mode', choices=['fast', 'identical'], required=True)
     parser.add_argument('--vendor', choices=['metal', 'cuda', 'hip'], required=True)
     args = parser.parse_args()
     os.environ['MOJOLEARN_NUMERIC_MODE'] = args.mode
@@ -39,7 +39,7 @@ def main():
             native = model._bind()
             prefix = 'rf' if cls.__name__.startswith('RandomForest') else 'trees'
             assert str(getattr(native, prefix + '_vendor')()) == args.vendor
-            assert getattr(native, prefix + '_numeric_mode')() == {'fast':0, 'identical':1, 'deterministic':2}[args.mode]
+            assert getattr(native, prefix + '_numeric_mode')() == {'fast':0, 'identical':1}[args.mode]
             model.fit(X, y)
             expected = _forest_protocol._forest_fit_arrays(captured.pop())
             for name, value in zip(_forest_protocol._FOREST_ARRAYS, expected[:5]):

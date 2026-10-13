@@ -76,7 +76,7 @@ def read_back(lm):
     """Every mode and vendor statement the process can make about the
     binaries it loaded: the package's cross-checked numeric_mode(), the
     vendor, and each loaded `_mojolearn_*` module's own `<prefix>_numeric_mode()`
-    (1 is identical, 0 fast, 2 deterministic) and the file's sha256."""
+    (1 is identical, 0 fast) and the file's sha256."""
     import mojolearn
     lib = dict(mojolearn_version=getattr(mojolearn, "__version__", None), numeric_mode=None,
                vendor=None, requested_mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical"),
@@ -96,7 +96,7 @@ def read_back(lm):
                 lib["model_read_back"][attr] = v() if callable(v) else v
             except Exception as e:  # noqa: BLE001
                 lib["model_read_back"][attr] = f"error: {str(e)[:120]}"
-    codes = {0: "fast", 1: "identical", 2: "deterministic"}
+    codes = {0: "fast", 1: "identical"}
     for name, mod in sorted(sys.modules.items()):
         f = getattr(mod, "__file__", None)
         if not f or "_mojolearn" not in os.path.basename(f) or not f.endswith((".so", ".dylib", ".pyd")):

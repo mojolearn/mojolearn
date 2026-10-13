@@ -38,14 +38,14 @@ def main():
     x, y = fixture()
     baseline = {}
     checks = 0
-    for mode in ('fast', 'deterministic', 'identical'):
+    for mode in ('fast', 'identical'):
         for policy in ('SymmetricTree', 'Depthwise', 'Lossguide'):
             for loss in ('RMSE', 'Logloss'):
                 target = (y > np.median(y)).astype(np.float32) if loss == 'Logloss' else y
                 opts = options(mode, policy, loss)
                 default = GradientBoosting(**opts).fit(x, target)
                 readback = default._bind('_mojolearn_gbdt').gbdt_numeric_mode()
-                assert readback == {'fast': 0, 'identical': 1, 'deterministic': 2}[mode]
+                assert readback == {'fast': 0, 'identical': 1}[mode]
                 key = '/'.join((mode, policy, loss))
                 baseline[key] = fingerprint(default, x)
                 checks += 1

@@ -15,7 +15,7 @@ def main():
     repeated[:, 2] = np.linspace(-2, 2, 513, dtype=np.float32)
     cases.append(repeated[:, ::2])  # strided, inexact constant + varying column
     checks = 0
-    for mode in ('fast', 'deterministic', 'identical'):
+    for mode in ('fast', 'identical'):
         for mean in (False, True):
             for std in (False, True):
                 for x in cases:

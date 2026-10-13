@@ -502,7 +502,7 @@ def verify_our_arm(arm, requested=None):
     """Resolve and verify this arm before any fit timer starts. `requested`
     overrides the environment's tier for an `--ours-ab numeric_mode=...` arm."""
     requested = (requested or os.environ.get("MOJOLEARN_NUMERIC_MODE", "")).strip().lower()
-    codes = {0: "fast", 1: "identical", 2: "deterministic"}
+    codes = {0: "fast", 1: "identical"}
     if requested not in codes.values():
         raise RuntimeError("set MOJOLEARN_NUMERIC_MODE explicitly before benchmarking")
     model = arm.make()
