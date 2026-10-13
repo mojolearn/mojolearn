@@ -266,14 +266,15 @@ EXCEPTIONS = [
      "min_child_weight 0 (best_split_info.left_count > 0) and keeps 1e-3; ours has no hessian floor"),
     ("gbdt-*", "min_samples_leaf", "lightgbm-*", "LightGBM keeps min_child_samples 20 (it aborts at "
      "the other arms' value); ours and CatBoost min_data_in_leaf 1"),
-    ("gbdt-depthwise", "min_child_weight", "*", "ours takes min_child_hessian only with a Newton "
-     "score and Depthwise runs Cosine (CatBoost CPU has no Newton score), so ours has no hessian "
-     "floor: XGBoost min_child_weight 0"),
-    ("gbdt-lossguide", "score_function", "catboost-cpu", "CatBoost's CPU learner scores splits with "
-     "Cosine or L2 only; ours and catboost-gpu NewtonL2, the Newton L2 gain of XGBoost and LightGBM"),
-    ("gbdt-categorical", "score_function", "catboost-cpu", "CatBoost's CPU learner scores splits "
-     "with Cosine or L2 only; ours and catboost-gpu NewtonL2, the Newton L2 gain of XGBoost and "
-     "LightGBM"),
+    # FAIRNESS FIX (2026-10-13 audit): three rows removed here. ("gbdt-depthwise",
+    # min_child_weight, *) excused ours' missing hessian floor while Depthwise ran Cosine on ours
+    # against XGBoost's Newton L2 gain; Depthwise now scores NewtonL2 and ours takes
+    # min_child_hessian 0.0, XGBoost's min_child_weight 0. ("gbdt-lossguide" and
+    # "gbdt-categorical", score_function, catboost-cpu) excused CatBoost's CPU learner racing
+    # Cosine against ours' NewtonL2; that arm is now refused by name where it lacks the lane's
+    # score function (tools/speed_gbdt_arm.py _catboost_cpu_refusal), and gbdt-categorical
+    # scores L2 on every arm. Results raced before this change were wrong for these lanes;
+    # apply extra scrutiny.
 ] + [
     (lane, "min_child_weight", "*", "ours takes min_child_hessian on Depthwise and Lossguide only; "
      "on the symmetric grower it is unset (no hessian floor, as CatBoost; XGBoost 0)")

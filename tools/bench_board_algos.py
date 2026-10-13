@@ -1021,34 +1021,47 @@ _add("ovr", xlane="trees", ours="OneVsRestClassifier", task="clf", block="mc",
 _add("calibrated", xlane="trees", ours="CalibratedClassifierCV", task="clf", block="cls",
      sk="sklearn.calibration:CalibratedClassifierCV",
      params=dict(estimator=_E("GaussianNB"), method="sigmoid", cv=5, ensemble=True))
+# FAIRNESS FIX (2026-10-13 audit): tree-shap raced ours explaining its own RandomForestRegressor
+# with 100-row background covers against XGBoost (and shap, LightGBM) explaining their own GBDT with
+# training covers: different models, different covers. No opponent here can explain ours' forest with
+# ours' covers through its public API (ours' TreeExplainer takes mojolearn models only), so every
+# opponent arm is REFUSED by name in _build_shap; `explained_model` names the model so a copy of the
+# old opponent cells is withheld by the board's settings check. Results raced before this change were
+# wrong for this lane; apply extra scrutiny.
 _add("tree-shap", xlane="trees", ours="TreeExplainer", kind="shap", task="tree-shap", block="reg",
      sub={"X": SUB["mid"], "Xq": SUB["quad"]},
-     params=dict(n_estimators=100, max_depth=6, learning_rate=0.1),
+     params=dict(n_estimators=100, max_depth=6, learning_rate=0.1,
+                 explained_model="ours' RandomForestRegressor, covers = 100 background rows"),
      other={"shap-cpu": "shap", "xgboost-cpu": "xgboost", "xgboost-gpu": "xgboost",
             "lightgbm-cpu": "lightgbm"},
-     notes=["each arm explains its own library's tree ensemble (100 trees, depth 6) fit before "
-            "the clock on the same rows; timed = the SHAP values of 10,000 rows; shap-cpu is the "
-            "shap package over the XGBoost model, xgboost-* its pred_contribs (GPUTreeShap on CUDA)"],
-     mism=["ours explains its RandomForestRegressor (TreeExplainer takes RF, ExtraTrees, "
-           "DecisionTree and DART models), the opponents their GBDT of the same size"])
-# lane shap-xvendor-identity (2026-10-08): ours explains this library's device ridge, the opponents the
-# NumPy closed form they were scored with (see _build_shap)
-_SHAP_RIDGE_MISM = ["ours explains this library's device ridge (mojolearn.RidgeCV(alphas=[1.0]), the x_linear "
-                    "binding, the same bits on NVIDIA and AMD), the opponents a NumPy/LAPACK ridge of the same "
-                    "objective whose bits are the host CPU's; each arm's error is against its own model's exact values"]
+     notes=["ours explains its RandomForestRegressor (100 trees, depth 6) fit before the clock, node "
+            "covers from 100 background rows; timed = the SHAP values of 10,000 rows. Every opponent "
+            "is refused: none explains that model with those covers (2026-10-13 audit)"])
+# lane shap-xvendor-identity (2026-10-08): ours explains this library's device ridge.
+# FAIRNESS FIX (2026-10-13 audit): the opponents explained a different model (the NumPy closed form
+# of the ridge, host-BLAS coefficients) and cuML evaluated it as a float64 cupy GEMV (FP64 on the
+# L40S), while ours explained its own float32 device RidgeCV. Every arm now explains ONE float32
+# linear model whose coefficients the harness solves in a fixed order (_shared_ridge_f32, the same
+# bits on every box): ours through mojolearn.RidgeCV's device predict holding those coefficients,
+# cuML through a float32 cupy GEMV, shap through a float32 NumPy GEMV. Results raced before this
+# change were wrong for this lane; apply extra scrutiny.
+_SHAP_RIDGE_MODEL = ("one float32 ridge (alpha 1, centered) on every arm, coefficients solved once "
+                     "in a fixed order by the harness")
 _add("kernel-shap", xlane="trees", ours="KernelExplainer", kind="shap", task="kernel-shap",
      block="reg", sub={"X": SUB["mid"], "Xq": 100},
-     params=dict(n_background=100, nsamples=2048, link="identity", l1_reg=False),
+     params=dict(n_background=100, nsamples=2048, link="identity", l1_reg=False,
+                 explained_model=_SHAP_RIDGE_MODEL),
      other={"shap-cpu": "shap", "cuml-gpu": "cuml"},
-     notes=["the model is a ridge (alpha 1, centered) fit before the clock (its exact SHAP values are known: "
-            "w_j (x_j - E x_j)); background = 100 stride rows; ours explains mojolearn.RidgeCV(alphas=[1.0]) "
-            "on the device, the opponents the NumPy closed form"],
-     mism=_SHAP_RIDGE_MISM)
+     notes=["the model is a ridge (alpha 1, centered) solved before the clock in a fixed order on the "
+            "host (no BLAS), its coefficients rounded to float32 (its exact SHAP values are known: "
+            "w_j (x_j - E x_j)); background = 100 stride rows; every arm evaluates that one float32 model: "
+            "ours mojolearn.RidgeCV(alphas=[1.0]).predict on the device holding those coefficients, cuML a "
+            "float32 cupy GEMV, shap a float32 NumPy GEMV"])
 _add("permutation-shap", xlane="trees", ours="PermutationExplainer", kind="shap",
      task="permutation-shap", block="reg", sub={"X": SUB["mid"], "Xq": 100},
-     params=dict(n_background=100, npermutations=10),
+     params=dict(n_background=100, npermutations=10, explained_model=_SHAP_RIDGE_MODEL),
      other={"shap-cpu": "shap", "cuml-gpu": "cuml"},
-     notes=["the ridge model as kernel-shap"], mism=_SHAP_RIDGE_MISM)
+     notes=["the ridge model as kernel-shap"])
 
 # ---- lane cnn -------------------------------------------------------------
 _CNN = "seeded N(0,1) tensors (no image set is in the R2 store)"
@@ -4592,6 +4605,81 @@ def _build_als(lane, arm, D):
 
 # ---- SHAP -----------------------------------------------------------------
 
+def _shared_ridge_f32(X, y, alpha=1.0):
+    """(w32, b32): THE linear model every kernel- and permutation-SHAP arm explains.
+
+    FAIRNESS FIX (2026-10-13 audit): ours explained its own device RidgeCV while the opponents
+    explained a NumPy/LAPACK ridge (host-BLAS coefficients, a float64 cupy GEMV on cuML). This
+    solves the same objective once, the centered ridge (X_c^T X_c + alpha I) w = X_c^T y_c with
+    b = mean(y) - mean(X) . w, in a FIXED ORDER: sequential row folds of elementwise IEEE float64
+    operations (no BLAS, no pairwise sum) and a Cholesky solve in Python floats. The result is
+    the same bits on every host, so every worker process (each arm builds its own) derives the
+    same coefficients, and ours' cross-vendor identity holds. The coefficients are rounded to
+    float32, the precision ours' linear predict runs in, and every arm evaluates the model in
+    float32. Harness work before every clock. Results raced before this change were wrong for
+    these lanes; apply extra scrutiny."""
+    np = _np()
+    import math
+    Xd = np.ascontiguousarray(X, dtype=np.float64)
+    yd = np.ascontiguousarray(y, dtype=np.float64).reshape(-1)
+    n, d = Xd.shape
+    mu = np.zeros(d, dtype=np.float64)
+    for i in range(n):
+        mu += Xd[i]
+    mu /= float(n)
+    ym = 0.0
+    for v in yd.tolist():
+        ym += v
+    ym /= float(n)
+    gram = np.zeros((d, d), dtype=np.float64)
+    rhs = np.zeros(d, dtype=np.float64)
+    xc = np.empty(d, dtype=np.float64)
+    outer = np.empty((d, d), dtype=np.float64)
+    yl = yd.tolist()
+    for i in range(n):
+        np.subtract(Xd[i], mu, out=xc)
+        np.multiply.outer(xc, xc, out=outer)
+        gram += outer
+        rhs += xc * (yl[i] - ym)
+    A = gram.tolist()
+    r = rhs.tolist()
+    for j in range(d):
+        A[j][j] += float(alpha)
+    L = [[0.0] * d for _ in range(d)]
+    for j in range(d):
+        Lj = L[j]
+        s = A[j][j]
+        for k in range(j):
+            s -= Lj[k] * Lj[k]
+        if not s > 0.0:
+            raise RuntimeError("the shared ridge's normal matrix is not positive definite")
+        Lj[j] = math.sqrt(s)
+        for i in range(j + 1, d):
+            Li = L[i]
+            s = A[i][j]
+            for k in range(j):
+                s -= Li[k] * Lj[k]
+            Li[j] = s / Lj[j]
+    z = [0.0] * d
+    for i in range(d):
+        Li = L[i]
+        s = r[i]
+        for k in range(i):
+            s -= Li[k] * z[k]
+        z[i] = s / Li[i]
+    wv = [0.0] * d
+    for i in range(d - 1, -1, -1):
+        s = z[i]
+        for k in range(i + 1, d):
+            s -= L[k][i] * wv[k]
+        wv[i] = s / L[i][i]
+    w32 = np.asarray(wv, dtype=np.float32)
+    b = ym
+    for mj, wj in zip(mu.tolist(), w32.tolist()):
+        b -= mj * wj
+    return w32, float(np.float32(b))
+
+
 def _build_shap(lane, arm, D):
     np = _np()
     s = LANES[lane]
@@ -4602,6 +4690,17 @@ def _build_shap(lane, arm, D):
     if t == "tree-shap":
         gb = dict(n_estimators=p["n_estimators"], max_depth=p["max_depth"],
                   learning_rate=p["learning_rate"])
+        if arm not in OURS_ARMS:
+            # FAIRNESS FIX (2026-10-13 audit): these arms explained their own GBDT (XGBoost's,
+            # LightGBM's) with training covers while ours explains its RandomForestRegressor with
+            # 100-row background covers: different models and covers. Refused by name before
+            # any fit (the code below is kept for the record). Results raced before this change
+            # were wrong for this lane; apply extra scrutiny.
+            raise RuntimeError(
+                "REFUSED: a different model: ours explains its RandomForestRegressor with node "
+                "covers from 100 background rows; %s would explain its own library's GBDT with "
+                "training covers. No opponent explains ours' forest with ours' covers through its "
+                "public API, so the race has no opponent (fairness audit 2026-10-13)" % arm)
         if arm in OURS_ARMS:
             import mojolearn as ml
             name, cls = _ours_class(lane)
@@ -4685,36 +4784,38 @@ def _build_shap(lane, arm, D):
         return Runner(info, fit, outputs, record=rec)
     # kernel / permutation SHAP over a ridge (alpha 1, centered) fit before the clock
     bg = _stride(X, p["n_background"])
-
-    def numpy_ridge():
-        """The opponents' model: the ridge as a NumPy closed form (host BLAS/LAPACK, so its
-        bits are the box's), and its predict over host arrays."""
-        Xd, yd = X.astype(np.float64), y.astype(np.float64)
-        mu, ym = Xd.mean(0), yd.mean()
-        A = (Xd - mu).T @ (Xd - mu) + np.eye(Xd.shape[1])
-        w = np.linalg.solve(A, (Xd - mu).T @ (yd - ym))
-        b = ym - mu @ w
-
-        def predict(Z):
-            return np.asarray(_host(Z), dtype=np.float64) @ w + b
-        return w, b, predict
+    # FAIRNESS FIX (2026-10-13 audit): ours explained its own device RidgeCV (float32 outputs)
+    # while the opponents explained the former `numpy_ridge`, a NumPy/LAPACK closed form of the same
+    # objective with host-BLAS coefficients, and cuML evaluated it as a float64 cupy GEMV (FP64
+    # on the L40S): two models in two precisions. Every arm now explains ONE float32 linear model,
+    # w32 and b32 from _shared_ridge_f32 (a fixed-order solve, the same bits on every box and in
+    # every worker), each through its own library's device or host evaluation of that model.
+    # Results raced before this change were wrong for this lane; apply extra scrutiny.
+    w32, b32 = _shared_ridge_f32(X, y)
+    w = w32.astype(np.float64)              # the model's coefficients, exactly, for `exact`
     if arm in OURS_ARMS:
         # Lane shap-xvendor-identity (2026-10-08). OUR arm explains this library's own device
         # ridge, mojolearn.RidgeCV(alphas=[1.0]) (the x_linear binding: the ridge-cv lane's fit
         # and predict, the same bits on NVIDIA and AMD on every grid run), fit before the clock.
-        # Until then it explained the NumPy closed form of `numpy_ridge`: OpenBLAS dgemm/dgesv
+        # Until then it explained the NumPy closed form of a host ridge: OpenBLAS dgemm/dgesv
         # for w and dgemv for every model call round differently on the two boxes' host CPUs, so
         # the model the explainer was handed and the `exact` reference the digest hashes differed
         # between the vendors (the only two divergent lanes of the board) while every explainer
-        # word on the device is an integer soft-float64 unit (xtrees/agnostic.mojo). The
-        # opponents keep the NumPy ridge they were scored with (never re-run); see mism.
+        # word on the device is an integer soft-float64 unit (xtrees/agnostic.mojo).
+        # FAIRNESS FIX (2026-10-13 audit): the fitted RidgeCV now holds the shared coefficients
+        # (coef_ = w32, intercept_ = b32; its predict reads both on every call), so ours explains
+        # the opponents' model on its own device path. The coefficients are host-independent, so
+        # the cross-vendor identity this lane was moved for is kept. Results raced before this
+        # change were wrong for this lane; apply extra scrutiny.
         import mojolearn as ml
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
         ridge = ml.RidgeCV(alphas=[1.0], fit_intercept=True).fit(X, y)
-        w = _arr(ridge.coef_, np.float64).reshape(-1)
+        ridge.coef_ = w32
+        ridge.intercept_ = b32
         info["pre_clock_fit"] = True
-        info["model"] = "mojolearn.RidgeCV(alphas=[1.0]) fit on the device; its coef_ is the w of the exact values"
+        info["model"] = ("mojolearn.RidgeCV(alphas=[1.0]) on the device holding the shared float32 "
+                         "coefficients (_shared_ridge_f32)")
         info["config"] = "mojolearn.%s(mojolearn.RidgeCV(alphas=[1.0]).predict, background 100)" % name
 
         def fit():
@@ -4724,9 +4825,13 @@ def _build_shap(lane, arm, D):
                         else ex.shap_values(Xq, npermutations=p["npermutations"]))
     elif arm == "shap-cpu":
         import shap
-        w, b, predict = numpy_ridge()
+        b_f32 = np.float32(b32)
+
+        def predict(Z):
+            return np.asarray(_host(Z), dtype=np.float32) @ w32 + b_f32
         info = {"library": "shap", "version": shap.__version__, "device": "cpu",
-                "pre_clock_fit": True, "input_home": "host"}
+                "pre_clock_fit": True, "input_home": "host",
+                "model": "the shared float32 ridge (_shared_ridge_f32) as a float32 NumPy GEMV"}
         if t == "kernel-shap":
             info["config"] = "shap.KernelExplainer(ridge.predict, bg100).shap_values(Xq, nsamples=%d)" % p["nsamples"]
 
@@ -4743,14 +4848,18 @@ def _build_shap(lane, arm, D):
                 S["phi"] = ex(Xq, max_evals=2 * p["npermutations"] * (X.shape[1] + 1)).values
     else:
         from cuml.explainer import KernelExplainer, PermutationExplainer
-        w, b, predict = numpy_ridge()
-        dev, info, sync = _cuml_up({"bg": bg, "Xq": Xq})
+        # float32 background and rows (the upload is untimed), so cuML generates float32
+        # synthetic rows, the precision of the model
+        dev, info, sync = _cuml_up({"bg": np.ascontiguousarray(bg, dtype=np.float32),
+                                    "Xq": np.ascontiguousarray(Xq, dtype=np.float32)})
         info["pre_clock_fit"] = True
+        info["model"] = "the shared float32 ridge (_shared_ridge_f32) as a float32 cupy GEMV"
         import cupy as cp
-        wd = cp.asarray(w)
+        wd = cp.asarray(w32)
+        bd = cp.float32(b32)
 
         def cpredict(Z):
-            return cp.asarray(Z, dtype=cp.float64) @ wd + b
+            return cp.asarray(Z, dtype=cp.float32) @ wd + bd
         if t == "kernel-shap":
             info["config"] = "cuml.explainer.KernelExplainer(model, bg100, nsamples=%d)" % p["nsamples"]
 

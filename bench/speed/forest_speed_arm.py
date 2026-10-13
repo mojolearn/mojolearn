@@ -622,8 +622,10 @@ def infer_spec(arm_name, lane, task, model, n_features=None, frame=None):
         return _task_infer_spec(arm_name, task, model, n_features)
     if frame is not None:
         # gbdt-categorical: CatBoost and XGBoost predict from the frame kind
-        # their fit took, built from the host rows INSIDE the clock (as the
-        # fit clock builds it); ours and LightGBM take the float32 codes.
+        # their fit took; ours and LightGBM take the float32 codes.
+        # FAIRNESS FIX (2026-10-13 audit): the frame was built from the host rows INSIDE
+        # the clock; run_inference now prepares it before any clock. Results raced before
+        # this change were wrong for this lane; apply extra scrutiny.
         return _categorical_infer_spec(arm_name, model, frame)
     if arm_name in ("ours", "ours-ab"):
         if iforest:
@@ -756,19 +758,20 @@ def _task_infer_spec(arm_name, task, model, n_features):
 
 def _categorical_infer_spec(arm_name, model, frame):
     """Inference for the categorical lane: P(class 1) from each library's
-    own call on its own frame kind (`frame(X)`, built inside the clock)."""
+    own call on its own frame kind (`frame(X)`, prepared before the clock by
+    run_inference; FAIRNESS FIX 2026-10-13: it was built inside the clock)."""
     if arm_name in ("ours", "ours-ab"):
         return (model.predict_proba, _p1,
                 "mojolearn GradientBoosting.predict_proba(X) on the float32 codes, column 1")
     if arm_name.startswith("catboost-"):
         tt = "GPU" if arm_name.endswith("-gpu") else "CPU"
         return ((lambda X: model.predict_proba(frame("catboost", X), task_type=tt)), _p1,
-                "catboost predict_proba(int64 categorical frame built in the clock, task_type %s), "
-                "column 1" % tt)
+                "catboost predict_proba(int64-categorical DataFrame built before the clock, "
+                "task_type %s), column 1" % tt)
     if arm_name.startswith("xgboost-"):
         return ((lambda X: model.predict_proba(frame("xgboost", X))), _p1,
-                "xgboost XGBClassifier.predict_proba(pandas CategoricalDtype frame built in the "
-                "clock; inplace_predict takes no category frame here), column 1")
+                "xgboost XGBClassifier.predict_proba(pandas CategoricalDtype frame built before "
+                "the clock; inplace_predict takes no category frame here), column 1")
     if arm_name.startswith("lightgbm-"):
         return (model.booster_.predict, _vec,
                 "lightgbm Booster.predict(X) on the float32 codes (its categorical columns are "
@@ -778,24 +781,43 @@ def _categorical_infer_spec(arm_name, model, frame):
 
 def _categorical_frame(data):
     """`frame(library, X)` for the categorical lane's inference: CatBoost's
-    int64 object matrix and XGBoost's category frame, the kinds their fit and
-    scorer build (tools/speed_gbdt_arm.py catboost_arms, xgboost_arms)."""
+    int64-categorical DataFrame and XGBoost's category frame, the kinds their fit and
+    scorer build (tools/speed_gbdt_arm.py catboost_arms, xgboost_arms).
+
+    FAIRNESS FIX (2026-10-13 audit): every call built the frame from the host rows INSIDE
+    the inference clock, while ours took its float32 codes prepared outside. Frames are now
+    memoized per (library, array) and `frame.prepare` builds them before any clock
+    (run_inference), so the timed call only predicts; CatBoost's kind is the DataFrame its
+    fit now takes. Results raced before this change were wrong for this lane; apply extra
+    scrutiny."""
     cat_idx = list(data.cat_idx)
     levels = {j: int(max(float(np.max(data.X_train[:, j])),
                          float(np.max(data.X_test[:, j])))) + 1 for j in cat_idx}
+    cache = {}
 
-    def frame(library, x):
+    def build(library, x):
         if library == "catboost":
-            out = x.astype(object)
-            for j in cat_idx:
-                out[:, j] = x[:, j].astype(np.int64)
-            return out
+            return spec.catboost_cat_frame(x, cat_idx)
         import pandas as pd
         from pandas.api.types import CategoricalDtype
         df = pd.DataFrame(x)
         for j in cat_idx:
             df[j] = df[j].astype("int64").astype(CategoricalDtype(categories=list(range(levels[j]))))
         return df
+
+    def frame(library, x):
+        key = (library, id(x))
+        hit = cache.get(key)
+        if hit is None or hit[0] is not x:
+            hit = (x, build(library, x))
+            cache[key] = hit
+        return hit[1]
+
+    def prepare(library, arrays):
+        for x in arrays:
+            frame(library, x)
+
+    frame.prepare = prepare
     return frame
 
 
@@ -834,8 +856,16 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
     batches = [("test", x_own, data.X_test), ("large", xl, xl)]
     specs = {}
     # categorical frames (lane gbdt-categorical, criteo): CatBoost and XGBoost
-    # predict from the frame kind their fit took, built inside the clock
+    # predict from the frame kind their fit took.
+    # FAIRNESS FIX (2026-10-13 audit): the frames were built inside the inference clock on
+    # those arms only; they are now built here, before any clock, for every batch the arms
+    # will be timed on. Results raced before this change were wrong for this lane; apply
+    # extra scrutiny.
     frame = _categorical_frame(data) if data.cat_idx and data.task == "binary" else None
+    if frame is not None:
+        for library in ("catboost", "xgboost"):
+            if any(a.name.startswith(library + "-") and a.name in models for a in arms):
+                frame.prepare(library, [x_them for _, _, x_them in batches])
     for arm in arms:
         model = models.get(arm.name)
         if model is None:

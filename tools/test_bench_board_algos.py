@@ -374,3 +374,25 @@ def test_own_layer_retains_outputs_without_false_opponent_comparison(monkeypatch
     q = A.quality(lane, {}, {'ours': actual, 'torch-eager-fp32': {'y': np.zeros((1, 2))}})
     assert bool(q['ours']) is comparable
     assert gpu.info['output_comparable'] is comparable
+
+
+def test_fairness_fix_20261013_shared_ridge_is_the_centered_ridge_and_bit_stable():
+    """FAIRNESS FIX (2026-10-13 audit): every kernel/permutation-SHAP arm explains the one
+    float32 ridge _shared_ridge_f32 solves in a fixed order. It must be the centered alpha-1
+    ridge, the same bits on every call, and named in the lane params so stale opponent cells
+    are not copied beside it. Results raced before this change were wrong for these lanes;
+    apply extra scrutiny."""
+    rng = np.random.default_rng(7)
+    X = rng.standard_normal((500, 7)).astype(np.float32)
+    y = (X @ np.arange(1, 8, dtype=np.float32) + 0.5).astype(np.float32)
+    w32, b32 = A._shared_ridge_f32(X, y)
+    Xd, yd = X.astype(np.float64), y.astype(np.float64)
+    mu, ym = Xd.mean(0), yd.mean()
+    w = np.linalg.solve((Xd - mu).T @ (Xd - mu) + np.eye(7), (Xd - mu).T @ (yd - ym))
+    assert w32.dtype == np.float32 and w32.shape == (7,)
+    assert np.allclose(w32, w, rtol=1e-5, atol=1e-6)
+    assert abs(b32 - (ym - mu @ w)) < 1e-4
+    w2, b2 = A._shared_ridge_f32(X, y)
+    assert w2.tobytes() == w32.tobytes() and b2 == b32
+    for lane in ("kernel-shap", "permutation-shap", "tree-shap"):
+        assert A.lane_config(lane)["params"].get("explained_model"), lane

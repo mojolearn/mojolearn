@@ -1800,8 +1800,21 @@ TASK_LANES = {
             "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: "
             "at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
         )),
+    # FAIRNESS FIX (2026-10-13 audit): this lane raced ours' one-hot/CTR categorical
+    # algorithm against XGBoost's partition search (max_cat_to_onehot 1) and LightGBM's own
+    # categorical split, two different algorithms, and converted the input of XGBoost (a
+    # pandas CategoricalDtype frame) and CatBoost (x.astype(object)) INSIDE their fit clocks
+    # while ours got float32 codes prepared outside. Now: XGBoost and LightGBM are REFUSED by
+    # name on any dataset with declared categorical columns (xgboost_arms, lightgbm_arms);
+    # CatBoost, the one library running the same algorithm, gets its frame built ONCE outside
+    # the clock (catboost_arms) and has_time=True, so it computes its CTRs over the rows in the
+    # order given, as ours does (it shuffled them first); and with CatBoost the only opponent
+    # the lane scores splits with L2, which ours, CatBoost GPU and CatBoost CPU all implement
+    # (it was NewtonL2, chosen for XGBoost and LightGBM, which CatBoost's CPU learner lacks and
+    # silently replaced with Cosine). Results raced before this change were wrong for this
+    # lane; apply extra scrutiny.
     "gbdt-categorical": dict(
-        task="binary", loss="Logloss", grow_policy="Lossguide",
+        task="binary", loss="Logloss", grow_policy="Lossguide", score_function="L2",
         datasets=("taxicat", "criteo"),
         objectives={"mojolearn": "Logloss", "catboost": "Logloss",
                     "xgboost": "binary:logistic", "lightgbm": "binary"},
@@ -1809,15 +1822,15 @@ TASK_LANES = {
             "categorical method: ours follows CatBoost's dispatch (one-hot at or below "
             "one_hot_max_size, CTR target statistics above), CatBoost runs its own at its "
             "defaults: two libraries, one algorithm, on the same declared columns",
-            "categorical method: XGBoost partition search (enable_categorical, "
-            "max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) "
-            "at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): "
-            "different algorithms from CTR",
-            "input conversion inside the fit clock: CatBoost gets the declared columns as "
-            "int64 (it refuses float categorical columns), XGBoost a pandas frame with one "
-            "CategoricalDtype per column; ours and LightGBM take the float32 codes",
-            "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: "
-            "at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+            "XGBoost and LightGBM are refused: their categorical splits (XGBoost partition "
+            "search, LightGBM's gradient-sorted categorical split) are different algorithms "
+            "from CTR target statistics",
+            "inputs prepared once outside every clock: ours the float32 codes, CatBoost a "
+            "pandas frame with the declared columns int64 (it refuses float categorical "
+            "columns) and the others float32; each library builds its own pool inside its "
+            "fit clock",
+            "CTR row order: CatBoost has_time True, so it computes its target statistics "
+            "over the rows in the order given, as ours does, instead of shuffling them first",
             "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense "
             "categorical column); a test value unseen in training shares one unknown bucket "
             "k per column",
@@ -1848,6 +1861,15 @@ TASK_LANES["gbdt-ordered"] = dict(
         "ours restates their GPU Ordered boosting, which has no full-history arm, so both "
         "arms run the False behaviour",
     ))
+
+
+#: FAIRNESS FIX (2026-10-13 audit): the depth bound of every Lossguide lane, on every arm.
+#: At max_depth 8 with max_leaves 256 (= 2 ** 8) a Lossguide tree that fills its budget is the
+#: depthwise tree, so the lane timed XGBoost's lossguide grower building its depthwise model.
+#: 16 is CatBoost's GPU depth cap for these losses and far above log2(256), so the leaf budget
+#: stops the tree. Results raced before this change were wrong for this lane; apply extra
+#: scrutiny.
+LOSSGUIDE_MAX_DEPTH = 16
 
 
 def task_names(task):
@@ -1935,12 +1957,25 @@ def lane_config(lane, size):
       max_leaves 64      2 ** depth on every lane and arm (ours and CatBoost
                          accept exactly that value off Lossguide; XGBoost
                          max_leaves, LightGBM num_leaves).
+                         FAIRNESS FIX (2026-10-13 audit): at max_leaves =
+                         2 ** depth a Lossguide tree that fills its budget IS
+                         the depthwise tree, so the lossguide lane never
+                         tested leaf-wise growth (XGBoost built its depthwise
+                         model, more slowly). Lossguide lanes now keep the
+                         leaf budget and lift max_depth to
+                         LOSSGUIDE_MAX_DEPTH (16) on every arm, so the budget,
+                         not the depth, stops each tree; lane_config refuses a
+                         Lossguide lane whose max_leaves >= 2 ** max_depth.
+                         Results raced before this change were wrong for this
+                         lane; apply extra scrutiny.
       min_child_weight 0 XGBoost's default 1.0 is a hessian floor ours and
                          CatBoost do not have; on taxi's Logloss (hessian
                          about 0.18 per row) it stopped XGBoost at 3911
                          leaves against ours 5903. Ours carries it as
-                         min_child_hessian (0.0) where it exists (Lossguide
-                         with NewtonL2). LightGBM keeps 1e-3 (it aborts at 0).
+                         min_child_hessian (0.0) where it exists (Depthwise
+                         and Lossguide with NewtonL2; FAIRNESS FIX 2026-10-13:
+                         Depthwise too, now that it scores NewtonL2). LightGBM
+                         keeps 1e-3 (it aborts at 0).
       min_split_gain 0   XGBoost gamma 0.0 and LightGBM 0.0 require a
                          positive gain, and so does CatBoost CPU (gain >=
                          1e-9, greedy_tensor_search.cpp); ours off
@@ -1958,11 +1993,22 @@ def lane_config(lane, size):
       random_strength    1.0 on the symmetric grower (both libraries'
                          default), 0.0 on Depthwise and Lossguide, where
                          CatBoost CPU's default 1.0 met ours 0.0.
-      score_function     Cosine on SymmetricTree and Depthwise; NewtonL2 on
-                         Lossguide (ours and CatBoost GPU; CatBoost CPU has
-                         Cosine and L2 only and keeps Cosine, a named
-                         mismatch). XGBoost and LightGBM have one Newton L2
-                         gain and no such knob.
+      score_function     Cosine on SymmetricTree; NewtonL2 on Depthwise and
+                         Lossguide (ours and CatBoost GPU), the one Newton L2
+                         gain XGBoost and LightGBM have (they have no such
+                         knob); L2 on gbdt-categorical (TASK_LANES), whose
+                         only opponent is CatBoost.
+                         FAIRNESS FIX (2026-10-13 audit): Depthwise ran Cosine
+                         on ours against XGBoost's Newton L2 gain, two split
+                         scores (taxi: ours 106,182 leaves, XGBoost 91,234,
+                         NOT-COMPARABLE), and CatBoost CPU silently ran Cosine
+                         against ours' NewtonL2 on Lossguide. Depthwise now
+                         scores NewtonL2 on every arm, and a CatBoost CPU arm
+                         is REFUSED by name where the lane's score function is
+                         one its CPU learner lacks (it has Cosine and L2
+                         only), never swapped. Results raced before this
+                         change were wrong for this lane; apply extra
+                         scrutiny.
       boost_from_average False for Logloss on ours and CatBoost (their
                          default), XGBoost base_score 0.5 (margin 0) and
                          LightGBM boost_from_average False, which both
@@ -2043,15 +2089,39 @@ def lane_config(lane, size):
         policy = cfg["grow_policy"]
         symmetric = policy == "SymmetricTree"
         loss = task["loss"] if task else None
+        if policy == "Lossguide":
+            # FAIRNESS FIX (2026-10-13 audit): max_leaves was 2 ** max_depth (256 at depth 8,
+            # 64 at depth 6), so a Lossguide tree that filled its leaf budget was exactly the
+            # depthwise tree and the lane never exercised leaf-wise growth (XGBoost's lossguide
+            # built its depthwise model, more slowly). The leaf budget is kept and max_depth is
+            # lifted to LOSSGUIDE_MAX_DEPTH on every arm (ours, CatBoost, XGBoost, LightGBM read
+            # the same cfg), so the budget, not the depth, stops each tree; a Lossguide lane
+            # whose budget could still fill a full tree is refused. Results raced before this
+            # change were wrong for this lane; apply extra scrutiny.
+            cfg["max_depth"] = LOSSGUIDE_MAX_DEPTH
+            if cfg["max_leaves"] >= 2 ** cfg["max_depth"]:
+                raise SystemExit(
+                    "lane %s: Lossguide with max_leaves %d >= 2 ** max_depth (%d) grows the "
+                    "depthwise tree; it does not test leaf-wise growth"
+                    % (lane, cfg["max_leaves"], 2 ** cfg["max_depth"]))
+        # FAIRNESS FIX (2026-10-13 audit): Depthwise scored splits with Cosine on ours (and
+        # CatBoost) while XGBoost, its other opponent, has only the Newton L2 gain, so the
+        # arms grew different trees (taxi: ours 106,182 leaves, XGBoost 91,234). Depthwise
+        # now scores NewtonL2 on every arm, as Lossguide does, and takes the same 0.0 hessian
+        # floor XGBoost's min_child_weight 0 is; a task lane may name its own score function
+        # (gbdt-categorical: L2, see TASK_LANES). Results raced before this change were wrong
+        # for this lane; apply extra scrutiny.
+        score = (task or {}).get("score_function") or ("Cosine" if symmetric else "NewtonL2")
+        newton = score in ("NewtonL2", "NewtonCosine")
         cfg.update(
             # the SAME SEED, SAME TUNING PARAMETERS block of the docstring
             min_child_weight=0.0,          # XGBoost; ours min_child_hessian below
             min_split_gain=None if symmetric else 0.0,
-            min_child_hessian=(0.0 if policy == "Lossguide"
+            min_child_hessian=(0.0 if not symmetric and newton
                                and loss in (None, "Logloss", "RMSE") else None),
             min_data_in_leaf=1,
             random_strength=1.0 if symmetric else 0.0,
-            score_function="NewtonL2" if policy == "Lossguide" else "Cosine",
+            score_function=score,
             leaf_estimation_method="Newton",
             leaf_estimation_iterations=1,
             feature_border_type="GreedyLogSum",
@@ -2261,11 +2331,18 @@ def catboost_tree_params(cfg, task_type):
     """Every tree knob a CatBoost arm is given, one dict for the gbdt and the
     ranking builders, each set explicitly (lane_config's SAME SEED, SAME
     TUNING PARAMETERS). CatBoost CPU scores splits with Cosine or L2 only
-    (leafwise_scoring.cpp), so a NewtonL2 lane keeps Cosine there and says
-    so in a mismatch line."""
+    (leafwise_scoring.cpp), so a lane with another score function has no
+    CatBoost CPU arm (catboost_arms refuses it by name)."""
     score = cfg["score_function"]
-    if task_type == "CPU" and score not in ("Cosine", "L2"):
-        score = "Cosine"
+    if task_type == "CPU" and score not in CATBOOST_CPU_SCORES:
+        # FAIRNESS FIX (2026-10-13 audit): this silently swapped a NewtonL2 lane to Cosine on
+        # CatBoost's CPU learner, so that arm raced a different split score than ours. A CPU
+        # arm is now refused by name upstream (catboost_arms); reaching here is a harness
+        # bug. Results raced before this change were wrong for this lane; apply extra
+        # scrutiny.
+        raise RuntimeError(
+            "CatBoost's CPU learner has no score_function %r (Cosine or L2 only); the arm "
+            "must be refused, not given another score" % score)
     p = dict(
         iterations=cfg["n_estimators"],
         depth=cfg["max_depth"],
@@ -2301,13 +2378,44 @@ def catboost_tree_params(cfg, task_type):
     return p
 
 
-def _catboost_score_note(lane, cfg, devices):
-    if "cpu" in devices and cfg["score_function"] not in ("Cosine", "L2"):
-        emit_note(lane, ["catboost-cpu", "ours"], "mismatch", 1.0,
-                  "score_function: ours (and catboost-gpu) %s, catboost-cpu Cosine: CatBoost's "
-                  "CPU learner scores splits with Cosine or L2 only "
-                  "(leafwise_scoring.cpp); XGBoost and LightGBM have one Newton L2 gain"
-                  % cfg["score_function"])
+#: The split scores CatBoost's CPU learner implements (leafwise_scoring.cpp).
+CATBOOST_CPU_SCORES = ("Cosine", "L2")
+
+
+def catboost_cat_frame(x, cat_idx):
+    """float32 matrix -> pandas DataFrame: the declared categorical columns int64, the
+    others float32, columns labelled 0..d-1 so `cat_features` indices name them.
+
+    CatBoost refuses float columns named in `cat_features` ("Invalid type for
+    cat_feature"), so those columns go in as integers. The codes are already dense
+    0..k-1 integers held exactly in float32 (the largest is 371,237, well inside
+    float32's 24-bit exact-integer range), so the cast moves no value.
+
+    FAIRNESS FIX (2026-10-13 audit): this was `x.astype(object)` built inside CatBoost's
+    fit and predict clocks; the callers now build it once, outside every clock. Results
+    raced before this change were wrong for this lane; apply extra scrutiny."""
+    import pandas as pd
+    cat = set(int(j) for j in cat_idx)
+    cols = {}
+    for j in range(x.shape[1]):
+        col = x[:, j]
+        cols[j] = (col.astype(np.int64) if j in cat
+                   else np.ascontiguousarray(col, dtype=np.float32))
+    return pd.DataFrame(cols)
+
+
+def _catboost_cpu_refusal(cfg):
+    """Why CatBoost's CPU arm cannot race this lane, or None.
+
+    FAIRNESS FIX (2026-10-13 audit): this was a mismatch NOTE while the arm ran Cosine against
+    ours' NewtonL2 (gbdt-lossguide, gbdt-categorical): a settings difference on one arm. The
+    arm is now refused by name instead. Results raced before this change were wrong for this
+    lane; apply extra scrutiny."""
+    if cfg["score_function"] not in CATBOOST_CPU_SCORES:
+        return ("SCORE-FUNCTION: the lane scores splits with %s on every arm and CatBoost's CPU "
+                "learner has Cosine and L2 only (leafwise_scoring.cpp); another score would be "
+                "another tree, so the CPU arm does not race this lane" % cfg["score_function"])
+    return None
 
 
 def catboost_arms(lane, cfg, data, devices):
@@ -2338,29 +2446,35 @@ def catboost_arms(lane, cfg, data, devices):
         # ours.
         if data.cat_idx:
             p["cat_features"] = list(data.cat_idx)
+            # FAIRNESS FIX (2026-10-13 audit): CatBoost shuffled the learn rows before
+            # computing its CTR target statistics (preprocess.cpp:161-199) while ours computes
+            # them over the rows in the order given (ensemble.py cat_features), extra work and
+            # different statistics on one arm. has_time=True makes CatBoost use the given order,
+            # the CTR computation ours runs. Results raced before this change were wrong for this
+            # lane; apply extra scrutiny.
+            p["has_time"] = True
         if data.task == "regression":
             return catboost.CatBoostRegressor(loss_function="RMSE", **p)
         if data.task == "binary":
             return catboost.CatBoostClassifier(loss_function="Logloss", **p)
         return catboost.CatBoostClassifier(loss_function="MultiClass", **p)
 
-    def _cat_frame(x, cat_idx):
-        """float32 matrix -> object matrix with the declared columns integral.
-
-        CatBoost refuses float columns named in `cat_features` ("Invalid type
-        for cat_feature"), so those columns go in as integers. The codes are
-        already dense 0..k-1 integers held exactly in float32 (the largest is
-        371,237, well inside float32's 24-bit exact-integer range), so the
-        cast moves no value."""
-        out = x.astype(object)
-        for j in cat_idx:
-            out[:, j] = x[:, j].astype(np.int64)
-        return out
+    # FAIRNESS FIX (2026-10-13 audit): the categorical input was converted with
+    # x.astype(object) INSIDE CatBoost's fit clock, while ours got its float32 codes prepared
+    # outside every clock (forest_speed_arm.prepare_our_inputs). The frame is now built ONCE
+    # here, before any clock, as a pandas DataFrame (the input CatBoost documents for mixed
+    # columns; an object matrix is its slow per-element path), and fit and the scorer reuse
+    # it; CatBoost still builds its own Pool inside fit, as every other arm builds its own
+    # dataset inside its fit. Results raced before this change were wrong for this lane;
+    # apply extra scrutiny.
+    if data.cat_idx:
+        data._catboost_X_train = catboost_cat_frame(data.X_train, data.cat_idx)
+        data._catboost_X_test = catboost_cat_frame(data.X_test, data.cat_idx)
 
     def _fit(m, d):
         if not d.cat_idx:
             return m.fit(d.X_train, d.y_train)
-        return m.fit(_cat_frame(d.X_train, d.cat_idx), d.y_train)
+        return m.fit(d._catboost_X_train, d.y_train)
 
     def _score(m, d):
         if not d.cat_idx:
@@ -2370,16 +2484,23 @@ def catboost_arms(lane, cfg, data, devices):
         # cat_features and CatBoost would raise -- a failure that would have
         # looked like "criteo is broken" rather than "the scorer was not
         # wired". Reuse the shared scorer so the metric stays defined once.
-        shim = Data(d.name, d.X_train, _cat_frame(d.X_test, d.cat_idx),
+        shim = Data(d.name, d.X_train, d._catboost_X_test,
                     d.y_train, d.y_test, d.task, d.n_classes,
                     y_anom=d.y_anom, cat_idx=d.cat_idx)
         return _score_sklearn_like(m, shim)
 
-    _catboost_score_note(lane, cfg, devices)
     out = []
     for dev in devices:
         if dev == "opencl":
             continue                   # LightGBM's device name only
+        if dev == "cpu":
+            # FAIRNESS FIX (2026-10-13 audit): refused by name where the lane's score
+            # function is one CatBoost's CPU learner lacks (it ran Cosine there before).
+            # Results raced before this change were wrong for this lane; apply extra scrutiny.
+            why = _catboost_cpu_refusal(cfg)
+            if why:
+                emit_refused(lane, "catboost-cpu", why)
+                continue
         task_type = "CPU" if dev == "cpu" else "GPU"
         out.append(Arm(
             "catboost-" + dev,
@@ -2426,6 +2547,18 @@ def xgboost_arms(lane, cfg, data, devices):
     `grow_policy` is depthwise or lossguide and it has no symmetric mode, so
     the same argument that keeps LightGBM out of the symmetric pair keeps
     XGBoost out of it."""
+    # FAIRNESS FIX (2026-10-13 audit): on declared categorical columns XGBoost ran its
+    # partition search (max_cat_to_onehot 1) against ours' one-hot/CTR target statistics, a
+    # different algorithm, and its pandas CategoricalDtype frame was built inside its fit
+    # clock. No XGBoost setting runs CTR target statistics, so the arm is refused by name.
+    # (Its frame code below is kept for the record; if this refusal is ever lifted for a
+    # same-algorithm configuration, build the frames once outside the clock, as catboost_arms
+    # does.) Results raced before this change were wrong for this lane; apply extra scrutiny.
+    if data.cat_idx:
+        raise RuntimeError(
+            "CATEGORICAL-ALGORITHM: XGBoost's categorical split (partition search, or one-hot "
+            "up to max_cat_to_onehot) is not the one-hot/CTR target statistics ours and CatBoost "
+            "run on the declared columns; a different algorithm is not raced")
     import xgboost as xgb
 
     policy = cfg.get("xgboost_grow_policy") or {
@@ -2586,6 +2719,16 @@ def lightgbm_arms(lane, cfg, data, devices):
     runs `boosting_type='rf'`, which is what
     `PARITY_NOTES['lgbm-rf-bagging']` and `tools/nvidia_forest_bench.sh`
     already compare against."""
+    # FAIRNESS FIX (2026-10-13 audit): on declared categorical columns LightGBM ran its own
+    # categorical split (one-hot up to max_cat_to_onehot, else its gradient-sorted partition)
+    # against ours' one-hot/CTR target statistics, a different algorithm. It is refused by
+    # name. Results raced before this change were wrong for this lane; apply extra scrutiny.
+    if data.cat_idx:
+        raise RuntimeError(
+            "CATEGORICAL-ALGORITHM: LightGBM's categorical split (one-hot up to "
+            "max_cat_to_onehot, else its gradient-sorted partition) is not the one-hot/CTR "
+            "target statistics ours and CatBoost run on the declared columns; a different "
+            "algorithm is not raced")
     import lightgbm as lgb
 
     forest = lane in ("rf", "et")

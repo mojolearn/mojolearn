@@ -118,8 +118,14 @@ def test_task_config_shares_the_gbdt_knobs_and_names_mismatches(lane):
     # lanes, which it lacks, keep 100 trees at depth 6 and 64 leaves
     want = ((base["n_estimators"], base["max_depth"], base["max_leaves"]) if cfg.get("harness")
             else (100, 6, 64))
-    assert (cfg["n_estimators"], cfg["max_depth"], cfg["max_leaves"]) == want, lane
     task = spec.TASK_LANES[lane]
+    if task["grow_policy"] == "Lossguide":
+        # FAIRNESS FIX (2026-10-13 audit): a Lossguide lane keeps the leaf budget and lifts the
+        # depth, so the budget (not a full 2 ** depth tree) stops each tree. Results raced
+        # before this change were wrong for this lane; apply extra scrutiny.
+        want = (want[0], spec.LOSSGUIDE_MAX_DEPTH, want[2])
+        assert cfg["max_leaves"] < 2 ** cfg["max_depth"], lane
+    assert (cfg["n_estimators"], cfg["max_depth"], cfg["max_leaves"]) == want, lane
     assert cfg["loss"] == task["loss"] and cfg["task"] == task["task"]
     assert cfg["objectives"]["mojolearn"] == task["loss"]
     assert cfg["mismatches"], lane
@@ -143,6 +149,28 @@ def test_objectives_per_library():
     assert spec.TASK_LANES["gbdt-categorical"]["grow_policy"] == "Lossguide"
     # the original lanes are untouched
     assert "loss" not in spec.lane_config("gbdt-lossguide", "shipped")
+
+
+def test_fairness_fix_20261013_tree_lane_settings():
+    """FAIRNESS FIX (2026-10-13 audit): the split score and growth each lane races are the
+    ones every one of its arms can run. Results raced before this change were wrong for these
+    lanes; apply extra scrutiny."""
+    dw = spec.lane_config("gbdt-depthwise", "shipped")
+    assert dw["score_function"] == "NewtonL2" and dw["min_child_hessian"] == 0.0
+    lg = spec.lane_config("gbdt-lossguide", "shipped")
+    assert lg["score_function"] == "NewtonL2" and lg["max_depth"] == spec.LOSSGUIDE_MAX_DEPTH
+    assert lg["max_leaves"] < 2 ** lg["max_depth"]
+    cat = spec.lane_config("gbdt-categorical", "shipped")
+    assert cat["score_function"] == "L2" and cat["min_child_hessian"] is None
+    assert spec._catboost_cpu_refusal(cat) is None
+    for cfg in (dw, lg):
+        assert spec._catboost_cpu_refusal(cfg) is not None
+    for lane in ("gbdt-symmetric", "gbdt-multiclass", "gbdt-ordered"):
+        assert spec.lane_config(lane, "shipped")["score_function"] == "Cosine", lane
+    # a different categorical algorithm is refused by name, before any import
+    for fn in (spec.xgboost_arms, spec.lightgbm_arms):
+        with pytest.raises(RuntimeError, match="CATEGORICAL-ALGORITHM"):
+            fn("gbdt-categorical", cat, types.SimpleNamespace(cat_idx=spec.TAXI_CAT_COLUMNS), ["gpu"])
 
 
 # --- quality functions -------------------------------------------------------
