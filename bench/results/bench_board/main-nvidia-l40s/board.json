@@ -1,8 +1,8 @@
 {
   "board_notes": [
-    "MAIN BOARD nvidia-l40s, version label main@e129be096. Unreleased: not reproducible by pip install; the release boards are the reference.",
-    "Cells: 245 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@e129be096 (2026-10-12T23:14:52Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).",
-    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 51 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
+    "MAIN BOARD nvidia-l40s, version label main@8899093fc. Unreleased: not reproducible by pip install; the release boards are the reference.",
+    "Cells: 245 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@8899093fc (2026-10-13T00:09:47Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).",
+    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 62 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
     "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: n/a 245).",
     "Opponents: copied from the stored opponent boards (opponents-default-20261006, opponents-specific-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 4 races.",
     "Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax. A cell of ours whose output hash equals a copied opponent's shows quality identical_to=<arm> (the same bits) where the own-host reference gave none."
@@ -18,29 +18,8 @@
     },
     {
       "lines": [
-        "Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 19 failed runs.",
-        "",
-        "| lane | dataset | commit | hardware | version | box/job | reason | ok cell on the board |",
-        "|---|---|---|---|---|---|---|---|",
-        "| avgpool1d | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@1665b5626 nv2/v1092 stays |",
-        "| avgpool2d | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@a1c96a5ba nv2/v0082 stays |",
-        "| batchnorm1d | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@7924718fc nv2/v0140 stays |",
-        "| batchnorm2d | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@7924718fc nv2/v0140 stays |",
-        "| conv1d | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@a1c96a5ba nv2/v0082 stays |",
-        "| conv2d | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@a1c96a5ba nv2/v0082 stays |",
-        "| dropout2d | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@9f83ea479 nv2/v1056 stays |",
-        "| embedding | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@ca8ea1f8d nv2/v1080 stays |",
-        "| gcn | istella | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@1665b5626 nv2/v1090 stays |",
-        "| gcn | taxi | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@1665b5626 nv2/v1090 stays |",
-        "| global-avgpool | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@a1c96a5ba nv2/v0082 stays |",
-        "| global-maxpool | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@a1c96a5ba nv2/v0082 stays |",
-        "| graphsage | istella | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@1665b5626 nv2/v1090 stays |",
-        "| graphsage | taxi | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@1665b5626 nv2/v1090 stays |",
-        "| layernorm | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@ca8ea1f8d nv2/v1080 stays |",
-        "| maxpool1d | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@a1c96a5ba nv2/v0082 stays |",
-        "| maxpool2d | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@1665b5626 nv2/v1092 stays |",
-        "| moe | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@c8ef6c66d nv2/v0100 stays |",
-        "| resnet-block | synthetic | main@12412eca4 | NVIDIA L40S (nv, RunPod) | mojolearn 0.8.42 (source build, main@12412eca4) | nv/n0001 | not_ready | main@7924718fc nv2/v0140 stays |"
+        "Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 0 failed runs.",
+        ""
       ],
       "title": "FAILED"
     }
@@ -55,14 +34,14 @@
       "hostname": "NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod)"
     },
     "mojolearn": {
-      "version": "main@e129be096",
+      "version": "main@8899093fc",
       "wheel": {
         "file": "none (unreleased; built from source at each cell's commit)",
         "sha256": "-"
       }
     },
     "repo": {
-      "commit": "e129be096bd8e65ea01bba95c61cdfa4d7faa085"
+      "commit": "8899093fceee01e9914ba7f889f5ad26efee071c"
     }
   },
   "config": {
@@ -80,7 +59,7 @@
     "smoke": false,
     "vendor": "nvidia"
   },
-  "created": "2026-10-13T00:09:41Z",
+  "created": "2026-10-13T00:27:48Z",
   "main_board": {
     "backfill": {
       "filled": {
@@ -100,528 +79,14 @@
     ],
     "column": "nvidia-l40s",
     "differ": [],
-    "failed_observations": [
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "avgpool1d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/avgpool1d/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "avgpool2d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/avgpool2d/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "batchnorm1d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/batchnorm1d/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "batchnorm2d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/batchnorm2d/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "conv1d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/conv1d/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "conv2d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/conv2d/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "dropout2d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/dropout2d/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "embedding",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/embedding/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "istella",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "gcn",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/gcn/istella/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "taxi",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "gcn",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/gcn/taxi/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "global-avgpool",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/global-avgpool/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "global-maxpool",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/global-maxpool/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "istella",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "graphsage",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/graphsage/istella/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "taxi",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "graphsage",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/graphsage/taxi/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "layernorm",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/layernorm/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "maxpool1d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/maxpool1d/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "maxpool2d",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/maxpool2d/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "moe",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/moe/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      },
-      {
-        "box": "nv",
-        "column": "nvidia-l40s",
-        "comparability": {},
-        "ct": 1791843783,
-        "dataset": "synthetic",
-        "digest": null,
-        "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-        "family": "algos",
-        "gpu_recorded": null,
-        "hardware": "NVIDIA L40S (nv, RunPod)",
-        "infra": true,
-        "job": "n0001",
-        "kind": "algos",
-        "lane": "resnet-block",
-        "measured": null,
-        "median_ms": null,
-        "quality": {},
-        "race_id": "algos/resnet-block/synthetic/rows=full",
-        "reason": "not_ready",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
-        "status": "REFUSED(not_ready)",
-        "status_raw": "not_ready",
-        "tag": null,
-        "vendor": "nvidia",
-        "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
-      }
-    ],
-    "failed_runs": 19,
+    "failed_observations": [],
+    "failed_runs": 0,
     "identity": {
       "n/a": 245
     },
     "inputs": {
       "branch": "main",
-      "generated": "2026-10-13T00:09:41Z",
+      "generated": "2026-10-13T00:27:48Z",
       "grid_logs": [
         "nv=/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/gridlogs_nvc3.txt"
       ],
@@ -630,8 +95,8 @@
         "nv=/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt"
       ]
     },
-    "label": "main@e129be096",
-    "newest_sha": "e129be096bd8e65ea01bba95c61cdfa4d7faa085",
+    "label": "main@8899093fc",
+    "newest_sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
     "oldest_sha": "89485bc9624fad07097aa6671c5b162b5221ae99",
     "opponent_boards": [
       {
@@ -647,7 +112,7 @@
         "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/nvidia-l40s/board/board.json"
       }
     ],
-    "replaced": 51,
+    "replaced": 62,
     "withheld_opponents": 4
   },
   "main_board_schema": "mojolearn-main-board/1",
@@ -3851,7 +3316,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "8f415c65c3fe8114",
@@ -3859,64 +3324,58 @@
           "lane": "avgpool1d",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-10T07:57:07Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v1092",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791619027,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "8f415c65c3fe8114",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v1092",
+              "job": "n0006",
               "kind": "algos",
               "lane": "avgpool1d",
               "measured": null,
-              "median_ms": 0.9873248636722565,
+              "median_ms": 0.927407294511795,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1092/work-avgpool1d-synthetic-def/avgpool1d-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/avgpool1d/synthetic/rows=full",
               "reason": null,
-              "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 0.9873248636722565,
-          "median_ms": 0.9873248636722565,
+          "max_ms": 0.927407294511795,
+          "median_ms": 0.927407294511795,
           "memory": {},
-          "min_ms": 0.9873248636722565,
+          "min_ms": 0.927407294511795,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "identical_to": "torch-eager-fp32"
-          },
-          "quality_source": "output hash 8f415c65c3fe8114 equals the stored torch-eager-fp32 output hash: the same bits",
-          "quality_superseded": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1092/work-avgpool1d-synthetic-def/avgpool1d-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -3925,16 +3384,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            0.9873248636722565
+            0.927407294511795
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@1665b5626)",
-          "version_source": "box table (job nv2/v1092)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -3995,7 +3454,7 @@
           "peak_host_mb": 695.3,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.3932021586336072,
+          "ratio_ours_identical_over": 0.36933998479313096,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -4104,7 +3563,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.4183557980840112,
+          "ratio_ours_identical_over": 0.39296713079962303,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -4213,7 +3672,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.7755081140235374,
+          "ratio_ours_identical_over": 0.7284450218578276,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -4322,7 +3781,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.6667345896570895,
+          "ratio_ours_identical_over": 0.6262726126955616,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -4431,7 +3890,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.6577790683533496,
+          "ratio_ours_identical_over": 0.6178605731644665,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -4540,7 +3999,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.39752395908562876,
+          "ratio_ours_identical_over": 0.3733995090815415,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -4592,7 +4051,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v1092"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/avgpool1d/synthetic/rows=full",
       "infer_cells": [],
@@ -4621,26 +4080,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1092)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v1092",
-        "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 1.5009976923465729,
-          "ratio": 0.6577790683533496
+          "ratio": 0.6178605731644665
         },
         "fp32": {
           "arm": "torch-compile-fp32",
           "ms": 2.3600123822689056,
-          "ratio": 0.4183557980840112
+          "ratio": 0.39296713079962303
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 0.9873248636722565
+        "ours_ms": 0.927407294511795
       },
       "opponent_source": {
         "boards": [
@@ -4661,7 +4120,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "50b3b720f2049060",
@@ -4669,64 +4128,58 @@
           "lane": "avgpool2d",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-11T18:50:20Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v0082",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791744620,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "50b3b720f2049060",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v0082",
+              "job": "n0006",
               "kind": "algos",
               "lane": "avgpool2d",
               "measured": null,
-              "median_ms": 4.528915509581566,
+              "median_ms": 1.4299685135483742,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-avgpool2d-synthetic-def/avgpool2d-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/avgpool2d/synthetic/rows=full",
               "reason": null,
-              "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 4.528915509581566,
-          "median_ms": 4.528915509581566,
+          "max_ms": 1.4299685135483742,
+          "median_ms": 1.4299685135483742,
           "memory": {},
-          "min_ms": 4.528915509581566,
+          "min_ms": 1.4299685135483742,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "identical_to": "torch-eager-fp32"
-          },
-          "quality_source": "output hash 50b3b720f2049060 equals the stored torch-eager-fp32 output hash: the same bits",
-          "quality_superseded": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-avgpool2d-synthetic-def/avgpool2d-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -4735,16 +4188,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@a1c96a5ba nv2/v0082 2026-10-11; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            4.528915509581566
+            1.4299685135483742
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)",
-          "version_source": "box table (job nv2/v0082)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -4805,7 +4258,7 @@
           "peak_host_mb": 711.3,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.3695780561110524,
+          "ratio_ours_identical_over": 0.7481751433572295,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -4915,7 +4368,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.995088792786161,
+          "ratio_ours_identical_over": 1.261417036910458,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -5025,7 +4478,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.002695857374072,
+          "ratio_ours_identical_over": 0.6323350506760235,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -5135,7 +4588,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.9479797498291522,
+          "ratio_ours_identical_over": 0.6150588814015848,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -5245,7 +4698,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.7320627979046392,
+          "ratio_ours_identical_over": 0.8626267745059923,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -5355,7 +4808,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.7272118526295244,
+          "ratio_ours_identical_over": 0.8610951276934863,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -5408,7 +4861,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v0082"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/avgpool2d/synthetic/rows=full",
       "infer_cells": [],
@@ -5438,26 +4891,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0082)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v0082",
-        "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 1.657690852880478,
-          "ratio": 2.7320627979046392
+          "ratio": 0.8626267745059923
         },
         "fp32": {
           "arm": "torch-compile-fp32",
           "ms": 1.1336207389831543,
-          "ratio": 3.995088792786161
+          "ratio": 1.261417036910458
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 4.528915509581566
+        "ours_ms": 1.4299685135483742
       },
       "opponent_source": {
         "boards": [
@@ -5478,62 +4931,60 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
-          "hash": "350fa2dfacbe848b",
+          "hash": "9c44320d439bdd7e",
           "hash_stable": null,
           "lane": "batchnorm1d",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-11T21:48:42Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v0140",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791755322,
+              "ct": 1791850187,
               "dataset": "synthetic",
-              "digest": "350fa2dfacbe848b",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt",
+              "digest": "9c44320d439bdd7e",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v0140",
+              "job": "n0006",
               "kind": "algos",
               "lane": "batchnorm1d",
               "measured": null,
-              "median_ms": 1.5589389950037003,
+              "median_ms": 1.244300976395607,
               "quality": {
                 "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/batchnorm1d/synthetic/rows=full",
               "reason": null,
-              "sha": "7924718fc95688b88982a9ea06fa5dcd2c3ed93e",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.38 (source build, main@7924718fc)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "7924718fc95688b88982a9ea06fa5dcd2c3ed93e"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 1.5589389950037003,
-          "median_ms": 1.5589389950037003,
+          "max_ms": 1.244300976395607,
+          "median_ms": 1.244300976395607,
           "memory": {},
-          "min_ms": 1.5589389950037003,
+          "min_ms": 1.244300976395607,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
@@ -5548,16 +4999,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@7924718fc nv2/v0140 2026-10-11; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            1.5589389950037003
+            1.244300976395607
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.38 (source build, main@7924718fc)",
-          "version_source": "box table (job nv2/v0140)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -5620,7 +5071,7 @@
           "peak_host_mb": 776.4,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.7751379496212984,
+          "ratio_ours_identical_over": 0.6186931692941462,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -5731,7 +5182,7 @@
             "rel_fro_vs_torch_eager_fp32": 5.10856522750742e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.9343420078748508,
+          "ratio_ours_identical_over": 0.7457653419487074,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -5842,7 +5293,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.628273583652181,
+          "ratio_ours_identical_over": 0.5014701897171545,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -5953,7 +5404,7 @@
             "rel_fro_vs_torch_eager_fp32": 5.10856522750742e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.716549360588411,
+          "ratio_ours_identical_over": 0.571929416015212,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -6064,7 +5515,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.7581588570941995,
+          "ratio_ours_identical_over": 0.6051409382719628,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -6175,7 +5626,7 @@
             "rel_fro_vs_torch_eager_fp32": 5.10856522750742e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.864274775579497,
+          "ratio_ours_identical_over": 0.6898396605475313,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -6227,7 +5678,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v0140"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/batchnorm1d/synthetic/rows=full",
       "infer_cells": [],
@@ -6256,26 +5707,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0140)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v0140",
-        "sha": "7924718fc95688b88982a9ea06fa5dcd2c3ed93e"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-compile-bf16",
           "ms": 1.8037538975477219,
-          "ratio": 0.864274775579497
+          "ratio": 0.6898396605475313
         },
         "fp32": {
           "arm": "torch-compile-fp32",
           "ms": 1.6684886068105698,
-          "ratio": 0.9343420078748508
+          "ratio": 0.7457653419487074
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 1.5589389950037003
+        "ours_ms": 1.244300976395607
       },
       "opponent_source": {
         "boards": [
@@ -6296,62 +5747,60 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
-          "hash": "aca20cab4bac0749",
+          "hash": "3da2082b8e470fc7",
           "hash_stable": null,
           "lane": "batchnorm2d",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-11T21:48:42Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v0140",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791755322,
+              "ct": 1791850187,
               "dataset": "synthetic",
-              "digest": "aca20cab4bac0749",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt",
+              "digest": "3da2082b8e470fc7",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v0140",
+              "job": "n0006",
               "kind": "algos",
               "lane": "batchnorm2d",
               "measured": null,
-              "median_ms": 1.2553445994853973,
+              "median_ms": 0.9064860641956329,
               "quality": {
                 "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/batchnorm2d/synthetic/rows=full",
               "reason": null,
-              "sha": "7924718fc95688b88982a9ea06fa5dcd2c3ed93e",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.38 (source build, main@7924718fc)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "7924718fc95688b88982a9ea06fa5dcd2c3ed93e"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 1.2553445994853973,
-          "median_ms": 1.2553445994853973,
+          "max_ms": 0.9064860641956329,
+          "median_ms": 0.9064860641956329,
           "memory": {},
-          "min_ms": 1.2553445994853973,
+          "min_ms": 0.9064860641956329,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
@@ -6366,16 +5815,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@7924718fc nv2/v0140 2026-10-11; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            1.2553445994853973
+            0.9064860641956329
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.38 (source build, main@7924718fc)",
-          "version_source": "box table (job nv2/v0140)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -6438,7 +5887,7 @@
           "peak_host_mb": 761.8,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.9414241254267404,
+          "ratio_ours_identical_over": 0.6798036575349354,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -6549,7 +5998,7 @@
             "rel_fro_vs_torch_eager_fp32": 4.3267440243349576e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.8812258432313976,
+          "ratio_ours_identical_over": 0.6363343950543674,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -6660,7 +6109,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.0667605812149799,
+          "ratio_ours_identical_over": 0.7703092848776473,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -6771,7 +6220,7 @@
             "rel_fro_vs_torch_eager_fp32": 4.3267440243349576e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.7727777242685673,
+          "ratio_ours_identical_over": 0.5580238589925286,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -6882,7 +6331,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.9236147656010174,
+          "ratio_ours_identical_over": 0.6669434942770688,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -6993,7 +6442,7 @@
             "rel_fro_vs_torch_eager_fp32": 4.3267440243349576e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.6617864240881703,
+          "ratio_ours_identical_over": 0.47787688827092123,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -7045,7 +6494,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v0140"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/batchnorm2d/synthetic/rows=full",
       "infer_cells": [],
@@ -7074,26 +6523,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0140)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v0140",
-        "sha": "7924718fc95688b88982a9ea06fa5dcd2c3ed93e"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 1.3591647148132324,
-          "ratio": 0.9236147656010174
+          "ratio": 0.6669434942770688
         },
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 1.3334527611732483,
-          "ratio": 0.9414241254267404
+          "ratio": 0.6798036575349354
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 1.2553445994853973
+        "ours_ms": 0.9064860641956329
       },
       "opponent_source": {
         "boards": [
@@ -12856,7 +12305,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "720ffaacdfcf76a5",
@@ -12864,60 +12313,58 @@
           "lane": "conv1d",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-11T18:50:20Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v0082",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791744620,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "720ffaacdfcf76a5",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v0082",
+              "job": "n0006",
               "kind": "algos",
               "lane": "conv1d",
               "measured": null,
-              "median_ms": 10.027892887592316,
+              "median_ms": 9.809331968426704,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-conv1d-synthetic-def/conv1d-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/conv1d/synthetic/rows=full",
               "reason": null,
-              "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 10.027892887592316,
-          "median_ms": 10.027892887592316,
+          "max_ms": 9.809331968426704,
+          "median_ms": 9.809331968426704,
           "memory": {},
-          "min_ms": 10.027892887592316,
+          "min_ms": 9.809331968426704,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-conv1d-synthetic-def/conv1d-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -12926,16 +12373,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@a1c96a5ba nv2/v0082 2026-10-11; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            10.027892887592316
+            9.809331968426704
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)",
-          "version_source": "box table (job nv2/v0082)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -12996,7 +12443,7 @@
           "peak_host_mb": 989.0,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.6180916667922944,
+          "ratio_ours_identical_over": 2.561029577321638,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -13109,7 +12556,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.9477027046582638,
+          "ratio_ours_identical_over": 1.9052519427521237,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -13222,7 +12669,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.557528286954035,
+          "ratio_ours_identical_over": 2.5017861944272632,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -13335,7 +12782,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.425280619726203,
+          "ratio_ours_identical_over": 2.372420904587266,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -13448,7 +12895,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.003296466016286264
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.0553109574285755,
+          "ratio_ours_identical_over": 2.9887195429930866,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -13561,7 +13008,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.003293928796571171
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.9873888611132227,
+          "ratio_ours_identical_over": 2.9222778290440736,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -13617,7 +13064,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v0082"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/conv1d/synthetic/rows=full",
       "infer_cells": [],
@@ -13650,26 +13097,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0082)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v0082",
-        "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 3.2821185886859894,
-          "ratio": 3.0553109574285755
+          "ratio": 2.9887195429930866
         },
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 3.830229863524437,
-          "ratio": 2.6180916667922944
+          "ratio": 2.561029577321638
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 10.027892887592316
+        "ours_ms": 9.809331968426704
       },
       "opponent_source": {
         "boards": [
@@ -13690,7 +13137,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "9782257b7436241b",
@@ -13698,60 +13145,58 @@
           "lane": "conv2d",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-11T18:50:20Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v0082",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791744620,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "9782257b7436241b",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v0082",
+              "job": "n0006",
               "kind": "algos",
               "lane": "conv2d",
               "measured": null,
-              "median_ms": 6.3007548451423645,
+              "median_ms": 6.436836905777454,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-conv2d-synthetic-def/conv2d-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/conv2d/synthetic/rows=full",
               "reason": null,
-              "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 6.3007548451423645,
-          "median_ms": 6.3007548451423645,
+          "max_ms": 6.436836905777454,
+          "median_ms": 6.436836905777454,
           "memory": {},
-          "min_ms": 6.3007548451423645,
+          "min_ms": 6.436836905777454,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-conv2d-synthetic-def/conv2d-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -13760,16 +13205,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@a1c96a5ba nv2/v0082 2026-10-11; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            6.3007548451423645
+            6.436836905777454
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)",
-          "version_source": "box table (job nv2/v0082)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -13830,7 +13275,7 @@
           "peak_host_mb": 910.5,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.7352102859092713,
+          "ratio_ours_identical_over": 2.7942846446369067,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -13943,7 +13388,7 @@
             "rel_fro_vs_torch_eager_fp32": 5.007182975318072e-07
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.5348865267094056,
+          "ratio_ours_identical_over": 2.5896343451071786,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -14056,7 +13501,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0003020887854393909
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.5589601797843597,
+          "ratio_ours_identical_over": 3.635825673980927,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -14169,7 +13614,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0003020887854393909
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.8462553987434274,
+          "ratio_ours_identical_over": 2.9077280808702946,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -14282,7 +13727,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.003382425471374813
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 4.726806774355821,
+          "ratio_ours_identical_over": 4.828895114862221,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -14395,7 +13840,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0033803551547309757
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.607377508091478,
+          "ratio_ours_identical_over": 3.6852887071231666,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -14451,7 +13896,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v0082"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/conv2d/synthetic/rows=full",
       "infer_cells": [],
@@ -14484,26 +13929,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0082)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v0082",
-        "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 1.332983374595642,
-          "ratio": 4.726806774355821
+          "ratio": 4.828895114862221
         },
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 2.3035723716020584,
-          "ratio": 2.7352102859092713
+          "ratio": 2.7942846446369067
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 6.3007548451423645
+        "ours_ms": 6.436836905777454
       },
       "opponent_source": {
         "boards": [
@@ -15246,7 +14691,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": null,
@@ -15254,57 +14699,59 @@
           "lane": "dropout2d",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-10T02:40:03Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v1056",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791600003,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": null,
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v1056",
+              "job": "n0006",
               "kind": "algos",
               "lane": "dropout2d",
               "measured": null,
-              "median_ms": 1.1092610657215118,
-              "quality": {},
+              "median_ms": 1.0030297562479973,
+              "quality": {
+                "relative_error_vs_own_host": 0.0
+              },
               "race_id": "algos/dropout2d/synthetic/rows=full",
               "reason": null,
-              "sha": "9f83ea4798fe487a99e3b0f493dbc3edad16266a",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "9f83ea4798fe487a99e3b0f493dbc3edad16266a"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 1.1092610657215118,
-          "median_ms": 1.1092610657215118,
+          "max_ms": 1.0030297562479973,
+          "median_ms": 1.0030297562479973,
           "memory": {},
-          "min_ms": 1.1092610657215118,
+          "min_ms": 1.0030297562479973,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
-          "quality": {},
+          "quality": {
+            "relative_error_vs_own_host": 0.0
+          },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
           "rounds": 1,
@@ -15312,16 +14759,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@9f83ea479 nv2/v1056 2026-10-10; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            1.1092610657215118
+            1.0030297562479973
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@9f83ea479)",
-          "version_source": "box table (job nv2/v1056)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -15383,7 +14830,7 @@
           "peak_host_mb": 697.8,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.1303661214735967,
+          "ratio_ours_identical_over": 1.0221136307125218,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -15486,7 +14933,7 @@
           "peak_host_mb": 916.4,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.9203017139466205,
+          "ratio_ours_identical_over": 0.8321665948079363,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -15589,7 +15036,7 @@
           "peak_host_mb": 697.7,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.0421967806404417,
+          "ratio_ours_identical_over": 0.9423880591790949,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -15692,7 +15139,7 @@
           "peak_host_mb": 852.0,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.8668798700400739,
+          "ratio_ours_identical_over": 0.7838608345791223,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -15740,7 +15187,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v1056"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/dropout2d/synthetic/rows=full",
       "infer_cells": [],
@@ -15765,22 +15212,22 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1056)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v1056",
-        "sha": "9f83ea4798fe487a99e3b0f493dbc3edad16266a"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": null,
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 0.981329008936882,
-          "ratio": 1.1303661214735967
+          "ratio": 1.0221136307125218
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 1.1092610657215118
+        "ours_ms": 1.0030297562479973
       },
       "opponent_source": {
         "boards": [
@@ -16747,7 +16194,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "2753e61a6dde36e3",
@@ -16755,64 +16202,58 @@
           "lane": "embedding",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-10T05:06:10Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v1080",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791608770,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "2753e61a6dde36e3",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v1080",
+              "job": "n0006",
               "kind": "algos",
               "lane": "embedding",
               "measured": null,
-              "median_ms": 2.693481743335724,
+              "median_ms": 2.208532765507698,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1080/work-embedding-synthetic-def/embedding-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/embedding/synthetic/rows=full",
               "reason": null,
-              "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 2.693481743335724,
-          "median_ms": 2.693481743335724,
+          "max_ms": 2.208532765507698,
+          "median_ms": 2.208532765507698,
           "memory": {},
-          "min_ms": 2.693481743335724,
+          "min_ms": 2.208532765507698,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "identical_to": "torch-eager-fp32"
-          },
-          "quality_source": "output hash 2753e61a6dde36e3 equals the stored torch-eager-fp32 output hash: the same bits",
-          "quality_superseded": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1080/work-embedding-synthetic-def/embedding-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -16821,16 +16262,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@ca8ea1f8d nv2/v1080 2026-10-10; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            2.693481743335724
+            2.208532765507698
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)",
-          "version_source": "box table (job nv2/v1080)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -16891,7 +16332,7 @@
           "peak_host_mb": 838.7,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.4337290983992583,
+          "ratio_ours_identical_over": 1.1755927800554236,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -17003,7 +16444,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.2986908481511386,
+          "ratio_ours_identical_over": 1.064867544583639,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -17058,7 +16499,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v1080"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/embedding/synthetic/rows=full",
       "infer_cells": [],
@@ -17090,22 +16531,22 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1080)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v1080",
-        "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": null,
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 1.878654584288597,
-          "ratio": 1.4337290983992583
+          "ratio": 1.1755927800554236
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 2.693481743335724
+        "ours_ms": 2.208532765507698
       },
       "opponent_source": {
         "boards": [
@@ -19170,7 +18611,7 @@
           "dataset": "istella",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "052c093d8f32367e",
@@ -19178,60 +18619,58 @@
           "lane": "gcn",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-10T07:57:07Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v1090",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791619027,
+              "ct": 1791850187,
               "dataset": "istella",
               "digest": "052c093d8f32367e",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v1090",
+              "job": "n0006",
               "kind": "algos",
               "lane": "gcn",
               "measured": null,
-              "median_ms": 3.014136105775833,
+              "median_ms": 2.9227416962385178,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1090/work-gcn-istella-def/gcn-istella-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/gcn/istella/rows=full",
               "reason": null,
-              "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 3.014136105775833,
-          "median_ms": 3.014136105775833,
+          "max_ms": 2.9227416962385178,
+          "median_ms": 2.9227416962385178,
           "memory": {},
-          "min_ms": 3.014136105775833,
+          "min_ms": 2.9227416962385178,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1090/work-gcn-istella-def/gcn-istella-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -19240,16 +18679,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            3.014136105775833
+            2.9227416962385178
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@1665b5626)",
-          "version_source": "box table (job nv2/v1090)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -19311,7 +18750,7 @@
           "peak_host_mb": 1426.9,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.21953319339952332,
+          "ratio_ours_identical_over": 0.21287652433068371,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -19422,7 +18861,7 @@
             "rel_fro_vs_torch_eager_fp32": 1.0407717436037768e-07
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.6746474698249679,
+          "ratio_ours_identical_over": 0.6541908597096042,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -19533,7 +18972,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0002660861726555702
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.21956357620890074,
+          "ratio_ours_identical_over": 0.21290598587478785,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -19644,7 +19083,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0002660853344981354
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.367289528289339,
+          "ratio_ours_identical_over": 0.3561526026863716,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -19755,7 +19194,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0021871114940941864
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.2182323444695256,
+          "ratio_ours_identical_over": 0.21161511964463586,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -19866,7 +19305,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.002187113955222678
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.35295054249011515,
+          "ratio_ours_identical_over": 0.34224840254197364,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -19919,7 +19358,7 @@
       "dataset": "istella",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v1090"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/gcn/istella/rows=full",
       "infer_cells": [],
@@ -19949,26 +19388,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1090)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v1090",
-        "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-compile-bf16",
           "ms": 8.539825677871704,
-          "ratio": 0.35295054249011515
+          "ratio": 0.34224840254197364
         },
         "fp32": {
           "arm": "torch-compile-fp32",
           "ms": 4.467720165848732,
-          "ratio": 0.6746474698249679
+          "ratio": 0.6541908597096042
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 3.014136105775833
+        "ours_ms": 2.9227416962385178
       },
       "opponent_source": {
         "boards": [
@@ -19989,7 +19428,7 @@
           "dataset": "taxi",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "8f1a232749915615",
@@ -19997,60 +19436,58 @@
           "lane": "gcn",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-10T07:57:07Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v1090",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791619027,
+              "ct": 1791850187,
               "dataset": "taxi",
               "digest": "8f1a232749915615",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v1090",
+              "job": "n0006",
               "kind": "algos",
               "lane": "gcn",
               "measured": null,
-              "median_ms": 2.9592476785182953,
+              "median_ms": 1.6943449154496193,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1090/work-gcn-taxi-def/gcn-taxi-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/gcn/taxi/rows=full",
               "reason": null,
-              "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 2.9592476785182953,
-          "median_ms": 2.9592476785182953,
+          "max_ms": 1.6943449154496193,
+          "median_ms": 1.6943449154496193,
           "memory": {},
-          "min_ms": 2.9592476785182953,
+          "min_ms": 1.6943449154496193,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1090/work-gcn-taxi-def/gcn-taxi-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -20059,16 +19496,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            2.9592476785182953
+            1.6943449154496193
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@1665b5626)",
-          "version_source": "box table (job nv2/v1090)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -20130,7 +19567,7 @@
           "peak_host_mb": 1344.8,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.23569472526582405,
+          "ratio_ours_identical_over": 0.1349492177526684,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -20241,7 +19678,7 @@
             "rel_fro_vs_torch_eager_fp32": 9.80289858766657e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.8935119831638432,
+          "ratio_ours_identical_over": 0.511588636718974,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -20352,7 +19789,7 @@
             "rel_fro_vs_torch_eager_fp32": 7.223017954192634e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.27069995919226236,
+          "ratio_ours_identical_over": 0.15499179159599147,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -20463,7 +19900,7 @@
             "rel_fro_vs_torch_eager_fp32": 9.801093052008335e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.7963682734712332,
+          "ratio_ours_identical_over": 0.45596809782984643,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -20574,7 +20011,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0023301619703130607
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.18643405876812755,
+          "ratio_ours_identical_over": 0.10674456275947013,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -20685,7 +20122,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0023301606761055318
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.31911670418773713,
+          "ratio_ours_identical_over": 0.18271325144580655,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -20738,7 +20175,7 @@
       "dataset": "taxi",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v1090"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/gcn/taxi/rows=full",
       "infer_cells": [],
@@ -20768,26 +20205,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1090)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v1090",
-        "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-compile-bf16",
           "ms": 9.273245930671692,
-          "ratio": 0.31911670418773713
+          "ratio": 0.18271325144580655
         },
         "fp32": {
           "arm": "torch-compile-fp32",
           "ms": 3.3119283616542816,
-          "ratio": 0.8935119831638432
+          "ratio": 0.511588636718974
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 2.9592476785182953
+        "ours_ms": 1.6943449154496193
       },
       "opponent_source": {
         "boards": [
@@ -20808,7 +20245,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "b50e06fc713744d1",
@@ -20816,60 +20253,58 @@
           "lane": "global-avgpool",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-11T18:50:20Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v0082",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791744620,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "b50e06fc713744d1",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v0082",
+              "job": "n0006",
               "kind": "algos",
               "lane": "global-avgpool",
               "measured": null,
-              "median_ms": 2.3536402732133865,
+              "median_ms": 0.13655424118041992,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-global-avgpool-synthetic-def/global-avgpool-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/global-avgpool/synthetic/rows=full",
               "reason": null,
-              "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 2.3536402732133865,
-          "median_ms": 2.3536402732133865,
+          "max_ms": 0.13655424118041992,
+          "median_ms": 0.13655424118041992,
           "memory": {},
-          "min_ms": 2.3536402732133865,
+          "min_ms": 0.13655424118041992,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-global-avgpool-synthetic-def/global-avgpool-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -20878,16 +20313,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@a1c96a5ba nv2/v0082 2026-10-11; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            2.3536402732133865
+            0.13655424118041992
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)",
-          "version_source": "box table (job nv2/v0082)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -20948,7 +20383,7 @@
           "peak_host_mb": 692.6,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.2203173421954006,
+          "ratio_ours_identical_over": 0.18683738378731038,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -21053,7 +20488,7 @@
             "rel_fro_vs_torch_eager_fp32": 9.63994185534871e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.7632470176505965,
+          "ratio_ours_identical_over": 0.10230061970353026,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -21158,7 +20593,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.27630231358202,
+          "ratio_ours_identical_over": 0.1900855374547227,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -21263,7 +20698,7 @@
             "rel_fro_vs_torch_eager_fp32": 9.63994185534871e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.749469080464772,
+          "ratio_ours_identical_over": 0.15951956133861353,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -21368,7 +20803,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.712586233238139,
+          "ratio_ours_identical_over": 0.215397995040487,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -21473,7 +20908,7 @@
             "rel_fro_vs_torch_eager_fp32": 9.63994185534871e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.9660185059127846,
+          "ratio_ours_identical_over": 0.17208339397125996,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -21521,7 +20956,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v0082"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/global-avgpool/synthetic/rows=full",
       "infer_cells": [],
@@ -21546,26 +20981,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0082)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v0082",
-        "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 0.6339624524116516,
-          "ratio": 3.712586233238139
+          "ratio": 0.215397995040487
         },
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 0.7308721542358398,
-          "ratio": 3.2203173421954006
+          "ratio": 0.18683738378731038
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 2.3536402732133865
+        "ours_ms": 0.13655424118041992
       },
       "opponent_source": {
         "boards": [
@@ -21586,7 +21021,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "3578657416f43a55",
@@ -21594,64 +21029,58 @@
           "lane": "global-maxpool",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-11T18:50:20Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v0082",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791744620,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "3578657416f43a55",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v0082",
+              "job": "n0006",
               "kind": "algos",
               "lane": "global-maxpool",
               "measured": null,
-              "median_ms": 3.2167453318834305,
+              "median_ms": 0.12492761015892029,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-global-maxpool-synthetic-def/global-maxpool-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/global-maxpool/synthetic/rows=full",
               "reason": null,
-              "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 3.2167453318834305,
-          "median_ms": 3.2167453318834305,
+          "max_ms": 0.12492761015892029,
+          "median_ms": 0.12492761015892029,
           "memory": {},
-          "min_ms": 3.2167453318834305,
+          "min_ms": 0.12492761015892029,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "identical_to": "torch-eager-fp32"
-          },
-          "quality_source": "output hash 3578657416f43a55 equals the stored torch-eager-fp32 output hash: the same bits",
-          "quality_superseded": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-global-maxpool-synthetic-def/global-maxpool-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -21660,16 +21089,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@a1c96a5ba nv2/v0082 2026-10-11; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            3.2167453318834305
+            0.12492761015892029
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)",
-          "version_source": "box table (job nv2/v0082)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -21730,7 +21159,7 @@
           "peak_host_mb": 669.4,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 5.466639443895769,
+          "ratio_ours_identical_over": 0.21230595862138824,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -21835,7 +21264,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.6023504344340602,
+          "ratio_ours_identical_over": 0.10106657102989353,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -21940,7 +21369,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 5.74225350707733,
+          "ratio_ours_identical_over": 0.22300988531965193,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -22045,7 +21474,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.897393653163771,
+          "ratio_ours_identical_over": 0.11252506102727143,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -22150,7 +21579,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 5.493156523647606,
+          "ratio_ours_identical_over": 0.21333579314666318,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -22255,7 +21684,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.1602180524599524,
+          "ratio_ours_identical_over": 0.12273228003528072,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -22303,7 +21732,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v0082"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/global-maxpool/synthetic/rows=full",
       "infer_cells": [],
@@ -22328,26 +21757,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0082)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v0082",
-        "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 0.5855914205312729,
-          "ratio": 5.493156523647606
+          "ratio": 0.21333579314666318
         },
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 0.5884319543838501,
-          "ratio": 5.466639443895769
+          "ratio": 0.21230595862138824
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 3.2167453318834305
+        "ours_ms": 0.12492761015892029
       },
       "opponent_source": {
         "boards": [
@@ -22368,7 +21797,7 @@
           "dataset": "istella",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "09a833349e94f972",
@@ -22376,60 +21805,58 @@
           "lane": "graphsage",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-10T07:57:07Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v1090",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791619027,
+              "ct": 1791850187,
               "dataset": "istella",
               "digest": "09a833349e94f972",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v1090",
+              "job": "n0006",
               "kind": "algos",
               "lane": "graphsage",
               "measured": null,
-              "median_ms": 7.463090121746063,
+              "median_ms": 6.168426014482975,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1090/work-graphsage-istella-def/graphsage-istella-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/graphsage/istella/rows=full",
               "reason": null,
-              "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 7.463090121746063,
-          "median_ms": 7.463090121746063,
+          "max_ms": 6.168426014482975,
+          "median_ms": 6.168426014482975,
           "memory": {},
-          "min_ms": 7.463090121746063,
+          "min_ms": 6.168426014482975,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1090/work-graphsage-istella-def/graphsage-istella-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -22438,16 +21865,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            7.463090121746063
+            6.168426014482975
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@1665b5626)",
-          "version_source": "box table (job nv2/v1090)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -22509,7 +21936,7 @@
           "peak_host_mb": 1263.5,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.8712542057249395,
+          "ratio_ours_identical_over": 0.7201128513994222,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -22621,7 +22048,7 @@
             "rel_fro_vs_torch_eager_fp32": 9.700249357424572e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.764854658960719,
+          "ratio_ours_identical_over": 1.4586954214037822,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -22733,7 +22160,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0002968752478799462
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.8818268292436,
+          "ratio_ours_identical_over": 0.7288513826096793,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -22845,7 +22272,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.00029687450393400995
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.9760460791174779,
+          "ratio_ours_identical_over": 1.6332502812378709,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -22957,7 +22384,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0033662370200528736
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.9212580121443611,
+          "ratio_ours_identical_over": 0.7614422170253282,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -23069,7 +22496,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.00305432007023077
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.249911137091462,
+          "ratio_ours_identical_over": 1.8596064313722849,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -23123,7 +22550,7 @@
       "dataset": "istella",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v1090"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/graphsage/istella/rows=full",
       "infer_cells": [],
@@ -23154,26 +22581,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1090)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v1090",
-        "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-compile-bf16",
           "ms": 3.317059949040413,
-          "ratio": 2.249911137091462
+          "ratio": 1.8596064313722849
         },
         "fp32": {
           "arm": "torch-compile-fp32",
           "ms": 4.228727892041206,
-          "ratio": 1.764854658960719
+          "ratio": 1.4586954214037822
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 7.463090121746063
+        "ours_ms": 6.168426014482975
       },
       "opponent_source": {
         "boards": [
@@ -23194,7 +22621,7 @@
           "dataset": "taxi",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "d053647ed5c362bb",
@@ -23202,60 +22629,58 @@
           "lane": "graphsage",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-10T07:57:07Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v1090",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791619027,
+              "ct": 1791850187,
               "dataset": "taxi",
               "digest": "d053647ed5c362bb",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v1090",
+              "job": "n0006",
               "kind": "algos",
               "lane": "graphsage",
               "measured": null,
-              "median_ms": 1.7457716166973114,
+              "median_ms": 1.8148235976696014,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1090/work-graphsage-taxi-def/graphsage-taxi-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/graphsage/taxi/rows=full",
               "reason": null,
-              "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 1.7457716166973114,
-          "median_ms": 1.7457716166973114,
+          "max_ms": 1.8148235976696014,
+          "median_ms": 1.8148235976696014,
           "memory": {},
-          "min_ms": 1.7457716166973114,
+          "min_ms": 1.8148235976696014,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1090/work-graphsage-taxi-def/graphsage-taxi-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -23264,16 +22689,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@1665b5626 nv2/v1090 2026-10-10; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            1.7457716166973114
+            1.8148235976696014
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@1665b5626)",
-          "version_source": "box table (job nv2/v1090)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -23335,7 +22760,7 @@
           "peak_host_mb": 1181.3,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.0741686044979077,
+          "ratio_ours_identical_over": 1.1166561036240215,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -23447,7 +22872,7 @@
             "rel_fro_vs_torch_eager_fp32": 6.95404122287012e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.9151316084962126,
+          "ratio_ours_identical_over": 0.951328582838463,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -23559,7 +22984,7 @@
             "rel_fro_vs_torch_eager_fp32": 4.21793308306575e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.7649373321286999,
+          "ratio_ours_identical_over": 0.7951935452541442,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -23671,7 +23096,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.00021454800775089734
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.8662348681036538,
+          "ratio_ours_identical_over": 0.9004977883262815,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -23783,7 +23208,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0035571992315430122
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.0222633779866106,
+          "ratio_ours_identical_over": 1.0626978257976838,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -23895,7 +23320,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0032853222810784307
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.0118069732067965,
+          "ratio_ours_identical_over": 1.0518278299977222,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -23949,7 +23374,7 @@
       "dataset": "taxi",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v1090"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/graphsage/taxi/rows=full",
       "infer_cells": [],
@@ -23980,26 +23405,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1090)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v1090",
-        "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 1.707751303911209,
-          "ratio": 1.0222633779866106
+          "ratio": 1.0626978257976838
         },
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 1.62523053586483,
-          "ratio": 1.0741686044979077
+          "ratio": 1.1166561036240215
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 1.7457716166973114
+        "ours_ms": 1.8148235976696014
       },
       "opponent_source": {
         "boards": [
@@ -36615,7 +36040,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "2a8100a05aad3c95",
@@ -36623,60 +36048,58 @@
           "lane": "layernorm",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-10T05:06:10Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v1080",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791608770,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "2a8100a05aad3c95",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v1080",
+              "job": "n0006",
               "kind": "algos",
               "lane": "layernorm",
               "measured": null,
-              "median_ms": 1.107979565858841,
+              "median_ms": 1.1061634868383408,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1080/work-layernorm-synthetic-def/layernorm-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/layernorm/synthetic/rows=full",
               "reason": null,
-              "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 1.107979565858841,
-          "median_ms": 1.107979565858841,
+          "max_ms": 1.1061634868383408,
+          "median_ms": 1.1061634868383408,
           "memory": {},
-          "min_ms": 1.107979565858841,
+          "min_ms": 1.1061634868383408,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1080/work-layernorm-synthetic-def/layernorm-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -36685,16 +36108,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@ca8ea1f8d nv2/v1080 2026-10-10; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            1.107979565858841
+            1.1061634868383408
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)",
-          "version_source": "box table (job nv2/v1080)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -36756,7 +36179,7 @@
           "peak_host_mb": 734.0,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.3215763698061758,
+          "ratio_ours_identical_over": 0.3210492769637722,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -36865,7 +36288,7 @@
             "rel_fro_vs_torch_eager_fp32": 5.315952850510693e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.15511921144087698,
+          "ratio_ours_identical_over": 0.15486495698144934,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -36974,7 +36397,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.5658371858531667,
+          "ratio_ours_identical_over": 0.5649097273747693,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -37083,7 +36506,7 @@
             "rel_fro_vs_torch_eager_fp32": 5.315952850510693e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.5577583224174322,
+          "ratio_ours_identical_over": 0.5568441059290924,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -37192,7 +36615,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.5919285277862362,
+          "ratio_ours_identical_over": 0.5909583032314946,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -37301,7 +36724,7 @@
             "rel_fro_vs_torch_eager_fp32": 5.315952850510693e-08
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.5461239231844819,
+          "ratio_ours_identical_over": 0.5452287765319173,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -37352,7 +36775,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v1080"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/layernorm/synthetic/rows=full",
       "infer_cells": [],
@@ -37380,26 +36803,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1080)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v1080",
-        "sha": "ca8ea1f8d64bb09179a2bd6bd52c11b0a43b64ec"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 1.8718130886554718,
-          "ratio": 0.5919285277862362
+          "ratio": 0.5909583032314946
         },
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 3.445463255047798,
-          "ratio": 0.3215763698061758
+          "ratio": 0.3210492769637722
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 1.107979565858841
+        "ours_ms": 1.1061634868383408
       },
       "opponent_source": {
         "boards": [
@@ -45132,7 +44555,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "e458d4bba33b2c8e",
@@ -45140,64 +44563,58 @@
           "lane": "maxpool1d",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-11T18:50:20Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v0082",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791744620,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "e458d4bba33b2c8e",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v0082",
+              "job": "n0006",
               "kind": "algos",
               "lane": "maxpool1d",
               "measured": null,
-              "median_ms": 1.2339632958173752,
+              "median_ms": 2.30320543050766,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-maxpool1d-synthetic-def/maxpool1d-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/maxpool1d/synthetic/rows=full",
               "reason": null,
-              "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 1.2339632958173752,
-          "median_ms": 1.2339632958173752,
+          "max_ms": 2.30320543050766,
+          "median_ms": 2.30320543050766,
           "memory": {},
-          "min_ms": 1.2339632958173752,
+          "min_ms": 2.30320543050766,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "identical_to": "torch-eager-fp32"
-          },
-          "quality_source": "output hash e458d4bba33b2c8e equals the stored torch-eager-fp32 output hash: the same bits",
-          "quality_superseded": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0082/work-maxpool1d-synthetic-def/maxpool1d-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -45206,16 +44623,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@a1c96a5ba nv2/v0082 2026-10-11; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            1.2339632958173752
+            2.30320543050766
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.38 (source build, main@a1c96a5ba)",
-          "version_source": "box table (job nv2/v0082)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -45276,7 +44693,7 @@
           "peak_host_mb": 703.9,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.9055740017524266,
+          "ratio_ours_identical_over": 1.6902633697715967,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -45385,7 +44802,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.7864008290411304,
+          "ratio_ours_identical_over": 1.4678253933019079,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -45494,7 +44911,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.9374167795139995,
+          "ratio_ours_identical_over": 1.749698248354693,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -45603,7 +45020,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.4620722557443505,
+          "ratio_ours_identical_over": 0.8624627104587878,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -45712,7 +45129,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.32647830365859487,
+          "ratio_ours_identical_over": 0.6093751771046937,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -45821,7 +45238,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.7137843947239695,
+          "ratio_ours_identical_over": 1.3322860572209256,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -45873,7 +45290,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v0082"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/maxpool1d/synthetic/rows=full",
       "infer_cells": [],
@@ -45902,26 +45319,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0082)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v0082",
-        "sha": "a1c96a5baff55c98b32d2791c1a2555a45089afe"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-compile-bf16",
           "ms": 1.7287619411945343,
-          "ratio": 0.7137843947239695
+          "ratio": 1.3322860572209256
         },
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 1.3626310974359512,
-          "ratio": 0.9055740017524266
+          "ratio": 1.6902633697715967
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 1.2339632958173752
+        "ours_ms": 2.30320543050766
       },
       "opponent_source": {
         "boards": [
@@ -45942,7 +45359,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "97cfede5e4c32f4f",
@@ -45950,64 +45367,58 @@
           "lane": "maxpool2d",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-10T07:57:07Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v1092",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791619027,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "97cfede5e4c32f4f",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v1092",
+              "job": "n0006",
               "kind": "algos",
               "lane": "maxpool2d",
               "measured": null,
-              "median_ms": 1.470174640417099,
+              "median_ms": 1.1784136295318604,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1092/work-maxpool2d-synthetic-def/maxpool2d-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/maxpool2d/synthetic/rows=full",
               "reason": null,
-              "sha": "1665b56263fbb612b79810ce263b6992748ab580",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 1.470174640417099,
-          "median_ms": 1.470174640417099,
+          "max_ms": 1.1784136295318604,
+          "median_ms": 1.1784136295318604,
           "memory": {},
-          "min_ms": 1.470174640417099,
+          "min_ms": 1.1784136295318604,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "identical_to": "torch-eager-fp32"
-          },
-          "quality_source": "output hash 97cfede5e4c32f4f equals the stored torch-eager-fp32 output hash: the same bits",
-          "quality_superseded": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v1092/work-maxpool2d-synthetic-def/maxpool2d-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -46016,16 +45427,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@1665b5626 nv2/v1092 2026-10-10; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            1.470174640417099
+            1.1784136295318604
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.37 (source build, main@1665b5626)",
-          "version_source": "box table (job nv2/v1092)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -46086,7 +45497,7 @@
           "peak_host_mb": 719.8,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.8318418803373765,
+          "ratio_ours_identical_over": 0.6667601130209063,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -46195,7 +45606,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.650157124558795,
+          "ratio_ours_identical_over": 0.5211312968233245,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -46304,7 +45715,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.8452178382690733,
+          "ratio_ours_identical_over": 0.677481567942945,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -46413,7 +45824,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.5788959893563886,
+          "ratio_ours_identical_over": 0.46401216915655685,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -46522,7 +45933,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.6538491488216046,
+          "ratio_ours_identical_over": 0.5240906266826824,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -46631,7 +46042,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.5262626599369253,
+          "ratio_ours_identical_over": 0.4218240977190444,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -46683,7 +46094,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v1092"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/maxpool2d/synthetic/rows=full",
       "infer_cells": [],
@@ -46712,26 +46123,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt (nv2/v1092)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v1092",
-        "sha": "1665b56263fbb612b79810ce263b6992748ab580"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 2.24849209189415,
-          "ratio": 0.6538491488216046
+          "ratio": 0.5240906266826824
         },
         "fp32": {
           "arm": "torch-eager-fp32",
           "ms": 1.7673727124929428,
-          "ratio": 0.8318418803373765
+          "ratio": 0.6667601130209063
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 1.470174640417099
+        "ours_ms": 1.1784136295318604
       },
       "opponent_source": {
         "boards": [
@@ -48268,7 +47679,7 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
           "hash": "c7c1ee2cbe8fa57f",
@@ -48276,60 +47687,58 @@
           "lane": "moe",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-11T19:36:52Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v0100",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791747412,
+              "ct": 1791850187,
               "dataset": "synthetic",
               "digest": "c7c1ee2cbe8fa57f",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v0100",
+              "job": "n0006",
               "kind": "algos",
               "lane": "moe",
               "measured": null,
-              "median_ms": 14.10665363073349,
+              "median_ms": 14.46407288312912,
               "quality": {
-                "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0100/work-moe-synthetic-def/moe-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/moe/synthetic/rows=full",
               "reason": null,
-              "sha": "c8ef6c66d15eceb865e00cddd248bdca58ac7b2e",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.38 (source build, main@c8ef6c66d)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "c8ef6c66d15eceb865e00cddd248bdca58ac7b2e"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 14.10665363073349,
-          "median_ms": 14.10665363073349,
+          "max_ms": 14.46407288312912,
+          "median_ms": 14.46407288312912,
           "memory": {},
-          "min_ms": 14.10665363073349,
+          "min_ms": 14.46407288312912,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/v0100/work-moe-synthetic-def/moe-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -48338,16 +47747,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@c8ef6c66d nv2/v0100 2026-10-11; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            14.10665363073349
+            14.46407288312912
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.38 (source build, main@c8ef6c66d)",
-          "version_source": "box table (job nv2/v0100)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -48409,7 +47818,7 @@
           "peak_host_mb": 1008.6,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.1720717829068183,
+          "ratio_ours_identical_over": 1.2017684800375883,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -48520,7 +47929,7 @@
             "rel_fro_vs_torch_eager_fp32": 1.5483823796382377e-07
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.1829415421525658,
+          "ratio_ours_identical_over": 1.2129136455791898,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -48631,7 +48040,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0175335391319701
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.434450400392902,
+          "ratio_ours_identical_over": 1.4707949653852717,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -48742,7 +48151,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.01753353951347063
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.7707156529323274,
+          "ratio_ours_identical_over": 2.840917072999409,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -48853,7 +48262,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.05522181477147399
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.248198971943978,
+          "ratio_ours_identical_over": 3.3304983519794473,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -48964,7 +48373,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.05519875451828998
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.199077801423173,
+          "ratio_ours_identical_over": 3.280132601949999,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -49017,7 +48426,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v0100"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/moe/synthetic/rows=full",
       "infer_cells": [],
@@ -49047,26 +48456,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0100)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v0100",
-        "sha": "c8ef6c66d15eceb865e00cddd248bdca58ac7b2e"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 4.342915490269661,
-          "ratio": 3.248198971943978
+          "ratio": 3.3304983519794473
         },
         "fp32": {
           "arm": "torch-compile-fp32",
           "ms": 11.925064027309418,
-          "ratio": 1.1829415421525658
+          "ratio": 1.2129136455791898
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 14.10665363073349
+        "ours_ms": 14.46407288312912
       },
       "opponent_source": {
         "boards": [
@@ -59455,68 +58864,66 @@
           "dataset": "synthetic",
           "device": "gpu",
           "family": "algos",
-          "hardware": "NVIDIA L40S (nv2, RunPod)",
+          "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
-          "hash": "263c26c1c15e1170",
+          "hash": "af7cd3bb889f976f",
           "hash_stable": null,
           "lane": "resnet-block",
           "library": "mojolearn",
           "main_board": {
-            "box": "nv2",
-            "commit_date": "2026-10-11T21:48:42Z",
+            "box": "nv",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "v0140",
+            "job": "n0006",
             "measured": null,
-            "newer_failed": [
-              "newer run 12412eca4/n0001 failed: not_ready"
-            ],
+            "newer_failed": [],
             "observation": {
-              "box": "nv2",
+              "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791755322,
+              "ct": 1791850187,
               "dataset": "synthetic",
-              "digest": "263c26c1c15e1170",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt",
+              "digest": "af7cd3bb889f976f",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
-              "hardware": "NVIDIA L40S (nv2, RunPod)",
+              "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "v0140",
+              "job": "n0006",
               "kind": "algos",
               "lane": "resnet-block",
               "measured": null,
-              "median_ms": 15.335476025938988,
+              "median_ms": 15.02789556980133,
               "quality": {
-                "error": "Own host reference failed (mojolearn: MOJOLEARN_VENDOR=cpu; no GPU set is loaded, on request (flat layout)); see /root/lq/out/v0140/work-resnet-block-synthetic-def/resnet-block-synthetic-host-quality/host.log"
+                "relative_error_vs_own_host": 0.0
               },
               "race_id": "algos/resnet-block/synthetic/rows=full",
               "reason": null,
-              "sha": "7924718fc95688b88982a9ea06fa5dcd2c3ed93e",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.38 (source build, main@7924718fc)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "7924718fc95688b88982a9ea06fa5dcd2c3ed93e"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 15.335476025938988,
-          "median_ms": 15.335476025938988,
+          "max_ms": 15.02789556980133,
+          "median_ms": 15.02789556980133,
           "memory": {},
-          "min_ms": 15.335476025938988,
+          "min_ms": 15.02789556980133,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
-            "error": "Own host reference failed (mojolearn: MOJOLEARN_VENDOR=cpu; no GPU set is loaded, on request (flat layout)); see /root/lq/out/v0140/work-resnet-block-synthetic-def/resnet-block-synthetic-host-quality/host.log"
+            "relative_error_vs_own_host": 0.0
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -59525,16 +58932,16 @@
           "rows_tag": "full",
           "settings": {
             "rounds": 1,
-            "source": "main board: one scored run of ours (previous)"
+            "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@7924718fc nv2/v0140 2026-10-11; identity vs the amd columns: n/a; newer run 12412eca4/n0001 failed: not_ready",
+          "source": "main@8899093fc nv/n0006 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            15.335476025938988
+            15.02789556980133
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.38 (source build, main@7924718fc)",
-          "version_source": "box table (job nv2/v0140)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0006)",
           "warmup_ms": null
         },
         {
@@ -59595,7 +59002,7 @@
           "peak_host_mb": 942.5,
           "quality": {},
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.9073266075067004,
+          "ratio_ours_identical_over": 2.849014961845,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -59701,7 +59108,7 @@
             "rel_fro_vs_torch_eager_fp32": 5.381319868981409e-07
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 2.9078441289469463,
+          "ratio_ours_identical_over": 2.849522103465253,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -59807,7 +59214,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.00034780397338795074
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.485397448977432,
+          "ratio_ours_identical_over": 3.415491556564036,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -59913,7 +59320,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.00034780440981670694
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 3.550914213109084,
+          "ratio_ours_identical_over": 3.4796942645710396,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -60019,7 +59426,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.0036207329351270563
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 5.387097407402803,
+          "ratio_ours_identical_over": 5.279049514072052,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -60125,7 +59532,7 @@
             "rel_fro_vs_torch_eager_fp32": 0.003424604864144181
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 4.531286582375736,
+          "ratio_ours_identical_over": 4.440403508936075,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -60174,7 +59581,7 @@
       "dataset": "synthetic",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv2, RunPod) job v0140"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0006"
       },
       "id": "algos/resnet-block/synthetic/rows=full",
       "infer_cells": [],
@@ -60200,26 +59607,26 @@
         "timed_fit": "forward + backward(dy)",
         "timed_infer": "forward(x) (no autograd)"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0140)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0006)",
       "main_board": {
-        "box": "nv2",
+        "box": "nv",
         "identity": "n/a",
-        "job": "v0140",
-        "sha": "7924718fc95688b88982a9ea06fa5dcd2c3ed93e"
+        "job": "n0006",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "neural_headline": {
         "bf16": {
           "arm": "torch-eager-bf16",
           "ms": 2.8467047959566116,
-          "ratio": 5.387097407402803
+          "ratio": 5.279049514072052
         },
         "fp32": {
           "arm": "torch-compile-fp32",
           "ms": 5.273830145597458,
-          "ratio": 2.9078441289469463
+          "ratio": 2.849522103465253
         },
         "note": "torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax",
-        "ours_ms": 15.335476025938988
+        "ours_ms": 15.02789556980133
       },
       "opponent_source": {
         "boards": [
@@ -60243,58 +59650,58 @@
           "hardware": "NVIDIA L40S (nv, RunPod)",
           "hardware_key": "NVIDIA L40S",
           "hardware_source": "box table (tools/board_hardware.py)",
-          "hash": null,
+          "hash": "0cceeaeac076d598",
           "hash_stable": null,
           "lane": "rfe",
           "library": "mojolearn",
           "main_board": {
             "box": "nv",
-            "commit_date": "2026-10-12T22:23:03Z",
+            "commit_date": "2026-10-13T00:09:47Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "n0003",
+            "job": "n0005",
             "measured": null,
             "newer_failed": [],
             "observation": {
               "box": "nv",
               "column": "nvidia-l40s",
               "comparability": {},
-              "ct": 1791843783,
+              "ct": 1791850187,
               "dataset": "istella",
-              "digest": null,
+              "digest": "0cceeaeac076d598",
               "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
               "family": "algos",
               "gpu_recorded": null,
               "hardware": "NVIDIA L40S (nv, RunPod)",
               "infra": false,
-              "job": "n0003",
+              "job": "n0005",
               "kind": "algos",
               "lane": "rfe",
               "measured": null,
-              "median_ms": 1348.796172067523,
+              "median_ms": 1362.9050701856613,
               "quality": {
                 "jaccard_vs_sklearn": 0.8803418803418803,
                 "n_selected": 110
               },
               "race_id": "algos/rfe/istella/rows=full",
               "reason": null,
-              "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c",
+              "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
-              "version": "mojolearn 0.8.42 (source build, main@12412eca4)"
+              "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
             },
-            "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c"
+            "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
           },
-          "max_ms": 1348.796172067523,
-          "median_ms": 1348.796172067523,
+          "max_ms": 1362.9050701856613,
+          "median_ms": 1362.9050701856613,
           "memory": {},
-          "min_ms": 1348.796172067523,
+          "min_ms": 1362.9050701856613,
           "mode": "identical",
           "neural_shape": null,
           "peak_gpu_mb": null,
@@ -60312,14 +59719,14 @@
             "rounds": 1,
             "source": "main board: one scored run of ours (algos)"
           },
-          "source": "main@12412eca4 nv/n0003 2026-10-12; identity vs the amd columns: n/a",
+          "source": "main@8899093fc nv/n0005 2026-10-13; identity vs the amd columns: n/a",
           "status": "ok",
           "times_ms": [
-            1348.796172067523
+            1362.9050701856613
           ],
           "verdict": "main board, one scored run",
-          "version": "mojolearn 0.8.42 (source build, main@12412eca4)",
-          "version_source": "box table (job nv/n0003)",
+          "version": "mojolearn 0.8.42 (source build, main@8899093fc)",
+          "version_source": "box table (job nv/n0005)",
           "warmup_ms": null
         },
         {
@@ -60384,7 +59791,7 @@
             "n_selected": 110
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 0.014706918204905347,
+          "ratio_ours_identical_over": 0.01486075791388579,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -60439,7 +59846,7 @@
       "dataset": "istella",
       "family": "algos",
       "host": {
-        "hostname": "NVIDIA L40S (nv, RunPod) job n0003"
+        "hostname": "NVIDIA L40S (nv, RunPod) job n0005"
       },
       "id": "algos/rfe/istella/rows=full",
       "infer_cells": [],
@@ -60471,12 +59878,12 @@
         "timed_fit": "fit(X, y)",
         "timed_infer": null
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0003)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0005)",
       "main_board": {
         "box": "nv",
         "identity": "n/a",
-        "job": "n0003",
-        "sha": "12412eca4bf88b36d0e9e485566f1e74d9e2c62c"
+        "job": "n0005",
+        "sha": "8899093fceee01e9914ba7f889f5ad26efee071c"
       },
       "opponent_source": {
         "boards": [
@@ -105039,5 +104446,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-13T00:09:41Z"
+  "updated": "2026-10-13T00:27:48Z"
 }
