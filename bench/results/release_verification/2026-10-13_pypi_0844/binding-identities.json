@@ -51,7 +51,7 @@
    "identity_digest": "fd831a1932efe2c0c6bf26c3fc259939b1e2cb520dd36f9f5b9d8d154d725f07",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_gbdt",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "db84198939afdfacb57fe0aba923b78b20966ba169829ba16041003548ecc20c",
    "target": "linux-64"
   },
   {
@@ -103,7 +103,7 @@
    "identity_digest": "a53cf813c2f7232e111ded2dbdb2758185063999dab406ee5b7cb693dd493a2b",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_rf",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "237c3d7fadcbe4547b9ab8f423dbc9bbf31b227e1abca2cbadc1c739a3085f51",
    "target": "linux-64"
   },
   {
@@ -155,7 +155,7 @@
    "identity_digest": "397f7c9b8187ded74b553460bd3321442b3f5676fa87e3a5e0342b2b13a5a650",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_trees",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "7251b8e8a7ccb1cbe2de91baf85117bda85adf38392b574cc0e5d921dc5542f1",
    "target": "linux-64"
   },
   {
@@ -207,7 +207,7 @@
    "identity_digest": "cf1b29dffccdb4b11742d337c134ecb5250f46451718616838d015ac862feb91",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "e8309247bf29917e215387d184cbb7934424b5ca15fcddb8fb7bc48a3062d413",
    "target": "linux-64"
   },
   {
@@ -259,7 +259,7 @@
    "identity_digest": "e506bd74c58d3113f79c6ed07f655278bf04afd3ef29a8d1d8217ba7d2f1e37d",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_estimators",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "ed80e776151ab8d808c20a49e5d1521e22922e936a1d7976104e46d1f7d9e62c",
    "target": "linux-64"
   },
   {
@@ -311,7 +311,7 @@
    "identity_digest": "4c29fb0e30d1e6bc2f635e2884aac3abb3c2f3bdac9a30948784af97438e74ff",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_svm",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "fea5f8b1c1b86393a5b44ab3cb555ed4a97916e613ed54b321e8bbf95473b7e6",
    "target": "linux-64"
   },
   {
@@ -363,7 +363,7 @@
    "identity_digest": "c58baf3f6c3f99ee364309210c8dfaf65306a903c9d5ff731331c8a8ae3a70ec",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_solver",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a42335912c3ab76ab49374436e3652d4396bb962e20a146333e1beb60744952b",
    "target": "linux-64"
   },
   {
@@ -415,7 +415,7 @@
    "identity_digest": "5bb9e132448b7de245a5ab053e5ee48e6faca93224511e07751ae92b34b41bcb",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_metrics",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "85cb7d1c528d7a3b2dff22e773ccf1ac6b59a7e5bb16e7405a37e8258eb60be5",
    "target": "linux-64"
   },
   {
@@ -467,7 +467,7 @@
    "identity_digest": "72c3646d0f84215a6e13b8112b3ddb0a2cc98e138a8be69d42c354905d08762b",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_preprocessing",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "1c6a7f174142b036036ef2c5fdb25fd97e61ec6a2c500565f3195364bd780574",
    "target": "linux-64"
   },
   {
@@ -519,7 +519,7 @@
    "identity_digest": "6e0dcedb4a0a82d17b2bb5cfe86a61de539c6c4b8668103d88f261229ce4baf0",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_tsa",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "6e53b392ea69f3b3131d5c3442b92a9b70fa0726fa28d8556146f2f83d9f244a",
    "target": "linux-64"
   },
   {
@@ -571,7 +571,7 @@
    "identity_digest": "b8290c26f4cee9f686873e1acd6aaaaa1d8828ceb6670829c54d26269b456278",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_linalg",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "5691bfc861944f98181f92e9d1e4dca65c0f0990e3dfb730c98e232e705a3326",
    "target": "linux-64"
   },
   {
@@ -623,7 +623,7 @@
    "identity_digest": "2fa08ac6734847910a49950de3c7c2f149f08447c1ca32803a4a54bd44c91b6c",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_arima",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "1251d17db6c7857bee181abc42abc683023381b81f419968c3ec401993e56e39",
    "target": "linux-64"
   },
   {
@@ -675,7 +675,7 @@
    "identity_digest": "d6c9fad7524ae567038d90bac79656f89e1e3bd1f3e272c440dd4eda3e24ba0c",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_gp",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "19a00f00210c1e147d3a298bf5fd1dc53d1894be2499768a5c1eb8578a543c17",
    "target": "linux-64"
   },
   {
@@ -727,7 +727,7 @@
    "identity_digest": "c3ed012cb9ac7da82c906dc146cbea2b2bceda688466b03d53d9619af0464082",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_kernel_methods",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "d9b06482e123b644d807c6bb2c266ace639d34720d17dc719ef054d8ae1033e2",
    "target": "linux-64"
   },
   {
@@ -779,7 +779,7 @@
    "identity_digest": "3cd8fe9cfcdb99ffacb6dc9ca5ae554a9e98bf320976ee4fe337dbe5ddf8db8b",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_mixture",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f10a389b454bf6624ce9daf5b14595f1e1a8861dce3ce6f16b1d2e9300fdb549",
    "target": "linux-64"
   },
   {
@@ -831,7 +831,7 @@
    "identity_digest": "1c1871d8e42e192142ab9bed0e8299557a3691a6868181a503ef092f51f8fdcd",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_hdbscan",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "2014147e69b719c4528fd845f9f258d235fa16601187914897d73329ed5cde43",
    "target": "linux-64"
   },
   {
@@ -883,7 +883,7 @@
    "identity_digest": "a5105bf883612abd576e290a36a331c2cbf41848d0437eed0e72446da331a3e0",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_resample",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "b837f561fc1e3953f1e1e0eb3f853daa03ec18197b5ff59f9276488b3f82348a",
    "target": "linux-64"
   },
   {
@@ -935,7 +935,7 @@
    "identity_digest": "4fed66a0f53a8db6ffda047cd30b11b4081c4633f429794e6a5cc49748591974",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_ivf",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "99eaa0b195945a16fd52f2dce46750678aed874f3d35ac3998d30d6bc7700135",
    "target": "linux-64"
   },
   {
@@ -987,7 +987,7 @@
    "identity_digest": "030338417572c387531e487bf9de62730b26d0a5ca3f173796e7f17af7e4fe8b",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_training",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "b38404dab854350dc84ccd8be5851f3d677af31ea883ea3f2603a34626208430",
    "target": "linux-64"
   },
   {
@@ -1039,7 +1039,7 @@
    "identity_digest": "d2ece732ba3ed3bb04e5efc0aec8d407bfdc1f74d37d2fd05caa6f87af6d2ef8",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_mamba",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "9a3ef48024fea660108f395a8763fc2a16941c4256b827aa03a975eaa156b9bb",
    "target": "linux-64"
   },
   {
@@ -1091,7 +1091,7 @@
    "identity_digest": "086d87e118d1d9bf5a9db83f868fe7d43144d4d42e379e053500facdea213a60",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_transformer",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "cbf8d479d9d0ba80dceef4d22e35f389eb66c20007ec07fd3d77233883b8365a",
    "target": "linux-64"
   },
   {
@@ -1143,7 +1143,7 @@
    "identity_digest": "1455f0a9fa3597b7dedc4d3d8eceb25fe8c0d37b432dc2e92c9cc8d29719cb77",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_embedding",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "ffe83376df12813da5ecbe98361147df0432957d2fa3356b81389fa2eaca4548",
    "target": "linux-64"
   },
   {
@@ -1195,7 +1195,7 @@
    "identity_digest": "6e3f88aadff7e82d8b137918d80d720aeb1842e3ae2645e54c9acce42d9bfe8a",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_linear",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "dd5daee100caaaabe9b93bfdb6c1f17e9910032d4aae9ca59e116af47f0838bf",
    "target": "linux-64"
   },
   {
@@ -1247,7 +1247,7 @@
    "identity_digest": "0ddf982a56dd235b6ebea097e89e5ae9c32756aab730e4202a929c70d26fcb5a",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_cluster",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "df88f71bff4f9e21e5bcc1a0fc334dfb3958cef754db38f4f94d34496171e5a7",
    "target": "linux-64"
   },
   {
@@ -1299,7 +1299,7 @@
    "identity_digest": "07b94e9d185d2ddc120f78f6152298d5b7a2e241cc5e5b0b0da4613f350231fb",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_neighbors",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "8c22b043a546aaa36055cfc59d97dea4f1e68b0834db7685f652a2e77d400921",
    "target": "linux-64"
   },
   {
@@ -1351,7 +1351,7 @@
    "identity_digest": "84f7ff9e853bc0e229973d23b7db161e938a416160e7ab61ce7b1c5d52828beb",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_decomp",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "804c604f15c8c1e07dce616f8a4fd359666f5e939cf4c9cffe2df8915ade3cb0",
    "target": "linux-64"
   },
   {
@@ -1403,7 +1403,7 @@
    "identity_digest": "2ed23b808a510086d693f1139561683d9563874504385c1a0b06a5d5aa2b1a1a",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_prep",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "bb43511dbec98ff6259d772e202f2a1f9345fefbe1cd97b830142ee2d94fca6d",
    "target": "linux-64"
   },
   {
@@ -1455,7 +1455,7 @@
    "identity_digest": "639a2a29ec3ea193a008a339412a9245b416791be5bff8d5ff1aa55c5d5b0394",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_sequence",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "2bd99527392a55c65d788635ea3d42d336b89f48001343ecd32a06131607e519",
    "target": "linux-64"
   },
   {
@@ -1507,7 +1507,7 @@
    "identity_digest": "099d43c326129d8ddebfe0fa55bdb0dd6ab123f819ad11869bea42b1593dea2a",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_trees",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "0b79bd76439b2762ec76aa0bead34fdfe9496141ff2c73e1a0d17d6b5789715e",
    "target": "linux-64"
   },
   {
@@ -1559,7 +1559,7 @@
    "identity_digest": "e0d2f75b1b681b027b8f015ff4c946267d5b1220ab69ec20b2263455304a369b",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_cnn",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "e8edf80a57bc8269fda1efb3de822b385f03dbf7bf1f914af3086287fc196d15",
    "target": "linux-64"
   },
   {
@@ -1611,7 +1611,7 @@
    "identity_digest": "f2f349b6e5cf658ea6ec36d7c7a1d93cdf833700c982b4e0a0c8ae0d927bc06a",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_ann",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "9ff9c3a747d5dead1fb11bef1da8791549323377537a5efee16a4c544b63da35",
    "target": "linux-64"
   },
   {
@@ -1663,7 +1663,7 @@
    "identity_digest": "08cbf0d170022b3d7097bbb7137a1f2d652c6833cd6cc25e2a6c178340560a50",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_x_metrics",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "d7bc6b5cd9354b09fdf551a03608cf88d425740583bdf0ea676b3ed00eff0217",
    "target": "linux-64"
   },
   {
@@ -1715,7 +1715,7 @@
    "identity_digest": "ebb22c1fc0470796e6a368b05fee1cd4e44a9ad8d623c7a3078294a6fb4a1169",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_gbdt",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "917eb80b1a9b6394ddcf76874e21754fab3e95ff5daa8dabf8d511fb4050b132",
    "target": "linux-64"
   },
   {
@@ -1767,7 +1767,7 @@
    "identity_digest": "6fd2a2d425398c9d08e3ac4e3d9e4594523587983a659b57e904cc69682f20f9",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_rf",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "db2afbd5644d88cfdfefd15a4b9391cfd4e394b7a4ac374b4b6111d5f7a2d850",
    "target": "linux-64"
   },
   {
@@ -1819,7 +1819,7 @@
    "identity_digest": "4d2ae671d8a80e2f1025150b9813d4e603eff419a87d42273cb608104d982cb8",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_trees",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "7aed555fd86f978e50bd696eb6057da653f4448a163a542e91265a8739436588",
    "target": "linux-64"
   },
   {
@@ -1871,7 +1871,7 @@
    "identity_digest": "0514a4c23fbfa1259de7f736b2bc4a85c41dae0953735b34c9d71d3d2b6864ac",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "0e0b82045025ac597719757857d53d0cfb1f8e098cfbf2f8e8c0a5db986ea7f6",
    "target": "linux-64"
   },
   {
@@ -1923,7 +1923,7 @@
    "identity_digest": "b87beb4d7d948002a23f25f708d94663eeadb5db6f49e0e7eea0ff55244b7f41",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_estimators",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "aa0d91ec8a89f94fd157bdd6cd9542700eb6cd32b92890079bce4db2c4335281",
    "target": "linux-64"
   },
   {
@@ -1975,7 +1975,7 @@
    "identity_digest": "c5ebb2b8046c9df27d4974e5e17fff2684783a55f3b97abe434034837f4d8723",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_svm",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "77d376a45b3b99fd5baa256bd93dc857c8e4f978bd1f3285a0eced7c9b5e4471",
    "target": "linux-64"
   },
   {
@@ -2027,7 +2027,7 @@
    "identity_digest": "b82bb741835050c65b5dbb8f87dab7b0ac2ffc19b385dc1ff608dc8601e00456",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_solver",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "5e321bbbaa1d6b9a6867a254bb98d29d5a77eac78f0ec953d2e0df211e381f9b",
    "target": "linux-64"
   },
   {
@@ -2079,7 +2079,7 @@
    "identity_digest": "38ad250bb4f86d330f0d50b4b47413c52f7cdcbee90ca8af7792dde247e0ae79",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_metrics",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "3760a7b22710d751c635b7728b547092bcf313070c0ec2400573c9f5fc54d2f4",
    "target": "linux-64"
   },
   {
@@ -2131,7 +2131,7 @@
    "identity_digest": "2aca0497731052d5ca2c10599286de11badbbb99798bc27d3127f9be0348363c",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_preprocessing",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "7107776340b829bcd6a8fbafb9813318560540de2a469b1d16f38bd07d954ee0",
    "target": "linux-64"
   },
   {
@@ -2183,7 +2183,7 @@
    "identity_digest": "195f241d35b86578bfe96dd31216384c374b2ef6a59cb4944d7e25aed563eca3",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_tsa",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "912f7b363644178722d7e8b6773d8dccc5c97dc5858fc81541ec4803c2ac4024",
    "target": "linux-64"
   },
   {
@@ -2235,7 +2235,7 @@
    "identity_digest": "5226e1526ff9d0d54b449a7f2277a7722dffb6481753a22017ce873d67bf1e07",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_linalg",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "bd7c8c75a815008c13051b11a8f11440840b606a30a8484317f4106eefd6215a",
    "target": "linux-64"
   },
   {
@@ -2287,7 +2287,7 @@
    "identity_digest": "0dc260f79305c52b9b15333b91c2291a14bd5399b9640968eaf145b09ea9e31c",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_arima",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "6089eccf3c0acfcd54c6eb699aa46d80c974bca4cb684fac2efeea5b54911fc1",
    "target": "linux-64"
   },
   {
@@ -2339,7 +2339,7 @@
    "identity_digest": "e641bf04e505025dcbd3b4a76a2f88e32f87e19e02248d32a0ab474abf33a590",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_gp",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "c4a01de4733c2ae6a6084a0f555f559d729c91e262b374dcef461089e05d9b2e",
    "target": "linux-64"
   },
   {
@@ -2391,7 +2391,7 @@
    "identity_digest": "b5d561439c4920f57f572fed685a3572b3c8fb92f14f0f2c203a5c089aa15554",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_kernel_methods",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "26634625ab7392516376aa7a62ed3baee170030ffb18e6c66f2b69b65c35b760",
    "target": "linux-64"
   },
   {
@@ -2443,7 +2443,7 @@
    "identity_digest": "a9b05c4eba256562ce43ae3e37e3f1b4b2a65ccb6dc4513506f6c94f9e5d2401",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_mixture",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "4a9294ecd7ca11a01e82a22c9c625305aea25b9c84d804389ca1b17fdf57dfb0",
    "target": "linux-64"
   },
   {
@@ -2495,7 +2495,7 @@
    "identity_digest": "5181fea57d0362b48f2857003301111060c6ce43151832ce052731ee8d2e33a9",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_hdbscan",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "9c314b1369c43fcaf8184b251078bda952b9520887c2a0a5360c0bb93d7ad31c",
    "target": "linux-64"
   },
   {
@@ -2547,7 +2547,7 @@
    "identity_digest": "72c58228ed12c424845a02344db4de0cdf29a3413a97b3891b3cbd1990258ab7",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_resample",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "6dea49316b63a3b1156384ebdff62c745c108f619255a5091e5e3691b55d4299",
    "target": "linux-64"
   },
   {
@@ -2599,7 +2599,7 @@
    "identity_digest": "edc553c233da146492dabed55606c6883ec77b7eef682926fa076588d7b0b6d3",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_ivf",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "7cc5382fca4709441018fdfc2c6dd56aacfca6e60130e11cf3431f4249d4edd7",
    "target": "linux-64"
   },
   {
@@ -2651,7 +2651,7 @@
    "identity_digest": "62ff8fcf5b21e01becb126a8e33089a7714b87b98b0c5c4b6501537c1b9472fd",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_training",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "58e01ae60f2131f7cae56c07f63203daa00188660e3c281eff0b454ce0d8b54b",
    "target": "linux-64"
   },
   {
@@ -2703,7 +2703,7 @@
    "identity_digest": "9f146bb16e305733e289f97197d62f6f96a5e354c2ea3acbf2fad7f2e35fddd3",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_mamba",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f08cc6e91c778d1be7824aaf1fc0b0ef99ade8f1cbec82cde7fa9e471da0d07f",
    "target": "linux-64"
   },
   {
@@ -2755,7 +2755,7 @@
    "identity_digest": "bc25dd707daa2fc3fab40e9487e5a69e1c9b6316a3917a476d1ac66c0793849c",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_transformer",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a57473dbf5b5b8f0e74246f1c8a53a144471a4c97d4886adfddb52770d9527b6",
    "target": "linux-64"
   },
   {
@@ -2807,7 +2807,7 @@
    "identity_digest": "1eadd08a41f51ad4af9ff587a797128e3f15813b75c916449f1e4965937f94eb",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_embedding",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "83c7f3210f83b6eee1b7544cf31b8d117b3430015b441ef35d6826a5af7fdbfd",
    "target": "linux-64"
   },
   {
@@ -2859,7 +2859,7 @@
    "identity_digest": "45fac5260f5b80c49c6fa2cac1639093066be4fbfe32772aa07d4fe1747f3b34",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_linear",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "2d3e0152bc3e0957405bbe25193667b2d0064441e7fde883ce855f3f4220ba57",
    "target": "linux-64"
   },
   {
@@ -2911,7 +2911,7 @@
    "identity_digest": "aa42ce9df4ad6b1f6de6c446f01153a8257940dadea375820176edba317d2604",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_cluster",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "b9d1af57641966706ae5bbb4e258087c3ac5f381c1ff7bddf1556c28e6184c11",
    "target": "linux-64"
   },
   {
@@ -2963,7 +2963,7 @@
    "identity_digest": "15ab7c789a86aa2158bcb5b802b1f8c86a39ece1664e90ab1057f442a55c1bb9",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_neighbors",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "45e13d360d898fa922b2ab36553ea7b43edd8445fa5b62f81f944df8f0708e83",
    "target": "linux-64"
   },
   {
@@ -3015,7 +3015,7 @@
    "identity_digest": "882551a4312bb3bfee291046fd711f5f1ed90e837850dd64f4f473e38c235a05",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_decomp",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "dd5c7ba9decb67a86e206d9aa8771695937cfe3a2d1a118deb7b3df3accf2776",
    "target": "linux-64"
   },
   {
@@ -3067,7 +3067,7 @@
    "identity_digest": "5ed611c77d414901136d2492fcba8a4583851443fad13baf0da71a0846cbed52",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_prep",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "e75b81949c0a9051e3874aea016e589eefa2070ec5026d2e238047607db0e689",
    "target": "linux-64"
   },
   {
@@ -3119,7 +3119,7 @@
    "identity_digest": "fbeee7a4f89f770f713f27af2717ab2abe6007e852a0b20ce4506161f286c424",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_sequence",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "5e172f6761a05436cdaf80a2e3ac169ab1e04b0a0a5a64fd48df793f5300df6e",
    "target": "linux-64"
   },
   {
@@ -3171,7 +3171,7 @@
    "identity_digest": "40fc07eec6668c5ebd3ef383fa9a826db4ac0ea566d4316472c50a1fe85a5437",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_trees",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "c5042a5cba6cb692eba95e22d544ef266ceb8916f3846c392e9484910e638d39",
    "target": "linux-64"
   },
   {
@@ -3223,7 +3223,7 @@
    "identity_digest": "8e1094e9ec79ee359a3c366f0cf68fc909ab0cdc73bfa83d28d2a120180d98a7",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_cnn",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "584e2b845259b24fa5287520a052c5ed2e869225a12e09cda14bbefe7a96f399",
    "target": "linux-64"
   },
   {
@@ -3275,7 +3275,7 @@
    "identity_digest": "1a799a6bddaf9ab838f0fac8c9e7ff454f0bf29b95e851ce4e54ec63f12056f6",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_ann",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "8dac3852160b3b9f6968075754d32332d4712f574a6d7eaeaa1d5052c31b5ca9",
    "target": "linux-64"
   },
   {
@@ -3327,7 +3327,7 @@
    "identity_digest": "d5a11d013ab13751f23ed426ff9afd7360b358b9dd56bbfc44615daa6c4a52ca",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_metrics",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "7677b8372ef03fa9a67ad458672c013fbc0e511251fcb3128f2e9e274b222253",
    "target": "linux-64"
   },
   {
@@ -3379,7 +3379,7 @@
    "identity_digest": "62fb37c4e5fd49e50530e79e4857873983c8f2cd81c4117c7c6ea2a2fdcb0e7f",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_byte_lm",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "95b4f4ef62d7839b51eaecd656c053239a34d8e49b23a19adc3e9a62caa24c1f",
    "target": "linux-64"
   },
   {
@@ -3431,7 +3431,7 @@
    "identity_digest": "a0a73a6c11b4660b6108455c33467309d7927d03537b6274f56f9ca561e0438b",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_gbdt",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "ac19c8f06a4b996acce3e55f96395fe1a23ada6c521824702ea6b8d3a21a85ef",
    "target": "linux-64"
   },
   {
@@ -3483,7 +3483,7 @@
    "identity_digest": "89d37b6024fb7b5bd8cd1cc8f493881203a231bdb2641c2f084be74ebbc9b635",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_rf",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "7da50129ac53839c1ab88a1ec07d8498e5626bdeb26ee155af5ebda46bddd3cd",
    "target": "linux-64"
   },
   {
@@ -3535,7 +3535,7 @@
    "identity_digest": "419bef9c71663652dd56448bd55fcfedf8b490438fd2f2300dcc83ce7d21c591",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_trees",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "ef17dc5855045572736c528eb8b9b129157c77f23fa8365aa0579c601b4477f2",
    "target": "linux-64"
   },
   {
@@ -3587,7 +3587,7 @@
    "identity_digest": "81f839ece9e85e068dae4f11b9b060bee183d2ac3d65aadd74f71b4bb7537eef",
    "key": "linux-64/hip/gfx942/fast/_mojolearn",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "dc61d540cd908a5e568d6419f499a34c63401dfef9b72029cc9fbc0c2fb099cd",
    "target": "linux-64"
   },
   {
@@ -3639,7 +3639,7 @@
    "identity_digest": "2d3267f8a248fa9e97bb14cab4d66f2646a812ac4bcab1406a89b387806b349b",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_estimators",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a5562f41529ba196814e832d1a7705800b353014d573476898b3cadcbb32864b",
    "target": "linux-64"
   },
   {
@@ -3691,7 +3691,7 @@
    "identity_digest": "86acd680ba64580a10fa85b33d3a41170d6de207ec0b57c4d61e9f2c93c495b9",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_svm",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "3f42ef17181fbf30be19697d845c0eeae2a337bd8eb01a8da6929c6bb5de5709",
    "target": "linux-64"
   },
   {
@@ -3743,7 +3743,7 @@
    "identity_digest": "2ee490a96798e18306efbd8092d3eb27d2ccc2759ea6232557fbd32cfe675941",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_solver",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a2d5d3384bb7d9fdd51938bae2fd2f026de1ef85079232067f7a79b80aa82c82",
    "target": "linux-64"
   },
   {
@@ -3795,7 +3795,7 @@
    "identity_digest": "98fd2aa05d132d0fbc9c64df6adef62e95fc59931cbaf02b1ddab38baac5de0b",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_metrics",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "97be280ab65b0b85240e3461459d0c716a215ed09d62ae0460a812de9fa16901",
    "target": "linux-64"
   },
   {
@@ -3847,7 +3847,7 @@
    "identity_digest": "f568495f2ace92e01d272f6ebe8c6ad1416e911876c479d0d23b9580f8e964f9",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_preprocessing",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "1d5af9b6557b0b4fbb66e554ed00810382f4a6453b20e2f6c6e2f5ab4095eb8a",
    "target": "linux-64"
   },
   {
@@ -3899,7 +3899,7 @@
    "identity_digest": "4c5f8efa1666290888e3b3a30ff42a1325936794a7a2a6092356382382d7bc95",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_tsa",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "1ee6c4969d670ddde1b14c9314c33ac046888675b738b39b6e550ffe1368a520",
    "target": "linux-64"
   },
   {
@@ -3951,7 +3951,7 @@
    "identity_digest": "6e2651335e04fe0b18933eeadf93d64e7fc97611905dd11300d8582b4ed76d11",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_linalg",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "43855680567c5df553127b4370a435c0e93d782ca0df4a361407cca4873c27d5",
    "target": "linux-64"
   },
   {
@@ -4003,7 +4003,7 @@
    "identity_digest": "fd00885b969770b3f4165613a20bcdca72f37dd63c1def279175e9221433ee84",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_arima",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "e328d97dcaefa317f0e744a91d9ac313c9afb3786bd7b0d2788f877d9840aa96",
    "target": "linux-64"
   },
   {
@@ -4055,7 +4055,7 @@
    "identity_digest": "448e39521307f3664d01b7fcd2639c28984b25af39d31113e6021a70fdc66a8b",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_gp",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "b579d0729b967649510824a2ba0b4b711ce5c94648f58c0aea9f80f982e84fde",
    "target": "linux-64"
   },
   {
@@ -4107,7 +4107,7 @@
    "identity_digest": "90574942b286b5ddabc9a14910c1203c6ab8bc1d3659720e280b5c186a00d565",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_kernel_methods",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "3c0ae1093ee6ee11060e4c090092d391068d6f471b035acf039e264a6633498d",
    "target": "linux-64"
   },
   {
@@ -4159,7 +4159,7 @@
    "identity_digest": "e300090d79b5d3405502f079e42248ed7bed574bbed31472f360c18743ec51c0",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_mixture",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a7dead09ae990277a8a7f02501b7d1d71a6ae568a80947301f8e0c95c8b37831",
    "target": "linux-64"
   },
   {
@@ -4211,7 +4211,7 @@
    "identity_digest": "38d3be3215f6159c50c8600c09ddcc96fdbc12bbb65c80c76f9d85feb7efe7ba",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_hdbscan",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "b60c25f9a6d79e23e316b19b1041a8803f5991bf74115d473ebeccd8ab742d4b",
    "target": "linux-64"
   },
   {
@@ -4263,7 +4263,7 @@
    "identity_digest": "54773c9496b0fadc7ca7dd8495310a3df495e4096b2e55c702953f88b22f4600",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_resample",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "aebc5558be2449739a9ed70ff1f5d2f3fbf45b50cefb748bbb432ea0f8590b3f",
    "target": "linux-64"
   },
   {
@@ -4315,7 +4315,7 @@
    "identity_digest": "5a9736ddbd475c648db51748e24895ed7614718298508073eba6da30f92f9b2d",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_ivf",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "768dcbdac98e26bdffc0631b314dc38b2f7e1870b2e3230680b2a9e96c3d62fb",
    "target": "linux-64"
   },
   {
@@ -4367,7 +4367,7 @@
    "identity_digest": "02119900ca2ac3cb3e383ac8d52384df4913b8c091c4fe05caf8727f4715db42",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_training",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f22de3e6d7c643ac9180c00659b4e93654a817c1dbd98b9bc98b43c5cc7b6be9",
    "target": "linux-64"
   },
   {
@@ -4419,7 +4419,7 @@
    "identity_digest": "26284ca42ab3da3e0d8e51da7075c48f5db3d51e3885b3c16219c8d09b136de9",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_mamba",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "459d0d1bda1f5eeff53905f8fb7bdcc1790fc2eb76c1dbfa99ae130f33765a27",
    "target": "linux-64"
   },
   {
@@ -4471,7 +4471,7 @@
    "identity_digest": "f95b5c6445f991b62b777ef32ca535db9a09cdd478db3308df86a2e1b53ef97f",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_transformer",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "9ffffdf333d310e4d44295761ff5d74f4b91b2f4080a41bd6bfe8c1c016205f6",
    "target": "linux-64"
   },
   {
@@ -4523,7 +4523,7 @@
    "identity_digest": "1f2ac81017eaad10df24d7933485b1c4af39194727b3836cd7d9064d8dd7ddf9",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_embedding",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f6f1b270e71f5bd1a487a36eebb0c3fdd1318cb40492591ec202969aaea9428e",
    "target": "linux-64"
   },
   {
@@ -4575,7 +4575,7 @@
    "identity_digest": "17b979ce6ea296e8e9ececbfc45804c4b227c2780fac183fca3decdd6e325af8",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_x_linear",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "3e40ae5509e284f79da092e06d1abb659294a2fe43f2dd1b8e45cfbfc9ba3a00",
    "target": "linux-64"
   },
   {
@@ -4627,7 +4627,7 @@
    "identity_digest": "c90934a2acc8cba20860f73ef9fb948a03def3882cd72da7242c2009f3c15854",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_x_cluster",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "da7244b97c0019588c504140f0a6b6c14dd53a5c2cffe1be042ff75ce411495c",
    "target": "linux-64"
   },
   {
@@ -4679,7 +4679,7 @@
    "identity_digest": "b5c99a2f32d558a5cc91eaa2fd8bff2c23b88a088f1fccf710d3d14fc313ece6",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_x_neighbors",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "80834c5e0e0ea9183a1e4f1e750d3abc7aa327edc8db2f477c4fe95fb39742d4",
    "target": "linux-64"
   },
   {
@@ -4731,7 +4731,7 @@
    "identity_digest": "82b5aa8ebf4de5be22fa556bb8c24295d2bd484393c8178b5b26c95af026dc7e",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_x_decomp",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "e5ccfc2822c9ec29706ed3250e670510588233ddc76041ec27b45af114aeef0d",
    "target": "linux-64"
   },
   {
@@ -4783,7 +4783,7 @@
    "identity_digest": "3552e1831a67d4c7a1f87e6f69286ed58bcad5f73dcc2be52412850469571e15",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_x_prep",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "9aa7d31ec4ba546f783a11b9ea1ff26b5fa1e2d5149c222bf91604e385ad6236",
    "target": "linux-64"
   },
   {
@@ -4835,7 +4835,7 @@
    "identity_digest": "b08dd471d6245bec3141a439817defd981ac9593c78fa23de7505460b06edf04",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_x_sequence",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "89c5d2b90122acf82b3f36b734d14cabcf5f7886f626fbafeefa9128a999330b",
    "target": "linux-64"
   },
   {
@@ -4887,7 +4887,7 @@
    "identity_digest": "8c7cb9d80fbb374043527dff4124285a53ca103af9e6129baf8647915f9e0e19",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_x_trees",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "459ec6c73a340febc75ecb4ff772f09190daa5abf97c36a236e9827ec7855a78",
    "target": "linux-64"
   },
   {
@@ -4939,7 +4939,7 @@
    "identity_digest": "b94d2ecdd2b7c8cc636ff6c2334d6652051771c1158742b42e7243a0f5af62db",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_x_cnn",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "74111b0aa05d3dbb06a62225cbde18f55677b5020ac324ed18f474a6688a2ff6",
    "target": "linux-64"
   },
   {
@@ -4991,7 +4991,7 @@
    "identity_digest": "a184f0a6788939ac999f48d857ee461d6d875d32a79e1832afb2e142a0a2dd06",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_x_ann",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "b6dfce79cb8ff373d23855811371c76a376cd1cc25449911bbc71d3cc931b082",
    "target": "linux-64"
   },
   {
@@ -5043,7 +5043,7 @@
    "identity_digest": "c0bf3503d8895b93f4ad8f7b4dcf526baa6a0449efb25c16d6fe417910131e69",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_x_metrics",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "546b4bc8eb1f6112d9c670d573fb75a982b873f6aecf32e9ef288693f9d9e957",
    "target": "linux-64"
   },
   {
@@ -5095,7 +5095,7 @@
    "identity_digest": "99fa6d410bda9a037d7b533a8bb554999b3206453b7960d3a2e5eaf76514f319",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_gbdt",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "78a444b61c8b5978548f36229e7e8efc877fbb8569a1f1c44ce43efb80250f12",
    "target": "linux-64"
   },
   {
@@ -5147,7 +5147,7 @@
    "identity_digest": "5d28f65fd628cff0ed1cd42525be6f711fa0aab7022aa2a73a6eaa8d4e4e68ab",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_rf",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "fceaec9096cfd400ed669eee923c283c8e4f032113a174807566ceab648c087e",
    "target": "linux-64"
   },
   {
@@ -5199,7 +5199,7 @@
    "identity_digest": "5f9f9381734ee2f75ed581168ab6131cb1b88b096228207d563cf4896418fce0",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_trees",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "1cd83418bc894ec574f5e953fbf826c32614150dec52309802504339d14061a9",
    "target": "linux-64"
   },
   {
@@ -5251,7 +5251,7 @@
    "identity_digest": "ddfea57da676c1eaca31e770161c23f5e26b68180aef86df07593fe8c9f717d9",
    "key": "linux-64/hip/gfx942/identical/_mojolearn",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "281f23b620f9032cfc532dfba614e7c4a0867524231321a9da30ef0416dd0e29",
    "target": "linux-64"
   },
   {
@@ -5303,7 +5303,7 @@
    "identity_digest": "89467ab9f60c3477c793e2233f82db804910e3769e74522aa5fac8eb3e3e04fe",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_estimators",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "2df228e48b34838fa680beac416429d63e5e97fe698d6de213654bf30e38a512",
    "target": "linux-64"
   },
   {
@@ -5355,7 +5355,7 @@
    "identity_digest": "fda55e6f39ffe604c472d18021fd6e65c6be740fd81b883a15df399143b2daa8",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_svm",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "1c62b317d0d58075dd9cfa70c2023bac65ee698934c0ce2b9acdbf3c0758e6ad",
    "target": "linux-64"
   },
   {
@@ -5407,7 +5407,7 @@
    "identity_digest": "0be765274c70eccc4ef457c409c66c7d29642ca8d2ed54a9fdbf20715073969c",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_solver",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "3a95458dc9fbe41daf2e44d7bad8b730b66108c9308b144fff7dd94ceaec7fb7",
    "target": "linux-64"
   },
   {
@@ -5459,7 +5459,7 @@
    "identity_digest": "6efeee539c447cea3859fdc3f9056843dbe0b58d04d3025b79a0340e9c7cd3bd",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_metrics",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "587c1bfa05333ddd581d9783ab488cc1111336fb649ebb4ba255b8c7e990f54f",
    "target": "linux-64"
   },
   {
@@ -5511,7 +5511,7 @@
    "identity_digest": "f739df40970f2b27f302cd1f7bfb0ff501337265c9fa17d7494f27031723bd8b",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_preprocessing",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f36d2b212d6a3aec3a6ee66296b6430630d6ef3934c6cb4ed22c8f49b68597a8",
    "target": "linux-64"
   },
   {
@@ -5563,7 +5563,7 @@
    "identity_digest": "433a3124dd49b5877ddf12b098e8ebd0fe95e868cda99d0d2fb4ad5af215902a",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_tsa",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "5e8343face438bafc9ea02cf391185c2a9d36dde324c80015e63e2c429b1ecdc",
    "target": "linux-64"
   },
   {
@@ -5615,7 +5615,7 @@
    "identity_digest": "3a7eda7a403cb7bfc2fa8d2d7544872f56a3aee94797ad2785b50117baf14958",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_linalg",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "e6cda5500c63598156b5d9ada270d75a3fa4ee6a22398b5fc73c8a45c04bef92",
    "target": "linux-64"
   },
   {
@@ -5667,7 +5667,7 @@
    "identity_digest": "b85337a86a377eff8a3bedfb1e0610b418b4669c1da8aa3b1c242af0500829ef",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_arima",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "67fe77f28035bf3b4d206bfc1b7d2867dd22bb2517d0f49d124362fe15285255",
    "target": "linux-64"
   },
   {
@@ -5719,7 +5719,7 @@
    "identity_digest": "e928aef976a3fb006381fec8a45f58da9bd6cbb5a61b721374efc38dffd1f15b",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_gp",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "67706a4ccdf259a2b2721804b6883014fd1853251df7d8b3601614bd05541988",
    "target": "linux-64"
   },
   {
@@ -5771,7 +5771,7 @@
    "identity_digest": "739ed8b76380076eac4b62c3ef5b43f679a5912a4b3f353eadb35433b4fba167",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_kernel_methods",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "18a798bdbd01e5e8129222117040c84bdfa5447025589a4ced6f4b3df6a5bf0d",
    "target": "linux-64"
   },
   {
@@ -5823,7 +5823,7 @@
    "identity_digest": "f1c1d894adc4155221bb23c66000a7a7ccbd5457883e28b9d47c79cdec9c0553",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_mixture",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "44862aa7a5a43d8340ad2ca27d623626d5e6d671945899b1981356770a7fd781",
    "target": "linux-64"
   },
   {
@@ -5875,7 +5875,7 @@
    "identity_digest": "88fbf209284449a17d4db3232ca9c1ea914eac620a5ef50e7dfd0c5e6913ca54",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_hdbscan",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "0361bff94b438c13593131bf9b0b00769721533fc94e011159f3e759d86c5ffc",
    "target": "linux-64"
   },
   {
@@ -5927,7 +5927,7 @@
    "identity_digest": "b7edb848ae8bc821759809b1244f760703f533843f6009ee73bfa8a5783dfb0e",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_resample",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "dc9d6a1984a46f48553a1e5d02ecb1e73b6e7787139b2462f0031edf26097cce",
    "target": "linux-64"
   },
   {
@@ -5979,7 +5979,7 @@
    "identity_digest": "56c2ca862396829ae22bb93b5a64c7932956162d90409438244c22862a9f2d85",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_ivf",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a84ea064cc91cdd2a998bf663b17b490f276c090322d76dfc8ca1481bf155868",
    "target": "linux-64"
   },
   {
@@ -6031,7 +6031,7 @@
    "identity_digest": "e321d68f545bfacb50f52fba2d6e760c91074aed4873039f6a73e4654766226d",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_training",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "2ab2ded3e751efb51b7510187ae728f72af6638b93fe58c7ef0471124c026581",
    "target": "linux-64"
   },
   {
@@ -6083,7 +6083,7 @@
    "identity_digest": "8d039f4ccbdc498b6991f9d457c219a48627fa43ee5f7f4ae65c3a6c83a01670",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_mamba",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "9b91feedee903c80ac0aad94005afabc5f45faa876eb6be68d8d72824f225c7c",
    "target": "linux-64"
   },
   {
@@ -6135,7 +6135,7 @@
    "identity_digest": "17d44d5c30ef4938950c729255b61c864b7cacb74f58722a7b087674efe3e7e3",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_transformer",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "36413d754f9669640e15c43664809cc2c9299985e74babcd36175069c138fb99",
    "target": "linux-64"
   },
   {
@@ -6187,7 +6187,7 @@
    "identity_digest": "fd2f43d64bdc3b0d0ed8e903776429c9b70b5e52d266efcdad420fc3b82d5679",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_embedding",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f19f4eab4d42e3b6373a44924d330e02cf54c9489feafbaa94773b80edbc34dc",
    "target": "linux-64"
   },
   {
@@ -6239,7 +6239,7 @@
    "identity_digest": "4b49bc30b3741714ee444eb9e1b3c8461ed0d3f14a8fbbd8d9b3a8d7e4bc6173",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_x_linear",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "29573414e75b1aa259f74c1c558812db499471a1fe39c8169ce20c6c430d1c38",
    "target": "linux-64"
   },
   {
@@ -6291,7 +6291,7 @@
    "identity_digest": "1e8520fa60364aeda8d3efe27c8d15079e739468afc6fc133b80a106619d8c4c",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_x_cluster",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "59e12e8d888fd6f1e3cf640003721e096ac1ff72a75e70f69c1b0c1d5f6ddb1b",
    "target": "linux-64"
   },
   {
@@ -6343,7 +6343,7 @@
    "identity_digest": "d0cf71fced88ffca71160880f4c874ceb972e146495d208cc43ff5d56fb49679",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_x_neighbors",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "831d4437816270bbe672308db7c6d6e4fca563822d07f00c576059c65be18509",
    "target": "linux-64"
   },
   {
@@ -6395,7 +6395,7 @@
    "identity_digest": "90dd9a571b516719317025c467e941da217fc31501ebb4d8a113d0b8b857dc23",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_x_decomp",
    "reason": "changed: builders, closure",
-   "shipped_sha256": null,
+   "shipped_sha256": "997f24a9e241ceffd3545b1620a88bf12ed919abafc03e44383abaf5feeabf82",
    "target": "linux-64"
   },
   {
@@ -6447,7 +6447,7 @@
    "identity_digest": "86d7a5b0d725b887681bde4b5b31f78eef39687ba826c3de39e5bab180137b6c",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_x_prep",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "89ceb75d765de7e0e25c78fedb655aa56d4d30cb54aef7153cfc829484f670c5",
    "target": "linux-64"
   },
   {
@@ -6499,7 +6499,7 @@
    "identity_digest": "0db254d5521de8dd4a92e9ef7cf33e4ef52f2eb0b5f1e3460c2327a0560cdd7d",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_x_sequence",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "73d385bd7d75b61ac6afdbdea9030e1fd6d22a16ef39c0722d173b0f4779e505",
    "target": "linux-64"
   },
   {
@@ -6551,7 +6551,7 @@
    "identity_digest": "6d88d588d17e63da0f7c76ad10ca701b2e931644e6a3a98bf7df87f941eb8dc6",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_x_trees",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "3adaa19083f62335b84723923b3a1cdc5649b2d56566f64f654423c294470f11",
    "target": "linux-64"
   },
   {
@@ -6603,7 +6603,7 @@
    "identity_digest": "00b7ad64f032206ed3936f567903aeafe74702f8aa468c98b1e10cf0691e7d17",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_x_cnn",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "cc317ab71b643eb7c6130a6f73640cdd8fc8d3a66262ba77731b27b60f76ef18",
    "target": "linux-64"
   },
   {
@@ -6655,7 +6655,7 @@
    "identity_digest": "429c1aea3d8e6fb00e4b30b86cba0be22974f2d0ea93368048cfb37d5a08e309",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_x_ann",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "cef3229c6c965e37fb3614c10010bdc322012cab40cd81e6fe7f5ccadd396919",
    "target": "linux-64"
   },
   {
@@ -6707,7 +6707,7 @@
    "identity_digest": "716bd6d2ad4d21b5759bcd87d35b77f44235bfad28d487ebe1faf9db40c67415",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_x_metrics",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "9c3c4cb3d911bfe1ca0f8566431cdfbf1d79eef688d14cffae54546a492a714e",
    "target": "linux-64"
   },
   {
@@ -6759,7 +6759,7 @@
    "identity_digest": "0802291b140ad0e61bc929379f1438699b3bb641b2d9e42df479e2596521deec",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_byte_lm",
    "reason": "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (changed: builders, closure)",
-   "shipped_sha256": null,
+   "shipped_sha256": "3db9c39ed8d25dbd7db69480f6fe7e418100ca35f6b646ae8e9172bb1b07c6f7",
    "target": "linux-64"
   },
   {

@@ -24,10 +24,13 @@
   }
  },
  "published": [
-  "macos"
+  "macos",
+  "linux",
+  "nvidia",
+  "amd"
  ],
  "schema": "mojolearn.release-provenance.v1",
  "source_commit": "b6c49ce419c47b224b5d257440dadc6210d33151",
- "tooling_commit": "284052f0f51409d1d928ffd49b269f9f49d53af9",
+ "tooling_commit": "2f0295555bb692ee90851f7365f14007f0588076",
  "version": "0.8.44"
 }

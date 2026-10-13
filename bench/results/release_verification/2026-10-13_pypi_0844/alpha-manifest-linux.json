@@ -1,0 +1,13 @@
+{
+  "files": {
+    "mojolearn-0.8.44-py3-none-manylinux_2_35_x86_64.whl": "e892e8d165a608c9fdf1b4ab989df6ad90cdc2fd320bb67d78bfa01f79e441c8"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "b6c49ce419c47b224b5d257440dadc6210d33151"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.44"
+}
