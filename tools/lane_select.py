@@ -295,7 +295,15 @@ def reset_caches():
 
 @_by_path
 def _read(path):
-    with open(os.path.join(ROOT, path), encoding="utf-8", errors="replace") as fh:
+    full = os.path.join(ROOT, path)
+    if not os.path.exists(full):
+        # A sparse worktree (tools/lean_worktree.sh) tracks files it does not
+        # check out; `git ls-files` still lists them. Read the index blob, the
+        # same content a full checkout would hold.
+        text = _git_show("", path)
+        if text is not None:
+            return text
+    with open(full, encoding="utf-8", errors="replace") as fh:
         return fh.read()
 
 
