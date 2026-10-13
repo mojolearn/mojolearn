@@ -641,24 +641,59 @@ _add("nmf", xlane="decomp", ours="NMF", task="transform", block="nonneg", qualit
 _add("fastica", xlane="decomp", ours="FastICA", task="transform", block="tsvd", quality="ica",
      sk="sklearn.decomposition:FastICA",
      params=dict(n_components=8, whiten="unit-variance", max_iter=200, tol=1e-4, random_state=SEED))
+# FAIRNESS FIX (2026-10-13 audit): the lane declared svd_method='randomized', which ours accepts and
+# ignores (python/mojolearn/_expansion_decomp.py FactorAnalysis: "both svd_method values use an
+# exact SVD at every iteration"), while scikit-learn ran its randomized SVD of the full scaled X at
+# every EM iteration: a different, approximate algorithm on one side. Both arms now take
+# svd_method='lapack', the exact SVD ours really computes. Results raced before this change were
+# wrong for this lane; apply extra scrutiny.
 _add("factor-analysis", xlane="decomp", ours="FactorAnalysis", task="transform", block="cls",
      quality="fa", sk="sklearn.decomposition:FactorAnalysis",
-     params=dict(n_components=8, max_iter=1000, tol=1e-2, svd_method="randomized",
-                 random_state=SEED))
+     params=dict(n_components=8, max_iter=1000, tol=1e-2, svd_method="lapack",
+                 random_state=SEED),
+     mism=["exact SVD on both arms: ours reduces the centred X by one QR and takes the SVD of the "
+           "d x d scaled R per EM iteration (the same singular values and vectors as the scaled X's); "
+           "scikit-learn svd_method='lapack' takes scipy.linalg.svd of the full scaled X per iteration",
+           "precision: scikit-learn FactorAnalysis converts X to float64 (validate_data dtype=float64, "
+           "its only path); ours float32",
+           "the same stopping rule on both: the total log-likelihood gain below tol=1e-2, max_iter=1000"])
+# FAIRNESS FIX (2026-10-13 audit): the CPU opponent of lu-solve, lstsq, cholesky, qr, eigh and svd
+# was numpy.linalg, which computes every float32 input in float64 (numpy/linalg/_linalg.py
+# _commonType: "always double", the 'dd->d' gufunc signatures) and rounds the result back: double the
+# arithmetic and a different precision from ours' float32. scipy.linalg, the same LAPACK through
+# its public API, keeps float32 (the s-routines): the CPU arm is now scipy-cpu with numpy's drivers
+# (getrf/getrs, gelsd, potrf, geqrf + orgqr, syevd, gesdd) and check_finite=False, as numpy checks
+# nothing. Results raced before this change were wrong for these lanes; apply extra scrutiny.
 _add("lu-solve", xlane="decomp", ours=("solve", "linalg.solve"), kind="linalg", task="lu",
      block="dense", datasets=("synthetic",),
-     other={"numpy-cpu": "numpy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     other={"scipy-cpu": "scipy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
      notes=["A = N(0,1) 8192 x 8192 + 2 sqrt(8192) I (seed 7), B 8192 x 64; LU with partial pivoting then "
-            "the two triangular solves (numpy.linalg.solve = LAPACK getrf/getrs)",
+            "the two triangular solves (scipy.linalg.solve = LAPACK sgetrf/sgetrs in float32)",
             "dense linear algebra has no dataset kind: one seeded matrix, not taxi/Istella"])
 _add("lstsq", xlane="decomp", ours=("lstsq", "linalg.lstsq"), kind="linalg", task="lstsq", block="reg",
-     other={"numpy-cpu": "numpy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
-     notes=["min ||X b - y|| on the reg block's fit rows (1,000,000 x d)"])
+     other={"scipy-cpu": "scipy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     notes=["min ||X b - y|| on the reg block's fit rows (1,000,000 x d)"],
+     # FAIRNESS FIX (2026-10-13 audit): torch's GPU lstsq (driver 'gels' only on CUDA and ROCm: QR
+     # without pivoting, full rank assumed) returned NaN on the rank-deficient Istella block and
+     # still counted as the fastest opponent. A non-finite torch solution now fails its round (an
+     # invalid result is not a result); the difference is declared. Results raced before this
+     # change were wrong for this lane; apply extra scrutiny.
+     mism=["torch-gpu: torch.linalg.lstsq on CUDA/ROCm has only driver='gels' (QR without "
+           "pivoting, full rank assumed); ours, scipy (gelsd) and CuPy are rank-revealing; a "
+           "non-finite torch solution (rank-deficient X, e.g. Istella) refuses the arm"])
 _add("randomized-svd", xlane="decomp", ours=("randomized_svd", "linalg.randomized_svd"),
      kind="linalg", task="rsvd", block="tsvd",
      other={"sklearn-cpu": "sklearn", "torch-gpu": "torch"},
-     params=dict(n_components=8, n_oversamples=10, n_iter=4, random_state=SEED),
-     mism=["torch-gpu is torch.svd_lowrank(q=18, niter=4), its randomized range finder"])
+     # FAIRNESS FIX (2026-10-13 audit): power_iteration_normalizer was left at scikit-learn's
+     # default 'auto' (LU for n_iter > 2), while ours re-orthonormalizes by QR every half
+     # iteration whatever it is given and torch.svd_lowrank does the same: a different
+     # normalization on one arm. It is pinned to 'QR' on ours and scikit-learn (torch's own
+     # rule). Results raced before this change were wrong for this lane; apply extra scrutiny.
+     params=dict(n_components=8, n_oversamples=10, n_iter=4, random_state=SEED,
+                 power_iteration_normalizer="QR"),
+     mism=["torch-gpu is torch.svd_lowrank(q = n_components + n_oversamples, clipped to "
+           "min(X.shape), niter=4), its randomized range finder with a QR step every half "
+           "iteration, as ours and scikit-learn's power_iteration_normalizer='QR'"])
 # the rest of mojolearn's dense linear algebra (README family "linear algebra"),
 # raced from 2026-09-29: numpy/scipy on the CPU, torch on this box's GPU, CuPy on NVIDIA
 _add("lu-factor", xlane="decomp", ours=("lu_factor", "linalg.lu_factor"), kind="linalg",
@@ -669,33 +704,47 @@ _add("lu-factor", xlane="decomp", ours=("lu_factor", "linalg.lu_factor"), kind="
             "lu_factor + lu_solve; cupyx.scipy.linalg's)"])
 _add("cholesky", xlane="decomp", ours=("Cholesky", "linalg.Cholesky"), kind="linalg",
      task="chol", block="sym", datasets=("synthetic",), params=dict(jitter=0.0),
-     other={"numpy-cpu": "numpy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     other={"scipy-cpu": "scipy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
      notes=["A = (M + M^T) / 2 + 2 sqrt(n) I, M N(0,1) 8192 x 8192 seed 7 (symmetric positive "
-            "definite); ours Cholesky(jitter=0.0).fit(A) (no ridge, as numpy.linalg.cholesky)"])
+            "definite); ours Cholesky(jitter=0.0).fit(A) (no ridge, as scipy.linalg.cholesky)"])
 _add("qr", xlane="decomp", ours=("linalg.qr",), kind="linalg", task="qr", block="reg",
      params=dict(mode="reduced"),
-     other={"numpy-cpu": "numpy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     other={"scipy-cpu": "scipy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
      notes=["qr(X, mode='reduced') of the reg block's fit rows (1,000,000 x d) on every arm "
             "(Householder, Q and R formed)"])
 _add("eigh", xlane="decomp", ours=("linalg.eigh",), kind="linalg", task="eigh", block="sym",
      datasets=("synthetic",), params=dict(UPLO="L"),
-     other={"numpy-cpu": "numpy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     other={"scipy-cpu": "scipy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
      notes=["eigh(A, UPLO='L') of the cholesky lane's symmetric matrix at n = 4096: every "
             "eigenvalue and eigenvector"])
 _add("svd", xlane="decomp", ours=("linalg.svd",), kind="linalg", task="svd", block="reg",
      params=dict(full_matrices=False),
-     other={"numpy-cpu": "numpy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     other={"scipy-cpu": "scipy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
      notes=["svd(X, full_matrices=False) of the reg block's fit rows (1,000,000 x d): U, S, "
             "Vh on every arm"])
 _add("cca", xlane="decomp", ours="CCA", task="transform", block="cls", quality="cca", xy_split=True,
-     sk="sklearn.cross_decomposition:CCA", params=dict(n_components=2, max_iter=500, tol=1e-6),
-     notes=["X = the first half of the columns, Y = the second half"])
+     sk="sklearn.cross_decomposition:CCA",
+     params=dict(n_components=2, max_iter=500, tol=1e-6, scale=True),
+     notes=["X = the first half of the columns, Y = the second half"],
+     # FAIRNESS FIX (2026-10-13 audit): the precision difference was undeclared, and scale was
+     # each library's default (True on both, now explicit). Results raced before this change
+     # were wrong for this lane; apply extra scrutiny.
+     mism=["precision: scikit-learn's _PLS family converts X and Y to float64 (validate_data "
+           "dtype=np.float64, its only path); ours float32"])
+# FAIRNESS FIX (2026-10-13 audit): the precision difference was undeclared, and scale (and tol on
+# pls) were each library's default (the same values, now explicit). Results raced before this
+# change were wrong for these lanes; apply extra scrutiny.
 _add("pls-canonical", xlane="decomp", ours="PLSCanonical", task="transform", block="cls",
      quality="cca", xy_split=True, sk="sklearn.cross_decomposition:PLSCanonical",
-     params=dict(n_components=2, max_iter=500, tol=1e-6),
-     notes=["X = the first half of the columns, Y = the second half"])
+     params=dict(n_components=2, max_iter=500, tol=1e-6, scale=True),
+     notes=["X = the first half of the columns, Y = the second half"],
+     mism=["precision: scikit-learn's _PLS family converts X and Y to float64 (validate_data "
+           "dtype=np.float64, its only path); ours float32"])
 _add("pls", xlane="decomp", ours="PLSRegression", task="reg", block="reg",
-     sk="sklearn.cross_decomposition:PLSRegression", params=dict(n_components=4, max_iter=500))
+     sk="sklearn.cross_decomposition:PLSRegression",
+     params=dict(n_components=4, max_iter=500, tol=1e-6, scale=True),
+     mism=["precision: scikit-learn's _PLS family converts X and Y to float64 (validate_data "
+           "dtype=np.float64, its only path); ours float32"])
 _add("sparse-pca", xlane="decomp", ours="SparsePCA", task="transform", block="cls",
      sub={"X": SUB["small"], "Xq": SUB["small"]}, quality="recon",
      sk="sklearn.decomposition:SparsePCA",
@@ -842,7 +891,13 @@ for _slug, _cls, _kw, _blk, _cu in (
              "'averaged_inverted_cdf')"] if _slug == "kbins" else [])
          + (["cuML 26.08 MinMaxScaler has fixed unclipped transform behavior, equivalent to "
              "clip=False; the unsupported constructor keyword is omitted"]
-            if _slug == "minmax-scaler" else []),
+            if _slug == "minmax-scaler" else [])
+         # FAIRNESS FIX (2026-10-13 audit): VarianceThreshold's precision difference was
+         # undeclared. Results raced before this change were wrong for this lane; apply extra
+         # scrutiny.
+         + (["precision: scikit-learn VarianceThreshold.fit converts X to float64 "
+             "(validate_data dtype=np.float64, its only path); ours float32"]
+            if _slug == "variance-threshold" else []),
          # FAIRNESS FIX (2026-10-13 audit): the lane raced ours' and scikit-learn's lambda searches
          # as one algorithm; they are not, and no setting of either matches the other, so the
          # difference is declared (no harness fix). Results raced before this change were wrong
@@ -1685,6 +1740,26 @@ def _merge_shared():
 
 _merge_shared()
 
+# FAIRNESS FIX (2026-10-13 audit): the CPU time-series opponents mapped their per-series fits
+# through a joblib process pool only (see _ts_map); each now has a `-serial` twin, an in-process
+# loop, so the board races the library's faster path. Prophet (seconds per series) and AutoARIMA
+# (the search, about a second per series) keep the pool only; VAR is one joint fit. Results raced
+# before this change were wrong for these lanes; apply extra scrutiny.
+for _slug, _s in LANES.items():
+    if _s.get("kind") != "ts" or _slug in ("prophet", "autoarima") or _s.get("task") == "var":
+        continue
+    for _arm, _lib in list(_s["other"].items()):
+        if _lib in ("statsforecast", "statsmodels", "arch") and not _arm.endswith("-serial"):
+            _s["other"][_arm + "-serial"] = _lib
+# FAIRNESS FIX (2026-10-13 audit): the precision difference of the CPU time-series libraries was
+# undeclared. They compute in float64 (their only path); ours float32. Declared on every lane that
+# races them. Results raced before this change were wrong for these lanes; apply extra scrutiny.
+for _slug, _s in LANES.items():
+    _libs = sorted({_l for _l in _s.get("other", {}).values()
+                    if _l in ("statsforecast", "statsmodels", "arch")})
+    if _libs and not any(str(_m).startswith("precision:") for _m in _s["mism"]):
+        _s["mism"].append("precision: %s compute%s in float64 on the CPU (the only path); ours "
+                          "float32" % (" and ".join(_libs), "" if len(_libs) > 1 else "s"))
 LANE_ORDER = tuple(LANES)
 
 #: Algorithms of the expansion that are NOT a race, with the reason (the board
@@ -3859,6 +3934,20 @@ def _joblib_map(fn, rows):
     return Parallel(n_jobs=-1, backend="loky")(delayed(fn)(r) for r in rows)
 
 
+def _ts_map(arm):
+    """How a CPU time-series arm maps its per-series fit over the batch.
+
+    FAIRNESS FIX (2026-10-13 audit): every CPU time-series opponent (statsforecast, statsmodels,
+    arch) was timed through a joblib loky process pool, one task per series, so on cheap models
+    (Croston: 64 sub-millisecond forecasts) the pool's dispatch, not the library, filled its
+    clock (statsforecast CrostonClassic 54-92 ms against ours 2-5 ms). Each such arm now has a
+    `-serial` twin that loops over the series in its own process; the board keeps the faster.
+    Results raced before this change were wrong for these lanes; apply extra scrutiny."""
+    if arm.endswith("-serial"):
+        return lambda fn, rows: [fn(r) for r in rows]
+    return _joblib_map
+
+
 _STL_NAMES = ("period", "seasonal", "trend", "low_pass", "seasonal_deg", "trend_deg",
               "low_pass_deg", "robust", "seasonal_jump", "trend_jump", "low_pass_jump")
 _PROPHET_NAMES = ("growth", "n_changepoints", "changepoint_range", "yearly_seasonality",
@@ -3907,7 +3996,14 @@ def _ts_one(lib, task, params, y, h):
                                      initialization_method="estimated").fit()
             return np.asarray(m.forecast(h))
         from statsmodels.tsa.forecasting.theta import ThetaModel
-        m = ThetaModel(y, period=params.get("season_length", 24)).fit()
+        # FAIRNESS FIX (2026-10-13 audit): the deseasonalization settings were statsmodels'
+        # defaults, unnamed. They are passed explicitly (the same values, so the same work):
+        # deseasonalize after the seasonality test, method 'auto' (multiplicative for a positive
+        # series, else additive: the rule ours and statsforecast apply to
+        # decomposition_type='multiplicative'). Results raced before this change were wrong for
+        # this lane; apply extra scrutiny.
+        m = ThetaModel(y, period=params.get("season_length", 24), deseasonalize=True,
+                       use_test=True, method="auto").fit()
         return np.asarray(m.forecast(h))
     if lib == "arch":
         from arch import arch_model
@@ -4058,8 +4154,12 @@ def _build_ts(lane, arm, D):
         def one(y):
             return mk().forecast(y=y, h=h)["mean"]
 
+        info["config"] += ("; one process, the series in a loop" if arm.endswith("-serial")
+                           else "; one series per joblib loky task, n_jobs=-1")
+        _map = _ts_map(arm)   # FAIRNESS FIX (2026-10-13 audit): see _ts_map
+
         def fit():
-            S["fc"] = np.stack(_joblib_map(one, list(Y)))
+            S["fc"] = np.stack(_map(one, list(Y)))
         return Runner(info, fit, lambda: {"forecast": S["fc"]}, None, record=rec)
     if lib == "cuml":
         # FAIRNESS FIX (2026-10-13 audit): this arm cast Y to float64 (Y above) for cuML, whose
@@ -4114,9 +4214,12 @@ def _build_ts(lane, arm, D):
         return Runner(info, fit, lambda: {"forecast": S["fc"]}, None,
                       record=dict(p, __library__="statsmodels"))
     task = "decompose" if t == "decompose" else "forecast"
+    _map = _ts_map(arm)       # FAIRNESS FIX (2026-10-13 audit): see _ts_map
+    if arm.endswith("-serial"):
+        info["config"] = "%s per series in one process (a loop), params %s" % (lib, p)
 
     def fit():
-        S["res"] = np.stack(_joblib_map(lambda y: _ts_one(lib, task, p, y, h), list(Y)))
+        S["res"] = np.stack(_map(lambda y: _ts_one(lib, task, p, y, h), list(Y)))
 
     def outputs():
         r = S["res"]
@@ -5174,7 +5277,28 @@ def _build_linalg(lane, arm, D):
             info.update(_tool("classical_two_datasets")._host_info())
 
             def fit():
-                if t == "lu":
+                if lib == "scipy" and t in ("lu", "lstsq", "chol", "qr", "eigh", "svd"):
+                    # FAIRNESS FIX (2026-10-13 audit): numpy.linalg ran these in float64 on a
+                    # float32 input; scipy.linalg keeps float32 (the LAPACK s-routines) with
+                    # numpy's drivers, check_finite=False as numpy checks nothing. Results raced
+                    # before this change were wrong for these lanes; apply extra scrutiny.
+                    import scipy.linalg as sla
+                    if t == "lu":
+                        S["r"] = sla.solve(args[0], args[1], assume_a="gen", check_finite=False)
+                    elif t == "lstsq":
+                        S["r"] = sla.lstsq(args[0], args[1], lapack_driver="gelsd",
+                                           check_finite=False)[0]
+                    elif t == "chol":
+                        S["r"] = sla.cholesky(args[0], lower=True, check_finite=False)
+                    elif t == "qr":
+                        S["r"] = sla.qr(args[0], mode="economic", check_finite=False)
+                    elif t == "eigh":
+                        S["r"] = sla.eigh(args[0], lower=p["UPLO"] == "L", driver="evd",
+                                          check_finite=False)
+                    else:
+                        S["r"] = sla.svd(args[0], full_matrices=p["full_matrices"],
+                                         lapack_driver="gesdd", check_finite=False)
+                elif t == "lu":
                     S["r"] = np.linalg.solve(*args)
                 elif t == "lufac":
                     import scipy.linalg as sla
@@ -5253,17 +5377,29 @@ def _build_linalg(lane, arm, D):
         if t == "rsvd" and lib == "sklearn":
             rec.update(p)
         elif t == "rsvd":                               # torch.svd_lowrank(q, niter), seeded globally
+            # FAIRNESS FIX (2026-10-13 audit): torch's range finder normalizes by QR, the value now
+            # pinned on ours and scikit-learn. Results raced before this change were wrong for this
+            # lane; apply extra scrutiny.
             rec.update(n_components=p["n_components"], n_oversamples=p["n_oversamples"],
-                       n_iter=p["n_iter"], random_state=p["random_state"])
+                       n_iter=p["n_iter"], random_state=p["random_state"],
+                       power_iteration_normalizer="QR")
         elif t in ("qr", "eigh", "svd"):
             rec.update(p)
         elif t == "chol":
-            rec.update(jitter=0.0)                     # numpy/torch/CuPy add no ridge
+            rec.update(jitter=0.0)                     # scipy/torch/CuPy add no ridge
 
     def outputs():
         r = S["r"]
         if t == "lstsq" and isinstance(r, tuple):     # numpy's (x, residuals, rank, s)
             r = r[0]
+        if t == "lstsq" and arm not in OURS_ARMS and s["other"].get(arm) == "torch":
+            # FAIRNESS FIX (2026-10-13 audit): torch's GPU lstsq is driver 'gels' (full rank
+            # assumed); on a rank-deficient X it returned NaN and still counted as an opponent.
+            # Results raced before this change were wrong for this lane; apply extra scrutiny.
+            if not np.isfinite(_arr(r, np.float64)).all():
+                raise RuntimeError("REFUSED: torch.linalg.lstsq (driver 'gels' on CUDA/ROCm: QR "
+                                   "without pivoting, full rank assumed) returned a non-finite "
+                                   "solution on this rank-deficient X; not a result")
         if t == "rsvd":
             vt = _arr(r[2], np.float64)          # (k, d), scikit-learn's Vt
             return {"components": vt[:p["n_components"]]}

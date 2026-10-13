@@ -293,6 +293,17 @@ REFUSED = {
     ("linearsvr", "sklearn-cpu"): "different algorithm and model: liblinear dual coordinate "
                                   "descent with a penalized intercept; ours and cuML L-BFGS on "
                                   "the primal with an unpenalized intercept",
+    # FAIRNESS FIX (2026-10-13 audit): tsvd raced ours' algorithm='covariance_eigh' (one Gram
+    # matrix X^T X, then its eigendecomposition) against scikit-learn's 'arpack' (Lanczos
+    # iterations of matrix-vector products over X): a declared but different algorithm.
+    # scikit-learn's TruncatedSVD has only 'arpack' and 'randomized', and no CPU library has a
+    # Gram-eigh TSVD, so on Apple and AMD tsvd has no opponent; cuML (algorithm='full', the
+    # eigendecomposition of X^T X, ours' algorithm) stays on NVIDIA. A like-for-like CPU race
+    # would be ours algorithm='randomized' against scikit-learn 'randomized' (a separate lane).
+    # Results raced before this change were wrong for this lane; apply extra scrutiny.
+    ("tsvd", "sklearn-cpu"): "different algorithm: ours 'covariance_eigh' (the eigendecomposition "
+                             "of X^T X); scikit-learn TruncatedSVD has only 'arpack' (Lanczos on "
+                             "X) and 'randomized', and no CPU library has ours' algorithm",
 }
 
 #: Opponent arms per vendor and lane. Apple and AMD: the CPU libraries on every

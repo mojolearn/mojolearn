@@ -446,8 +446,11 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # FAIRNESS FIX (2026-10-13 audit): 342 since the classical2 linearsvc / linearsvr races on
     # Apple lost their scikit-learn arm (liblinear with a penalized intercept is a different
     # algorithm and model from ours' L-BFGS primal; bench_board_more.REFUSED): 2 lanes x 2 datasets
-    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 342
-    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 342 + sum(len(r["arms"]) for r in algos)) in text
+    # FAIRNESS FIX (2026-10-13 audit, decomposition group): 340 since the classical2 tsvd race on
+    # Apple lost its scikit-learn arm (ARPACK, a different algorithm from ours' covariance_eigh;
+    # bench_board_more.REFUSED): 1 lane x 2 datasets
+    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 340
+    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 340 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -793,9 +796,12 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # the classical2 linearsvc / linearsvr scikit-learn arms (liblinear, a different algorithm and
 # model) leave Apple and AMD (-4 each: Apple 346 -> 342 and classical2 134 -> 130, AMD 232 -> 228
 # and classical2 90 -> 86).
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 342, 130, 82),
+# FAIRNESS FIX (2026-10-13 audit, decomposition group): the classical2 tsvd scikit-learn arm
+# (ARPACK, a different algorithm from ours' covariance_eigh) leaves Apple and AMD (-2 each:
+# Apple 342 -> 340 and classical2 130 -> 128, AMD 228 -> 226 and classical2 86 -> 84).
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 340, 128, 82),
                                                       ("nvidia", 267, 88, 88),
-                                                      ("amd", 228, 86, 64)])
+                                                      ("amd", 226, 84, 64)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
