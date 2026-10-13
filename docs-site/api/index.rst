@@ -1,7 +1,7 @@
 API reference
 =============
 
-Every public name in ``mojolearn`` 0.8.41, by family. Estimators follow the scikit-learn conventions (``fit``, ``predict``, ``transform``) unless their page says otherwise.
+Every public name in ``mojolearn`` 0.8.43, by family. Estimators follow the scikit-learn conventions (``fit``, ``predict``, ``transform``) unless their page says otherwise.
 
 .. toctree::
    :maxdepth: 1
