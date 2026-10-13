@@ -1143,6 +1143,18 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-fp32",
+          "torch-eager-fp32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -1943,6 +1955,18 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-fp32",
+          "torch-eager-fp32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -4230,6 +4254,26 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -5883,6 +5927,26 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -10731,6 +10795,26 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -13485,6 +13569,26 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -20480,6 +20584,26 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -22100,6 +22224,26 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -23727,6 +23871,26 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -25539,6 +25703,26 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -27500,6 +27684,26 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -38364,6 +38568,26 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -41719,6 +41943,26 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -43693,6 +43937,26 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -47896,6 +48160,26 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -50553,7 +50837,15 @@
           "torch-eager-tf32"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-compile-tf32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-tf32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -62127,7 +62419,15 @@
           "torch-eager-tf32"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-compile-tf32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-tf32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -64609,6 +64909,26 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -66583,6 +66903,26 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-compile-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-bf16": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-tf32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -73930,6 +74270,18 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-fp32",
+          "torch-eager-fp32"
+        ],
+        "date": "2026-10-13",
+        "reason": "torch-compile-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+        "why": {
+          "torch-compile-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)",
+          "torch-eager-fp32": "measured on cc560ebdaf91: L40S host about 2x slower than host 24a11adce16e on identical torch work (lstm-clf eager-fp32 1246 vs 516 ms; fairness audit 2026-10-13)"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -85033,7 +85385,10 @@
           "torch-gpu"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -85385,7 +85740,10 @@
           "torch-gpu"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -85732,7 +86090,10 @@
           "torch-gpu"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -86078,7 +86439,10 @@
           "torch-gpu"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -86519,7 +86883,10 @@
           "torch-gpu-eigh"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-gpu-eigh": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -86961,7 +87328,10 @@
           "torch-gpu-eigh"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-gpu-eigh": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -86979,7 +87349,7 @@
           "pairing": "59104105ce9fb83a",
           "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "rule": "race_fairness.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
       },
@@ -87301,7 +87671,10 @@
           "torch-gpu"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -87318,7 +87691,7 @@
           "pairing": "f7ba2d7790b13a60",
           "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "rule": "race_fairness.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
       },
@@ -87640,7 +88013,10 @@
           "torch-gpu"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -92885,7 +93261,15 @@
           "torch-eager-tf32"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-compile-tf32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-tf32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -93768,7 +94152,15 @@
           "torch-eager-tf32"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-compile-tf32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-tf32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -94433,7 +94825,12 @@
           "torch-eager-tf32"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-tf32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -95416,7 +95813,15 @@
           "torch-eager-tf32"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-compile-tf32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-tf32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -96391,7 +96796,15 @@
           "torch-eager-tf32"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-compile-tf32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-tf32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -98076,7 +98489,15 @@
           "torch-eager-tf32"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-compile-tf32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-tf32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -98978,7 +99399,15 @@
           "torch-eager-tf32"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-compile-tf32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-tf32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -99745,7 +100174,15 @@
           "torch-eager-tf32"
         ],
         "date": "2026-10-13",
-        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-compile-tf32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-tf32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,

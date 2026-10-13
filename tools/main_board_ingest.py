@@ -1083,115 +1083,27 @@ def collect(BB, args, resolve, skips):
 # ---------------------------------------------------------------------------
 # Fairness marks (Andrew, 2026-10-13 audit)
 # ---------------------------------------------------------------------------
-# FAIRNESS FIX (2026-10-13 audit): before this, the main boards paired our one scored run with opponent cells
-# copied from other boards and never compared the two arms' settings ("params_check: not checked"), and an audit
-# mark written on a race was lost at the next rebuild. Now every (mode, phase) row of a race carries an entry in
-# race["audit"]: a verdict from a human audit (FAIR, SUSPECT, UNFAIR, TIE; written by hand) or one from
-# fairness_rule() (MATCHED, UNCHECKED, TIE). Only an UNFAIR or TIE entry has rerace "x": it must be raced again
-# before it is shown, win or lose; an UNCHECKED row stays shown until an audit judges it. The paper (mlsys) and
-# mojolearn.org omit those rows, and race["rerace"] is "x" when any of its entries is. An entry survives a rebuild
-# only while the measurements it judged are unchanged (its "pairing" fingerprint); a changed row is judged again.
-TIE_BAND = (0.95, 1.05)
+# FAIRNESS FIX (2026-10-13 audit): the main boards paired our one scored run with opponent cells copied from other
+# boards and never compared the arms' settings, and audit marks were lost at every rebuild. The rule now lives in
+# one module, tools/race_fairness.py (AGENTS.md "Race fairness"), which every rebuild applies; these names are kept
+# for callers and tests.
+def _load_race_fairness():
+    spec = importlib.util.spec_from_file_location("race_fairness", os.path.join(HERE, "race_fairness.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
-def _phase_cells(race, phase):
-    return (race.get("cells") if phase == "fit" else race.get("infer_cells")) or []
-
-
-def _completed(cell):
-    ms = cell.get("median_ms")
-    return cell.get("status") == "ok" and isinstance(ms, (int, float)) and ms > 0
-
-
-def _our_arm(mode):
-    return "ours-fast" if mode == "fast" else "ours"
-
-
-def _n_iter(cell):
-    q = (cell or {}).get("quality") or {}
-    for k in ("n_iter", "n_iter_", "iterations", "n_steps"):
-        if isinstance(q.get(k), (int, float)) and not isinstance(q.get(k), bool):
-            return q[k]
-    return None
-
-
-def pairing(race, mode, phase):
-    """Fingerprint of what one (mode, phase) row measures: our arm's and every opponent's status and median."""
-    rows = sorted((str(c.get("arm")), str(c.get("status")),
-                   round(c["median_ms"], 6) if isinstance(c.get("median_ms"), (int, float)) else None)
-                  for c in _phase_cells(race, phase)
-                  if c.get("arm") == _our_arm(mode) or c.get("mode") == "opponent")
-    return hashlib.sha256(json.dumps(rows).encode()).hexdigest()[:16]
-
-
-def fairness_rule(race, mode, phase, today):
-    """The entry for a row no audit covers, or None when there is no row (no our cell, no completed opponent that
-    is not excluded). Such a row is recorded MATCHED (settings-parity check of both arms passed), TIE or UNCHECKED
-    and is shown; only an audit's UNFAIR verdict hides a row (AGENTS.md "Race fairness")."""
-    cells = _phase_cells(race, phase)
-    ours = next((c for c in cells if c.get("arm") == _our_arm(mode)), None)
-    excluded = set((race.get("opponents_excluded") or {}).get("arms") or [])
-    opps = [c for c in cells if c.get("mode") == "opponent" and _completed(c) and c.get("arm") not in excluded]
-    if ours is None or not opps:
-        return None
-    best = min([c for c in opps if c.get("device") == "gpu"] or opps, key=lambda c: c["median_ms"])
-    ratio = ours["median_ms"] / best["median_ms"] if _completed(ours) else None
-    entry = {"rule": "main_board_ingest.fairness_rule (2026-10-13)", "date": today, "opponent": best.get("arm"),
-             "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
-             "pairing": pairing(race, mode, phase)}
-    differ = [(c.get("arm"), _n_iter(c)) for c in opps
-              if _n_iter(ours) is not None and _n_iter(c) is not None and _n_iter(c) != _n_iter(ours)]
-    if differ:
-        # Either arm running more iterations than the other is a broken comparison (AGENTS.md "Race fairness").
-        entry.update(verdict="UNFAIR", rerace="x",
-                     reason="iterations differ: ours %s, %s" % (_n_iter(ours), ", ".join("%s %s" % d for d in differ)))
-    elif race.get("params_check") != "MATCHED":
-        # Shown, win or lose (Andrew, 2026-10-13: "show everything, not just where we win"): only a row confirmed
-        # broken (an audit's UNFAIR, or a tie) is hidden. UNCHECKED records that no audit or parity check covers it.
-        entry.update(verdict="UNCHECKED", rerace="",
-                     reason="no MATCHED settings-parity check of both arms and no audit yet; shown until audited")
-    elif ratio is not None and TIE_BAND[0] <= ratio <= TIE_BAND[1]:
-        # A tie is a result like any other and is shown (Andrew, 2026-10-13).
-        entry.update(verdict="TIE", rerace="", reason="a tie (ours/theirs within TIE_BAND); shown")
-    else:
-        entry.update(verdict="MATCHED", rerace="", reason="settings-parity check MATCHED")
-    return entry
+RF = _load_race_fairness()
+TIE_BAND = RF.TIE_BAND
+pairing = RF.pairing
+fairness_rule = RF.fairness_rule
+_n_iter = RF.n_iter
 
 
 def apply_fairness(board, prev, today):
-    """Give every row of every race of `board` its audit entry: the previous board's entry while its pairing is
-    unchanged, otherwise fairness_rule(). Sets race["audit"] and race["rerace"]; returns the number of races
-    marked "x"."""
-    prev_races = (prev or {}).get("races") or {}
-    modes = (board.get("config") or {}).get("modes") or ["identical"]
-    marked = 0
-    for section in ("races", "extra_races"):
-        for rid, rr in ((board.get(section) or {}).items()):
-            old = ((prev_races.get(rid) or ((prev or {}).get("extra_races") or {}).get(rid) or {})
-                   .get("audit") or {})
-            # Opponent arms an audit excluded (for example harness-written) stay excluded while the race is unchanged.
-            prev_rr = prev_races.get(rid) or ((prev or {}).get("extra_races") or {}).get(rid) or {}
-            if prev_rr.get("opponents_excluded") and not rr.get("opponents_excluded"):
-                rr["opponents_excluded"] = prev_rr["opponents_excluded"]
-            audit = {}
-            for mode in modes:
-                for phase in ("fit", "infer"):
-                    key = "%s/%s" % (mode, phase)
-                    entry = old.get(key)
-                    if not (entry and entry.get("pairing") == pairing(rr, mode, phase)):
-                        entry = fairness_rule(rr, mode, phase, today)
-                    if entry:
-                        audit[key] = entry
-            if audit:
-                rr["audit"] = audit
-            else:
-                rr.pop("audit", None)
-            if any(e.get("rerace") == "x" for e in audit.values()):
-                rr["rerace"] = "x"
-                marked += 1
-            else:
-                rr.pop("rerace", None)
-    return marked
+    """tools/race_fairness.py apply(): every row of every race gets its audit entry; returns the races marked x."""
+    return RF.apply(board, prev or {}, today)
 
 
 def build_parser():

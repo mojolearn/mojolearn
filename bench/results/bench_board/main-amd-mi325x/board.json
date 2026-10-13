@@ -37463,7 +37463,13 @@
           "torch-eager-fp32"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+        }
       }
     },
     "algos/multilabel-binarizer/istella/rows=full": {
@@ -46898,7 +46904,13 @@
           "torch-eager-fp32"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+        }
       }
     },
     "algos/rfe/istella/rows=full": {
@@ -64892,11 +64904,14 @@
           "torch-gpu"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "audit": {
         "identical/fit": {
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "rule": "race_fairness.fairness_rule (2026-10-13)",
           "date": "2026-10-13",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.053,
@@ -65253,11 +65268,14 @@
           "torch-gpu"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "audit": {
         "identical/fit": {
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "rule": "race_fairness.fairness_rule (2026-10-13)",
           "date": "2026-10-13",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.081,
@@ -65607,11 +65625,14 @@
           "torch-gpu"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "audit": {
         "identical/fit": {
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "rule": "race_fairness.fairness_rule (2026-10-13)",
           "date": "2026-10-13",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.056,
@@ -65960,11 +65981,14 @@
           "torch-gpu"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "audit": {
         "identical/fit": {
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "rule": "race_fairness.fairness_rule (2026-10-13)",
           "date": "2026-10-13",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.035,
@@ -66410,7 +66434,10 @@
           "torch-gpu-eigh"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-gpu-eigh": "code our harness wrote, not a library's own implementation"
+        }
       },
       "audit": {
         "identical/fit": {
@@ -66862,11 +66889,14 @@
           "torch-gpu-eigh"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-gpu-eigh": "code our harness wrote, not a library's own implementation"
+        }
       },
       "audit": {
         "identical/fit": {
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "rule": "race_fairness.fairness_rule (2026-10-13)",
           "date": "2026-10-13",
           "opponent": "torch-gpu",
           "ours_over_theirs": 0.14,
@@ -67210,11 +67240,14 @@
           "torch-gpu"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "audit": {
         "identical/fit": {
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "rule": "race_fairness.fairness_rule (2026-10-13)",
           "date": "2026-10-13",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.083,
@@ -67558,11 +67591,14 @@
           "torch-gpu"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-gpu": "code our harness wrote, not a library's own implementation"
+        }
       },
       "audit": {
         "identical/fit": {
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "rule": "race_fairness.fairness_rule (2026-10-13)",
           "date": "2026-10-13",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.092,
@@ -72417,7 +72453,13 @@
           "torch-eager-fp32"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+        }
       }
     },
     "neural/lm-train-step/bytes/shape=full": {
@@ -73052,7 +73094,13 @@
           "torch-eager-fp32"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+        }
       }
     },
     "neural/mamba1-forward/gaussian/shape=full": {
@@ -73387,7 +73435,11 @@
           "torch-eager-fp32"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+        }
       }
     },
     "neural/mamba2-forward/gaussian/shape=full": {
@@ -73926,7 +73978,13 @@
           "torch-eager-fp32"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+        }
       }
     },
     "neural/mlp-train-step/gaussian/shape=full": {
@@ -75143,7 +75201,13 @@
           "torch-eager-fp32"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+        }
       },
       "audit": {
         "identical/fit": {
@@ -75779,7 +75843,13 @@
           "torch-eager-fp32"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+        }
       }
     },
     "neural/transformer-forward/gaussian/shape=full": {
@@ -76326,7 +76396,13 @@
           "torch-eager-fp32"
         ],
         "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-        "date": "2026-10-13"
+        "date": "2026-10-13",
+        "why": {
+          "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+          "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+          "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+        }
       }
     },
     "trees/gbdt-categorical/taxi/rows=full": {

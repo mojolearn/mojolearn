@@ -44084,7 +44084,7 @@
      "pairing": "9f7f51bda94d30bd"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 4.627,
@@ -44105,7 +44105,7 @@
      "pairing": "2eb49b0b1e700380"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 3.668,
@@ -44864,7 +44864,7 @@
      "pairing": "d05ca7447a80241c"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.715,
@@ -44885,7 +44885,7 @@
      "pairing": "a6c247703a992db1"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 2.6,
@@ -45644,7 +45644,7 @@
      "pairing": "d92c4a6f7b85aeb6"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.774,
@@ -45665,7 +45665,7 @@
      "pairing": "db33a8a5b143131b"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.947,
@@ -59318,7 +59318,7 @@
      "pairing": "8197ccb1cbcf70b9"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.135,
@@ -59339,7 +59339,7 @@
      "pairing": "c91771242a2fb3d4"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.155,
@@ -60107,7 +60107,7 @@
      "pairing": "20f83c4dfb45de53"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.053,
@@ -60128,7 +60128,7 @@
      "pairing": "d7f778361b70e1eb"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.058,
@@ -60899,7 +60899,7 @@
      "pairing": "2d73b011e7520123"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.167,
@@ -60920,7 +60920,7 @@
      "pairing": "22ada957140fb7b0"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.23,
@@ -61712,7 +61712,7 @@
      "pairing": "0cd5ffdf3567c2b5"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.075,
@@ -61733,7 +61733,7 @@
      "pairing": "81efd0b84fbd23b1"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.076,
@@ -76366,7 +76366,7 @@
      "pairing": "7dc0a17400b5ab00"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.186,
@@ -76387,7 +76387,7 @@
      "pairing": "245dfc87bd7e4209"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.199,
@@ -77101,7 +77101,7 @@
      "pairing": "6f57444cd9eb48e4"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.858,
@@ -77122,7 +77122,7 @@
      "pairing": "3daaf0544e0f8879"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.878,
@@ -96909,7 +96909,7 @@
      "pairing": "c7eb68073ed1f691"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "lightgbm-cpu",
      "ours_over_theirs": 1.695,
@@ -96930,7 +96930,7 @@
      "pairing": "72e35072abfbae36"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "lightgbm-cpu",
      "ours_over_theirs": 1.645,
@@ -98139,7 +98139,7 @@
      "pairing": "04768ec1be19ec56"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "lightgbm-cpu",
      "ours_over_theirs": 2.888,
@@ -98160,7 +98160,7 @@
      "pairing": "5f8351df7f56571c"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "lightgbm-cpu",
      "ours_over_theirs": 3.192,
@@ -99352,7 +99352,7 @@
      "pairing": "40d4224950238c71"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "lightgbm-cpu",
      "ours_over_theirs": 3.97,
@@ -99373,7 +99373,7 @@
      "pairing": "02f7d1f2960dbb39"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "lightgbm-cpu",
      "ours_over_theirs": 3.835,
@@ -100578,7 +100578,7 @@
      "pairing": "9595fecdeae41f56"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "lightgbm-cpu",
      "ours_over_theirs": 5.847,
@@ -100599,7 +100599,7 @@
      "pairing": "4140e19d3e092f59"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "lightgbm-cpu",
      "ours_over_theirs": 4.579,
@@ -101456,7 +101456,7 @@
      "pairing": "e4879006c9685dd0"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.677,
@@ -101477,7 +101477,7 @@
      "pairing": "6b7d66e46ac94234"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.659,
@@ -102335,7 +102335,7 @@
      "pairing": "777387ce7c4f2b6c"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.322,
@@ -102356,7 +102356,7 @@
      "pairing": "869927c164451fc1"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.279,
@@ -103198,7 +103198,7 @@
      "pairing": "6aaa039c639c6715"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.359,
@@ -103219,7 +103219,7 @@
      "pairing": "4196a7e13033a0d4"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.397,
@@ -104082,7 +104082,7 @@
      "pairing": "efb6cd36114312d9"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.232,
@@ -104103,7 +104103,7 @@
      "pairing": "340c45d6bf32758a"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.226,
@@ -214681,7 +214681,13 @@
      "torch-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "algos/multilabel-binarizer/istella/rows=full": {
@@ -219182,7 +219188,7 @@
      "pairing": "af23067675889bf7"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 2.046,
@@ -219203,7 +219209,7 @@
      "pairing": "5f3c08dc86b47415"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 2.093,
@@ -219907,7 +219913,7 @@
      "pairing": "5e8fd1b9c933c9c6"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 8.26,
@@ -219928,7 +219934,7 @@
      "pairing": "e1cebba3b0e1fb8f"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 6.686,
@@ -220618,7 +220624,7 @@
      "pairing": "52af433e97fe064f"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 4.8,
@@ -220639,7 +220645,7 @@
      "pairing": "4e33487c880b91a6"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 3.721,
@@ -221329,7 +221335,7 @@
      "pairing": "7cdfc2631cb0bf3d"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 11.625,
@@ -221350,7 +221356,7 @@
      "pairing": "e7dc247919b6f5b9"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 10.554,
@@ -234704,7 +234710,7 @@
      "pairing": "c439467e91510827"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.638,
@@ -234725,7 +234731,7 @@
      "pairing": "66967320daa802d9"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.675,
@@ -235429,7 +235435,7 @@
      "pairing": "0a689627a9bce564"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 3.606,
@@ -235450,7 +235456,7 @@
      "pairing": "f2d3fd1668d2fa22"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 3.608,
@@ -265473,7 +265479,13 @@
      "torch-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "algos/rfe/istella/rows=full": {
@@ -298876,7 +298888,7 @@
      "pairing": "f52fb83daadebea8"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.365,
@@ -298897,7 +298909,7 @@
      "pairing": "0f9d1e47dfb5144f"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.348,
@@ -299695,7 +299707,7 @@
      "pairing": "c3742f400205b47d"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.239,
@@ -299716,7 +299728,7 @@
      "pairing": "9c43ece60aebd411"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.788,
@@ -300430,7 +300442,7 @@
      "pairing": "7f3e60cad4712696"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": null,
@@ -300451,7 +300463,7 @@
      "pairing": "5d27c02cefcaa6b8"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": null,
@@ -301165,7 +301177,7 @@
      "pairing": "d7a329708415aa31"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": null,
@@ -301186,7 +301198,7 @@
      "pairing": "8567277950103684"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": null,
@@ -315762,7 +315774,7 @@
      "pairing": "2a8bccd8f602bab9"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.316,
@@ -315783,7 +315795,7 @@
      "pairing": "64bc024f058754fa"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.32,
@@ -316582,7 +316594,7 @@
      "pairing": "294a041e7267374c"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.434,
@@ -316603,7 +316615,7 @@
      "pairing": "fc104d2bc790e8d5"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.448,
@@ -317324,7 +317336,7 @@
      "pairing": "50d89b2eff813b44"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": null,
@@ -317345,7 +317357,7 @@
      "pairing": "c41b65ae8a110fb9"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": null,
@@ -318066,7 +318078,7 @@
      "pairing": "b57fbf046d8771d5"
     },
     "fast/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": null,
@@ -318087,7 +318099,7 @@
      "pairing": "1945e5e6d838f314"
     },
     "identical/infer": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": null,
@@ -322033,7 +322045,10 @@
      "torch-gpu"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-gpu": "code our harness wrote, not a library's own implementation"
+    }
    },
    "audit": {
     "fast/fit": {
@@ -322059,7 +322074,7 @@
      "pairing": "f97cb7fd540ebfa8"
     },
     "identical/fit": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.65,
@@ -323004,7 +323019,10 @@
      "torch-gpu"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-gpu": "code our harness wrote, not a library's own implementation"
+    }
    },
    "audit": {
     "fast/fit": {
@@ -323030,7 +323048,7 @@
      "pairing": "0fe193f97b9e1c03"
     },
     "identical/fit": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.473,
@@ -323658,11 +323676,14 @@
      "torch-gpu"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-gpu": "code our harness wrote, not a library's own implementation"
+    }
    },
    "audit": {
     "fast/fit": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.631,
@@ -323672,7 +323693,7 @@
      "reason": "settings-parity check MATCHED"
     },
     "identical/fit": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.352,
@@ -324288,11 +324309,14 @@
      "torch-gpu"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-gpu": "code our harness wrote, not a library's own implementation"
+    }
    },
    "audit": {
     "fast/fit": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.604,
@@ -324302,7 +324326,7 @@
      "reason": "settings-parity check MATCHED"
     },
     "identical/fit": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 1.679,
@@ -327617,7 +327641,10 @@
      "torch-gpu"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-gpu": "code our harness wrote, not a library's own implementation"
+    }
    },
    "audit": {
     "fast/fit": {
@@ -328781,7 +328808,10 @@
      "torch-gpu"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-gpu": "code our harness wrote, not a library's own implementation"
+    }
    },
    "audit": {
     "fast/fit": {
@@ -361938,7 +361968,13 @@
      "torch-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/lm-host-train-step/bytes/shape=full": {
@@ -362824,7 +362860,13 @@
      "torch-cpu-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-cpu-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/lm-infer/bytes/shape=full": {
@@ -363409,7 +363451,13 @@
      "torch-cpu-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-cpu-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/lm-train-step/bytes/shape=full": {
@@ -364828,7 +364876,13 @@
      "torch-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/mamba1-forward/gaussian/shape=full": {
@@ -365640,7 +365694,11 @@
      "torch-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/mamba1-infer/gaussian/shape=full": {
@@ -366081,7 +366139,11 @@
      "torch-cpu-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-cpu-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/mamba2-forward/gaussian/shape=full": {
@@ -367456,7 +367518,13 @@
      "torch-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/mamba2-infer/gaussian/shape=full": {
@@ -368068,7 +368136,13 @@
      "torch-cpu-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-cpu-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/mamba3-forward/gaussian/shape=full": {
@@ -369397,7 +369471,13 @@
      "torch-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/mamba3-infer/gaussian/shape=full": {
@@ -370009,7 +370089,13 @@
      "torch-cpu-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-cpu-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/mlp-infer/gaussian/shape=full": {
@@ -373551,7 +373637,13 @@
      "torch-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/samba-infer/bytes/shape=full": {
@@ -374278,7 +374370,13 @@
      "torch-cpu-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-cpu-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/samba-train-step/bytes/shape=full": {
@@ -376153,7 +376251,13 @@
      "torch-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/transformer-forward/gaussian/shape=full": {
@@ -377628,7 +377732,13 @@
      "torch-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   },
   "neural/transformer-infer/gaussian/shape=full": {
@@ -378260,7 +378370,13 @@
      "torch-cpu-eager-fp32"
     ],
     "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "why": {
+     "torch-cpu-compile-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-compile-fp32": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-bf16": "code our harness wrote, not a library's own implementation",
+     "torch-cpu-eager-fp32": "code our harness wrote, not a library's own implementation"
+    }
    }
   }
  },
@@ -381848,7 +381964,7 @@
    },
    "audit": {
     "fast/fit": {
-     "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+     "rule": "race_fairness.fairness_rule (2026-10-13)",
      "date": "2026-10-13",
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.0,

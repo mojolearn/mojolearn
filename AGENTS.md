@@ -113,6 +113,11 @@ When only one opponent arm of a race is broken (for example harness-written), th
 (race["opponents_excluded"]) and the race is shown against its remaining opponents; the whole race is hidden
 only when no valid opponent is left.
 
+THE RULE IS CODE: tools/race_fairness.py (tests: tools/test_race_fairness.py) applies it to any board.json, and
+tools/main_board_ingest.py calls it on every rebuild; `python3 tools/race_fairness.py --check <board.json>...` shows
+what it would change and `--review` lists warning signs on rows still shown. Its registries (HARNESS_ARMS, SLOW_HOSTS)
+are where a new harness-written arm or slow box is recorded. The paper (mlsys) and mojolearn.org only read its marks.
+
 Every (mode, phase) row of a race in board.json carries an entry in race["audit"] (verdict, reason, evidence,
 opponent, ratio, date, pairing fingerprint); an entry with rerace "x" is broken, and race["rerace"] is "x" when
 any of its entries is. tools/main_board_ingest.py (apply_fairness) keeps an entry only while the measurements it
