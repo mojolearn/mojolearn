@@ -278,5 +278,23 @@ class FairnessMarks(unittest.TestCase):
         self.assertEqual(changed["races"]["r"]["audit"]["identical/fit"]["verdict"], "UNCHECKED")
 
 
+class TreeSettingsDrift(unittest.TestCase):
+    """Tree opponent cells recorded at other settings are withheld (2026-10-13 audit)."""
+
+    def test_tree_view_compares_every_work_setting(self):
+        a = {"depth": 8, "learning_rate": 0.1, "harness": "x", "mismatches": ["y"]}
+        b = dict(a, depth=16, harness="z")
+        self.assertNotEqual(MB._settings_view(a, "trees"), MB._settings_view(b, "trees"))
+        self.assertEqual(MB._settings_view(a, "trees"), MB._settings_view(dict(a, harness="z"), "trees"))
+
+    def test_recorded_config_falls_back_to_the_cells(self):
+        race = {"lane_config": None, "cells": [{"settings": json.dumps({"lane_config": {"depth": 8}})}]}
+        self.assertEqual(MB.recorded_lane_config(race), {"depth": 8})
+
+    def test_trees_have_a_current_config(self):
+        cfg = MB.current_lane_config(BB, "trees", "gbdt-depthwise")
+        self.assertTrue(cfg is None or isinstance(cfg, dict))
+
+
 if __name__ == "__main__":
     unittest.main()

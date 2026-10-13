@@ -688,9 +688,22 @@ def load_opponent_sources(BB, specs, column, skips):
     return out
 
 
-def _settings_view(cfg):
+#: Descriptive keys of a tree lane config (tools/speed_gbdt_arm.py lane_config) that do not change the work.
+TREE_TEXT_KEYS = ("harness", "mismatches", "objectives")
+
+
+def _settings_view(cfg, family=None):
+    if isinstance(cfg, str):
+        try:
+            cfg = json.loads(cfg)
+        except ValueError:
+            return None
     if not isinstance(cfg, dict):
         return None
+    if family == "trees":
+        # FAIRNESS FIX (2026-10-13 audit): tree races were never checked for settings drift (SETTINGS_KEYS names no
+        # tree knob). Every work-changing tree setting is now compared: the whole config minus descriptive text.
+        return json.dumps({k: v for k, v in cfg.items() if k not in TREE_TEXT_KEYS}, sort_keys=True, default=str)
     return json.dumps({k: cfg.get(k) for k in SETTINGS_KEYS if k in cfg}, sort_keys=True, default=str)
 
 
@@ -700,20 +713,42 @@ def current_lane_config(BB, family, lane):
             return BB.ALGOS.lane_config(lane)
         if family == "classical2":
             return BB.MORE.LANE_CONFIG.get(lane)
-    except (KeyError, AttributeError):
+        if family == "trees":
+            # FAIRNESS FIX (2026-10-13 audit): this returned None for trees, so a tree opponent cell measured at old
+            # settings (for example the 2026-10-06 depthwise, lossguide and categorical cells) kept being copied next
+            # to new runs of ours. Now the tree lane's config at HEAD, as tools/bench_board.py race_settings records it.
+            return BB._load_tool("speed_gbdt_arm").lane_config(lane, "shipped")
+    except Exception:          # noqa: BLE001  (a lane the tool does not know, or numpy absent)
         return None
+    return None
+
+
+def recorded_lane_config(race):
+    """The lane config an opponent race recorded: the race's own, else (tree opponent boards keep it only per cell)
+    the first cell's settings.lane_config."""
+    if race.get("lane_config") is not None:
+        return race.get("lane_config")
+    for c in race.get("cells") or []:
+        st = c.get("settings")
+        if isinstance(st, str):
+            try:
+                st = json.loads(st)
+            except ValueError:
+                st = None
+        if isinstance(st, dict) and st.get("lane_config") is not None:
+            return st["lane_config"]
     return None
 
 
 def copy_opponents(BB, sources, family, lane, race_id, archive=None, backfill=None):
     """-> (opponent cells, the first source race (for lane_config), withheld reason or None)."""
     cells, first, seen = [], None, set()
-    cur = _settings_view(current_lane_config(BB, family, lane))
+    cur = _settings_view(current_lane_config(BB, family, lane), family)
     for src in sources:
         rr = ((src["board"].get("races") or {}).get(race_id))
         if not rr:
             continue
-        if cur is not None and _settings_view(rr.get("lane_config")) not in (None, cur):
+        if cur is not None and _settings_view(recorded_lane_config(rr), family) not in (None, cur):
             return [], rr, ("opponents withheld: the lane settings at this tree's HEAD differ from the settings "
                             "%s recorded for its opponent race (an opponent job must score them again)" % src["label"])
         box = src["board"].get("box") or {}
