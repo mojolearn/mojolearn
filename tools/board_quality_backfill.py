@@ -15,7 +15,8 @@ a cell is filled only from the race JSON its race record names.
 --rerun names a separate QUALITY-ONLY rerun instead (same wheel and package versions as the board run, raced
 for its quality because the board run recorded none): --raw then holds `<lane>-<dataset>.json` files written by
 bench_board_algos.py race, and each filled cell keeps the board run's timing; quality_source says so. A cell that already has a numeric quality is
-never touched. Usable = a finite number under a metric name that is not bookkeeping (output_shape, finite,
+never touched. --failed-too also fills cells whose board status is not ok (e.g. a MODE-MISMATCH read-back or a
+refusal the rerun no longer hits); their status and timing stay as the board run recorded them. Usable = a finite number under a metric name that is not bookkeeping (output_shape, finite,
 steps, ...), as on the published measurements page.
 
 Usage:
@@ -52,6 +53,8 @@ def main():
     ap.add_argument("--source", required=True, help="where --raw came from, recorded in quality_source")
     ap.add_argument("--rerun", action="store_true",
                     help="--raw is a quality-only rerun (files <lane>-<dataset>.json), not the board run's own raw/")
+    ap.add_argument("--failed-too", action="store_true",
+                    help="also fill cells whose board status is not ok (status and timing are left as recorded)")
     ap.add_argument("--write", action="store_true")
     a = ap.parse_args()
 
@@ -74,7 +77,7 @@ def main():
         sources = {"fit": per_arm(raw.get("quality")), "infer": per_arm((raw.get("infer") or {}).get("quality"))}
         for phase, cells in (("fit", race.get("cells") or []), ("infer", race.get("infer_cells") or [])):
             for c in cells:
-                if c.get("status") != "ok" or usable(c.get("quality")):
+                if (c.get("status") != "ok" and not a.failed_too) or usable(c.get("quality")):
                     continue
                 found = usable(sources[phase].get(c.get("arm")))
                 if not found:
@@ -87,7 +90,9 @@ def main():
                     c["quality"] = dict(old or {}, **found)
                     c["quality_source"] = "%s quality of arm %s in %s (%s): %s" % (
                         "inference" if phase == "infer" else "fit", c.get("arm"), rel, a.source,
-                        "a quality-only rerun; this cell's timing is the board run's" if a.rerun
+                        ("a quality-only rerun; this cell's timing is the board run's"
+                         + ("" if c.get("status") == "ok" else " and its status (%s) is the board run's" % c.get("status")[:60]))
+                        if a.rerun
                         else "the run that built this cell")
                 filled.append((rid, phase, c.get("arm"), sorted(found)))
     for f in filled[:40]:

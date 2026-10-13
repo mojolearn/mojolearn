@@ -46774,7 +46774,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1795.5,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 3.3386681827062307e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -46823,7 +46825,8 @@
       118.0708330066409
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 136.6988749941811
+     "warmup_ms": 136.6988749941811,
+     "quality_source": "fit quality of arm ours in adam-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0 (vs torch eager fp32)): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -48029,7 +48032,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1795.5,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 3.3391640560049096e-08
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -48078,7 +48083,8 @@
       115.66437501460314
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 134.67337499605492
+     "warmup_ms": 134.67337499605492,
+     "quality_source": "fit quality of arm ours in adamw-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0 (vs torch eager fp32)): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -105355,7 +105361,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": null,
-     "quality": {},
+     "quality": {
+      "max_eigenvalue_error": 3.6918872203006057e-07,
+      "relative_residual": 6.672270099310256e-07
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 0,
@@ -105394,7 +105403,8 @@
      "status": "REFUSED(timeout: null)",
      "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": null
+     "warmup_ms": null,
+     "quality_source": "fit quality of arm ours in eigh-synthetic.json (quality-only rerun on this Mac with mojolearn 0.8.42 (the 0.8.34 wheel cannot score this cell: its own host reference does not load, or the 0.8.34 run failed)): a quality-only rerun; this cell's timing is the board run's and its status (REFUSED(timeout: null)) is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -107299,7 +107309,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1725.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -107348,7 +107360,8 @@
       85.8629580179695
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 359.7227910067886
+     "warmup_ms": 359.7227910067886,
+     "quality_source": "fit quality of arm ours in embedding-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -107396,7 +107409,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1726.3,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_cpu_over": null,
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -107445,7 +107460,8 @@
       97.1555830037687
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 423.5454580048099
+     "warmup_ms": 423.5454580048099,
+     "quality_source": "fit quality of arm ours-fast in embedding-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested fast, read back unknown)) is the board run's"
     },
     {
      "arm": "torch-compile-fp32",
@@ -159686,7 +159702,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": null,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 0,
@@ -159731,7 +159749,8 @@
      "status": "REFUSED(error: {\"error\": \"Exception('lamb_step: offsets must rise strictly from 0, below 2^24')\", \"event\": \"error\", \"stage\": \"round 0\"})",
      "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": null
+     "warmup_ms": null,
+     "quality_source": "fit quality of arm ours in lamb-synthetic.json (quality-only rerun on this Mac with mojolearn 0.8.42 (the 0.8.34 wheel cannot score this cell: its own host reference does not load, or the 0.8.34 run failed)): a quality-only rerun; this cell's timing is the board run's and its status (REFUSED(error: {\"error\": \"Exception('lamb_step: offsets must) is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -159780,7 +159799,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": null,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -159841,7 +159862,8 @@
       "baseline_ms": null,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in lamb-synthetic.json (quality-only rerun on this Mac with mojolearn 0.8.42 (the 0.8.34 wheel cannot score this cell: its own host reference does not load, or the 0.8.34 run failed)): a quality-only rerun; this cell's timing is the board run's"
     }
    ],
    "command": [
@@ -169106,7 +169128,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1863.1,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -169152,7 +169176,8 @@
       135.2143330150284
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 165.0587500189431
+     "warmup_ms": 165.0587500189431,
+     "quality_source": "fit quality of arm ours in lion-synthetic.json (quality-only rerun on this Mac with mojolearn 0.8.42 (the 0.8.34 wheel cannot score this cell: its own host reference does not load, or the 0.8.34 run failed)): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -169206,7 +169231,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1863.1,
-     "quality": {},
+     "quality": {
+      "relative_error_vs_own_host": 0.0
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -169266,7 +169293,8 @@
       "baseline_ms": 137.30770800611936,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in lion-synthetic.json (quality-only rerun on this Mac with mojolearn 0.8.42 (the 0.8.34 wheel cannot score this cell: its own host reference does not load, or the 0.8.34 run failed)): a quality-only rerun; this cell's timing is the board run's"
     }
    ],
    "command": [
@@ -276392,7 +276420,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 1796.6,
-     "quality": {},
+     "quality": {
+      "rel_fro_vs_torch_eager_fp32": 6.095239964123602e-10
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -276439,7 +276469,8 @@
       116.20737498742528
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 139.33254199218936
+     "warmup_ms": 139.33254199218936,
+     "quality_source": "fit quality of arm ours in sgd-synthetic.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13, sklearn 1.7.2, torch 2.13.0 (vs torch eager fp32)): a quality-only rerun; this cell's timing is the board run's and its status (MODE-MISMATCH(requested identical, read back unknown)) is the board run's"
     },
     {
      "arm": "ours-fast",
