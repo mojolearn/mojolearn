@@ -374,8 +374,8 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.922,
           "pairing": "5e3efe623083b0ab",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -762,7 +762,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -774,8 +773,8 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.576,
           "pairing": "2c137e778a4c9ca2",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -1144,7 +1143,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -1156,8 +1154,8 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 8.138,
           "pairing": "9c9df69eac877372",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -1548,7 +1546,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -1560,8 +1557,8 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.536,
           "pairing": "b4ac1d7a490f406a",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -1944,7 +1941,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -1956,8 +1952,8 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 7.403,
           "pairing": "3d3c6b949f685805",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -2348,7 +2344,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -2356,14 +2351,15 @@
     "algos/ard/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board quality",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.043,
+          "ours_over_theirs": 0.04,
           "pairing": "db74a43082a8b8ef",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "ours' IDENTICAL fit converges to a different model (R2 -0.125 vs scikit-learn 0.327; ours FAST 0.327), so the times are not for the same result (a library matter, not the harness); CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -2630,7 +2626,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -3424,8 +3419,8 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.728,
           "pairing": "e2077c79609e3c27",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -4229,7 +4224,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -4241,8 +4235,8 @@
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 1.261,
           "pairing": "1f28eefeccf75b05",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -5053,7 +5047,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -5065,8 +5058,8 @@
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 0.746,
           "pairing": "1dd6073dcd0239f7",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -5882,7 +5875,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -5894,8 +5886,8 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.77,
           "pairing": "884c16997f8bfeaf",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -6711,7 +6703,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -6719,14 +6710,15 @@
     "algos/bayesian-ridge/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board quality",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.075,
+          "ours_over_theirs": 0.07,
           "pairing": "454a8d4c57b1faeb",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "scikit-learn's float32 fit diverges on Istella (R2 -8e7 AMD, -890 Apple, -4e5 NVIDIA vs ours 0.318): the opponent's time is for a failed fit; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -6985,7 +6977,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -7386,7 +7377,7 @@
           "ours_over_theirs": 1.05,
           "pairing": "c575ba589348b358",
           "reason": "a tie (ours/theirs 1.05, inside 0.95-1.05): alpha, binarize, fit_prior match, accuracy equal; cuML's upload (58 ms) is outside its clock while ours' includes it; the stored span says input_home host, so the table lacks its dagger (relabel to device at ingest)",
-          "rerace": "x",
+          "rerace": "",
           "verdict": "TIE"
         }
       },
@@ -7758,7 +7749,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -7766,14 +7756,15 @@
     "algos/binarizer/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py transform lanes",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.303,
+          "ours_over_theirs": 0.3,
           "pairing": "a990058cabad7392",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "stateless fit: ours returns without reading X while the opponent validates it; the race measures call overhead, not the transform (the transform is the inference row)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -8133,7 +8124,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -8141,14 +8131,15 @@
     "algos/binarizer/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py transform lanes",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.041,
+          "ours_over_theirs": 0.04,
           "pairing": "d3eb70d2d36cc155",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "stateless fit: ours returns without reading X while the opponent validates it; the race measures call overhead, not the transform (the transform is the inference row)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -8508,7 +8499,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -9298,8 +9288,8 @@
           "opponent": "torch-gpu",
           "ours_over_theirs": 15.193,
           "pairing": "8afe0723f49f9ad5",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -9748,7 +9738,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -9762,9 +9751,9 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.44,
           "pairing": "487e894f571bf9a9",
-          "reason": "opponent on the slow host cc560ebdaf91 (the same torch harness takes 172.9 ms on the MI325X vs 458.6 ms here); weights/order mismatch",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (slower host and random initial weights only); audit note: opponent on the slow host cc560ebdaf91 (the same torch harness takes 172.9 ms on the MI325X vs 458.6 ms here); weights/order mismatch",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -10730,7 +10719,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -12651,8 +12639,8 @@
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 2.989,
           "pairing": "6fd0232847efc283",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -13484,7 +13472,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -13496,8 +13483,8 @@
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 4.829,
           "pairing": "40bf6e3f8346de72",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -14329,7 +14316,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -14341,8 +14327,8 @@
           "opponent": "statsforecast-cpu",
           "ours_over_theirs": 4.109,
           "pairing": "645fd4ef8a764512",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -14703,7 +14689,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -14715,8 +14700,8 @@
           "opponent": "statsforecast-cpu",
           "ours_over_theirs": 5.551,
           "pairing": "d9cc27a1da64d233",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -15077,7 +15062,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -15089,8 +15073,8 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 1.022,
           "pairing": "337db2753ecba300",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -15647,7 +15631,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -15659,8 +15642,8 @@
           "opponent": "statsforecast-cpu",
           "ours_over_theirs": 0.327,
           "pairing": "f3f021d2f2fd5922",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -15906,7 +15889,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -15918,8 +15900,8 @@
           "opponent": "statsforecast-cpu",
           "ours_over_theirs": 0.978,
           "pairing": "09d599239605a42c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -16165,7 +16147,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -16177,8 +16158,8 @@
           "opponent": "cupy-gpu",
           "ours_over_theirs": 5.013,
           "pairing": "1459ffaf8ddbbf7a",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -16632,7 +16613,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -16881,14 +16861,15 @@
     "algos/elliptic-envelope/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 1.158,
+          "ours_over_theirs": 1.16,
           "pairing": "d0ce0207094fe0ed",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; FastMCD on both with each library's own random subsets (allowed); CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -17138,7 +17119,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -17150,8 +17130,8 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 1.176,
           "pairing": "6021d7856a845cb5",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -17524,7 +17504,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -17532,14 +17511,15 @@
     "algos/enet-cv/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.004,
+          "ours_over_theirs": 0.0,
           "pairing": "2ff02a407a70a4a6",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -17820,7 +17800,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -17828,14 +17807,15 @@
     "algos/enet-cv/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.038,
+          "ours_over_theirs": 0.04,
           "pairing": "2d0b5f0bc27fccb3",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -18116,7 +18096,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -18880,9 +18859,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 1.73,
           "pairing": "5d9dd4b4e3b7ca32",
-          "reason": "cuML was given host input in the random-projection lanes only (fcef3cd62), so its host-side input check sat inside its clock (31.4 ms; 2.4 ms with device input on the same L40S, 09-30); ours is slower even so, and the true gap is larger; rerace with device input",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (both arms start from host input); audit note: cuML was given host input in the random-projection lanes only (fcef3cd62), so its host-side input check sat inside its clock (31.4 ms; 2.4 ms with device input on the same L40S, 09-30); ours is slower even so, and the true gap is larger; rerace with device input",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -19257,7 +19236,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -19271,9 +19249,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 1.5,
           "pairing": "a80633ac053501df",
-          "reason": "same host-input policy for cuML in this lane only (input handling inside cuML's clock: 2.28 ms vs 1.09 ms with device input on the 09-30 L40S board); ours slower even so; rerace with device input",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (both arms start from host input); audit note: same host-input policy for cuML in this lane only (input handling inside cuML's clock: 2.28 ms vs 1.09 ms with device input on the 09-30 L40S board); ours slower even so; rerace with device input",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -19648,7 +19626,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -21322,8 +21299,8 @@
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 0.215,
           "pairing": "066bf55f76fbc036",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -22099,7 +22076,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -22111,8 +22087,8 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.223,
           "pairing": "a5bcb8aa98e943f3",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -22888,7 +22864,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -24578,9 +24553,9 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.42,
           "pairing": "5f0f0dab8ee92ce9",
-          "reason": "opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -25538,7 +25513,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -26525,9 +26499,9 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.44,
           "pairing": "a5f417707c1f3b82",
-          "reason": "opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -27499,7 +27473,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -28500,9 +28473,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.57,
           "pairing": "5262b4b0e21d7bad",
-          "reason": "in the 09-30 same-session race ours was 2x slower (3,287 vs 1,618 ms); the published win pairs runs from different sessions and hosts; undeclared algorithm difference",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: in the 09-30 same-session race ours was 2x slower (3,287 vs 1,618 ms); the published win pairs runs from different sessions and hosts; undeclared algorithm difference",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -28870,7 +28843,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -31283,14 +31255,15 @@
     "algos/kbins/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.374,
+          "ours_over_theirs": 0.37,
           "pairing": "0e3f640a49ab6dfc",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -31673,7 +31646,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -31681,14 +31653,15 @@
     "algos/kbins/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.296,
+          "ours_over_theirs": 0.3,
           "pairing": "d4312d1106f90a47",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -32071,7 +32044,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -32083,8 +32055,8 @@
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.757,
           "pairing": "2dd6c98785fe513e",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -32366,7 +32338,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -32378,8 +32349,8 @@
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 1.028,
           "pairing": "5f0d3fa4f2e8178c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -32661,7 +32632,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -33443,14 +33413,15 @@
     "algos/knn-imputer/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "cells quality masked_rmse",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 2.23,
           "pairing": "47980d12c1453d97",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the fit only validates and stores the rows (milliseconds on both), and the imputed values differ from scikit-learn's (masked RMSE 323,953 vs 986,208 on Istella, 6.15 vs 5.26 on taxi), so the transform work is not shown to be the same",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -33711,7 +33682,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -33719,14 +33689,15 @@
     "algos/knn-imputer/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "cells quality masked_rmse",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.452,
+          "ours_over_theirs": 0.45,
           "pairing": "7c160cb1049da14e",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the fit only validates and stores the rows (milliseconds on both), and the imputed values differ from scikit-learn's (masked RMSE 323,953 vs 986,208 on Istella, 6.15 vs 5.26 on taxi), so the transform work is not shown to be the same",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -33987,7 +33958,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -33995,14 +33965,15 @@
     "algos/label-binarizer/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 3.017,
+          "ours_over_theirs": 3.02,
           "pairing": "bb051d7faf156223",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -34365,7 +34336,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -34373,14 +34343,15 @@
     "algos/label-binarizer/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 16.459,
+          "ours_over_theirs": 16.46,
           "pairing": "372a44f3b3dec7a2",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -34743,7 +34714,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -34751,14 +34721,15 @@
     "algos/label-encoder/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.891,
+          "ours_over_theirs": 0.89,
           "pairing": "635d22f29d7be3b0",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -35118,7 +35089,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -35126,14 +35096,15 @@
     "algos/label-encoder/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.175,
+          "ours_over_theirs": 0.18,
           "pairing": "0135a2691c4539e0",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -35493,7 +35464,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -36416,14 +36386,15 @@
     "algos/lasso-cv/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.004,
+          "ours_over_theirs": 0.0,
           "pairing": "0ce173cf9f623f6d",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -36701,7 +36672,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -36709,14 +36679,15 @@
     "algos/lasso-cv/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.058,
+          "ours_over_theirs": 0.06,
           "pairing": "3527014b77a60d6b",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -36994,7 +36965,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -37002,14 +36972,15 @@
     "algos/lasso-lars/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "_expansion_linear.py Lars/LassoLars; x_linear/lars.mojo:204; tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.1,
           "pairing": "128647a7799914f0",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
+          "reason": "ours silently ignores the declared eps (its kernel never reads it) and precompute was left at each library's 'auto'; eps=2**-52 is probably inert (it only floors pivots both sides then drop below 1e-7). Fixed: precompute=True pinned, eps behaviour declared; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
           "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -37277,14 +37248,15 @@
     "algos/lasso-lars/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "_expansion_linear.py Lars/LassoLars; x_linear/lars.mojo:204; tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.051,
+          "ours_over_theirs": 0.05,
           "pairing": "d854b76214f72ac4",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
+          "reason": "ours silently ignores the declared eps (its kernel never reads it) and precompute was left at each library's 'auto'; eps=2**-52 is probably inert (it only floors pivots both sides then drop below 1e-7). Fixed: precompute=True pinned, eps behaviour declared; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
           "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -37556,8 +37528,8 @@
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 0.591,
           "pairing": "cd81aaa5f16a5496",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -38360,7 +38332,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -38372,8 +38343,8 @@
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.027,
           "pairing": "4bc96b66faec9f58",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -38621,7 +38592,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -38633,8 +38603,8 @@
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.07,
           "pairing": "d4bca3caf3751ff6",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -38882,7 +38852,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -39040,9 +39009,9 @@
           "opponent": "cugraph-gpu",
           "ours_over_theirs": 0.82,
           "pairing": "e5c9c82f13047a5c",
-          "reason": "cuGraph ran with renumbering on, a per-call overhead its docs let you skip; a slowed opponent (cluster agent, 2026-10-13: renumber=False now)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (cuGraph's own default path); audit note: cuGraph ran with renumbering on, a per-call overhead its docs let you skip; a slowed opponent (cluster agent, 2026-10-13: renumber=False now)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -39398,7 +39367,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -39412,9 +39380,9 @@
           "opponent": "cugraph-gpu",
           "ours_over_theirs": 0.46,
           "pairing": "3e273de4d40a3283",
-          "reason": "cuGraph ran with renumbering on, a per-call overhead its docs let you skip; a slowed opponent (cluster agent, 2026-10-13: renumber=False now)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (cuGraph's own default path); audit note: cuGraph ran with renumbering on, a per-call overhead its docs let you skip; a slowed opponent (cluster agent, 2026-10-13: renumber=False now)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -39770,7 +39738,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -40757,9 +40724,9 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.44,
           "pairing": "0b6aba92769bf214",
-          "reason": "opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -41717,7 +41684,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -41732,7 +41698,7 @@
           "ours_over_theirs": 0.97,
           "pairing": "be38c61af4184623",
           "reason": "a tie (ours/theirs 0.97): not cited until rerun (Andrew, 2026-10-13); a tie (0.97) on one run each; since 86b2bc254/4bdc5487e ours draws its initial weights and row order in Mojo while the torch arm still uses numpy default_rng(7) weights and order; one run each, different sessions",
-          "rerace": "x",
+          "rerace": "",
           "verdict": "TIE"
         }
       },
@@ -42705,7 +42671,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -42719,9 +42684,9 @@
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 0.44,
           "pairing": "292311382bb34b6b",
-          "reason": "opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -43693,7 +43658,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -43705,8 +43669,8 @@
           "opponent": "torch-gpu",
           "ours_over_theirs": 1.417,
           "pairing": "f6b7c9f13f6a3174",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -44151,7 +44115,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -44163,8 +44126,8 @@
           "opponent": "torch-gpu",
           "ours_over_theirs": 1.059,
           "pairing": "15280d0a23e1611b",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -44609,7 +44572,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -44621,8 +44583,8 @@
           "opponent": "torch-gpu",
           "ours_over_theirs": 9.95,
           "pairing": "0bc90536aa6432c1",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -45063,7 +45025,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -45075,8 +45036,8 @@
           "opponent": "cupy-gpu",
           "ours_over_theirs": 9.822,
           "pairing": "652221a4a634bf57",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -45521,7 +45482,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -45529,14 +45489,15 @@
     "algos/maxabs-scaler/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 1.158,
+          "ours_over_theirs": 1.16,
           "pairing": "b793fab5cb17a67c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -45890,7 +45851,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -45898,14 +45858,15 @@
     "algos/maxabs-scaler/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.85,
           "pairing": "a3b4849a9b70ca6c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -46259,7 +46220,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -46271,8 +46231,8 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 1.75,
           "pairing": "b8d50c18882c2a9d",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -47076,7 +47036,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -47088,8 +47047,8 @@
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.677,
           "pairing": "61d9bf0debee6755",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -47893,7 +47852,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -48139,14 +48097,15 @@
     "algos/min-cov-det/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 1.136,
+          "ours_over_theirs": 1.14,
           "pairing": "270406f67e92aca7",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; FastMCD on both with each library's own random subsets (allowed); CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -48392,7 +48351,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -48400,14 +48358,15 @@
     "algos/minibatch-kmeans/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "race lane_config; cells quality (no n_iter)",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 2.138,
+          "ours_over_theirs": 2.14,
           "pairing": "cbda7c04e0c582d1",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "same batch_size 4096, max_iter 100, tol 0, max_no_improvement 10; both may stop early and n_steps / n_iter are not recorded; init_size was left at each library's default",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -48671,7 +48630,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -48679,14 +48637,15 @@
     "algos/minibatch-kmeans/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "race lane_config; cells quality (no n_iter)",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.958,
+          "ours_over_theirs": 0.96,
           "pairing": "b3317c85da2c18ae",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "same batch_size 4096, max_iter 100, tol 0, max_no_improvement 10; both may stop early and n_steps / n_iter are not recorded; init_size was left at each library's default",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -48950,7 +48909,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -48958,14 +48916,15 @@
     "algos/minmax-scaler/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.981,
+          "ours_over_theirs": 0.98,
           "pairing": "b08effc0105621d4",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "a tie (ours/theirs 0.98): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "TIE"
         }
       },
       "cells": [
@@ -49336,7 +49295,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -49344,14 +49302,15 @@
     "algos/minmax-scaler/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.634,
+          "ours_over_theirs": 0.63,
           "pairing": "ed04d27350dc3e94",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -49722,7 +49681,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -49734,8 +49692,8 @@
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 3.33,
           "pairing": "7444192fc2e9b084",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -50552,7 +50510,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -50560,14 +50517,15 @@
     "algos/multilabel-binarizer/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 1.228,
+          "ours_over_theirs": 1.23,
           "pairing": "b13d134b2c437ff4",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -50817,7 +50775,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -50825,14 +50782,15 @@
     "algos/multilabel-binarizer/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 2.668,
+          "ours_over_theirs": 2.67,
           "pairing": "ea36fb5e55340c58",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -51082,7 +51040,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -52270,8 +52227,8 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.515,
           "pairing": "14bac95ae5779225",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -52660,7 +52617,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -52668,14 +52624,15 @@
     "algos/nearest-centroid/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "race lane_config; cells quality",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.045,
+          "ours_over_theirs": 0.04,
           "pairing": "da6245f649c7fdfa",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "euclidean, uniform priors on both; identical held-out accuracy",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -52919,7 +52876,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -52927,14 +52883,15 @@
     "algos/nearest-centroid/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "race lane_config; cells quality",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.035,
+          "ours_over_theirs": 0.04,
           "pairing": "ff7e3d5d6de5d43a",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "euclidean, uniform priors on both; identical held-out accuracy",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -53178,7 +53135,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -53186,14 +53142,15 @@
     "algos/normalizer/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py transform lanes",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.085,
+          "ours_over_theirs": 0.09,
           "pairing": "7c7dc4b3700af567",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "stateless fit: ours returns without reading X while the opponent validates it; the race measures call overhead, not the transform (the transform is the inference row)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -53553,7 +53510,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -53561,14 +53517,15 @@
     "algos/normalizer/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py transform lanes",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.211,
+          "ours_over_theirs": 0.21,
           "pairing": "067842626a82f7b4",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "stateless fit: ours returns without reading X while the opponent validates it; the race measures call overhead, not the transform (the transform is the inference row)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -53928,7 +53885,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -53936,14 +53892,15 @@
     "algos/onehot/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.664,
+          "ours_over_theirs": 0.66,
           "pairing": "06d810e72ba10f5b",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -54309,7 +54266,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -54317,14 +54273,15 @@
     "algos/onehot/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.136,
+          "ours_over_theirs": 0.14,
           "pairing": "cb07e9f83bf2d087",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -54690,7 +54647,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -54698,14 +54654,15 @@
     "algos/optimized-theta/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "statsforecast-cpu",
-          "ours_over_theirs": 0.233,
+          "ours_over_theirs": 0.23,
           "pairing": "181d897b9ddef636",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; statsforecast OptimizedTheta, the same season and decomposition; forecast RMSE equal; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -54949,7 +54906,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -54957,14 +54913,15 @@
     "algos/optimized-theta/taxi-hourly/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "statsforecast-cpu",
-          "ours_over_theirs": 0.175,
+          "ours_over_theirs": 0.17,
           "pairing": "d6348d5a9aaf940a",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; statsforecast OptimizedTheta, the same season and decomposition; forecast RMSE equal; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -55208,7 +55165,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -55216,14 +55172,15 @@
     "algos/ordinal/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.331,
+          "ours_over_theirs": 0.33,
           "pairing": "0ee47c3ec2f8c1f5",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -55474,7 +55431,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -55482,14 +55438,15 @@
     "algos/ordinal/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.405,
+          "ours_over_theirs": 0.41,
           "pairing": "3d108b8d73a4fbb7",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -55740,7 +55697,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -57270,14 +57226,15 @@
     "algos/poly-features/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py transform lanes",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.379,
+          "ours_over_theirs": 0.38,
           "pairing": "671e36db598b399b",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "stateless fit: ours returns without reading X while the opponent validates it; the race measures call overhead, not the transform (the transform is the inference row)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -57653,7 +57610,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -57661,14 +57617,15 @@
     "algos/poly-features/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py transform lanes",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.201,
+          "ours_over_theirs": 0.2,
           "pairing": "b71e158771edd94a",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "stateless fit: ours returns without reading X while the opponent validates it; the race measures call overhead, not the transform (the transform is the inference row)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -58044,7 +58001,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -58052,14 +58008,15 @@
     "algos/power-transformer/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "x_prep/transform.mojo PT_ITERS/GOLDEN; tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.037,
+          "ours_over_theirs": 0.04,
           "pairing": "0441d0ba59a9a547",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
+          "reason": "different algorithm: ours searches lambda by 48 golden-section steps in [-8, 8] in float32, scikit-learn and cuML by scipy Brent; outputs differ (rel 0.11 Istella; Apple identical rel 1.0). No setting matches: declared, not fixable in the harness; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
           "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -58420,14 +58377,15 @@
     "algos/power-transformer/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "x_prep/transform.mojo PT_ITERS/GOLDEN; tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.034,
+          "ours_over_theirs": 0.03,
           "pairing": "2d03242fa9564f19",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
+          "reason": "different algorithm: ours searches lambda by 48 golden-section steps in [-8, 8] in float32, scikit-learn and cuML by scipy Brent; outputs differ (rel 0.11 Istella; Apple identical rel 1.0). No setting matches: declared, not fixable in the harness",
           "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -58802,8 +58760,8 @@
           "opponent": "torch-gpu",
           "ours_over_theirs": 3.876,
           "pairing": "a411198d9030d2fe",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -59256,7 +59214,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -59268,8 +59225,8 @@
           "opponent": "cupy-gpu",
           "ours_over_theirs": 4.593,
           "pairing": "7016ae8d4a9e71cf",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -59722,7 +59679,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -60018,14 +59974,15 @@
     "algos/quantile/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py quantile refused",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.0,
           "pairing": "a95592c2a0c9d4c3",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
+          "reason": "different algorithm: ours accepts solver='highs' and always runs ADMM, scikit-learn solved the HiGHS LP (ours silently ignores the declared solver). Fixed: scikit-learn refused, no library has an ADMM quantile regression; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
           "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -60296,14 +60253,15 @@
     "algos/quantile/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py quantile refused",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.001,
+          "ours_over_theirs": 0.0,
           "pairing": "fabbb70e08d5b80b",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
+          "reason": "different algorithm: ours accepts solver='highs' and always runs ADMM, scikit-learn solved the HiGHS LP (ours silently ignores the declared solver). Fixed: scikit-learn refused, no library has an ADMM quantile regression; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
           "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -61326,8 +61284,8 @@
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 5.279,
           "pairing": "ac30b1a36ca69f13",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -62110,7 +62068,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -62118,14 +62075,15 @@
     "algos/rfe/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "linear_model.py LogisticRegression lbfgs_memory=5; tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.015,
+          "ours_over_theirs": 0.01,
           "pairing": "5838826316bc0194",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "L-BFGS settings no library exposes differ: ours (cuML's QN) memory 5, scikit-learn's scipy lbfgs memory 10, each with its own stopping rule on tol; Istella selections differ (jaccard 0.85-0.88), neither converges in 200 iterations; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -62382,7 +62340,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -62390,14 +62347,15 @@
     "algos/rfe/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "linear_model.py LogisticRegression lbfgs_memory=5; tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.022,
+          "ours_over_theirs": 0.02,
           "pairing": "7e397e11cf1760c6",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "L-BFGS settings no library exposes differ: ours (cuML's QN) memory 5, scikit-learn's scipy lbfgs memory 10, each with its own stopping rule on tol; Istella selections differ (jaccard 0.85-0.88), neither converges in 200 iterations; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -62654,7 +62612,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -62662,14 +62619,15 @@
     "algos/ridge-cv/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.123,
+          "ours_over_theirs": 0.12,
           "pairing": "79c92de897457f93",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -62937,7 +62895,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -62945,14 +62902,15 @@
     "algos/ridge-cv/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.069,
+          "ours_over_theirs": 0.07,
           "pairing": "b79f9c6463fd6b5f",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -63220,7 +63178,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -63232,8 +63189,8 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.639,
           "pairing": "493acf135c980367",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -63609,7 +63566,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -63623,9 +63579,9 @@
           "opponent": "torch-compile-bf16",
           "ours_over_theirs": 0.28,
           "pairing": "bbfdb0a333f539e0",
-          "reason": "opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -64590,7 +64546,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -65584,9 +65539,9 @@
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 0.27,
           "pairing": "c74ac577dd70c5e4",
-          "reason": "opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (only version, host, seeds or noise differ); audit note: opponent copied from the L40S host cc560ebdaf91, about 2x slower than host 24a11adce16e on identical work; on the faster host torch ties or beats ours",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -66565,7 +66520,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -67567,14 +67521,15 @@
     "algos/robust-scaler/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.33,
           "pairing": "b522062da3b1a0ed",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -67952,7 +67907,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -67960,14 +67914,15 @@
     "algos/robust-scaler/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.259,
+          "ours_over_theirs": 0.26,
           "pairing": "038e3f0d608cb48c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -68345,7 +68300,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -68353,14 +68307,15 @@
     "algos/select-chi2/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.156,
+          "ours_over_theirs": 0.16,
           "pairing": "28e3acb5be139a38",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -68605,7 +68560,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -68613,14 +68567,15 @@
     "algos/select-chi2/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.124,
+          "ours_over_theirs": 0.12,
           "pairing": "b715949b269540e7",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -68865,7 +68820,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -69099,14 +69053,15 @@
     "algos/select-f-classif/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.115,
+          "ours_over_theirs": 0.11,
           "pairing": "7328b591815e13d7",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -69351,7 +69306,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -69359,14 +69313,15 @@
     "algos/select-f-classif/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.178,
+          "ours_over_theirs": 0.18,
           "pairing": "5b019a7c5953bc1f",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -69611,7 +69566,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -69619,14 +69573,15 @@
     "algos/select-f-regression/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.105,
+          "ours_over_theirs": 0.1,
           "pairing": "5e3ab547f8157c8b",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -69871,7 +69826,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -69879,14 +69833,15 @@
     "algos/select-f-regression/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.067,
+          "ours_over_theirs": 0.07,
           "pairing": "3bfffbc931b039cb",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -70131,7 +70086,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -70139,14 +70093,15 @@
     "algos/select-mutual-info-reg/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py _est_factory score_func",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.161,
+          "ours_over_theirs": 0.16,
           "pairing": "36bf746a2b3e9b5e",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
+          "reason": "scikit-learn's mutual_info_* ran at its default n_jobs=None, one core (every other scikit-learn arm gets n_jobs=-1). Fixed: n_jobs=-1 bound into the score function; each library's own noise draws (FAIR); CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
           "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -70405,14 +70360,15 @@
     "algos/select-mutual-info-reg/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py _est_factory score_func",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.128,
+          "ours_over_theirs": 0.13,
           "pairing": "545fb7b52bb15152",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
+          "reason": "scikit-learn's mutual_info_* ran at its default n_jobs=None, one core (every other scikit-learn arm gets n_jobs=-1). Fixed: n_jobs=-1 bound into the score function; each library's own noise draws (FAIR); CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
           "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -70671,14 +70627,15 @@
     "algos/select-mutual-info/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py _est_factory score_func",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.008,
+          "ours_over_theirs": 0.01,
           "pairing": "da4faf570feaa495",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
+          "reason": "scikit-learn's mutual_info_* ran at its default n_jobs=None, one core (every other scikit-learn arm gets n_jobs=-1). Fixed: n_jobs=-1 bound into the score function; each library's own noise draws (FAIR); CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
           "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -70937,14 +70894,15 @@
     "algos/select-mutual-info/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py _est_factory score_func",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.024,
+          "ours_over_theirs": 0.02,
           "pairing": "78a756de7793cb89",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
+          "reason": "scikit-learn's mutual_info_* ran at its default n_jobs=None, one core (every other scikit-learn arm gets n_jobs=-1). Fixed: n_jobs=-1 bound into the score function; each library's own noise draws (FAIR); CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
           "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -71203,14 +71161,15 @@
     "algos/select-r-regression/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.088,
+          "ours_over_theirs": 0.09,
           "pairing": "7ea105667d5c600c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -71455,7 +71414,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -71463,14 +71421,15 @@
     "algos/select-r-regression/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.052,
+          "ours_over_theirs": 0.05,
           "pairing": "fe73508d41a75231",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -71715,7 +71674,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -71729,9 +71687,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.33,
           "pairing": "7fa1931f17a52b53",
-          "reason": "settings left at library defaults: ours' batch_size and several cuML SGD settings were never pinned on both arms (AGENTS.md parity rule; linear agent, 2026-10-13)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (same values, unpinned); audit note: settings left at library defaults: ours' batch_size and several cuML SGD settings were never pinned on both arms (AGENTS.md parity rule; linear agent, 2026-10-13)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -72164,7 +72122,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -72178,9 +72135,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.67,
           "pairing": "5a34f19e959d9640",
-          "reason": "settings left at library defaults: ours' batch_size and several cuML SGD settings were never pinned on both arms (AGENTS.md parity rule; linear agent, 2026-10-13)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (same values, unpinned); audit note: settings left at library defaults: ours' batch_size and several cuML SGD settings were never pinned on both arms (AGENTS.md parity rule; linear agent, 2026-10-13)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -72613,7 +72570,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -72627,9 +72583,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.32,
           "pairing": "1230c638823a324a",
-          "reason": "settings left at library defaults: ours' batch_size and several cuML SGD settings were never pinned on both arms (AGENTS.md parity rule; linear agent, 2026-10-13)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (same values, unpinned); audit note: settings left at library defaults: ours' batch_size and several cuML SGD settings were never pinned on both arms (AGENTS.md parity rule; linear agent, 2026-10-13)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -73066,7 +73022,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -73080,9 +73035,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.65,
           "pairing": "8145beeb9a344d08",
-          "reason": "settings left at library defaults: ours' batch_size and several cuML SGD settings were never pinned on both arms (AGENTS.md parity rule; linear agent, 2026-10-13)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (same values, unpinned); audit note: settings left at library defaults: ours' batch_size and several cuML SGD settings were never pinned on both arms (AGENTS.md parity rule; linear agent, 2026-10-13)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -73519,7 +73474,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -73531,8 +73485,8 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 14.412,
           "pairing": "71d68f3bd486f03f",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -73911,7 +73865,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -73919,14 +73872,15 @@
     "algos/simple-imputer/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.959,
+          "ours_over_theirs": 0.96,
           "pairing": "93c5c4547885d781",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "a tie (ours/theirs 0.96): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "TIE"
         }
       },
       "cells": [
@@ -74294,7 +74248,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -74302,14 +74255,15 @@
     "algos/simple-imputer/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.44,
           "pairing": "9918bc65955decd8",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -74677,7 +74631,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -74685,14 +74638,15 @@
     "algos/sparse-coder/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py sparse-coder notes",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 13.199,
+          "ours_over_theirs": 13.2,
           "pairing": "2c4c6e6044b0720f",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "SparseCoder.fit is a no-op on both arms (fit returns self): the race measures call overhead, not the encoder; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -74958,7 +74912,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -74966,14 +74919,15 @@
     "algos/sparse-coder/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py sparse-coder notes",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 20.196,
+          "ours_over_theirs": 20.2,
           "pairing": "1572166d11a4aa4f",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "SparseCoder.fit is a no-op on both arms (fit returns self): the race measures call overhead, not the encoder; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -75239,7 +75193,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -75253,9 +75206,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.5,
           "pairing": "e3cf58366bacb832",
-          "reason": "cuML was given host input only in the random-projection lanes, putting its upload inside its clock; with device input (09-30, same session) cuML is faster than ours",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (both arms start from host input); audit note: cuML was given host input only in the random-projection lanes, putting its upload inside its clock; with device input (09-30, same session) cuML is faster than ours",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -75636,7 +75589,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -75650,9 +75602,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.79,
           "pairing": "980128e9e8b5c226",
-          "reason": "cuML was given host input only in the random-projection lanes, putting its upload inside its clock; with device input (09-30, same session) cuML is faster than ours",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "good under Andrew's rule (both arms start from host input); audit note: cuML was given host input only in the random-projection lanes, putting its upload inside its clock; with device input (09-30, same session) cuML is faster than ours",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -76033,7 +75985,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -76041,14 +75992,15 @@
     "algos/spline/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.892,
+          "ours_over_theirs": 0.89,
           "pairing": "3e7bf7c0b33cbec7",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -76304,7 +76256,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -76312,14 +76263,15 @@
     "algos/spline/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.604,
+          "ours_over_theirs": 0.6,
           "pairing": "9012e95b0704d460",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; CPU opponent copied from the RunPod L40S box (cgroup CPU quota unrecorded)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -76575,7 +76527,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -76583,14 +76534,15 @@
     "algos/standard-scaler/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.103,
+          "ours_over_theirs": 0.1,
           "pairing": "0cdd9c9741f0449d",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -76943,7 +76895,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -76951,14 +76902,15 @@
     "algos/standard-scaler/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.059,
+          "ours_over_theirs": 0.06,
           "pairing": "770bf859b9c62c55",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -77311,7 +77263,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -77323,8 +77274,8 @@
           "opponent": "cupy-gpu",
           "ours_over_theirs": 3.947,
           "pairing": "7f506e837d72f8b6",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -77782,7 +77733,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -77794,8 +77744,8 @@
           "opponent": "cupy-gpu",
           "ours_over_theirs": 3.573,
           "pairing": "c66afd748da09585",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -78253,7 +78203,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -79071,14 +79020,15 @@
     "algos/target-encoder/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.239,
+          "ours_over_theirs": 0.24,
           "pairing": "735e623450e9ec0c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; same smoothing and fold count; cuML's interleaved folds vs shuffled KFold are a fold-draw difference (the cuML benchmark's own args)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -79464,7 +79414,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -79472,14 +79421,15 @@
     "algos/target-encoder/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "tools/bench_board_algos.py",
           "opponent": "cuml-gpu",
-          "ours_over_theirs": 0.084,
+          "ours_over_theirs": 0.08,
           "pairing": "1235c0c8cb88624a",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; same smoothing and fold count; cuML's interleaved folds vs shuffled KFold are a fold-draw difference (the cuML benchmark's own args)",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -79865,7 +79815,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -79877,8 +79826,8 @@
           "opponent": "statsmodels-cpu",
           "ours_over_theirs": 0.676,
           "pairing": "2e639caa08819580",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -80232,7 +80181,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -80244,8 +80192,8 @@
           "opponent": "statsmodels-cpu",
           "ours_over_theirs": 1.669,
           "pairing": "27a6f40928be6a5c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -80599,7 +80547,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -82701,8 +82648,8 @@
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.055,
           "pairing": "9c117f7f61dd49a1",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -82946,7 +82893,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -82958,8 +82904,8 @@
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.046,
           "pairing": "325be0dd58023d53",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -83203,7 +83149,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -84681,7 +84626,7 @@
           "pairing": "17241cc05a5c18d7",
           "reason": "a tie (ours/theirs 0.95): not cited until rerun (Andrew, 2026-10-13); each arm draws its own k-means++ start; ours ran MORE iterations (accepted: Andrew, 2026-10-13)",
           "rerace": "x",
-          "verdict": "TIE"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -85008,6 +84953,13 @@
           "opponents-specific-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -85025,8 +84977,8 @@
           "ours_over_theirs": 0.61,
           "pairing": "ba542556bdf532f1",
           "reason": "each arm draws its own k-means++ start; ours ran MORE iterations (accepted: Andrew, 2026-10-13)",
-          "rerace": "",
-          "verdict": "FAIR"
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -85353,8 +85305,16 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -85691,6 +85651,13 @@
         "boards": [
           "opponents-specific-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -86030,6 +85997,13 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -86464,6 +86438,13 @@
         "boards": [
           "opponents-specific-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-gpu-eigh"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -86900,6 +86881,13 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-gpu-eigh"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -87234,6 +87222,13 @@
           "opponents-specific-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rerace": "x",
@@ -87244,15 +87239,14 @@
     "classical/pca/taxi/rows=full": {
       "audit": {
         "identical/fit": {
-          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "classical_two_datasets.py TorchPCA (now refused); cuML cell opponents-default-20261006 20.49 ms",
-          "opponent": "torch-gpu",
-          "ours_over_theirs": 7.97,
+          "opponent": "cuml-gpu",
+          "ours_over_theirs": 0.559,
           "pairing": "f7ba2d7790b13a60",
-          "reason": "harness-written torch-gpu PCA (covariance eigh from torch ops), not a library opponent; removed. Against the library opponent cuML PCA ours is faster (11.46 vs 20.49 ms, 0.56)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "verdict": "UNCHECKED"
         }
       },
       "cells": [
@@ -87568,9 +87562,15 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-gpu"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -88835,7 +88835,7 @@
           "ours_over_theirs": 1.03,
           "pairing": "55dbd469e62b5e57",
           "reason": "a tie (0.95-1.05), not cited until rerun; IVF-Flat 1024 lists, 32 probes, k=10, 20 k-means iterations on both, both train on 200,000 strided rows (ours stride, cuVS fraction 0.5); recall 0.99993 vs 0.99998",
-          "rerace": "x",
+          "rerace": "",
           "verdict": "TIE"
         }
       },
@@ -89061,7 +89061,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -89818,7 +89817,7 @@
           "ours_over_theirs": 0.97,
           "pairing": "8965e571341a92fe",
           "reason": "a tie (ours/theirs 0.97): not cited until rerun (Andrew, 2026-10-13); noise-level margin, accepted (Andrew, 2026-10-13): both qn; ours ranges 1778-1887 ms against cuML's single 1855 ms",
-          "rerace": "x",
+          "rerace": "",
           "verdict": "TIE"
         }
       },
@@ -90058,7 +90057,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -91310,8 +91308,8 @@
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 1.16,
           "pairing": "e9af5081d7560c09",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
           "rule": "main_board_ingest.fairness_rule (2026-10-13)",
           "verdict": "UNCHECKED"
         }
@@ -92058,25 +92056,11 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": "full",
       "status": "done"
     },
     "neural/lm-forward/bytes/shape=full": {
-      "audit": {
-        "identical/fit": {
-          "audit": "fairness audit 2026-10-13 (no reruns)",
-          "date": "2026-10-13",
-          "evidence": "cell copied_from.box cc560ebdaf91; mean_nll 9.018733 ours and fp32 arms",
-          "opponent": "torch-compile-bf16",
-          "ours_over_theirs": 1.31,
-          "pairing": "a2b369c4e200c568",
-          "reason": "the opponent ran on the slow L40S host cc560ebdaf91 (about 2x slower than 24a11adce16e on identical work); the torch LM twin is the harness's own ByteDecoder (tools/torch_lm_step_opponent.py build_model: hand-written RMSNorm/RoPE/SwiGLU around SDPA), not a library's model such as transformers' LlamaForCausalLM; bf16 autocast vs ours FP32 is the board's disclosed identity-tax comparison (bench_board.py neural headline, Andrew 2026-10-09) (vs compile-fp32: 1.21)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
-        }
-      },
       "cells": [
         {
           "arm": "ours",
@@ -92817,27 +92801,25 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": "full",
       "status": "done"
     },
     "neural/lm-train-step/bytes/shape=full": {
-      "audit": {
-        "identical/fit": {
-          "audit": "fairness audit 2026-10-13 (no reruns)",
-          "date": "2026-10-13",
-          "evidence": "tools/torch_lm_step_opponent.py:286; cell quality loss_last 8.418446 ours vs 8.418448 compile-fp32",
-          "opponent": "torch-compile-bf16",
-          "ours_over_theirs": 3.49,
-          "pairing": "cbab75cef1025142",
-          "reason": "opponent is code our harness wrote (Andrew, 2026-10-13: not an opponent); the torch LM twin is the harness's own ByteDecoder (tools/torch_lm_step_opponent.py build_model: hand-written RMSNorm/RoPE/SwiGLU around SDPA), not a library's model such as transformers' LlamaForCausalLM; otherwise like-for-like (same init and batches, AdamW pinned, fast host 24a11adce16e); bf16 autocast vs ours FP32 is the board's disclosed identity-tax comparison (bench_board.py neural headline, Andrew 2026-10-09) (vs compile-fp32: 1.74)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
-        }
-      },
       "cells": [
         {
           "arm": "ours",
@@ -93702,9 +93684,20 @@
           "opponents-specific-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": "full",
       "status": "done"
@@ -94358,6 +94351,15 @@
           "opponents-default-20261006",
           "release-board-resume-r2"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -95330,6 +95332,18 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
       "rows": null,
@@ -95346,7 +95360,7 @@
           "ours_over_theirs": 1.0,
           "pairing": "fff1f1b4bebe0943",
           "reason": "a tie (ours/theirs 1.00): not cited until rerun (Andrew, 2026-10-13); a tie (1.00), one run each on different hosts and dates; mamba-ssm bf16 not raced",
-          "rerace": "x",
+          "rerace": "",
           "verdict": "TIE"
         }
       },
@@ -96293,9 +96307,20 @@
           "release-board-resume-r2"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": "full",
       "status": "done"
@@ -97185,19 +97210,6 @@
       "status": "done"
     },
     "neural/samba-forward/bytes/shape=full": {
-      "audit": {
-        "identical/fit": {
-          "audit": "fairness audit 2026-10-13 (no reruns)",
-          "date": "2026-10-13",
-          "evidence": "bench_board_neural.py LANE_TEXT samba-*; cell torch-compile-fp32 12.08 ms",
-          "opponent": "torch-compile-tf32",
-          "ours_over_theirs": 1.01,
-          "pairing": "41d8099921e0b5ad",
-          "reason": "the Samba opponent's Mamba-3 layers are the pure-PyTorch reference (gen_corpus.py m3_forward), not a library kernel; no library Samba/Mamba-3 implementation exists to race; also a tie (1.01); vs compile-fp32 ours is 0.41",
-          "rerace": "x",
-          "verdict": "UNFAIR"
-        }
-      },
       "cells": [
         {
           "arm": "ours",
@@ -97980,9 +97992,20 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": "full",
       "status": "done"
@@ -97997,7 +98020,7 @@
           "ours_over_theirs": 0.98,
           "pairing": "0e48a518adef5530",
           "reason": "a tie (ours/theirs 0.98): not cited until rerun (Andrew, 2026-10-13); a tie (0.98); torch-compile-bf16 timed out; torch Mamba-3 layers are the pure-PyTorch reference",
-          "rerace": "x",
+          "rerace": "",
           "verdict": "TIE"
         }
       },
@@ -98871,27 +98894,25 @@
           "opponents-specific-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": "full",
       "status": "done"
     },
     "neural/transformer-forward/gaussian/shape=full": {
-      "audit": {
-        "identical/fit": {
-          "audit": "fairness audit 2026-10-13 (no reruns)",
-          "date": "2026-10-13",
-          "evidence": "cell copied_from.box cc560ebdaf91; tools/speed_torch_seq.py:506",
-          "opponent": "torch-eager-bf16",
-          "ours_over_theirs": 2.21,
-          "pairing": "9b4e4484989e9fd0",
-          "reason": "the opponent ran on the slow L40S host cc560ebdaf91 (about 2x slower than 24a11adce16e on identical work); the torch twin is the harness's transcription of HF's Llama block from torch ops (tools/speed_torch_seq.py LlamaEager: SDPA attention, hand-written RMSNorm/RoPE), not transformers' own LlamaDecoderLayer; bf16 autocast vs ours FP32 is the board's disclosed identity-tax comparison (bench_board.py neural headline, Andrew 2026-10-09) (vs eager-fp32: 2.11)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
-        }
-      },
       "cells": [
         {
           "arm": "ours",
@@ -99640,9 +99661,20 @@
           "opponents-default-20261006"
         ]
       },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
+      },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": "full",
       "status": "done"
@@ -99650,14 +99682,15 @@
     "trees/et/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "FSPEED-FIT-VERDICT et taxi 881,399 vs 906,974, istella 1,029,236 vs 1,006,311 (nvidia); speed_gbdt_arm.sklearn_forest_arm",
           "opponent": "sklearn-et-cpu",
-          "ours_over_theirs": 0.297,
+          "ours_over_theirs": 0.3,
           "pairing": "cd42a2ea0a55f1db",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "same algorithm on both (a uniform random threshold per candidate feature, sqrt features per node, depth 16, 100 trees, every row); scikit-learn has no GPU path and runs n_jobs -1; leaf counts within 3%",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -99876,7 +99909,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -99884,14 +99916,15 @@
     "trees/et/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "FSPEED-FIT-VERDICT et taxi 881,399 vs 906,974, istella 1,029,236 vs 1,006,311 (nvidia); speed_gbdt_arm.sklearn_forest_arm",
           "opponent": "sklearn-et-cpu",
-          "ours_over_theirs": 0.349,
+          "ours_over_theirs": 0.35,
           "pairing": "6115ffcda6e10e63",
-          "reason": "no MATCHED settings-parity check of both arms and no audit",
-          "rerace": "x",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "same algorithm on both (a uniform random threshold per candidate feature, sqrt features per node, depth 16, 100 trees, every row); scikit-learn has no GPU path and runs n_jobs -1; leaf counts within 3%",
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -100110,7 +100143,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -100120,11 +100152,11 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "tools/speed_gbdt_arm.py:2492-2540",
-          "opponent": "xgboost-gpu",
-          "ours_over_theirs": 0.53,
+          "evidence": "FSPEED-FIT-VERDICT: lane=gbdt-categorical arms=lightgbm-cuda leaves=lightgbm-cuda:1 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one",
+          "opponent": "lightgbm-cuda",
+          "ours_over_theirs": 4.46,
           "pairing": "7aa48fc3e147a251",
-          "reason": "different categorical algorithms (ours one-hot/CTR, XGBoost partition search); only XGBoost's input is converted inside its fit clock",
+          "reason": "broken run: LightGBM CUDA's fitted model holds 1 leaf in total over 500 trees (it learned nothing); also LightGBM ran min_child_samples 20 and min_child_weight 1e-3 against every other arm's 1 and 0; every boosted LightGBM arm refused in 2bd73c307",
           "rerace": "x",
           "verdict": "UNFAIR"
         }
@@ -102217,11 +102249,11 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "cells quality/leaves",
-          "opponent": "xgboost-gpu",
-          "ours_over_theirs": 0.57,
+          "evidence": "FSPEED-FIT-VERDICT: lane=gbdt-lossguide arms=lightgbm-cuda leaves=lightgbm-cuda:1 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one",
+          "opponent": "lightgbm-cuda",
+          "ours_over_theirs": 1.51,
           "pairing": "e984a4d8ef8b2d56",
-          "reason": "with max_leaves 256 = 2^depth XGBoost's lossguide builds its depthwise model, more slowly; against its depthwise build the ratio is 0.80 (marked wrong: Andrew, 2026-10-13)",
+          "reason": "broken run: LightGBM CUDA's fitted model holds 1 leaf in total over 500 trees (it learned nothing); also LightGBM ran min_child_samples 20 and min_child_weight 1e-3 against every other arm's 1 and 0; every boosted LightGBM arm refused in 2bd73c307",
           "rerace": "x",
           "verdict": "UNFAIR"
         }
@@ -103040,11 +103072,11 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "tree-rerun-20261009.txt",
-          "opponent": "xgboost-gpu",
-          "ours_over_theirs": 0.57,
+          "evidence": "FSPEED-FIT-VERDICT: lane=gbdt-lossguide arms=lightgbm-cuda leaves=lightgbm-cuda:1 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one",
+          "opponent": "lightgbm-cuda",
+          "ours_over_theirs": 2.17,
           "pairing": "9f8312611ba2cfd5",
-          "reason": "XGBoost's lossguide model equals its depthwise model, which it builds in 3,244 ms in the same session; ours (3,744 ms) is slower",
+          "reason": "broken run: LightGBM CUDA's fitted model holds 1 leaf in total over 500 trees (it learned nothing); also LightGBM ran min_child_samples 20 and min_child_weight 1e-3 against every other arm's 1 and 0; every boosted LightGBM arm refused in 2bd73c307",
           "rerace": "x",
           "verdict": "UNFAIR"
         }
@@ -103862,13 +103894,13 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "cells copied_from",
-          "opponent": "catboost-gpu",
-          "ours_over_theirs": 0.97,
+          "evidence": "FSPEED-FIT-VERDICT: lane=gbdt-multiclass arms=catboost-gpu,xgboost-gpu leaves=catboost-gpu:128000,xgboost-gpu:88137 spread=0.3114 verdict=NOT-COMPARABLE",
+          "opponent": "xgboost-gpu",
+          "ours_over_theirs": 0.44,
           "pairing": "c689f8fe9fb3e2cd",
-          "reason": "a tie (ours/theirs 0.97): not cited until rerun (Andrew, 2026-10-13); noise-level margin, accepted (Andrew, 2026-10-13): a 3.5% gap inside the cross-host CatBoost spread (8,181 vs 7,506 ms): a tie",
+          "reason": "different algorithm: depth-wise trees, one per class per round, against ours' oblivious vector-leaf trees (88,137-99,730 leaves per class vs 128,000); refused in 2bd73c307",
           "rerace": "x",
-          "verdict": "TIE"
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -104791,13 +104823,13 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "race lane_config",
-          "opponent": "catboost-gpu",
-          "ours_over_theirs": 0.69,
+          "evidence": "FSPEED-FIT-VERDICT: lane=gbdt-multiclass arms=catboost-gpu,xgboost-gpu leaves=catboost-gpu:128000,xgboost-gpu:99730 spread=0.2209 verdict=NOT-COMPARABLE",
+          "opponent": "xgboost-gpu",
+          "ours_over_theirs": 0.55,
           "pairing": "c7c6a0b74d363a5c",
-          "reason": "same symmetric MultiClass, quality equal to 4 digits; cross-session",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "different algorithm: depth-wise trees, one per class per round, against ours' oblivious vector-leaf trees (88,137-99,730 leaves per class vs 128,000); refused in 2bd73c307",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -105709,6 +105741,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -106123,7 +106156,7 @@
           "ours_over_theirs": 0.99,
           "pairing": "0ade5bd03b8b4ca8",
           "reason": "a tie (ours/theirs 0.99): not cited until rerun (Andrew, 2026-10-13); noise-level margin, accepted (Andrew, 2026-10-13): config and quality match; a 1-10% margin between single rounds on different hosts is noise",
-          "rerace": "x",
+          "rerace": "",
           "verdict": "TIE"
         }
       },
@@ -106509,7 +106542,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -106519,13 +106551,13 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "race lane_config",
-          "opponent": "catboost-gpu",
-          "ours_over_theirs": 0.65,
+          "evidence": "FSPEED-FIT-VERDICT: lane=gbdt-rank-pairlogit arms=catboost-gpu,xgboost-gpu leaves=catboost-gpu:6400,xgboost-gpu:6395 spread=0.0008 verdict=COMPARABLE",
+          "opponent": "xgboost-gpu",
+          "ours_over_theirs": 0.55,
           "pairing": "0afabbddb2f485c5",
-          "reason": "same PairLogit on symmetric trees, MAP 0.8545 vs 0.8539; cross-session",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "different algorithm: depth-wise trees with sampled pairs (rank:pairwise) against ours' oblivious PairLogit over every pair; refused in 2bd73c307",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -107125,6 +107157,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
