@@ -112,6 +112,10 @@ INERT_PREFIXES = (
     # six_lane_grid.py), never by a build; .libs/ and .dylibs/ hold the packed runtime libraries whose SOURCE
     # (packaging/portable_math) stays attributed on its own.
     "experiments/six_lane_integration/grid_controls/", "python/mojolearn/.libs/", "python/mojolearn/.dylibs/",
+    # The public docs site (2026-10-13): reStructuredText, the Sphinx conf.py and its exclude list build
+    # docs.mojolearn.org and nothing a lane imports. Its .rst pages were UNATTRIBUTED, which made the 0.8.44
+    # ONLY_CHANGED re-record select all 439 lanes (cpu-rerecord-0844/changed.err).
+    "docs-site/",
     "run/", "build/", ".github/", "AUTHORS", "CHANGELOG", "CITATION",
     "CONTRIBUTING", "GOVERNANCE", "LICENSE", "NOTICE", "README", "ROADMAP",
     "SECURITY", "SUPPORT",

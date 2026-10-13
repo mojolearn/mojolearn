@@ -145,7 +145,7 @@ def test_family_path_selects_its_lane_and_not_the_others():
 
 
 def test_inert_paths_select_nothing_and_do_not_pretend_otherwise():
-    sel = lane_select.select(["docs/START_HERE.md", "CHANGELOG.md"])
+    sel = lane_select.select(["docs/START_HERE.md", "CHANGELOG.md", "docs-site/api/boosting.rst"])
     assert sel["lanes"] == [], "a prose change selected lanes"
     assert not sel["unattributed"], "a prose change was refused"
 
