@@ -227,9 +227,7 @@ def _load(mode=None):
     under the identical label.
 
     The read-back below is the second half of the same discipline. It is a
-    NAME lookup and not a boolean, because the middle tier reports 2 and the
-    old spelling called that "fast", so a deterministic binary matched a fast
-    request and the cross-check passed on the wrong arm.
+    NAME lookup and not a boolean.
     """
     mode = (mode or _backend.default_mode()).strip().lower()
     mod = _backend.binding(_EXT_NAME, mode)
@@ -239,8 +237,6 @@ def _load(mode=None):
             "mojolearn: %s was compiled %s but numeric_mode asked for %s -- "
             "a binary is in the wrong directory; rebuild the sets with\n    "
             "bash bindings/build_training.sh\n    "
-            "MOJOLEARN_NUMERIC_MODE=deterministic bash "
-            "bindings/build_training.sh\n    "
             "MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_training.sh"
             % (_EXT_NAME, compiled, mode)
         )
@@ -1489,7 +1485,7 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
     error_if_nonfinite : bool, default True
         Only True is supported (False raises `NotImplementedError`): a non-finite
         total norm always raises.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -1621,7 +1617,7 @@ def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
         number of non-ignored targets.
     return_grad : bool, default False
         Also return the gradient with respect to `logits`.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -1784,7 +1780,7 @@ def numeric_mode_used(numeric_mode=None):
 
     Parameters
     ----------
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -1802,7 +1798,7 @@ def vendor_used(numeric_mode=None):
 
     Parameters
     ----------
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -2186,7 +2182,7 @@ def accumulation_is_aligned(tokens, accumulation_steps, numeric_mode=None):
         Token count of the whole step.
     accumulation_steps : int
         Number of microbatches.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -2214,7 +2210,7 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
         same shapes across entries.
     tokens : int or None
         Token count of the whole step, or None.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -2311,7 +2307,7 @@ class Generator(object):
     ----------
     seed : int
         Seed in [0, 2**64); otherwise `ValueError`.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Examples
@@ -2533,7 +2529,7 @@ def embedding_forward(weight, ids, numeric_mode=None):
         float32 embedding table.
     ids : array, shape (N,)
         Integer row indices.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -2566,7 +2562,7 @@ def embedding_backward(dy, ids, vocab, numeric_mode=None):
         The forward's ids; the row counts must match, otherwise `ValueError`.
     vocab : int
         Number of table rows V.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -2599,7 +2595,7 @@ def rms_norm_forward(x, weight, eps, numeric_mode=None):
         float32 scale.
     eps : float
         Added to the mean square.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -2631,7 +2627,7 @@ def rms_norm_backward(dy, x, weight, eps, numeric_mode=None):
         The forward's scale.
     eps : float
         The forward's epsilon.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -2811,7 +2807,7 @@ def linear_forward(a, weight, numeric_mode=None):
         float32 input.
     weight : array, shape (N, K)
         float32 weight, in torch's layout.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -2890,7 +2886,7 @@ def linear_backward(dc, a, weight, numeric_mode=None):
         The forward input.
     weight : array, shape (N, K)
         The forward weight.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -2952,7 +2948,7 @@ def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
         Integer class indices in [0, vocab).
     return_grad : bool, default False
         Also return the gradients.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Returns
@@ -3030,7 +3026,7 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
         Second layer weight.
     bias2 : array, shape (out_width,)
         Second layer bias.
-    numeric_mode : {'identical', 'deterministic', 'fast'}, default 'identical'
+    numeric_mode : {'identical', 'fast'}, default 'identical'
         Numeric mode. ``'fast'`` is available on Apple GPUs only.
 
     Returns

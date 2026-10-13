@@ -9,7 +9,7 @@ out=${1:-bench/results/feature_fraction_local}
 mkdir -p "$out"
 MOJOLEARN_PYTHON=${MOJOLEARN_PYTHON:-"$PWD/checks/pipeline_python.sh"}
 export MOJOLEARN_PYTHON
-for mode in fast deterministic identical; do
+for mode in fast identical; do
     MOJOLEARN_NUMERIC_MODE=$mode sh bindings/build_gbdt.sh > "$out/binding-$mode.build.log" 2>&1
 done
 pixi run mojo run -I . gbdt/checks/feature_sampling_check.mojo > "$out/native-fast.log" 2>&1

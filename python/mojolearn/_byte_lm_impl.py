@@ -292,7 +292,7 @@ def _step(value):
 #: The tiers the byte LM ships and the code its binding reads back
 #: (`byte_lm_numeric_mode`). IDENTICAL is the default; FAST (afn-lm,
 #: 2026-10-03) runs the same device step with the pins on the free schedule
-#: and promises quality, never bits. DETERMINISTIC is the tree lanes' tier.
+#: and promises quality, never bits.
 _NATIVE_MODE_CODE = {'identical': 1, 'fast': 0}
 
 

@@ -46,7 +46,7 @@ class AutoTheta:
     theta : float or None, default None
         Fixes the theta coefficient; None estimates it.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 
@@ -217,7 +217,7 @@ class Theta(AutoTheta):
     theta : float or None, default None
         Fixes the theta coefficient; None estimates it.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 
@@ -272,7 +272,7 @@ class OptimizedTheta(AutoTheta):
     theta : float or None, default None
         Fixes the theta coefficient; None estimates it.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 
@@ -327,7 +327,7 @@ class DynamicTheta(AutoTheta):
     theta : float or None, default None
         Fixes the theta coefficient; None estimates it.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 
@@ -382,7 +382,7 @@ class DynamicOptimizedTheta(AutoTheta):
     theta : float or None, default None
         Fixes the theta coefficient; None estimates it.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 

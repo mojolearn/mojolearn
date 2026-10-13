@@ -57,8 +57,7 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
 
 
 def resample_numeric_mode_binding() raises -> PythonObject:
-    """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL, 2
-    DETERMINISTIC."""
+    """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 

@@ -98,7 +98,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             difference. The verdict over repeats is STABLE, MOVED (the hash
             disagreed with itself run to run), BATCH_MOVED, N/A or REFUSED.
             BATCH_MOVED fails the run under IDENTICAL and is RECORDED, not
-            failed, under FAST and DETERMINISTIC (neither promises it:
+            failed, under FAST (it does not promise it:
             checks/batch_invariance_check.mojo's tier table); `--diff` reads
             it the same way per column (BATCH_MOVED-RECORDED when no
             IDENTICAL column moved) and `--require-columns` counts batch
@@ -186,7 +186,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             `RLPAIR_MOVED:<pair>:seq <s> token <k>:<which differ, values in
             hex>` at the earliest token. Verdicts over repeats: STABLE,
             MOVED, RLPAIR_MOVED, N/A, REFUSED; RLPAIR_MOVED fails the run
-            under IDENTICAL and is recorded under FAST and DETERMINISTIC.
+            under IDENTICAL and is recorded under FAST.
             `summary (rlpair):` is its own `--diff` line, over the declaring
             lanes only; a JSON that predates the part reads NOT-COMPARED.
             Since the hash is the same bytes wherever the assertions hold,
@@ -12349,9 +12349,8 @@ def _run_reference(args):
         print(f"REFUSED {k}: {e}")
     for k in moved3:
         print(f"MOVED   {k}: batch={cells[k]['batch']}")
-    # BATCH_MOVED is a defect under IDENTICAL only: FAST promises no bits and
-    # DETERMINISTIC hands the GEMM to the vendor kernel, which may tile by
-    # batch (checks/batch_invariance_check.mojo's tier table), so both RECORD
+    # BATCH_MOVED is a defect under IDENTICAL only: FAST promises no bits, so
+    # it is RECORDED there
     batch_fails = bool(batch_moved) and mode == "identical"
     for k in batch_moved:
         first = next(b for b in cells[k]["batch"] if b.startswith("BATCH_MOVED"))
@@ -12412,7 +12411,7 @@ def _diff_column(cols, k, col):
     before the batch part (2026-09-14) has no `batch_verdict`, so its batch
     cells read NOT-COMPARED, or are counted as not compared when no JSON
     carries them, never DIVERGENT. A BATCH_MOVED from an IDENTICAL column is
-    BATCH_MOVED (a failure); from a FAST or DETERMINISTIC column only, it is
+    BATCH_MOVED (a failure); from a FAST column only, it is
     BATCH_MOVED-RECORDED (reported, not a failure)."""
     shown, hashes, missing, na, identical_bm = [], [], False, False, False
     for _, j in cols:

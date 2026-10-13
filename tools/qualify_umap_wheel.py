@@ -60,7 +60,7 @@ binding = mojolearn.UMAP(numeric_mode=mode)._bind()
 binary = pathlib.Path(binding.__file__).resolve()
 assert binary.is_relative_to(prefix) and 'site-packages' in binary.parts, binary
 code = int(binding.umap_numeric_mode())
-assert code == {'fast': 0, 'identical': 1, 'deterministic': 2}[mode], code
+assert code == {'fast': 0, 'identical': 1}[mode], code
 record = {'package': str(package), 'version': mojolearn.__version__,
           'wrapper': str(wrapper), 'wrapper_sha256': wrapper_sha,
           'binding_file': str(binary), 'binding_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
@@ -186,7 +186,7 @@ def main():
             guard = work / 'run_installed.py'
             guard.write_text(GUARD)
             passed = True
-            for mode in ('fast', 'deterministic', 'identical'):
+            for mode in ('fast', 'identical'):
                 for surface, target in tests.items():
                     name = surface + '-' + mode
                     extra = {'MOJOLEARN_NUMERIC_MODE': mode,

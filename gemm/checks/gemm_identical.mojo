@@ -4234,7 +4234,7 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
     # whenever one matrix output/input width is d_model=768: Q/K/V/O, both
     # MLP directions, and the chunked head.  B1/L1024 through B8/L2048 and
     # FFN widths 2048/3072 were faster on Apple M4 with zero bit mismatches.
-    # Keep this IDENTICAL-only; FAST and DETERMINISTIC retain their existing
+    # Keep this IDENTICAL-only; FAST retains its existing
     # dispatcher unchanged.
     #
     # lane/no-bench-tuning (2026-10-04): the rules used to name d_model = 768

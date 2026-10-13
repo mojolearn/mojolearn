@@ -17,7 +17,7 @@ def main():
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="gbdt-prepared-") as tmp:
-        for mode in ("fast", "identical", "deterministic"):
+        for mode in ("fast", "identical"):
             binary = str(Path(tmp) / mode)
             cmd = ["tools/with_build_lock.sh", "pixi", "run", "mojo", "build", "-I", "."]
             if mode != "fast":

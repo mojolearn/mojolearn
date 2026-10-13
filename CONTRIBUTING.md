@@ -83,8 +83,7 @@ better and identical in output becomes the default. Reach is per-branch.
 ### Numeric modes
 
 `identical` is the default everywhere and the product: the same bits on
-Apple Metal, NVIDIA CUDA, AMD HIP and the host column. `deterministic` ships
-only for the tree learners (`gbdt`, `rf`, `trees`). `fast` is the Apple tier:
+Apple Metal, NVIDIA CUDA, AMD HIP and the host column. `fast` is the Apple tier:
 it ships for the tree learners, classical ML and, since the Apple FAST neural
 pass (2026-10-03, docs/apple-fast/PLAN-neural.md), the neural GPU surface
 (the LM trainer, the transformer and Mamba blocks, the Samba stack, the MLP,

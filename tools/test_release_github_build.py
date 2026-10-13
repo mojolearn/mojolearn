@@ -68,7 +68,7 @@ class Workflow(unittest.TestCase):
 
 
 BUILD_SETS = r'''#!/usr/bin/env bash
-TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
+TIERS="${MOJOLEARN_BUILD_TIERS:-fast identical}"
 SCRIPTS="${MOJOLEARN_BUILD_SCRIPTS:-build_gbdt.sh build_rf.sh}"
 EXT_NAMES="_mojolearn_gbdt _mojolearn_rf"
 FAST_CLASSICAL_SCRIPTS="build.sh"
@@ -99,7 +99,6 @@ class Plan(unittest.TestCase):
         names = sorted(e for e, _ in builds)
         self.assertEqual(names, sorted([
             "fast:build_gbdt.sh", "fast:build_rf.sh", "fast:build.sh",
-            "deterministic:build_gbdt.sh", "deterministic:build_rf.sh",
             "identical:build_gbdt.sh", "identical:build_rf.sh", "identical:build_mamba.sh", "identical:build.sh",
             "identical:build_byte_lm.sh", "identical:build_core_host.sh", "identical:build_svm_host.sh"]))
         self.assertEqual({e for e, h in builds if h}, {"identical:build_core_host.sh", "identical:build_svm_host.sh"})

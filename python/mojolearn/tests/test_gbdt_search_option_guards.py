@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from mojolearn import GradientBoosting
 
-MODES = ['fast', 'deterministic', 'identical']
+MODES = ['fast', 'identical']
 
 
 @pytest.mark.parametrize('mode', MODES)

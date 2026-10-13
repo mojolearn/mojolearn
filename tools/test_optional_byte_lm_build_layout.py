@@ -8,8 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 #: The Linux tier rule, as packaging/linux/build_sets.sh states it. The three
 #: TREE lanes (gbdt, rf, trees) build in EVERY tier (DEVIATION 2490,
-#: 2026-09-10). CLASSICAL ML (2026-09-25) builds FAST and IDENTICAL, never
-#: deterministic: FAST_CLASSICAL_NAMES / FAST_CLASSICAL_SCRIPTS. The neural
+#: 2026-09-10). CLASSICAL ML (2026-09-25) builds FAST and IDENTICAL:
+#: FAST_CLASSICAL_NAMES / FAST_CLASSICAL_SCRIPTS. The neural
 #: blocks joined them on 2026-09-27 (lane neural); IDENTICAL_ONLY_NAMES /
 #: IDENTICAL_ONLY_SCRIPTS are empty, and only the optional byte LM stays
 #: IDENTICAL only.
@@ -61,54 +61,43 @@ class OptionalBuildLayoutTests(unittest.TestCase):
                    + '\nFAST_CLASSICAL_SCRIPTS=' + repr(fast_classical_scripts)
                    + '\nPACKAGE_BYTE_LM=' + str(enabled)
                    + '\nHOST_FAMILIES=' + repr(' '.join(HOST_FAMILIES)) + '\n' + body
-                   + '\nfor tier in fast deterministic identical; do ' + function + ' "$tier"; done\n')
+                   + '\nfor tier in fast identical; do ' + function + ' "$tier"; done\n')
         result = subprocess.run(['bash', '-c', program], capture_output=True, text=True,
                                 timeout=5, check=True)
         return [line.split() for line in result.stdout.splitlines()]
 
     def test_only_tree_lanes_build_in_every_tier(self):
         for helper in ('tier_names', 'tier_scripts'):
-            fast, deterministic, identical = self.rows(0, helper)
-            self.assertEqual(
-                [len(fast), len(deterministic), len(identical)],
-                [FAST_ROW, EVERY_TIER, IDENTICAL_ROW],
-                helper,
-            )
-            # deterministic is the tree lanes alone; fast is the tree lanes
-            # plus classical; identical is a superset of fast.
-            self.assertEqual(fast[:EVERY_TIER], deterministic)
-            self.assertEqual(identical[:EVERY_TIER], deterministic)
+            fast, identical = self.rows(0, helper)
+            self.assertEqual([len(fast), len(identical)], [FAST_ROW, IDENTICAL_ROW], helper)
+            # fast is the tree lanes plus classical; identical is a superset of fast.
+            self.assertEqual(identical[:EVERY_TIER], fast[:EVERY_TIER])
             self.assertLessEqual(set(fast), set(identical))
             self.assertEqual(fast[EVERY_TIER:], identical[EVERY_TIER + IDENTICAL_ONLY:])
-            self.assertFalse(any('byte_lm' in entry for row in (fast, deterministic, identical)
+            self.assertFalse(any('byte_lm' in entry for row in (fast, identical)
                                  for entry in row))
 
-    def test_classical_is_fast_and_identical_never_deterministic(self):
+    def test_classical_is_fast_and_identical(self):
         for helper in ('tier_names', 'tier_scripts'):
-            fast, deterministic, identical = self.rows(0, helper)
+            fast, identical = self.rows(0, helper)
             classical = fast[EVERY_TIER:]
             self.assertEqual(len(classical), FAST_CLASSICAL, helper)
             for entry in classical:
-                self.assertNotIn(entry, deterministic, helper)
                 self.assertIn(entry, identical, helper)
-            # the identical-only lanes sit in neither lower tier
+            # the identical-only lanes are not in fast
             only = identical[EVERY_TIER:EVERY_TIER + IDENTICAL_ONLY]
             for entry in only:
                 self.assertNotIn(entry, fast, helper)
-                self.assertNotIn(entry, deterministic, helper)
 
     def test_neural_blocks_fast_and_identical_byte_lm_identical_only(self):
         for helper in ('tier_names', 'tier_scripts'):
-            fast, deterministic, identical = self.rows(1, helper)
+            fast, identical = self.rows(1, helper)
             for stem in ('training', 'mamba', 'transformer', 'embedding'):
-                self.assertFalse(any(stem in entry for entry in deterministic),
-                                 f'{stem} must not build in deterministic: {deterministic}')
                 for row, tier in ((fast, 'fast'), (identical, 'identical')):
                     self.assertTrue(any(stem in entry and 'host' not in entry for entry in row),
                                     f'{stem} must build in {tier}: {row}')
-            for row, tier in ((fast, 'fast'), (deterministic, 'deterministic')):
-                self.assertFalse(any('byte_lm' in entry for entry in row),
-                                 f'byte_lm must not build in {tier}: {row}')
+            self.assertFalse(any('byte_lm' in entry for entry in fast),
+                             f'byte_lm must not build in fast: {fast}')
             self.assertTrue(any('byte_lm' in entry for entry in identical),
                             f'byte_lm must build in identical: {identical}')
 
@@ -116,7 +105,7 @@ class OptionalBuildLayoutTests(unittest.TestCase):
         names = self.rows(1, 'tier_names')
         scripts = self.rows(1, 'tier_scripts')
         full = IDENTICAL_ROW + 1
-        self.assertEqual([len(row) for row in names], [FAST_ROW, EVERY_TIER, full])
+        self.assertEqual([len(row) for row in names], [FAST_ROW, full])
         # tier_SCRIPTS CARRIES ONE MORE ENTRY THAN tier_NAMES, ON PURPOSE, AND
         # THE ASYMMETRY IS THE POINT OF THIS ASSERTION. The CPU training
         # binding builds in the identical tier's pass and is absent from
@@ -130,15 +119,14 @@ class OptionalBuildLayoutTests(unittest.TestCase):
         host_scripts = [f'build_{f}_host.sh' for f in HOST_FAMILIES]
         self.assertEqual(host_scripts[0], HOST_SCRIPT)
         self.assertEqual([len(row) for row in scripts],
-                         [FAST_ROW, EVERY_TIER, full + len(host_scripts)])
-        self.assertNotIn(HOST_NAME, names[2])
-        self.assertEqual(scripts[2][full:], host_scripts)
-        self.assertEqual(scripts[2][full - 1], 'build_byte_lm.sh')
-        for row in (names[0], names[1], scripts[0], scripts[1]):
+                         [FAST_ROW, full + len(host_scripts)])
+        self.assertNotIn(HOST_NAME, names[1])
+        self.assertEqual(scripts[1][full:], host_scripts)
+        self.assertEqual(scripts[1][full - 1], 'build_byte_lm.sh')
+        for row in (names[0], scripts[0]):
             self.assertNotIn(HOST_NAME, row)
             self.assertNotIn(HOST_SCRIPT, row)
-        self.assertEqual(names[0][:EVERY_TIER], names[1])
-        self.assertEqual(names[2][-1], '_mojolearn_byte_lm')
+        self.assertEqual(names[1][-1], '_mojolearn_byte_lm')
         for row in names + scripts:
             self.assertEqual(len(row), len(set(row)))
 

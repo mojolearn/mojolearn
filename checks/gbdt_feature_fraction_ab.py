@@ -25,7 +25,7 @@ def main():
     parser.add_argument('--reference-root', type=Path, required=True)
     parser.add_argument('--expected-vendor', choices=['metal', 'cuda', 'hip'], required=True)
     parser.add_argument('--rows', type=int, nargs='+', default=[8192, 65536, 262144])
-    parser.add_argument('--modes', nargs='+', choices=['fast', 'deterministic', 'identical'], default=['fast', 'identical'])
+    parser.add_argument('--modes', nargs='+', choices=['fast', 'identical'], default=['fast', 'identical'])
     parser.add_argument('--policies', nargs='+', choices=['SymmetricTree', 'Depthwise', 'Lossguide'], default=['SymmetricTree', 'Depthwise', 'Lossguide'])
     parser.add_argument('--fractions', type=float, nargs='+', default=[.5, .25])
     parser.add_argument('--rounds', type=int, default=5)
@@ -41,7 +41,7 @@ def main():
         spec = importlib.util.spec_from_file_location(f'feature_reference_{mode}._mojolearn_gbdt', path)
         reference = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(reference)
-        expected_code = {'fast': 0, 'deterministic': 2, 'identical': 1}[mode]
+        expected_code = {'fast': 0, 'identical': 1}[mode]
         assert reference.gbdt_numeric_mode() == expected_code
         assert reference.gbdt_vendor() == args.expected_vendor
         candidate_binding = binding('_mojolearn_gbdt', mode=mode)

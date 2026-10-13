@@ -54,7 +54,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes
 from ._mode import NumericModeMixin
 
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 
 METRIC_L2_EXPANDED = 0
 METRIC_L2_SQRT_EXPANDED = 1

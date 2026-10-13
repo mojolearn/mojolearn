@@ -16,7 +16,7 @@ sabotage and the three vacuity controls are.
 
     tools/with_identical_mode.sh pixi run check-batch-invariance
 
-Under FAST or DETERMINISTIC this driver still runs and still prints every
+Under FAST this driver still runs and still prints every
 number; it REPORTS instead of asserting, and says so on its banner
 ([[fast-is-not-identical]]).
 """

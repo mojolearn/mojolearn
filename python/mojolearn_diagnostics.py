@@ -49,7 +49,7 @@ PRESENCE_ONLY_ENVIRONMENT_KEYS = (
 # The numeric tiers, in the order the ladder runs. `fast` is the package
 # directory itself and every other tier is a subdirectory of the same name;
 # see python/mojolearn/_backend.py, which is what actually loads them.
-NUMERIC_TIERS = ("fast", "deterministic", "identical")
+NUMERIC_TIERS = ("fast", "identical")
 RELEVANT_DISTRIBUTIONS = (
     "mojolearn",
     "numpy",
@@ -131,7 +131,7 @@ def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
     """Which numeric tiers this install actually carries.
 
     A wheel that shipped fewer tiers than the caller expects is the single
-    most confusing failure this library has: `numeric_mode="deterministic"`
+    most confusing failure this library has: `numeric_mode="fast"`
     raises from a missing-binary stub BY NAME, which is the correct
     behaviour, but the answer to "why" lives in the wheel's contents rather
     than in the traceback. This puts it in the report.
@@ -141,7 +141,7 @@ def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
     module lives outside the package.
     """
     counts: dict[str, int] = {tier: 0 for tier in NUMERIC_TIERS}
-    # THE VENDOR AXIS (2026-08-29). The Linux wheel lays the same three tiers
+    # THE VENDOR AXIS (2026-08-29). The Linux wheel lays the same tiers
     # out once per vendor, mojolearn/cuda/... and mojolearn/hip/..., and
     # stages the MAX runtime under a `.libs/` directory. Runtime libraries
     # are not extensions and are not counted; extensions are counted per

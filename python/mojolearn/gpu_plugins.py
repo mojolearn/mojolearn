@@ -269,7 +269,7 @@ def validate_baseline_manifest(doc, files):
                 or ".." in name.split("/") or name in declared):
             raise ValueError("invalid or duplicate PTX manifest file")
         mode = name.split("/", 1)[0] if "/" in name else "fast"
-        if mode not in ("fast", "deterministic", "identical") or row.get("numeric_mode") != mode:
+        if mode not in ("fast", "identical") or row.get("numeric_mode") != mode:
             raise ValueError(f"missing or mismatched numerical-mode evidence for {name}")
         modules = row.get("ptx_modules")
         if not isinstance(modules, list) or not all(isinstance(module, dict) for module in modules):  # glue: validate JSON PTX evidence record shapes

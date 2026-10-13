@@ -789,8 +789,7 @@ def _weights(data):
 
 def _ours_mode():
     """The tier this `ours*` worker was started for: `ours` is identical,
-    `ours-fast` fast (the conductor's _worker_env sets the variable per arm).
-    Deterministic is not a neural tier and is refused by name."""
+    `ours-fast` fast (the conductor's _worker_env sets the variable per arm)."""
     want = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower()
     if want not in ("identical", "fast"):
         raise RuntimeError("REFUSED: the neural surface races identical (ours) and fast "
@@ -1007,7 +1006,7 @@ class OursLM(Ours):
             lr=ADAMW["lr"], betas=ADAMW["betas"], eps=ADAMW["eps"],
             weight_decay=ADAMW["weight_decay"])
         meta = self.trainer.run_metadata()
-        mode = {0: "fast", 1: "identical", 2: "deterministic"}.get(
+        mode = {0: "fast", 1: "identical"}.get(
             int(meta.get("native_numeric_mode", -1)),
             "native_numeric_mode=%s" % meta.get("native_numeric_mode"))
         self.info = _ours_info(ml, meta.get("binding_file"), mode)

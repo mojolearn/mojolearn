@@ -47,7 +47,7 @@ def main(gpu=False):
         from sklearn.model_selection import GridSearchCV
         from mojolearn import StandardScaler
         X = np.tile(np.array([[-2.], [-1.], [1.], [2.]], np.float32), (8, 1))
-        for mode in ('fast', 'deterministic', 'identical'):
+        for mode in ('fast', 'identical'):
             for cls in (GradientBoostingClassifier, GradientBoostingRegressor):
                 y = np.where(X[:, 0] > 0, 'yes', 'no') if cls is GradientBoostingClassifier else (X[:, 0] > 0).astype(np.float32)
                 pipe = Pipeline([('scale', StandardScaler(numeric_mode=mode)),

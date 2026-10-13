@@ -94,8 +94,6 @@ def mamba2_prefill_backward(
     dt_hi: Float32,
     var ctx_in: Optional[DeviceContext] = None,
 ) raises -> Mamba2PrefillGradients:
-    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
-        raise Error("mamba2 backward: no DETERMINISTIC tier (FAST or IDENTICAL zero-state prefill)")
     if b <= 0 or l <= 0:
         raise Error("mamba2 backward: B and L must be positive")
     if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):

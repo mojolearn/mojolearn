@@ -76,7 +76,7 @@ def _validate(metadata, entries):
             or not isinstance(metadata.get('optimizer'), dict)
             or metadata['optimizer'].get('kind') != 'adamw'
             or not isinstance(metadata.get('rng'), dict)
-            or metadata.get('numeric_mode') not in ('identical', 'fast', 'deterministic')
+            or metadata.get('numeric_mode') not in ('identical', 'fast')
             or not (metadata.get('schedule') is None
                     or isinstance(metadata['schedule'], dict))):
         raise ValueError('Samba checkpoint state metadata mismatch')

@@ -28,7 +28,7 @@ def fixture():
         results.append(receipt);stamps[rel]=w(stamp)
         outputs.append(dict(relative=rel,original_sha256=raw,staged_sha256=staged,original_stamp=stamp,
             original_tier_receipt=receipt,admitted_closure={k:stamp[k] for k in ('digest','files','sources','scope')},
-            readback=dict(mode={'fast':0,'deterministic':2,'identical':1,'host':1}[tier],vendor='cpu' if tier=='host' else 'hip'),
+            readback=dict(mode={'fast':0,'identical':1,'host':1}[tier],vendor='cpu' if tier=='host' else 'hip'),
             embedded_architectures=[] if tier=='host' or Path(rel).stem=='_mojolearn_x_trees' else ['gfx942']))
     stage=dict(schema='mojolearn.native-staging-admission.v1',status='STAGED',admitted_package_source_commit='c'*40,
                qualified_source_commit='d'*40,compiler='Mojo 1.0.0 (test)',vendor='hip',arch='gfx942',outputs=outputs,

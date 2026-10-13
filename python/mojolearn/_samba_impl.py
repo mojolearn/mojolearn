@@ -301,7 +301,7 @@ class SambaStack(object):
         Clip the global gradient L2 norm to this value; None turns clipping off.
     accumulation_steps : int, default 1
         Number of microbatches per optimizer step; must divide the batch rows.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes

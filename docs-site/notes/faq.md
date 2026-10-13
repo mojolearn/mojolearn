@@ -34,11 +34,6 @@ Compare runs made with the same release, and record `mojolearn.__version__` with
 bits, while `fast` is tuned for Apple GPUs and makes no identity or repeatability promise. `identical` is
 the default and the mode to report results in; `fast` is opt-in.
 
-## Is `deterministic` the same as `identical`?
-
-No. `deterministic` promises the same bits on repeated runs on one device and build, with no promise
-across vendors. Only gradient boosting, random forests and Extra Trees offer it.
-
 ## Which GPUs are supported?
 
 In {{release}}: Apple silicon GPUs (M1 to M4 families) on macOS; NVIDIA {{nvidia_arches}} GPUs (for example

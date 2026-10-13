@@ -145,12 +145,7 @@ fi
 # failure and still a failure.
 # TWO TIERS (2026-09-25, reversing DEVIATION 2490 for classical ML): this
 # binding builds IDENTICAL (the default, bitwise across vendors) or FAST
-# (per-vendor speed, same quality, no bit promise). The DETERMINISTIC tier
-# stays tree-only (build_gbdt.sh, build_rf.sh, build_trees.sh); refusing it
-# here, by name, keeps it an unshipped tier rather than an unchecked one.
-[ "${MOJOLEARN_NUMERIC_MODE:-identical}" != deterministic ] || {
-    echo 'build_linalg.sh: the deterministic tier ships for the tree lanes (gbdt, rf, trees) only; classical bindings build MOJOLEARN_NUMERIC_MODE=identical (default) or fast.' >&2
-    exit 2; }
+# (per-vendor speed, same quality, no bit promise).
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
 if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "identical" ]; then
@@ -163,18 +158,8 @@ if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "identical" ]; then
     #     tools/with_identical_mode.sh pixi run mojo run -I . \
     #         gemm/checks/gemm_device_check.mojo
     export MOJOLEARN_SKIP_BUILD_GATE=1
-elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "deterministic" ]; then
-    # The MIDDLE tier: reproducible run to run on ONE device, with no
-    # promise about a second one. It gets its own directory because it
-    # is its own binary -- PIN_DETERMINISM is comptime, so a
-    # deterministic build is different code from both neighbours, not
-    # the identical build with a flag turned down.
-    MODE_DEFINE="-D MOJOLEARN_NUMERIC_DETERMINISTIC=1"
-    OUTDIR="python/mojolearn/deterministic"
-    mkdir -p "$OUTDIR"
-    export MOJOLEARN_SKIP_BUILD_GATE=1
 elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" != "fast" ]; then
-    echo "MOJOLEARN_NUMERIC_MODE must be fast, deterministic or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
+    echo "MOJOLEARN_NUMERIC_MODE must be fast or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
     exit 2
 fi
 
@@ -209,7 +194,7 @@ air_blobs() {
 # THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
 #
 # This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
-# identical and deterministic tiers, and the skip below then turned off ALL
+# identical tier, and the skip below then turned off ALL
 # THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
 # shipped for hours ran only on `fast` builds -- never on the identical ones
 # whose cross-vendor claim is the entire product.

@@ -21,18 +21,17 @@ THREE ASSERTIONS PER RUN, and a lane that refuses is a FAILURE here, not a
 row: this is a release gate, not a measurement.
 
 ONE EXCEPTION, AND IT IS AN ASSERTION RATHER THAN AN EXEMPTION. `gemm-pinned`
-asks `linalg.matmul(..., identical=True)`, and under `fast` and
-`deterministic` the library REFUSES it by name, because those tiers make no
+asks `linalg.matmul(..., identical=True)`, and under `fast` the library REFUSES it by name, because that tier makes no
 cross-vendor claim and returning a product anyway would be the library
 asserting something it cannot honour. `repeat_run_stability.py`'s own lane
 says so: "REFUSED under fast, which is the correct answer and is reported
 rather than skipped."
 
-The first NVIDIA wheel leg (2026-08-30) failed the fast and deterministic
+The first NVIDIA wheel leg (2026-08-30) failed the fast
 smokes on exactly this, 28 of 29 lanes green, and the one red one was the
 library behaving correctly. So `designed_refusals()` below inverts the test
 for those pairs instead of skipping them (since DEVIATION 2490 that is every
-non-tree lane under fast and deterministic, not only gemm-pinned): the lane must RAISE, and a lane that
+non-tree lane under fast, not only gemm-pinned): the lane must RAISE, and a lane that
 SUCCEEDS is the failure. A skip would have hidden a library that quietly
 started honouring an identity request under a tier that cannot keep it.
 
@@ -59,8 +58,8 @@ import traceback
 #: THE LANES THAT RUN IN EVERY TIER: the ones whose only binding is a tree
 #: lane (`_mojolearn_gbdt`, `_mojolearn_rf`, `_mojolearn_trees`). Since
 #: DEVIATION 2490 (2026-09-10) those three are the ONLY bindings with a fast
-#: or deterministic tier; every other binding is identical only, so every
-#: other lane must REFUSE under the two lower tiers, and a lane that answers
+#: tier; every other binding is identical only, so every
+#: other lane must REFUSE under the fast tier, and a lane that answers
 #: there is the failure (a lower-tier binary got back into the wheel). This
 #: is an allowlist on purpose: a lane added tomorrow is expected to refuse
 #: until someone puts it here, which is the safe direction to be wrong in.
@@ -68,7 +67,7 @@ TREE_LANES = frozenset({
     "rf-clf", "rf-reg", "et-clf", "et-reg",
     "gbdt-depthwise", "gbdt-lossguide", "gbdt-symmetric", "gbdt-rmse",
 })
-LOWER_TIERS = ("fast", "deterministic")
+LOWER_TIERS = ("fast",)
 
 
 def designed_refusals(lane_names):
@@ -77,14 +76,12 @@ def designed_refusals(lane_names):
     lane that SUCCEEDS is the failure. `gemm-pinned` was the first such pair
     (matmul(identical=True) under a tier that makes no identity claim); as
     of DEVIATION 2490 every non-tree lane joins it."""
-    # Since 2026-09-25 classical ML ships fast too: a classical lane refuses
-    # only the deterministic tier (tree-only), and `gemm-pinned` still
-    # refuses both lower tiers because it asks for identity by name.
+    # Since 2026-09-25 classical ML ships fast too; `gemm-pinned` still
+    # refuses fast because it asks for identity by name.
     out = set()
     for lane in lane_names:
         if lane in TREE_LANES:
             continue
-        out.add((lane, "deterministic"))
         if lane == "gemm-pinned":
             out.add((lane, "fast"))
     return out
@@ -158,7 +155,7 @@ ALL_BINDINGS = (
 #:
 #: So the test is INVERTED for these names below rather than skipped, the way
 #: `designed_refusals()` inverts it for lanes. Under `identical` they must
-#: load and read back the vendor. Under `fast` and `deterministic` they must
+#: load and read back the vendor. Under `fast` they must
 #: RAISE, and one that LOADS is the failure -- that would mean a lower-tier
 #: binary got back into the wheel, which is the whole thing this rule
 #: removed. `main()` checks this set against the installed package's own
@@ -167,8 +164,7 @@ IDENTICAL_ONLY_BINDINGS = frozenset({
     # The neural blocks gained FAST (lane neural, 2026-09-27); the byte LM has not.
     "_mojolearn_byte_lm",
 })
-#: Classical ML (2026-09-25): loads under fast and identical, must REFUSE
-#: under deterministic. Checked against `_backend._CLASSICAL_FAST` in main().
+#: Classical ML (2026-09-25): loads under fast and identical. Checked against `_backend._CLASSICAL_FAST` in main().
 CLASSICAL_FAST_BINDINGS = frozenset({
     "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm", "_mojolearn_solver",
     "_mojolearn_metrics", "_mojolearn_preprocessing", "_mojolearn_tsa",
@@ -182,8 +178,7 @@ CLASSICAL_FAST_BINDINGS = frozenset({
 
 
 def _must_refuse(name, mode):
-    return ((name in IDENTICAL_ONLY_BINDINGS and mode != "identical")
-            or (name in CLASSICAL_FAST_BINDINGS and mode == "deterministic"))
+    return name in IDENTICAL_ONLY_BINDINGS and mode != "identical"
 
 
 #: Lines MAX appends to a message that carry no cause. A message made only

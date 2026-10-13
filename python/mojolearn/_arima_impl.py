@@ -107,7 +107,7 @@ _ARIMA_FORMAT_EXOG = "mojolearn-arima-2"
 #: `checks/numerics.mojo`. Duplicated from `_backend._MODE_CODE` on purpose:
 #: the cross-check below is worth nothing if it reads its expectation from
 #: the same object it is checking.
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 
 
 def _series_major(y, name):
@@ -513,7 +513,7 @@ class ARIMA(NumericModeMixin):
     output_type : None, default None
         Must be None (cuML's array-type selector is not supported).
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'`` or
+        Numeric mode for this model (``'identical'`` or
         ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 

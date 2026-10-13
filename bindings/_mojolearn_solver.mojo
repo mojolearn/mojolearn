@@ -231,7 +231,7 @@ def linkage_fit_binding(
 
 def solver_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
-    IDENTICAL, 2 DETERMINISTIC; the same read-back as `svm_numeric_mode`.
+    IDENTICAL; the same read-back as `svm_numeric_mode`.
     box-run-2 (2026-10-05): this binding exported no `*_numeric_mode`, so the
     wave native import smoke (tools/identical_wave_native_build.py) refused it
     in both arms. Read-back only; no kernel or bits change."""

@@ -409,7 +409,7 @@ class LocalOutlierFactor(_XNeighbors):
         ``score_samples``) instead of the training data (``fit_predict``).
     n_jobs : int or None, default None
         Accepted for scikit-learn compatibility; unused.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -641,7 +641,7 @@ class NearestCentroid(_XNeighbors):
     priors : {'uniform', 'empirical'} or array-like of shape (n_classes,), default 'uniform'
         Class priors. ``'empirical'`` uses the class frequencies. Given priors
         must be non-negative, one per class, and are rescaled to sum to one.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -976,7 +976,7 @@ class OneClassSVM(_XNeighbors):
         Accepted for scikit-learn compatibility; unused.
     max_iter : int, default -1
         Iteration limit of the solver; -1 means 10,000,000.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -1290,7 +1290,7 @@ class KernelPCA(_XNeighbors):
     remove_zero_eig : bool, default False
         Drop components with zero eigenvalue even when ``n_components`` is
         set.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -1612,7 +1612,7 @@ class PolynomialCountSketch(_XNeighbors):
     random_state : int, numpy.random.RandomState or None, default None
         Seed for the hash tables. A RandomState or None contributes one draw
         that seeds the generator. Anything else raises ``ValueError``.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -1771,7 +1771,7 @@ class AdditiveChi2Sampler(_XNeighbors):
     sample_interval : float or None, default None
         Sampling interval. Required when ``sample_steps`` is not 1, 2 or 3
         (``ValueError`` otherwise); by default 0.8, 0.5 or 0.4 for those.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -1933,7 +1933,7 @@ class SkewedChi2Sampler(_XNeighbors):
         Seed for the weights and offsets. A RandomState or None contributes
         one draw that seeds the generator. Anything else raises
         ``ValueError``.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -2364,7 +2364,7 @@ class LabelPropagation(_LabelPropagationBase):
         Convergence tolerance.
     n_jobs : int or None, default None
         Accepted for scikit-learn compatibility; unused.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -2445,7 +2445,7 @@ class LabelSpreading(_LabelPropagationBase):
         Convergence tolerance.
     n_jobs : int or None, default None
         Accepted for scikit-learn compatibility; unused.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -2566,7 +2566,7 @@ class KNNImputer(_XNeighbors):
         values at ``fit``.
     keep_empty_features : bool, default False
         Keep features that are entirely missing at ``fit``, imputed as zero.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -2794,7 +2794,7 @@ class PageRank(_XNeighbors):
     dangling : array-like of shape (n,) or None, default None
         Where the mass of nodes without out-edges goes, normalized to sum to
         one; None uses the personalization.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -2958,7 +2958,7 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         ``'weak'``. Other values raise ``ValueError``.
     return_labels : bool, default True
         Also return the component label of each node.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for the call (``'fast'`` is Apple only). None uses the
         process default.
 
@@ -3117,7 +3117,7 @@ class Louvain(_XNeighbors):
         Maximum number of levels (a positive integer); None means no limit.
     seed : int or None, default None
         Accepted for networkx compatibility; unused.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 
@@ -3275,7 +3275,7 @@ class SVGP(_XNeighbors):
         Variance of the Gaussian likelihood.
     jitter : float, default 1e-6
         Diagonal jitter added to the inducing-point kernel matrix.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
 

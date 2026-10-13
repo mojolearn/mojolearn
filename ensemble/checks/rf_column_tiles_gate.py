@@ -14,7 +14,7 @@ source = "ensemble/checks/rf_column_tiles_fingerprint.mojo"
 subprocess.run(["pixi", "run", "mojo", "--version"], stdout=(out / "toolchain.txt").open("w"), check=True)
 cases = {"c2_boot", "c5_no_boot", "c5_weighted", "c2_weighted_boot", "c17_capacity", "c5_search", "c2_bins256", "c2_leaf_cap", "reg_boot", "reg_weighted", "reg_weighted_boot"}
 summary = []
-for mode in ("fast", "deterministic", "identical"):
+for mode in ("fast", "identical"):
     expected = None
     for arm in ("reference", "columns2", "columns4"):
         name = f"{mode}-{arm}"

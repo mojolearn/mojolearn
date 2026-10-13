@@ -77,7 +77,7 @@ def test_counted_class_weights_and_existing_gain_tail_remain_compatible(weights,
     assert after[fixed:] == [-1.0 if gain is None else gain, 0.125]
 
 
-@pytest.mark.parametrize("mode", ["fast", "deterministic", "identical"])
+@pytest.mark.parametrize("mode", ["fast", "identical"])
 def test_guard_retains_requested_numeric_mode(mode):
     model = _model(min_child_hessian=0.25, numeric_mode=mode)
     assert model.numeric_mode == mode

@@ -20,7 +20,7 @@ def _saved_mode(est):
     persists it, so a loaded model never silently changes tier."""
     mode = getattr(est, "numeric_mode", None) or _backend.default_mode()
     if not isinstance(mode, str) or mode.strip().lower() not in (
-        "fast", "deterministic", "identical"
+        "fast", "identical"
     ):
         raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
     return mode.strip().lower()
@@ -28,7 +28,7 @@ def _saved_mode(est):
 
 def _restore_mode(obj, arrays):
     mode = _serialize.scalar_str(arrays, "numeric_mode")
-    if mode not in ("fast", "deterministic", "identical"):
+    if mode not in ("fast", "identical"):
         raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
     obj.numeric_mode = mode
 

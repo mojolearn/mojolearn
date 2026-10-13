@@ -13,9 +13,8 @@ export MOJOLEARN_PYTHON
 out=${1:-bench/results/min_child_hessian_2026-09-10}
 mkdir -p "$out" build/min_child_hessian
 pixi run mojo --version > "$out/toolchain.txt"
-for mode in fast deterministic identical; do
+for mode in fast identical; do
     set --
-    if [ "$mode" = deterministic ]; then set -- -D MOJOLEARN_NUMERIC_DETERMINISTIC=1; fi
     if [ "$mode" = identical ]; then set -- -D MOJOLEARN_NUMERIC_IDENTICAL=1; fi
     echo "BUILD native $mode"
     pixi run mojo build -I . "$@" checks/min_child_hessian_check.mojo \

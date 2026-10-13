@@ -86,7 +86,7 @@ SOURCE_EXCLUDES = (":!bench/results", ":!mamba/corpus", ":!bench/oracle_*", ":!b
 #: runners, two at a time (run 36318515173); only the shard balance reads them.
 WEIGHTS = {
     "fast:build_gbdt.sh": 206, "identical:build_byte_lm.sh": 202, "identical:build_gbdt.sh": 182,
-    "deterministic:build_gbdt.sh": 159, "identical:build_metrics.sh": 132, "fast:build_metrics.sh": 130,
+    "identical:build_metrics.sh": 132, "fast:build_metrics.sh": 130,
     "fast:build.sh": 95, "fast:build_estimators.sh": 87, "identical:build_transformer.sh": 87,
     "identical:build_mixture.sh": 85, "identical:build_mamba.sh": 82, "identical:build_hdbscan.sh": 80,
     "identical:build_gp.sh": 79, "identical:build.sh": 76, "fast:build_hdbscan.sh": 75,
@@ -95,8 +95,8 @@ WEIGHTS = {
     "identical:build_gbdt_host.sh": 65, "identical:build_solver.sh": 59, "fast:build_gp.sh": 55,
     "fast:build_mixture.sh": 55, "identical:build_linalg.sh": 55, "identical:build_ivf.sh": 53,
     "identical:build_svm.sh": 51, "fast:build_ivf.sh": 46, "fast:build_linalg.sh": 46,
-    "deterministic:build_trees.sh": 45, "fast:build_svm.sh": 42, "identical:build_rf.sh": 41,
-    "identical:build_trees.sh": 41, "deterministic:build_rf.sh": 39, "fast:build_trees.sh": 38,
+    "fast:build_svm.sh": 42, "identical:build_rf.sh": 41,
+    "identical:build_trees.sh": 41, "fast:build_trees.sh": 38,
     "fast:build_rf.sh": 36, "fast:build_solver.sh": 34, "identical:build_mamba_host.sh": 34,
     "identical:build_metrics_host.sh": 32, "identical:build_core_host.sh": 30,
     "identical:build_embedding.sh": 30, "fast:build_arima.sh": 27, "fast:build_resample.sh": 26,
@@ -148,7 +148,7 @@ def set_builds(src):
     if not m:
         raise SystemExit("plan: packaging/linux/build_sets.sh has no SCRIPTS= ... host_so() block")
     block = text[m.start():m.end() - len("host_so()")]
-    tiers = "fast deterministic identical"
+    tiers = "fast identical"
     t = re.search(r'^TIERS="\$\{MOJOLEARN_BUILD_TIERS:-([a-z ]+)\}"', text, re.M)
     if t:
         tiers = t.group(1)

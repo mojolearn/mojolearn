@@ -181,13 +181,7 @@ def card_path() -> String:
 
 
 def _mode_name() -> String:
-    """The build's tier, from the ONE definition of it.
-
-    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
-    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
-    for a DETERMINISTIC build, which mislabels every line the driver
-    prints.
-    """
+    """The build's tier, from `numeric_mode_name()`."""
     return numeric_mode_name()
 
 

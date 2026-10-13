@@ -9,11 +9,10 @@ out=${1:-bench/results/gbdt_adapters_local}
 mkdir -p "$out"
 MOJOLEARN_PYTHON=${MOJOLEARN_PYTHON:-"$PWD/checks/pipeline_python.sh"}
 export MOJOLEARN_PYTHON
-for mode in fast deterministic identical; do
+for mode in fast identical; do
     MOJOLEARN_NUMERIC_MODE=$mode sh bindings/build_gbdt.sh > "$out/binding-$mode.build.log" 2>&1
     case "$mode" in
         fast) so=python/mojolearn/_mojolearn_gbdt.so; code=0 ;;
-        deterministic) so=python/mojolearn/deterministic/_mojolearn_gbdt.so; code=2 ;;
         identical) so=python/mojolearn/identical/_mojolearn_gbdt.so; code=1 ;;
     esac
     checks/pipeline_python.sh checks/gbdt_binary_prediction_smoke.py "$so" "$code" > "$out/native-$mode.smoke.log" 2>&1

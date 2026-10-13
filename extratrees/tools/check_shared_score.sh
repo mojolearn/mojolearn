@@ -7,13 +7,10 @@ if [[ "${MOJOLEARN_BUILD_LOCK_HELD:-}" != 1 ]]; then
 fi
 out=${1:-bench/results/et_shared_score}
 mkdir -p "$out"
-for mode in fast deterministic identical; do
+for mode in fast identical; do
     defines=()
     expected=FAST
-    if [[ "$mode" == deterministic ]]; then
-        defines+=(-D MOJOLEARN_NUMERIC_DETERMINISTIC=1)
-        expected=DETERMINISTIC
-    elif [[ "$mode" == identical ]]; then
+    if [[ "$mode" == identical ]]; then
         defines+=(-D MOJOLEARN_NUMERIC_IDENTICAL=1)
         expected=IDENTICAL
     fi

@@ -16,7 +16,7 @@ cd "$byte_lm_root"
 # build_transformer.sh: identical compiles with -D MOJOLEARN_NUMERIC_IDENTICAL=1
 # and lands under python/mojolearn/identical/; fast compiles with no mode
 # define (checks/numerics.mojo then resolves NUMERIC_FAST), lands flat in
-# python/mojolearn/, and promises quality, never bits. Deterministic is refused.
+# python/mojolearn/, and promises quality, never bits.
 case "${MOJOLEARN_NUMERIC_MODE:-identical}" in
     identical) byte_lm_mode_define="-D MOJOLEARN_NUMERIC_IDENTICAL=1"; byte_lm_default_outdir=python/mojolearn/identical ;;
     fast) byte_lm_mode_define=""; byte_lm_default_outdir=python/mojolearn ;;

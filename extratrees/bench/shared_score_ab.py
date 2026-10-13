@@ -29,7 +29,7 @@ def synthetic_main():
         selected = {int(v) for v in wanted_classes.split(",")}
         cases = [case for case in cases if case[1] in selected]
     modes = os.environ.get("MOJOLEARN_ET_BENCH_MODES", "fast,identical").split(",")
-    if not cases or any(mode not in ("fast", "identical", "deterministic") for mode in modes):
+    if not cases or any(mode not in ("fast", "identical") for mode in modes):
         raise SystemExit("Invalid or empty benchmark mode/class selection")
     results = []
     subprocess.run(["tools/bench_lock.sh", "acquire", "et-shared-counts", "exact model ABBA fits", "2 minutes"], check=True)
@@ -97,7 +97,7 @@ def verify_binding(native, mode, vendor, mask):
     witness = dict(mode=int(native.trees_numeric_mode()),
                    vendor=str(native.trees_vendor()),
                    shared_counts_mask=int(native.trees_shared_counts_mask()))
-    expected = dict(mode={'fast': 0, 'identical': 1, 'deterministic': 2}[mode],
+    expected = dict(mode={'fast': 0, 'identical': 1}[mode],
                     vendor=vendor, shared_counts_mask=mask)
     if witness != expected:
         raise RuntimeError(f'Compiled binding witness mismatch: {witness} != {expected}')
@@ -237,7 +237,7 @@ def real_main(argv):
     parser.add_argument('--rows', type=int, default=1000000, help='Shared-loader cap; actual shapes are recorded')
     parser.add_argument('--baseline-binding', type=Path, required=True)
     parser.add_argument('--candidate-binding', type=Path, required=True)
-    parser.add_argument('--mode', choices=('fast', 'deterministic', 'identical'), default='identical')
+    parser.add_argument('--mode', choices=('fast', 'identical'), default='identical')
     parser.add_argument('--vendor', choices=('cuda', 'metal', 'hip'), default='cuda')
     parser.add_argument('--trees', type=int, default=100)
     parser.add_argument('--depth', type=int, default=16)

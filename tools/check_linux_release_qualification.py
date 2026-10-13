@@ -28,7 +28,7 @@ require = surface.require
 # cuda_ptx/sm_80 is the PTX slot of mojolearn-nvidia, a set like any other
 # (Andrew 2026-10-10: PTX is a normal target; no flag).
 EXTENSION = re.compile(r'mojolearn/(cuda|hip)(?:_native|_ptx)?/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
-                       r'(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so')
+                       r'(?:(identical)/)?(_mojolearn[^/]*)\.so')
 # DEVIATION 2680: the CPU TRAINING binding. One vendor-neutral copy per wheel,
 # beside the architecture trees rather than inside one, because it targets no
 # GPU and reads back vendor 'cpu'.
@@ -338,7 +338,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
                 'Final payload or source differs from assembly inventory')
         require(set(payload.get('sets', {})) == carried, 'Missing assembly set proofs')
         require(payload.get('optional_native', {}).get('_mojolearn_byte_lm') == dict(included=True,
-                    supported_modes=['identical'], unsupported_modes=['fast', 'deterministic']),
+                    supported_modes=['identical'], unsupported_modes=['fast']),
                 'Release byte-LM must be included in IDENTICAL only')
         # DEVIATION 2680: THE HOST BINDINGS. A release wheel carries exactly
         # one copy of each, vendor-neutral, and the payload's record of each
@@ -353,7 +353,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
         for name in HOST_NAMES:
             member = 'mojolearn/host/' + name + '.so'
             require(payload.get('optional_native', {}).get(name) == dict(included=True,
-                        supported_modes=['identical'], unsupported_modes=['fast', 'deterministic']),
+                        supported_modes=['identical'], unsupported_modes=['fast']),
                     'Release host binding must be included in IDENTICAL only: ' + name)
             record = host_native[name]
             require(isinstance(record, dict) and record.get('archive_path') == member

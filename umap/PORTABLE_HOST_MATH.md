@@ -2,7 +2,7 @@
 
 IDENTICAL now routes host binary64 transcendental calls through repository
 portable seams. Other numeric modes retain their previous `std.math` calls
-through compile-time wrappers; no FAST or DETERMINISTIC tests were run here.
+through compile-time wrappers; no FAST tests were run here.
 
 | UMAP module | Replaced calls |
 |---|---|

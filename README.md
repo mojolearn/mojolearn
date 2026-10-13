@@ -92,14 +92,12 @@ weight storage, tokenized corpora and a built-in verifier.
 ## Numeric modes
 
 `identical` is the default. `fast` is available on Apple GPUs only, as an
-opt-in for most families. Gradient boosting, random
-forests and Extra Trees also offer `deterministic`. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
+opt-in for most families. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
 the table by family.
 
 | mode | contract |
 |---|---|
 | `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
-| `deterministic` | The same bits on repeated runs on one device. |
 | `fast` | Apple GPUs only: throughput, with no repeatability promise. |
 
 The `identical` contract is across hardware within one release. mojolearn is

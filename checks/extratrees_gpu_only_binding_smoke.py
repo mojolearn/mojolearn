@@ -8,7 +8,7 @@ from mojolearn import ExtraTreesClassifier, ExtraTreesRegressor
 from mojolearn.extratrees import _fit_params
 from mojolearn._backend import binding
 
-for mode in ('fast', 'deterministic', 'identical'):
+for mode in ('fast', 'identical'):
     native = binding('_mojolearn_trees', mode=mode)
     for cls, name, classes in (
         (ExtraTreesClassifier, 'et_classifier_fit', 2),

@@ -203,13 +203,13 @@ def fixture(root, split=False):
         host_native={name: dict(archive_path=member,
                                 sha256=hashlib.sha256(files[member]).hexdigest(),
                                 vendor='cpu', supported_modes=['identical'],
-                                unsupported_modes=['fast', 'deterministic'])
+                                unsupported_modes=['fast'])
                      for name, member in zip(gate.HOST_NAMES, gate.HOST_MEMBERS)},
         python_sha256={'mojolearn/__init__.py': gate.digest_file(wrapper),
                        'mojolearn/_version.py': gate.digest_file(version_file)},
         runtime_sha256={'mojolearn/.libs/libfixture.so': hashlib.sha256(b'inert runtime').hexdigest()},
         optional_native={n: {'included': True, 'supported_modes': ['identical'],
-                             'unsupported_modes': ['fast', 'deterministic']}
+                             'unsupported_modes': ['fast']}
                          for n in ('_mojolearn_byte_lm',) + tuple(gate.HOST_NAMES)})
     dist = 'mojolearn-' + version + '.dist-info/'
     files[dist + 'LINUX_PAYLOAD.json'] = json.dumps(payload).encode()

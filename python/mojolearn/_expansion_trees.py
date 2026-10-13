@@ -237,7 +237,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
     inference_engine : {"auto", "sequential", "parallel_groves"}, default="auto"
         Prediction kernel. ``"auto"`` lets the library choose; in identical
         mode it predicts as ``"sequential"``.
-    numeric_mode : {"identical", "deterministic", "fast"} or None, default=None
+    numeric_mode : {"identical", "fast"} or None, default=None
         Numeric mode for this estimator. None uses the process default (see
         ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
         only.
@@ -475,7 +475,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
     inference_engine : {"auto", "sequential", "parallel_groves"}, default="auto"
         Prediction kernel. ``"auto"`` lets the library choose; in identical
         mode it predicts as ``"sequential"``.
-    numeric_mode : {"identical", "deterministic", "fast"} or None, default=None
+    numeric_mode : {"identical", "fast"} or None, default=None
         Numeric mode for this estimator. None uses the process default (see
         ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
         only.

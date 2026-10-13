@@ -213,7 +213,7 @@ def validate_staged(proof, source_root=None):
         mode=row.get('readback',{}).get('mode')
         require(row.get('readback',{}).get('vendor')==('cpu' if tier=='host' else vendor), 'Wrong vendor readback')
         no_mode=Path(rel).stem in ('_mojolearn_solver','_mojolearn_tsa') and tier in ('fast','identical')
-        require((type(mode) is int and mode=={'fast':0,'deterministic':2,'identical':1,'host':1}[tier])
+        require((type(mode) is int and mode=={'fast':0,'identical':1,'host':1}[tier])
                 or (mode is None and no_mode), 'Wrong mode readback')
         member=f'mojolearn/{vendor}/{arch}/{rel}'
         (hosts if tier=='host' else extensions)[member]=staged_sha

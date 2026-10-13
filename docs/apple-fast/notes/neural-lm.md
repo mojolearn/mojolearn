@@ -10,7 +10,6 @@ reading and compiles only. Nothing here was run or measured. The board shape is
 - `bindings/build_byte_lm.sh` accepts `MOJOLEARN_NUMERIC_MODE=fast`. FAST adds no
   mode define and goes to `python/mojolearn/` by default. IDENTICAL keeps
   `-D MOJOLEARN_NUMERIC_IDENTICAL=1` and goes to `python/mojolearn/identical/`.
-  Deterministic is refused.
 - `MOJOLEARN_BYTE_LM_OUTDIR` overrides the output directory. A fresh directory is
   required, because an existing output is refused as before.
 - `MOJOLEARN_SKIP_BUILD_GATE=1` is accepted. The script never runs, imports or

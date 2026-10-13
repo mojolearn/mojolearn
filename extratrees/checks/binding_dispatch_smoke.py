@@ -32,7 +32,7 @@ print(f"PASS Python regression smoke requested_mode={os.environ['MOJOLEARN_NUMER
 native = gpu._bind("_mojolearn_trees")
 print("loaded_trees_extension", native.__file__)
 compiled_mode = native.trees_numeric_mode()
-expected_mode = {"fast": 0, "identical": 1, "deterministic": 2}[os.environ["MOJOLEARN_NUMERIC_MODE"]]
+expected_mode = {"fast": 0, "identical": 1}[os.environ["MOJOLEARN_NUMERIC_MODE"]]
 assert compiled_mode == expected_mode, (compiled_mode, expected_mode)
 expected_mask = int(os.environ.get("MOJOLEARN_ET_EXPECT_SHARED_MASK", "14" if native.trees_vendor() == "metal" else "0"))
 assert native.trees_shared_counts_mask() == expected_mask

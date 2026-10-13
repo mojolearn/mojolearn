@@ -67,7 +67,6 @@ import release_limits  # noqa: E402
 
 TIER_DEFINES = {
     "identical": ["-D", "MOJOLEARN_NUMERIC_IDENTICAL=1"],
-    "deterministic": ["-D", "MOJOLEARN_NUMERIC_DETERMINISTIC=1"],
     "fast": [],
 }
 DEFAULT_ARCHS = ("sm_89", "sm_80", "gfx942")  # sm_80: the PTX slot of mojolearn-nvidia

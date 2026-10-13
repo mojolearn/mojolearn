@@ -888,7 +888,7 @@ def rbc_eps_pass_fill(
     # this function's signature, which keeps all four `rbc_eps_nn_query_*`
     # entry points and both callers byte-for-byte unchanged;
     # `rbc_eps_pass_count` already performs exactly this read. Compiled out
-    # entirely under FAST and DETERMINISTIC.
+    # entirely under FAST.
     @parameter
     if PIN_CROSS_VENDOR:
         var h_nnz = ctx.enqueue_create_host_buffer[DType.int32](1)

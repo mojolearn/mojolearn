@@ -1402,9 +1402,9 @@ build-mamba2-ssd-backward-probe = "mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -
 #
 # THE TIER IS IDENTICAL AND ONLY IDENTICAL, for a mechanical reason:
 # identical_gemm's DEVIATION 1876 branch hands every projection to the vendor
-# kernel under FAST *and* under DETERMINISTIC, so the pinned k-partition
+# kernel under FAST, so the pinned k-partition
 # never runs there. The driver prints the tier it compiled in and REPORTS
-# rather than asserts under the lower two, so the IDENTICAL pass is the
+# rather than asserts under FAST, so the IDENTICAL pass is the
 # injector as everywhere else:
 #
 #   tools/with_identical_mode.sh pixi run check-batch-invariance

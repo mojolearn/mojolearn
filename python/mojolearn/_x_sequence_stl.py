@@ -62,7 +62,7 @@ class STL:
     seasonal_jump, trend_jump, low_pass_jump : int, default 1
         Evaluate each smoother every ``jump`` points and interpolate between.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 

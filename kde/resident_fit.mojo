@@ -185,7 +185,6 @@ comptime KDE_FIT_REGISTRY = _Global[
     StorageType=KdeFitRegistry,
     name=(
         "MojoKdeResidentFitIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoKdeResidentFitDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
         "MojoKdeResidentFitFast"
     ),
     init_fn=KdeFitRegistry.__init__,

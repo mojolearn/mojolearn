@@ -9,7 +9,7 @@ from mojolearn.ensemble import GradientBoosting
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=('fast', 'deterministic', 'identical'), required=True)
+    parser.add_argument('--mode', choices=('fast', 'identical'), required=True)
     mode = parser.parse_args().mode
     x = (np.arange(256) % 4).astype(np.float32)[:, None]
     y = np.array([0, .25, 4, 4.25], np.float32)[np.arange(256) % 4]
@@ -20,7 +20,7 @@ def main():
                         boost_from_average=False)
         baseline = GradientBoosting(**defaults).fit(x, y)
         assert baseline._bind('_mojolearn_gbdt').gbdt_numeric_mode() == {
-            'fast': 0, 'identical': 1, 'deterministic': 2}[mode]
+            'fast': 0, 'identical': 1}[mode]
         for threshold, count in ((None, 4), (0., 4), (1.999, 4), (2., 2), (1024., 1)):
             model = GradientBoosting(**defaults, min_split_gain=threshold).fit(x, y)
             assert model.get_tree_leaf_counts().tolist() == [count], (policy, threshold)

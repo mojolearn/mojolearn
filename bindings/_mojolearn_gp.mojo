@@ -165,13 +165,12 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
 
 def gp_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
-    IDENTICAL, 2 DETERMINISTIC. The same shape as `gbdt_numeric_mode`, and
+    IDENTICAL. The same shape as `gbdt_numeric_mode`, and
     for the same reason: the wrapper reads it once (`_gp_impl.py::
     GaussianProcessRegressor._extension`) and refuses to run if the binary
     it loaded disagrees with the mode the package asked for. A wrong-arm
     measurement that is correctly labelled by accident is the failure this
-    prevents, and a boolean could not do that job once a third tier
-    existed, because DETERMINISTIC answered 0 and read back as "fast"."""
+    prevents."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 

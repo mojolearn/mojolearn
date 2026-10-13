@@ -18,7 +18,7 @@ def main():
         ([1] * 257, np.full((257, 1), 0.75, np.float32), [0, 1], [0.75] * 257),
     ]
     checks = 0
-    for mode in ("fast", "deterministic", "identical"):
+    for mode in ("fast", "identical"):
         for y, p, labels, selected in cases:
             total = math.fsum(-math.log(min(1 - eps, max(eps, x))) for x in selected)
             for normalize in (False, True):

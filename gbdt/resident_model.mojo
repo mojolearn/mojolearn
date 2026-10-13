@@ -37,7 +37,7 @@ resident call is the device work of `gbdt/train.mojo::predict_floats` and
     text for a NaN on an `AsIs` column); features without borders are
     skipped exactly as `_build_cindex_from_floats` skips them;
   * the cursor is filled with `Float32(model.bias)` and every oblivious
-    tree is applied in tree order with the same grid. FAST and DETERMINISTIC
+    tree is applied in tree order with the same grid. FAST
     use the same `compute_bins_and_add_kernel` launch per tree; IDENTICAL
     groups at most four consecutive trees while retaining the same ordered
     float32 additions and split walk
@@ -1055,7 +1055,6 @@ comptime GBDT_MODEL_REGISTRY = _Global[
     StorageType=GbdtModelRegistry,
     name=(
         "MojoGbdtResidentModelIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoGbdtResidentModelDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
         "MojoGbdtResidentModelFast"
     ),
     init_fn=GbdtModelRegistry.__init__,

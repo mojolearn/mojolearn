@@ -14,7 +14,7 @@ p.add_argument('--rows', type=int, default=1_000_000)
 p.add_argument('--trees', type=int, default=100)
 p.add_argument('--depth', type=int, default=16)
 p.add_argument('--pairs', type=int, default=2)
-p.add_argument('--mode', default='fast', choices=('fast','identical','deterministic'))
+p.add_argument('--mode', default='fast', choices=('fast','identical'))
 a = p.parse_args()
 if a.rows < 1_000_000:
     print('REMINDER: small inputs are diagnostic only; tree timing target is >=1M rows', flush=True)

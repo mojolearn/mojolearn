@@ -22,7 +22,7 @@ streamed through shared memory. No `n_query x n_train` matrix exists, so
 memory is O(n_query + n_train) and 100k x 100k scores in about half a
 second on an M4 where the staged path could not allocate. The staged
 path (`kde.dists`, `kde.logk`, `kde.rowmax` stages, serial ascending fold)
-is what IDENTICAL and DETERMINISTIC run, and what FAST runs whenever an
+is what IDENTICAL runs, and what FAST runs whenever an
 identity trace is requested, so the two arms compare in one process
 (`python/mojolearn/tests/test_kde_fused_fast.py`). Register rows cover
 `d <= 64`; wider rows take a feature-chunked kernel. Numbers and the
@@ -38,7 +38,7 @@ train chunks) over the staged path's own per-cell arithmetic, the
 log-kernel written straight into the matrix (no distance matrix), the row
 max folded from chunk maxima, the `exp` terms computed one thread per cell,
 and the staged serial ascending sum. It returns the staged path's bits.
-A trace, cosine, sqeuclidean, minkowski, FAST and DETERMINISTIC still run
+A trace, cosine, sqeuclidean, minkowski and FAST still run
 the staged (or fused FAST) path.
 
 Identity on the H100 (RunPod pod `dn8er13wjuxtax`, 2026-09-11).

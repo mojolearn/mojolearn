@@ -956,8 +956,8 @@ class BuilderViewTests(unittest.TestCase):
             # a flag on the compile line
             lambda t: t.replace("MOJOLEARN_COMPILE_JOBS=2 \\", "MOJOLEARN_COMPILE_JOBS=3 \\", 1),
             # the tier default
-            lambda t: t.replace('TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"',
-                                'TIERS="${MOJOLEARN_BUILD_TIERS:-deterministic identical}"'),
+            lambda t: t.replace('TIERS="${MOJOLEARN_BUILD_TIERS:-fast identical}"',
+                                'TIERS="${MOJOLEARN_BUILD_TIERS:-identical}"'),
             # the tier_names function body
             lambda t: t.replace('if [[ "$1" = identical || "$1" = fast ]]; then printf \' %s\' "$FAST_CLASSICAL_NAMES"; fi',
                                 'if [[ "$1" = identical ]]; then printf \' %s\' "$FAST_CLASSICAL_NAMES"; fi'),

@@ -80,7 +80,6 @@ def test_patch_bytes_touches_only_ptx_and_keeps_size():
 def test_tree_scope_is_identical_cuda_only(tmp_path):
     for rel in ("mojolearn/cuda/sm_89/identical/_mojolearn.so",
                 "mojolearn/cuda/sm_89/_mojolearn.so",               # FAST: not ours
-                "mojolearn/cuda/sm_89/deterministic/_mojolearn.so",  # DETERMINISTIC: not ours
                 "mojolearn/hip/gfx942/identical/_mojolearn.so"):     # AMD ships no PTX
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / rel).write_bytes(blob(PTX))

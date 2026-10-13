@@ -287,13 +287,7 @@ comptime PACK_POISON_I = Int32(-424242)
 
 
 def _mode_name() -> String:
-    """The build's tier, from the ONE definition of it.
-
-    Delegates to `numeric_mode_name()` since 2026-08-29; see the note
-    on that function. A local two-way IDENTICAL-or-FAST answers "FAST"
-    for a DETERMINISTIC build, which mislabels every line the driver
-    prints.
-    """
+    """The build's tier, from `numeric_mode_name()`."""
     return numeric_mode_name()
 
 
@@ -2770,7 +2764,7 @@ def check_hw_linesearch_limit_keeps_best() raises:
           bits differ from the best trial's, so the sabotage `LS_LAST`
           (store the last trial on the device) has a series to fail on.
     Counts print BEFORE anything raises (DEVIATION 960's lesson). Under
-    FAST and DETERMINISTIC (b) is RECORDED, not raised; (a) and (c) raise in
+    FAST (b) is RECORDED, not raised; (a) and (c) raise in
     every mode because they are reach facts about the fixture set."""
     var ctx = DeviceContext()
     var limits: List[Int] = [1, 2, 4, 8]

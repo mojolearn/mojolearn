@@ -148,7 +148,7 @@ class DBSCAN(NumericModeMixin):
         Keep the core samples and their labels so :meth:`predict` and
         :meth:`save` can be used. Not allowed with
         ``metric='precomputed'``.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default=None
+    numeric_mode : {'identical', 'fast'} or None, default=None
         Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
         default.
 
@@ -635,7 +635,7 @@ class KernelDensity(NumericModeMixin):
         At most one entry, whose value is the Minkowski ``p``, as in cuML.
         Only ``p = 2`` is supported; any other value raises
         ``NotImplementedError``.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default=None
+    numeric_mode : {'identical', 'fast'} or None, default=None
         Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
         default.
 

@@ -4098,8 +4098,8 @@ def attention_path_choice(plant_at: Int) -> Int:
     unconditionally). `fused` asks for the fused kernels; the default is
     `auto`, which is `fused`.
 
-    THIS FUNCTION USED TO RETURN EAGER FOR A FAST OR DETERMINISTIC BUILD,
-    which is the whole case against those tiers existing in this lane: the
+    THIS FUNCTION USED TO RETURN EAGER FOR A FAST BUILD,
+    which is the whole case against that tier existing in this lane: the
     fused kernels are gated on IDENTICAL, so the tier sold as "fast" got the
     UNFUSED path and ran slower than the default while promising less. The
     transformer lane is IDENTICAL-only as of 2026-09-10 and the branch is

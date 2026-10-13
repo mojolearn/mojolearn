@@ -7,7 +7,6 @@
 #
 # Output, under <dest-dir>:
 #   sets/<vendor>/_mojolearn*.so                 the FAST set
-#   sets/<vendor>/deterministic/_mojolearn*.so   the DETERMINISTIC set
 #   sets/<vendor>/identical/_mojolearn*.so       the IDENTICAL set
 #   sets/<vendor>/.libs/*.so                     the MAX runtime closure
 #   sets/<vendor>/manifest.json                  sizes, hashes, read-backs
@@ -89,7 +88,7 @@ taskset -pc "$BUILD_CPUS" $$ || exit 2
 . "$REPO/packaging/linux/binding_timeout.sh"
 BINDING_TIMEOUT=$(binding_timeout_seconds) || exit 2
 python3 -c 'import os, sys; assert 1 <= len(os.sched_getaffinity(0)) <= int(sys.argv[1]), "build affinity exceeds 2 x jobs"' "$BUILD_CORES" || exit 2
-TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
+TIERS="${MOJOLEARN_BUILD_TIERS:-fast identical}"
 # THE TWO LISTS BELOW ARE THE LINUX WHEEL'S CONTENTS AND THEY GO STALE
 # SILENTLY. A binding missing from them is not a build error -- it is a wheel
 # that ships without that extension and imports fine until the user touches
@@ -113,12 +112,12 @@ EXT_NAMES="_mojolearn_gbdt _mojolearn_rf _mojolearn_trees"
 # Before this the split was neural-only (three lanes, 2026-09-10 morning);
 # the reason for THOSE was different (their fused kernels were gated on the
 # identical contract, so the lower tiers were slower) and no longer matters.
-# CLASSICAL ML (2026-09-25): fast and identical, never deterministic.
+# CLASSICAL ML (2026-09-25): fast and identical.
 FAST_CLASSICAL_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_kernel_methods.sh build_mixture.sh build_hdbscan.sh build_resample.sh build_ivf.sh build_training.sh build_mamba.sh build_transformer.sh build_embedding.sh"
 FAST_CLASSICAL_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_kernel_methods _mojolearn_mixture _mojolearn_hdbscan _mojolearn_resample _mojolearn_ivf _mojolearn_training _mojolearn_mamba _mojolearn_transformer _mojolearn_embedding"
 # THE NEURAL BLOCKS (training, mamba, transformer, embedding) moved to the
-# FAST_CLASSICAL lists above on 2026-09-27 (lane neural): fast and identical,
-# never deterministic. The two lists below are empty until an expansion lane
+# FAST_CLASSICAL lists above on 2026-09-27 (lane neural): fast and identical.
+# The two lists below are empty until an expansion lane
 # declares an identical-only binding.
 IDENTICAL_ONLY_SCRIPTS=""
 IDENTICAL_ONLY_NAMES=""
@@ -501,10 +500,10 @@ fi
 
 # ---------------------------------------------------------------- move
 # THE ARCHITECTURE IS A DIRECTORY LEVEL, named by the read-back and never
-# typed: sets/<vendor>/<arch>/{,deterministic,identical}. The selector and
+# typed: sets/<vendor>/<arch>/{,identical}. The selector and
 # pack_wheel.py mirror this layout (docs/LINUX_WHEEL.md).
 SET="$DEST/sets/$VENDOR/$ARCH"
-rm -rf "$DEST/sets/$VENDOR"; mkdir -p "$SET/deterministic" "$SET/identical"
+rm -rf "$DEST/sets/$VENDOR"; mkdir -p "$SET/identical"
 for t in $TIERS; do
   case "$t" in fast) src=python/mojolearn; dst="$SET" ;; *) src=python/mojolearn/$t; dst="$SET/$t" ;; esac
   for n in $(tier_names "$t"); do
@@ -700,7 +699,7 @@ import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
 record = json.loads(path.read_text())
 record.setdefault('optional_native', {})['_mojolearn_byte_lm'] = dict(
-    included=True, supported_modes=['identical'], unsupported_modes=['fast', 'deterministic'],
+    included=True, supported_modes=['identical'], unsupported_modes=['fast'],
     profile='mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1')
 path.write_text(json.dumps(record, indent=2) + '\n')
 PYBYTE

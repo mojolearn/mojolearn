@@ -90,7 +90,7 @@ def _host_surface():
 MARKER = re.compile(
     r"<!--fact:(?P<name>[a-z_]+)-->(?P<value>.*?)<!--/fact-->", re.DOTALL
 )
-MODES = ("fast", "deterministic", "identical")
+MODES = ("fast", "identical")
 
 
 def _read(rel):

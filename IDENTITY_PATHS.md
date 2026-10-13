@@ -351,8 +351,8 @@ sequence models (byte LM, Mamba 1/2/3, transformer, Samba) the prefix
 lengths 1, 7 and L-1 against L, and the forecasters the horizons 1, 7 and
 H-1 against H. It is one hash when every answer is the same bytes and
 `BATCH_MOVED` naming the call, the row and both values in hex when one is
-not, a failure under IDENTICAL and a recorded verdict under FAST and
-DETERMINISTIC. `MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1` flips one low bit of
+not, a failure under IDENTICAL and a recorded verdict under FAST.
+`MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1` flips one low bit of
 every whole-batch answer and must turn every hashed cell `BATCH_MOVED`.
 
 What it tests is the host call path's batch splitting through the bindings,

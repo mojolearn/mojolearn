@@ -2,7 +2,7 @@
 """Keep a32-lane queue topology inside each half of an IDENTICAL CDNA wave.
 
 This changes communication scope, never floating arithmetic or queue order.
-FAST/DETERMINISTIC retain their prior physical-width calls and entry refusal.
+FAST retains its prior physical-width calls and entry refusal.
 The caller must converge each logical group; different halves may diverge.
 """
 from std.gpu.primitives.id import lane_id

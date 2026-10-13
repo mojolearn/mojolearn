@@ -43,10 +43,7 @@ that is wired, so the debt cannot rot into a silent skip
 WHAT IS ASSERTED AND WHAT IS REPORTED. Under `identical` the bitwise
 arms -- decode == prefill per token, split prefill (L-1 tokens then one
 step) == whole prefill, the cache round-trip, and the repeat-call
-determinism arm -- are ASSERTED; under `deterministic` ONLY the
-repeat-call arm is asserted (same box, same bits run to run IS that
-tier's promise; the cross-path decode==prefill construction is asserted
-only where the lane's clause (d) is, under identical); under `fast`
+determinism arm -- are ASSERTED; under `fast`
 every bitwise arm is REPORTED, per [[fast-is-not-identical]] (the
 lane's own clause (d) FAILS under FAST by construction and that is
 recorded as correct in transformer/README.md). The reference
@@ -66,8 +63,7 @@ first ran on an NVIDIA L40S (the lane report names the log).
 
 RUN LEDGER. RAN 2026-09-02 on the M4 (Apple), ALL THREE TIERS GREEN,
 44 checks 0 failed each, with the binding rebuilt for each tier:
-fast (bitwise rows REPORTED), deterministic (the repeat-call row
-ASSERTED), identical (decode, resumption and determinism all
+fast (bitwise rows REPORTED), identical (decode, resumption and determinism all
 ASSERTED). The first run was RED by one check and the check was
 wrong, not the binding: it asked a transposed q_proj to be refused
 by shape, and q_proj is square for every legal config -- see the
@@ -84,12 +80,7 @@ HOW TO RUN IT
     #    transformer/corpus/)
     cd python && python3 -m mojolearn.tests.test_transformer_surface
 
-    # 3. the deterministic tier
-    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_transformer.sh
-    cd python && MOJOLEARN_NUMERIC_MODE=deterministic \\
-        python3 -m mojolearn.tests.test_transformer_surface
-
-    # 4. the identical tier, where the bitwise arms are asserted
+    # 3. the identical tier, where the bitwise arms are asserted
     MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
     cd python && MOJOLEARN_NUMERIC_MODE=identical \\
         python3 -m mojolearn.tests.test_transformer_surface
@@ -443,9 +434,7 @@ def main(out=sys.stdout):
     rep = Report()
     mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower()
     assert_bits = mode == "identical"
-    # The repeat-call arm alone is also asserted under `deterministic`:
-    # same box, same bits run to run IS that tier's promise (header).
-    assert_repeat = mode in ("identical", "deterministic")
+    assert_repeat = mode == "identical"
 
     rng = np.random.default_rng(0x54726E73)  # ASCII 'Trns'
     wa = _weights(rng, A_DM, A_NH, A_NKV, A_HD, A_IT)
@@ -881,12 +870,9 @@ def main(out=sys.stdout):
             "and every refusal hold.\n"
             "THE CROSS-PATH BITWISE ARMS WERE %s: fast promises\n"
             "speed only (the lane's clause (d) fails under FAST by\n"
-            "construction) and deterministic promises repeat-run bits\n"
-            "only. Re-run under MOJOLEARN_NUMERIC_MODE=identical for the\n"
+            "construction). Re-run under MOJOLEARN_NUMERIC_MODE=identical for the\n"
             "fully asserted form.\n"
-            % (mode,
-               "REPORTED, NOT ASSERTED" if mode == "fast"
-               else "REPORTED (repeat-run asserted)"))
+            % (mode, "REPORTED, NOT ASSERTED"))
         return 0
     out.write(
         "test_transformer_surface: GREEN. The block reproduces the\n"

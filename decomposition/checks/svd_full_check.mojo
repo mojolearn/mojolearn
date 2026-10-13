@@ -321,7 +321,7 @@ def _rel_frob(got: List[Float64], want: List[Float64]) -> Float64:
 
 
 def _mode() -> String:
-    return "IDENTICAL" if _IDENTICAL else "FAST/DETERMINISTIC"
+    return "IDENTICAL" if _IDENTICAL else "FAST"
 
 
 # ===========================================================================

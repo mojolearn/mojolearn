@@ -80,7 +80,7 @@ class ReleaseInventory(unittest.TestCase):
             result = packer.release_inventory(sets, proofs, version, root)
             self.assertEqual(result['version'], version)
             self.assertEqual(result['assembly_profile'], packer.RELEASE_PROFILE)
-            # Three tree lanes in each of fast and deterministic, and all
+            # Three tree lanes in fast, and all
             # twenty-three identical-tier names (the three trees, the nineteen
             # identical-only bindings, and the byte LM), so 29 per architecture
             # across three architectures. Counted from tier_names rather than
@@ -96,11 +96,11 @@ class ReleaseInventory(unittest.TestCase):
             expansion = (2 * len(packer.host_surface.expansion_gpu_bindings("classical"))
                          + len(packer.host_surface.expansion_gpu_bindings("identical-only")))
             # Four neural blocks now also ship FAST (py/Apple takeover).
-            self.assertEqual(per_arch, 48 + expansion)
+            self.assertEqual(per_arch, 45 + expansion)
             self.assertEqual(len(result['extensions']), per_arch * 3)
             self.assertTrue(result['optional_native']['_mojolearn_byte_lm']['included'])
             self.assertEqual(result['optional_native']['_mojolearn_byte_lm']['unsupported_modes'],
-                             ['fast', 'deterministic'])
+                             ['fast'])
             self.assertEqual(set(result['runtime_coverage'].values()), {'PENDING_INSTALLED_ARTIFACT'})
 
     def test_wrong_version_or_missing_architecture_refused(self):

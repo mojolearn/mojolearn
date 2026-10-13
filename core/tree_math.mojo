@@ -9,7 +9,7 @@ MojoLearn's existing RF DEVIATION 406 and ET entropy seam wrap that call
 through checks.numerics.identical_log for Float32 and std.math.log for other
 floating widths. This module extracts their token-identical wrapper; it does
 not change arithmetic, dtype dispatch, fusion, or any learner's split policy.
-FAST/DETERMINISTIC retain stdlib Float32 log; IDENTICAL retains portable_logf
+FAST retains stdlib Float32 log; IDENTICAL retains portable_logf
 through the existing identical_log function. This is a host/device scalar
 primitive, not a CPU training or prediction implementation.
 """

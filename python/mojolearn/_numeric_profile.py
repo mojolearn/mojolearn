@@ -11,7 +11,7 @@
     numeric_profile="fp32_v1"       the default: every family, every trainer
 
 ITS OWN PARAMETER, NOT A VALUE OF `numeric_mode`. `numeric_mode` is the
-PROMISE (identical, deterministic, fast). `numeric_profile` is the NUMBER
+PROMISE (identical, fast). `numeric_profile` is the NUMBER
 FORMAT the matrix products compute in. They are independent: a profile is
 bitwise identical across vendors under `numeric_mode="identical"` exactly
 as `fp32_v1` is, and picking one never changes the mode.

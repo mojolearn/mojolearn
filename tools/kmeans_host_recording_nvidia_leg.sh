@@ -263,7 +263,7 @@ grep -E 'BATCH_MOVED|summary' "$OUT/logs/kmeans-diff-batch-sabotage.log" | head 
 # the column is taken, so a GPU column can never be mislabelled as a CPU one.
 rm -rf "$CPUPKG"; mkdir -p "$CPUPKG"
 cp -R python/mojolearn "$CPUPKG/mojolearn"
-rm -rf "$CPUPKG/mojolearn/identical" "$CPUPKG/mojolearn/deterministic" "$CPUPKG/mojolearn/__pycache__"
+rm -rf "$CPUPKG/mojolearn/identical" "$CPUPKG/mojolearn/__pycache__"
 rm -f "$CPUPKG/mojolearn"/*.so
 _cv=$(env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$CPUPKG" pixi run python -c \
     'import mojolearn; print(mojolearn.vendor())' 2>&1 | tail -1)

@@ -154,7 +154,7 @@ for name in sorted(all_bindings):
     assert audit['extension_hashes'].get(member) == row['sha256'], ('Installed binary differs from wheel', member)
     if name in getters:
         row['mode_code'] = int(getattr(binding, getters[name])())
-        assert row['mode_code'] == {'fast': 0, 'identical': 1, 'deterministic': 2}[os.environ['MOJOLEARN_NUMERIC_MODE']]
+        assert row['mode_code'] == {'fast': 0, 'identical': 1}[os.environ['MOJOLEARN_NUMERIC_MODE']]
     else:
         row['mode_readback'] = 'unavailable; build provenance and functional gate required'
     readback[name] = row
@@ -213,7 +213,7 @@ unset PYTHONPATH PYTHONHOME MOJOLEARN_VENDOR MOJOLEARN_ARIMA_GATE_QUICK MOJOLEAR
 export MOJOLEARN_WHEEL_AUDIT="$DEST/wheel-audit.json"
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 MOJOLEARN_EXPECT_VENDOR="$VENDOR" MOJOLEARN_REPO="$ROOT"
 cd "$DEST"
-for mode in fast deterministic identical; do
+for mode in fast identical; do
     export MOJOLEARN_NUMERIC_MODE="$mode"
     # DEVIATION 2490: the job set per tier comes from the verifier's
     # expected_jobs so the on-box loop and the admission side cannot drift.

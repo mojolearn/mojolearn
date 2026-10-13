@@ -43,7 +43,7 @@ for path in json.loads(Path('/root/wp67-paths.json').read_text()):
         p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(saved.read_bytes())
 PY
     fi
-    for mode in identical deterministic fast; do
+    for mode in identical fast; do
         export MOJOLEARN_NUMERIC_MODE=$mode
         DIR="$OUT/$arm/$mode"
         mkdir -p "$DIR"
@@ -93,7 +93,6 @@ PY
             WP67_LM_ACTION=train_eval WP67_LM_STEPS=2 WP67_LM_RESIDENT=1 timeout -k 5 45 "$PY" /root/wp67_surface_capture.py /root/wp67_lm_surface.py "$DIR/resident-multi.bin" > "$DIR/resident-multi.log" 2>&1
         fi
         mode_define=-D\ MOJOLEARN_NUMERIC_IDENTICAL=1
-        [ "$mode" != deterministic ] || mode_define=-D\ MOJOLEARN_NUMERIC_DETERMINISTIC=1
         [ "$mode" != fast ] || mode_define=""
         pending=""
         count=0

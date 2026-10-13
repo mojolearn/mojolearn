@@ -101,8 +101,8 @@ DEVIATION 795 -- THE TRANSFORMER SURFACE'S OWN DEPARTURES, IN ONE BLOCK.
   `window` (sliding-window causal attention with a ring KV cache) is
   the tenth forward scalar.
 
-THE THREE-TIER SEMANTICS ARE THE BUILD'S, NOT THIS FILE'S. The numeric
-mode (fast / deterministic / identical) is a compile-time define
+THE TIER SEMANTICS ARE THE BUILD'S, NOT THIS FILE'S. The numeric
+mode (fast / identical) is a compile-time define
 (`checks/numerics.mojo`), one binary per tier under
 `python/mojolearn/[<tier>/]_mojolearn_transformer.so`;
 `transformer_numeric_mode` below is the read-back
@@ -439,7 +439,7 @@ def transformer_attention_profile_binding() raises -> PythonObject:
 
 def transformer_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
-    IDENTICAL, 2 DETERMINISTIC. The same shape as `mamba_numeric_mode`
+    IDENTICAL. The same shape as `mamba_numeric_mode`
     and for the same reason: `_transformer_impl.py` reads it once and
     refuses to run if the binary it loaded disagrees with the mode the
     package asked for."""
@@ -464,8 +464,6 @@ def transformer_lean_stages(hd: Int) -> Bool:
     allocations: the fused attention path will be attempted (FAST or
     IDENTICAL build, supported head_dim, not forced eager) and the trace is off here
     always. The eager fallback grows the buffers on demand."""
-    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
-        return False
     if not fused_forward_supported_head_dim(hd):
         return False
     return attention_path_choice(PLANT_AT_NONE) != ATTN_PATH_EAGER
@@ -1377,11 +1375,6 @@ def transformer_session_backward_binding(
     """`transformer_backward` on a session (lane/neural-net-experiment):
     the same twenty-one addresses and eight scalars, word for word, the
     weights, workspace and backward stages retained across calls."""
-    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
-        raise Error(
-            "transformer backward: no DETERMINISTIC tier (FAST or IDENTICAL"
-            " zero-state prefill backward)"
-        )
     var owner = session.downcast_value_ptr[TransformerSession]()
     if owner[].busy or owner[].closed:
         raise Error("transformer: session is busy or closed")
@@ -3184,11 +3177,6 @@ def transformer_backward_binding(
     1 L, 2 d_model, 3 n_heads, 4 n_kv_heads, 5 head_dim, 6 intermediate,
     7 window. The activation gradients are the lane's pinned chains; every
     weight gradient is a sum over this call's B*L tokens."""
-    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
-        raise Error(
-            "transformer backward: no DETERMINISTIC tier (FAST or IDENTICAL"
-            " zero-state prefill backward)"
-        )
     if len(addrs) != 21 or len(params) != 8:
         raise Error(
             "transformer backward: expected 21 addresses and 8 scalars (B,"
@@ -3378,16 +3366,7 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
     # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those
     # fallbacks are gone: FAST runs the same kernels and the same launches with
     # the pins in checks/numerics.mojo compiled to the free schedule. FAST
-    # promises quality, never bits. The
-    # DETERMINISTIC tier stays tree-only: refuse to exist under it.
-    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
-        abort(
-            String(
-                "_mojolearn_transformer: refusing to initialize -- this lane builds"
-                " FAST and IDENTICAL only. Rebuild with"
-                " MOJOLEARN_NUMERIC_MODE=identical (or fast) bash bindings/build_transformer.sh"
-            )
-        )
+    # promises quality, never bits.
     # DEVIATION 793's last clause, applied here: a sabotage arm exists to
     # be run by a gate and to FAIL; a Python surface that quietly served
     # one would be a wrong answer wearing a green label. Refuse to exist

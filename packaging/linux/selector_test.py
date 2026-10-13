@@ -121,13 +121,11 @@ def _mkinstall(root, vendors_with_binaries=(), empty_vendor_dirs=(),
         open(os.path.join(pkg, "_mojolearn.so"), "w").close()
     for v in vendors_with_binaries:
         d = os.path.join(pkg, v)
-        os.makedirs(os.path.join(d, "deterministic"), exist_ok=True)
         os.makedirs(os.path.join(d, "identical"), exist_ok=True)
         open(os.path.join(d, "_mojolearn.so"), "w").close()
     for v, archs in (vendor_archs or {}).items():
         for arch in archs:
             d = os.path.join(pkg, v, arch)
-            os.makedirs(os.path.join(d, "deterministic"), exist_ok=True)
             os.makedirs(os.path.join(d, "identical"), exist_ok=True)
             open(os.path.join(d, "_mojolearn.so"), "w").close()
     for v in empty_vendor_dirs:
@@ -379,17 +377,15 @@ def run_all(root):
                          vendors_with_binaries=("cuda", "hip"))
         _reset(pkg, _probe(hip=True))
         fast = B.tier_dir("fast")
-        det = B.tier_dir("deterministic")
         ident = B.tier_dir("identical")
         assert os.path.basename(fast) == "hip", fast
-        assert det == os.path.join(pkg, "hip", "deterministic"), det
         assert ident == os.path.join(pkg, "hip", "identical"), ident
 
         # SABOTAGE: same tiers under the other vendor must move.
         _reset(pkg, _probe(cuda=True))
-        det2 = B.tier_dir("deterministic")
-        assert det2 == os.path.join(pkg, "cuda", "deterministic"), (
-            "the tier path did not follow the vendor: %r" % det2)
+        ident2 = B.tier_dir("identical")
+        assert ident2 == os.path.join(pkg, "cuda", "identical"), (
+            "the tier path did not follow the vendor: %r" % ident2)
 
     @case("tier_dir on a FLAT install keeps the macOS paths unchanged")
     def _():
@@ -522,8 +518,8 @@ def run_all(root):
         pkg = _mkinstall(os.path.join(root, "w"),
                          vendor_archs={"cuda": ("sm_80",)})
         _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"))
-        det = B.tier_dir("deterministic")
-        assert det == os.path.join(pkg, "cuda", "sm_80", "deterministic"), det
+        ident = B.tier_dir("identical")
+        assert ident == os.path.join(pkg, "cuda", "sm_80", "identical"), ident
         assert B.tier_dir("fast") == os.path.join(pkg, "cuda", "sm_80")
 
     @case("an arch-less vendor set keeps working beside the new layout")

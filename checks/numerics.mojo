@@ -11,18 +11,13 @@ def _checked_numeric_mode() -> Int:
     comptime assert SIX_LANE_CONFIGURATION_OK, "invalid integrated experiment configuration"
     comptime if is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]():
         return NUMERIC_IDENTICAL
-    comptime if is_defined["MOJOLEARN_NUMERIC_DETERMINISTIC"]():
-        return NUMERIC_DETERMINISTIC
     return NUMERIC_FAST
 
 
 comptime GLOBAL_NUMERIC_MODE = _checked_numeric_mode()
 
 
-comptime PIN_DETERMINISM = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_DETERMINISTIC
-    or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-)
+comptime PIN_DETERMINISM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 comptime PIN_CROSS_VENDOR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
@@ -31,17 +26,12 @@ def numeric_mode_name() -> String:
     """The build's tier, for every banner that prints one."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         return String("IDENTICAL")
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_DETERMINISTIC:
-        return String("DETERMINISTIC")
     return String("FAST")
 
 
 comptime NUMERIC_FAST = 0
 
 comptime NUMERIC_IDENTICAL = 1
-
-
-comptime NUMERIC_DETERMINISTIC = 2
 
 
 @fieldwise_init

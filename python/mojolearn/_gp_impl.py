@@ -88,7 +88,7 @@ from .preprocessing import StandardScaler
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
 #: table with the thing it checks.
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 
 # The GP_K_* node kinds, mirroring gaussian_process/checks/kernels.mojo.
 # A silent renumbering on either side is a WRONG KERNEL, not a failure,

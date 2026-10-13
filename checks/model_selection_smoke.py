@@ -41,7 +41,7 @@ def main(gpu):
         from mojolearn import StandardScaler, GradientBoostingRegressor
         X = np.tile(np.array([[-2.], [-1.], [1.], [2.]], np.float32), (6, 1))
         y = (X[:, 0] > 0).astype(np.float32)
-        for mode in ('fast', 'deterministic', 'identical'):
+        for mode in ('fast', 'identical'):
             pipe = Pipeline([('scale', StandardScaler(numeric_mode=mode)),
                              ('tree', GradientBoostingRegressor(n_estimators=2, max_depth=2,
                                                                learning_rate=.5, numeric_mode=mode))])

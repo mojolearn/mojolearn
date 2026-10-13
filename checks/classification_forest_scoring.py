@@ -20,9 +20,9 @@ def main():
     x = np.tile(np.array([[-2., 1.], [-1., 0.], [1., 0.], [2., 1.]], np.float32), (16, 1))
     y = np.where(x[:, 0] > 0, 'positive', 'negative')
     fits = 0
-    for mode in ('fast', 'deterministic', 'identical'):
+    for mode in ('fast', 'identical'):
         assert metrics._get_binding(mode).metrics_numeric_mode() == {
-            'fast': 0, 'deterministic': 2, 'identical': 1}[mode]
+            'fast': 0, 'identical': 1}[mode]
         for cls in (RandomForestClassifier, ExtraTreesClassifier):
             kwargs = dict(n_estimators=2, max_depth=2, max_features=1.,
                           random_state=7, numeric_mode=mode)

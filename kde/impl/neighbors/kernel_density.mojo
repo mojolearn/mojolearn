@@ -1692,7 +1692,7 @@ def _kde_score_samples_fused(
 # unweighted x shapes that straddle every tile and chunk edge, under two
 # schedules. The staged path still runs whenever a trace records (the card
 # certifies `kde.dists`), for cosine, sqeuclidean and minkowski, and under
-# FAST (DEVIATION 2490) and DETERMINISTIC, whose codegen contraction is not
+# FAST (DEVIATION 2490), whose codegen contraction is not
 # pinned and so could differ between two loop shapes.
 # MEASURED: `kde/checks/kde_stage_profile.mojo` and the lane's race on the
 # H100; numbers in `kde/README.md` and `bench/OPPONENT_REFERENCE.md`.

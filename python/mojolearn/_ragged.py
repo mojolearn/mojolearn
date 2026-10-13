@@ -20,7 +20,7 @@ of the argument is two sentences:
 
 Sentence 2 holds in every numeric mode. Sentence 1 is a claim of the
 IDENTICAL tier, the tier whose contracts make a row independent of its batch
-and its length; under FAST and DETERMINISTIC the two copies are the same and
+and its length; under FAST the two copies are the same and
 the equality is not promised, as for any batch.
 
 NO ARITHMETIC CHANGES, AND THIS IS WHY IT NEEDS NONE. Every model reached

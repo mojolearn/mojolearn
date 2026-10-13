@@ -53,7 +53,7 @@ def _scaler_header(arrays, path, cls, fields):
     if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: walks the class hierarchy names
         raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}")
     mode = _serialize.scalar_str(arrays, "numeric_mode")
-    if mode not in ("fast", "deterministic", "identical"):
+    if mode not in ("fast", "identical"):
         raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
     meta = _serialize.exact(arrays, "meta", "<i8")
     if meta.size != fields:
@@ -274,7 +274,7 @@ class _ScalerProtocol:
     @staticmethod
     def _binding(mode):
         binding = _backend.binding('_mojolearn_preprocessing', mode)
-        expected = {'fast': 0, 'identical': 1, 'deterministic': 2}[mode]
+        expected = {'fast': 0, 'identical': 1}[mode]
         if binding.preprocessing_numeric_mode() != expected:
             raise RuntimeError('Scaler native numeric mode disagrees with requested mode')
         return binding
@@ -341,7 +341,7 @@ class MinMaxScaler(_ScalerProtocol):
     clip : bool, default False
         Clip transformed values to ``feature_range``. Values lost to clipping
         are not recovered by ``inverse_transform``.
-    numeric_mode : {"fast", "deterministic", "identical"} or None, default None
+    numeric_mode : {"fast", "identical"} or None, default None
         Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
@@ -390,8 +390,8 @@ class MinMaxScaler(_ScalerProtocol):
             raise ValueError('clip must be a bool')
         if self.numeric_mode is not None and (
                 not isinstance(self.numeric_mode, str) or
-                self.numeric_mode.strip().lower() not in ('fast', 'deterministic', 'identical')):
-            raise ValueError('numeric_mode must be fast, deterministic, identical or None')
+                self.numeric_mode.strip().lower() not in ('fast', 'identical')):
+            raise ValueError('numeric_mode must be fast, identical or None')
         if not isinstance(self.feature_range, (tuple, list, Array)) and not hasattr(self.feature_range, "__array_interface__"):
             raise ValueError("feature_range must be a reusable tuple, list or 1D array")
         if getattr(self.feature_range, "ndim", 1) != 1:
@@ -734,7 +734,7 @@ class StandardScaler(_ScalerProtocol):
         Center the data before scaling.
     with_std : bool, default True
         Scale the data to unit variance.
-    numeric_mode : {"fast", "deterministic", "identical"} or None, default None
+    numeric_mode : {"fast", "identical"} or None, default None
         Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
@@ -777,8 +777,8 @@ class StandardScaler(_ScalerProtocol):
             raise ValueError('with_mean and with_std must be bools')
         if self.numeric_mode is not None and (
                 not isinstance(self.numeric_mode, str) or
-                self.numeric_mode.strip().lower() not in ('fast', 'deterministic', 'identical')):
-            raise ValueError('numeric_mode must be fast, deterministic, identical or None')
+                self.numeric_mode.strip().lower() not in ('fast', 'identical')):
+            raise ValueError('numeric_mode must be fast, identical or None')
 
     def _keep(self, mean, var, scale, seen, d, mode):
         self.mean_ = mean if self.with_mean or self.with_std else None

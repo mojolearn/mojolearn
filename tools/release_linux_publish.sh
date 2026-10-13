@@ -136,7 +136,7 @@ fi
 echo "== GitHub release $TAG =="
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || { git tag -a "$TAG" -m "mojolearn $VERSION $LIGHT_PLATFORM wheel" "$HEAD_SHA"; git push origin "refs/tags/$TAG"; }
 if ! gh release view "$TAG" >/dev/null 2>&1; then
-  NOTES="Linux x86-64 wheel with CUDA sm_89, CUDA sm_90a and HIP gfx942 sets in fast, deterministic and identical modes, built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
+  NOTES="Linux x86-64 wheel with CUDA sm_89, CUDA sm_90a and HIP gfx942 sets in fast and identical modes, built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -n "$TAR" ] && NOTES="$NOTES linux-qualification.tar.gz is the install-and-test record on each architecture." \
                 || NOTES="$NOTES Installed per-architecture qualification was not run for this release."
   # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): one package per release.

@@ -81,7 +81,7 @@ def audit_tree(root, source_commit, mojo_version, source_dirty=False):
         rel = path.relative_to(root)
         if any(part in ('host', '.libs') for part in rel.parts):
             continue
-        mode = rel.parts[0] if rel.parts[0] in ('identical', 'deterministic') else 'fast'
+        mode = rel.parts[0] if rel.parts[0] == 'identical' else 'fast'
         data = path.read_bytes()
         mods, failures = audit_binary(data, identical=mode == 'identical')
         errors.extend(f'{rel.as_posix()}: {error}' for error in failures)

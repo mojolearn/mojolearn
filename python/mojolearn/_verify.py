@@ -422,10 +422,7 @@ def _mode_report():
         _readable = False
     if _readable:
         try:
-            # Three tiers, so a NAME lookup rather than a boolean:
-            # DETERMINISTIC reports 2 and the old spelling called it
-            # "fast", which agrees with a fast selector and reports no
-            # conflict while the caller holds the wrong arm.
+            # A NAME lookup rather than a boolean.
             rep.compiled = _backend._CODE_MODE.get(
                 gb.gbdt_numeric_mode(), "unknown"
             )

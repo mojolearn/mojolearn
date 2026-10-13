@@ -69,7 +69,7 @@ class UMAPSurfaceTests(unittest.TestCase):
         np.testing.assert_array_equal(before, self.x)
         if self.mode == "identical":
             np.testing.assert_array_equal(np.asarray(layout).view(np.uint32), LAYOUT_BITS)
-        if self.mode in ("identical", "deterministic"):
+        if self.mode == "identical":
             again = self.estimator().fit_transform(self.x)
             np.testing.assert_array_equal(np.asarray(layout).view(np.uint32),
                                           np.asarray(again).view(np.uint32))
@@ -115,7 +115,7 @@ class UMAPSurfaceTests(unittest.TestCase):
                     np.testing.assert_array_equal(np.asarray(layout).view(np.uint32),
                                                   BROADER_LAYOUT_BITS)
                 np.testing.assert_array_equal(x, before)
-                if self.mode in ("identical", "deterministic"):
+                if self.mode == "identical":
                     again = UMAP(n_epochs=12, numeric_mode=self.mode,
                                  **config).fit_transform(x)
                     np.testing.assert_array_equal(np.asarray(layout).view(np.uint32),

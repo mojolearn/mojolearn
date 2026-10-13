@@ -2,7 +2,7 @@
 """Shared GPU flat-forest prototype, independent handcrafted oracle.
 
  tools/with_build_lock.sh pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 checks/forest_inference_gpu.mojo
-Repeat without mode define for FAST, or MOJOLEARN_NUMERIC_DETERMINISTIC=1.
+Repeat without mode define for FAST.
 No public inference dispatch changes. Expected leaves are chosen by fixture
 row categories, not the production traversal/key helper. Host folds specify
 ordered and fixed32-grove arithmetic independently; division is Float64 then

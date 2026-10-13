@@ -45,7 +45,7 @@ def main():
         ([0, 0, 0], [0, 1, 2], 1),
     ]
     checks = 0
-    for mode in ("fast", "deterministic", "identical"):
+    for mode in ("fast", "identical"):
         for y, values, positive in cases:
             scores = np.asarray(values, dtype=np.float32)
             auc, p, r, t = reference(y, scores, positive)

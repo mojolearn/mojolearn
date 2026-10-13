@@ -475,7 +475,7 @@ def _resolve_rbc_metric(cls_name, metric, p):
 # - Honored/refused rows were measured row by row by `tools/e2u_matrix_fit.py`.
 # - n_neighbors above n_samples_fit is refused: the reference's short-index
 #   fill is not implemented (knn_brute_force.mojo). Under
-#   IDENTICAL/DETERMINISTIC a k above 1024 selects in rounds of 1024 and
+#   IDENTICAL a k above 1024 selects in rounds of 1024 and
 #   merges index tiles by binary search (DEVIATION 6300,
 #   neighbors/checks/select_radix_identical.mojo); the answer is the same
 #   ascending (distance, index) list. FAST runs k > 256 through the radix
@@ -542,7 +542,7 @@ class NearestNeighbors(NumericModeMixin):
         ``metric='minkowski', p=2`` runs the Minkowski computation rather
         than switching to Euclidean; the two agree to a few units in the last
         place.
-    numeric_mode : {'identical', 'deterministic', 'fast'}, optional
+    numeric_mode : {'identical', 'fast'}, optional
         Numeric mode for this estimator; ``None`` uses the process default
         (`mojolearn.set_numeric_mode`). 'fast' is available on Apple GPUs
         only.
@@ -995,7 +995,7 @@ class KNeighborsClassifier(NearestNeighbors):
         result instead.
     p : float, default 2
         As in `NearestNeighbors`.
-    numeric_mode : {'identical', 'deterministic', 'fast'}, optional
+    numeric_mode : {'identical', 'fast'}, optional
         As in `NearestNeighbors`. 'fast' is available on Apple GPUs only.
 
     Attributes
@@ -1388,7 +1388,7 @@ class KNeighborsRegressor(NearestNeighbors):
         ``NearestNeighbors(algorithm='rbc').kneighbors`` instead.
     p : float, default 2
         As in `NearestNeighbors`.
-    numeric_mode : {'identical', 'deterministic', 'fast'}, optional
+    numeric_mode : {'identical', 'fast'}, optional
         As in `NearestNeighbors`. 'fast' is available on Apple GPUs only.
 
     Attributes
@@ -1653,7 +1653,7 @@ class RadiusNeighbors(NumericModeMixin):
         Minkowski exponent, read only by ``metric='minkowski'`` (or 'lp');
         must be finite and at least 1. Under any other metric, a value other
         than 2 raises ``ValueError``.
-    numeric_mode : {'identical', 'deterministic', 'fast'}, optional
+    numeric_mode : {'identical', 'fast'}, optional
         Numeric mode for this estimator; ``None`` uses the process default
         (`mojolearn.set_numeric_mode`). 'fast' is available on Apple GPUs
         only.

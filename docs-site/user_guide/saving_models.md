@@ -93,7 +93,7 @@ Random forests and Extra Trees have two prediction algorithms, chosen with `infe
 
 | `inference_engine` | Behavior |
 |---|---|
-| `auto` (default) | `parallel_groves` in `fast` (Apple GPUs only); `sequential` in `deterministic` and `identical` |
+| `auto` (default) | `parallel_groves` in `fast` (Apple GPUs only); `sequential` in `identical` |
 | `sequential` | Each row adds trees in increasing tree order, then divides by the tree count |
 | `parallel_groves` | 32 fixed tree groups in parallel, combined by a fixed 16/8/4/2/1 reduction |
 

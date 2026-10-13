@@ -49,7 +49,7 @@ The cases, with `V` the box's vendor and `W` the other one:
                         no-GPU refusal naming: the V device evidence that
                         was found, the W set that is the only one carried,
                         and MOJOLEARN_VENDOR. It must not load W/.
-  tier_mislabeled       V/deterministic/_mojolearn_gbdt.so replaced by the
+  tier_mislabeled       V/identical/_mojolearn_gbdt.so replaced by the
                         FAST binary. The existing tier read-back must
                         refuse it on the new layout too.
 
@@ -156,10 +156,9 @@ def main():
         link_tree(pkg / V, pkg / W)
 
     def poison_w(pkg):
-        (pkg / W / "deterministic").mkdir(parents=True)
         (pkg / W / "identical").mkdir(parents=True)
         for so in (pkg / V).glob("_mojolearn*.so"):
-            for d in (pkg / W, pkg / W / "deterministic", pkg / W / "identical"):
+            for d in (pkg / W, pkg / W / "identical"):
                 (d / so.name).write_bytes(os.urandom(4096))
 
     def remove_v(pkg):
@@ -167,13 +166,13 @@ def main():
         shutil.rmtree(pkg / V)
 
     def mislabel_tier(pkg):
-        # The deterministic directory sits at <vendor>/<arch>/ since the
+        # The identical directory sits at <vendor>/<arch>/ since the
         # architecture axis (2026-08-30), and at <vendor>/ on a legacy set.
         # Find it rather than assume; the fast binary is its sibling's
         # parent either way.
-        t = next((pkg / V).glob("*/deterministic/_mojolearn_gbdt.so"), None)
+        t = next((pkg / V).glob("*/identical/_mojolearn_gbdt.so"), None)
         if t is None:
-            t = pkg / V / "deterministic" / "_mojolearn_gbdt.so"
+            t = pkg / V / "identical" / "_mojolearn_gbdt.so"
         fast = t.parent.parent / "_mojolearn_gbdt.so"
         t.unlink()
         os.link(fast, t)
@@ -206,7 +205,7 @@ def main():
     case("poisoned_forced", poison_w, FORCE, False)
     case("correct_set_removed", remove_v, {}, False,
          ("NO SUPPORTED GPU FOUND", f"['{W}']", "MOJOLEARN_VENDOR"))
-    case("tier_mislabeled", mislabel_tier, {"MOJOLEARN_NUMERIC_MODE": "deterministic"},
+    case("tier_mislabeled", mislabel_tier, {"MOJOLEARN_NUMERIC_MODE": "identical"},
          False, ("compiled fast",))
 
     allok = all(r["pass"] for r in results.values())

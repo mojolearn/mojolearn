@@ -8,7 +8,7 @@ import runpy
 import sys
 
 
-MODE_CODES = {'fast': 0, 'deterministic': 2, 'identical': 1}
+MODE_CODES = {'fast': 0, 'identical': 1}
 
 
 def admit_output(output, mode, vendor):

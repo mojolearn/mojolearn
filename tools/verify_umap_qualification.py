@@ -31,7 +31,7 @@ def verify(wheel, results, source_root, expected_version):
     for relative in required_sources:
         if sources.get(relative) != sha(Path(source_root) / relative):
             raise ValueError('Qualification source changed: ' + relative)
-    modes = {'fast': 0, 'deterministic': 2, 'identical': 1}
+    modes = {'fast': 0, 'identical': 1}
     expected_jobs = {'create-venv', 'install-wheel', 'check-dependencies',
                      'install-test-dependencies', 'installed-packages'}
     expected_jobs.update(f'{surface}-{mode}' for mode in modes

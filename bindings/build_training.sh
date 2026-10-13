@@ -129,14 +129,13 @@ COLUMN_DEFINE=""
 # lower tiers ran the slower unfused arms. Those gates are gone (2794391bf):
 # FAST compiles the same kernels and launches with the pins in
 # checks/numerics.mojo on the free schedule, lands flat in python/mojolearn/,
-# and promises quality, never bits. The
-# DETERMINISTIC tier ships for the tree lanes only and is refused here.
+# and promises quality, never bits.
 MODE_DEFINE="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
 case "${MOJOLEARN_NUMERIC_MODE:-identical}" in
     identical) OUTDIR="python/mojolearn/identical" ;;
     fast) MODE_DEFINE=""; OUTDIR="python/mojolearn" ;;
     *)
-        echo "$(basename "$0"): this lane builds MOJOLEARN_NUMERIC_MODE=identical (default) or fast; deterministic ships for the tree lanes only (got '${MOJOLEARN_NUMERIC_MODE}')" >&2
+        echo "$(basename "$0"): this lane builds MOJOLEARN_NUMERIC_MODE=identical (default) or fast (got '${MOJOLEARN_NUMERIC_MODE}')" >&2
         exit 2 ;;
 esac
 mkdir -p "$OUTDIR"
@@ -189,7 +188,7 @@ air_blobs() {
 # THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
 #
 # This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
-# identical and deterministic tiers, and the skip below then turned off ALL
+# identical tier, and the skip below then turned off ALL
 # THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
 # shipped for hours ran only on `fast` builds -- never on the identical ones
 # whose cross-vendor claim is the entire product.

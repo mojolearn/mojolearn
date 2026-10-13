@@ -20,7 +20,7 @@ class _Binding:
         return 1
 
     def gbdt_predict(self, model, x, out, params):
-        bits = {'fast': 0x3f800000, 'deterministic': 0x3f800001, 'identical': 0x3f800002}
+        bits = {'fast': 0x3f800000, 'identical': 0x3f800002}
         buffer = (ctypes.c_uint32 * params[0]).from_address(out)
         for index in range(params[0]):
             buffer[index] = bits[self.mode]
@@ -59,7 +59,7 @@ class GbdtModeSerializationTests(unittest.TestCase):
     def test_explicit_mode_survives_different_default_for_both_classes(self):
         X = np.zeros((2, 1), dtype=np.float32)
         for cls in (GradientBoosting, OrderedRMSE):
-            for mode in ('identical', 'deterministic', 'fast'):
+            for mode in ('identical', 'fast'):
                 with self.subTest(cls=cls.__name__, mode=mode):
                     obj = fitted(cls, mode)
                     expected = np.asarray(obj.predict(X)).view(np.uint32).copy()  # DEVIATION 2460

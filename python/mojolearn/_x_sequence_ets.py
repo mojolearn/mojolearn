@@ -49,7 +49,7 @@ class ETS:
         Fix the level, trend, damping and seasonal smoothing parameters;
         None estimates each.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 
@@ -259,7 +259,7 @@ class DampedETS(ETS):
         Fix the level, trend and damping smoothing parameters; None
         estimates each.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 

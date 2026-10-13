@@ -123,7 +123,7 @@ def metallib_kernels(data):
 
 def identity(path):
     path = Path(path)
-    tier = path.parent.name if path.parent.name in ("identical", "deterministic") else "fast"
+    tier = path.parent.name if path.parent.name == "identical" else "fast"
     return tier, path.stem
 
 

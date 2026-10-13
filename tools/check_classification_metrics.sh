@@ -12,9 +12,8 @@ export MOJOLEARN_PYTHON
 out=${1:-bench/results/classification_metrics_local}
 mkdir -p "$out" build/classification_metrics
 pixi run mojo --version > "$out/toolchain.txt"
-for mode in fast deterministic identical; do
+for mode in fast identical; do
     set --
-    if [ "$mode" = deterministic ]; then set -- -D MOJOLEARN_NUMERIC_DETERMINISTIC=1; fi
     if [ "$mode" = identical ]; then set -- -D MOJOLEARN_NUMERIC_IDENTICAL=1; fi
     echo "BUILD native $mode"
     pixi run mojo build -I . "$@" metrics/checks/classification_metrics_check.mojo \

@@ -20,7 +20,7 @@ except ImportError:
 import mojolearn
 from mojolearn import metrics, _backend
 
-CODES = {"fast": 0, "identical": 1, "deterministic": 2}
+CODES = {"fast": 0, "identical": 1}
 SCORES = ("precision_score", "recall_score", "f1_score")
 
 

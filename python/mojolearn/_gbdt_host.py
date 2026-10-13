@@ -680,7 +680,7 @@ class HostGBDT:
         mode = None
         if 'numeric_mode' in arrays:
             mode = _serialize.scalar_str(arrays, 'numeric_mode')
-            if mode not in ('fast', 'deterministic', 'identical'):
+            if mode not in ('fast', 'identical'):
                 raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
         text = _serialize.exact(arrays, 'model', '<u1').tobytes().decode('utf-8')
         meta = _serialize.exact(arrays, 'meta', '<i8')

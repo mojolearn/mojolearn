@@ -11,18 +11,12 @@ fi
 unset MACOSX_DEPLOYMENT_TARGET
 # TWO TIERS (2026-09-25, reversing DEVIATION 2490 for classical ML): this
 # binding builds IDENTICAL (the default, bitwise across vendors) or FAST
-# (per-vendor speed, same quality, no bit promise). The DETERMINISTIC tier
-# stays tree-only (build_gbdt.sh, build_rf.sh, build_trees.sh); refusing it
-# here, by name, keeps it an unshipped tier rather than an unchecked one.
-[ "${MOJOLEARN_NUMERIC_MODE:-identical}" != deterministic ] || {
-    echo 'build_scoped_gemm_probe.sh: the deterministic tier ships for the tree lanes (gbdt, rf, trees) only; classical bindings build MOJOLEARN_NUMERIC_MODE=identical (default) or fast.' >&2
-    exit 2; }
+# (per-vendor speed, same quality, no bit promise).
 mode=${MOJOLEARN_NUMERIC_MODE:-identical}
 mode_flags=""
 outdir=python/mojolearn
 case "$mode" in
     fast) expected=0 ;;
-    deterministic) expected=2; mode_flags="-D MOJOLEARN_NUMERIC_DETERMINISTIC=1"; outdir=$outdir/deterministic ;;
     identical) expected=1; mode_flags="-D MOJOLEARN_NUMERIC_IDENTICAL=1"; outdir=$outdir/identical ;;
     *) echo "invalid numeric mode: $mode" >&2; exit 2 ;;
 esac

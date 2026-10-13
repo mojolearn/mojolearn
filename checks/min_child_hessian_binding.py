@@ -9,7 +9,7 @@ from mojolearn.ensemble import GradientBoosting
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', required=True, choices=('fast', 'deterministic', 'identical'))
+    parser.add_argument('--mode', required=True, choices=('fast', 'identical'))
     mode = parser.parse_args().mode
     rows = np.arange(256)
     x = (rows % 4).astype(np.float32)[:, None]
@@ -22,7 +22,7 @@ def main():
                       boost_from_average=False, class_weights=[2., 2.])
         baseline = GradientBoosting(**common).fit(x, y)
         assert baseline._bind('_mojolearn_gbdt').gbdt_numeric_mode() == {
-            'fast': 0, 'identical': 1, 'deterministic': 2}[mode]
+            'fast': 0, 'identical': 1}[mode]
         for threshold, count in ((None, 4), (0., 4), (-0., 4), (32., 4),
                                  (32.000000001, 2), (64.000000001, 1)):
             model = GradientBoosting(**common, min_child_hessian=threshold).fit(x, y)

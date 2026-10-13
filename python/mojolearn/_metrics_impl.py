@@ -18,7 +18,7 @@ silently accepted and ignored. Inputs are checked here: non-finite values are
 refused where the docstring says so.
 
 Functions that take ``numeric_mode`` accept ``'identical'`` (the same bits
-on Apple, NVIDIA and AMD GPUs), ``'deterministic'``, or ``'fast'`` (Apple only); None
+on Apple, NVIDIA and AMD GPUs) or ``'fast'`` (Apple only); None
 uses the library default. Other functions run in the library default mode.
 
 Examples
@@ -154,16 +154,16 @@ __all__ = [
 def _get_binding(numeric_mode=None):
     if numeric_mode is not None and (
         not isinstance(numeric_mode, str)
-        or numeric_mode.strip().lower() not in ("fast", "deterministic", "identical")
+        or numeric_mode.strip().lower() not in ("fast", "identical")
     ):
-        raise ValueError("numeric_mode must be 'fast', 'deterministic' or 'identical'")
+        raise ValueError("numeric_mode must be 'fast' or 'identical'")
     expected = (numeric_mode or _backend.default_mode()).strip().lower()
     mod = _backend.binding("_mojolearn_metrics", expected)
     read_mode = getattr(mod, "metrics_numeric_mode", None)
     if read_mode is None:
         read_mode = getattr(mod, "umap_numeric_mode", None)
     if read_mode is not None:
-        actual = {0: "fast", 1: "identical", 2: "deterministic"}.get(read_mode())
+        actual = {0: "fast", 1: "identical"}.get(read_mode())
         if actual != expected:
             raise RuntimeError(
                 f"mojolearn metrics: requested {expected}, binary reports {actual}; rebuild it"
@@ -398,7 +398,7 @@ def accuracy_score(
         float32. Weights must be finite, non-negative and have a positive
         total; negative weights, which scikit-learn accepts, raise
         ``ValueError``.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -882,7 +882,7 @@ def r2_score(
     force_finite : bool, default True
         False returns scikit-learn's raw values for constant targets
         (``nan`` or ``-inf``).
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -980,7 +980,7 @@ def mean_squared_error(
         Per-sample weights, as in scikit-learn.
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
         How to combine several outputs, as in scikit-learn.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -1021,7 +1021,7 @@ def mean_absolute_error(
         Per-sample weights, as in scikit-learn.
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
         How to combine several outputs, as in scikit-learn.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -1063,7 +1063,7 @@ def root_mean_squared_error(
         Per-sample weights, as in scikit-learn.
     multioutput : {'uniform_average', 'raw_values'} or array-like, default 'uniform_average'
         How to combine several outputs, as in scikit-learn.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -1565,7 +1565,7 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     labels : array-like, default None
         The class labels, unique, in column order. Needed when ``y_true``
         holds a single class. At least two labels are required.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -1696,7 +1696,7 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
         Multiclass strategy.
     labels : array-like, default None
         Class labels for multiclass input, as in scikit-learn.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -1764,7 +1764,7 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
     drop_intermediate : bool, default False
         Drop thresholds that do not change the curve's shape, as in
         scikit-learn.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -1863,7 +1863,7 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
     normalize : {'true', 'pred', 'all'} or None, default None
         Normalize over rows, columns or the whole matrix. Rows or columns
         with no mass give zeros.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -1983,7 +1983,7 @@ def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary
         Per-sample weights.
     zero_division : {'warn', 0, 1}, default 'warn'
         The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -2028,7 +2028,7 @@ def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
         Per-sample weights.
     zero_division : {'warn', 0, 1}, default 'warn'
         The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 
@@ -2073,7 +2073,7 @@ def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
         Per-sample weights.
     zero_division : {'warn', 0, 1}, default 'warn'
         The value for an undefined ratio; ``'warn'`` gives 0 and a warning.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this call (``'fast'`` is Apple only). None uses the
         library default.
 

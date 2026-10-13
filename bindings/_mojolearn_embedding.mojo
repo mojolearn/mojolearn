@@ -80,8 +80,7 @@ from embedding.checks.embedding_oracle import (
 
 
 def embedding_numeric_mode_binding() raises -> PythonObject:
-    """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL, 2
-    DETERMINISTIC."""
+    """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 

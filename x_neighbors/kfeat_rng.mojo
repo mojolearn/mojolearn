@@ -47,7 +47,7 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
 from x_neighbors.items import FP, IP, skew_weights_item
 
-# lane cpu3-python (2026-10-04): FAST and DETERMINISTIC take the counter
+# lane cpu3-python (2026-10-04): FAST takes the counter
 # draws too, on every vendor (owner rule: no host draw on a GPU route; FAST
 # keeps the same uniform/z/offset distributions, so quality is unchanged and
 # only FAST's bits move). The `_OFF` defines keep their meaning for the

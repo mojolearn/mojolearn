@@ -55,12 +55,7 @@ HOW TO RUN IT
     # 2. the gate, FROM THE REPOSITORY ROOT (it reads mamba/corpus/)
     cd python && python3 -m mojolearn.tests.test_mamba_surface
 
-    # 3. the deterministic tier
-    MOJOLEARN_NUMERIC_MODE=deterministic bash bindings/build_mamba.sh
-    cd python && MOJOLEARN_NUMERIC_MODE=deterministic \\
-        python3 -m mojolearn.tests.test_mamba_surface
-
-    # 4. the identical tier, where the bitwise arms are asserted
+    # 3. the identical tier, where the bitwise arms are asserted
     MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_mamba.sh
     cd python && MOJOLEARN_NUMERIC_MODE=identical \\
         python3 -m mojolearn.tests.test_mamba_surface

@@ -736,11 +736,7 @@ def m3_dt_softplus(x: Float32) -> Float32:
     against the lower tiers existing here at all. Negative dt biases make
     exp(x) small; rounding exp(x) + 1 before log discards dt bits that
     accumulate in S10's rotary angle, so FAST evaluated `portable_log1pf(exp(x))`
-    instead. DEVIATION 2300 (2026-09-09) then found the gate was FAST-only, so
-    DETERMINISTIC fell through to the unpinned `log(exp(x) + 1)` arm and failed
-    `k_last` against ref64 at flat index 151 with excess 3.980e-07, bit-identically
-    on an L40S and an H100, while FAST and IDENTICAL both passed. That was a bug
-    that could only exist in a tier nobody had a reason to run.
+    instead.
 
     The mamba lane is IDENTICAL-only as of 2026-09-10, so the second spelling
     is gone and this is the portable arithmetic verbatim. IDENTICAL's bits do

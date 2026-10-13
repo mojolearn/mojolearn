@@ -169,7 +169,7 @@ from nn.topk import top_k
 # `-D MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL=1` forcing a row ON and
 # `-D MOJOLEARN_KNN_IDENTICAL_LEGACY_SELECT=1` /
 # `-D MOJOLEARN_KNN_IDENTICAL_LEGACY_LAYOUT=1` forcing it OFF on any column.
-# FAST and DETERMINISTIC never enter either.
+# FAST never enters either.
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime EXPERIMENTAL_SMALLK_IDENTICAL = knn_smallk_select_for[
     TARGET_COLUMN, IDENTICAL_BUILD
@@ -929,7 +929,7 @@ def tiled_brute_force_knn(
     Only expanded Euclidean metrics can use this layout. Original row-major
     norm computation, ascending per-distance FMA/FTZ, clamp, sqrt BEFORE
     selection, selector choice and output offsets are preserved. Other metrics
-    and FAST/DETERMINISTIC retain the legacy path without added allocation.
+    and FAST retains the legacy path without added allocation.
     The candidate adds 4*n_index*n_features bytes, once per public request.
     Allocation failure is an explicit failure, never an unrecorded fallback.
     """
@@ -1663,17 +1663,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     # atomic-ordered by construction; this one has no tie class
                     # and no arrival order in its output.
                     #
-                    # **`PIN_DETERMINISM`, NOT `== NUMERIC_IDENTICAL`, SINCE
-                    # 2026-08-29.** "Atomic-ordered by construction" is a
-                    # RUN-TO-RUN property: two runs of the same fit on the same
-                    # GPU can place a tied neighbour in different slots, because
-                    # which thread's `atomicAdd` lands first is not a function of
-                    # the input. That is the middle tier's whole promise, and the
-                    # pin was keyed to the top tier only -- so a DETERMINISTIC
-                    # k-NN build took RAFT's selector and was not deterministic.
-                    # IDENTICAL is unmoved; `PIN_DETERMINISM` is true there too.
-                    #
-                    # Both pinned tiers share the bounded rank staging. The
+                    # The pinned tier uses the bounded rank staging. The
                     # strided pass extends it beyond the 256-thread block; the
                     # cap still bounds shared storage and quadratic rank work.
                     # DEVIATION 6300: k above the bounded rank profile's

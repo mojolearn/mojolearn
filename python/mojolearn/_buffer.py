@@ -887,7 +887,7 @@ def _native(key):
     narrowing, the same bytes on every vendor), and every estimator in
     every tier funnels its input through them. Since DEVIATION 2490
     (2026-09-10) the base binding is built in the identical tier alone
-    (only the tree lanes have a fast or deterministic binary), so
+    (only the tree lanes have a fast binary), so
     resolving through the running tier here would refuse every FAST tree
     fit at its first input conversion. Found by the macOS release smoke
     under MOJOLEARN_NUMERIC_MODE=fast the day the rule landed.

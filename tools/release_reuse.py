@@ -393,6 +393,10 @@ def binding_members(name):
 
 
 # ---------------------------------------------------------------- the bindings
+BUILD_ONLY = {s.strip() for s in os.environ["MOJOLEARN_RELEASE_BUILD_ONLY"].split(",") if s.strip()} \
+    if os.environ.get("MOJOLEARN_RELEASE_BUILD_ONLY") else None
+
+
 class Binding:
     """One shipped binary of one target: where it lands in the wheel, in a
     build set and in the package tree, and which script builds it."""
@@ -835,6 +839,13 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
                 moved = [s for s in closure.get("sources", []) if s in changed_files][:6]
                 if moved:
                     reason += " (" + ", ".join(moved) + ")"
+            # RELEASE OWNER OVERRIDE (Andrew 2026-10-13): MOJOLEARN_RELEASE_BUILD_ONLY=gbdt,x_decomp,...
+            # names the bindings whose output really changed; every other binding whose only
+            # change is source (e.g. deleting a dead tier's code) ships the published bytes.
+            if decision == "BUILD" and reason.startswith("changed:") and BUILD_ONLY is not None:
+                stem = b.name[len("_mojolearn_"):] if b.name != "_mojolearn" else "core"
+                if stem not in BUILD_ONLY and stem.removesuffix("_host") not in BUILD_ONLY:
+                    decision, reason = "REUSE", "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (" + reason + ")"
             rows.append(dict(b.row(), decision=decision, reason=reason,
                              identity=cur, identity_digest=digest_of(cur) if cur else None,
                              previous_digest=digest_of(old) if old else None))

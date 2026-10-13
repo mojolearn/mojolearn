@@ -109,9 +109,8 @@ cells against the Apple, NVIDIA and AMD columns.
 RUN LEDGER. THIS PATH RAN 2026-09-02, the day the binding first
 compiled (rc 0 on the first attempt, 15 AIR blobs, transformer 7 and
 gemm 8). `python/mojolearn/tests/test_transformer_surface.py` printed
-green in ALL THREE TIERS, 44 checks 0 failed each, with the binding
-rebuilt for every tier -- fast (bitwise rows REPORTED), deterministic
-(the repeat-call row ASSERTED), identical (decode, resumption and
+green in EVERY TIER, 44 checks 0 failed each, with the binding
+rebuilt for every tier -- fast (bitwise rows REPORTED), identical (decode, resumption and
 determinism all bitwise ASSERTED). ONE BOX, ONE VENDOR -- an Apple M4;
 no NVIDIA or AMD box has built or run this path and both columns are
 OWED. Still owed with it: the corpus cross-check, because
@@ -141,7 +140,7 @@ from . import _ragged
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
 #: table with the thing it checks.
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 
 #: The absolute-position ceiling, mirrored from the contract (section 3 /
 #: modeling_llama.mojo's MAX_ABS_POSITION; DEVIATION 812: the Cody-Waite
@@ -708,7 +707,7 @@ class TransformerBlock(NumericModeMixin):
     numeric_profile : {'fp32_v1', 'fixed15_v1'} or None, default None
         Arithmetic profile. None and 'fp32_v1' are float32. 'fixed15_v1' quantizes the
         projection weights once to 15-bit fixed point and is inference only.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Examples

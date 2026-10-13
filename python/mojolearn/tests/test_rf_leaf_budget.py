@@ -138,7 +138,7 @@ HOW TO RUN IT
     cd python && python3 -m mojolearn.tests.test_rf_leaf_budget
 
 ENVIRONMENT
-    MOJOLEARN_NUMERIC_MODE   fast (default), deterministic or identical
+    MOJOLEARN_NUMERIC_MODE   fast (default) or identical
 """
 
 import os
@@ -377,7 +377,7 @@ def arm_provenance(rep):
     rep.check(arm, hasattr(ext, "rf_regressor_fit"),
               "the loaded binary exports rf_regressor_fit")
     compiled = est.numeric_mode_used()
-    rep.check(arm, compiled in ("fast", "identical", "deterministic"),
+    rep.check(arm, compiled in ("fast", "identical"),
               "the binding reports a tier it knows", str(compiled))
     rep.note("  binary tier   %s\n  env asked for %s\n  vendor        %s"
              % (compiled, asked, _backend.read_vendor(ext)))

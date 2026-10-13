@@ -46,10 +46,9 @@ class QualificationArtifactTests(unittest.TestCase):
         with zipfile.ZipFile(self.wheel, 'w') as archive:
             archive.write(self.root / 'python/mojolearn/_umap_impl.py', 'mojolearn/_umap_impl.py')
             archive.writestr('mojolearn/_mojolearn_gbdt.so', b'fixture binary fast trees')
-            archive.writestr('mojolearn/deterministic/_mojolearn_gbdt.so', b'fixture binary deterministic trees')
             binary = b'fixture binary identical'
             archive.writestr('mojolearn/identical/_mojolearn_metrics.so', binary)
-            for mode, code in {'fast': 0, 'deterministic': 2, 'identical': 1}.items():
+            for mode, code in {'fast': 0, 'identical': 1}.items():
                 for surface in ('fit', 'transform', 'quality'):
                     if mode == 'identical':
                         installed = {'version': '0.6.0', 'mode': mode, 'binding_mode_code': code,

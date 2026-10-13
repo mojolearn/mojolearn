@@ -199,7 +199,7 @@ def worker(args):
             probe = ml.GradientBoosting(**parameters, numeric_mode=args.worker)
             binding = probe._bind('_mojolearn_gbdt')
             raw = int(binding.gbdt_numeric_mode())
-            info['mode'] = {0: 'fast', 1: 'identical', 2: 'deterministic'}.get(raw, 'unknown')
+            info['mode'] = {0: 'fast', 1: 'identical'}.get(raw, 'unknown')
             info['binding_file'] = binding.__file__
             info['parameters'] = parameters
             info['arm_label'] = 'mojolearn-symmetric-rmse-fit-predict-host-request'
@@ -211,7 +211,7 @@ def worker(args):
             if not hasattr(binding, 'mojolearn_numeric_mode'):
                 raise RuntimeError('kNN binary lacks compiled mode witness; rebuild core binding')
             raw = int(binding.mojolearn_numeric_mode())
-            info['mode'] = {0: 'fast', 1: 'identical', 2: 'deterministic'}.get(raw, 'unknown')
+            info['mode'] = {0: 'fast', 1: 'identical'}.get(raw, 'unknown')
             info['binding_file'] = binding.__file__
         elif args.lane == 'umap':
             def call():
@@ -222,8 +222,8 @@ def worker(args):
             binding = probe._bind('_mojolearn_metrics')
             raw = int(binding.umap_numeric_mode())
             info['binding_file'] = binding.__file__
-            # UMAP binding uses its own explicit fast=0/identical=1/deterministic=2 map.
-            info['mode'] = {0: 'fast', 1: 'identical', 2: 'deterministic'}.get(raw, 'unknown')
+            # UMAP binding uses its own explicit fast=0/identical=1 map.
+            info['mode'] = {0: 'fast', 1: 'identical'}.get(raw, 'unknown')
             info['parameters'] = umap_parameters(args)
             info['arm_label'] = 'mojolearn-umap-fit-transform-host-request'
         else:

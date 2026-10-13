@@ -124,14 +124,13 @@ class Enumerate(unittest.TestCase):
             got = pc.enumerate_builds(tree)
         self.assertEqual(got, [
             ("fast", "build_gbdt.sh"), ("fast", "build_estimators.sh"),
-            ("deterministic", "build_gbdt.sh"),
             ("identical", "build_gbdt.sh"), ("identical", "build_svm.sh"), ("identical", "build_estimators.sh"),
             ("identical", "build_byte_lm.sh"), ("identical", "build_alpha_host.sh")])
 
     def test_this_checkout_enumerates_every_tier_and_the_host_families(self):
         got = pc.enumerate_builds(ROOT)
         tiers = {t for t, _ in got}
-        self.assertEqual(tiers, {"fast", "deterministic", "identical"})
+        self.assertEqual(tiers, {"fast", "identical"})
         self.assertTrue(any(s.endswith("_host.sh") for _, s in got))
         self.assertIn(("identical", "build_byte_lm.sh"), got)
         self.assertEqual(len(got), len(set(got)))
@@ -284,7 +283,7 @@ class Wiring(unittest.TestCase):
         prof = pc.load_profiles()
         self.assertEqual(sorted(prof), ["cuda-sm_89", "cuda-sm_90a", "hip-gfx942"])
         for name, p in prof.items():
-            self.assertEqual(sorted(p["templates"]), ["gpu:deterministic", "gpu:fast", "gpu:identical", "host"])
+            self.assertEqual(sorted(p["templates"]), ["gpu:fast", "gpu:identical", "host"])
         self.assertTrue(pc.partition_of(prof["cuda-sm_89"]["templates"]["host"]).startswith("sm_89/runpod-"))
         self.assertTrue(pc.partition_of(prof["hip-gfx942"]["templates"]["host"]).startswith("none/runpod-cpu-"))
 

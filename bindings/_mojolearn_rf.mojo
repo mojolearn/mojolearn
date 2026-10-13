@@ -347,7 +347,6 @@ from forest_export_binding import (
 comptime RFExportTrees = List[TreeMetaDataNode[DT]]
 comptime RF_EXPORTS = _Global[StorageType=ForestExportRegistry[RFExportTrees],
     name=("MojoRFFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFFitExportDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
           "MojoRFFitExportFast"), init_fn=ForestExportRegistry[RFExportTrees].__init__]
 
 
@@ -723,7 +722,6 @@ struct RfSessionRegistry(Defaultable, Movable):
 
 comptime RF_SESSIONS = _Global[StorageType=RfSessionRegistry,
     name=("MojoRFDataSessionIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFDataSessionDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
           "MojoRFDataSessionFast"), init_fn=RfSessionRegistry.__init__]
 
 

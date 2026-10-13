@@ -70,7 +70,7 @@ Usage:
     stage_libs.py --set <vendor-set-dir> --env-lib <pixi env lib dir>
                   --manifest <out.json> [--patchelf <path>]
 
-The set directory holds `*.so` (fast) and `deterministic/*.so`,
+The set directory holds `*.so` (fast) and
 `identical/*.so`; `.libs/` is created inside it.
 """
 
@@ -223,7 +223,7 @@ def main():
         raise SystemExit("stage_libs: patchelf not found; build_sets.sh installs one")
 
     exts = sorted(root.glob("_mojolearn*.so"))
-    for tier in ("deterministic", "identical"):
+    for tier in ("identical",):
         exts += sorted((root / tier).glob("_mojolearn*.so"))
     if not exts:
         raise SystemExit(f"stage_libs: no _mojolearn*.so under {root}")

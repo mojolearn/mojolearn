@@ -19,9 +19,9 @@ from mojolearn import _backend
 def main():
     print('sklearn', sklearn.__version__, flush=True)
     X = np.tile(np.array([[-2., 1.], [-1., 0.], [1., 0.], [2., 1.]], np.float32), (16, 1))
-    for mode in ('fast', 'deterministic', 'identical'):
+    for mode in ('fast', 'identical'):
         metrics = _backend.binding('_mojolearn_metrics', mode)
-        assert metrics.metrics_numeric_mode() == {'fast': 0, 'deterministic': 2, 'identical': 1}[mode]
+        assert metrics.metrics_numeric_mode() == {'fast': 0, 'identical': 1}[mode]
         for cls in (ExtraTreesClassifier, ExtraTreesRegressor,
                     RandomForestClassifier, RandomForestRegressor):
             classifier = 'Classifier' in cls.__name__
@@ -36,7 +36,7 @@ def main():
             # validates available mode metadata and exact tier extension paths.
             getter = getattr(binding, prefix + '_numeric_mode', None)
             if getter is not None:
-                assert getter() == {'fast': 0, 'deterministic': 2, 'identical': 1}[mode]
+                assert getter() == {'fast': 0, 'identical': 1}[mode]
             search = GridSearchCV(Pipeline([('scale', StandardScaler()), ('model', model)]),
                                   {'model__max_depth': [1, 2]}, cv=2, n_jobs=1,
                                   error_score='raise')

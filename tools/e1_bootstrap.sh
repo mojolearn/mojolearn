@@ -113,8 +113,8 @@ run_phase() {
 }
 
 # THE TEN BINDINGS, hoisted above the phases 2026-08-29. It lived inside
-# phase 3's block, so `MOJOLEARN_E1_PHASES=9` -- phase 9 builds the
-# DETERMINISTIC set from the same list -- died on an unbound variable
+# phase 3's block, so `MOJOLEARN_E1_PHASES=9` -- phase 9 builds its
+# sets from the same list -- died on an unbound variable
 # before it launched a single kernel. A phase subset is a supported way to
 # run this file, so no phase may depend on another having run.
 E1_IDENT_BINDINGS="build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh"
@@ -524,7 +524,7 @@ done
 fi
 
 if run_phase 9; then
-step "phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silicon"
+step "phase 9: RUN-TO-RUN DETERMINISM, on this vendor's silicon"
 # THE QUESTION NO OTHER PHASE ASKS. Phases 3-8 all ask a CROSS-VENDOR
 # question: they write cards here so a second machine's cards can be diffed
 # against them. That inference only exists where a card exists, it needs two
@@ -532,22 +532,13 @@ step "phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silic
 # whose instability we want to price.
 #
 # This phase asks the one-box question directly: same fit, same input, same
-# GPU, twice -- same bits? It is the whole evidence for `deterministic`, the
-# middle tier, and until 2026-08-29 it had been asked on ONE column (an Apple
-# M4) and written down as if it covered three. That is the standing error this
-# phase exists to stop repeating.
+# GPU, twice -- same bits?
 #
-# THE DETERMINISTIC SET IS BUILT HERE and nowhere else in this file: phase 3
-# builds FAST and IDENTICAL, because those are what the cards need. The middle
-# tier needs its own ten binaries and they land under
-# python/mojolearn/deterministic/.
-# ALL THREE SETS, BUILT HERE, because this phase COMPARES them. Phase 3 builds
+# BOTH SETS, BUILT HERE, because this phase COMPARES them. Phase 3 builds
 # fast and identical -- but a phase subset is a supported way to run this file
-# and `MOJOLEARN_E1_PHASES=9` skips phase 3, which would leave the box with the
-# deterministic set alone and two of the three arms reporting "no binary". A
-# baseline-less deterministic reading answers nothing, so this phase does not
+# and `MOJOLEARN_E1_PHASES=9` skips phase 3, so this phase does not
 # depend on another phase having run. Sets that already exist are rebuilt: the
-# whole comparison is void if the three came from different source states, and
+# whole comparison is void if the two came from different source states, and
 # a stale binary already produced one wrong verdict today.
 # WHICH BINDINGS, AND WHY THIS IS A KNOB. Thirty builds (ten bindings x three
 # tiers) took FIFTY MINUTES on a rented RTX 4090 and the 54-minute work bound
@@ -569,10 +560,10 @@ step "phase 9: RUN-TO-RUN DETERMINISM -- the middle tier, on this vendor's silic
 # must never look the same in the fetched directory.
 P9_BINDINGS="${MOJOLEARN_P9_BINDINGS:-$E1_IDENT_BINDINGS}"
 # WHICH TIERS, for the same budget reason. A cross-vendor identity leg needs
-# ONLY the identical set (ten builds, not thirty); the run-to-run comparison
-# needs all three. Default all three. Recorded in the log so a one-tier leg
-# can never read as a three-tier one.
-P9_TIERS="${MOJOLEARN_P9_TIERS:-fast deterministic identical}"
+# ONLY the identical set (ten builds, not twenty); the run-to-run comparison
+# needs both. Default both. Recorded in the log so a one-tier leg
+# can never read as a two-tier one.
+P9_TIERS="${MOJOLEARN_P9_TIERS:-fast identical}"
 # DIAG ONLY (2026-08-29, the Linux wheel legs). MOJOLEARN_P9_ONLY_DIAG=1 skips
 # this phase's builds, stability arms, concurrent probe and break-it probe
 # and runs ONLY the diag script at the bottom. packaging/linux/leg_diag.sh
@@ -631,7 +622,7 @@ done
 # round-robin, which is what a serving process holding two models looks like.
 # On the M4 the sequential arm called the k-NN lane STABLE under FAST and this
 # probe found three different answers in 24 calls.
-if [ "$P9_TIERS" = "fast deterministic identical" ]; then
+if [ "$P9_TIERS" = "fast identical" ]; then
 PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 \
     tools/repeat_run_stability.py --concurrent \
     > "$OUT/stability/concurrent.txt" 2>&1 \
@@ -639,7 +630,7 @@ PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 \
 echo "--- stability concurrent"
 tail -6 "$OUT/stability/concurrent.txt" 2>/dev/null | sed 's/^/    /'
 else
-  echo "concurrent probe SKIPPED: needs all three tiers, P9_TIERS=${P9_TIERS:-<none>}"
+  echo "concurrent probe SKIPPED: needs both tiers, P9_TIERS=${P9_TIERS:-<none>}"
 fi
 
 # THE BREAK-IT PROBE (2026-08-29). tools/identity_break.py fits EVERY public
