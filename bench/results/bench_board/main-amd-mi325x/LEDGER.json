@@ -432,7 +432,7 @@
     "box": "amd",
     "commit_date": "2026-10-12T21:25:50Z",
     "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_amd.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
     "job": "a0010",
     "kind": "algos",
@@ -466,7 +466,7 @@
     "box": "amd",
     "commit_date": "2026-10-12T21:25:50Z",
     "digest": "f12739eda2af1a06",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_amd.txt",
     "hardware": "AMD Instinct MI325X (amd, DO)",
     "job": "a0010",
     "kind": "algos",
@@ -13211,5 +13211,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-12T23:14:52Z"
+ "updated": "2026-10-13T01:43:09Z"
 }

@@ -70,7 +70,7 @@
     "smoke": false,
     "vendor": "amd"
   },
-  "created": "2026-10-12T23:14:52Z",
+  "created": "2026-10-13T01:43:09Z",
   "main_board": {
     "backfill": {
       "filled": {
@@ -341,13 +341,14 @@
     },
     "inputs": {
       "branch": "main",
-      "generated": "2026-10-12T23:14:52Z",
+      "generated": "2026-10-13T01:43:09Z",
       "grid_logs": [
         "amd=/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/gridlogs.txt"
       ],
       "json_dir": null,
       "results": [
-        "amd=/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt"
+        "amd=/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+        "amd=/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_amd.txt"
       ]
     },
     "label": "main@4e9a2bf60",
@@ -44569,7 +44570,7 @@
               "ct": 1791840350,
               "dataset": "istella",
               "digest": null,
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_amd.txt",
               "family": "algos",
               "gpu_recorded": null,
               "hardware": "AMD Instinct MI325X (amd, DO)",
@@ -44580,6 +44581,7 @@
               "measured": null,
               "median_ms": 887.0141519946628,
               "quality": {
+                "jaccard_vs_exact": 0.7741935483870968,
                 "jaccard_vs_sklearn": 0.8487394957983193,
                 "n_selected": 110
               },
@@ -44603,6 +44605,7 @@
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
+            "jaccard_vs_exact": 0.7741935483870968,
             "jaccard_vs_sklearn": 0.8487394957983193,
             "n_selected": 110
           },
@@ -44774,7 +44777,7 @@
         "timed_fit": "fit(X, y)",
         "timed_infer": null
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_amd.txt (amd/a0010)",
       "main_board": {
         "box": "amd",
         "identity": "n/a",
@@ -44826,7 +44829,7 @@
               "ct": 1791840350,
               "dataset": "taxi",
               "digest": "f12739eda2af1a06",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_amd.txt",
               "family": "algos",
               "gpu_recorded": null,
               "hardware": "AMD Instinct MI325X (amd, DO)",
@@ -44837,6 +44840,7 @@
               "measured": null,
               "median_ms": 103.3867200021632,
               "quality": {
+                "jaccard_vs_exact": 1.0,
                 "jaccard_vs_sklearn": 1.0,
                 "n_selected": 5
               },
@@ -44860,6 +44864,7 @@
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
+            "jaccard_vs_exact": 1.0,
             "jaccard_vs_sklearn": 1.0,
             "n_selected": 5
           },
@@ -45031,7 +45036,7 @@
         "timed_fit": "fit(X, y)",
         "timed_infer": null
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_amd.txt (amd/a0010)",
       "main_board": {
         "box": "amd",
         "identity": "n/a",
@@ -77676,5 +77681,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-12T23:14:52Z"
+  "updated": "2026-10-13T01:43:09Z"
 }

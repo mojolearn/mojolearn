@@ -2,7 +2,7 @@
   "board_notes": [
     "MAIN BOARD nvidia-l40s, version label main@8899093fc. Unreleased: not reproducible by pip install; the release boards are the reference.",
     "Cells: 245 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@8899093fc (2026-10-13T00:09:47Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).",
-    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 62 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
+    "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 43 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
     "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: n/a 245).",
     "Opponents: copied from the stored opponent boards (opponents-default-20261006, opponents-specific-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 4 races.",
     "Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax. A cell of ours whose output hash equals a copied opponent's shows quality identical_to=<arm> (the same bits) where the own-host reference gave none."
@@ -59,7 +59,7 @@
     "smoke": false,
     "vendor": "nvidia"
   },
-  "created": "2026-10-13T00:27:48Z",
+  "created": "2026-10-13T01:43:08Z",
   "main_board": {
     "backfill": {
       "filled": {
@@ -86,13 +86,14 @@
     },
     "inputs": {
       "branch": "main",
-      "generated": "2026-10-13T00:27:48Z",
+      "generated": "2026-10-13T01:43:08Z",
       "grid_logs": [
         "nv=/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/gridlogs_nvc3.txt"
       ],
       "json_dir": null,
       "results": [
-        "nv=/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt"
+        "nv=/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+        "nv=/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_nv.txt"
       ]
     },
     "label": "main@8899093fc",
@@ -112,7 +113,7 @@
         "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/nvidia-l40s/board/board.json"
       }
     ],
-    "replaced": 62,
+    "replaced": 43,
     "withheld_opponents": 4
   },
   "main_board_schema": "mojolearn-main-board/1",
@@ -59673,7 +59674,7 @@
               "ct": 1791850187,
               "dataset": "istella",
               "digest": "0cceeaeac076d598",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_nv.txt",
               "family": "algos",
               "gpu_recorded": null,
               "hardware": "NVIDIA L40S (nv, RunPod)",
@@ -59684,6 +59685,7 @@
               "measured": null,
               "median_ms": 1362.9050701856613,
               "quality": {
+                "jaccard_vs_exact": 0.7741935483870968,
                 "jaccard_vs_sklearn": 0.8803418803418803,
                 "n_selected": 110
               },
@@ -59707,6 +59709,7 @@
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
+            "jaccard_vs_exact": 0.7741935483870968,
             "jaccard_vs_sklearn": 0.8803418803418803,
             "n_selected": 110
           },
@@ -59878,7 +59881,7 @@
         "timed_fit": "fit(X, y)",
         "timed_infer": null
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0005)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_nv.txt (nv/n0005)",
       "main_board": {
         "box": "nv",
         "identity": "n/a",
@@ -59930,7 +59933,7 @@
               "ct": 1791843783,
               "dataset": "taxi",
               "digest": "f12739eda2af1a06",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_nv.txt",
               "family": "algos",
               "gpu_recorded": null,
               "hardware": "NVIDIA L40S (nv, RunPod)",
@@ -59941,6 +59944,7 @@
               "measured": null,
               "median_ms": 63.848892226815224,
               "quality": {
+                "jaccard_vs_exact": 1.0,
                 "jaccard_vs_sklearn": 1.0,
                 "n_selected": 5
               },
@@ -59964,6 +59968,7 @@
           "peak_gpu_mb": null,
           "peak_host_mb": null,
           "quality": {
+            "jaccard_vs_exact": 1.0,
             "jaccard_vs_sklearn": 1.0,
             "n_selected": 5
           },
@@ -60135,7 +60140,7 @@
         "timed_fit": "fit(X, y)",
         "timed_infer": null
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt (nv/n0003)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_nv.txt (nv/n0003)",
       "main_board": {
         "box": "nv",
         "identity": "n/a",
@@ -104446,5 +104451,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-13T00:27:48Z"
+  "updated": "2026-10-13T01:43:08Z"
 }
