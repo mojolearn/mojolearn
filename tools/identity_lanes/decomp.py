@@ -475,7 +475,7 @@ def _(ml, X, yc, yr, Xh=None):
         src = m.fit_transform(S)
         out[f"fit{w}"] = _h(src, m.components_, m.mixing_, m.whitening_, np.int32(m.n_iter_))
         out[f"inv{w}"] = _h(m.inverse_transform(src[:32]))
-        first = first or m
+        first = m if first is None else first
     return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 72)),))
 
 
@@ -491,7 +491,7 @@ def _(ml, X, yc, yr, Xh=None):
         S = _decomp_eigh_wide(X, 4 * d, d)
         m = ml.FactorAnalysis(n_components=nc, rotation=method, max_iter=5).fit(S)
         out[f"{method}{nc}"] = _h(m.components_, m.noise_variance_, m.transform(S[:64]))
-        first = first or m
+        first = m if first is None else first
     return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 80)),))
 
 
@@ -505,10 +505,10 @@ def _(ml, X, yc, yr, Xh=None):
     for w in _decomp_eigh_widths:
         S = _decomp_eigh_wide(X, w - 1, w)
         m = ml.FactorAnalysis(n_components=4, max_iter=10).fit(S)
-        out[f"fit{w}"] = _h(m.components_, m.noise_variance_, np.float64(m.loglike_[-1]), np.int32(m.n_iter_))
+        out[f"fit{w}"] = _h(m.components_, m.noise_variance_, np.asarray(m.loglike_, dtype=np.float64), np.int32(m.n_iter_))
         out[f"T{w}"] = _h(m.transform(S[:32]), m.score_samples(S[:32]))
         out[f"cov{w}"] = _h(m.get_covariance(), m.get_precision())
-        first = first or m
+        first = m if first is None else first
     return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 72)),
                                        e.score_samples(_decomp_eigh_wide(Xh, 256, 72))))
 
@@ -525,7 +525,7 @@ def _(ml, X, yc, yr, Xh=None):
         out[f"fit{w}"] = _h(m.location_, m.covariance_, m.precision_, np.asarray(m.support_, dtype=np.int8),
                             m.dist_, m.raw_location_, m.raw_covariance_)
         out[f"maha{w}"] = _h(m.mahalanobis(S[:64]))
-        first = first or m
+        first = m if first is None else first
     return _fit(out, first, lambda e: (e.mahalanobis(_decomp_eigh_wide(Xh, 256, 72)),))
 
 
@@ -533,14 +533,16 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """KernelPCA's dense eigensolve (x_decomp's eigh of the centered n x n
     kernel matrix) at n = 72 and 128 samples of the fixture's own columns:
-    rbf (full rank, the tridiagonal solve) and cosine."""
+    rbf (full rank, separated spectrum: the tridiagonal solve) and cosine
+    (rank at most the fixture's width, a cluster of zero eigenvalues: the
+    refusal and the Jacobi fallback at n >= 64)."""
     out, first = {}, None
     for w in _decomp_eigh_widths:
         for kern in ("rbf", "cosine"):
             m = ml.KernelPCA(n_components=4, kernel=kern, eigen_solver="dense")
             Z = m.fit_transform(X[:w])
             out[f"{kern}{w}"] = _h(Z, m.eigenvalues_, m.eigenvectors_)
-            first = first or m
+            first = m if first is None else first
     return _fit(out, first, lambda e: (e.transform(Xh[:128]),))
 
 
