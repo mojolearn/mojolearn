@@ -46,8 +46,12 @@ SCHEMA = "mojolearn.release-route-overlay.v1"
 #: tools/build_sizing.py: release061_remote_build.sh and release_ubuntu22_build.sh
 #: size the build with it on the box (lane/build-parallelism), so a source
 #: frozen before it existed still gets it with the driver that calls it.
+#: The changed-lanes check (2026-10-13) runs on the same boxes right after the build: its driver, its
+#: per-lane summary and the record script it calls, so a source frozen before them still records.
 BOX_OVERLAY = ("tools/release061_remote_build.sh", "tools/nvidia_serial_guard.py", "tools/amd_serial_guard.py",
-               "tools/cpu_build_guard.py", "tools/bincache.py", "tools/build_sizing.py")
+               "tools/cpu_build_guard.py", "tools/bincache.py", "tools/build_sizing.py",
+               "tools/release_leg_changed_lanes.sh", "tools/changed_lanes_check.sh", "tools/changed_lanes_summary.py",
+               "tools/record_identity_column.sh")
 #: Everything that drives a Linux build leg: the local runners, the box
 #: helpers and BOX_OVERLAY. Their bytes at the tooling commit are the tooling
 #: digest a reused leg must match.

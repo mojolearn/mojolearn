@@ -90,8 +90,13 @@ THE STEPS
                      droplet live or no token (--amd-build-provider do|hotaisle
                      or MOJOLEARN_AMD_PROVIDER pins one). `cpu-box` (RunPod CPU
                      pods) and `github` (GitHub's free runners,
-                     tools/release_github_build.py) are opt-in
-  macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
+                     tools/release_github_build.py) are opt-in. With gpu-legs the
+                     NVIDIA sm_89 and AMD gfx942 legs also record and verify the
+                     changed lanes on their own boxes after the build (identity-admit)
+  macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on; then the
+                     changed lanes on Metal and on the CPU column, once each, under the
+                     Metal lock (tools/changed_lanes_check.sh), printed against the table,
+                     never gating (Apple and host digests are recorded, not required)
   macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock;
                      its self-test job is the bundled-table gate (0.8.35 shipped a
                      stale table): no PASSED receipt for these wheel bytes, no
@@ -101,6 +106,14 @@ THE STEPS
                      host binding byte-identical across the legs (taken ones too)
   linux-assemble     the set directories the packer packs: a leg's set, a taken
                      leg's set, or one synthesized from the published wheel
+  identity-admit     the changed lanes (tools/identity_columns.py changed-lanes, per backend,
+                     computed once at linux-builds) were recorded (REPEATS=1) and verified on
+                     the NVIDIA sm_89 and AMD gfx942 build legs' own boxes right after their
+                     build; this admits those records (tools/admit_identity_columns.sh:
+                     NVIDIA == AMD, 0 conflicts) into the source checkout's table, so the
+                     packed wheels carry it, and commits table + records to main.
+                     NOTHING-CHANGED when no lane moved; a conflict stops the Linux
+                     pipelines (a bug to fix, never a rerun). MOJOLEARN_RELEASE_CHANGED_LANES_CHECK=off skips
   linux-pack         pixi run -e pkg pack-linux-wheel --profile release-split
                      (the core and both plugins), audit.sh, strip, split_audit
   gpu-column-nvidia  } the NVIDIA and AMD wheel smokes AT ONCE (detached
@@ -431,6 +444,34 @@ def leg_common_env(ctx):
     return fn() if callable(fn) else {}
 
 
+#: CHANGED LANES ON THE BUILD LEGS (Andrew, 2026-10-13: fold light verification of what changed into
+#: compiling, so a release needs no separate GPU rental for re-records and never waits long). The NVIDIA
+#: sm_89 and AMD gfx942 legs record the changed lanes (REPEATS=1) and verify them on the SAME box right
+#: after their bindings build (tools/release_leg_changed_lanes.sh); identity-admit admits the records
+#: before linux-pack. MOJOLEARN_RELEASE_CHANGED_LANES_CHECK=off turns all of it off for one run.
+CHANGED_LANES_SWITCH = "MOJOLEARN_RELEASE_CHANGED_LANES_CHECK"
+#: leg -> the backend its column records (lane_select --backend) and the table class it admits as
+CHANGED_LANES_LEGS = {"cuda-sm_89": ("cuda", "nvidia"), "hip-gfx942": ("hip", "amd")}
+#: the AMD leg's GPU by provider (the record label); the NVIDIA leg names its GPU on the box (it walks stock)
+AMD_RECORD_LABEL = {"do": "amd-mi325x-gfx942", "hotaisle": "amd-mi300x-gfx942"}
+
+
+def changed_lanes_env(ctx, leg_name, amd_route=None):
+    """The leg environment that asks its box to record and verify the changed
+    lanes, or {} (no lanes, the check off, a CPU-only route, a bare context)."""
+    # only what step_linux_builds already computed: building a leg list (pack, wait, status) never runs the selector
+    fn = getattr(ctx, "changed_lanes_known", None)
+    if not callable(fn) or leg_name not in CHANGED_LANES_LEGS or amd_route == "cpu-box":
+        return {}
+    lanes = fn(CHANGED_LANES_LEGS[leg_name][0])
+    if not lanes:
+        return {}
+    env = dict(MOJOLEARN_RELEASE_CHANGED_LANES=",".join(lanes))
+    if amd_route in AMD_RECORD_LABEL:
+        env["MOJOLEARN_RELEASE_CHANGED_LABEL"] = AMD_RECORD_LABEL[amd_route]
+    return env
+
+
 def gpu_legs(ctx):
     """THE DEFAULT ROUTE: two RunPod NVIDIA legs and one DigitalOcean MI325X leg,
     exactly docs/RELEASE_CHECKLIST.md section 2's commands, output directories
@@ -450,7 +491,8 @@ def gpu_legs(ctx):
                         ["sh", "tools/gemm_remote_leg.sh", "nvidia", "--payload", "mamba",
                          "--source-ref", ctx.commit, "--gpu", gpu, "--allow-concurrent", "--rent",
                          "--segment-lease", "120", "--dollar-cap", "15"],
-                        dict(runpod, MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_GEMM_LEG_OUT=str(out), **common),
+                        dict(runpod, MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_GEMM_LEG_OUT=str(out), **common,
+                             **changed_lanes_env(ctx, f"cuda-{arch}")),
                         rb, legs_dir, out))
     # THE PTX SLOT needs no GPU to build (Andrew 2026-10-10: PTX is a normal target; no
     # flag): its leg is the CPU box route, like cpu_legs, with the same set layout.
@@ -552,6 +594,7 @@ def amd_leg_command(ctx, route, legs_dir):
     if ctx.args.amd_expect_from:
         cmd += ["--expect-from", ctx.args.amd_expect_from]
     env.update(leg_common_env(ctx))
+    env.update(changed_lanes_env(ctx, "hip-gfx942", amd_route=route))
     return cmd, env
 
 
@@ -763,7 +806,10 @@ STEP_TABLE = [
     # already holds) are deleted: the table admit is the identity check.
     ("linux-wait", "core-linux", ["linux-builds"], None),
     ("linux-assemble", "core-linux", ["linux-wait"], None),
-    ("linux-pack", "core-linux", ["linux-assemble"], "mac"),
+    # the changed lanes' NVIDIA and AMD records from the build legs, admitted into the table the packed
+    # wheels carry (Andrew 2026-10-13); "mac": it writes the source checkout's table and runs a host self-test
+    ("identity-admit", "core-linux", ["linux-wait"], "mac"),
+    ("linux-pack", "core-linux", ["linux-assemble", "identity-admit"], "mac"),
     ("gpu-column-nvidia", "nvidia", ["linux-pack"], None),
     ("gpu-column-amd", "amd", ["linux-pack"], None),
     # linux-joint-diff is deleted (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun):
@@ -786,7 +832,7 @@ PIPELINES = {
     "macos": dict(builds=["macos-build"], checks=["macos-smoke"],
                   publish="publish-macos",
                   platform="macos"),
-    "core-linux": dict(builds=["linux-builds", "linux-wait", "linux-assemble", "linux-pack"],
+    "core-linux": dict(builds=["linux-builds", "linux-wait", "linux-assemble", "identity-admit", "linux-pack"],
                        # no "cross-compile" check: the step is skipped in the release (Release.RUN_CROSS_COMPILE)
                        checks=[], publish="publish-core-linux", platform="linux"),
     "nvidia": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-nvidia", platform="nvidia"),
@@ -916,6 +962,7 @@ class Release:
         self.evidence = ev
         self._plan = None
         self._overlay = None
+        self._changed_lanes = {}
         self._tooling = None
         self._leg_env = None
         self._ledger = None
@@ -1513,6 +1560,11 @@ class Release:
         return out
 
     def step_linux_builds(self):
+        if self.args.build_backend == "gpu-legs":
+            # the lanes the NVIDIA sm_89 and AMD gfx942 legs record and verify on their boxes after the
+            # build (changed_lanes_env); computed once per freeze, before the leg commands are made
+            for backend, _ in CHANGED_LANES_LEGS.values():
+                self.changed_lanes(backend)
         legs = linux_legs(self)
         prev = (self.plan().get("previous") or {}).get("version")
         if not legs:
@@ -1582,7 +1634,34 @@ class Release:
         (self.rel / "macos").mkdir(parents=True, exist_ok=True)
         dest = self.rel / "macos" / built[0].name
         shutil.copy2(built[0], dest)
-        return f"{dest.name} sha256 {sha256(dest)}"
+        checked = self.mac_changed_lanes_check(src)
+        return f"{dest.name} sha256 {sha256(dest)}" + (f"; {checked}" if checked else "")
+
+    def mac_changed_lanes_check(self, src):
+        """THE CHANGED LANES ON THIS MAC, RIGHT AFTER ITS BUILD (Andrew 2026-10-13): Metal, then the CPU
+        column, once each, from the tree build_release_wheel.sh just built, against the committed table
+        (tools/changed_lanes_check.sh; one line per lane in <rel>/changed-lanes/macos/summary.txt). It
+        prints the comparison and never fails the build: Apple and host digests are recorded, never
+        required (identity is NVIDIA == AMD), and the Linux legs' records are what identity-admit admits."""
+        out = self.rel / "changed-lanes" / "macos"
+        py = ROOT / ".pixi" / "envs" / "default" / "bin" / "python"
+        said = []
+        for column in ("metal", "cpu"):
+            lanes = self.changed_lanes(column)
+            if lanes is None:
+                continue
+            env = dict(LANES=",".join(lanes) or "none", PYTHON=str(py if py.exists() else PY))
+            rc = self.run([PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
+                           "bash", str(src / "tools" / "changed_lanes_check.sh"), str(out), column],
+                          env=env, log=out / f"{column}.log", cwd=src)
+            said.append(f"{column} rc={rc}")
+        if not said:
+            return ""
+        if not self.dry and (out / "summary.txt").exists():
+            for line in (out / "summary.txt").read_text().splitlines():
+                if line.startswith(("CHANGED-LANES ", "NOTHING-CHANGED")) or " state=DIVERGENT" in line:
+                    self.say("  " + line[:240])
+        return "changed lanes on this Mac: " + ", ".join(said) + f" (summary {out / 'summary.txt'})"
 
     def smoke_python(self):
         for name in ("python3.12", "python3.13", "python3.11", "python3.14", "python3.10"):
@@ -1778,6 +1857,173 @@ class Release:
         sets = [leg.release_build / "build" / "sets" / leg.vendor for leg in legs]
         manifests = [leg.release_build / "build" / "sets" / leg.vendor / leg.arch / "manifest.json" for leg in legs]
         return sets, proofs, manifests
+
+    # ------------------------------------------------------------ changed lanes (Andrew 2026-10-13)
+    def changed_lanes(self, backend):
+        """The lanes whose bits can have moved since the admitted table, for
+        one column backend (cuda, hip, metal, cpu): tools/identity_columns.py
+        changed-lanes in the source checkout, computed once per freeze and
+        kept in <rel>/changed-lanes/<backend>.txt. MOJOLEARN_RELEASE_BUILD_ONLY
+        reaches tools/lane_select.py through the environment, so the lanes are
+        those whose bindings BUILD. None when the check is off or in a dry run."""
+        if os.environ.get(CHANGED_LANES_SWITCH) == "off":
+            return None
+        with self._lock:
+            if backend in self._changed_lanes:
+                return self._changed_lanes[backend]
+            if self.dry or self.readonly:
+                self.say(f"  changed lanes ({backend}): would run tools/identity_columns.py changed-lanes "
+                         f"--scope routine --backend {backend} in the source checkout")
+                self._changed_lanes[backend] = None
+                return None
+        # computed outside the lock (the selector reads the whole tree); the kept file makes it once per freeze
+        d = self.rel / "changed-lanes"
+        d.mkdir(parents=True, exist_ok=True)
+        kept, err = d / f"{backend}.txt", d / f"{backend}.err"
+        if kept.exists():
+            text = kept.read_text().strip()
+        else:
+            src = self.src
+            p = subprocess.run([PY, str(src / "tools" / "identity_columns.py"), "changed-lanes", "--scope",
+                                "routine", "--backend", backend], cwd=src, capture_output=True, text=True)
+            err.write_text(p.stderr)
+            if p.returncode != 0:
+                raise StepFailed(f"changed lanes ({backend}): identity_columns.py changed-lanes exited "
+                                 f"{p.returncode}; see {err}")
+            text = (p.stdout.strip().splitlines() or [""])[-1].strip()
+            kept.write_text(text + "\n")
+        lanes = [x for x in text.split(",") if x]
+        summary = next((l for l in err.read_text().splitlines() if "CHANGED-LANES" in l), "") if err.exists() else ""
+        with self._lock:
+            if backend not in self._changed_lanes:
+                self.say(f"  changed lanes ({backend}): {len(lanes)}"
+                         + (f"  [{summary.lstrip('# ')}]" if summary else "") + f"  ({kept})")
+            self._changed_lanes[backend] = lanes
+        return lanes
+
+    def changed_lanes_known(self, backend):
+        """changed_lanes(backend) if it was computed at this freeze (this run or
+        a kept file), else None; never runs the selector."""
+        with self._lock:
+            if backend in self._changed_lanes:
+                return self._changed_lanes[backend]
+        kept = self.rel / "changed-lanes" / f"{backend}.txt"
+        if os.environ.get(CHANGED_LANES_SWITCH) == "off" or not kept.exists():
+            return None
+        return [x for x in kept.read_text().strip().split(",") if x]
+
+    def step_identity_admit(self):
+        """ADMIT THE CHANGED LANES' RECORDS FROM THE BUILD LEGS (Andrew,
+        2026-10-13). The NVIDIA sm_89 and AMD gfx942 legs recorded the changed
+        lanes on their own boxes after the build (REPEATS=1); this copies the
+        records home under <rel>/identity/, admits them with
+        tools/admit_identity_columns.sh in the source checkout (NVIDIA == AMD,
+        0 conflicts; the regenerated table is what linux-pack packs), and
+        commits the table and the records to main. Identity runs ONCE: a
+        conflict or a DIVERGENT admission is a bug to fix, never a rerun. A
+        vendor whose leg did not build at this freeze (taken from an earlier
+        one, or every binding reused) has no box here: that is reported OWED,
+        and nothing is admitted without both vendors."""
+        if os.environ.get(CHANGED_LANES_SWITCH) == "off":
+            return f"SKIPPED: {CHANGED_LANES_SWITCH}=off"
+        out = self.rel / "identity"
+        marker = out / "admitted.json"
+        done = read_json(marker) or {}
+        if done.get("commit") == self.commit:
+            return "have " + done.get("result", str(marker))
+        if self.dry:
+            return ("would collect the changed lanes' records from the cuda-sm_89 and hip-gfx942 legs, admit them "
+                    "with tools/admit_identity_columns.sh (NVIDIA == AMD, 0 conflicts) and commit the table")
+        want = {leg: self.changed_lanes(backend) for leg, (backend, _) in CHANGED_LANES_LEGS.items()}
+        if not any(want.values()):
+            write_json(marker, dict(commit=self.commit, result="NOTHING-CHANGED"))
+            return "NOTHING-CHANGED: no lane's bits can have moved since the admitted table"
+        built = {l.name: l for l in linux_legs(self) if l.name not in self.admitted_legs()}
+        dirs, owed, lines = [], [], []
+        for leg_name, (backend, cls) in CHANGED_LANES_LEGS.items():
+            lanes = want[leg_name]
+            if not lanes:
+                continue
+            leg = built.get(leg_name)
+            cl = leg.release_build / "changed-lanes" if leg else None
+            if leg is None or not leg.release_build.exists():
+                owed.append(f"{cls}: the {leg_name} leg did not build at this freeze, so no box recorded "
+                            f"its {len(lanes)} changed lane(s)")
+                continue
+            summary = cl / "summary.txt"
+            if summary.exists():
+                lines += [l for l in summary.read_text().splitlines() if l.startswith(("CHANGED-LANES", "NOTHING"))]
+            records = sorted((cl / "record").glob("*.identical.json")) if (cl / "record").is_dir() else []
+            if not records:
+                raise StepFailed(f"the {leg_name} leg built but recorded none of its {len(lanes)} changed lane(s); "
+                                 f"read {cl}/ (summary.txt, record.log) and {leg.release_build}/changed-lanes.log")
+            dest = out / cls
+            if dest.exists():
+                dest.rename(dest.with_name(dest.name + ".old-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+            dest.mkdir(parents=True)
+            for r in records:
+                shutil.copy2(r, dest / r.name)
+                prov = r.with_name(r.name.replace(".identical.json", ".provenance.txt"))
+                if prov.exists():
+                    shutil.copy2(prov, dest / prov.name)
+            dirs.append(dest)
+        for l in lines:
+            self.say("  " + l[:240])
+        if owed:
+            return ("OWED, nothing admitted (NVIDIA == AMD needs both): " + "; ".join(owed)
+                    + ". Record them with tools/record_identity_column.sh (LANES=..., REPEATS=1) and admit by hand")
+        src = self.src
+        py = ROOT / ".pixi" / "envs" / "default" / "bin" / "python"
+        env = dict(REF_TAG=self.version.replace(".", ""), EVIDENCE=str(out / "admit-evidence"),
+                   ADMIT_DATE=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d"),
+                   PYTHON=str(py if py.exists() else PY))
+        self.must(["bash", str(src / "tools" / "admit_identity_columns.sh"), "--build-host", *dirs], env=env,
+                  log=out / "admit.log", what="admit_identity_columns.sh", cwd=src)
+        dest = src / "bench" / "results" / "identity_break" / f"{env['ADMIT_DATE']}-{env['REF_TAG']}"
+        summary = read_json(dest / "admission-summary.json")
+        conflicts = (summary or {}).get("conflicts")
+        if conflicts != 0:
+            raise StepFailed(f"the admission reports conflicts={conflicts} (NVIDIA != AMD on a changed lane is a "
+                             f"bug to fix, never a rerun); read {out / 'admit.log'}")
+        committed = self.commit_admitted_table(src, dest)
+        result = f"ADMITTED {sum(len(v or []) for v in want.values())} lane record(s), 0 conflicts; {committed}"
+        write_json(marker, dict(commit=self.commit, result=result, records=[str(d) for d in dirs]))
+        return result
+
+    def commit_admitted_table(self, src, dest):
+        """Commit the admitted table and the records to main from a scratch
+        worktree of origin/main, only when main's table and records have not
+        moved since the source commit (else say what is owed). The source
+        checkout keeps the new table uncommitted: linux-pack packs it from
+        there, and its HEAD stays the source commit."""
+        table = "python/mojolearn/verify_reference/table.json"
+        rel_dest = dest.relative_to(src).as_posix()
+        if subprocess.run(["git", "-C", str(ROOT), "fetch", "-q", "origin", "main"]).returncode != 0:
+            return "COMMIT OWED: git fetch origin main failed; commit " + table + " and " + rel_dest + " by hand"
+        moved = subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", self.commit, "origin/main", "--", table,
+                                "bench/results/identity_break"]).returncode != 0
+        if moved:
+            return (f"COMMIT OWED: main changed {table} or bench/results/identity_break since {self.commit[:12]}; "
+                    f"admit {rel_dest} there by hand")
+        wt = self.rel / "identity" / "main-worktree"
+        if wt.exists():
+            subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(wt)])
+        if subprocess.run(["git", "-C", str(ROOT), "worktree", "add", "-q", "--detach", str(wt),
+                           "origin/main"]).returncode != 0:
+            return "COMMIT OWED: could not add a worktree of origin/main"
+        shutil.copy2(src / table, wt / table)
+        shutil.copytree(dest, wt / rel_dest, dirs_exist_ok=True)
+        msg = (f"verify_reference: admit the {self.version} changed lanes recorded on the release build legs "
+               f"({self.commit[:12]})")
+        ok = (subprocess.run(["git", "-C", str(wt), "add", table, rel_dest]).returncode == 0
+              and subprocess.run(["git", "-C", str(wt), "commit", "-q", "-m", msg]).returncode == 0)
+        if not ok:
+            return "COMMIT OWED: git commit failed in " + str(wt)
+        if subprocess.run(["git", "-C", str(wt), "push", "-q", "origin", "HEAD:main"]).returncode != 0:
+            return f"COMMITTED in {wt} but the push to main failed; push it by hand"
+        head = git_at(wt, "rev-parse", "HEAD")
+        subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(wt)])
+        return f"table and records committed to main as {head[:12]}"
 
     def step_linux_pack(self):
         """--profile release-split: the core and both plugins from the same

@@ -123,6 +123,10 @@ fi
 # the box by release_ubuntu22_build.sh or release061_remote_build.sh); N is an
 # explicit override, 1..16.
 BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-auto}
+# The changed lanes tools/release.py asks this leg to record and verify on its box after the build
+# (tools/release_leg_changed_lanes.sh, Andrew 2026-10-13). They go into a remote shell string: lane names only.
+case "${MOJOLEARN_RELEASE_CHANGED_LANES:-}${MOJOLEARN_RELEASE_CHANGED_LABEL:-}" in *[!a-z0-9,_.-]*)
+  echo 'MOJOLEARN_RELEASE_CHANGED_LANES/_LABEL: lane names, commas and a lowercase label only' >&2; exit 2;; esac
 [[ "$BUILD_JOBS" = auto || ( "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ) ]] || { echo 'MOJOLEARN_BUILD_JOBS must be auto or 1..16' >&2; exit 2; }
 if [ "$UBUNTU22" = 1 ] && [[ ! "$CORE_HOST_SHA" =~ ^([0-9a-f]{64}|skip)$ ]]; then
   echo 'MOJOLEARN_EXPECT_CORE_HOST_SHA256 must be 64 lowercase hex (the STAGED NVIDIA set copy) or skip' >&2; exit 2
@@ -574,6 +578,33 @@ while [ $(date +%s) -lt $(( LEG_START + DEADMAN_SECONDS - FETCH_RESERVE + 60 )) 
 done
 echo "build_exit=${BUILD_EXIT:-NO_EXIT_BEFORE_FETCH_RESERVE}" >> "$STATE"
 log "build exit ${BUILD_EXIT:-none}; $($SSH "tail -3 $REMOTE_LOG" 2>/dev/null | tr '\n' '|')"
+
+# THE CHANGED LANES, ON THIS BOX, ONCE (Andrew, 2026-10-13: fold light verification of what changed into
+# compiling, so a release needs no separate GPU rental for re-records). On the host, outside the build
+# container (it binds /root, so the set and the source tree are the same files), with the GPU the build
+# never needed: tools/release_leg_changed_lanes.sh stages the set just built, records the changed lanes
+# (REPEATS=1) and verifies them against the committed table into $REMOTE_OUT/changed-lanes/, which the
+# fetch below brings home with the proof. Detached and polled like the build; never changes BUILD_EXIT.
+if [ "$LEG_MODE" = build ] && [ "${BUILD_EXIT:-}" = 0 ] && [ -n "${MOJOLEARN_RELEASE_CHANGED_LANES:-}" ]; then
+  CL_SECONDS=$(( LEG_START + DEADMAN_SECONDS - FETCH_RESERVE - $(date +%s) - 20 ))
+  if [ "$CL_SECONDS" -ge 300 ]; then
+    $SSH "cd /root/mojolearn && rm -f /root/changed-lanes.exit && nohup bash -c 'export PATH=/root/release-tools/bin:/root/.pixi/bin:\$PATH; \
+      MOJOLEARN_RELEASE_CHANGED_LANES=$MOJOLEARN_RELEASE_CHANGED_LANES MOJOLEARN_RELEASE_CHANGED_LABEL=${MOJOLEARN_RELEASE_CHANGED_LABEL:-} \
+      MOJOLEARN_COMMIT=$COMMIT timeout -k 20 $CL_SECONDS bash tools/release_leg_changed_lanes.sh $LEG_VENDOR $LEG_ARCH $REMOTE_OUT \
+      > $REMOTE_OUT/changed-lanes.log 2>&1; echo \$? > /root/changed-lanes.exit' > /dev/null 2>&1 < /dev/null &" \
+      || log "could not start the changed-lanes check"
+    CL_EXIT=""
+    while [ $(date +%s) -lt $(( LEG_START + DEADMAN_SECONDS - FETCH_RESERVE + 60 )) ]; do
+      CL_EXIT=$($SSH 'cat /root/changed-lanes.exit 2>/dev/null' 2>/dev/null | tr -d '[:space:]')
+      [ -n "$CL_EXIT" ] && break
+      sleep 30
+    done
+    echo "changed_lanes_exit=${CL_EXIT:-NO_EXIT_BEFORE_FETCH_RESERVE}" >> "$STATE"
+    log "changed lanes exit ${CL_EXIT:-none}; $($SSH "tail -2 $REMOTE_OUT/changed-lanes/summary.txt" 2>/dev/null | tr '\n' '|')"
+  else
+    echo "changed_lanes_exit=NOT_RUN_${CL_SECONDS}s_LEFT" >> "$STATE"
+  fi
+fi
 
 log "fetch evidence"
 rsync -az -e "ssh $SSH_OPTS" "root@$IP:$REMOTE_OUT/" "$OUT/release-build/" && log "fetched release-build/" || log "FETCH FAILED (release-build/)"

@@ -73,6 +73,8 @@
 set -uo pipefail
 
 die() { echo "record_identity_column: $*" >&2; exit 2; }
+# shasum (perl) is not in every build image (the AMD leg's Ubuntu 22.04 container); sha256sum is the same digest.
+command -v shasum > /dev/null 2>&1 || shasum() { shift 2; sha256sum "$@"; }
 [ $# -ge 2 ] || die "usage: record_identity_column.sh <vendor-label> <outdir> [--models]"
 LABEL=$1; OUT=$2; MODE=${3:-column}
 case $MODE in column|--models) ;; *) die "unknown third argument $MODE (only --models)";; esac
@@ -129,10 +131,21 @@ if [ "$PTX" = 1 ]; then export MOJOLEARN_GPU_ARCH=sm_80; elif [ "$BACKEND" = cud
 # intentional full run; a reference column is exactly that.
 if [ "$BACKEND" = metal ]; then export MOJOLEARN_APPLE_FULL_DIAGNOSTIC=1; fi
 
-COMMIT=$(git rev-parse HEAD 2>/dev/null) || die "not a git checkout; the record needs a commit witness"
+if COMMIT=$(git rev-parse HEAD 2>/dev/null); then
 # A build may touch a lock file or a generated table; a changed SOURCE file
 # means the record would name a commit that is not what ran.
 DIRTY=$(git status --porcelain --untracked-files=no 2>/dev/null | awk '{print $NF}' | tr '\n' ' ')
+else
+    # A RELEASE BUILD LEG'S TREE (2026-10-13, tools/changed_lanes_check.sh): the box unpacks a `git
+    # archive` of the frozen commit with a commit.txt witness, and the build's own preflight has already
+    # compared its native inventory with that commit. MOJOLEARN_COMMIT (exported by
+    # tools/release061_remote_build.sh) must equal the witness; identity_break.py reads the same pair.
+    W=$(cat COMMIT commit.txt 2>/dev/null | head -n 1 | tr -d '[:space:]')
+    [ -n "${MOJOLEARN_COMMIT:-}" ] && [ "$W" = "$MOJOLEARN_COMMIT" ] \
+        || die "not a git checkout, and no commit.txt witness equal to MOJOLEARN_COMMIT; the record needs a commit witness"
+    COMMIT=$MOJOLEARN_COMMIT
+    DIRTY="archive tree (commit.txt witness; the build preflight checked its inventory)"
+fi
 SRC_DIRTY=$(tr ' ' '\n' <<< "$DIRTY" | grep -E '^(python/|tools/|bindings/|.*\.mojo$)' \
             | grep -v -x 'tokenizer/impl/unicode_table_generated.mojo' | tr '\n' ' ')
 if [ -n "${SRC_DIRTY// /}" ] && [ "${ALLOW_DIRTY:-0}" != 1 ]; then

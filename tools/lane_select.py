@@ -2827,8 +2827,11 @@ def _git_show(ref, path):
     key = f"{ref}:{path}"
     if key not in _GIT_SHOW:
         try:
-            _GIT_SHOW[key] = subprocess.run(["git", "-C", ROOT, "show", key],
-                                            capture_output=True, text=True, check=True).stdout
+            # errors="replace": a binary path in the diff (a .so, a wheel, a lease file) raised
+            # UnicodeDecodeError here, and identity_columns.py changed-lanes turned that into "cannot diff:
+            # every lane re-recorded" (the 0.8.44 floor diff, 2026-10-13). Binary text never parses as code.
+            _GIT_SHOW[key] = subprocess.run(["git", "-C", ROOT, "show", key], capture_output=True, text=True,
+                                            encoding="utf-8", errors="replace", check=True).stdout
         except subprocess.CalledProcessError:
             _GIT_SHOW[key] = None
     return _GIT_SHOW[key]
