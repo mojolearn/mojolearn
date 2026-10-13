@@ -6662,11 +6662,11 @@ def _chi2_quantile(k, dof, upper):
     return float(k.b.x_decomp_chi2_quantile(float(dof), float(upper)))
 
 
-def _consistency_factor(k, p, alpha):
+def _consistency_factor(k, p, num, den=1):
     """sklearn `_robust_covariance.py::_consistency_factor` (Pison 2002):
-    alpha / chi2.cdf(chi2.ppf(alpha, p), p + 2)."""
-    q = _chi2_quantile(k, p, 1.0 - alpha)
-    return _f32(alpha / _chi2_cdf(k, p + 2, q))
+    alpha / chi2.cdf(chi2.ppf(alpha, p), p + 2) with alpha = num / den, all in
+    Mojo (x_decomp/chi2.mojo `consistency_factor`)."""
+    return float(k.b.x_decomp_consistency_factor(float(p), float(num), float(den)))
 
 
 # Reference: scikit-learn `covariance/_robust_covariance.py`:
@@ -6818,7 +6818,7 @@ class MinCovDet(_Base):
         # correct_covariance: consistency at the normal model (the corrected
         # matrix is returned by sklearn and not kept; dist_ is rescaled)
         n_support = int(support.sum())  # glue: Array.sum is the Mojo reduce helper
-        corr = _consistency_factor(k, p, n_support / n)
+        corr = _consistency_factor(k, p, n_support, n)
         dist = k.ew("scale", dist, s=1.0 / corr)
         # reweight_covariance
         thr = _chi2_quantile(k, p, 0.025)
