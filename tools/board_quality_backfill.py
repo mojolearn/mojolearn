@@ -55,12 +55,23 @@ def main():
                     help="--raw is a quality-only rerun (files <lane>-<dataset>.json), not the board run's own raw/")
     ap.add_argument("--failed-too", action="store_true",
                     help="also fill cells whose board status is not ok (status and timing are left as recorded)")
+    ap.add_argument("--revert-source", metavar="TEXT",
+                    help="first undo every earlier fill whose quality_source contains TEXT (quality back to what it was "
+                         "before that fill), so a corrected rerun replaces it, or the cell is blank again")
     ap.add_argument("--write", action="store_true")
     a = ap.parse_args()
 
     board = json.load(open(a.board))
     filled, missing_raw, no_value = [], 0, 0
     races = list(board.get("races", {}).items()) + list((board.get("extra_races") or {}).items())
+    reverted = 0
+    if a.revert_source:
+        for _rid, race in races:
+            for c in (race.get("cells") or []) + (race.get("infer_cells") or []):
+                if a.revert_source in (c.get("quality_source") or ""):
+                    c["quality"] = c.pop("quality_superseded", None) or {}
+                    c.pop("quality_source", None)
+                    reverted += 1
     for rid, race in races:
         if a.rerun:
             rel = "%s-%s.json" % (race.get("lane"), race.get("dataset"))
@@ -97,9 +108,11 @@ def main():
                 filled.append((rid, phase, c.get("arm"), sorted(found)))
     for f in filled[:40]:
         print("fill", *f)
+    if a.revert_source:
+        print("board_quality_backfill: %d earlier fills reverted (quality_source contains %r)" % (reverted, a.revert_source))
     print("board_quality_backfill: %d cells filled%s; %d still without a value in the raw JSON; %d races without "
           "a raw JSON" % (len(filled), "" if a.write else " (dry run)", no_value, missing_raw))
-    if a.write and filled:
+    if a.write and (filled or reverted):
         tmp = a.board + ".tmp"
         with open(tmp, "w") as fh:
             json.dump(board, fh, indent=1, sort_keys=False)
