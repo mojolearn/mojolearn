@@ -104,14 +104,13 @@ EXT_NAMES="_mojolearn_gbdt _mojolearn_rf _mojolearn_trees"
 # Before this the split was neural-only (three lanes, 2026-09-10 morning);
 # the reason for THOSE was different (their fused kernels were gated on the
 # identical contract, so the lower tiers were slower) and no longer matters.
-# CLASSICAL ML (2026-09-25): fast and identical, never deterministic. They
-# build in the identical tier and, when MODES names it, the fast tier; the
-# build scripts refuse deterministic by name.
+# CLASSICAL ML (2026-09-25): fast and identical. They
+# build in the identical tier and, when MODES names it, the fast tier.
 FAST_CLASSICAL_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_kernel_methods.sh build_mixture.sh build_hdbscan.sh build_resample.sh build_ivf.sh build_training.sh build_mamba.sh build_transformer.sh build_embedding.sh"
 FAST_CLASSICAL_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_kernel_methods _mojolearn_mixture _mojolearn_hdbscan _mojolearn_resample _mojolearn_ivf _mojolearn_training _mojolearn_mamba _mojolearn_transformer _mojolearn_embedding"
 # THE NEURAL BLOCKS (training, mamba, transformer, embedding) moved to the
-# FAST_CLASSICAL lists above on 2026-09-27 (lane neural): fast and identical,
-# never deterministic. The two lists below are empty until an expansion lane
+# FAST_CLASSICAL lists above on 2026-09-27 (lane neural): fast and identical.
+# The two lists below are empty until an expansion lane
 # declares an identical-only binding.
 IDENTICAL_ONLY_SCRIPTS=""
 IDENTICAL_ONLY_NAMES=""
@@ -194,43 +193,16 @@ fi
 # every other tier one directory down under its own name, which is the layout
 # python/mojolearn/_backend.py loads from.
 #
-# THE DEFAULT IS THREE TIERS, 2026-08-29. It read "TWO TIERS AND NOT THREE"
-# until the determinism lane closed the same day; that sentence is deleted
-# rather than softened, because a stale default here silently ships a wheel
-# whose deterministic tier raises from a missing-binary stub.
-#
-# WHAT CLOSED THE LANE, and it is not a pin count. A tier is a PROMISE, and
-# the promise is measured by tools/repeat_run_stability.py, which runs one
-# fit repeatedly in one process and compares RAW OUTPUT BYTES. Taken at one
-# commit on all three vendors on 2026-08-29:
-#
-#     column                 fast                     deterministic
-#     Apple M4 (Metal)       MOVED in 8 of 10 tries   STABLE 10/10
-#     NVIDIA RTX 4090 (CUDA) MOVED, 24 answers in 24  STABLE, 1 in 12
-#     AMD MI325X (HIP)       MOVED, 6 answers in 24   STABLE, 1 in 12
-#
-# bench/results/stability/RESULTS.md is the record. The pin side is 15 files
-# keyed to PIN_DETERMINISM; the determinism class is small because this tree
-# uses no float atomicAdd anywhere, which is why the middle tier is cheap.
-#
-# THE MIDDLE TIER IS NOT THE TOP ONE WEARING A HAT. Its hashes DIFFER across
-# vendors on 10 of 12 comparable lanes, gemm-vendor among them -- it keeps
-# the vendor matmul and its speed and buys no cross-vendor identity.
-#
-# To cut a two-tier wheel anyway (a hotfix, a bisect), name the tiers:
-#     MOJOLEARN_RELEASE_MODES="fast identical" ./packaging/macos/build_release_wheel.sh
+# To cut a one-tier wheel (a hotfix, a bisect), name the tier:
+#     MOJOLEARN_RELEASE_MODES="identical" ./packaging/macos/build_release_wheel.sh
 # and keep verify_wheel.sh's copy of the variable set the same for one release
 # or the verifier fails the wheel for lacking a tier it was never asked to
-# build. pyproject.toml's package-data glob carries all three directories.
-MODES="${MOJOLEARN_RELEASE_MODES:-fast deterministic identical}"
+# build. pyproject.toml's package-data glob carries both directories.
+MODES="${MOJOLEARN_RELEASE_MODES:-fast identical}"
 echo "== numeric tiers in this wheel: $MODES"
 if [ "$PACKAGE_BYTE_LM" = 1 ]; then
     case " $MODES " in *' identical '*) ;; *) echo 'Byte LM requires the identical tier' >&2; exit 2 ;; esac
 fi
-# Refuse stale unsupported-mode artifacts rather than silently packaging them.
-for byte_path in "$PKG/deterministic/_mojolearn_byte_lm.so"; do
-    [ ! -e "$byte_path" ] && [ ! -L "$byte_path" ] || { echo 'Apple Byte LM supports FAST and IDENTICAL only' >&2; exit 2; }
-done
 if [ "$PACKAGE_BYTE_LM" = 0 ]; then
     for byte_path in "$PKG/_mojolearn_byte_lm.so" "$PKG/identical/_mojolearn_byte_lm.so"; do
         [ ! -e "$byte_path" ] && [ ! -L "$byte_path" ] || {
@@ -353,7 +325,6 @@ pair_weight() {
         "identical build_kernel_methods.sh") echo 111 ;;
         "identical build_ivf.sh") echo 110 ;;
         "identical build_gbdt.sh") echo 87 ;;
-        "deterministic build_gbdt.sh") echo 81 ;;
         "identical build_mixture.sh") echo 71 ;;
         "identical build_resample.sh") echo 58 ;;
         "identical build_gbdt_host.sh") echo 52 ;;
@@ -446,7 +417,7 @@ ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
     fi' build_one_pair "$BUILD_LOGS" 2>&1 || { echo "== at least one extension failed to build (logs in $BUILD_LOGS)" >&2; exit 1; }
 
 # THE FILES THE REST OF THIS SCRIPT GATES: EXT_NAMES x MODES (three tree
-# bindings x three tiers = nine) plus IDENTICAL_ONLY_NAMES in identical/
+# bindings x two tiers = six) plus IDENTICAL_ONLY_NAMES in identical/
 # alone (thirteen), twenty-two on the default build as of DEVIATION 2490. Built above or absent, never
 # stale: every one is checked for existence and for being newer than this
 # script's start, so a build script that silently left the old file in place
@@ -497,7 +468,7 @@ assert str(getattr(module, prefix + '_column')()) == 'cpu', name + ' must compil
 assert not bool(getattr(module, prefix + '_sabotage')()), name + ' is a sabotage build'
 print(json.dumps(dict(extension=name, native_vendor='cpu', column='cpu',
     numeric_mode=1, supported_modes=['identical'],
-    unsupported_modes=['fast', 'deterministic'])))
+    unsupported_modes=['fast'])))
 PYHOST
     done
     for byte_mode in $MODES; do
@@ -515,7 +486,7 @@ assert module.byte_lm_numeric_mode() == {"fast": 0, "identical": 1}[sys.argv[2]]
 assert module.byte_lm_vendor() == 'metal'
 assert module.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 print(json.dumps(dict(extension='_mojolearn_byte_lm', native_vendor='metal', numeric_mode=module.byte_lm_numeric_mode(),
-    profile=module.byte_lm_profile(), supported_modes=['fast', 'identical'], unsupported_modes=['deterministic'])))
+    profile=module.byte_lm_profile(), supported_modes=['fast', 'identical'], unsupported_modes=[])))
 PYBYTE
     done
 fi
@@ -536,7 +507,7 @@ PYFRESH
 
 # AND NOTHING ELSE. The loop above walks ALL_SOS, so it can only ever check a
 # file it already expects; a .so that is on NO list is neither required nor
-# refused. pyproject.toml's package-data globs `*.so`, `deterministic/*.so` and
+# refused. pyproject.toml's package-data globs `*.so` and
 # `identical/*.so` unconditionally, so such a file is not absent from the wheel,
 # it SHIPS -- built by a different commit, for a different layout, with nothing
 # anywhere naming it.

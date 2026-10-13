@@ -38,13 +38,13 @@ WHEEL=$1
 echo "wheel: $(basename "$WHEEL")"
 echo "mode:  $MODE"
 
-MODES="${MOJOLEARN_RELEASE_MODES:-fast deterministic identical}"
+MODES="${MOJOLEARN_RELEASE_MODES:-fast identical}"
 set -f
 set -- $MODES
 [ "$#" -gt 0 ] || { echo "no numeric modes requested" >&2; exit 2; }
 for mode do
     case "$mode" in
-        fast|deterministic|identical) ;;
+        fast|identical) ;;
         *) echo "unsupported numeric mode: $mode" >&2; exit 2 ;;
     esac
 done
@@ -114,7 +114,6 @@ from mojolearn import _mojolearn_byte_lm as native
 package = pathlib.Path(mojolearn.__file__).resolve().parent
 assert package.is_relative_to(pathlib.Path(sys.prefix).resolve())
 assert pathlib.Path(native.__file__).resolve() == package / 'identical/_mojolearn_byte_lm.so'
-assert not (package / 'deterministic/_mojolearn_byte_lm.so').exists()
 assert native.byte_lm_numeric_mode() == 1 and native.byte_lm_vendor() == 'metal'
 assert native.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 # THE CPU TRAINING BINDING, FROM THE INSTALLED WHEEL. It is reached through its

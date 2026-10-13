@@ -33,10 +33,10 @@ MATH_SYMBOLS |= {"__sincosf_stret", "__sincos_stret", "__sincospif_stret", "__si
                  "__sinpif", "__cospif", "__tanpif", "__sinpi", "__cospi", "__tanpi",
                  "__exp10f", "__exp10"}
 #: A FAST-tier binding of a Linux GPU set: mojolearn/<cuda|hip>/<arch>/<name>.so
-#: with no tier directory (identical/ and deterministic/ sit one level deeper).
+#: with no tier directory (identical/ sits one level deeper).
 FAST_SET = re.compile(r"^mojolearn/(cuda|hip|cuda_native|hip_native|cuda_ptx)/[^/]+/_mojolearn[^/]*\.so$"
-                      # macOS: FAST GPU bindings sit at the package root; host/,
-                      # identical/ and deterministic/ are directories below it.
+                      # macOS: FAST GPU bindings sit at the package root; host/
+                      # and identical/ are directories below it.
                       r"|^mojolearn/_mojolearn[^/]*\.so$")
 # These entry points run independent tests; none is imported by estimators.
 NUMPY_ORACLES = {
@@ -246,7 +246,7 @@ def audit_tree(root, python_only=False):
         bad_deps = [dep for dep in deps if LIBM.match(Path(dep).name)]
         # FAST promises no bits across machines (per-vendor speed tier), so a
         # FAST-tier GPU set may call the platform's math; it is recorded, not
-        # refused. IDENTICAL, deterministic and host binaries stay enforced.
+        # refused. IDENTICAL and host binaries stay enforced.
         fast_tier = bool(FAST_SET.match(relative))
         if (bad_symbols or bad_deps) and not fast_tier:
             errors.append(f"{relative}: math imports={bad_symbols}, dependencies={bad_deps}")

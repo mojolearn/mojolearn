@@ -156,9 +156,8 @@ def test_fast_tier_gpu_sets_are_the_only_math_exemption():
     ok = ["mojolearn/cuda/sm_89/_mojolearn_gp.so", "mojolearn/hip/gfx942/_mojolearn.so",
           "mojolearn/_mojolearn_gp.so"]
     enforced = ["mojolearn/cuda/sm_89/identical/_mojolearn_gp.so",
-                "mojolearn/hip/gfx942/deterministic/_mojolearn_gbdt.so",
                 "mojolearn/host/_mojolearn_gp_host.so", "mojolearn/identical/_mojolearn_gp.so",
-                "mojolearn/deterministic/_mojolearn_gbdt.so", "mojolearn/.libs/libfoo.so"]
+                "mojolearn/.libs/libfoo.so"]
     assert "__sincosf_stret" in wheel.MATH_SYMBOLS
     assert all(wheel.FAST_SET.match(p) for p in ok)
     assert not any(wheel.FAST_SET.match(p) for p in enforced)

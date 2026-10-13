@@ -81,12 +81,12 @@ if NO_GPU:
 
 # ==========================================================================
 # ONE TIER RULE (DEVIATION 2490, 2026-09-10). THE THREE TREE LANES ship
-# fast, deterministic and identical; EVERY OTHER BINDING ships identical
+# fast and identical; EVERY OTHER BINDING ships identical
 # only. So this file has two halves:
 #
 #   * The trees, below, fit in whatever tier verify_wheel.sh asked for.
 #   * Every other family is a thunk in IDENTICAL_ONLY_LAUNCHES. Under
-#     `identical` each must LAUNCH. Under `fast` and `deterministic` each
+#     `identical` each must LAUNCH. Under `fast` each
 #     must RAISE, naming the identical tier, and one that answers is the
 #     failure: it would mean a lower-tier binary of an identical-only lane
 #     got back into the wheel.
@@ -415,8 +415,8 @@ import importlib  # noqa: E402
 from mojolearn import host_surface as _hs_manifest  # noqa: E402,F401  (mojolearn.host_surface)
 IDENTICAL_ONLY_LAUNCHES += [(_n, _expansion_launch(_n)) for _n in _hs_manifest.expansion_gpu_bindings()]
 # Since 2026-09-25 the list holds every NON-TREE binding: the classical ones
-# (`_backend._CLASSICAL_FAST`) must LAUNCH under fast and identical and refuse
-# deterministic; the neural ones must refuse both lower tiers. `_offers`
+# (`_backend._CLASSICAL_FAST`) must LAUNCH under fast and identical; the
+# neural ones must refuse fast. `_offers`
 # decides, and the coverage below keeps the list equal to the package's.
 _covered = {name for name, _ in IDENTICAL_ONLY_LAUNCHES}
 _expected = (set(mojolearn._backend._MODULES) - set(mojolearn._backend._TIERED)
