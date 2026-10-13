@@ -61,6 +61,8 @@ def run(command, out, seconds, interval=10):
             proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                     env=dict(os.environ, **{MARKER: marker}), start_new_session=True)
             state["pid"] = proc.pid
+            state["status"] = "running"
+            (out / "session.json").write_text(json.dumps(state, indent=2) + "\n")
             while True:
                 row = dict(time_epoch=time.time(), remaining_s=max(0, round(end-time.monotonic(), 1)),
                            returncode=proc.poll(), workers=marked_processes(marker))
@@ -86,7 +88,9 @@ def run(command, out, seconds, interval=10):
         if proc is not None:
             proc.wait(timeout=10)
         state["finished_epoch"] = time.time()
+        state["status"] = "finished"
         state["remaining_workers"] = marked_processes(marker)
+        (out / ("session." + marker + ".json")).write_text(json.dumps(state, indent=2) + "\n")
         (out / "session.json").write_text(json.dumps(state, indent=2) + "\n")
         for s, handler in previous.items():
             signal.signal(s, handler)
