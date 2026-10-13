@@ -278,10 +278,7 @@ COLUMN_DEFINE=""
 # TWO TIERS (2026-09-25, reversing DEVIATION 2490 for classical ML): the base
 # binding carries k-means and k-NN and builds IDENTICAL (the default) or FAST.
 # The buffer helpers in it (_buffer._native) always resolve from the IDENTICAL
-# build whatever tier runs. DETERMINISTIC stays tree-only and is refused here.
-[ "${MOJOLEARN_NUMERIC_MODE:-identical}" != deterministic ] || {
-    echo 'build.sh: the deterministic tier ships for the tree lanes (gbdt, rf, trees) only; the base binding builds MOJOLEARN_NUMERIC_MODE=identical (default) or fast.' >&2
-    exit 2; }
+# build whatever tier runs.
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
 if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "identical" ]; then
@@ -289,18 +286,8 @@ if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "identical" ]; then
     OUTDIR="python/mojolearn/identical"
     mkdir -p "$OUTDIR"
     export MOJOLEARN_SKIP_BUILD_GATE=1
-elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "deterministic" ]; then
-    # The MIDDLE tier: reproducible run to run on ONE device, with no
-    # promise about a second one. It gets its own directory because it
-    # is its own binary -- PIN_DETERMINISM is comptime, so a
-    # deterministic build is different code from both neighbours, not
-    # the identical build with a flag turned down.
-    MODE_DEFINE="-D MOJOLEARN_NUMERIC_DETERMINISTIC=1"
-    OUTDIR="python/mojolearn/deterministic"
-    mkdir -p "$OUTDIR"
-    export MOJOLEARN_SKIP_BUILD_GATE=1
 elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" != "fast" ]; then
-    echo "MOJOLEARN_NUMERIC_MODE must be fast, deterministic or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
+    echo "MOJOLEARN_NUMERIC_MODE must be fast or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
     exit 2
 fi
 if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then

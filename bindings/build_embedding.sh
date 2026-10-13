@@ -114,11 +114,7 @@ COLUMN_DEFINE=""
 # FAST AND IDENTICAL (lane neural, 2026-09-27; IDENTICAL-only from
 # 2026-09-10 under DEVIATION 2490). FAST compiles the same kernels with the
 # pins in checks/numerics.mojo on the free schedule and promises quality,
-# never bits. The DETERMINISTIC tier ships
-# for the tree lanes (gbdt, rf, trees) only and is refused here by name.
-[ "${MOJOLEARN_NUMERIC_MODE:-identical}" != deterministic ] || {
-    echo 'build_embedding.sh: the deterministic tier ships for the tree lanes (gbdt, rf, trees) only; this binding builds MOJOLEARN_NUMERIC_MODE=identical (default) or fast.' >&2
-    exit 2; }
+# never bits.
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
 if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "identical" ]; then
@@ -166,7 +162,7 @@ air_blobs() {
 # THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
 #
 # This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
-# identical and deterministic tiers, and the skip below then turned off ALL
+# identical tier, and the skip below then turned off ALL
 # THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
 # shipped for hours ran only on `fast` builds -- never on the identical ones
 # whose cross-vendor claim is the entire product.
