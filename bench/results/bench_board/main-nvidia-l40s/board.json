@@ -370,14 +370,15 @@
     "algos/adafactor/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_optim; cells quality; cell copied_from/version",
           "opponent": "torch-eager-fp32",
-          "ours_over_theirs": 0.922,
+          "ours_over_theirs": 0.92,
           "pairing": "5e3efe623083b0ab",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch.optim.adafactor with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -769,14 +770,15 @@
     "algos/adagrad/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_optim; cells quality; cell copied_from/version",
           "opponent": "torch-eager-fp32",
-          "ours_over_theirs": 0.576,
+          "ours_over_theirs": 0.58,
           "pairing": "2c137e778a4c9ca2",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch.optim.adagrad with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -1150,14 +1152,15 @@
     "algos/adam/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_optim; cells quality; cell copied_from/version",
           "opponent": "torch-eager-fp32",
-          "ours_over_theirs": 8.138,
+          "ours_over_theirs": 8.14,
           "pairing": "9c9df69eac877372",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch.optim.adam with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; ours' training optimizer moves the parameter between host and device every step inside its clock (not broken; harness fix listed); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -1553,14 +1556,15 @@
     "algos/adamax/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_optim; cells quality; cell copied_from/version",
           "opponent": "torch-eager-fp32",
-          "ours_over_theirs": 0.536,
+          "ours_over_theirs": 0.54,
           "pairing": "b4ac1d7a490f406a",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch.optim.adamax with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -1948,14 +1952,15 @@
     "algos/adamw/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_optim; cells quality; cell copied_from/version",
           "opponent": "torch-eager-fp32",
-          "ours_over_theirs": 7.403,
+          "ours_over_theirs": 7.4,
           "pairing": "3d3c6b949f685805",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch.optim.adamw with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; ours' training optimizer moves the parameter between host and device every step inside its clock (not broken; harness fix listed); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -3415,14 +3420,15 @@
     "algos/avgpool1d/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-eager-tf32",
-          "ours_over_theirs": 0.728,
+          "ours_over_theirs": 0.73,
           "pairing": "e2077c79609e3c27",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -4231,14 +4237,15 @@
     "algos/avgpool2d/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-compile-fp32",
-          "ours_over_theirs": 1.261,
+          "ours_over_theirs": 1.26,
           "pairing": "1f28eefeccf75b05",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -5054,14 +5061,15 @@
     "algos/batchnorm1d/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-compile-fp32",
-          "ours_over_theirs": 0.746,
+          "ours_over_theirs": 0.75,
           "pairing": "1dd6073dcd0239f7",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -5882,14 +5890,15 @@
     "algos/batchnorm2d/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 0.77,
           "pairing": "884c16997f8bfeaf",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -9284,14 +9293,15 @@
     "algos/cholesky/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py _build_linalg",
           "opponent": "torch-gpu",
-          "ours_over_theirs": 15.193,
+          "ours_over_theirs": 15.19,
           "pairing": "8afe0723f49f9ad5",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "the library's own float32 routine (torch-gpu), same task and outputs, input on the device for GPU arms (the disclosed asymmetry); other opponent numpy-cpu is FP64 internally (unfair, replaced by scipy-cpu)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -9751,7 +9761,7 @@
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.44,
           "pairing": "487e894f571bf9a9",
-          "reason": "good under Andrew's rule (slower host and random initial weights only); audit note: opponent on the slow host cc560ebdaf91 (the same torch harness takes 172.9 ms on the MI325X vs 458.6 ms here); weights/order mismatch",
+          "reason": "good under Andrew's rule (host, version and random initial weights only); audit note: opponent on the slow host cc560ebdaf91 (the same torch harness takes 172.9 ms on the MI325X vs 458.6 ms here); weights/order mismatch",
           "rerace": "",
           "verdict": "FAIR"
         }
@@ -12635,14 +12645,15 @@
     "algos/conv1d/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-eager-bf16",
-          "ours_over_theirs": 2.989,
+          "ours_over_theirs": 2.99,
           "pairing": "6fd0232847efc283",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 2.56",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -13479,14 +13490,15 @@
     "algos/conv2d/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-eager-bf16",
-          "ours_over_theirs": 4.829,
+          "ours_over_theirs": 4.83,
           "pairing": "40bf6e3f8346de72",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy; the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 2.79",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -14323,14 +14335,15 @@
     "algos/damped-ets/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _joblib_map/_ts_map; board cells",
           "opponent": "statsforecast-cpu",
-          "ours_over_theirs": 4.109,
+          "ours_over_theirs": 4.11,
           "pairing": "645fd4ef8a764512",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "statsforecast AutoETS(model='AAN', damped=True) = ours' ETS(A,Ad,N); statsmodels (other) fits the same model with its own optimizer and a 2x worse RMSE; each of the 64 series is a separate joblib loky task inside the opponent's clock and the per-series work is about 2.6 ms, so pool dispatch may dominate (not a settings difference; a -serial in-process twin now races beside it, fixed in 930622460); CPU float64 is the library's only precision (declared)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -14696,14 +14709,15 @@
     "algos/damped-ets/taxi-hourly/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _joblib_map/_ts_map; board cells",
           "opponent": "statsforecast-cpu",
-          "ours_over_theirs": 5.551,
+          "ours_over_theirs": 5.55,
           "pairing": "d9cc27a1da64d233",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "statsforecast AutoETS(model='AAN', damped=True) = ours' ETS(A,Ad,N); statsmodels (other) fits the same model with its own optimizer and a 2x worse RMSE; each of the 64 series is a separate joblib loky task inside the opponent's clock and the per-series work is about 2.1 ms, so pool dispatch may dominate (not a settings difference; a -serial in-process twin now races beside it, fixed in 930622460); CPU float64 is the library's only precision (declared)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -15069,14 +15083,15 @@
     "algos/dropout2d/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "cell copied_from/version",
           "opponent": "torch-eager-fp32",
-          "ours_over_theirs": 1.022,
+          "ours_over_theirs": 1.02,
           "pairing": "337db2753ecba300",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "a tie (1.02): same algorithm and settings",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "TIE"
         }
       },
       "cells": [
@@ -15638,14 +15653,15 @@
     "algos/dynamic-optimized-theta/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py / bench_board_more.py lane spec",
           "opponent": "statsforecast-cpu",
-          "ours_over_theirs": 0.327,
+          "ours_over_theirs": 0.33,
           "pairing": "f3f021d2f2fd5922",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "statsforecast DynamicOptimizedTheta with ours' settings; CPU float64 is the library's only precision (declared)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -15896,14 +15912,15 @@
     "algos/dynamic-optimized-theta/taxi-hourly/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py / bench_board_more.py lane spec",
           "opponent": "statsforecast-cpu",
-          "ours_over_theirs": 0.978,
+          "ours_over_theirs": 0.98,
           "pairing": "09d599239605a42c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); statsforecast DynamicOptimizedTheta with ours' settings; CPU float64 is the library's only precision (declared)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "TIE"
         }
       },
       "cells": [
@@ -16154,14 +16171,15 @@
     "algos/eigh/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py _build_linalg",
           "opponent": "cupy-gpu",
-          "ours_over_theirs": 5.013,
+          "ours_over_theirs": 5.01,
           "pairing": "1459ffaf8ddbbf7a",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "the library's own float32 routine (cupy-gpu), same task and outputs, input on the device for GPU arms (the disclosed asymmetry); other opponent numpy-cpu is FP64 internally (unfair, replaced by scipy-cpu)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -17126,14 +17144,15 @@
     "algos/embedding/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-eager-fp32",
-          "ours_over_theirs": 1.176,
+          "ours_over_theirs": 1.18,
           "pairing": "6021d7856a845cb5",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -18859,7 +18878,7 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 1.73,
           "pairing": "5d9dd4b4e3b7ca32",
-          "reason": "good under Andrew's rule (both arms start from host input); audit note: cuML was given host input in the random-projection lanes only (fcef3cd62), so its host-side input check sat inside its clock (31.4 ms; 2.4 ms with device input on the same L40S, 09-30); ours is slower even so, and the true gap is larger; rerace with device input",
+          "reason": "good under Andrew's rule (both arms start from host input; no setting differs); audit note: cuML was given host input in the random-projection lanes only (fcef3cd62), so its host-side input check sat inside its clock (31.4 ms; 2.4 ms with device input on the same L40S, 09-30); ours is slower even so, and the true gap is larger; rerace with device input",
           "rerace": "",
           "verdict": "FAIR"
         }
@@ -19249,9 +19268,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 1.5,
           "pairing": "a80633ac053501df",
-          "reason": "good under Andrew's rule (both arms start from host input); audit note: same host-input policy for cuML in this lane only (input handling inside cuML's clock: 2.28 ms vs 1.09 ms with device input on the 09-30 L40S board); ours slower even so; rerace with device input",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "same host-input policy for cuML in this lane only (input handling inside cuML's clock: 2.28 ms vs 1.09 ms with device input on the 09-30 L40S board); ours slower even so; rerace with device input",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -19626,6 +19645,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -21295,14 +21315,15 @@
     "algos/global-avgpool/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-eager-bf16",
-          "ours_over_theirs": 0.215,
+          "ours_over_theirs": 0.22,
           "pairing": "066bf55f76fbc036",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 0.19",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -22083,14 +22104,15 @@
     "algos/global-maxpool/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-eager-tf32",
-          "ours_over_theirs": 0.223,
+          "ours_over_theirs": 0.22,
           "pairing": "a5bcb8aa98e943f3",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -22873,11 +22895,11 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "bench_board_algos.py:4128 (requires_grad skipped for gcn/sage); _expansion_cnn.py SAGEConv._backward_dev returns dx; copied_from.box",
+          "evidence": "bench_board_algos.py:4128 at 3243cf1c5^; _expansion_cnn.py SAGEConv._backward_dev",
           "opponent": "torch-compile-bf16",
           "ours_over_theirs": 1.86,
           "pairing": "25b59fb3223461f0",
-          "reason": "ours' SAGEConv.backward also computes grad_x (an extra GEMM, two SpMMs and an add) while the torch arm leaves x without requires_grad and computes weight gradients only: ours does more work; the opponent ran on the slow L40S host cc560ebdaf91 (about 2x slower than 24a11adce16e on identical work) (vs compile-fp32 there: 1.46)",
+          "reason": "work differs: ours' SAGEConv.backward also computes grad_x (a GEMM, two SpMMs and an add) while the torch arm is told not to (x without requires_grad: weight gradients only); fixed in code (1daefbde5 / 3243cf1c5)",
           "rerace": "x",
           "verdict": "UNFAIR"
         }
@@ -23711,11 +23733,11 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "bench_board_algos.py:4128; _expansion_cnn.py SAGEConv._backward_dev/backward return dx",
+          "evidence": "bench_board_algos.py:4128 at 3243cf1c5^; _expansion_cnn.py SAGEConv._backward_dev",
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 1.12,
           "pairing": "935fec1b1f72f9ee",
-          "reason": "ours' SAGEConv.backward also computes grad_x (an extra GEMM, two SpMMs and an add) while the torch arm leaves x without requires_grad and computes weight gradients only: ours does more work",
+          "reason": "work differs: ours' SAGEConv.backward also computes grad_x (a GEMM, two SpMMs and an add) while the torch arm is told not to (x without requires_grad: weight gradients only); fixed in code (1daefbde5 / 3243cf1c5)",
           "rerace": "x",
           "verdict": "UNFAIR"
         }
@@ -32051,14 +32073,15 @@
     "algos/kernel-pca/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells (params MATCHED); bench_board_algos.py lane spec",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.757,
+          "ours_over_theirs": 0.76,
           "pairing": "2dd6c98785fe513e",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "same kernel and gamma; top-8 eigenpairs by an iterative Krylov solver on both (ours Lanczos, scikit-learn ARPACK at n > 200, k < 10); subspace agrees to 1e-11",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -32345,14 +32368,15 @@
     "algos/kernel-pca/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells (params MATCHED); bench_board_algos.py lane spec",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 1.028,
+          "ours_over_theirs": 1.03,
           "pairing": "5f0d3fa4f2e8178c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "tie (0.95-1.05, shown under the 2026-10-13 rules); same kernel and gamma; top-8 eigenpairs by an iterative Krylov solver on both (ours Lanczos, scikit-learn ARPACK at n > 200, k < 10); subspace agrees to 1e-11",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "TIE"
         }
       },
       "cells": [
@@ -37524,14 +37548,15 @@
     "algos/layernorm/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-eager-bf16",
-          "ours_over_theirs": 0.591,
+          "ours_over_theirs": 0.59,
           "pairing": "cd81aaa5f16a5496",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); the bf16 arm is the opponent's own fast mode (allowed); vs torch-eager-fp32: 0.32",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -38339,14 +38364,15 @@
     "algos/lda-clf/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board quality cells",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.027,
+          "ours_over_theirs": 0.03,
           "pairing": "4bc96b66faec9f58",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "same settings (solver='svd', tol=1e-4) but materially different models on Istella (accuracy 0.913 vs 0.900, logloss 0.236 vs 0.439): the rank cutoff on the near-constant columns likely differs; not settled",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -38599,14 +38625,15 @@
     "algos/lda-clf/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells (params MATCHED); bench_board_algos.py lane spec",
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.07,
           "pairing": "d4bca3caf3751ff6",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "same settings (MATCHED read-back), same algorithm, comparable quality",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -39747,13 +39774,13 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "accuracy 0.9671 vs 0.9687 (different weights); bench_board_algos.py:3065; _x_sequence_rnn.py:138,175",
+          "evidence": "AGENTS.md Race fairness; cells quality accuracy 0.9671 vs 0.9687",
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 1.06,
           "pairing": "f7961d461bbf0001",
-          "reason": "a 6% margin from one cross-host run each (ours nv2 10-10, torch 24a11adce16e 10-06); ours draws its initial weights and per-epoch row orders in Mojo (InitStream, executor Feistel order) since 86b2bc254/4bdc5487e while the torch twin loads numpy default_rng(7) weights and orders",
+          "reason": "same model, Adam settings, batch, epochs and FP32; different initial weights and row orders are random starts and the hosts differ (neither a reason under Andrew's rule); a 6% margin",
           "rerace": "",
-          "verdict": "SUSPECT"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -43665,14 +43692,15 @@
     "algos/lstsq/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board quality relative_residual NaN for torch-gpu; cupy 0.849957 = ours",
           "opponent": "torch-gpu",
-          "ours_over_theirs": 1.417,
+          "ours_over_theirs": 1.42,
           "pairing": "f6b7c9f13f6a3174",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
-          "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "reason": "torch.linalg.lstsq on CUDA/ROCm is driver 'gels' (QR without pivoting, full rank assumed) and returned NaN on rank-deficient Istella: a different solver and an invalid result; a non-finite torch solution now fails its round (fixed in 930622460); the valid library opponent cupy-gpu (SVD-based) has ours 1.28x slower",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -44115,6 +44143,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -44122,14 +44151,15 @@
     "algos/lstsq/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py _build_linalg",
           "opponent": "torch-gpu",
-          "ours_over_theirs": 1.059,
+          "ours_over_theirs": 1.06,
           "pairing": "15280d0a23e1611b",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "the library's own float32 routine (torch-gpu), same task and outputs, input on the device for GPU arms (the disclosed asymmetry); other opponent numpy-cpu is FP64 internally (unfair, replaced by scipy-cpu)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -44579,14 +44609,15 @@
     "algos/lu-factor/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py _build_linalg",
           "opponent": "torch-gpu",
           "ours_over_theirs": 9.95,
           "pairing": "0bc90536aa6432c1",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "the library's own float32 routine (torch-gpu), same task and outputs, input on the device for GPU arms (the disclosed asymmetry)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -45032,14 +45063,15 @@
     "algos/lu-solve/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py _build_linalg",
           "opponent": "cupy-gpu",
-          "ours_over_theirs": 9.822,
+          "ours_over_theirs": 9.82,
           "pairing": "652221a4a634bf57",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "the library's own float32 routine (cupy-gpu), same task and outputs, input on the device for GPU arms (the disclosed asymmetry); other opponent numpy-cpu is FP64 internally (unfair, replaced by scipy-cpu)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -46227,14 +46259,15 @@
     "algos/maxpool1d/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-eager-tf32",
           "ours_over_theirs": 1.75,
           "pairing": "b8d50c18882c2a9d",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -47043,14 +47076,15 @@
     "algos/maxpool2d/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_layer (neural fixtures); cell copied_from/version",
           "opponent": "torch-eager-tf32",
-          "ours_over_theirs": 0.677,
+          "ours_over_theirs": 0.68,
           "pairing": "61d9bf0debee6755",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch's own nn module on the same fixture inputs, weights and dy; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -49686,18 +49720,6 @@
       "status": "done"
     },
     "algos/moe/synthetic/rows=full": {
-      "audit": {
-        "identical/fit": {
-          "date": "2026-10-13",
-          "opponent": "torch-eager-bf16",
-          "ours_over_theirs": 3.33,
-          "pairing": "7444192fc2e9b084",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
-          "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
-        }
-      },
       "cells": [
         {
           "arm": "ours",
@@ -50507,6 +50529,18 @@
         "boards": [
           "opponents-specific-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -52223,14 +52257,15 @@
     "algos/nadam/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_optim; cells quality; cell copied_from/version",
           "opponent": "torch-eager-fp32",
-          "ours_over_theirs": 0.515,
+          "ours_over_theirs": 0.51,
           "pairing": "14bac95ae5779225",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch.optim.nadam with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -58756,14 +58791,15 @@
     "algos/qr/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py _build_linalg",
           "opponent": "torch-gpu",
-          "ours_over_theirs": 3.876,
+          "ours_over_theirs": 3.88,
           "pairing": "a411198d9030d2fe",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "the library's own float32 routine (torch-gpu), same task and outputs, input on the device for GPU arms (the disclosed asymmetry); other opponent numpy-cpu is FP64 internally (unfair, replaced by scipy-cpu)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -59221,14 +59257,15 @@
     "algos/qr/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py _build_linalg",
           "opponent": "cupy-gpu",
-          "ours_over_theirs": 4.593,
+          "ours_over_theirs": 4.59,
           "pairing": "7016ae8d4a9e71cf",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "the library's own float32 routine (cupy-gpu), same task and outputs, input on the device for GPU arms (the disclosed asymmetry); other opponent numpy-cpu is FP64 internally (unfair, replaced by scipy-cpu)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -61278,18 +61315,6 @@
       "status": "done"
     },
     "algos/resnet-block/synthetic/rows=full": {
-      "audit": {
-        "identical/fit": {
-          "date": "2026-10-13",
-          "opponent": "torch-eager-bf16",
-          "ours_over_theirs": 5.279,
-          "pairing": "ac30b1a36ca69f13",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
-          "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
-        }
-      },
       "cells": [
         {
           "arm": "ours",
@@ -62065,6 +62090,18 @@
         "boards": [
           "opponents-default-20261006"
         ]
+      },
+      "opponents_excluded": {
+        "arms": [
+          "torch-compile-bf16",
+          "torch-compile-fp32",
+          "torch-compile-tf32",
+          "torch-eager-bf16",
+          "torch-eager-fp32",
+          "torch-eager-tf32"
+        ],
+        "date": "2026-10-13",
+        "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation"
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
@@ -63185,14 +63222,15 @@
     "algos/rmsprop/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_optim; cells quality; cell copied_from/version",
           "opponent": "torch-eager-fp32",
-          "ours_over_theirs": 0.639,
+          "ours_over_theirs": 0.64,
           "pairing": "493acf135c980367",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch.optim.rmsprop with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -73481,14 +73519,15 @@
     "algos/sgd/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _build_optim; cells quality; cell copied_from/version",
           "opponent": "torch-eager-fp32",
-          "ours_over_theirs": 14.412,
+          "ours_over_theirs": 14.41,
           "pairing": "71d68f3bd486f03f",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "torch.optim.sgd with every hyperparameter explicit, the same parameter and 10 gradients, parameter equal to torch eager; opponent measured on L40S host cc560ebdaf91 (slower host; not a reason under the 2026-10-13 rules); ours' training optimizer moves the parameter between host and device every step inside its clock (not broken; harness fix listed); other opponents: torch-compile-fp32 recompiles torch.compile(opt.step) inside every timed fit (7-50x its eager arm); not excluded (not a broken cause under the rules), it is never the fastest",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -75206,7 +75245,7 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.5,
           "pairing": "e3cf58366bacb832",
-          "reason": "good under Andrew's rule (both arms start from host input); audit note: cuML was given host input only in the random-projection lanes, putting its upload inside its clock; with device input (09-30, same session) cuML is faster than ours",
+          "reason": "good under Andrew's rule (both arms start from host input; no setting differs); audit note: cuML was given host input only in the random-projection lanes, putting its upload inside its clock; with device input (09-30, same session) cuML is faster than ours",
           "rerace": "",
           "verdict": "FAIR"
         }
@@ -75602,7 +75641,7 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.79,
           "pairing": "980128e9e8b5c226",
-          "reason": "good under Andrew's rule (both arms start from host input); audit note: cuML was given host input only in the random-projection lanes, putting its upload inside its clock; with device input (09-30, same session) cuML is faster than ours",
+          "reason": "good under Andrew's rule (both arms start from host input; no setting differs); audit note: cuML was given host input only in the random-projection lanes, putting its upload inside its clock; with device input (09-30, same session) cuML is faster than ours",
           "rerace": "",
           "verdict": "FAIR"
         }
@@ -77270,14 +77309,15 @@
     "algos/svd/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py _build_linalg",
           "opponent": "cupy-gpu",
-          "ours_over_theirs": 3.947,
+          "ours_over_theirs": 3.95,
           "pairing": "7f506e837d72f8b6",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "the library's own float32 routine (cupy-gpu), same task and outputs, input on the device for GPU arms (the disclosed asymmetry); other opponent numpy-cpu is FP64 internally (unfair, replaced by scipy-cpu)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -77740,14 +77780,15 @@
     "algos/svd/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells; bench_board_algos.py _build_linalg",
           "opponent": "cupy-gpu",
-          "ours_over_theirs": 3.573,
+          "ours_over_theirs": 3.57,
           "pairing": "c66afd748da09585",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "the library's own float32 routine (cupy-gpu), same task and outputs, input on the device for GPU arms (the disclosed asymmetry); other opponent numpy-cpu is FP64 internally (unfair, replaced by scipy-cpu)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -79822,14 +79863,15 @@
     "algos/theta/synthetic/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _joblib_map/_ts_map; board cells",
           "opponent": "statsmodels-cpu",
-          "ours_over_theirs": 0.676,
+          "ours_over_theirs": 0.68,
           "pairing": "2e639caa08819580",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "statsforecast Theta (STM) with ours' settings; statsmodels ThetaModel(period=24) is the same theta method, its deseasonalization defaults equal in effect (now explicit); each of the 64 series is a separate joblib loky task inside the opponent's clock and the per-series work is about 1.3 ms, so pool dispatch may dominate (not a settings difference; a -serial in-process twin now races beside it, fixed in 930622460); CPU float64 is the library's only precision (declared)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -80188,14 +80230,15 @@
     "algos/theta/taxi-hourly/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_algos.py _joblib_map/_ts_map; board cells",
           "opponent": "statsmodels-cpu",
-          "ours_over_theirs": 1.669,
+          "ours_over_theirs": 1.67,
           "pairing": "27a6f40928be6a5c",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "statsforecast Theta (STM) with ours' settings; statsmodels ThetaModel(period=24) is the same theta method, its deseasonalization defaults equal in effect (now explicit); each of the 64 series is a separate joblib loky task inside the opponent's clock and the per-series work is about 1.6 ms, so pool dispatch may dominate (not a settings difference; a -serial in-process twin now races beside it, fixed in 930622460); CPU float64 is the library's only precision (declared)",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "SUSPECT"
         }
       },
       "cells": [
@@ -82644,14 +82687,15 @@
     "algos/variance-threshold/istella/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells (params MATCHED); bench_board_algos.py lane spec",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.055,
+          "ours_over_theirs": 0.05,
           "pairing": "9c117f7f61dd49a1",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "same settings (MATCHED read-back), same algorithm, comparable quality; scikit-learn VarianceThreshold converts to float64 (its only path); outputs identical to the bit",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -82900,14 +82944,15 @@
     "algos/variance-threshold/taxi/rows=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "board cells (params MATCHED); bench_board_algos.py lane spec",
           "opponent": "sklearn-cpu",
-          "ours_over_theirs": 0.046,
+          "ours_over_theirs": 0.05,
           "pairing": "325be0dd58023d53",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "same settings (MATCHED read-back), same algorithm, comparable quality; scikit-learn VarianceThreshold converts to float64 (its only path); outputs identical to the bit",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -84625,8 +84670,8 @@
           "ours_over_theirs": 0.95,
           "pairing": "17241cc05a5c18d7",
           "reason": "a tie (ours/theirs 0.95): not cited until rerun (Andrew, 2026-10-13); each arm draws its own k-means++ start; ours ran MORE iterations (accepted: Andrew, 2026-10-13)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "rerace": "",
+          "verdict": "TIE"
         }
       },
       "cells": [
@@ -84962,7 +85007,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -84977,8 +85021,8 @@
           "ours_over_theirs": 0.61,
           "pairing": "ba542556bdf532f1",
           "reason": "each arm draws its own k-means++ start; ours ran MORE iterations (accepted: Andrew, 2026-10-13)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "rerace": "",
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -85314,7 +85358,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -86898,15 +86941,14 @@
     "classical/pca/istella/rows=full": {
       "audit": {
         "identical/fit": {
-          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "classical_two_datasets.py TorchPCA (now refused); cuML cell opponents-specific-20261006 74.60 ms; cuml pca.pyx: full -> COV_EIG_DQ",
-          "opponent": "torch-gpu",
-          "ours_over_theirs": 6.19,
+          "opponent": "cuml-gpu",
+          "ours_over_theirs": 1.412,
           "pairing": "59104105ce9fb83a",
-          "reason": "the torch-gpu PCA opponent is code our harness wrote (mean, xc.T @ xc, torch.linalg.eigh), not a library's PCA; removed. The library opponent cuML PCA (svd_solver='full' = covariance eigendecomposition, ours' algorithm, quality equal) has ours 1.41x slower (105.30 vs 74.60 ms)",
-          "rerace": "x",
-          "verdict": "UNFAIR"
+          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "rerace": "",
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "verdict": "UNCHECKED"
         }
       },
       "cells": [
@@ -87231,7 +87273,6 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
-      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -91304,14 +91345,15 @@
     "neural/gemm/gaussian/shape=full": {
       "audit": {
         "identical/fit": {
+          "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
+          "evidence": "bench_board_neural.py LANE_TEXT gemm*; cell copied_from/version",
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 1.16,
           "pairing": "e9af5081d7560c09",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited",
+          "reason": "same matmul with host inputs and the result back on the host in both clocks; the bf16 arm is the opponent's own fast mode (allowed); vs torch-compile-fp32: 1.07",
           "rerace": "",
-          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
-          "verdict": "UNCHECKED"
+          "verdict": "FAIR"
         }
       },
       "cells": [
@@ -93707,11 +93749,11 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "facde18cc (lane/mamba-opp MambaSsmArm); cell quality max_abs_diff_vs_ours 1.19e-07",
+          "evidence": "facde18cc MambaSsmArm; cell quality max_abs_diff_vs_ours 1.19e-07",
           "opponent": "mamba-ssm-fp32",
           "ours_over_theirs": 1.54,
           "pairing": "cc4bf47b4c9db221",
-          "reason": "mamba_ssm's own fused Block fast path, TF32 off and Triton fp32 IEEE, our weights loaded and read back, output equal to 1.2e-7, same host-in/host-out clock; one run each, different hosts and dates",
+          "reason": "mamba_ssm's own fused Block fast path, TF32 off and Triton fp32 IEEE, our weights loaded and read back, output equal to 1.2e-7, same host-in/host-out clock",
           "rerace": "",
           "verdict": "FAIR"
         }
@@ -94372,11 +94414,11 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "facde18cc MambaSsmArm; cell quality max_abs_diff_vs_ours 5.1e-04 (tf32) vs 1.9e-06 (fp32)",
+          "evidence": "facde18cc MambaSsmArm; cell quality",
           "opponent": "mamba-ssm-tf32",
           "ours_over_theirs": 2.69,
           "pairing": "b8c181bcad1f7d35",
-          "reason": "mamba_ssm's own fused kernels (Mamba2 SSD Triton), our weights loaded, same clock; the opponent is its TF32 setting (output differs 5e-4), a disclosed other precision; vs mamba-ssm-fp32 ours is 2.00x; one run each across hosts and dates",
+          "reason": "mamba_ssm's own fused kernels, our weights loaded, same clock; its TF32 setting is its own fast mode (vs mamba-ssm-fp32 ours is 2.00x)",
           "rerace": "",
           "verdict": "FAIR"
         }
@@ -96330,11 +96372,11 @@
         "identical/fit": {
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "date": "2026-10-13",
-          "evidence": "cell quality loss_last 1.1233609 vs 1.1233611; LANE_TEXT mlp-train-step",
+          "evidence": "cell quality loss_last 1.1233609 vs 1.1233611",
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 1.37,
           "pairing": "fe1131e73cd82bff",
-          "reason": "same weights and batches (losses equal to 2e-7), FP32 TF32 off, torch's own F.linear/ReLU/cross-entropy and torch.optim.AdamW pinned on both, opponent on the fast host 24a11adce16e; one run each across hosts on overhead-bound work",
+          "reason": "same weights and batches (losses equal to 2e-7), FP32, torch's own F.linear/ReLU/cross-entropy and torch.optim.AdamW pinned on both",
           "rerace": "",
           "verdict": "FAIR"
         }
