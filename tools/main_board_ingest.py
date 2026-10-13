@@ -1107,6 +1107,14 @@ def _our_arm(mode):
     return "ours-fast" if mode == "fast" else "ours"
 
 
+def _n_iter(cell):
+    q = (cell or {}).get("quality") or {}
+    for k in ("n_iter", "n_iter_", "iterations", "n_steps"):
+        if isinstance(q.get(k), (int, float)) and not isinstance(q.get(k), bool):
+            return q[k]
+    return None
+
+
 def pairing(race, mode, phase):
     """Fingerprint of what one (mode, phase) row measures: our arm's and every opponent's status and median."""
     rows = sorted((str(c.get("arm")), str(c.get("status")),
@@ -1131,7 +1139,13 @@ def fairness_rule(race, mode, phase, today):
     entry = {"rule": "main_board_ingest.fairness_rule (2026-10-13)", "date": today, "opponent": best.get("arm"),
              "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
              "pairing": pairing(race, mode, phase)}
-    if race.get("params_check") != "MATCHED":
+    differ = [(c.get("arm"), _n_iter(c)) for c in opps
+              if _n_iter(ours) is not None and _n_iter(c) is not None and _n_iter(c) != _n_iter(ours)]
+    if differ:
+        # Either arm running more iterations than the other is a broken comparison (AGENTS.md "Race fairness").
+        entry.update(verdict="UNFAIR", rerace="x",
+                     reason="iterations differ: ours %s, %s" % (_n_iter(ours), ", ".join("%s %s" % d for d in differ)))
+    elif race.get("params_check") != "MATCHED":
         # Shown, win or lose (Andrew, 2026-10-13: "show everything, not just where we win"): only a row confirmed
         # broken (an audit's UNFAIR, or a tie) is hidden. UNCHECKED records that no audit or parity check covers it.
         entry.update(verdict="UNCHECKED", rerace="",

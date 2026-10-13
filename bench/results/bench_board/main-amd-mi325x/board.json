@@ -64860,11 +64860,12 @@
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.053,
           "pairing": "2226666bed4a7b16",
-          "verdict": "UNCHECKED",
-          "rerace": "",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited"
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "iterations differ: ours 33, sklearn-cpu 24"
         }
-      }
+      },
+      "rerace": "x"
     },
     "classical/kmeans/taxi/rows=full": {
       "cells": [
@@ -65220,11 +65221,12 @@
           "opponent": "sklearn-cpu",
           "ours_over_theirs": 0.081,
           "pairing": "6e2335d0cbb44068",
-          "verdict": "UNCHECKED",
-          "rerace": "",
-          "reason": "no MATCHED settings-parity check of both arms and no audit yet; shown until audited"
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "iterations differ: ours 91, sklearn-cpu 58"
         }
-      }
+      },
+      "rerace": "x"
     },
     "classical/knn/istella/rows=full": {
       "cells": [

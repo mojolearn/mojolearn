@@ -321812,9 +321812,9 @@
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.65,
      "pairing": "1624099db3bd2b96",
-     "verdict": "MATCHED",
-     "rerace": "",
-     "reason": "settings-parity check MATCHED"
+     "verdict": "UNFAIR",
+     "rerace": "x",
+     "reason": "iterations differ: ours 33, sklearn-cpu 36"
     },
     "identical/infer": {
      "verdict": "UNFAIR",
@@ -322783,9 +322783,9 @@
      "opponent": "sklearn-cpu",
      "ours_over_theirs": 0.473,
      "pairing": "bb199c3a10f33a5f",
-     "verdict": "MATCHED",
-     "rerace": "",
-     "reason": "settings-parity check MATCHED"
+     "verdict": "UNFAIR",
+     "rerace": "x",
+     "reason": "iterations differ: ours 91, sklearn-cpu 100"
     },
     "identical/infer": {
      "verdict": "UNFAIR",

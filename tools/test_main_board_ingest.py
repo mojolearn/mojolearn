@@ -267,6 +267,15 @@ class FairnessMarks(unittest.TestCase):
         self.assertEqual(b["races"]["tie"]["audit"]["identical/fit"]["verdict"], "TIE")
         self.assertNotIn("rerace", b["races"]["tie"])          # ties are shown
 
+    def test_different_iteration_counts_are_broken_either_way(self):
+        for ours_it, their_it in ((33, 21), (21, 33)):
+            r = self.race(5.0, 10.0, "MATCHED")
+            r["cells"][0]["quality"] = {"n_iter": ours_it}
+            r["cells"][1]["quality"] = {"n_iter": their_it}
+            b = self.board(r=r)
+            MB.apply_fairness(b, None, "2026-10-13")
+            self.assertEqual((b["races"]["r"]["audit"]["identical/fit"]["verdict"], b["races"]["r"]["rerace"]), ("UNFAIR", "x"))
+
     def test_excluded_opponents_are_ignored_and_carried(self):
         r = self.race(5.0, 10.0, "MATCHED")
         r["cells"].append({"arm": "torch-gpu", "mode": "opponent", "device": "gpu", "status": "ok", "median_ms": 1.0})
