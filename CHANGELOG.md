@@ -5,6 +5,9 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 ## Unreleased
 
 - The `deterministic` numeric mode has been removed; use `identical`.
+- `mojolearn doctor` recognizes the published Linux wheels: it lists the installed `mojolearn-nvidia` and
+  `mojolearn-amd` packages and their GPU architecture sets, and reports whether the backend loaded instead of
+  saying no Linux wheel is published.
 
 - Correct the IDENTICAL verifier: Apple, NVIDIA and AMD must use the same reference hashes.
   Remove the Apple-only lookup introduced in 0.8.43 and restore Apple participation in reference
@@ -115,10 +118,6 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   each stored cell is. Our arm records its copy separately in both the classical and the algos drivers; no opponent is re-scored.
 - Tooling: the per-algorithm switch grid (`tools/six_lane_grid.py`, full factorial up to 128 configurations else pairwise),
   the decision roll-up (`tools/six_lane_grid_decide.py`), the lq route with prebuilt binding stores, and the second-pass renderer.
-
-- Split Linux native GPU binaries into Ada, Hopper, and gfx942 payload packages, retaining `mojolearn-nvidia` and `mojolearn-amd` as vendor aggregates. Ordinary `pip install mojolearn` still installs all native payloads. New ownership paths protect upgrades from the old vendor wheels.
-- Publish payloads before vendor aggregates and core; require architecture-specific smoke receipts and one frozen source commit throughout the release. Oversized and mixed-architecture payloads are rejected.
-- Add an explicitly selected experimental sm80 PTX build/loader and witnessed baseline/native comparison tool. It is excluded from default dependencies and publication and makes no IDENTICAL qualification claim.
 
 ## 0.8.36 (published 2026-10-03)
 

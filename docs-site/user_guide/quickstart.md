@@ -2,6 +2,12 @@
 
 ## Train and predict
 
+The examples use NumPy to make data. mojolearn itself does not need it, so install both:
+
+```sh
+pip install mojolearn numpy
+```
+
 ```python
 import numpy as np
 import mojolearn
@@ -42,7 +48,9 @@ previous = mojolearn.set_numeric_mode("fast")            # returns the previous 
 mojolearn.set_numeric_mode("identical")                  # back to the default
 ```
 
-You can also set `MOJOLEARN_NUMERIC_MODE` in the environment. `fast` is available on Apple GPUs only. Estimators that take a `numeric_mode=` argument, such as
+You can also set `MOJOLEARN_NUMERIC_MODE` in the environment before import. `fast` is available on Apple GPUs only.
+
+Estimators that take a `numeric_mode=` argument, such as
 `RandomForestClassifier`, override the process mode per call. Asking a family for a mode it does not ship raises
 a named error rather than running something weaker. See [Numeric modes](numeric_modes.md).
 
