@@ -4,11 +4,11 @@
 
 The same source tree targets Apple Metal, NVIDIA CUDA, and AMD HIP.
 ``identical`` is the default mode and promises cross-vendor bit identity for
-configurations certified in the project's support matrix. Public estimator
-training generally requires a GPU; private CPU verifier paths are not a
-general-purpose CPU training API. Explicit CPU saved-model inference includes
-classical estimators, forests/boosting, neural blocks and loaded language models.
-Their supported configurations and qualification scope are documented per API.
+configurations certified in the project's support matrix. On a machine with
+no GPU, ``fit`` trains on the CPU for every estimator with a CPU binding and
+refuses by name otherwise, and saved models predict on the CPU: classical
+estimators, forests and boosting, neural blocks and loaded language models.
+Their supported configurations are documented per API.
 ``LanguageModelInference`` runs the byte-LM forward pass
 (docs/BYTE_LM_CPU_INFERENCE.md). ``LanguageModelHostTrainer`` runs one training
 step, forward, backward and the AdamW update
