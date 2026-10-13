@@ -2064,6 +2064,21 @@ def fit_non_symmetric_tree[
     ref d_all_ids = dws[0].d_all_ids
     ref h_all_ids = dws[0].h_all_ids
     ref h_part_stats = dws[0].h_part_stats
+    # Partition-stats readback size, in floats. `part_stats` is the
+    # symmetric pool's (`1 << max_depth` leaf slots) and `h_part_stats` this
+    # lane's (`max_leaves` slots); they differ whenever max_leaves is not
+    # `1 << max_depth` (a Lossguide fit with max_leaves=32 at depth 6 has 64
+    # device slots and 32 host slots). A whole-buffer copy then wrote past the
+    # end of the host buffer: on Apple, where a small host buffer is
+    # suballocated next to the Metal driver's own data, that corrupted driver
+    # memory and trapped the process later inside a blit (SIGTRAP in
+    # `_ioGPUResourceListAddResourceEntryFault`, the 0.8.43 `verify --all`
+    # crash at gbdt-lossguide-newtoncosine/denormal). Every reader takes slots
+    # below `len(leaves)` <= both capacities, so the copied prefix is all
+    # that was ever read and no bits change.
+    var ps_readback = (
+        min(dws[0].max_leaves_key, ws[0].max_leaves_key) * stat_count
+    )
     ref d_win_cells = dws[0].d_win_cells
     ref h_win_cells = dws[0].h_win_cells
     ref d_copy_src = dws[0].d_copy_src
@@ -3254,7 +3269,9 @@ def fit_non_symmetric_tree[
                 if lg_exact:
                     ctx.enqueue_copy(
                         dst_ptr=h_part_stats.unsafe_ptr(),
-                        src_buf=part_stats,
+                        src_buf=part_stats.create_sub_buffer[DType.float32](
+                            0, ps_readback
+                        ),
                     )
             mgr.wait_complete()
             stage_times.end(ctx, "score.read")
@@ -4016,7 +4033,10 @@ def fit_non_symmetric_tree[
                     dst_ptr=h_leaf_vals.unsafe_ptr(), src_buf=d_leaf_vals
                 )
             ctx.enqueue_copy(
-                dst_ptr=h_part_stats.unsafe_ptr(), src_buf=part_stats
+                dst_ptr=h_part_stats.unsafe_ptr(),
+                src_buf=part_stats.create_sub_buffer[DType.float32](
+                    0, ps_readback
+                ),
             )
             mgr.wait_complete()
             stage_times.end(ctx, "leaf.values")
