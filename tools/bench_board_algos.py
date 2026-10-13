@@ -691,7 +691,8 @@ _add("rfe", xlane="prep", ours="RFE", task="select", block="cls", sub={"X": SUB[
      sk="sklearn.feature_selection:RFE",
      params=dict(estimator=_E("LogisticRegression", max_iter=200), n_features_to_select="half",
                  step=0.1),
-     mism=["nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"])
+     mism=["nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion",
+           "jaccard_vs_sklearn compares two selections, neither exact: on istella (200k standardized rows) neither solver converges in 200 iterations (scikit-learn warns on all 12 fits); against an exact RFE (newton-cholesky, float64, tol 1e-10) scikit-learn's selection scores 0.789 and ours 0.746 at max_iter=200, and 0.760 and 0.930 once each solver reports convergence (evidence: rfe-istella-20261012)"])
 for _slug, _cls, _blk, _cu in (("gaussian-nb", "GaussianNB", "cls", True),
                                ("bernoulli-nb", "BernoulliNB", "cls", True),
                                ("categorical-nb", "CategoricalNB", "cat", True)):
