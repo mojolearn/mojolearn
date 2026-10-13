@@ -5,8 +5,8 @@
 (`ordered_boosting.mojo`) and the structure searcher
 (`oblivious_tree_doc_parallel_structure_searcher.mojo`) read the same gate.
 
-`ORD_ALL` is compiled only under the FAST tier on an Apple GPU; IDENTICAL,
-DETERMINISTIC and non-Apple FAST compile main's statements unchanged.
+`ORD_ALL` is compiled only under the FAST tier on an Apple GPU; IDENTICAL
+and non-Apple FAST compile main's statements unchanged.
 `-D MOJOLEARN_ORD_ALL_OFF` compiles it out. Since 2026-10-04 it runs at
 every width; the old width gate (more than 32 features) was removed as
 benchmark-tuned and survives only behind MOJOLEARN_LEGACY_NARROW_ORD_ALL.

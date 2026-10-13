@@ -464,15 +464,6 @@ def weak_cc_batched(
         # DEVIATION 507. See DETERMINISM in the module docstring: the
         # order-independence of `atomicMin` is a property of the FIXED
         # POINT, and a run that stopped at the cap never reached one.
-        #
-        # **`PIN_DETERMINISM`, NOT `== NUMERIC_IDENTICAL`, SINCE
-        # 2026-08-29.** Read the sentence above literally: the labels
-        # of a truncated run are "a snapshot of the atomic order on
-        # THIS machine". That is a RUN-TO-RUN property, not a
-        # cross-vendor one -- two runs of the same call on the same GPU
-        # can stop at the cap holding different labels. Keyed to the
-        # top tier only, a DETERMINISTIC build returned that snapshot
-        # and called itself deterministic. IDENTICAL is unmoved.
         if not converged:
             raise Error(
                 "weak_cc_batched: label propagation did not converge in "

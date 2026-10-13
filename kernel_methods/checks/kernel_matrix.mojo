@@ -715,7 +715,7 @@ def _svm_kernel_op(
     mut norm_b: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],
 ) raises:
-    """`kernel_op`, CALLED, under IDENTICAL and DETERMINISTIC. Under FAST,
+    """`kernel_op`, CALLED, under IDENTICAL. Under FAST,
     `kernel_op`'s own non-fused lines, called one by one.
 
     **WHY FAST DOES NOT CALL `kernel_op`, WHICH IS COMPILE TIME.** Since
@@ -732,7 +732,7 @@ def _svm_kernel_op(
     H100 its compile passed 25 minutes (legs 2026-09-14 d-followup) where
     it had compiled in all three modes on 2026-09-10 before 2492 landed.
 
-    **WHY NO IDENTICAL OR DETERMINISTIC BIT CAN MOVE.** In those modes this
+    **WHY NO IDENTICAL BIT CAN MOVE.** In that mode this
     function is the one `kernel_op` call it replaced, same arguments, same
     order; the FAST branch below is not compiled.
 

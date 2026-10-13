@@ -4,7 +4,7 @@
     tools/with_build_lock.sh pixi run mojo run -I . \
         extratrees/checks/gpu_only_entrypoints.mojo
 
-Repeat with -D MOJOLEARN_NUMERIC_DETERMINISTIC=1 and
+Repeat with
 -D MOJOLEARN_NUMERIC_IDENTICAL=1. Eight rows, one tree per fit. The comparison
 uses the existing context-taking GPU APIs; independent objective/RNG checks
 own mathematical correctness. No host-reference training is called here.

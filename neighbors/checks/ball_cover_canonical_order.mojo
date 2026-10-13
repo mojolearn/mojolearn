@@ -313,10 +313,10 @@ def rbc_canonicalize_row_order(
     Int32 block scan, so the row BOUNDARIES are already cross-vendor identical
     and only the contents within a boundary move.
 
-    NO-OP UNDER FAST AND DETERMINISTIC. `PIN_CROSS_VENDOR` is true only under
+    NO-OP UNDER FAST. `PIN_CROSS_VENDOR` is true only under
     IDENTICAL, which is the correct tier: the emission order is already a pure
     function of the build ON ONE BOX, so this is not a determinism pin, it is a
-    CROSS-VENDOR pin, and a DETERMINISTIC user should not pay for it. The guard
+    CROSS-VENDOR pin. The guard
     is `comptime`, so FAST allocates nothing and launches nothing.
     """
 

@@ -291,7 +291,7 @@ def _svc_fit_staged(
 # coefficients, `acc += dual_j * K(x_i, sv_j)` ascending in j, then the
 # `+ b` and the label epilogue. No tile, no batch loop, one launch. Linear
 # and RBF; register rows up to `SVC_FUSED_KREG` features (wider inputs keep
-# the tiled path). IDENTICAL and DETERMINISTIC keep the tiled path with its
+# the tiled path). IDENTICAL keeps the tiled path with its
 # recorded `svm.predict.*` card. FAST only; the FAST arm is free to move.
 comptime SVC_FUSED_TPB = 128
 comptime SVC_FUSED_TILE_FLOATS = 3072

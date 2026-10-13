@@ -1237,7 +1237,7 @@ def _knn_search_on_device_index(
         )
         index_norm = ctx.enqueue_create_buffer[DType.float32](n_index)
         query_norm = ctx.enqueue_create_buffer[DType.float32](n_queries)
-        # `identical_index_tile` is `n_index` on FAST and DETERMINISTIC builds;
+        # `identical_index_tile` is `n_index` on FAST builds;
         # under IDENTICAL on the columns that tile the index axis it is the
         # kernel-matrix row's width, so the tile is bounded whatever the index.
         # DEVIATION 2667: one cell when the fused launch writes no matrix.

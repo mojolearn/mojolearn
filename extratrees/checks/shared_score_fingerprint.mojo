@@ -3,7 +3,7 @@
 """Whole-forest/prediction A/B for the shared integer class-count candidate.
 
 Build with and without MOJOLEARN_ET_SHARED_CLASS_COUNTS and compare
-fingerprints in FAST, DETERMINISTIC and IDENTICAL. Default cases span all
+fingerprints in FAST and IDENTICAL. Default cases span all
 accumulator widths, Gini/entropy, bootstrap and best-first. Every model
 field is folded, plus probabilities on all fixture rows (first2048 for
 optional large timing cases). Predictions are outside the fit timer.

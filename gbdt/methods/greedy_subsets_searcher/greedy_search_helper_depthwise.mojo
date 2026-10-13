@@ -165,7 +165,7 @@ from gbdt.options.catboost_options import (
 
 # ============================ DEVIATION 1901 ============================
 # The mode test for the existing split-cost arms. IDENTICAL retains the
-# pinned reduction and host winner fold; FAST/DETERMINISTIC use the existing
+# pinned reduction and host winner fold; FAST uses the existing
 # propagation/copy/fold optimizations below. The separate unchanged-leaf
 # cache reduces repeated work without changing any leaf's arithmetic.
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -1807,7 +1807,7 @@ def fit_non_symmetric_tree[
     THE PARTITION STATS ARE RECOMPUTED, NOT UPDATED IN THE SPLIT.
     Their `TSplitPointsKernel` updates `subsets->PartitionStats` inside the
     split ("Update part stats", `split_properties_helper.cpp:918`), so their
-    `ComputeOptimalSplits` finds them already correct. FAST/DETERMINISTIC
+    `ComputeOptimalSplits` finds them already correct. FAST
     propagate child statistics from the winning histogram. IDENTICAL now
     recomputes changed children with the established pinned fold and caches
     unchanged leaves. MOJOLEARN_GBDT_FULL_PARTITION_STATS restores the former
