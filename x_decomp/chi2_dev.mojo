@@ -8,7 +8,7 @@ bisection in float64 as on the host column. GPU binding only."""
 from std.python import PythonObject
 from std.python._cpython import GILReleased
 from std.python import Python
-from x_decomp.chi2 import CHI2_BISECT, CHI2_TERMS
+from x_decomp.chi2 import CHI2_BISECT, chi2_cf, chi2_series
 from x_decomp.kit import OP_EXP, OP_LOGS, mat_const
 from x_decomp.kit_device import DKit
 
@@ -28,16 +28,15 @@ def chi2_cdf_dev(mut k: DKit, dof: Float64, m: Float64) raises -> Float64:
     if x <= 0:
         return 0.0
     var lx = _cell1(k, OP_LOGS, x, 1e-30)
-    var lg = _cell1(k, _OP_LGAMMA, a + 1, 0.0)
-    var pref = _cell1(k, OP_EXP, Float64(Float32(a * lx - x - lg)), 0.0)
-    var term = 1.0
-    var tot = 1.0
-    for n in range(1, CHI2_TERMS):  # small-loop(CHI2_TERMS: series terms): float64 scalar series, no data
-        term *= x / (a + Float64(n))
-        tot += term
-        if term < 1e-17 * tot:
-            break
-    return pref * tot
+    # the series below x = a + 1, 1 - Q by the continued fraction above (lane
+    # apple-holes: the series's float32 prefactor underflowed far above the mean)
+    if x < a + 1.0:
+        var lg = _cell1(k, _OP_LGAMMA, a + 1, 0.0)
+        var pref = _cell1(k, OP_EXP, Float64(Float32(a * lx - x - lg)), 0.0)
+        return pref * chi2_series(a, x)
+    var lga = _cell1(k, _OP_LGAMMA, a, 0.0)
+    var prefq = _cell1(k, OP_EXP, Float64(Float32(a * lx - x - lga)), 0.0)
+    return 1.0 - prefq * chi2_cf(a, x)
 
 
 def chi2_quantile_dev(mut k: DKit, dof: Float64, upper: Float64) raises -> Float64:
@@ -62,6 +61,28 @@ def chi2_cdf_dev_py(dof: PythonObject, m: PythonObject) raises -> PythonObject:
     with GILReleased(Python()):
         var k = DKit()
         r = chi2_cdf_dev(k, d, x)
+    return PythonObject(r)
+
+
+def consistency_factor_dev(mut k: DKit, p: Float64, alpha: Float64) raises -> Float64:
+    """x_decomp/chi2.mojo `consistency_factor` on the device cells."""
+    var q = chi2_quantile_dev(k, p, 1.0 - alpha)
+    var c = chi2_cdf_dev(k, p + 2.0, q)
+    if not (c > 0.0):
+        raise Error("x_decomp: chi2 consistency factor: the cdf is 0")
+    return Float64(Float32(alpha / c))
+
+
+def consistency_factor_dev_py(p: PythonObject, num: PythonObject, den: PythonObject) raises -> PythonObject:
+    var pp = Float64(py=p)
+    var dn = Float64(py=den)
+    if not (dn > 0.0):
+        raise Error("x_decomp: chi2 consistency factor: den must be > 0")
+    var al = Float64(py=num) / dn
+    var r = 0.0
+    with GILReleased(Python()):
+        var k = DKit()
+        r = consistency_factor_dev(k, pp, al)
     return PythonObject(r)
 
 

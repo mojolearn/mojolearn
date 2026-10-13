@@ -42,7 +42,7 @@ FAMILIES = (
             # lane cpu2-l8-decomp (2026-10-04): exact select reductions, the small stable order, the Lanczos steps
             "x_decomp_reduce", "x_decomp_order_small", "x_decomp_lanczos", "x_decomp_mds_setup", "x_decomp_mds_disp",
             # lane py-runtime-b (2026-10-05): the solver drivers in Mojo
-            "x_decomp_nmf_solve", "x_decomp_nmf_nndsvd", "x_decomp_ica_solve", "x_decomp_fa_em_main", "x_decomp_dsum_f32", "x_decomp_ortho_rotation", "x_decomp_chi2_cdf", "x_decomp_chi2_quantile", "x_decomp_lda_bound", "x_decomp_als_fit", "x_decomp_mds_fit", "x_decomp_lle_iterate", "x_decomp_pls_fit", "x_decomp_lda_fit", "x_decomp_dict_learning", "x_decomp_dict_minibatch",
+            "x_decomp_nmf_solve", "x_decomp_nmf_nndsvd", "x_decomp_ica_solve", "x_decomp_fa_em_main", "x_decomp_dsum_f32", "x_decomp_ortho_rotation", "x_decomp_chi2_cdf", "x_decomp_chi2_quantile", "x_decomp_consistency_factor", "x_decomp_lda_bound", "x_decomp_als_fit", "x_decomp_mds_fit", "x_decomp_lle_iterate", "x_decomp_pls_fit", "x_decomp_lda_fit", "x_decomp_dict_learning", "x_decomp_dict_minibatch",
             "x_decomp_numeric_mode", "x_decomp_vendor",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_decomp_trisolve", "x_decomp_knn_select", "x_decomp_r_signs",

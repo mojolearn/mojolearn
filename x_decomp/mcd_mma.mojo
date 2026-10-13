@@ -14,7 +14,12 @@ def mc_center_kernel[SKIP: Bool = False](
     x: F32Ptr, rows: I32Ptr, selected: I32Ptr, loc0: F32Ptr, loc1: F32Ptr,
     dst: F32Ptr, active: I32Ptr, fin: I32Ptr, nc: Int32, r: Int32, d: Int32,
     per: Int32, ident: Int32, count: Int32, compact: Int32, par: Int32, use_fin: Int32,
+    c0: Int32 = 0,
 ):
+    """nc candidates from candidate c0 (lane apple-holes: mcd_fast runs a
+    phase's candidates in chunks of `MfPhase.mchunk`, so dst holds the
+    chunk only, at the chunk-local index; every candidate-indexed input is
+    read at the phase index c0 + local)."""
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     var dd = Int(d)
     var rr = Int(r)
@@ -24,8 +29,9 @@ def mc_center_kernel[SKIP: Bool = False](
     var j = t % dd
     var z = t // dd
     var i = z % take
-    var c = z // take
-    var target = c*rr*dd+i*dd+j
+    var cl = z // take
+    var target = cl*rr*dd+i*dd+j
+    var c = cl + Int(c0)
     # MMA calls for inactive candidates may still run; zero their source
     # and guard destination publication, retaining frozen fit state.
     # SKIP (MCD_BMMA): the batched GEMM launches no block for an

@@ -32,10 +32,34 @@ from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_S
 from experiments.classical_identical_ideas.linear_controls import C23_MCD
 from std.memory import bitcast
 from std.builtin.sort import sort
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import Kit, Mat, OP_ABS, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB, take_rows
+
+# lane apple-holes (2026-10-12), IDENTICAL: the C-step's log determinant and
+# Mahalanobis distances by the blocked Cholesky (cholesky/checks/potrf.mojo
+# `potrf_lower`, profile mojolearn.identical.cholesky.fp32.v1; `chol_logdet`;
+# L^{-1} by `trsm_lower` against I; d = rowsum((Xc L^{-T})^2)) instead of a
+# partial-pivot LU for the determinant and a round-robin Jacobi eigh for
+# pinvh on every C-step. Cause: at p = 220 the Jacobi is ~219 rounds x 2
+# launches a sweep plus the LU's ~5 launches a column, thousands of launches
+# per C-step; on Apple (per-launch cost ~20 us) MinCovDet identical took
+# 225 s at 2,000 rows and hit the board's race timeout at 100,000. The
+# Cholesky is ~10 launches a 32-column panel. A covariance whose Cholesky
+# stops (not positive definite) keeps the old rule: log det -inf, pinvh by
+# eigh. Semantics: pinvh dropped eigen-directions below max|w| p eps32 (an
+# absolute cut that removes small-scale features of a badly scaled
+# covariance); the Cholesky keeps them, as scikit-learn's float64 pinvh does.
+# Bits change (all columns: this host twin runs chol_oracle's spelling of the
+# same profile). No size rule. `-D MOJOLEARN_IDN_MCD_CHOL_OFF` restores the
+# LU + eigh C-step. A/B owed (NV + AMD, MinCovDet/EllipticEnvelope taxi and
+# istella, plus one non-board shape).
+comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_MCD_CHOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 #: `_expansion_decomp._F32_EPS` and the `logs` floor `_slogdet` passes
 comptime _F32_EPS: Float64 = 1.1920928955078125e-07
@@ -157,6 +181,17 @@ struct Est(Copyable, Movable):
         self.dist = dist^
 
 
+struct Chol(Movable):
+    """IDN_MCD_CHOL: a covariance's Cholesky log determinant (-inf when the
+    factorization stopped) and L^{-1} (empty then)."""
+    var det: Float64
+    var li: Mat
+
+    def __init__(out self, det: Float64, var li: Mat):
+        self.det = det
+        self.li = li^
+
+
 def _order_by_det(est: List[Est], keep: Int) raises -> List[Int]:
     """`sorted(range(len(est)), key=lambda j: (est[j].det, j))[:keep]`.
     A det is a float32 value or -inf, so its float32 image orders it."""
@@ -249,6 +284,93 @@ struct Mcd[E: Exec]:
             return _neg_inf()
         return Float64(t.d[0])
 
+    # ---- IDN_MCD_CHOL: the Cholesky C-step's pieces (host column)
+    def chol(self, A: Mat) raises -> Chol:
+        """`potrf_lower` (+0.0 ridge, as `add_jitter`), `chol_logdet` and
+        L^{-1} = `trsm_lower(L, I)` through the executor (`Exec.chol_inv`)."""
+        var n = A.r
+        var li = Mat(n, n)
+        var st = Mat(1, 2)
+        self.k.chol_inv(A, li, st)
+        if Int(st.d[0]) != 0:
+            return Chol(_neg_inf(), Mat(0, 0))
+        return Chol(Float64(st.d[1]), li^)
+
+    def mahal_chol(self, X: Mat, loc: Mat, Li: Mat) raises -> Mat:
+        """rowsum((Xc L^{-T})^2): the distances under P = L^{-T} L^{-1}."""
+        var Xc = self.k.ew2(OP_SUB, X, loc)
+        var Y = self.k.mm(Xc, Li, False, True)
+        return self.k.rowsum(self.k.ew2(OP_MUL, Y, Y))
+
+    def dist_from(self, X: Mat, loc: Mat, cov: Mat) raises -> Mat:
+        """The distances under cov: its Cholesky when it factors, pinvh
+        otherwise."""
+        var f = self.chol(cov)
+        if f.det != _neg_inf():
+            return self.mahal_chol(X, loc, f.li)
+        return self.mahal(X, loc, self.pinvh(cov))
+
+    def c_step_chol(
+        mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat, want_dist: Bool
+    ) raises -> Est:
+        """`c_step` with the Cholesky's log determinant and distances
+        (IDN_MCD_CHOL): the same control flow, statement for statement."""
+        var iters = n_iter
+        var dist = Mat(0, 0)
+        var sel: List[Int]
+        if not has_init:
+            sel = self.perm_head_sorted(X.r, h)
+        else:
+            dist = self.dist_from(X, loc0, cov0)
+            sel = smallest_sorted(dist, h)
+        var Xs = take_rows(X, sel)
+        var loc = self.colmean(Xs)
+        var cov = self.emp_cov_at(Xs, loc)
+        var f = self.chol(cov)
+        var det = f.det
+        var P = Mat(0, 0)
+        var p_chol = False
+        var has_p = False
+        if det == _neg_inf():
+            P = self.pinvh(cov)
+            has_p = True
+        var prev_det = _pos_inf()
+        var have_prev = False
+        var prev_loc = Mat(0, 0)
+        var prev_cov = Mat(0, 0)
+        var prev_sel = List[Int]()
+        while det < prev_det and iters > 0 and det != _neg_inf():
+            prev_loc = loc.copy()
+            prev_cov = cov.copy()
+            prev_sel = sel.copy()
+            have_prev = True
+            prev_det = det
+            P = f.li.copy()                   # det is finite: cov factored
+            p_chol = True
+            has_p = True
+            dist = self.mahal_chol(X, loc, P)
+            sel = smallest_sorted(dist, h)
+            Xs = take_rows(X, sel)
+            loc = self.colmean(Xs)
+            cov = self.emp_cov_at(Xs, loc)
+            f = self.chol(cov)
+            det = f.det
+            iters -= 1
+        if not has_p:
+            raise Error("x_decomp MinCovDet: the first C-step's log determinant is not finite")
+        var use_prev = have_prev and det > prev_det
+        if iters == 0:
+            use_prev = False
+        if use_prev:
+            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^)
+        var final = Mat(0, 0)
+        if want_dist:
+            if p_chol:
+                final = self.mahal_chol(X, loc, P)
+            else:
+                final = self.mahal(X, loc, P)
+        return Est(loc^, cov^, det, sel^, final^)
+
     # ---- randomness
     def perm(mut self, n: Int) raises -> List[Int]:
         """`MinCovDet._perm`: a sort of the next Philox stream's draws."""
@@ -264,6 +386,8 @@ struct Mcd[E: Exec]:
     def c_step(
         mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat, want_dist: Bool
     ) raises -> Est:
+        comptime if IDN_MCD_CHOL:
+            return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0, want_dist)
         var iters = n_iter
         var dist = Mat(0, 0)
         var sel: List[Int]

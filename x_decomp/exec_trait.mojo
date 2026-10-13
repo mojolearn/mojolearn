@@ -64,6 +64,13 @@ trait Exec:
         ...
 
     @staticmethod
+    def chol_inv(a: F32Ptr, li: F32Ptr, st: F32Ptr, n: Int) raises:
+        """The blocked Cholesky profile (cholesky/checks/potrf.mojo, +0.0
+        ridge): st[0] = LAPACK's info, st[1] = log det, li = L^{-1} (n x n)
+        when info == 0 (MinCovDet's IDN_MCD_CHOL C-step)."""
+        ...
+
+    @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
         ...
 

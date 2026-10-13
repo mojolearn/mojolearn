@@ -78,6 +78,13 @@ from std.builtin.sort import sort
 from core.device_zero import enqueue_fill
 from core.device_fold import device_exclusive_scan_total_from
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
+from cholesky.checks.potrf import (
+    CHOL_ELEM_TPB, CHOL_NB_PINNED, add_jitter, chol_logdet, chol_nb_for, chol_workspace_floats, potrf_lower,
+)
+from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
+from core.identity_trace import IdentityTrace
+from x_decomp.jacobi_par import pj_identity_kernel
+from x_decomp.mcd import IDN_MCD_CHOL
 from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
@@ -1020,12 +1027,134 @@ struct DMcd:
             )
         return self.k.mm(self.k.ew2(OP_MUL, e.vd, inv), e.vd, False, True)
 
+    # ---- IDN_MCD_CHOL (x_decomp/mcd.mojo): the Cholesky C-step's pieces
+    def chol(mut self, A: DMat) raises -> DChol:
+        """`potrf_lower` on a copy of A (+0.0 ridge through `add_jitter`, the
+        profile's diagonal flush), `chol_logdet` (one wait), then L^{-1} =
+        `trsm_lower(L, I)`, enqueued. Every launch is a grid over the panel,
+        the trailing block or the right-hand sides; ~10 launches a 32-column
+        panel against the Jacobi's 2 (p - 1) a sweep. A factorization that
+        stops (not positive definite) gives log det -inf and no L^{-1}."""
+        var n = A.r
+        var L = self.k.copy(A)
+        var da = self.k._sub(L)
+        var nb = chol_nb_for(n, CHOL_NB_PINNED)
+        var ws = self.k.ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
+        var trace = IdentityTrace()
+        add_jitter(self.k.ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
+        var run = potrf_lower(self.k.ctx, da, ws, n, trace)
+        if run.info != 0:
+            self.k.ctx.synchronize()
+            _ = ws^
+            _ = da^
+            _ = L^
+            return DChol(_neg_inf(), DMat(0, 0))
+        var dwork = self.k.ctx.enqueue_create_buffer[DType.float32](n + 1)
+        var ld = chol_logdet(self.k.ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
+        var li = DMat(n, n)
+        self.k.ctx.enqueue_function[pj_identity_kernel](
+            li.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+        )
+        var db = self.k._sub(li)
+        trsm_lower(self.k.ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
+        # ws and dwork are idle after chol_logdet's wait; L returns to the
+        # pool, whose later users are ordered after trsm on this stream
+        _ = ws^
+        _ = dwork^
+        _ = db^
+        _ = da^
+        _ = L^
+        return DChol(Float64(ld), li^)
+
+    def mahal_chol(self, X: DMat, loc: DMat, Li: DMat) raises -> DMat:
+        """rowsum((Xc L^{-T})^2): the distances under P = L^{-T} L^{-1}."""
+        var Xc = self.k.ew2(OP_SUB, X, loc)
+        var Y = self.k.mm(Xc, Li, False, True)
+        return self.k.rowsum(self.k.ew2(OP_MUL, Y, Y))
+
+    def dist_from(mut self, X: DMat, loc: DMat, cov: DMat) raises -> DMat:
+        """The distances under cov: its Cholesky when it factors, pinvh
+        otherwise."""
+        var f = self.chol(cov)
+        if f.det != _neg_inf():
+            return self.mahal_chol(X, loc, f.li)
+        var P = self.pinvh(cov)
+        return self.mahal(X, loc, P)
+
+    def c_step_chol(
+        mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, cov0: DMat, want_dist: Bool
+    ) raises -> DEst:
+        """`c_step` with the Cholesky's log determinant and distances
+        (IDN_MCD_CHOL; x_decomp/mcd.mojo `Mcd.c_step_chol` is the host
+        column): the same control flow, statement for statement."""
+        var iters = n_iter
+        var dist = DMat(0, 1)
+        var sel: DMat
+        if not has_init:
+            self.draws += 1
+            var r = self.k.rand(1, X.r, self.seed, 1000 + self.draws, 0)
+            sel = self.k.smallest_dev(r, h)
+        else:
+            var d0 = self.dist_from(X, loc0, cov0)
+            sel = self.k.smallest_dev(d0, h)
+            dist = d0^
+        var Xs = self.k.gather_dev(X, sel)
+        var loc = self.k.colmean(Xs)
+        var cov = self.emp_cov_at(Xs, loc)
+        var f = self.chol(cov)
+        var det = f.det
+        var P = DMat(0, 0)
+        var p_chol = False
+        var has_p = False
+        if det == _neg_inf():
+            P = self.pinvh(cov)
+            has_p = True
+        var prev_det = _pos_inf()
+        var have_prev = False
+        var prev_loc = DMat(0, 0)
+        var prev_cov = DMat(0, 0)
+        var prev_sel = DMat(0, 1)
+        while det < prev_det and iters > 0 and det != _neg_inf():
+            P = self.k.copy(f.li)             # det is finite: cov factored
+            p_chol = True
+            has_p = True
+            var dd = self.mahal_chol(X, loc, P)
+            prev_loc = loc^
+            prev_cov = cov^
+            prev_sel = sel^
+            have_prev = True
+            prev_det = det
+            sel = self.k.smallest_dev(dd, h)
+            dist = dd^
+            Xs = self.k.gather_dev(X, sel)
+            loc = self.k.colmean(Xs)
+            cov = self.emp_cov_at(Xs, loc)
+            f = self.chol(cov)
+            det = f.det
+            iters -= 1
+        if not has_p:
+            raise Error("x_decomp MinCovDet: the first C-step's log determinant is not finite")
+        var use_prev = have_prev and det > prev_det
+        if iters == 0:
+            use_prev = False
+        if use_prev:
+            return DEst(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^)
+        var final = DMat(0, 1)
+        if want_dist:
+            if p_chol:
+                final = self.mahal_chol(X, loc, P)
+            else:
+                final = self.mahal(X, loc, P)
+        return DEst(loc^, cov^, det, sel^, final^)
+
     def c_step(
         mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, cov0: DMat, want_dist: Bool
     ) raises -> DEst:
         """x_decomp/mcd.mojo's `c_step` with every selection, gather and
         distance resident (lane cpu3-core): the host reads only the log
         determinants the loop branches on (and the NaN refusal words)."""
+        comptime if IDN_MCD_CHOL:
+            return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0, want_dist)
         var iters = n_iter
         var dist = DMat(0, 1)
         var sel: DMat
@@ -1180,6 +1309,17 @@ struct DCands(Movable):
         self.det.append(det)
 
 
+struct DChol(Movable):
+    """IDN_MCD_CHOL: a covariance's Cholesky log determinant (-inf when the
+    factorization stopped) and L^{-1} (empty then)."""
+    var det: Float64
+    var li: DMat
+
+    def __init__(out self, det: Float64, var li: DMat):
+        self.det = det
+        self.li = li^
+
+
 struct DEst(Movable):
     """`Est` with every matrix resident: location, covariance, the log
     determinant, the support rows (an index vector) and the distances."""
@@ -1266,6 +1406,11 @@ def fast_mcd_dev(
             var rows = DMat(rows_of=shuf, row0=i * n_ss, rows=n_ss)
             var cur = run.k.gather_dev(Xd, rows)
             run.select_random(cur, h_sub, n_trials, 10, 2, cands)
+        # lane apple-holes: a row view does not own its parent, so the parent
+        # is kept alive past every use of its views (Mojo frees a value at its
+        # last NAMED use; `rows` / `selection` are views of shuf /
+        # selection_all, whose ids the pool may release and hand out again)
+        _ = shuf^
         var selection_all = run.k.argsort_dev(run.k.rand(1, n, run.seed, 1000 + run.draws + 1, 0))
         run.draws += 1
         var selection = DMat(rows_of=selection_all, row0=0, rows=n_m)
@@ -1286,12 +1431,14 @@ def fast_mcd_dev(
                     grid_dim=_blocks(ms), block_dim=TPB,
                 )
             _write_dev(run.k, m0.loc, m0.cov, sup, dist, n, d, loc_out, cov_out, sup_out, dist_out)
+            _ = selection_all^
             _ = Xd^
             return
         var merged = DCands(n_best_m, d)
         run.select_init(Xm, h_m, cands, n_best_m, 30, merged)
         _ = cands^
         best = run.select_init_best(Xd, h, merged, 30, True)
+        _ = selection_all^
     else:
         var first = DCands(10, d)
         run.select_random(Xd, h, 30, 10, 2, first)
