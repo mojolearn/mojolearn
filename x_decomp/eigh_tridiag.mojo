@@ -57,6 +57,7 @@ from checks.numerics import (
     identical_mul,
     identical_mul_add,
     identical_sqrt,
+    ftz,
 )
 from core.device_zero import enqueue_fill
 from gemm.block_update import BLK_TPB, blk_gemm_sub, blk_pack_kernel, blk_workspace_floats
@@ -67,6 +68,9 @@ from x_decomp.cells import F32Ptr, I32Ptr
 # items), shared verbatim with the CPU column (x_decomp/eigh_tridiag_host.mojo).
 from x_decomp.eigh_tridiag_cells import (
     DF,
+    tf_add,
+    tf_fma,
+    tf_mul,
     EIGH_TD_IDN,
     TD_BISECT_MAX,
     TD_EPS_DF,
@@ -195,7 +199,7 @@ comptime TD_SYNC_PANELS = 4
 def td_copy_kernel(src: F32Ptr, dst: F32Ptr, count_in: Int32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(count_in):
-        dst.unsafe_store(t, src.unsafe_load(t))
+        dst.unsafe_store(t, ftz(src.unsafe_load(t)))
 
 
 
@@ -242,13 +246,13 @@ def td_col_kernel(
         var x = _td_cell_any(a, alo, vp, wp, n, i, j, jj)
         xcol.unsafe_store(i, x)
         if i >= j + 2:
-            s = identical_mul(x, x)
+            s = tf_mul(x, x)
     red[tid] = s
     barrier()
     var w = TD_TPB // 2
     while w > 0:
         if tid < w:
-            red[tid] = red[tid] + red[tid + w]
+            red[tid] = tf_add(red[tid], red[tid + w])
         barrier()
         w = w // 2
     if tid == 0:
@@ -288,14 +292,14 @@ def td_gemv_kernel(
     var s0 = Float32(0.0)
     var q0 = tid
     while q0 < np_:
-        s0 += part.unsafe_load(q0)
+        s0 = tf_add(s0, part.unsafe_load(q0))
         q0 += TD_TPB
     red[tid] = s0
     barrier()
     var w0 = TD_TPB // 2
     while w0 > 0:
         if tid < w0:
-            red[tid] = red[tid] + red[tid + w0]
+            red[tid] = tf_add(red[tid], red[tid + w0])
         barrier()
         w0 = w0 // 2
     var hh = _td_house(xcol.unsafe_load(j + 1), red[0])
@@ -342,26 +346,26 @@ def td_gemv_kernel(
         var row = (j + 1 + b) * n
         var c = j + 1 + tid
         while c < n:
-            s = identical_mul_add(a.unsafe_load(row + c), _td_v(xcol, j, scale, c), s)
+            s = tf_fma(a.unsafe_load(row + c), _td_v(xcol, j, scale, c), s)
             c += TD_TPB
     else:
         var q = b - m
         var i = j + 1 + tid
         if q < jj:
             while i < n:
-                s = identical_mul_add(wp.unsafe_load(i * TD_NB + q), _td_v(xcol, j, scale, i), s)
+                s = tf_fma(wp.unsafe_load(i * TD_NB + q), _td_v(xcol, j, scale, i), s)
                 i += TD_TPB
         else:
             var q2 = q - jj
             while i < n:
-                s = identical_mul_add(vp.unsafe_load(i * TD_NB + q2), _td_v(xcol, j, scale, i), s)
+                s = tf_fma(vp.unsafe_load(i * TD_NB + q2), _td_v(xcol, j, scale, i), s)
                 i += TD_TPB
     red[tid] = s
     barrier()
     var w = TD_TPB // 2
     while w > 0:
         if tid < w:
-            red[tid] = red[tid] + red[tid + w]
+            red[tid] = tf_add(red[tid], red[tid + w])
         barrier()
         w = w // 2
     if tid == 0:
@@ -392,17 +396,17 @@ def td_p_kernel(
     if i < n:
         var u = y.unsafe_load(i)
         for p in range(jj):
-            u = identical_mul_add(-vp.unsafe_load(i * TD_NB + p), sh[p], u)
-            u = identical_mul_add(-wp.unsafe_load(i * TD_NB + p), sh[jj + p], u)
-        var pv = identical_mul(tau.unsafe_load(j), u)
+            u = tf_fma(-vp.unsafe_load(i * TD_NB + p), sh[p], u)
+            u = tf_fma(-wp.unsafe_load(i * TD_NB + p), sh[jj + p], u)
+        var pv = tf_mul(tau.unsafe_load(j), u)
         pb.unsafe_store(i, pv)
-        s = identical_mul(pv, vv.unsafe_load(i))
+        s = tf_mul(pv, vv.unsafe_load(i))
     red[tid] = s
     barrier()
     var w = TD_TPB // 2
     while w > 0:
         if tid < w:
-            red[tid] = red[tid] + red[tid + w]
+            red[tid] = tf_add(red[tid], red[tid + w])
         barrier()
         w = w // 2
     if tid == 0:
@@ -424,20 +428,20 @@ def td_w_kernel(
     var s = Float32(0.0)
     var q = tid
     while q < np_:
-        s += part.unsafe_load(q)
+        s = tf_add(s, part.unsafe_load(q))
         q += TD_TPB
     red[tid] = s
     barrier()
     var w = TD_TPB // 2
     while w > 0:
         if tid < w:
-            red[tid] = red[tid] + red[tid + w]
+            red[tid] = tf_add(red[tid], red[tid + w])
         barrier()
         w = w // 2
-    var alpha2 = identical_mul(identical_mul(Float32(-0.5), tau.unsafe_load(j)), red[0])
+    var alpha2 = tf_mul(tf_mul(Float32(-0.5), tau.unsafe_load(j)), red[0])
     var i = j + 1 + b * TD_TPB + tid
     if i < n:
-        wp.unsafe_store(i * TD_NB + jj, identical_mul_add(alpha2, vv.unsafe_load(i), pb.unsafe_load(i)))
+        wp.unsafe_store(i * TD_NB + jj, tf_fma(alpha2, vv.unsafe_load(i), pb.unsafe_load(i)))
 
 
 def td_syr2k_kernel(a: F32Ptr, alo: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int32, g_in: Int32):
@@ -585,14 +589,14 @@ def td_gram_kernel(a: F32Ptr, gm: F32Ptr, n_in: Int32):
     if qa < cnt and qb < cnt:
         var i = k + 1 + tid
         while i < n:
-            s = identical_mul_add(_td_y(a, n, k, cnt, i, qa), _td_y(a, n, k, cnt, i, qb), s)
+            s = tf_fma(_td_y(a, n, k, cnt, i, qa), _td_y(a, n, k, cnt, i, qb), s)
             i += TD_TPB
     red[tid] = s
     barrier()
     var w = TD_TPB // 2
     while w > 0:
         if tid < w:
-            red[tid] = red[tid] + red[tid + w]
+            red[tid] = tf_add(red[tid], red[tid + w])
         barrier()
         w = w // 2
     if tid == 0:

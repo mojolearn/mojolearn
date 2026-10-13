@@ -21,7 +21,8 @@ the shared statements in x_decomp/eigh_tridiag_cells.mojo):
     `td_w_kernel` and `td_gram_kernel`: each thread's strided partial
     (rows / partials at stride TD_TPB, the kernel's own statements), then
     `_td_tree`, the kernels' shared-memory tree over TD_TPB slots
-    (`red[t] = red[t] + red[t + w]`, w = TD_TPB / 2 .. 1).
+    (`red[t] = tf_add(red[t], red[t + w])`, w = TD_TPB / 2 .. 1). Every
+    result is flushed (`tf_*`, the denormal policy of eigh_tridiag_cells.mojo).
   * the identical GEMMs (`blk_gemm_sub`, `identical_gemm_into`): the
     contract's host answer, `host_gemm_oracle` (cluster/host/host_gemm_cells.mojo,
     bit for bit `gemm_oracle`), on the same packed operands; the block
@@ -33,7 +34,7 @@ the shared statements in x_decomp/eigh_tridiag_cells.mojo):
     (`enqueue_eigh_ascending`'s twin): the Jacobi route's host tail.
 Every task writes only its own cells, so the host thread count moves no word.
 """
-from checks.numerics import ftz, identical_mul, identical_mul_add
+from checks.numerics import ftz
 from cluster.host.host_cells import host_cells
 from cluster.host.host_gemm_cells import host_gemm_oracle
 from decomposition.host.linalg_public import eigh_ascending
@@ -43,6 +44,9 @@ from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import host_es_scale, host_es_unscale
 from x_decomp.eigh_tridiag_cells import (
     TD_NB,
+    tf_add,
+    tf_fma,
+    tf_mul,
     TD_TPB,
     _td_cell_kern,
     _td_house,
@@ -71,11 +75,11 @@ def _td_grid(count: Int) -> Int:
 @always_inline
 def _td_tree(mut red: InlineArray[Float32, TD_TPB]) -> Float32:
     """The kernels' shared-memory fold: w = TD_TPB / 2 .. 1, slot t < w
-    takes red[t] + red[t + w]; slot 0 is the block's value."""
+    takes tf_add(red[t], red[t + w]); slot 0 is the block's value."""
     var w = TD_TPB // 2
     while w > 0:
         for t in range(w):
-            red[t] = red[t] + red[t + w]
+            red[t] = tf_add(red[t], red[t + w])
         w = w // 2
     return red[0]
 
@@ -89,7 +93,7 @@ def _td_fold_parts(part: F32Ptr, np_: Int) -> Float32:
         var s = Float32(0.0)
         var q = t
         while q < np_:
-            s += part.unsafe_load(q)
+            s = tf_add(s, part.unsafe_load(q))
             q += TD_TPB
         red[t] = s
     return _td_tree(red)
@@ -142,7 +146,7 @@ def _td_tridiag(
                         var x = _td_cell_kern(a, vp, wp, n, i, j, jj)
                         xcol.unsafe_store(i, x)
                         if i >= j + 2:
-                            s = identical_mul(x, x)
+                            s = tf_mul(x, x)
                     red[tid] = s
                 part.unsafe_store(b, _td_tree(red))
 
@@ -163,7 +167,7 @@ def _td_tridiag(
                     var s = Float32(0.0)
                     var c = j + 1 + tid
                     while c < n:
-                        s = identical_mul_add(a.unsafe_load(row + c), _td_v(xcol, j, scale, c), s)
+                        s = tf_fma(a.unsafe_load(row + c), _td_v(xcol, j, scale, c), s)
                         c += TD_TPB
                     red[tid] = s
                 y.unsafe_store(j + 1 + b, _td_tree(red))
@@ -177,12 +181,12 @@ def _td_tridiag(
                     var i = j + 1 + tid
                     if q < jj:
                         while i < n:
-                            s = identical_mul_add(wp.unsafe_load(i * TD_NB + q), _td_v(xcol, j, scale, i), s)
+                            s = tf_fma(wp.unsafe_load(i * TD_NB + q), _td_v(xcol, j, scale, i), s)
                             i += TD_TPB
                     else:
                         var q2 = q - jj
                         while i < n:
-                            s = identical_mul_add(vp.unsafe_load(i * TD_NB + q2), _td_v(xcol, j, scale, i), s)
+                            s = tf_fma(vp.unsafe_load(i * TD_NB + q2), _td_v(xcol, j, scale, i), s)
                             i += TD_TPB
                     red[tid] = s
                 tv.unsafe_store(q, _td_tree(red))
@@ -205,20 +209,20 @@ def _td_tridiag(
                     if i < n:
                         var u = y.unsafe_load(i)
                         for p in range(jj):
-                            u = identical_mul_add(-vp.unsafe_load(i * TD_NB + p), tv.unsafe_load(p), u)
-                            u = identical_mul_add(-wp.unsafe_load(i * TD_NB + p), tv.unsafe_load(jj + p), u)
-                        var pv = identical_mul(tau.unsafe_load(j), u)
+                            u = tf_fma(-vp.unsafe_load(i * TD_NB + p), tv.unsafe_load(p), u)
+                            u = tf_fma(-wp.unsafe_load(i * TD_NB + p), tv.unsafe_load(jj + p), u)
+                        var pv = tf_mul(tau.unsafe_load(j), u)
                         pb.unsafe_store(i, pv)
-                        s = identical_mul(pv, vv.unsafe_load(i))
+                        s = tf_mul(pv, vv.unsafe_load(i))
                     red[tid] = s
                 part2.unsafe_store(b, _td_tree(red))
 
             host_cells(p_block, nbm, TD_TPB * (4 * jj + 3))
 
             # td_w_kernel: W[:, jj] = pb - tau/2 (p . v) v
-            var alpha2 = identical_mul(identical_mul(Float32(-0.5), tau.unsafe_load(j)), _td_fold_parts(part2, nbm))
+            var alpha2 = tf_mul(tf_mul(Float32(-0.5), tau.unsafe_load(j)), _td_fold_parts(part2, nbm))
             for i in range(j + 1, n):
-                wp.unsafe_store(i * TD_NB + jj, identical_mul_add(alpha2, vv.unsafe_load(i), pb.unsafe_load(i)))
+                wp.unsafe_store(i * TD_NB + jj, tf_fma(alpha2, vv.unsafe_load(i), pb.unsafe_load(i)))
         var kend = k + cnt
         var mm = n - kend
         if mm > 0:
@@ -262,6 +266,10 @@ def host_eigh_td(mut m: List[Float32], n: Int, w: F32Ptr, v: F32Ptr) raises -> B
     COLUMN c) written. False: refused (clustered spectrum, nonfinite T or
     vector norm); nothing written, the caller runs the Jacobi on its own
     copy of the input, as the device does. n >= 2."""
+    # td_copy_kernel's flush of the input (the denormal policy of
+    # x_decomp/eigh_tridiag_cells.mojo), then the range scale
+    for i in range(n * n):
+        m[i] = ftz(m[i])
     var fac = host_es_scale(m, n)
     var a = _lp(m)
     var vl = List[Float32](length=n * TD_NB, fill=Float32(0.0))
@@ -364,7 +372,7 @@ def host_eigh_td(mut m: List[Float32], n: Int, w: F32Ptr, v: F32Ptr) raises -> B
             if qa < cnt and qb < cnt:
                 var i = k + 1 + tid
                 while i < n:
-                    s = identical_mul_add(_td_y(a, n, k, cnt, i, qa), _td_y(a, n, k, cnt, i, qb), s)
+                    s = tf_fma(_td_y(a, n, k, cnt, i, qa), _td_y(a, n, k, cnt, i, qb), s)
                     i += TD_TPB
             red[tid] = s
         gm.unsafe_store(panel * TD_NB * TD_NB + b, _td_tree(red))

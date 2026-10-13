@@ -12,6 +12,7 @@ from std.sys.compile import is_defined
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    ftz,
     NUMERIC_IDENTICAL,
     identical_div,
     identical_mul,
@@ -55,6 +56,57 @@ comptime TD_PIVMIN = Float32(1.0e-30)
 
 comptime DF = SIMD[DType.float32, 2]
 
+
+# ===========================================================================
+# The denormal policy (lane apple-neighbors-gpu-cpu-2, 2026-10-13): every
+# arithmetic result of the route is flushed (`ftz`, IDENTITY_PATHS row 10),
+# and the input matrix is flushed before the solve (`td_copy_kernel`, the
+# host's `host_eigh_td`). The Apple GPU flushes float32 subnormals in
+# hardware and the host CPU does not, so without these seams the `denormal`
+# and `dupes` fixtures of x-decomp-eigh-wide-linalg split the Apple and CPU
+# columns (Apple's `denormal` cell equalled its own `denormal_ftz` cell; the
+# CPU's did not). With every value flushed no subnormal reaches an
+# operation, so NVIDIA, AMD, Apple and the host compute one function. Bits
+# move only where a subnormal arose.
+# ===========================================================================
+
+
+@always_inline
+def tf_add(a: Float32, b: Float32) -> Float32:
+    return ftz(a + b)
+
+
+@always_inline
+def tf_sub(a: Float32, b: Float32) -> Float32:
+    return ftz(a - b)
+
+
+@always_inline
+def tf_mul(a: Float32, b: Float32) -> Float32:
+    return ftz(identical_mul(a, b))
+
+
+@always_inline
+def tf_fma(a: Float32, b: Float32, c: Float32) -> Float32:
+    """The pinned multiply-add (`identical_mul_add`), flushed."""
+    return ftz(identical_mul_add(a, b, c))
+
+
+@always_inline
+def tf_fmae(a: Float32, b: Float32, c: Float32) -> Float32:
+    """The double-float error term's raw `fma`, flushed."""
+    return ftz(fma(a, b, c))
+
+
+@always_inline
+def tf_div(a: Float32, b: Float32) -> Float32:
+    return ftz(identical_div(a, b))
+
+
+@always_inline
+def tf_sqrt(x: Float32) -> Float32:
+    return ftz(identical_sqrt(x))
+
 # ===========================================================================
 # double-float arithmetic (hi, lo), every helper inlined (Metal pointer rule)
 # ===========================================================================
@@ -62,25 +114,25 @@ comptime DF = SIMD[DType.float32, 2]
 
 @always_inline
 def _two_sum(a: Float32, b: Float32) -> DF:
-    var s = a + b
-    var bb = s - a
-    var e = (a - (s - bb)) + (b - bb)
+    var s = tf_add(a, b)
+    var bb = tf_sub(s, a)
+    var e = tf_add(tf_sub(a, tf_sub(s, bb)), tf_sub(b, bb))
     return DF(s, e)
 
 
 @always_inline
 def _quick(a: Float32, b: Float32) -> DF:
-    var s = a + b
-    return DF(s, b - (s - a))
+    var s = tf_add(a, b)
+    return DF(s, tf_sub(b, tf_sub(s, a)))
 
 
 @always_inline
 def df_add(a: DF, b: DF) -> DF:
     var s = _two_sum(a[0], b[0])
     var t = _two_sum(a[1], b[1])
-    var e = s[1] + t[0]
+    var e = tf_add(s[1], t[0])
     var u = _quick(s[0], e)
-    e = t[1] + u[1]
+    e = tf_add(t[1], u[1])
     return _quick(u[0], e)
 
 
@@ -98,27 +150,27 @@ def df_sub(a: DF, b: DF) -> DF:
 def df_mul(a: DF, b: DF) -> DF:
     # the product pinned so the two-product's error term is exact (a
     # contracted `p + e` would fold the correction away)
-    var p = identical_mul(a[0], b[0])
-    var e = fma(a[0], b[0], -p)
-    e = fma(a[0], b[1], e)
-    e = fma(a[1], b[0], e)
+    var p = tf_mul(a[0], b[0])
+    var e = tf_fmae(a[0], b[0], -p)
+    e = tf_fmae(a[0], b[1], e)
+    e = tf_fmae(a[1], b[0], e)
     return _quick(p, e)
 
 
 @always_inline
 def df_div(a: DF, b: DF) -> DF:
-    var q1 = identical_div(a[0], b[0])
+    var q1 = tf_div(a[0], b[0])
     var r = df_sub(a, df_mul(b, DF(q1, Float32(0.0))))
-    var q2 = identical_div(r[0], b[0])
+    var q2 = tf_div(r[0], b[0])
     r = df_sub(r, df_mul(b, DF(q2, Float32(0.0))))
-    var q3 = identical_div(r[0], b[0])
+    var q3 = tf_div(r[0], b[0])
     return df_add(_quick(q1, q2), DF(q3, Float32(0.0)))
 
 
 @always_inline
 def df_sq(x: Float32) -> DF:
-    var p = identical_mul(x, x)
-    return DF(p, fma(x, x, -p))
+    var p = tf_mul(x, x)
+    return DF(p, tf_fmae(x, x, -p))
 
 
 @always_inline
@@ -137,13 +189,13 @@ def td_finite(x: Float32) -> Bool:
 @always_inline
 def td_sturm_kern(dd: F32Ptr, ee: F32Ptr, n: Int, sc: Float32, x: DF) -> Int:
     """Eigenvalues of the scaled T below x (negative pivots of T - x)."""
-    var q = df_guard(df_sub(DF(dd.unsafe_load(0) * sc, Float32(0.0)), x))
+    var q = df_guard(df_sub(DF(tf_mul(dd.unsafe_load(0), sc), Float32(0.0)), x))
     var cnt = 0
     if q[0] < Float32(0.0):
         cnt += 1
     for i in range(1, n):
-        var e = ee.unsafe_load(i - 1) * sc
-        var dl = df_sub(DF(dd.unsafe_load(i) * sc, Float32(0.0)), x)
+        var e = tf_mul(ee.unsafe_load(i - 1), sc)
+        var dl = df_sub(DF(tf_mul(dd.unsafe_load(i), sc), Float32(0.0)), x)
         q = df_guard(df_sub(dl, df_div(df_sq(e), q)))
         if q[0] < Float32(0.0):
             cnt += 1
@@ -157,8 +209,8 @@ def _td_cell_kern(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n: Int, i: Int, c: Int, jj:
     var x = a.unsafe_load(i * n + c)
     for p in range(jj):
         # the V W^T term, then the W V^T term, one fused multiply-add each
-        x = identical_mul_add(-vp.unsafe_load(i * TD_NB + p), wp.unsafe_load(c * TD_NB + p), x)
-        x = identical_mul_add(-wp.unsafe_load(i * TD_NB + p), vp.unsafe_load(c * TD_NB + p), x)
+        x = tf_fma(-vp.unsafe_load(i * TD_NB + p), wp.unsafe_load(c * TD_NB + p), x)
+        x = tf_fma(-wp.unsafe_load(i * TD_NB + p), vp.unsafe_load(c * TD_NB + p), x)
     return x
 
 
@@ -170,10 +222,10 @@ def _td_house(alpha: Float32, xn2: Float32) -> SIMD[DType.float32, 4]:
     var beta = alpha
     var scale = Float32(0.0)
     if xn2 > Float32(0.0):
-        var nrm = identical_sqrt(identical_mul_add(alpha, alpha, xn2))
+        var nrm = tf_sqrt(tf_fma(alpha, alpha, xn2))
         beta = -nrm if alpha >= Float32(0.0) else nrm
-        t = identical_div(beta - alpha, beta)
-        scale = identical_div(Float32(1.0), alpha - beta)
+        t = tf_div(tf_sub(beta, alpha), beta)
+        scale = tf_div(Float32(1.0), tf_sub(alpha, beta))
     return SIMD[DType.float32, 4](beta, t, scale, Float32(0.0))
 
 
@@ -182,7 +234,7 @@ def _td_v(xcol: F32Ptr, j: Int, scale: Float32, c: Int) -> Float32:
     """v[c] for c > j: 1 at j + 1, xcol[c] scale below."""
     if c == j + 1:
         return Float32(1.0)
-    return identical_mul(xcol.unsafe_load(c), scale)
+    return tf_mul(xcol.unsafe_load(c), scale)
 
 
 @always_inline
@@ -241,26 +293,26 @@ def td_bisect_item(dd: F32Ptr, ee: F32Ptr, info: F32Ptr, wh: F32Ptr, wl: F32Ptr,
     for i in range(n):
         var r = Float32(0.0)
         if i > 0:
-            r += abs(ee.unsafe_load(i - 1) * sc)
+            r = tf_add(r, abs(tf_mul(ee.unsafe_load(i - 1), sc)))
         if i < n - 1:
-            r += abs(ee.unsafe_load(i) * sc)
-        var d = dd.unsafe_load(i) * sc
-        glo = min(glo, d - r)
-        ghi = max(ghi, d + r)
-    var pad = identical_mul_add(Float32(1.0e-4), max(ghi - glo, max(abs(glo), abs(ghi))), Float32(1.0e-20))
-    var lo = DF(glo - pad, Float32(0.0))
-    var hi = DF(ghi + pad, Float32(0.0))
+            r = tf_add(r, abs(tf_mul(ee.unsafe_load(i), sc)))
+        var d = tf_mul(dd.unsafe_load(i), sc)
+        glo = min(glo, tf_sub(d, r))
+        ghi = max(ghi, tf_add(d, r))
+    var pad = tf_fma(Float32(1.0e-4), max(tf_sub(ghi, glo), max(abs(glo), abs(ghi))), Float32(1.0e-20))
+    var lo = DF(tf_sub(glo, pad), Float32(0.0))
+    var hi = DF(tf_add(ghi, pad), Float32(0.0))
     for _ in range(TD_BISECT_MAX):
         var wd = df_sub(hi, lo)
-        if wd[0] <= identical_mul_add(TD_EPS_DF, max(abs(lo[0]), abs(hi[0])), TD_PIVMIN):
+        if wd[0] <= tf_fma(TD_EPS_DF, max(abs(lo[0]), abs(hi[0])), TD_PIVMIN):
             break
-        var mid = df_add(lo, DF(wd[0] * Float32(0.5), wd[1] * Float32(0.5)))
+        var mid = df_add(lo, DF(tf_mul(wd[0], Float32(0.5)), tf_mul(wd[1], Float32(0.5))))
         if td_sturm_kern(dd, ee, n, sc, mid) > k:
             hi = mid
         else:
             lo = mid
     var wf = df_sub(hi, lo)
-    var lam = df_add(lo, DF(wf[0] * Float32(0.5), wf[1] * Float32(0.5)))
+    var lam = df_add(lo, DF(tf_mul(wf[0], Float32(0.5)), tf_mul(wf[1], Float32(0.5))))
     wh.unsafe_store(k, lam[0])
     wl.unsafe_store(k, lam[1])
 
@@ -276,9 +328,9 @@ def td_gap_item(wh: F32Ptr, wl: F32Ptr, info: F32Ptr, w_out: F32Ptr, n: Int, k: 
     if k < n - 1:
         g = min(g, df_sub(DF(wh.unsafe_load(k + 1), wl.unsafe_load(k + 1)), wk)[0])
     var scale = max(abs(wh.unsafe_load(0)), abs(wh.unsafe_load(n - 1)))
-    if not (g >= identical_mul(TD_GAP_MIN_REL, scale)) or not td_finite(wk[0]):
+    if not (g >= tf_mul(TD_GAP_MIN_REL, scale)) or not td_finite(wk[0]):
         info.unsafe_store(2, Float32(1.0))
-    w_out.unsafe_store(k, identical_div(wk[0] + wk[1], sc))
+    w_out.unsafe_store(k, tf_div(tf_add(wk[0], wk[1]), sc))
 
 
 @always_inline
@@ -291,17 +343,17 @@ def td_vec_item(
     var sc = info.unsafe_load(0)
     var lam = DF(wh.unsafe_load(k), wl.unsafe_load(k))
     # D+ (top down)
-    var dp = df_guard(df_sub(DF(dd.unsafe_load(0) * sc, Float32(0.0)), lam))
+    var dp = df_guard(df_sub(DF(tf_mul(dd.unsafe_load(0), sc), Float32(0.0)), lam))
     dph.unsafe_store(k, dp[0])
     dpl.unsafe_store(k, dp[1])
     for i in range(1, n):
-        var e = ee.unsafe_load(i - 1) * sc
-        var dl = df_sub(DF(dd.unsafe_load(i) * sc, Float32(0.0)), lam)
+        var e = tf_mul(ee.unsafe_load(i - 1), sc)
+        var dl = df_sub(DF(tf_mul(dd.unsafe_load(i), sc), Float32(0.0)), lam)
         dp = df_guard(df_sub(dl, df_div(df_sq(e), dp)))
         dph.unsafe_store(i * n + k, dp[0])
         dpl.unsafe_store(i * n + k, dp[1])
     # D- (bottom up) and the twist index r = argmin |gamma|
-    var dl0 = df_sub(DF(dd.unsafe_load(n - 1) * sc, Float32(0.0)), lam)
+    var dl0 = df_sub(DF(tf_mul(dd.unsafe_load(n - 1), sc), Float32(0.0)), lam)
     var dm = df_guard(dl0)
     dmh.unsafe_store((n - 1) * n + k, dm[0])
     dml.unsafe_store((n - 1) * n + k, dm[1])
@@ -310,8 +362,8 @@ def td_vec_item(
     var r = n - 1
     for tb in range(n - 1):
         var ib = n - 2 - tb
-        var e = ee.unsafe_load(ib) * sc
-        var dl = df_sub(DF(dd.unsafe_load(ib) * sc, Float32(0.0)), lam)
+        var e = tf_mul(ee.unsafe_load(ib), sc)
+        var dl = df_sub(DF(tf_mul(dd.unsafe_load(ib), sc), Float32(0.0)), lam)
         dm = df_guard(df_sub(dl, df_div(df_sq(e), dm)))
         dmh.unsafe_store(ib * n + k, dm[0])
         dml.unsafe_store(ib * n + k, dm[1])
@@ -327,18 +379,18 @@ def td_vec_item(
     var zp = DF(Float32(0.0), Float32(0.0))
     var ii = r - 1
     while ii >= 0:
-        var e = ee.unsafe_load(ii) * sc
+        var e = tf_mul(ee.unsafe_load(ii), sc)
         var zn = DF(Float32(0.0), Float32(0.0))
         if zc[0] != Float32(0.0):
             var dpi = DF(dph.unsafe_load(ii * n + k), dpl.unsafe_load(ii * n + k))
             zn = df_neg(df_mul(df_div(DF(e, Float32(0.0)), dpi), zc))
         elif e != Float32(0.0):
             # z_{i+1} = 0: row i + 1 gives z_i = -(e_{i+1} / e_i) z_{i+2}
-            var e1 = ee.unsafe_load(ii + 1) * sc
+            var e1 = tf_mul(ee.unsafe_load(ii + 1), sc)
             zn = df_neg(df_mul(df_div(DF(e1, Float32(0.0)), DF(e, Float32(0.0))), zp))
-        var zf = zn[0] + zn[1]
+        var zf = tf_add(zn[0], zn[1])
         z.unsafe_store(ii * n + k, zf)
-        nrm = identical_mul_add(zf, zf, nrm)
+        nrm = tf_fma(zf, zf, nrm)
         zp = zc
         zc = zn
         ii -= 1
@@ -346,27 +398,27 @@ def td_vec_item(
     zp = DF(Float32(0.0), Float32(0.0))
     ii = r
     while ii < n - 1:
-        var e = ee.unsafe_load(ii) * sc
+        var e = tf_mul(ee.unsafe_load(ii), sc)
         var zn = DF(Float32(0.0), Float32(0.0))
         if zc[0] != Float32(0.0):
             var dmi = DF(dmh.unsafe_load((ii + 1) * n + k), dml.unsafe_load((ii + 1) * n + k))
             zn = df_neg(df_mul(df_div(DF(e, Float32(0.0)), dmi), zc))
         elif ii >= 1 and e != Float32(0.0):
             # z_i = 0: row i gives z_{i+1} = -(e_{i-1} / e_i) z_{i-1}
-            var e1 = ee.unsafe_load(ii - 1) * sc
+            var e1 = tf_mul(ee.unsafe_load(ii - 1), sc)
             zn = df_neg(df_mul(df_div(DF(e1, Float32(0.0)), DF(e, Float32(0.0))), zp))
-        var zf = zn[0] + zn[1]
+        var zf = tf_add(zn[0], zn[1])
         z.unsafe_store((ii + 1) * n + k, zf)
-        nrm = identical_mul_add(zf, zf, nrm)
+        nrm = tf_fma(zf, zf, nrm)
         zp = zc
         zc = zn
         ii += 1
     if not td_finite(nrm) or not (nrm > Float32(0.0)):
         info.unsafe_store(2, Float32(1.0))
         return
-    var inv = identical_div(Float32(1.0), identical_sqrt(nrm))
+    var inv = tf_div(Float32(1.0), tf_sqrt(nrm))
     for t in range(n):
-        z.unsafe_store(t * n + k, identical_mul(z.unsafe_load(t * n + k), inv))
+        z.unsafe_store(t * n + k, tf_mul(z.unsafe_load(t * n + k), inv))
 
 
 @always_inline
@@ -385,7 +437,7 @@ def td_tfac_item(gm: F32Ptr, tau: F32Ptr, tf: F32Ptr, n_in: Int, panel: Int, r: 
             elif r < i:
                 var s = Float32(0.0)
                 for q in range(r, i):
-                    s = identical_mul_add(row[q], gm.unsafe_load(offset + q * TD_NB + i), s)
-                row[i] = identical_mul(-ti, s)
+                    s = tf_fma(row[q], gm.unsafe_load(offset + q * TD_NB + i), s)
+                row[i] = tf_mul(-ti, s)
     for i in range(TD_NB):
         tf.unsafe_store(offset + r * TD_NB + i, row[i])
