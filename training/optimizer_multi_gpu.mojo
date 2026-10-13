@@ -11,7 +11,6 @@ from max.gpu.host import DeviceContext
 from core.host_parallel import host_parallelize
 from bindings.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.clip_multi_gpu import parallel_clip_grad_norm_host
 from training.estimator import (
     identical_optimizer_step_host, identical_optimizer_step_resident_host,
@@ -58,8 +57,8 @@ def parallel_optimizer_step_host(
             v_ptr, offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t,
             nesterov, lr, beta1, beta2, eps, weight_decay, momentum,
             dampening, max_norm)
-    if devices < 1 or devices > 64 or GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:
-        raise Error("parallel optimizer requires IDENTICAL and 1..64 devices")
+    if devices < 1 or devices > 64:
+        raise Error("parallel optimizer requires 1..64 devices")
     comptime if STEP_PHASE_TIMERS:
         raise Error("parallel optimizer cannot use process-global phase counters")
     if kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:

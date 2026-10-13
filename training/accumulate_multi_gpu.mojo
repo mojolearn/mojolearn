@@ -12,7 +12,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.host_parallel import host_parallelize
 from bindings.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.samba_ops import samba_accumulate_buffer, samba_accumulate_host, samba_validate_accumulation, _refuse_nonfinite
 
 
@@ -32,8 +31,8 @@ def parallel_accumulate_host(
     var devices = Int(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1"))
     if devices == 1:
         return samba_accumulate_host(ctx,out_ptr,parts_ptr,n,a,t_tokens)
-    if devices < 1 or devices > 64 or GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:
-        raise Error("parallel accumulation requires IDENTICAL and 1..64 devices")
+    if devices < 1 or devices > 64:
+        raise Error("parallel accumulation requires 1..64 devices")
     comptime if STEP_PHASE_TIMERS:
         raise Error("parallel accumulation cannot use process-global phase counters")
     samba_validate_accumulation(n,a,t_tokens)
