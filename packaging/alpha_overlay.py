@@ -111,8 +111,7 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False, s
                 'Python source overlay exceeds bounds')
         replacements[name] = source.read_bytes()
     for source, name in ((package / 'ALPHA_API.md', 'mojolearn/ALPHA_API.md'),
-                         (python_root / 'mojolearn_diagnostics.py', 'mojolearn_diagnostics.py'),
-                         (package / 'Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf', 'mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf')):
+                         (python_root / 'mojolearn_diagnostics.py', 'mojolearn_diagnostics.py')):
         if source.exists() or source.is_symlink():
             require(source.is_file() and not source.is_symlink()
                     and source.stat().st_size <= 1024**2, 'invalid/oversize alpha documentation or diagnostics')
