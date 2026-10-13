@@ -78,7 +78,7 @@ def _km_write(est, path, fmt, arrays):
 
 #: `checks/numerics.mojo` codes, duplicated on purpose (the GP's reason):
 #: the read-back must not share a table with the thing it checks.
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 
 #: `kernel_methods/checks/kernel_matrix.mojo`'s KM_KERNEL_* codes:
 #: `svm/impl/svm_parameter.mojo`'s enumeration (0 to 4) plus the lane's

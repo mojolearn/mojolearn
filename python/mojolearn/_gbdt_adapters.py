@@ -54,8 +54,8 @@ class _GBDTAdapter:
 
     def _new_learner(self, mode):
         if mode is not None and (not isinstance(mode, str) or
-                mode.strip().lower() not in ('fast', 'deterministic', 'identical')):
-            raise ValueError('numeric_mode must be fast, deterministic, identical or None')
+                mode.strip().lower() not in ('fast', 'identical')):
+            raise ValueError('numeric_mode must be fast, identical or None')
         if self._loss == 'RMSE' and self.class_weights is not None:
             raise NotImplementedError('GradientBoostingRegressor does not support class_weights')
         parameters = self.get_params()
@@ -111,7 +111,7 @@ class _GBDTAdapter:
         mode = raw_mode.strip().lower()
         learner.numeric_mode = mode
         binding = _backend.binding('_mojolearn_gbdt', mode)
-        if binding.gbdt_numeric_mode() != {'fast': 0, 'identical': 1, 'deterministic': 2}[mode]:
+        if binding.gbdt_numeric_mode() != {'fast': 0, 'identical': 1}[mode]:
             raise RuntimeError('GBDT adapter native numeric mode disagrees with requested mode')
         learner.fit(X, y, sample_weight=sample_weight, eval_set=eval_set)
         self._learner_ = learner
@@ -161,7 +161,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
         As in :class:`GradientBoosting`.
     feature_fraction, feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block
         As in :class:`GradientBoosting`.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` on Apple GPUs); None uses
         the process default. Any other value raises ``ValueError``.
 
@@ -323,7 +323,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
         As in :class:`GradientBoosting`.
     feature_fraction, feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block
         As in :class:`GradientBoosting`.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` on Apple GPUs); None uses
         the process default. Any other value raises ``ValueError``.
 

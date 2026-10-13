@@ -42,7 +42,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 
 #: `hierarchy/impl/cluster/detail/connectivities.mojo::DISTANCE_L2_SQRT_EXPANDED`,
 #: the one metric `fit_hdbscan` accepts (their RAFT_EXPECTS).

@@ -119,8 +119,8 @@ def forest_estimator(kind):
             bound.apply_defaults()
             mode = bound.arguments["numeric_mode"]
             if mode is not None and (not isinstance(mode, str) or
-                    mode.strip().lower() not in ("fast", "deterministic", "identical")):
-                raise ValueError("numeric_mode must be fast, deterministic, identical or None")
+                    mode.strip().lower() not in ("fast", "identical")):
+                raise ValueError("numeric_mode must be fast, identical or None")
             self._validate_inference_engine(bound.arguments.get("inference_engine", "sequential"))
             original(self, *args, **kwargs)
             for name in cls._parameter_names:  # glue: copies constructor parameter names
@@ -178,8 +178,8 @@ class ForestProtocol:
         if mode is None:
             return None
         if not isinstance(mode, str) or mode.strip().lower() not in (
-                "fast", "deterministic", "identical"):
-            raise ValueError("numeric_mode must be fast, deterministic, identical or None")
+                "fast", "identical"):
+            raise ValueError("numeric_mode must be fast, identical or None")
         return mode.strip().lower()
 
     def _capture_fit_mode(self):
@@ -265,7 +265,7 @@ class ForestProtocol:
         names the groves explicitly so the recorded bits do not depend on a
         vendor build default: `parallel_groves` is the grove
         fold that the CPU host groves engine and the recorded GPU columns
-        compute. FAST and DETERMINISTIC keep the binary's default, and so
+        compute. FAST keeps the binary's default, and so
         does a binary older than the per-snapshot choice (no
         `forest_ordered_resident` export), whose resident route is groves."""
         if self._ordered_resident_export() is None:

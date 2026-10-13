@@ -310,7 +310,7 @@ class LSTMRegressor(_RecurrentRegressor):
         ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
@@ -398,7 +398,7 @@ class LSTMClassifier(_RecurrentClassifier):
         ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
@@ -491,7 +491,7 @@ class GRURegressor(_RecurrentRegressor):
         ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
@@ -579,7 +579,7 @@ class GRUClassifier(_RecurrentClassifier):
         ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
     nonlinearity : str, default 'tanh'
         Unused by this model; accepted for a common signature.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
@@ -672,7 +672,7 @@ class RNNRegressor(_RecurrentRegressor):
         ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
     nonlinearity : {'tanh', 'relu'}, default 'tanh'
         Activation of the recurrence, as `nn.RNN`.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
@@ -761,7 +761,7 @@ class RNNClassifier(_RecurrentClassifier):
         ``{'betas': (0.9, 0.99), 'weight_decay': 0.01}``). Unknown names raise `ValueError`.
     nonlinearity : {'tanh', 'relu'}, default 'tanh'
         Activation of the recurrence, as `nn.RNN`.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.

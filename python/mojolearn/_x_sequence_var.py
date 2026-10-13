@@ -100,7 +100,7 @@ class VAR:
         Exogenous variables are not supported; anything other than None
         raises NotImplementedError.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`).
 

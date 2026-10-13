@@ -906,8 +906,8 @@ class GradientBoosting(NumericModeMixin):
     returns raw scores for every loss; use ``predict_proba`` or
     ``predict_classes`` for classification output.
 
-    Supports the ``numeric_mode`` parameter (``'identical'``,
-    ``'deterministic'``, or ``'fast'`` on Apple GPUs).
+    Supports the ``numeric_mode`` parameter (``'identical'``
+    or ``'fast'`` on Apple GPUs).
 
     Parameters
     ----------
@@ -2501,13 +2501,13 @@ class GradientBoosting(NumericModeMixin):
         n_rows = raw.shape[0]
         # DEVIATION 258 made the IDENTICAL tier take the portable double
         # exp of `gbdt_sigmoid` so the probability bits are the same on
-        # every host, while fast and deterministic kept `1 / (1 +
+        # every host, while fast kept `1 / (1 +
         # np.exp(-raw))` with the host libm's last bit.
         # DEVIATION 2332: EVERY TIER now routes through `gbdt_sigmoid`.
-        # IDENTICAL's bits do not move (same call as before). The FAST and
-        # DETERMINISTIC `predict_proba` bits DO move, from numpy's exp to
+        # IDENTICAL's bits do not move (same call as before). The FAST
+        # `predict_proba` bits DO move, from numpy's exp to
         # the binding's portable exp, by at most the last-bit difference
-        # between two exps; neither tier has a bitwise card on proba, and
+        # between two exps; FAST has no bitwise card on proba, and
         # FAST is never asked a bitwise question. `1 - p` is the same one
         # float64 subtraction as before, so column 0 keeps its bits.
         # a CPU-only install's binding proxy raises ImportError, by name, for
@@ -2693,7 +2693,7 @@ class GradientBoosting(NumericModeMixin):
         # turn an IDENTICAL model into FAST arithmetic after loading.
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
         if not isinstance(mode, str) or mode.strip().lower() not in (
-            "fast", "deterministic", "identical"
+            "fast", "identical"
         ):
             raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
         mode = mode.strip().lower()
@@ -2760,7 +2760,7 @@ class GradientBoosting(NumericModeMixin):
             mode = _one_string(arrays["numeric_mode"])
             if mode is None:
                 raise ValueError("mojolearn: saved numeric_mode must be one string")
-            if mode not in ("fast", "deterministic", "identical"):
+            if mode not in ("fast", "identical"):
                 raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
             obj.numeric_mode = mode
         obj.loss = _serialize.scalar_str(arrays, "loss")

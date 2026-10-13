@@ -52,7 +52,7 @@ from ._mode import NumericModeMixin
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose (the GP's reason): the read-back must not share a table with
 #: the thing it checks.
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 
 #: The saved-model format tag (`save`, `load`, `mojolearn.host_model`).
 _CHOLESKY_FORMAT = "mojolearn-cholesky-1"

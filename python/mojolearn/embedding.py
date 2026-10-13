@@ -18,7 +18,7 @@ from ._array import Array
 from ._buffer import _materialize, addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
 from ._mode import NumericModeMixin
 
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 _NO_PADDING = -1
 #: ORDER MATCHES embedding/checks/embedding_sort.mojo's PLAN_SCAN = 0, PLAN_SORT = 1.
 #: PLAN_AUTO = 2 is embedding/checks/embedding_identical.mojo's.

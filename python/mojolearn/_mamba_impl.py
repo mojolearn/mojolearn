@@ -70,10 +70,10 @@ pins on the free schedule and promises quality, never bits. The history:
 from 2026-09-10 to 2026-09-27 this lane was IDENTICAL-only. It used to build all three
 tiers. It never should have: the fused kernels in `mamba/impl/ops/` and
 `mamba/impl/modules/` were gated on `GLOBAL_NUMERIC_MODE ==
-NUMERIC_IDENTICAL`, so a FAST or DETERMINISTIC build fell back to the
+NUMERIC_IDENTICAL`, so a FAST build fell back to the
 unfused arms and the legacy host copies and ran SLOWER than the default
 while promising less. DEVIATION 2300 is what that cost: a `k_last`
-failure against ref64 that existed ONLY in the deterministic tier, found
+failure against ref64 that existed ONLY in a lower tier, found
 in a shipped 0.7.0 qualification. `_extension()` checks
 the binary's compile-time mode against the requested tier.
 
@@ -108,7 +108,7 @@ from . import _ragged
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
 #: table with the thing it checks.
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 
 # Profile constants, mirrored from the contracts (mamba1 section 3 /
 # mamba2 section 3 and `mamba/checks/*_fixture.mojo`). NOT parameters:

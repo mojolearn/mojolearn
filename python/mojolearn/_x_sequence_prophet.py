@@ -89,7 +89,7 @@ class ProphetForecaster:
     max_iter : int, default 2000
         Maximum L-BFGS iterations.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`).
 

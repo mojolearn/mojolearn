@@ -162,7 +162,7 @@ def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-
         Elementwise shift with `normalized_shape` values.
     eps : float, default 1e-5
         Added to the variance inside the square root.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default.
 
     Returns
@@ -204,7 +204,7 @@ def layer_norm_backward(dy, x, normalized_shape=None, weight=None, bias=None, ep
         The forward's elementwise shift.
     eps : float, default 1e-5
         The forward's epsilon.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default.
 
     Returns
@@ -258,7 +258,7 @@ class LayerNorm:
         Learn a weight (and a bias when `bias` is True).
     bias : bool, default True
         Learn a bias. Ignored when `elementwise_affine` is False.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default None
+    numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default.
 
     Attributes

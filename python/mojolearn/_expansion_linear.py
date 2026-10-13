@@ -550,7 +550,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
     batch_size : int, default 4096
         Rows per minibatch step; 0 runs per-sample SGD.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -708,7 +708,7 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
     batch_size : int, default 4096
         Rows per minibatch step; 0 runs per-sample SGD.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -887,7 +887,7 @@ class PoissonRegressor(_GLMBase):
     verbose : int, default 0
         Accepted for compatibility; ignored.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -943,7 +943,7 @@ class GammaRegressor(_GLMBase):
     verbose : int, default 0
         Accepted for compatibility; ignored.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -1007,7 +1007,7 @@ class TweedieRegressor(_GLMBase):
     verbose : int, default 0
         Accepted for compatibility; ignored.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -1089,7 +1089,7 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
     tol : float, default 1e-05
         Stopping tolerance.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -1219,7 +1219,7 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
     verbose : bool, default False
         Accepted for compatibility; ignored.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -1343,7 +1343,7 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
     verbose : bool, default False
         Accepted for compatibility; ignored.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -1486,7 +1486,7 @@ class Lars(_LinearRegressorMixin, NumericModeMixin):
     random_state : int or None, default None
         Accepted for compatibility; ignored.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -1572,7 +1572,7 @@ class LassoLars(_LinearRegressorMixin, NumericModeMixin):
     random_state : int or None, default None
         Accepted for compatibility; ignored.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -1664,7 +1664,7 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
     tol : float, default 1e-4
         ADMM relative tolerance; the absolute tolerance is ``tol / 100``.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -1787,7 +1787,7 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
     batch_size : int, default 256
         Rows per minibatch step; 0 runs per-sample updates.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -1914,7 +1914,7 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
     batch_size : int, default 256
         Rows per minibatch step; 0 runs per-sample updates.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -2038,7 +2038,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
     batch_size : int, default 256
         Rows per minibatch step; 0 runs per-sample updates.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -2161,7 +2161,7 @@ class SGDOneClassSVM(NumericModeMixin):
         of 4096 rows in ``'identical'`` mode, per-sample updates otherwise.
         0 asks for per-sample updates.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -2359,7 +2359,7 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
     random_state : int or None, default None
         Accepted for compatibility; ignored.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -2474,7 +2474,7 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
     alpha_per_target : bool, default False
         Only False is supported; True raises ValueError.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -2696,7 +2696,7 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
     selection : {'cyclic'}, default 'cyclic'
         Only 'cyclic' is supported.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -2804,7 +2804,7 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
     selection : {'cyclic'}, default 'cyclic'
         Only 'cyclic' is supported.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -2933,7 +2933,7 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
     l1_ratios : None, default None
         Only None is supported.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 
@@ -3111,7 +3111,7 @@ class IsotonicRegression(NumericModeMixin):
         Prediction outside the training range of ``X``: NaN, the nearest
         end value, or a ValueError.
     numeric_mode : str or None, default None
-        Numeric mode for this model (``'identical'``, ``'deterministic'``
+        Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
         default (see :func:`mojolearn.set_numeric_mode`).
 

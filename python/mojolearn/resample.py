@@ -29,7 +29,7 @@ the replicate stream: replicates ``[r_first, r_first + n_resamples)`` are
 bit-identical to the same slice of one whole run, so a long run can be split
 into batches.
 
-Every function takes ``numeric_mode`` (``'identical'``, ``'deterministic'``,
+Every function takes ``numeric_mode`` (``'identical'``
 or ``'fast'`` on Apple); ``None`` uses the package default.
 
 Examples
@@ -45,7 +45,7 @@ from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 
 # Codes are `resample/checks/statistics.mojo`'s STAT_* codes.
 #: Statistic names accepted by :func:`bootstrap` and :func:`permutation_test`, with their integer codes.
@@ -226,7 +226,7 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
     r_first : int, default=0
         Index of the first replicate. Replicates ``[r_first, r_first +
         n_resamples)`` equal the same slice of one whole run, bit for bit.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default=None
+    numeric_mode : {'identical', 'fast'} or None, default=None
         Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
         default.
     paired : bool, default=True
@@ -354,7 +354,7 @@ def permutation_test(x, y=None, statistic="diff_means", n_resamples=9999,
     r_first : int, default=0
         Index of the first permutation; a slice of permutations equals the
         same slice of one whole run, bit for bit.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default=None
+    numeric_mode : {'identical', 'fast'} or None, default=None
         Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
         default.
     permutation_type : {'independent', 'samples'}, default='independent'
@@ -469,7 +469,7 @@ def monte_carlo_integrate(integrand, lower, upper, n_samples, random_state=0, i_
         Seed of the draw stream.
     i_first : int, default=0
         Index of the first draw, so a long run can be split into batches.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default=None
+    numeric_mode : {'identical', 'fast'} or None, default=None
         Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
         default.
 
@@ -528,7 +528,7 @@ def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mo
         Draw with replacement.
     random_state : int, default=0
         Seed.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default=None
+    numeric_mode : {'identical', 'fast'} or None, default=None
         Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
         default.
 
@@ -677,7 +677,7 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
         Not supported; any other value raises ``ValueError``.
     sample_weight : None
         Not supported; any other value raises ``ValueError``.
-    numeric_mode : {'identical', 'deterministic', 'fast'} or None, default=None
+    numeric_mode : {'identical', 'fast'} or None, default=None
         Numeric mode (``'fast'`` is Apple only); ``None`` uses the package
         default.
 

@@ -390,8 +390,7 @@ class UMAP(NumericModeMixin):
         # learning_rate, repulsion_strength, negative_sample_rate.
         binding = self._bind()
         mode = (self.numeric_mode or _backend.default_mode()).strip().lower()
-        if binding.umap_numeric_mode() != {"fast": 0, "identical": 1,
-                                           "deterministic": 2}[mode]:
+        if binding.umap_numeric_mode() != {"fast": 0, "identical": 1}[mode]:
             raise RuntimeError("UMAP binary numeric mode disagrees with requested mode")
         legacy = (initial is None and target is None and extras == (-1, 2.0, 0.0, 0.0)
                   and config[1] in (2, 3))
@@ -484,8 +483,7 @@ class UMAP(NumericModeMixin):
         if x.shape == training.shape and x.tobytes() == training.tobytes():
             return fitted_embedding.copy()
         binding = self._bind()
-        if binding.umap_numeric_mode() != {"fast": 0, "identical": 1,
-                                           "deterministic": 2}[mode]:
+        if binding.umap_numeric_mode() != {"fast": 0, "identical": 1}[mode]:
             raise RuntimeError("UMAP binary numeric mode disagrees with fitted mode")
         output = empty((x.shape[0], config[1]), "<f4")
         native_config = config[:8] if config[8:] == [1.0, 1.0, 5] else config

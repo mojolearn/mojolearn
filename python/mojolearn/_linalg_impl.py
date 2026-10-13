@@ -146,7 +146,7 @@ def _load():
     DEVIATION 912 gave this module a private by-path loader because
     `_backend._MODULES` did not list `_mojolearn_linalg` then. It does now,
     and since DEVIATION 2490 (2026-09-10) this binding exists in the
-    identical tier alone, so under `fast` or `deterministic` this raises the
+    identical tier alone, so under `fast` this raises the
     identical-only refusal before `require_identical` ever runs. A missing
     binary still raises HERE, on first use, rather than at import.
     """
@@ -159,7 +159,7 @@ def _load():
 def numeric_mode():
     """The numeric mode of the linalg extension this process loaded.
 
-    Returns 'identical', 'deterministic' or 'fast', read back from the loaded binary
+    Returns 'identical' or 'fast', read back from the loaded binary
     itself rather than from the environment, and checked against the directory it was
     loaded from and the binary's profile version.
 
@@ -178,10 +178,7 @@ def numeric_mode():
         return _mode_cache
     binding = _load()
     raw = int(binding.linalg_numeric_mode())
-    # A NAME lookup: the binary reports the NUMERIC_* code, and the middle
-    # tier is 2. `raw == 1 else "fast"` called a deterministic binary
-    # "fast", which then AGREED with a fast selector -- a cross-check that
-    # passes on the wrong arm is worse than no cross-check.
+    # A NAME lookup: the binary reports the NUMERIC_* code.
     compiled = _backend._CODE_MODE.get(raw, "unknown")
     selected = _backend.numeric_mode()
     if compiled != selected:
@@ -272,9 +269,7 @@ def require_identical():
     """
     loaded = numeric_mode()
     if loaded != "identical":
-        # Names the tier that actually loaded. This said "the FAST build"
-        # for every non-identical tier and so mislabeled the deterministic
-        # build on the 2026-08-29 Apple stability run.
+        # Names the tier that actually loaded.
         raise RuntimeError(
             f"mojolearn.linalg: this process loaded the {loaded.upper()} "
             f"build, which makes NO cross-vendor identity claim; {PROFILE} "
