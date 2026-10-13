@@ -184,7 +184,8 @@ from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
-from x_decomp.eigh_tridiag import EIGH_TRIDIAG_ROUTE, TD_MIN_N, eigh_td_on, td_copy_kernel
+from x_decomp.eigh_tridiag import EIGH_TRIDIAG_ROUTE, eigh_td_on, td_copy_kernel
+from x_decomp.eigh_tridiag_cells import TD_MIN_N
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_scale_rect, enqueue_es_unscale
 
 
