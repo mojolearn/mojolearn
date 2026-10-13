@@ -18,9 +18,11 @@ the same arithmetic one row per thread:
   * `tensor_values_kernel`: `(Float32(count) + prior_num) / (Float32(n) +
     prior_denom)`, `tensor_value_for_key`'s FeatureFreq arm, one add and one
     divide, no product to contract: the host's words.
-  * `float_minmax_kernel`: the column's extremes as order-preserving Int32
-    keys under `Atomic.min` / `Atomic.max` (exact; `uniform_borders` reads
-    nothing else of the column).
+  * `float_minmax_partials_kernel` / `float_minmax_final_kernel`: the
+    column's extremes as order-preserving Int32 keys, folded with plain
+    register and shared-memory integer compares in two stages, NO atomics
+    (exact; `uniform_borders` reads nothing else of the column). See the
+    note above `float_minmax_partials_kernel` for why the atomics went.
   * `tensor_bins_kernel`: the bin is the count of borders the value
     strictly exceeds, `materialize_tensor_candidate`'s comparison.
 
@@ -30,8 +32,11 @@ unchanged.
 """
 
 from std.atomic import Atomic
+from std.bit import log2_floor
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 from gbdt.models.tensor_ctr_apply import TENSOR_SPLIT_TAKE_BIN
 
@@ -124,21 +129,122 @@ def float_from_order_key(k: Int32) -> Float32:
     return bitcast[DType.float32](k ^ ((k >> 31) & Int32(0x7FFFFFFF)))
 
 
-def float_minmax_kernel(
+# lane apple-feature-freq (2026-10-13): the extremes were `Atomic.min` /
+# `Atomic.max` on SIGNED Int32 order keys, and a negative float's key is a
+# negative Int32. Every numeric column of the identity fixtures is standard
+# normal, so every fixture fed negative keys to those atomics. NVIDIA, AMD
+# and the host column agreed on every gbdt-feature-freq and
+# gbdt-tensor-ctr-tables part; the Apple column diverged on all 72 parts
+# (9 fixtures x 4 parts x 2 lanes) from the commit that moved these extremes
+# onto the device (35b3c9e02, lane cpu4-gbdt) and on no other GBDT lane,
+# and this is the only signed atomic min/max over possibly negative words
+# in the two-level fit (the category scans fold non-negative words and row
+# ids). The fold below needs no atomic min/max at all, so its answer does not
+# depend on how a backend lowers a signed atomic: integer compares in
+# registers, then a shared-memory halving tree, then one block over the
+# fixed number of partials. A min or max over a total order is exact in any
+# order, so NVIDIA, AMD and the host keep their words; Apple gets theirs.
+
+comptime TENSOR_MINMAX_GRID = 256
+"""Stage-1 blocks of the extremes fold: a fixed geometry (a min or max is
+exact in any order, so it moves no bits; it only bounds the partials to one
+stage-2 block)."""
+
+comptime _KEY_MAX = Int32(2147483647)
+comptime _KEY_MIN = Int32(-2147483647) - Int32(1)
+
+
+@always_inline
+def _block_key_minmax[block_size: Int](lo_in: Int32, hi_in: Int32) -> Tuple[Int32, Int32]:
+    """The block's smallest `lo_in` and largest `hi_in`: a halving tree of
+    integer compares in shared memory. Every thread of the block must call
+    it (it holds barriers)."""
+    comptime assert block_size > 0 and (block_size & (block_size - 1)) == 0, (
+        "the halving tree needs a power-of-two block"
+    )
+    var t = Int(thread_idx.x)
+    var s_lo = stack_allocation[
+        block_size,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var s_hi = stack_allocation[
+        block_size,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    s_lo[t] = lo_in
+    s_hi[t] = hi_in
+    barrier()
+    comptime for k in range(log2_floor(block_size)):
+        comptime step = block_size >> (k + 1)
+        if t < step:
+            var a = s_lo[t + step]
+            if a < s_lo[t]:
+                s_lo[t] = a
+            var c = s_hi[t + step]
+            if c > s_hi[t]:
+                s_hi[t] = c
+        barrier()
+    var lo = s_lo[0]
+    var hi = s_hi[0]
+    barrier()
+    return (lo, hi)
+
+
+def float_minmax_partials_kernel(
     values: MutPointer[Float32, MutAnyOrigin],
-    words: MutPointer[Int32, MutAnyOrigin],
+    partials: MutPointer[Int32, MutAnyOrigin],
     n_rows_in: Int32,
 ):
-    """`words[0]` the smallest, `words[1]` the largest order key; the host
-    seeds them with Int32 max / min."""
+    """Stage 1. Grid `(TENSOR_MINMAX_GRID, 1, 1)`, block
+    `(TENSOR_CTR_BLOCK, 1, 1)`. Block `b` writes `partials[2 b]`, the
+    smallest order key of its strided rows, and `partials[2 b + 1]`, the
+    largest (Int32 max / min for a block with no rows)."""
     var n = Int(n_rows_in)
-    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    var t = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var lo = _KEY_MAX
+    var hi = _KEY_MIN
+    var r = b * TENSOR_CTR_BLOCK + t
     while r < n:
         var k = float_order_key(values.unsafe_load(r))
-        _ = Atomic.min(words.unsafe_offset(0), k)
-        _ = Atomic.max(words.unsafe_offset(1), k)
-        r += stride
+        if k < lo:
+            lo = k
+        if k > hi:
+            hi = k
+        r += TENSOR_CTR_BLOCK * TENSOR_MINMAX_GRID
+    var folded = _block_key_minmax[TENSOR_CTR_BLOCK](lo, hi)
+    if t == 0:
+        partials.unsafe_store(2 * b, folded[0])
+        partials.unsafe_store(2 * b + 1, folded[1])
+
+
+def float_minmax_final_kernel(
+    partials: MutPointer[Int32, MutAnyOrigin],
+    n_partials_in: Int32,
+    words: MutPointer[Int32, MutAnyOrigin],
+):
+    """Stage 2. Grid `(1, 1, 1)`, block `(TENSOR_CTR_BLOCK, 1, 1)`: the
+    `n_partials_in` stage-1 pairs into `words[0]` (smallest order key) and
+    `words[1]` (largest)."""
+    var t = Int(thread_idx.x)
+    var m = Int(n_partials_in)
+    var lo = _KEY_MAX
+    var hi = _KEY_MIN
+    var i = t
+    while i < m:
+        var a = partials.unsafe_load(2 * i)
+        if a < lo:
+            lo = a
+        var c = partials.unsafe_load(2 * i + 1)
+        if c > hi:
+            hi = c
+        i += TENSOR_CTR_BLOCK
+    var folded = _block_key_minmax[TENSOR_CTR_BLOCK](lo, hi)
+    if t == 0:
+        words.unsafe_store(0, folded[0])
+        words.unsafe_store(1, folded[1])
 
 
 def tensor_bins_kernel(
