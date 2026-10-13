@@ -4,6 +4,19 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.43 (published 2026-10-13)
+
+- MinCovDet and EllipticEnvelope fit data with many features: the chi-squared distribution function no longer
+  underflows in its upper tail (series below a + 1, continued fraction above it), so the consistency factor is finite at
+  220 features, and the factor itself is computed in compiled code. The IDENTICAL C-step uses a Cholesky factor per
+  candidate for the determinant and the solve (NVIDIA L40S: 186 s -> 169 s on the 100,000 x 220 board fit, same
+  quality). FAST on Apple processes the candidates in groups that fit device memory, so 100,000-row fits complete.
+- GaussianMixture FAST on Apple accumulates covariances and their Cholesky factors in compensated float-float
+  arithmetic (up to 32 features), so fits that FAST refused as ill-defined now complete.
+- Identity re-records select far fewer lanes: rows admitted by the last release are measured from that release, files
+  that only route the CPU bindings no longer select the GPU columns, and a NumPy call no longer reads as a harness-wide
+  change (`tools/identity_columns.py changed-lanes`, `tools/lane_select.py`).
+
 - Release (lane release-no-rented-smoke): releases rent nothing. `tools/release.py --smoke-via lq` (the default) runs
   the NVIDIA and AMD wheel columns on the nv and amd boxes we already hold: `tools/release_lq_smoke.py` copies the final
   wheels there, queues `tools/release_wheel_smoke.sh --local` with `lq add --front` (next after the running job, ahead of
