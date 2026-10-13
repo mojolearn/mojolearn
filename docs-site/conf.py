@@ -86,8 +86,19 @@ for _n in mojolearn.__all__:
     _lower.setdefault(_n.lower(), []).append(_n)
 autosummary_filename_map = {f"mojolearn.{n}": f"mojolearn.{n}-module"
                             for group in _lower.values() if len(group) > 1 for n in group if n == n.lower()}
-autodoc_default_options = {"members": True, "inherited-members": False, "show-inheritance": False,
+# API page layout and navigation.
+# - A class page documents every public method it has, inherited ones included (save, load, fit, score
+#   from shared bases), but not the members that tuple or Exception supply.
+# - No "Bases:" line: the bases are mostly private helpers. autodoc reads any value of a flag option as on,
+#   False included, so the key is left out rather than set to False.
+# - _templates/autosummary/class.rst (templates_path above) drops the __init__ block that repeated the
+#   class signature.
+# - _ext/mojolearn_nav.py links API names on the guide pages and adds "See also" lines to class pages.
+autodoc_default_options = {"members": True, "inherited-members": "object,tuple,BaseException",
                            "exclude-members": "__init__"}
+import pathlib as _pathlib, sys as _sys  # noqa: E401,E402
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent / "_ext"))
+extensions.append("mojolearn_nav")
 # Docstrings write names in single backticks; render them as code, not as italic title references.
 default_role = "code"
 autodoc_typehints = "description"
