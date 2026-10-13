@@ -323691,7 +323691,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2038.5,
-     "quality": {},
+     "quality": {
+      "recall_at_k": 0.999925
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -323731,7 +323733,8 @@
       "previous_median_ms": 5064.779791980982,
       "previous_hash": "02e9d691d28f8953",
       "previous_status": "ok"
-     }
+     },
+     "quality_source": "fit quality of arm ours in ivf-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13 (classical2 ivf blocks from gbm-bench speed npz)): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -323783,7 +323786,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2417.2,
-     "quality": {},
+     "quality": {
+      "recall_at_k": 0.9999750000000001
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -323829,7 +323834,8 @@
       "baseline_ms": 2598.32833299879,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in ivf-istella.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13 (classical2 ivf blocks from gbm-bench speed npz)): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "faiss-cpu",
@@ -324148,7 +324154,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 775.0,
-     "quality": {},
+     "quality": {
+      "recall_at_k": 0.9996499999999999
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -324188,7 +324196,8 @@
       "previous_median_ms": 560.3834590292536,
       "previous_hash": "e00141a7605ff662",
       "previous_status": "ok"
-     }
+     },
+     "quality_source": "fit quality of arm ours in ivf-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13 (classical2 ivf blocks from gbm-bench speed npz)): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "ours-fast",
@@ -324240,7 +324249,9 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 799.0,
-     "quality": {},
+     "quality": {
+      "recall_at_k": 0.9997
+     },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
      "rounds": 1,
@@ -324286,7 +324297,8 @@
       "baseline_ms": 465.2800829790067,
       "baseline_quality_text": "-",
       "display_rounded": true
-     }
+     },
+     "quality_source": "fit quality of arm ours-fast in ivf-taxi.json (quality-only rerun on this Mac, mojolearn 0.8.34, py3.13 (classical2 ivf blocks from gbm-bench speed npz)): a quality-only rerun; this cell's timing is the board run's"
     },
     {
      "arm": "faiss-cpu",
