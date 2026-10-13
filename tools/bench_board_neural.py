@@ -2667,7 +2667,7 @@ def worker(args):
          "neural_ab": _neural_ab_receipt(runner, ab_config)})
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
-        library=(runner.info or {}).get("library") or "?")
+        library=(runner.info or {}).get("library") or "?", arm=args.arm)
     for line in sys.stdin:
         parts = line.split()
         if not parts:

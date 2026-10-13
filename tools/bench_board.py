@@ -103,6 +103,7 @@ import importlib.util
 import json
 import math
 import os
+from pathlib import Path
 import platform
 import re
 import shlex
@@ -699,6 +700,16 @@ def enforce_gpu_only(races):
         raise SystemExit("bench_board: GPU-only board violated (our CPU never races; CPU "
                          "opponents only where no GPU opponent exists):\n  " + "\n  ".join(bad))
     return races
+
+
+def gpu_opponents_only(races, vendor):
+    """Explicit GPU-only scope, including races with no GPU library opponent."""
+    out = []
+    for race in races:
+        opponents = [a for a in race["opponents"] if arm_device(a, vendor) == "gpu"]
+        arms = [a for a in race["arms"] if a in race["our_arms"] or a in opponents]
+        out.append(dict(race, opponents=opponents, arms=arms))
+    return out
 
 
 def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, rows=None,
@@ -2457,7 +2468,9 @@ def params_probe(ctx, race, arms):
     if race["family"] == "trees":
         cmd, extra = tree_cmd(ctx, sub)
         cmd = cmd + ["--params-only"]
-        run_logged(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
+        rc = run_logged(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
+        if rc:
+            return {}  # partial/stale stdout from a failed probe is not admission
         try:
             with open(log, errors="replace") as fh:
                 text = fh.read()
@@ -2479,6 +2492,7 @@ def params_probe(ctx, race, arms):
                 continue
             out[arm] = {"params": a.get("params"), "version": libs[arm].get("version"),
                         "record": a, "exceptions": rep.get("exceptions", []),
+                        "hardware": libs[arm].get("hardware_receipt"),
                         "device_name": libs[arm].get("device_name")}
         return out
     cmd, extra, ceiling = globals()[_PARAMS_ONLY_CMD[race["family"]]](ctx, sub)
@@ -2488,7 +2502,9 @@ def params_probe(ctx, race, arms):
     for f in os.listdir(probe_dir):
         if f.endswith(".params.json"):
             os.remove(os.path.join(probe_dir, f))
-    run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+    rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+    if rc:
+        return {}
     found = [f for f in os.listdir(probe_dir) if f.endswith(".params.json")]
     if not found:
         return {}
@@ -2502,8 +2518,82 @@ def params_probe(ctx, race, arms):
         info = a.get("info") or {}
         out[arm] = {"params": p.get("params"), "version": info.get("version"),
                     "record": p, "exceptions": rep.get("exceptions", []),
+                    "hardware": info.get("hardware_receipt"),
                     "device_name": info.get("device_name")}
     return out
+
+
+def preflight_check(ctx, race, arms):
+    """Construct both arms and audit the complete parameter union before timing."""
+    probes = params_probe(ctx, race, arms)
+    missing = [a for a in arms if a not in probes or not probes[a].get("version")]
+    records = {a: dict(p["record"], __record__=True) for a, p in probes.items() if p.get("record")}
+    lane = ("algos/" if race["family"] == "algos" else "") + race["lane"]
+    P = _params_mod()
+    try:
+        # Only the source-reviewed central exceptions apply. A probe cannot
+        # grant itself an exception by emitting a reason string.
+        report = P.check(lane, records, family=race["family"])
+    except P.ParamsRefused as exc:
+        report = dict(verdict="REFUSED", arms=records, problems=[str(exc)], exceptions=[])
+    report["problems"].extend("missing parameter/version probe: " + a for a in missing)
+    hardware = None
+    for arm in arms:
+        if arm_device(arm, ctx.get("vendor")) == "gpu":
+            actual = (probes.get(arm) or {}).get("hardware") or {}
+            if actual.get("status") != "verified":
+                report["problems"].append("missing worker GPU/driver/OS evidence: " + arm)
+            elif hardware is not None and actual != hardware:
+                report["problems"].append("different physical GPU, driver or OS: " + arm)
+            else:
+                hardware = actual
+        if arm in race.get("our_arms", {}):
+            continue
+        impl = (records.get(arm) or {}).get("implementation") or {}
+        module = impl.get("module") or ""
+        if not module or module == "__main__" or module.startswith(("bench_", "tools.")):
+            report["problems"].append("missing real library implementation read-back: " + arm)
+        exclusions = _load_tool("race_fairness").exclusions(dict(lane=race["lane"], cells=[
+            dict(arm=arm, mode="opponent", params=records.get(arm),
+                 hardware=((probes.get(arm) or {}).get("hardware") or {}).get("host", ""))]))
+        if arm in exclusions:
+            report["problems"].append(arm + ": " + exclusions[arm])
+    report["probe_workers"] = {a: {k: p.get(k) for k in ("version", "device_name", "hardware")}
+                               for a, p in probes.items()}
+    if report["problems"]:
+        report["verdict"] = "REFUSED"
+    return report
+
+
+def audit_plan(ctx, races):
+    """Audit the entire selection, without entering any timed driver."""
+    E = _load_tool("bench_board_evidence")
+    report = dict(schema="mojolearn.plan-preflight.v1", races={}, verdict="MATCHED")
+    for race in races:
+        unsupported = unsupported_our_arms(race)
+        arms = [a for a in race["arms"] if a not in unsupported]
+        files = race_data_files(ctx, race)
+        data = dict(name=race["dataset"], rows_requested=race.get("rows"),
+                    identity=race_data_sha(ctx, race, ctx["box"]),
+                    files={name: sha256_file(path) if os.path.isfile(path) else None for name, path in files})
+        directory, recipe = E.begin(ctx, race, race_settings(ctx, race), data)
+        sub = dict(ctx, measurement_receipts=str(directory / "workers"))
+        entry = preflight_check(sub, race, arms) if arms else dict(verdict="UNSUPPORTED", problems=[])
+        E.write(directory / "preflight.json", entry)
+        report["races"][race["id"]] = dict(recipe=recipe, audit=entry)
+        if entry["verdict"] == "REFUSED":
+            report["verdict"] = "REFUSED"
+    report["source"] = E.public_ref(ctx["measurement_source"]) if races else None
+    E.write(os.path.join(ctx["out"], "evidence", "preflight.json"), report)
+    members = {"preflight.json": E.encoded(report)}
+    for p in Path(ctx["out"], "raw", "params-only").rglob("*"):
+        if p.is_file() and p.suffix in (".log", ".json"):
+            members[str(p.relative_to(ctx["out"]))] = p.read_bytes()
+    ref = E.archive(os.path.join(ctx["out"], "evidence", "preflight.tar.gz"), members)
+    if ctx.get("evidence_r2", True):
+        ref = E.upload(ref)
+    report["artifacts"] = E.public_ref(ref)
+    return report
 
 
 def successful_opponent_cell(cell):
@@ -2788,24 +2878,7 @@ def run_race(ctx, race):
         preflight = None
         if evidence:
             probe_arms = race["arms"] + list(stored)
-            probes = params_probe(ctx, full, probe_arms)
-            missing = [a for a in probe_arms if a not in probes or not probes[a].get("version")]
-            records = {a: dict(p["record"], __record__=True) for a, p in probes.items() if p.get("record")}
-            lane = ("algos/" if full["family"] == "algos" else "") + full["lane"]
-            exceptions = [(e["param"], e["arm"], e["reason"]) for p in probes.values()
-                          for e in p.get("exceptions", []) if all(k in e for k in ("param", "arm", "reason"))]
-            preflight = _params_mod().check(lane, records, family=full["family"], extra_exceptions=exceptions)
-            preflight["problems"].extend("missing parameter/version probe: " + a for a in missing)
-            for arm in probe_arms:
-                if arm in full.get("our_arms", {}):
-                    continue
-                impl = (records.get(arm) or {}).get("implementation") or {}
-                module = impl.get("module") or ""
-                if not module or module == "__main__" or module.startswith(("bench_", "tools.")):
-                    preflight["problems"].append("missing real library implementation read-back: " + arm +
-                        " (functional adapters must record the actual callable as __implementation__)")
-            if preflight["problems"]:
-                preflight["verdict"] = "REFUSED"
+            preflight = preflight_check(ctx, full, probe_arms)
             E.write(evidence[0] / "preflight.json", preflight)
         if preflight and preflight["verdict"] == "REFUSED":
             rec = dict(id=race["id"], family=race["family"], lane=race["lane"], dataset=race["dataset"],
@@ -3765,6 +3838,10 @@ def build_parser():
     p.add_argument("--retime-opponents", action="store_true",
                    help="measure every opponent again (and store the new measurement); "
                         "implies --with-opponents")
+    p.add_argument("--gpu-opponents-only", action="store_true",
+                   help="remove all CPU opponents, including fallback opponents where no GPU library exists")
+    p.add_argument("--preflight-only", action="store_true",
+                   help="construct and audit the selected arms and retain the report; no warmups, fits or scored rounds")
     p.add_argument("--retime-cpu-opponents", action="store_true", help="fresh CPU opponents for this harness; GPU opponents stay missing-only")
     p.add_argument("--opponents-only", action="store_true", help="run missing or failed opponent cells only; never run our arms")
     p.add_argument("--with-opponents", action="store_true",
@@ -4038,6 +4115,8 @@ def main(argv=None):
     datasets = _csv(args.datasets, DATASETS, "dataset")
     rows = parse_rows(args.rows)
     races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape)
+    if args.gpu_opponents_only:
+        races = gpu_opponents_only(races, vendor)
     if args.opponents_only:
         races = [dict(r, our_arms={}, arms=list(r["opponents"])) for r in races]
     if args.shard:
@@ -4100,7 +4179,7 @@ def main(argv=None):
             {"nvidia": "cuda", "amd": "hip"}.get(vendor) != artifact_identity.get("vendor", "cuda")):
         raise SystemExit("bench_board: guarded board vendor/mode must match its explicit IDENTICAL artifact identity")
     gate = None
-    if full:
+    if full and not args.preflight_only:
         gate = "overridden (--no-smoke-gate)" if args.no_smoke_gate else None
         if not args.no_smoke_gate:
             why = smoke_gate(out, vendor, races, args.smoke_json, artifact_identity)
@@ -4197,6 +4276,8 @@ def main(argv=None):
                         "data_sha256": ctx["data_sha"],
                         "opponent_store": ctx["store_path"],
                         "retime_opponents": ctx["retime"],
+                        "gpu_opponents_only": args.gpu_opponents_only,
+                        "preflight_only": args.preflight_only,
                         "opponents_only": args.opponents_only,
                         "retime_cpu_opponents": args.retime_cpu_opponents,
                         "smoke_check": bool(args.smoke), "shard": args.shard,
@@ -4208,6 +4289,9 @@ def main(argv=None):
 
     todo = []
     for r in races:
+        if args.preflight_only:
+            todo.append(r)
+            continue
         prev = result["races"].get(r["id"])
         # Missing historical evidence changes publication eligibility, not the
         # operator's requested work. Never silently remeasure a completed cell.
@@ -4232,6 +4316,17 @@ def main(argv=None):
         ensure_algos_prep(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
+    if ctx.get("capture_measurements") and todo:
+        # Audit all selected recipes before the first warm-up, not after
+        # spending money on the first several hundred rows of a bad plan.
+        result["preflight"] = audit_plan(ctx, todo)
+        save_result(rpath, result)
+        if result["preflight"]["verdict"] != "MATCHED" or args.preflight_only:
+            print("bench_board: plan preflight %s; no timed races started; report in %s" %
+                  (result["preflight"]["verdict"], rpath), flush=True)
+            return 0 if result["preflight"]["verdict"] == "MATCHED" else 1
+    if args.preflight_only:
+        return 0
     for i, r in enumerate(todo):
         print("bench_board: [%d/%d] %s arms=%s" % (i + 1, len(todo), r["id"], ",".join(r["arms"])),
               flush=True)

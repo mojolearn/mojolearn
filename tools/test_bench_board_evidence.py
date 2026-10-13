@@ -98,7 +98,7 @@ class Evidence(unittest.TestCase):
         d=self.root/"evidence/runs/r1";d.mkdir(parents=True)
         ref=E.archive(d/"run.tar.gz",{"log":b"original"})
         E.write(d/"upload.json",dict(source=ref,run=ref))
-        b=dict(races={"r":dict(evidence_directory="evidence/runs/r1",evidence_failure="upload failed",
+        b=dict(races={"r":dict(evidence_directory="evidence/runs/r1",evidence_failure="R2 retention failed; retry sync without rerunning the measurement",
                  cells=[dict(arm="ours",times_ms=[3,4],median_ms=3.5,measurement=dict(artifacts=E.public_ref(ref)))])})
         p=self.root/"board.json";E.write(p,b)
         with patch.object(E,"upload",side_effect=lambda r: dict(r,status="verified",r2_key="key")):
@@ -126,6 +126,60 @@ class Evidence(unittest.TestCase):
         timed.assert_not_called()
         self.assertEqual(rec["params_check"],"REFUSED")
         self.assertTrue((directory/"preflight.json").exists())
+
+    def sealed_cell(self, receipt_arm="lib-gpu", worker_version="1", worker_hardware=None,
+                    changed_params=False):
+        d=self.root/"evidence/runs/r1";(d/"workers").mkdir(parents=True)
+        E.write(d/"recipe.json", {})
+        hardware=dict(status="verified", gpu="physical-123", driver="580", os="Linux")
+        record=P.check("ridge", {"ours":{"__library__":"library", "alpha":1, "seed":7},
+                                "lib-gpu":{"__library__":"library", "alpha":1, "seed":7}})["arms"]["lib-gpu"]
+        record["implementation"]={"module":"library.ridge", "name":"Ridge"}
+        pre=dict(verdict="MATCHED",arms={"lib-gpu":copy.deepcopy(record)},
+                 probe_workers={"lib-gpu":dict(version="1",hardware=hardware)})
+        if changed_params:
+            record["raw_params"]["alpha"]=2
+        cell=dict(arm="lib-gpu",library="library",mode="opponent",device="gpu",status="ok",
+                  library_version="1",shape="100x10",times_ms=[2],median_ms=2,
+                  comparability={"span":{"input_home":"host"}})
+        rec=dict(arms=["lib-gpu"],cells=[cell],preflight=pre,
+                 params=dict(schema="mojolearn.parameter-parity.v2",arms={"lib-gpu":record}),
+                 command=["python", "driver.py", "--seed", "7"])
+        E.write(d/"workers/1.json",dict(status="recorded",arms={receipt_arm:"library"},
+                versions={receipt_arm:worker_version},hardware=hardware if worker_hardware is None else worker_hardware))
+        E.seal(dict(out=str(self.root),measurement_inventory={},measurement_source={"status":"local"},
+                    evidence_r2=False), d, dict(source={},dataset={"identity":"abc"},hardware={}),rec)
+        return rec, cell
+
+    def test_complete_record_retains_call_settings_seed_and_final_receipt(self):
+        rec,cell=self.sealed_cell()
+        m=cell["measurement"]
+        self.assertEqual(m["completeness"],"complete",m["missing"])
+        self.assertEqual(m["seed"],7)
+        self.assertEqual(m["invocation"]["effective_arguments"]["alpha"],1)
+        with tarfile.open(self.root/"evidence/runs/r1/receipt.tar.gz") as t:
+            saved=json.load(t.extractfile("result.json"))
+        self.assertEqual(saved["cells"][0]["measurement"],m)
+
+    def test_same_library_different_arm_cannot_supply_receipt(self):
+        rec,cell=self.sealed_cell(receipt_arm="lib-other")
+        self.assertIn("worker receipt",cell["measurement"]["missing"])
+        self.assertIn("evidence_failure",rec)
+
+    def test_changed_worker_version_refuses_admission(self):
+        rec,cell=self.sealed_cell(worker_version="2")
+        self.assertIn("evidence_failure",rec)
+        self.assertTrue(any("version changed" in s for s in cell["measurement"]["missing"]))
+
+    def test_changed_worker_gpu_refuses_admission(self):
+        rec,cell=self.sealed_cell(worker_hardware=dict(status="verified",gpu="different"))
+        self.assertIn("evidence_failure",rec)
+        self.assertTrue(any("GPU/driver/OS" in s for s in cell["measurement"]["missing"]))
+
+    def test_changed_raw_parameters_refuses_admission(self):
+        rec,cell=self.sealed_cell(changed_params=True)
+        self.assertIn("evidence_failure",rec)
+        self.assertTrue(any("changed after preflight" in s for s in cell["measurement"]["missing"]))
 
     def test_main_board_retains_exact_worker_cell_evidence(self):
         M=load("main_board_ingest")

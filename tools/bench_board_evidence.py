@@ -26,6 +26,7 @@ PREFIX = "measurements/records/v1"
 RECEIPTS = "MOJOLEARN_MEASUREMENT_RECEIPTS"
 _registered = False
 _libraries = set()
+_arms = {}
 ENV_KEYS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
             "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS",
             "MOJOLEARN_BENCH_CPU_POLICY", "MOJOLEARN_NUMERIC_MODE",
@@ -160,6 +161,36 @@ def fetch(ref, destination, request=None):
     path.write_bytes(body)
 
 
+def hardware_context(vendor=None):
+    """Worker-observed physical GPU/driver and OS, outside any measured clock."""
+    vendor = vendor or os.environ.get("MOJOLEARN_BOARD_VENDOR")
+    row = dict(vendor=vendor, host=platform.node(), os=platform.platform(),
+               kernel=platform.release(), machine=platform.machine())
+    try:
+        if vendor in ("nvidia", "amd"):
+            import bench_board_provenance
+            row["gpu_driver_identity"] = bench_board_provenance.hardware_receipt(
+                "cuda" if vendor == "nvidia" else "hip")
+            if vendor == "amd":
+                row["rocm_version"] = Path("/opt/rocm/.info/version").read_text().strip()
+        elif vendor == "apple":
+            devices = json.loads(subprocess.check_output(
+                ["system_profiler", "SPDisplaysDataType", "-json"], text=True, timeout=60))["SPDisplaysDataType"]
+            if len(devices) != 1:
+                raise ValueError("one unambiguous GPU required")
+            g = devices[0]
+            row["gpu"] = {k: g[k] for k in ("sppci_model", "_name", "sppci_cores", "spdisplays_mtlgpufamilysupport") if k in g}
+            if not row["gpu"]:
+                raise ValueError("GPU identity missing")
+            row["driver_os_build"] = subprocess.check_output(["sw_vers", "-buildVersion"], text=True, timeout=10).strip()
+        else:
+            raise ValueError("GPU vendor missing")
+        row["status"] = "verified"
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        row.update(status="unavailable", error=type(exc).__name__)
+    return row
+
+
 def worker_context():
     """The actual worker's environment, collected outside the fit clock."""
     try:
@@ -168,7 +199,19 @@ def worker_context():
     except ImportError:
         pools = None
     quota = Path("/sys/fs/cgroup/cpu.max")
+    runtime = {}
+    torch = sys.modules.get("torch")
+    if torch is not None:
+        runtime["torch"] = dict(version=getattr(torch, "__version__", None),
+            cuda=getattr(torch.version, "cuda", None), hip=getattr(torch.version, "hip", None),
+            matmul_allow_tf32=torch.backends.cuda.matmul.allow_tf32,
+            cudnn_allow_tf32=torch.backends.cudnn.allow_tf32)
+    cupy = sys.modules.get("cupy")
+    if cupy is not None:
+        runtime["cupy"] = dict(version=cupy.__version__, driver=cupy.cuda.runtime.driverGetVersion(),
+                               runtime=cupy.cuda.runtime.runtimeGetVersion())
     return dict(python=sys.version, executable=sys.executable, host=platform.node(),
+                hardware=hardware_context(), runtime=runtime,
                 packages={d.metadata["Name"]: d.version for d in importlib.metadata.distributions()
                           if d.metadata.get("Name")},
                 environment={k: os.environ[k] for k in ENV_KEYS if k in os.environ},
@@ -177,18 +220,23 @@ def worker_context():
                 thread_pools=pools)
 
 
-def register_worker(library):
+def register_worker(library, arm=None):
     global _registered
     if not os.environ.get(RECEIPTS):
         return
     _libraries.add(library)
+    if arm:
+        _arms[arm] = library
     if _registered:
         return
     _registered = True
     def finish():
-        row = dict(library=library, libraries=sorted(_libraries), argv=sys.argv, pid=os.getpid(), final=True)
+        row = dict(library=library, libraries=sorted(_libraries), arms=dict(_arms),
+                   argv=sys.argv, pid=os.getpid(), final=True)
         try:
+            import bench_board_probe
             row.update(worker_context())
+            row["versions"] = {a: bench_board_probe.library_version(lib) for a, lib in _arms.items()}
             files = {}
             for name, mod in list(sys.modules.items()):
                 filename = getattr(mod, "__file__", None)
@@ -261,9 +309,18 @@ def seal(ctx, directory, recipe, rec):
         missing.append("source changed during run")
     before = (rec.get("preflight") or {}).get("arms") or {}
     after = (rec.get("params") or {}).get("arms") or {}
-    for arm, params in after.items():
-        if arm in before and params.get("params") != before[arm].get("params"):
-            missing.append("effective parameters changed after preflight: " + arm)
+    if (rec.get("preflight") or {}).get("verdict") != "MATCHED":
+        missing.append("preflight did not pass")
+    if (rec.get("params") or {}).get("schema") != "mojolearn.parameter-parity.v2":
+        missing.append("strict timed-worker parameter audit")
+    for arm in rec.get("arms", []):
+        if arm in rec.get("stored_arms", []) or arm in rec.get("unsupported_arms", {}):
+            continue
+        params = after.get(arm)
+        if not params or not before.get(arm):
+            missing.append("timed parameter read-back missing: " + arm)
+        elif any(params.get(k) != before[arm].get(k) for k in ("params", "raw_params", "implementation")):
+            missing.append("effective parameters/implementation changed after preflight: " + arm)
     ref = archive(directory / "run.tar.gz", members)
     write(directory / "upload.json", dict(source=ctx["measurement_source"], run=ref))
     error = None
@@ -285,11 +342,19 @@ def seal(ctx, directory, recipe, rec):
                 absent.append("library implementation read-back")
             if not (cell.get("library_version") or cell.get("version")):
                 absent.append("worker library version")
+            # A different arm importing the same library is not this arm's receipt.
             witnessed = [w for w in workers if w.get("status") == "recorded" and
-                         (w.get("library") == cell.get("library") or cell.get("library") in w.get("libraries", [])
-                          or cell.get("arm") in w.get("argv", []))]
+                         cell.get("arm") in (w.get("arms") or {})]
             if not witnessed:
                 absent.append("worker receipt")
+            probe = ((rec.get("preflight") or {}).get("probe_workers") or {}).get(cell.get("arm")) or {}
+            for w in witnessed:
+                version = (w.get("versions") or {}).get(cell.get("arm"))
+                if not version or version != probe.get("version") or version != (cell.get("library_version") or cell.get("version")):
+                    absent.append("worker library version changed or missing: " + cell.get("arm", "?"))
+                if cell.get("device") == "gpu" and ((w.get("hardware") or {}).get("status") != "verified"
+                        or w.get("hardware") != probe.get("hardware")):
+                    absent.append("worker GPU/driver/OS changed or missing: " + cell.get("arm", "?"))
             if cell.get("mode") != "opponent" and not any(w.get("loaded_mojolearn_files") for w in witnessed):
                 absent.append("loaded product code receipt")
             if not (cell.get("shape") or rec.get("inputs") or cell.get("batch_rows")):
@@ -299,18 +364,40 @@ def seal(ctx, directory, recipe, rec):
             record = dict(schema=SCHEMA, phase=phase, source=recipe["source"], artifacts=public_ref(ref),
                           software=dict(library=cell.get("library"), version=cell.get("library_version") or cell.get("version")),
                           parameters=params, dataset=recipe["dataset"], shape=cell.get("shape") or rec.get("inputs"),
+                          invocation=dict(implementation=(params or {}).get("implementation"),
+                              effective_arguments=(params or {}).get("raw_params"),
+                              readback_source=(params or {}).get("source"),
+                              note="Observed library object/function and effective settings; exact call site is in the retained source archive."),
+                          seed=(params or {}).get("params", {}).get("seed"),
                           parameter_exceptions=[e for e in (rec.get("params") or {}).get("exceptions", [])
                                                 if e.get("arm") == cell.get("arm")],
-                          hardware=recipe["hardware"], numeric_mode=cell.get("mode_witness") or cell.get("mode"),
+                          hardware=witnessed[0].get("hardware") if witnessed else None,
+                          controller_hardware=recipe["hardware"],
+                          numeric_mode=cell.get("mode_witness") or cell.get("mode"),
                           timing=dict(span=(cell.get("comparability") or {}).get("span"), rounds=cell.get("rounds"),
                                       warmup_ms=cell.get("warmup_ms"), times_ms=cell.get("times_ms")),
                           command=rec.get("command"), workers=witnessed,
                           completeness="complete" if not absent else "incomplete", missing=absent)
             record["id"] = digest(encoded(record))
             cell["measurement"] = record
+    # A separate receipt avoids a circular hash between the raw archive and
+    # its own reference. The full finalized board record is retained too.
+    receipt = archive(directory / "receipt.tar.gz", {"result.json": encoded(rec)})
+    write(directory / "receipt-upload.json", receipt)
+    if ctx.get("evidence_r2", True):
+        try:
+            receipt = upload(receipt)
+        except (OSError, ValueError, SystemExit):
+            error = "R2 retention failed; retry sync without rerunning the measurement"
+    write(directory / "receipt-upload.json", receipt)
+    rec["evidence_receipt"] = public_ref(receipt)
     rec["evidence_directory"] = str(directory.relative_to(Path(ctx["out"])))
     if error or changed:
         rec["evidence_failure"] = error or "source changed during measurement"
+    elif any(c.get("status") == "ok" and (c.get("measurement") or {}).get("completeness") != "complete"
+             for c in (rec.get("cells") or []) + (rec.get("infer_cells") or [])
+             if not c.get("stored") and c.get("arm") not in rec.get("stored_arms", [])):
+        rec["evidence_failure"] = "incomplete worker evidence; local results retained, no further races permitted"
     return rec
 
 
@@ -325,13 +412,21 @@ def sync(board_path):
         state = json.loads(state_path.read_text())
         state = {k: upload(v) if v.get("status") != "verified" else v for k, v in state.items()}
         write(state_path, state)
+        receipt_path = state_path.with_name("receipt-upload.json")
+        if receipt_path.exists():
+            receipt = json.loads(receipt_path.read_text())
+            if receipt.get("status") != "verified":
+                receipt = upload(receipt)
+                write(receipt_path, receipt)
+            rr["evidence_receipt"] = public_ref(receipt)
         for cell in (rr.get("cells") or []) + (rr.get("infer_cells") or []):
             record = cell.get("measurement")
             if record and record["artifacts"]["sha256"] == state["run"]["sha256"]:
                 record.update(source=public_ref(state["source"]), artifacts=public_ref(state["run"]))
                 record.pop("id", None)
                 record["id"] = digest(encoded(record))
-        rr.pop("evidence_failure", None)
+        if str(rr.get("evidence_failure", "")).startswith("R2 retention failed"):
+            rr.pop("evidence_failure", None)
     write(path, board)
 
 

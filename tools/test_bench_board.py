@@ -248,6 +248,7 @@ def env(tmp_path, monkeypatch):
     # upload evidence. Evidence/preflight integration has separate CPU tests.
     run_race = bb.run_race
     monkeypatch.setattr(bb, "run_race", lambda ctx, race: run_race(dict(ctx, capture_measurements=False), race))
+    monkeypatch.setattr(bb, "audit_plan", lambda ctx, races: dict(verdict="MATCHED", races={}))
     data = tmp_path / "data"
     for rel in bb.DATA_FILES.values():
         f = data / rel
@@ -294,6 +295,23 @@ def test_detect_vendor():
     # both tools present: still NVIDIA
     assert bb.detect_vendor("Linux", lambda n: "/x", lambda p: True) == "nvidia"
     assert bb.detect_vendor("Linux", none, lambda p: False) is None
+
+
+def test_full_plan_refusal_prevents_every_timed_race(env, monkeypatch):
+    monkeypatch.setattr(bb, "audit_plan", lambda ctx, races: dict(verdict="REFUSED", races={}))
+    timed = []
+    monkeypatch.setattr(bb, "run_race", lambda *a: timed.append(a))
+    rc = bb.main(env["base"] + ["--vendor", "amd", "--families", "trees", "--lanes", "rf",
+                              "--datasets", "taxi", "--no-smoke-gate"])
+    assert rc == 1
+    assert not timed
+    assert json.loads((env["out"] / "board.json").read_text())["preflight"]["verdict"] == "REFUSED"
+
+
+@pytest.mark.parametrize("vendor", ["nvidia", "amd"])
+def test_explicit_gpu_only_excludes_cpu_fallbacks(vendor):
+    races = bb.gpu_opponents_only(bb.plan_races(vendor, ["identical"]), vendor)
+    assert all(bb.arm_device(a, vendor) == "gpu" for r in races for a in r["arms"])
 
 
 def test_modes_apple_both_others_identical_only():

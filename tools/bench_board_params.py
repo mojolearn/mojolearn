@@ -30,9 +30,9 @@ A driver whose arms live in separate worker processes has each worker send
    `border_count` is `max_bin - 1`).
 3. It REFUSES the race by name (`ParamsRefused`, and a `BOARD-PARAMS-REFUSED`
    line) when an arm's seed differs from ours, or when a canonical parameter
-   that both our arm and that arm have differs, or is set on one side and
-   left to the library default (None) on the other, unless that exact
-   (lane, parameter, arm) is listed in `EXCEPTIONS` with its reason.
+   differs or is missing from either arm's read-back. Unknown names are
+   compared too. Library defaults (including None on both sides) need an exact
+   (lane, parameter, arm) entry in `EXCEPTIONS` with its reason.
    THE SEED. Every arm that has a seed parameter must hold the lane's seed
    (`seed_for(lane)`: 7, or the NVIDIA harness's own where it sets one,
    `LANE_SEED`); anything else refuses unless EXCEPTIONS names it. An arm
@@ -259,10 +259,10 @@ ALIASES = {
 #: the same computation runs, not what it computes).
 IGNORE = frozenset({
     "n_jobs", "nthread", "num_threads", "thread_count", "verbose", "verbosity", "silent",
-    "logging_level", "device", "device_type", "task_type", "numeric_mode", "copy_X", "copy",
-    "allow_writing_files", "train_dir", "importance_type", "callbacks", "warm_start",
-    "used_ram_limit", "gpu_ram_part", "gpu_id", "devices", "tree_method", "predictor",
-    "output_type", "handle", "compute_uv", "memory", "low_memory", "validate_parameters",
+    "logging_level", "device", "device_type", "task_type", "numeric_mode",
+    "allow_writing_files", "train_dir", "importance_type",
+    "used_ram_limit", "gpu_ram_part", "gpu_id", "devices",
+    "output_type", "handle", "validate_parameters",
 })
 
 #: The ONLY accepted differences. Each entry: (lane glob, canonical parameter,
@@ -597,23 +597,25 @@ def implementation_of(obj):
 
 
 def canonical(lib, params):
-    """{canonical name: (value, the library's own name)} for the aliased,
-    non-ignored parameters."""
+    """All work settings, including new/unknown names; only execution knobs are ignored."""
     own = ALIASES.get(lib, {})
     shared = ALIASES["*"]
     out = {}
     for name, value in params.items():
         if name in IGNORE:
             continue
-        rule = own.get(name, shared.get(name))
-        if rule is None:
-            continue
+        # FAIRNESS FIX (2026-10-13 audit): unknown names and one-sided settings
+        # used to disappear. Keep them so an incomplete mapping refuses.
+        rule = own.get(name, shared.get(name, name))
         canon, fn = (rule, None) if isinstance(rule, str) else rule
         try:
             value = fn(value) if fn else value
         except TypeError:
             pass
-        out[canon] = (_jsonable(value), name)
+        value = _jsonable(value)
+        if canon in out and not _equal(out[canon][0], value):
+            raise ParamsRefused("conflicting aliases for %s: %s and %s" % (canon, out[canon][1], name))
+        out[canon] = (value, name)
     return out
 
 
@@ -712,6 +714,8 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
             no_seed.add(name)
     ref = reference if reference in resolved else next(iter(resolved), None)
     problems, compared, applied = [], [], []
+    if not resolved:
+        problems.append("no parameter records")
 
     def _excused(param, arm):
         why = exception_for(lane, param, arm)
@@ -749,9 +753,14 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
                                 % (name, libs[name]))
         if name == ref:
             continue
-        for param, (val, own_name) in sorted(canon.items()):
-            if param == "seed" or param not in resolved[ref]:
+        for param in sorted(set(canon) | set(resolved[ref])):
+            if param == "seed":
                 continue
+            if param not in canon or param not in resolved[ref]:
+                problems.append("%s: %s missing from %s read-back; explicit semantic mapping required"
+                                % (name, param, name if param not in canon else ref))
+                continue
+            val, own_name = canon[param]
             rval, rname = resolved[ref][param]
             same = _equal(val, rval) and not (val is None and rval is None)
             compared.append({"arm": name, "param": param, "ours": rval, "theirs": val, "same": same})
@@ -769,7 +778,8 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
             else:
                 problems.append("%s: %s is %r (%s) on %s and %r (%s) on %s"
                                 % (name, param, rval, rname, ref, val, own_name, name))
-    return {"lane": lane, "family": family, "reference": ref, "seed": seed,
+    return {"schema": "mojolearn.parameter-parity.v2", "comparison": "union of all work settings",
+            "lane": lane, "family": family, "reference": ref, "seed": seed,
             "arms": {n: {"library": libs[n], "source": sources[n],
                          "implementation": implementation_of(arms[n]),
                          "raw_params": raw_params[n],

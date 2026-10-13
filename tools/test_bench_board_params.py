@@ -66,6 +66,12 @@ def _matched():
                thread_count=-1)
     xgb = _est("xgboost.sklearn", "XGBClassifier", n_estimators=100, max_depth=6,
                learning_rate=0.1, reg_lambda=1.0, max_bin=255, random_state=7, n_jobs=-1)
+    # Complete, explicit read-back on all fake arms; omitted work settings must
+    # fail now, even when an old intersection-only checker ignored them.
+    for obj in (ours, fast, cat, xgb):
+        obj._p.update(min_data_in_leaf=1, max_leaves=64, grow_policy="Depthwise",
+                      bootstrap_type="No", subsample=1.0, random_strength=0.0,
+                      boosting_type="Plain")
     return {"ours": ours, "ours-fast": fast, "catboost-cpu": cat, "xgboost-cpu": xgb}
 
 
@@ -94,6 +100,24 @@ def test_planted_parameter_mismatch_is_refused():
     assert BP.MARK_REFUSED in buf.getvalue()
 
 
+@pytest.mark.parametrize("ours,theirs", [
+    ({"new_option": 1}, {}), ({}, {"new_option": 1}),
+    ({"new_option": 1}, {"new_option": 2}),
+    ({"new_option": None}, {"new_option": None}),
+    ({"copy": True}, {"copy": False}),
+    ({"warm_start": False}, {"warm_start": True}),
+])
+def test_every_work_parameter_requires_audited_equivalence(ours, theirs):
+    records = {"ours": _est("mojolearn", "Model", **ours),
+               "lib-gpu": _est("library", "Model", **theirs)}
+    assert BP.check("unknown", records)["verdict"] == "REFUSED"
+
+
+def test_conflicting_aliases_are_not_silently_overwritten():
+    with pytest.raises(BP.ParamsRefused):
+        BP.canonical("xgboost", {"random_state": 7, "seed": 8})
+
+
 def test_planted_seed_mismatch_is_refused():
     arms = _matched()
     arms["catboost-cpu"]._p["random_seed"] = 0
@@ -109,9 +133,8 @@ def test_library_default_is_not_a_match():
 
 
 def test_arm_without_seed_argument_is_recorded_deterministic():
-    arms = _matched()
-    arms["faiss-ivf"] = {"__library__": "faiss", "nlist": 1024}
-    arms["ours"]._p["nlist"] = 1024
+    arms = {"ours": _est("mojolearn", "IVF", nlist=1024, random_state=7),
+            "faiss-ivf": {"__library__": "faiss", "nlist": 1024}}
     rep = BP.enforce("zz-no-row", arms, stream=io.StringIO())
     assert rep["verdict"] == "MATCHED"
     assert rep["arms"]["faiss-ivf"]["params"]["seed"] == BP.NO_SEED_ARGUMENT

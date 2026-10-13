@@ -6379,7 +6379,7 @@ def worker(args):
     say({"event": "ready", "info": runner.info, "pid": os.getpid(),
          "params_record": getattr(runner, "record", None)})
     mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
-        library=(runner.info or {}).get("library") or "?")
+        library=(runner.info or {}).get("library") or "?", arm=args.arm)
     last = None
     for line in sys.stdin:
         parts = line.split()
@@ -6877,29 +6877,10 @@ def _worker_env(arm):
 
 
 def _none_on_both(BP, records, ref="ours"):
-    """(param, arm, reason) for a canonical parameter that reads back None on
-    ours AND on the arm, both scikit-learn-shaped signatures (or declared
-    values) where None is the documented setting (no class weights, no cap,
-    'off'): the same value on both, not a library default standing in for one.
-    The check lists each one it excuses under `exceptions`."""
-    ref = ref if ref in records else next(iter(records), None)
-    if ref is None:
-        return []
-    lib_r, _src, raw_r = BP.read_params(records[ref])
-    canon_r = BP.canonical(lib_r, raw_r)
-    out = []
-    for arm, rec in records.items():
-        if arm == ref:
-            continue
-        lib, _src, raw = BP.read_params(rec)
-        if lib not in ("sklearn", "mojolearn", "cuml", "torch", "statsmodels", "statsforecast",
-                       "networkx", "faiss", "implicit", "gpytorch", "shap", "prophet", "arch"):
-            continue                  # XGBoost / LightGBM: None there IS "the library default"
-        for param, (val, _own) in BP.canonical(lib, raw).items():
-            if param != "seed" and val is None and param in canon_r and canon_r[param][0] is None:
-                out.append((param, arm, "None on both %s and %s: the same documented setting in "
-                                        "both signatures" % (ref, arm)))
-    return out
+    # FAIRNESS FIX (2026-10-13 audit): None in two unrelated libraries is
+    # not proof of equal behavior. Only named, source-backed EXCEPTIONS in
+    # bench_board_params may explain an intentionally unset setting.
+    return []
 
 
 def race(args):

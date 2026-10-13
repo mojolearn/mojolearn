@@ -152,9 +152,10 @@ class MemProbe(object):
     never sees their buffers. None (a caller that does not say) keeps that
     older behavior."""
 
-    def __init__(self, device="gpu", vendor=None, shared=False, library=None):
+    def __init__(self, device="gpu", vendor=None, shared=False, library=None, arm=None):
         self.device = device
         self.library = library
+        self.arm = arm
         self.vendor = (vendor or os.environ.get(VENDOR_ENV)
                        or ("apple" if sys.platform == "darwin" else None))
         self.shared = shared
@@ -375,7 +376,7 @@ class MemProbe(object):
             bench_board_provenance.register_worker(self.library)
         if os.environ.get("MOJOLEARN_MEASUREMENT_RECEIPTS"):
             import bench_board_evidence
-            bench_board_evidence.register_worker(self.library)
+            bench_board_evidence.register_worker(self.library, self.arm)
         try:
             self._reset_gpu()
             self._reset_host()
@@ -434,7 +435,7 @@ IMPORT_NAME = {"scikit-learn": "sklearn", "umap-learn": "umap", "hf": "tokenizer
 def library_version(library):
     """The exact version of the library this process imports: module.__version__,
     else importlib.metadata.version of its distribution; None if not importable."""
-    if not library or library in ("mojolearn",):
+    if not library:
         return None
     name = IMPORT_NAME.get(library, library).replace("-", "_")
     try:
@@ -501,6 +502,9 @@ def library_identity(info):
     device it ran on)."""
     info = info if isinstance(info, dict) else {}
     out = {}
+    if os.environ.get("MOJOLEARN_MEASUREMENT_RECEIPTS") and info.get("device") == "gpu":
+        import bench_board_evidence
+        out["hardware_receipt"] = bench_board_evidence.hardware_context()
     if info.get("device") == "cpu" and info.get("library") != "mojolearn":
         try:
             from threadpoolctl import threadpool_info

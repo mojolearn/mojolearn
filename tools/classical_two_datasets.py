@@ -2560,7 +2560,7 @@ def worker(args):
     say({"event": "ready", "info": runner.info, "pid": os.getpid(), "params": params})
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _probe().MemProbe((runner.info or {}).get("device", "gpu"),
-        library=(runner.info or {}).get("library") or "?")
+        library=(runner.info or {}).get("library") or "?", arm=args.arm)
     inf = None
     for line in sys.stdin:
         parts = line.split()

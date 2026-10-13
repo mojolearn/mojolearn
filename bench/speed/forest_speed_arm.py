@@ -1290,6 +1290,10 @@ def main(argv=None):
     # each arm's own library version and GPU (the board's opponent store keys
     # an opponent by them), one FSPEED-LIBRARY JSON line per constructed arm
     import bench_board_probe
+    hardware_receipt = None
+    if os.environ.get("MOJOLEARN_MEASUREMENT_RECEIPTS"):
+        import bench_board_evidence
+        hardware_receipt = bench_board_evidence.hardware_context()
     for arm in arms:
         if arm.name not in records \
                 or isinstance(records[arm.name], dict):          # not constructed
@@ -1300,6 +1304,7 @@ def main(argv=None):
             "lane": lane, "arm": arm.name, "library": lib,
             "version": bench_board_probe.library_version(lib),
             "device": "gpu" if gpu else "cpu",
+            "hardware_receipt": hardware_receipt if gpu else None,
             "device_name": bench_board_probe.gpu_device_name() if gpu else None},
             sort_keys=True), flush=True)
     if args.opponents_only:
