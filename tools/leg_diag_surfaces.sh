@@ -71,18 +71,12 @@ run_gate() {
   tail -3 "$log" | sed 's/^/      /'
 }
 
-TIERS="${MOJOLEARN_DIAG_TIERS:-fast deterministic identical}"
+TIERS="${MOJOLEARN_DIAG_TIERS:-fast identical}"
 for tier in $TIERS; do
   echo "== $tier =="
   run_gate "$tier" test_mamba_surface
   run_gate "$tier" test_transformer_surface
-  # ARIMA's gate is two tiers by construction (its own header: the mode is
-  # frozen at import, and `deterministic` makes it no promise it does not
-  # already make under `fast`), so it is not run there.
-  case "$tier" in
-    deterministic) : ;;
-    *) run_gate "$tier" test_arima_surface ;;
-  esac
+  run_gate "$tier" test_arima_surface
 done
 
 echo

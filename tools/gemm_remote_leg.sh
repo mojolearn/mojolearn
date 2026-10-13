@@ -1409,7 +1409,7 @@ LEG_SOURCE_PATHS="gemm/original bench/gemm_card_main.mojo bench/gemm_shapes.mojo
 # the injector and the build lock, and each lane's source. Four sessions
 # share this checkout, so it WILL block sometimes. That is the check working:
 # commit or stash, then rent.
-LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py tools/with_identical_mode.sh tools/with_deterministic_mode.sh tools/with_build_lock.sh tools/gemm_card.sh bench/gemm_card_main.mojo bench/gemm_shapes.mojo gemm/original solver kde hierarchy svm metrics mamba original bindings python/mojolearn pixi.toml pixi.lock"
+LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py tools/with_identical_mode.sh tools/with_build_lock.sh tools/gemm_card.sh bench/gemm_card_main.mojo bench/gemm_shapes.mojo gemm/original solver kde hierarchy svm metrics mamba original bindings python/mojolearn pixi.toml pixi.lock"
 
 # THE SPEED PAYLOAD'S SOURCE FOOTPRINT. Wider than either of the others,
 # because it compiles a driver per family and every lane those drivers call.
@@ -2213,7 +2213,7 @@ leg_phase9_artifacts() {
     # whose binaries did not build reports REFUSED per lane, which is a
     # RESULT and is printed, not failed: "not measured" and "measured clean"
     # must not look the same, and both are legible here. What goes red is an
-    # arm with no file whatsoever, and a MOVED lane under either upper tier.
+    # arm with no file whatsoever, and a MOVED lane under identical.
     _rc=0
     if [ ! -d "$E1_DEST/stability" ]; then
         echo "  NO stability/ DIRECTORY CAME HOME. Phase 9 measured nothing on"
@@ -2225,7 +2225,7 @@ leg_phase9_artifacts() {
     echo "  phase-9 lane set:  ${P9_LANES:-<all lanes>}"
     grep -h 'set: .* of 10 binaries' "$E1_DEST/bootstrap.log" 2>/dev/null \
         | sed 's/^/    /'
-    for _m in fast deterministic identical; do
+    for _m in fast identical; do
         _t="$E1_DEST/stability/$_m.txt"
         if [ ! -s "$_t" ]; then
             echo "    $_m: NO ARM. This tier was not measured on this box."
@@ -2293,9 +2293,8 @@ leg_archive_required() {
         # caught HERE, for nothing, instead of surfacing as a PHASE8-FINDING
         # forty minutes into a rental with no card to show for it.
         # `repeat_run_stability.py` is in this list for the same reason every
-        # lane driver is: phase 9 is the ONLY measurement of the middle tier's
-        # promise, and a leg that reaches the box without it spends the lease
-        # and comes home unable to say whether `deterministic` is deterministic
+        # lane driver is: a leg that reaches the box without it spends the lease
+        # and comes home unable to say whether a tier is run-to-run stable
         # on this vendor.
         echo "tools/e1_bootstrap.sh tools/repeat_run_stability.py bench/gemm_card_main.mojo gemm/checks/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/checks/mamba_check.mojo"
     elif [ "$PAYLOAD" = "mamba" ]; then
@@ -6213,9 +6212,8 @@ if [ "$MODE" = "dry" ]; then
     echo "      IN MOJOLEARN_E1_PHASES=$E1_PHASES, so NO lanes/*.card is written"
     echo "      and nothing here is a cross-vendor claim."
     echo "      READ THIS BEFORE RENTING: phase 9 builds EVERY tier it compares"
-    echo "      -- fast, deterministic and identical -- because a phase subset"
-    echo "      skips phase 3 and a baseline-less middle tier answers nothing."
-    echo "      That is $(echo "$P9_BINDINGS" | wc -w | tr -d ' ') bindings x 3 tiers of builds. Thirty builds"
+    echo "      -- fast and identical -- because a phase subset skips phase 3."
+    echo "      That is $(echo "$P9_BINDINGS" | wc -w | tr -d ' ') bindings x 2 tiers of builds. Thirty builds"
     echo "      took FIFTY MINUTES on a rented RTX 4090 and about three on the"
     echo "      M4: build time on a pod is not build time on the Mac, and the"
     echo "      ${WORK_TIMEOUT}s bound is what stands between that and a lease"

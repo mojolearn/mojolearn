@@ -40,8 +40,7 @@ def test_a_scope_change_alone_is_a_change():
 
 ROWS = [("_m_a", "build_a.sh", "fast"), ("_m_a", "build_a.sh", "identical"),
         ("_m_b", "build_b.sh", "identical"),
-        ("_m_c", "build_c.sh", "fast"), ("_m_c", "build_c.sh", "deterministic"),
-        ("_m_c", "build_c.sh", "identical")]
+        ("_m_c", "build_c.sh", "fast"), ("_m_c", "build_c.sh", "identical")]
 
 
 def test_jobs_follow_the_tiers_each_binding_ships_in():
@@ -81,8 +80,6 @@ def test_compile_cmd_flags():
     assert "-D MOJOLEARN_NUMERIC_IDENTICAL=1" in s and "-D MOJOLEARN_COLUMN_AMD" in s
     fast = " ".join(xcc.compile_cmd(["mojo"], "b.mojo", ["."], "fast", "sm_89", "/o"))
     assert "MOJOLEARN_NUMERIC" not in fast and "-D MOJOLEARN_COLUMN_NVIDIA" in fast
-    det = " ".join(xcc.compile_cmd(["mojo"], "b.mojo", ["."], "deterministic", "sm_90a", "/o"))
-    assert "-D MOJOLEARN_NUMERIC_DETERMINISTIC=1" in det
 
 
 # ---------------------------------------------------------------- verdicts

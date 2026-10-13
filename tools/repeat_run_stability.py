@@ -40,7 +40,6 @@ between every pair of repeats, which is what made the k-NN mutex merge
 on the instability, never an upper one.
 
     pixi run python tools/repeat_run_stability.py --repeats 5
-    MOJOLEARN_NUMERIC_MODE=deterministic pixi run python tools/repeat_run_stability.py
     MOJOLEARN_NUMERIC_MODE=identical     pixi run python tools/repeat_run_stability.py
 
 A lane that RAISES is reported REFUSED with its message, not skipped: an
@@ -423,15 +422,15 @@ def concurrent_probe(repeats=12):
     ever "not caught at this sample size" -- which is why the default is 12
     and why lowering it is a decision, not a convenience.
 
-    NEEDS ALL THREE BINARY SETS BUILT. Reports what is missing rather than
-    quietly comparing two.
+    NEEDS BOTH BINARY SETS BUILT. Reports what is missing rather than
+    quietly comparing one.
     """
     import mojolearn as ml
     rng = np.random.default_rng(2)
     idx = rng.integers(0, 8, size=(4096, 8)).astype(np.float32)   # tie-rich
     q = rng.integers(0, 8, size=(64, 8)).astype(np.float32)
 
-    tiers = ("fast", "deterministic", "identical")
+    tiers = ("fast", "identical")
     ests, unavailable = {}, []
     for m in tiers:
         try:

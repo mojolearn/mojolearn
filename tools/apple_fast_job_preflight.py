@@ -112,7 +112,7 @@ def artifact_check(item,mq,repo):
     expected_fields(manifest,dict(source_sha=source,binding=binding,
         numeric_mode=item['numeric_mode']),str(manifest_path))
     mode=item['numeric_mode']
-    require(mode in ('fast','identical','deterministic'),'unknown numeric mode')
+    require(mode in ('fast','identical'),'unknown numeric mode')
     hashes={}
     if item['kind']=='pair':
         expected_fields(manifest,dict(defines_A=item['defines_A'],defines_B=item['defines_B']),str(manifest_path))

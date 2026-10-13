@@ -182,7 +182,7 @@ def normalize_public_fitted_state(arrays, estimator, saved_estimator):
         raise ValueError('unreviewed saved format version')
     if saved_estimator not in (estimator, 'Host' + estimator) or _saved_text(arrays, 'estimator') != saved_estimator:
         raise ValueError('saved estimator class differs from reviewed owner')
-    if _saved_text(arrays, 'numeric_mode') not in ('fast', 'deterministic', 'identical'):
+    if _saved_text(arrays, 'numeric_mode') not in ('fast', 'identical'):
         raise ValueError('invalid saved numeric mode')
 
     def exact(name, dtype, shape):

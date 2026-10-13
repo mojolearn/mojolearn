@@ -14,7 +14,7 @@ from mojolearn.extratrees import _fit_params
 
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--data',required=True)
-p.add_argument('--mode',choices=('fast','identical','deterministic'),default='fast')
+p.add_argument('--mode',choices=('fast','identical'),default='fast')
 p.add_argument('--pairs',type=int,default=5)
 a=p.parse_args()
 os.environ['MOJOLEARN_STAGE_TIMES']='0'

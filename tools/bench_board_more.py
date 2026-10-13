@@ -834,7 +834,7 @@ def _mode_readback(ml, est, binding):
     # 0.8.22's _mojolearn_solver and _mojolearn_tsa carry no numeric-mode
     # constant: the tier is read from the directory the loaded binary sits in.
     here = os.path.dirname(os.path.abspath(getattr(mod, "__file__", "") or ""))
-    for m in ("fast", "identical", "deterministic"):
+    for m in ("fast", "identical"):
         if here == os.path.abspath(_backend.tier_dir(m)):
             return m, "%s has no numeric-mode constant; tier from its directory %s" % (name, here)
     return "unknown (%s)" % here, "%s tier directory not recognized" % name

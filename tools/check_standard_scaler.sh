@@ -9,7 +9,7 @@ out=${1:-bench/results/standard_scaler_local}
 mkdir -p "$out"
 MOJOLEARN_PYTHON=${MOJOLEARN_PYTHON:-"$PWD/checks/pipeline_python.sh"}
 export MOJOLEARN_PYTHON
-for mode in fast deterministic identical; do
+for mode in fast identical; do
     MOJOLEARN_NUMERIC_MODE=$mode sh bindings/build_preprocessing.sh > "$out/binding-$mode.build.log" 2>&1
 done
 PYTHONPATH=python checks/pipeline_python.sh checks/standard_scaler_smoke.py > "$out/public.smoke.log" 2>&1

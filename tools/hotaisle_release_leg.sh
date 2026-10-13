@@ -16,7 +16,7 @@
 # (tools/release_ubuntu22_build.sh prepare, then run hip gfx942
 # /root/rel061-build, its bytes copied beside the evidence and sha256-checked on
 # the box) running tools/release061_remote_build.sh: every gfx942 binding in the
-# IDENTICAL, deterministic and fast tiers plus the host set, the read-backs
+# IDENTICAL and fast tiers plus the host set, the read-backs
 # (readback.txt, arch_readback.txt) and build/build-provenance.json. The same
 # paths on the box, so the compiler witnesses are the same. The same output
 # tree: $MOJOLEARN_RELEASE_RESULTS_ROOT/hip-gfx942/release-build/ (default

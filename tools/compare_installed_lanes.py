@@ -20,7 +20,7 @@ from compare_ordered_python import ARRAYS, PREFIX, check_record
 from verify_linux_surface_qualification import BINDINGS, FIXTURES, MODES, SURFACES, check_quality, expected_bindings, expected_jobs, require
 
 TARGETS = {'umap', 'umap-transform', 'umap-quality', 'ordered-rmse'}
-EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so')
+EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/(?:(identical)/)?(_mojolearn[^/]*)\.so')
 
 
 def digest(path):

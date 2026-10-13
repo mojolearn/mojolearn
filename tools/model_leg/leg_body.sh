@@ -281,7 +281,7 @@ if [ "$CPU_ALSO" = 1 ] && [ "$VENDOR" != cpu ]; then
     CPU_PKG=$OUT/../cpu-package
     rm -rf "$CPU_PKG"; mkdir -p "$CPU_PKG"
     cp -R python/mojolearn "$CPU_PKG/mojolearn"
-    rm -rf "$CPU_PKG/mojolearn/identical" "$CPU_PKG/mojolearn/fast" "$CPU_PKG/mojolearn/deterministic" "$CPU_PKG/mojolearn/host"
+    rm -rf "$CPU_PKG/mojolearn/identical" "$CPU_PKG/mojolearn/fast" "$CPU_PKG/mojolearn/host"
     find "$CPU_PKG/mojolearn" \( -name '*.so' -o -name '*.dylib' -o -name '__pycache__' \) -prune -exec rm -rf {} + 2>/dev/null
     phase harness-cpu env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$CPU_PKG" MOJOLEARN_HOST_DIR="$ROOT/python/mojolearn/host" \
         $PY_OURS bench/model/harness.py --model "$MODEL_DIR" --formats "$FORMATS" \

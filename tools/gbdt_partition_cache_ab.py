@@ -24,7 +24,7 @@ def main():
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     reference_models = None
-    for mode in ("identical", "deterministic", "fast"):
+    for mode in ("identical", "fast"):
         results = {}
         for arm in ("reference", "cached"):
             name = f"{mode}-{arm}"

@@ -11,7 +11,7 @@
 #       --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
 #
 # Everything here is OUR IDENTICAL arm only (-D MOJOLEARN_NUMERIC_IDENTICAL=1
-# through tools/with_identical_mode.sh). No FAST or DETERMINISTIC arm is
+# through tools/with_identical_mode.sh). No FAST arm is
 # built, timed or mentioned, and no opponent runs: the cuBLAS rows come from
 # bench/OPPONENT_REFERENCE.md. What it produces, under
 # <leg out>/remote/identical/:

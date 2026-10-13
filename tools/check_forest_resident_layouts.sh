@@ -4,13 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 output_dir="${1:-$(mktemp -d /tmp/mojolearn-forest-layouts.XXXXXX)}"
 mkdir -p "$output_dir"
-for mode in fast deterministic identical; do
+for mode in fast identical; do
     for layout in separate_arrays packed_siblings; do
         defines=()
         if [[ "$mode" == identical ]]; then
             defines+=(-D MOJOLEARN_NUMERIC_IDENTICAL=1)
-        elif [[ "$mode" == deterministic ]]; then
-            defines+=(-D MOJOLEARN_NUMERIC_DETERMINISTIC=1)
         fi
         if [[ "$layout" == separate_arrays ]]; then
             defines+=(-D MOJOLEARN_FOREST_SEPARATE_NODES=1)   # packed is the default (2026-09-17)
