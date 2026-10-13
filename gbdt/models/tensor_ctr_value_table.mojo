@@ -38,10 +38,8 @@ from gbdt.ctrs.ctr_binarization import (
 from gbdt.data.cat_code_scan import cat_column_codes_device
 from gbdt.models.kernel.tensor_ctr_device import (
     TENSOR_CTR_BLOCK,
-    TENSOR_MINMAX_GRID,
     float_from_order_key,
-    float_minmax_final_kernel,
-    float_minmax_partials_kernel,
+    float_minmax_kernel,
     tensor_bins_kernel,
     tensor_ctr_blocks,
     tensor_keys_counts_kernel,
@@ -611,25 +609,21 @@ def device_float_extremes(
     ctx: DeviceContext, values: DeviceBuffer[DType.float32], n_rows: Int
 ) raises -> Tuple[Float32, Float32]:
     """The smallest and largest of `values[0:n_rows]` (finite), reduced on
-    the device as order-preserving Int32 keys in a two-stage compare fold
-    (no atomics, see `tensor_ctr_device.mojo`); two words come back."""
-    var d_part = ctx.enqueue_create_buffer[DType.int32](2 * TENSOR_MINMAX_GRID)
-    var d_w = ctx.enqueue_create_buffer[DType.int32](2)
-    ctx.enqueue_function[float_minmax_partials_kernel](
-        values.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](),
-        d_part.unsafe_ptr(), Int32(n_rows),
-        grid_dim=TENSOR_MINMAX_GRID, block_dim=TENSOR_CTR_BLOCK,
-    )
-    ctx.enqueue_function[float_minmax_final_kernel](
-        d_part.unsafe_ptr(), Int32(TENSOR_MINMAX_GRID), d_w.unsafe_ptr(),
-        grid_dim=1, block_dim=TENSOR_CTR_BLOCK,
-    )
+    the device as order-preserving Int32 keys; two words come back."""
     var h = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.synchronize()
+    h.unsafe_ptr().unsafe_store(0, Int32(2147483647))
+    h.unsafe_ptr().unsafe_store(1, Int32(-2147483647) - Int32(1))
+    var d_w = ctx.enqueue_create_buffer[DType.int32](2)
+    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h.unsafe_ptr())
+    ctx.enqueue_function[float_minmax_kernel](
+        values.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), d_w.unsafe_ptr(), Int32(n_rows),
+        grid_dim=tensor_ctr_blocks(n_rows), block_dim=TENSOR_CTR_BLOCK,
+    )
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_w)
     ctx.synchronize()
     var lo = float_from_order_key(h.unsafe_ptr().unsafe_load(0))
     var hi = float_from_order_key(h.unsafe_ptr().unsafe_load(1))
-    _ = d_part^
     _ = d_w^
     _ = h^
     return (lo, hi)
