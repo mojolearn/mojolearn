@@ -1111,6 +1111,8 @@ struct DMcd:
             dets[k] = _neg_inf() if info != Int32(0) else -2.0 * Float64(hl.d[k])
         _ = L^
         _ = pm^
+        _ = ldc^
+        _ = inf^
 
     def _load(mut self, X: DMat, b: DBatch, k: Int, s: DMat) raises:
         """Candidate k's support s: its rows, mean and covariance into the
@@ -1681,6 +1683,11 @@ def fast_mcd_dev(
             var rows = DMat(rows_of=shuf, row0=i * n_ss, rows=n_ss)
             var cur = run.k.gather_dev(Xd, rows)
             run.select_random(cur, h_sub, n_trials, 10, 2, cands)
+        # lane apple-holes: a row view does not own its parent, so the parent
+        # is kept alive past every use of its views (Mojo frees a value at its
+        # last NAMED use; `rows` / `selection` are views of shuf /
+        # selection_all, whose ids the pool may release and hand out again)
+        _ = shuf^
         var selection_all = run.k.argsort_dev(run.k.rand(1, n, run.seed, 1000 + run.draws + 1, 0))
         run.draws += 1
         var selection = DMat(rows_of=selection_all, row0=0, rows=n_m)
@@ -1701,12 +1708,14 @@ def fast_mcd_dev(
                     grid_dim=_blocks(ms), block_dim=TPB,
                 )
             _write_dev(run.k, m0.loc, m0.cov, sup, dist, n, d, loc_out, cov_out, sup_out, dist_out)
+            _ = selection_all^
             _ = Xd^
             return
         var merged = DCands(n_best_m, d)
         run.select_init(Xm, h_m, cands, n_best_m, 30, merged)
         _ = cands^
         best = run.select_init_best(Xd, h, merged, 30, True)
+        _ = selection_all^
     else:
         var first = DCands(10, d)
         run.select_random(Xd, h, 30, 10, 2, first)

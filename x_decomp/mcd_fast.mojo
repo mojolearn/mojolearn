@@ -887,6 +887,22 @@ def _u(buf: DeviceBuffer[DType.uint64]) -> U64Ptr:
 comptime MCD_MMA_CHUNK_WORDS = 1 << 27
 
 
+#: lane apple-holes (2026-10-12): the d^3 units of one launch of the
+#: block-per-candidate kernels (mc_pinvh_kernel's Jacobi, mf_det_wide_kernel's
+#: LU), 2^31. Cause: istella 100,000 x 220 FAST ran phase B's 3,330
+#: candidates' 220-wide Jacobi in ONE launch, seconds of GPU on a smaller
+#: Apple GPU; macOS cuts such a launch silently (outputs stale, no error)
+#: and the fit came back with an EMPTY support (5,000 rows: 160 candidates,
+#: one short launch, fine). A cost bound (work ~ d^3 per candidate), not a
+#: shape rule; narrow d keeps one launch.
+comptime MCD_BLOCK_WORK = 1 << 31
+
+
+def mf_block_chunk(d: Int) -> Int:
+    """Candidates per launch of a block-per-candidate kernel at width d."""
+    return max(1, MCD_BLOCK_WORK // max(d * d * d, 1))
+
+
 def mf_mma_chunk(nc: Int, r: Int, d: Int) -> Int:
     """Candidates per centered-row chunk: as many as MCD_MMA_CHUNK_WORDS
     holds (at least one, at most nc)."""
@@ -1112,11 +1128,22 @@ def _compat_pinvh(ctx: DeviceContext, ph: MfPhase, cov: F32Ptr, d: Int,
     takes the 256-entry instance for d > MF_DMAX)."""
     comptime if MCD_WIDE:
         if d > MF_DMAX:
-            ctx.enqueue_function[mc_pinvh_kernel[MCD_BATCH_MMA, MF_WIDE_DMAX, MCD_DEFLATE]](
-                cov, _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(ph.nc), Int32(d), _i(ph.active), _i(ph.needp),
-                _i(err), _f(ph.mm_v), _f(ph.mm_vw), _i(ph.mm_ran),
-                grid_dim=ph.nc, block_dim=MF_TPB,
-            )
+            # lane apple-holes: at most mf_block_chunk(d) candidates (a block
+            # each, a d-wide Jacobi) per launch, a wait between launches
+            var dd2 = d * d
+            var step = mf_block_chunk(d)
+            var c0 = 0
+            while c0 < ph.nc:
+                var cn = min(step, ph.nc - c0)
+                if c0 > 0:
+                    ctx.synchronize()
+                ctx.enqueue_function[mc_pinvh_kernel[MCD_BATCH_MMA, MF_WIDE_DMAX, MCD_DEFLATE]](
+                    cov + c0 * dd2, _f(ph.wa) + c0 * dd2, _f(ph.wv) + c0 * dd2, _f(ph.pm) + c0 * dd2,
+                    Int32(cn), Int32(d), _i(ph.active) + c0, _i(ph.needp) + c0,
+                    _i(err), _f(ph.mm_v) + c0 * dd2, _f(ph.mm_vw) + c0 * dd2, _i(ph.mm_ran) + c0,
+                    grid_dim=cn, block_dim=MF_TPB,
+                )
+                c0 += cn
             return
     ctx.enqueue_function[mc_pinvh_kernel[MCD_BATCH_MMA]](
         cov, _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(ph.nc), Int32(d), _i(ph.active), _i(ph.needp), _i(err),
@@ -1131,11 +1158,23 @@ def _det(ctx: DeviceContext, ph: MfPhase, d: Int, s: Int, err: DeviceBuffer[DTyp
     var par = s % 2
     comptime if MCD_WIDE:
         if d > MF_DMAX:
-            ctx.enqueue_function[mf_det_wide_kernel](
-                _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.det1) if par == 1 else _f(ph.det0),
-                _f(ph.det0) if par == 1 else _f(ph.det1), Int32(ph.nc), Int32(d), Int32(s), Int32(ph.n_iter),
-                _i(ph.active), _i(ph.needp), _i(ph.fin), _i(err), grid_dim=ph.nc, block_dim=MF_TPB,
-            )
+            # lane apple-holes: chunked as `_compat_pinvh` (a block LU each)
+            var dd2 = d * d
+            var step = mf_block_chunk(d)
+            var cv = _f(ph.cov1) if par == 1 else _f(ph.cov0)
+            var dt = _f(ph.det1) if par == 1 else _f(ph.det0)
+            var dp = _f(ph.det0) if par == 1 else _f(ph.det1)
+            var c0 = 0
+            while c0 < ph.nc:
+                var cn = min(step, ph.nc - c0)
+                if c0 > 0:
+                    ctx.synchronize()
+                ctx.enqueue_function[mf_det_wide_kernel](
+                    cv + c0 * dd2, _f(ph.wa) + c0 * dd2, dt + c0, dp + c0, Int32(cn), Int32(d), Int32(s),
+                    Int32(ph.n_iter), _i(ph.active) + c0, _i(ph.needp) + c0, _i(ph.fin) + c0, _i(err),
+                    grid_dim=cn, block_dim=MF_TPB,
+                )
+                c0 += cn
             return
     ctx.enqueue_function[mf_det_kernel](
         _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.det1) if par == 1 else _f(ph.det0),
