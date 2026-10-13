@@ -76,6 +76,7 @@ from x_decomp.cells import (
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
+from cholesky.host.chol_oracle import chol_host_factor_lower, chol_host_trsm_lower
 # TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch
 # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
@@ -425,6 +426,26 @@ struct HostExec(Exec):
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
         chol_serial(a, n, info)
+
+    @staticmethod
+    def chol_inv(a: F32Ptr, li: F32Ptr, st: F32Ptr, n: Int) raises:
+        """`Exec.chol_inv` in chol_oracle's host spelling of the profile
+        (`chol_host_factor_lower` at +0.0, `chol_host_trsm_lower` against I):
+        the device's `potrf_lower`, `chol_logdet` and `trsm_lower` words."""
+        var m = List[Float32](capacity=n * n)
+        for i in range(n * n):
+            m.append(a.unsafe_load(i))
+        var f = chol_host_factor_lower(m, n, Float32(0.0))
+        st.unsafe_store(0, Float32(f.info))
+        st.unsafe_store(1, f.logdet)
+        if f.info != 0:
+            return
+        var b = List[Float32](length=n * n, fill=Float32(0.0))
+        for i in range(n):
+            b[i * n + i] = Float32(1.0)
+        chol_host_trsm_lower(f.l, b, n, n)
+        for i in range(n * n):
+            li.unsafe_store(i, b[i])
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:

@@ -165,6 +165,11 @@ from x_decomp.tsqr_device import (
 )
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from glm.impl.center_device import col_means_buf, col_sums_buf, col_sums_pair_buf
+from cholesky.checks.potrf import (
+    CHOL_ELEM_TPB, CHOL_NB_PINNED, add_jitter, chol_logdet, chol_nb_for, chol_workspace_floats, potrf_lower,
+)
+from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
+from core.identity_trace import IdentityTrace
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -2810,6 +2815,38 @@ struct DevExec(Exec):
         _ = ud^
         cx.synchronize()
         _ = cx^
+
+    @staticmethod
+    def chol_inv(a: F32Ptr, li: F32Ptr, st: F32Ptr, n: Int) raises:
+        """`Exec.chol_inv` (lane apple-holes, MinCovDet's IDN_MCD_CHOL):
+        `potrf_lower` at +0.0 ridge, `chol_logdet`, L^{-1} by `trsm_lower`
+        against I. The resident kit's `DMcd.chol` (x_decomp/kit_device.mojo)
+        runs the same calls on its pooled matrices."""
+        var ctx = xd_ctx()
+        var da = _up(ctx, a, n * n)
+        var nb = chol_nb_for(n, CHOL_NB_PINNED)
+        var ws = ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
+        var trace = IdentityTrace()
+        add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
+        var run = potrf_lower(ctx, da, ws, n, trace)
+        st.unsafe_store(0, Float32(run.info))
+        st.unsafe_store(1, Float32(0.0))
+        if run.info == 0:
+            var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+            st.unsafe_store(1, chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB))
+            var db = ctx.enqueue_create_buffer[DType.float32](n * n)
+            ctx.enqueue_function[pj_identity_kernel](
+                db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+            )
+            trsm_lower(ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
+            _down(ctx, db, li, n * n)
+            ctx.synchronize()
+            _ = db^
+            _ = dwork^
+        ctx.synchronize()
+        _ = ws^
+        _ = da^
+        _ = ctx^
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:

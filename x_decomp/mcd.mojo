@@ -34,7 +34,6 @@ from std.memory import bitcast
 from std.builtin.sort import sort
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from cholesky.host.chol_oracle import chol_host_factor_lower, chol_host_trsm_lower
 
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
@@ -288,16 +287,14 @@ struct Mcd[E: Exec]:
     # ---- IDN_MCD_CHOL: the Cholesky C-step's pieces (host column)
     def chol(self, A: Mat) raises -> Chol:
         """`potrf_lower` (+0.0 ridge, as `add_jitter`), `chol_logdet` and
-        L^{-1} = `trsm_lower(L, I)`, in chol_oracle's host spelling."""
+        L^{-1} = `trsm_lower(L, I)` through the executor (`Exec.chol_inv`)."""
         var n = A.r
-        var f = chol_host_factor_lower(A.d, n, Float32(0.0))
-        if f.info != 0:
-            return Chol(_neg_inf(), Mat(0, 0))
         var li = Mat(n, n)
-        for i in range(n):
-            li.d[i * n + i] = Float32(1.0)
-        chol_host_trsm_lower(f.l, li.d, n, n)
-        return Chol(Float64(f.logdet), li^)
+        var st = Mat(1, 2)
+        self.k.chol_inv(A, li, st)
+        if Int(st.d[0]) != 0:
+            return Chol(_neg_inf(), Mat(0, 0))
+        return Chol(Float64(st.d[1]), li^)
 
     def mahal_chol(self, X: Mat, loc: Mat, Li: Mat) raises -> Mat:
         """rowsum((Xc L^{-T})^2): the distances under P = L^{-T} L^{-1}."""

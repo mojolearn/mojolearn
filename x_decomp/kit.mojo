@@ -414,6 +414,10 @@ struct Kit[E: Exec](Movable):
     def eigh(self, A: Mat, mut w: Mat, mut v: Mat) raises:
         Self.E.eigh(A.p(), w.p(), v.p(), A.r, 0)
 
+    def chol_inv(self, A: Mat, mut li: Mat, mut st: Mat) raises:
+        """`Exec.chol_inv`: st = [info, log det], li = L^{-1}."""
+        Self.E.chol_inv(A.p(), li.p(), st.p(), A.r)
+
     def lu(self, mut lu: Mat, mut piv: List[Int32], mut info: Mat) raises:
         """`_Kit.lu` on a copy the caller made (in place)."""
         var pp = I32Ptr(unsafe_from_address=Int(piv.unsafe_ptr()))
