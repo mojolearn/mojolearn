@@ -851,11 +851,16 @@ for _cell in ("LSTM", "GRU", "RNN"):
                     "part), X (n, %d, 1); target: the next value (reg) or next value above the "
                     "window mean (clf); windows ending in the first 80%% of time fit, the rest "
                     "held out" % (SEQ_T, SEQ_T),
+                    # FAIRNESS FIX (2026-10-13 audit): this note claimed the torch arm's numpy
+                    # default_rng(7) weights and orders were ours' (false since 86b2bc254 /
+                    # 4bdc5487e). It now says what the arm loads (ours-init). Results raced
+                    # before this change were wrong for this lane; apply extra scrutiny.
                     "torch arm: nn.%s(1, 64, batch_first) + Linear head on the last hidden state, "
                     "Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 "
-                    "epochs; its weights and per-epoch row orders are ours' (numpy "
-                    "default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, "
-                    "then one permutation per epoch), loaded into the torch module" % _cell])
+                    "epochs; its initial weights and per-epoch row orders are ours', exported "
+                    "untimed by `bench_board_algos.py ours-init` under our interpreter (ours' "
+                    "InitStream draws and its Feistel epoch orders) and loaded into the torch "
+                    "module; without the export the torch arm is refused" % _cell])
 _add("layernorm", xlane="sequence", ours=("LayerNorm", "layer_norm_forward"), kind="layer",
      task="layernorm",
      block="tensor", datasets=("synthetic",), torch=True,
@@ -1187,11 +1192,16 @@ _add("cnn-clf", xlane="cnn", ours="CNNClassifier", kind="cnnclf", task="clf", bl
      notes=["seed-7 synthetic 1 x 28 x 28 images of 10 classes (a class template plus N(0, 1) "
             "noise), 20,000 fit and 5,000 held out: the R2 store holds no image set, so this is "
             "the one kind",
+            # FAIRNESS FIX (2026-10-13 audit): this note claimed the torch arm's numpy weights
+            # and orders were ours' (false since 86b2bc254). It now says what the arm loads
+            # (ours-init). Results raced before this change were wrong for this lane; apply
+            # extra scrutiny.
             "torch arm: the same net (Conv2d-ReLU-MaxPool2d per entry of conv_channels, then "
             "Linear), SGD lr 0.01 momentum 0.9 dampening 0 no nesterov no weight decay, cross "
-            "entropy, the same epochs and batch size; its weights and per-epoch row orders are "
-            "ours' (numpy default_rng: conv i from seed 7 + 101 i, the head from seed 7 + 997, "
-            "the orders from seed 7), loaded into the torch module"])
+            "entropy, the same epochs and batch size; its initial weights and per-epoch row "
+            "orders are ours', exported untimed by `bench_board_algos.py ours-init` under our "
+            "interpreter (ours' InitStream draws and its Feistel epoch orders) and loaded into "
+            "the torch module; without the export the torch arm is refused"])
 _add("batchnorm2d", xlane="cnn", ours="BatchNorm2d", kind="layer", task="batchnorm2d",
      block="tensor", datasets=("synthetic",), torch=True,
      params=dict(num_features=64, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True),
@@ -1210,15 +1220,32 @@ _add("resnet-block", xlane="cnn", ours=("BasicBlock", "ResNetBasicBlock"), kind=
      params=dict(inplanes=64, planes=64),
      notes=["torchvision BasicBlock semantics (conv3x3-BN-ReLU-conv3x3-BN + identity, ReLU), "
             "x (64, 64, 56, 56)"])
+# FAIRNESS FIX (2026-10-13 audit): the torch GCNConv rebuilt the normalized graph on every call
+# (cached=False) while ours caches it; the torch arm also skipped grad_x on both graph lanes
+# while ours computes it; ours' output was never comparable (its own random weights). Now: PyG's
+# cached=True (torch only; ours always caches), x.requires_grad on both lanes, and ours loads
+# the fixture weights (torch's seeded init) so its y is compared with torch's. The notes below
+# say so, which also changes the store's settings key. Results raced before this change were
+# wrong for this lane; apply extra scrutiny.
+GCN_TORCH_KW = {"cached": True}
+_GRAPH_FAIR = ("both arms compute the full backward of forward + backward(dy): the weight and "
+               "bias gradients and grad_x (torch: x.requires_grad); ours loads torch's seeded "
+               "initial weights from the neural fixture, so its y is compared with torch's "
+               "(2026-10-13 fairness audit)")
 _add("gcn", xlane="cnn", ours=("GCNConv", "GCN"), kind="layer", task="gcn", block="graph",
      torch=True, params=dict(out_channels=128, improved=False, add_self_loops=True, normalize=True,
                              bias=True),
-     notes=["the kNN graph and its node features; PyG GCNConv (normalize=True, self loops)"])
+     notes=["the kNN graph and its node features; PyG GCNConv (normalize=True, self loops)",
+            "the normalized graph is cached on both arms after the first (warm-up) call: ours' "
+            "GCNConv caches it per edge_index, torch's is PyG GCNConv(cached=True) (a torch-only "
+            "argument; ours has no `cached`)", _GRAPH_FAIR])
 _add("graphsage", xlane="cnn", ours=("SAGEConv", "GraphSAGE"), kind="layer", task="sage",
      block="graph", torch=True,
      params=dict(out_channels=128, aggr="mean", normalize=False, root_weight=True, project=False,
                  bias=True),
-     notes=["the kNN graph and its node features; PyG SAGEConv (mean aggregation)"])
+     notes=["the kNN graph and its node features; PyG SAGEConv (mean aggregation)",
+            "ours keeps its CSR view of edge_index between calls; PyG aggregates from edge_index "
+            "by scatter and needs no such view", _GRAPH_FAIR])
 
 _add("embedding", xlane="embedding", ours=("Embedding",), kind="layer", task="embedding",
      block="tensor", datasets=("synthetic",), torch=True,
@@ -3103,6 +3130,225 @@ def synthetic_images(n, n_classes=10, shape=(1, 28, 28), seed=SEED):
     return np.ascontiguousarray(X, dtype=np.float32), y.astype(np.float32)
 
 
+# ---- ours' initial weights and row orders, exported for the torch twin --------
+# FAIRNESS FIX (2026-10-13 audit): since 86b2bc254 / 4bdc5487e ours draws its initial weights in
+# Mojo (`_buffer.InitStream`) and every epoch's row order on the executor (the integer Feistel
+# permutation `op_mlp_perm` / x_cnn `epoch_rows_at`), while the torch twins of the RNN/LSTM/GRU
+# and CNN lanes still drew numpy default_rng(7) weights and orders and the lane notes claimed
+# they were ours'. The parity rule is the same initial weight bytes and the same batches in the
+# same order. The conductor now runs `ours-init` under OUR interpreter before the race: it builds
+# ours' estimator with the lane's parameters and runs the same steps its fit runs first (the
+# InitStream draws, then the schedule seed), writes those weights and every epoch's row order
+# (the Feistel permutation below, checked against ours' own `x_cnn_epoch_rows` entry when the
+# binding has it) to one npz, and every torch arm loads it. No export, no torch arm: the arm is
+# refused by name. Results raced before this change were wrong for this lane; apply extra
+# scrutiny.
+
+#: the ours-init npz this worker reads (worker() sets it from --ours-init); None: not exported
+_OURS_INIT = None
+_M64 = (1 << 64) - 1
+OURS_INIT_KINDS = ("seqmodel", "cnnclf")
+#: the neural-network lane kinds whose torch arms follow bench_board_neural's compile-timeout rule
+NEURAL_KINDS = ("layer", "seqmodel", "cnnclf")
+
+
+def _export_ours_init(args, lane, ds, tag, env_extra):
+    """Run `ours-init` under OUR interpreter (untimed, before any worker): (npz path, None), or
+    (None, the refusal reason)."""
+    import subprocess
+    path = os.path.abspath(os.path.join(args.work, "%s-ours-init.npz" % tag))
+    log = os.path.join(args.out, "%s-ours-init.log" % tag)
+    cmd = shlex.split(args.ours_python) + [os.path.abspath(__file__), "ours-init", "--lane", lane,
+                                           "--dataset", ds, "--data", args.data, "--out", path]
+    env = _worker_env("ours")
+    env.update(env_extra)
+    try:
+        with open(log, "w") as fh:
+            rc = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, env=env, cwd=REPO,
+                                timeout=args.ready_seconds).returncode
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        rc = "%s: %s" % (type(exc).__name__, exc)
+    if rc == 0 and os.path.isfile(path):
+        print("ALGOS-OURS-INIT lane=%s dataset=%s path=%s" % (lane, ds, path), flush=True)
+        return path, None
+    return None, ("REFUSED: ours' initial weights and row orders could not be exported (ours-init "
+                  "exit %s, see %s), so the torch twin cannot start from ours' weights or follow "
+                  "ours' batches (2026-10-13 fairness audit)" % (rc, log))
+
+
+def epoch_key(seed, epoch):
+    """splitmix64's output at state seed + (epoch + 1) * golden: x_cnn/ops.mojo `epoch_key` and
+    sequence/mlp.mojo `mlp_epoch_key` (the same words)."""
+    z = (int(seed) + (int(epoch) + 1) * 0x9E3779B97F4A7C15) & _M64
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & _M64
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & _M64
+    return z ^ (z >> 31)
+
+
+def _mix32(x):
+    """murmur3's 32-bit finalizer on a Python int (x_cnn/ops.mojo `_perm_mix`)."""
+    x &= 0xFFFFFFFF
+    x = ((x ^ (x >> 16)) * 0x85EBCA6B) & 0xFFFFFFFF
+    x = ((x ^ (x >> 13)) * 0xC2B2AE35) & 0xFFFFFFFF
+    return x ^ (x >> 16)
+
+
+def feistel_order(n, seed, epoch, shuffle=True):
+    """Epoch `epoch`'s row order over n rows (int64), as ours builds it: the position itself
+    without shuffle, else six Feistel rounds on the two ceil(bits/2)-bit halves of the position
+    (round key mix(k0 + round * 0x9E3779B9) ^ k1, round function mix(r + rk) & mask), cycle-walked
+    into [0, n) (sequence/mlp.mojo `op_mlp_perm`, x_cnn/ops.mojo `epoch_row_val`). Integers only."""
+    np = _np()
+    n = int(n)
+    if not shuffle:
+        return np.arange(n, dtype=np.int64)
+    bits = 1
+    while (1 << bits) < n:
+        bits += 1
+    h = (bits + 1) // 2
+    mask = np.uint32((1 << h) - 1)
+    sh = np.uint32(h)
+    key = epoch_key(seed, epoch)
+    k0, k1 = key & 0xFFFFFFFF, (key >> 32) & 0xFFFFFFFF
+    rks = [np.uint32(_mix32(k0 + rd * 0x9E3779B9) ^ k1) for rd in range(6)]
+    c1, c2, s16, s13 = np.uint32(0x85EBCA6B), np.uint32(0xC2B2AE35), np.uint32(16), np.uint32(13)
+
+    def mix(v):
+        v = v ^ (v >> s16)
+        v = v * c1
+        v = v ^ (v >> s13)
+        v = v * c2
+        return v ^ (v >> s16)
+
+    def perm(x):
+        left, right = (x >> sh) & mask, x & mask
+        for rk in rks:
+            f = mix((right + rk).astype(np.uint32)) & mask
+            left, right = right, left ^ f
+        return ((left << sh) | right).astype(np.uint32)
+    with np.errstate(over="ignore"):
+        x = perm(np.arange(n, dtype=np.uint32))
+        bad = x >= np.uint32(n)
+        while bad.any():
+            x[bad] = perm(x[bad])
+            bad = x >= np.uint32(n)
+    return x.astype(np.int64)
+
+
+def _ours_epoch_rows(n, seed, epoch):
+    """Ours' own epoch order (the x_cnn binding's host entry `x_cnn_epoch_rows`), or None
+    when this build has no such entry. Used only to check feistel_order."""
+    np = _np()
+    try:
+        from mojolearn import _expansion_cnn as xc
+        b = xc._Layer()._binding()
+        if not hasattr(b, "x_cnn_epoch_rows"):
+            return None
+        out = np.empty(int(n), dtype=np.int32)
+        b.x_cnn_epoch_rows(out.ctypes.data, [int(n), int(epoch), 1, int(seed) & 0xFFFFFFFF,
+                                             (int(seed) >> 32) & 0xFFFFFFFF])
+        return out.astype(np.int64)
+    except Exception:  # noqa: BLE001  (no binding on this interpreter: unchecked, said so)
+        return None
+
+
+def ours_initial_state(lane, D):
+    """Under OUR interpreter: ({name: initial tensor}, orders (epochs, n) int64, meta) of ours'
+    estimator for this lane, exactly as its fit starts. RNN/LSTM/GRU: names are its
+    `state_dict()` names (`weight_ih_l0` ..., `head.weight`, `head.bias`); CNN: conv<i>.weight /
+    conv<i>.bias per conv block and head.weight / head.bias."""
+    np = _np()
+    import mojolearn as ml
+    from mojolearn._buffer import InitStream
+    s = LANES[lane]
+    make, what, params = _est_factory(lane, "ours", D)
+    est = make()
+    X, y = D["X"], np.asarray(D["y"])
+    n = int(X.shape[0])
+    if s["kind"] == "seqmodel":
+        # _x_sequence_rnn._RecurrentBase._fit's first steps, in its order
+        est._check_X(X, True)
+        est.n_outputs_ = (int(np.unique(y).shape[0]) if s["task"] == "clf"
+                          else int(np.asarray(y, np.float32).reshape(n, -1).shape[1]))
+        rng = InitStream(None if est.random_state is None else int(est.random_state))
+        est.params_ = est._init_params(rng)
+        state = {k: np.ascontiguousarray(v, np.float32) for k, v in est.state_dict().items()}
+        epochs, _bs, shuffle, seed = est._schedule(n, rng)
+    elif s["kind"] == "cnnclf":
+        # _expansion_cnn.CNNClassifier.fit's first steps: the layers (their InitStream draws),
+        # then one splitmix64 seed for every epoch's order
+        est._build(int(np.unique(y).shape[0]))
+        convs = [layer for layer in est.layers_ if hasattr(layer, "weight_")]
+        state = {}
+        for i, cv in enumerate(convs):
+            state["conv%d.weight" % i] = np.ascontiguousarray(cv.weight_, np.float32)
+            state["conv%d.bias" % i] = np.ascontiguousarray(cv.bias_, np.float32)
+        state["head.weight"] = np.ascontiguousarray(est.head_.weight_, np.float32)
+        state["head.bias"] = np.ascontiguousarray(est.head_.bias_, np.float32)
+        epochs, shuffle = int(est.max_iter), bool(est.shuffle)
+        seed = int(InitStream(est.random_state).seed)
+    else:
+        raise ValueError("ours-init: lane %s (kind %s) has no exported init" % (lane, s["kind"]))
+    orders = np.stack([feistel_order(n, seed, e, shuffle) for e in range(epochs)]) if epochs else \
+        np.zeros((0, n), np.int64)
+    check = "not shuffled" if not shuffle else "unchecked (no x_cnn_epoch_rows entry)"
+    if shuffle and epochs:
+        got = _ours_epoch_rows(n, seed, 0)
+        if got is not None:
+            if not np.array_equal(got, orders[0]):
+                raise RuntimeError("ours-init: feistel_order differs from ours' x_cnn_epoch_rows "
+                                   "(epoch 0); the torch twin cannot follow ours' batches")
+            check = "epoch 0 equal to ours' x_cnn_epoch_rows"
+    meta = {"lane": lane, "kind": s["kind"], "n_rows": n, "epochs": int(epochs),
+            "shuffle": bool(shuffle), "order_seed": str(seed), "order_check": check,
+            "estimator": what, "mojolearn": getattr(ml, "__version__", "?"),
+            "tensors": {k: list(v.shape) for k, v in sorted(state.items())},
+            "rule": "ours' initial weights (InitStream) and row orders, as its fit draws them"}
+    return state, orders, meta
+
+
+def write_ours_init(lane, D, path):
+    np = _np()
+    state, orders, meta = ours_initial_state(lane, D)
+    tmp = path + ".tmp.npz"
+    np.savez(tmp, orders=orders, meta=np.array(json.dumps(meta, sort_keys=True)),
+             **{"state/" + k: v for k, v in state.items()})
+    os.replace(tmp, path)
+    with open(path, "rb") as fh:
+        meta["sha256"] = hashlib.sha256(fh.read()).hexdigest()
+    return meta
+
+
+def ours_init_main(args):
+    """`ours-init`: write ours' initial weights and row orders for one race (OUR interpreter)."""
+    B, _rec = _load_block(args.lane, args.dataset, args.data)
+    D = lane_arrays(args.lane, B)
+    meta = write_ours_init(args.lane, D, args.out)
+    print("OURS-INIT " + json.dumps(meta, sort_keys=True), flush=True)
+    return 0
+
+
+def _read_ours_init(lane, n_rows, epochs):
+    """The torch twin's view of the export: (state {name: array}, orders [(n,) int64], meta).
+    Raises (the arm refuses at ready) when there is none or it does not fit this race."""
+    np = _np()
+    if not _OURS_INIT or not os.path.isfile(_OURS_INIT):
+        raise RuntimeError("REFUSED: ours' initial weights and row orders were not exported for "
+                           "%s (no --ours-init), so this torch twin cannot start from ours' weights "
+                           "or follow ours' batches (2026-10-13 fairness audit)" % lane)
+    with np.load(_OURS_INIT) as z:
+        meta = json.loads(str(z["meta"]))
+        state = {k[len("state/"):]: np.ascontiguousarray(z[k]) for k in z.files if k.startswith("state/")}
+        orders = np.ascontiguousarray(z["orders"])
+    if meta.get("lane") != lane or int(meta.get("n_rows", -1)) != int(n_rows) \
+            or tuple(orders.shape) != (int(epochs), int(n_rows)):
+        raise RuntimeError("REFUSED: the ours-init export (%s) does not fit this race (lane %s, %d "
+                           "rows, %d epochs)" % (meta, lane, n_rows, epochs))
+    with open(_OURS_INIT, "rb") as fh:
+        meta["sha256"] = hashlib.sha256(fh.read()).hexdigest()
+    return state, [orders[e] for e in range(orders.shape[0])], meta
+
+
 def _build_cnnclf(lane, arm, D):
     np = _np()
     s = LANES[lane]
@@ -3120,30 +3366,35 @@ def _build_cnnclf(lane, arm, D):
     dt = torch.bfloat16 if prec == "bf16" else None
     Xt, Xqt = torch.from_numpy(X).to(dev), torch.from_numpy(Xq).to(dev)
     yt = torch.from_numpy(y.astype(np.int64)).to(dev)
-    # ours' row orders: one permutation per epoch from default_rng(random_state)
-    rng = np.random.default_rng(p["random_state"])
-    orders = [torch.from_numpy(rng.permutation(X.shape[0]) if p["shuffle"] else np.arange(X.shape[0]))
-              .to(dev) for _ in range(p["max_iter"])]
+    # FAIRNESS FIX (2026-10-13 audit): the weights and row orders here were numpy
+    # default_rng(7) draws (conv i from seed + 101 i, the head from seed + 997, one permutation
+    # per epoch) that ours stopped using in 86b2bc254 (InitStream weights, device epoch
+    # orders), so the two arms started from different weights and trained on different
+    # batches. They are now ours' own, exported by `ours-init` (_read_ours_init); without the
+    # export this arm refuses. Results raced before this change were wrong for this lane; apply
+    # extra scrutiny.
+    init_state, init_orders, init_meta = _read_ours_init(lane, X.shape[0], p["max_iter"])
+    orders = [torch.from_numpy(o).to(dev) for o in init_orders]
     n_classes = int(np.unique(y).shape[0])
     S = {}
 
     def ours_init(m):
-        """ours' weights (mojolearn _expansion_cnn: conv i from default_rng(seed + 101 i), the
-        head from default_rng(seed + 997); U(+-1/sqrt(fan_in)) for weight then bias)."""
-        seed = int(p["random_state"])
+        """ours' initial weights, from ours' exported init (conv<i>.weight / .bias, head.*)."""
         convs = [mm for mm in m if isinstance(mm, nn.Conv2d)]
         lin = [mm for mm in m if isinstance(mm, nn.Linear)][0]
+        pairs = [(cv.weight, "conv%d.weight" % i) for i, cv in enumerate(convs)] \
+            + [(cv.bias, "conv%d.bias" % i) for i, cv in enumerate(convs)] \
+            + [(lin.weight, "head.weight"), (lin.bias, "head.bias")]
+        if len(convs) * 2 + 2 != len(init_state):
+            raise RuntimeError("REFUSED: ours-init has %d tensors, the torch net %d"
+                               % (len(init_state), len(convs) * 2 + 2))
         with torch.no_grad():
-            for i, cv in enumerate(convs):
-                r = np.random.default_rng(seed + 101 * i)
-                fan = cv.weight.shape[1] * cv.weight.shape[2] * cv.weight.shape[3]
-                b = 1.0 / np.sqrt(fan)
-                cv.weight.copy_(torch.from_numpy(r.uniform(-b, b, tuple(cv.weight.shape)).astype(np.float32)))
-                cv.bias.copy_(torch.from_numpy(r.uniform(-b, b, tuple(cv.bias.shape)).astype(np.float32)))
-            r = np.random.default_rng(seed + 997)
-            b = 1.0 / np.sqrt(lin.weight.shape[1])
-            lin.weight.copy_(torch.from_numpy(r.uniform(-b, b, tuple(lin.weight.shape)).astype(np.float32)))
-            lin.bias.copy_(torch.from_numpy(r.uniform(-b, b, tuple(lin.bias.shape)).astype(np.float32)))
+            for t, name in pairs:
+                v = init_state[name]
+                if tuple(v.shape) != tuple(t.shape):
+                    raise RuntimeError("REFUSED: ours-init %s is %s, the torch net's %s"
+                                       % (name, tuple(v.shape), tuple(t.shape)))
+                t.copy_(torch.from_numpy(v))
 
     def net():
         c, h, w = p["input_shape"]
@@ -3159,8 +3410,11 @@ def _build_cnnclf(lane, arm, D):
     info = {"library": "torch", "version": torch.__version__, "device": "gpu" if dev != "cpu" else "cpu",
             "pre_clock_fit": False, "input_home": "device", "setting": setting,
             "config": "Conv2d-ReLU-MaxPool2d x %s + Linear, SGD lr %g momentum %g, batch %d, %d "
-                      "epochs, %s %s on %s" % (p["conv_channels"], p["learning_rate"], p["momentum"],
-                                                p["batch_size"], p["max_iter"], mode, prec, dev)}
+                      "epochs, ours' exported initial weights and row orders, %s %s on %s"
+                      % (p["conv_channels"], p["learning_rate"], p["momentum"], p["batch_size"],
+                         p["max_iter"], mode, prec, dev),
+            "ours_init": init_meta}
+    ours_init(net())                      # untimed: the export fits this net, or the arm refuses now
     lossf = nn.CrossEntropyLoss()
 
     def run(m, x):
@@ -3223,22 +3477,18 @@ def _build_seqmodel(lane, arm, D):
     cell = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}[s["cell"]]
     ckw = {"nonlinearity": p["nonlinearity"]} if s["cell"] == "RNN" else {}
     oo = p["optimizer_options"]
-    n_out = 2 if clf else 1
-    # ours' draw (mojolearn _x_sequence_rnn: default_rng(random_state), uniform(+-1/sqrt(H))
-    # per tensor in the torch layout, then one permutation per epoch from the same stream)
-    rng = np.random.default_rng(p["random_state"])
-    H, G = p["hidden_size"], {"LSTM": 4, "GRU": 3, "RNN": 1}[s["cell"]]
-    layout = []
-    for l in range(p["num_layers"]):
-        din = X.shape[2] if l == 0 else H
-        layout += [("rnn.weight_ih_l%d" % l, (G * H, din)), ("rnn.weight_hh_l%d" % l, (G * H, H)),
-                   ("rnn.bias_ih_l%d" % l, (G * H,)), ("rnn.bias_hh_l%d" % l, (G * H,))]
-    layout += [("head.weight", (n_out, H)), ("head.bias", (n_out,))]
-    kb = 1.0 / np.sqrt(float(H))
-    init = {name: torch.from_numpy(rng.uniform(-kb, kb, size=int(np.prod(shp))).astype(np.float32)
-                                   .reshape(shp)) for name, shp in layout}
-    orders = [torch.from_numpy(rng.permutation(X.shape[0]) if p["shuffle"] else np.arange(X.shape[0]))
-              .to(dev) for _ in range(p["max_epochs"])]
+    n_out = int(np.unique(y).shape[0]) if clf else 1
+    # FAIRNESS FIX (2026-10-13 audit): the weights and row orders here were numpy
+    # default_rng(7) draws (uniform(+-1/sqrt(H)) per tensor, then one permutation per epoch)
+    # that ours stopped using in 86b2bc254 / 4bdc5487e (InitStream weights, executor Feistel
+    # orders): the arms started from different weights and trained on different batches while
+    # the lane notes said they were ours'. They are now ours' own, exported by `ours-init`
+    # (_read_ours_init); without the export this arm refuses. Results raced before this change
+    # were wrong for this lane; apply extra scrutiny.
+    init_state, init_orders, init_meta = _read_ours_init(lane, X.shape[0], p["max_epochs"])
+    init = {(k if k.startswith("head.") else "rnn." + k): torch.from_numpy(v)
+            for k, v in init_state.items()}
+    orders = [torch.from_numpy(o).to(dev) for o in init_orders]
 
     class Net(nn.Module):
         def __init__(self):
@@ -3254,10 +3504,12 @@ def _build_seqmodel(lane, arm, D):
     info = {"library": "torch", "version": torch.__version__, "device": "gpu" if dev != "cpu" else "cpu",
             "pre_clock_fit": False, "input_home": "device", "setting": setting,
             "config": "nn.%s(1, %d, batch_first) + Linear, Adam lr %g betas %s eps %g wd %g, batch %d, "
-                      "%d epochs, ours' seed-%d init and row orders, %s %s on %s"
+                      "%d epochs, ours' exported seed-%d initial weights and row orders, %s %s on %s"
                       % (s["cell"], p["hidden_size"], p["learning_rate"], oo["betas"], oo["eps"],
                          oo["weight_decay"], p["batch_size"], p["max_epochs"], p["random_state"], mode,
-                         prec, dev)}
+                         prec, dev),
+            "ours_init": init_meta}
+    Net().load_state_dict(init)           # untimed, strict: the export fits this net or the arm refuses now
     lossf = nn.CrossEntropyLoss() if clf else nn.MSELoss()
     rec = dict(__library__="torch", seed=p["random_state"], hidden_size=p["hidden_size"],
                num_layers=p["num_layers"], learning_rate=p["learning_rate"], batch_size=p["batch_size"],
@@ -4032,7 +4284,16 @@ def _layer_inputs(lane, D, torch):
         d = x.shape[1]
         if t == "gcn":
             from torch_geometric.nn import GCNConv
-            make = lambda: GCNConv(d, **p)  # noqa: E731
+            # FAIRNESS FIX (2026-10-13 audit): ours' GCNConv caches the normalized graph
+            # between calls (python/mojolearn/_expansion_cnn.py GCNConv.forward `_gcache`,
+            # keyed by the edge_index content, filled in the warm-up) while this arm was
+            # GCNConv(cached=False), rebuilding gcn_norm (self loops, degrees, D^-1/2 A D^-1/2)
+            # on every call. PyG's own cache (cached=True: the normalized graph is computed on
+            # the first call and reused) now does the same per-call work on the same static
+            # kNN graph. GCN_TORCH_KW is torch-only (ours has no `cached` argument; it always
+            # caches), declared in the lane notes. Results raced before this change were wrong
+            # for this lane; apply extra scrutiny.
+            make = lambda: GCNConv(d, **dict(p, **GCN_TORCH_KW))  # noqa: E731
         else:
             from torch_geometric.nn import SAGEConv
             make = lambda: SAGEConv(d, **p)  # noqa: E731
@@ -4050,6 +4311,37 @@ def _graph_layer_inputs(D):
     ip = np.asarray(D["indptr"])
     src = np.repeat(np.arange(ip.shape[0] - 1), np.diff(ip))
     return x, np.ascontiguousarray(np.stack([np.asarray(D["indices"]), src]).astype(np.int64))
+
+
+def _load_graph_weights(layer, task, state):
+    """FAIRNESS FIX (2026-10-13 audit): torch's seeded PyG weights (the neural fixture's state
+    dict) into ours' GCNConv / SAGEConv public weight attributes, so both arms start from the
+    same weights and ours' y is comparable with torch's. True when every tensor was present
+    with ours' shape; otherwise nothing is changed and False (ours keeps its own init). Results
+    raced before this change were wrong for this lane; apply extra scrutiny."""
+    np = _np()
+    if task == "gcn":
+        plan = [(layer, "weight_", "lin.weight"), (layer, "bias_", "bias")]
+    elif task == "sage":
+        lin = getattr(layer, "lin_l", None)
+        plan = [(lin, "weight_", "lin_l.weight"), (lin, "bias_", "lin_l.bias"),
+                (layer, "weight_r_", "lin_r.weight")]
+        if getattr(layer, "project", False):
+            return False                   # the projection's weights are not in this map
+    else:
+        return False
+    vals = []
+    for obj, attr, key in plan:
+        cur = getattr(obj, attr, None) if obj is not None else None
+        if cur is None or key not in state:
+            return False
+        v = np.ascontiguousarray(np.asarray(state[key]), dtype=np.float32)
+        if tuple(v.shape) != tuple(np.shape(cur)):
+            return False
+        vals.append((obj, attr, v))
+    for obj, attr, v in vals:
+        setattr(obj, attr, v)
+    return True
 
 
 #: the neural fixture directory this worker reads (set by worker() from --neural-fixtures,
@@ -4273,6 +4565,15 @@ def _build_layer(lane, arm, D):
             except Exception:  # noqa: BLE001  (Conv1d keeps (O, C, 1, k))
                 layer.set_weights(w.reshape(w.shape[0], w.shape[1], 1, -1), b_)
             info["weights_loaded"] = True
+        elif s["task"] in ("gcn", "sage"):
+            # FAIRNESS FIX (2026-10-13 audit): GCNConv/SAGEConv have no load_state_dict, so
+            # ours ran on its own random weights and its output was never checked against the
+            # opponent's. Torch's seeded initial weights (the fixture's PyG state dict) now go
+            # into the layer's public weight attributes (GCN: weight_ = lin.weight, bias_ =
+            # bias; SAGE: lin_l.weight_/bias_ = lin_l.*, weight_r_ = lin_r.weight), shapes
+            # checked; anything else leaves ours' own init (no comparison, as before). Results
+            # raced before this change were wrong for this lane; apply extra scrutiny.
+            info["weights_loaded"] = _load_graph_weights(layer, s["task"], state)
         x = x_cpu
         extra = tuple(extra_cpu)
         # lane idn-cnn-resident: a layer that takes device tensors (conv, pool, BasicBlock, GCNConv,
@@ -4371,13 +4672,30 @@ def _build_layer(lane, arm, D):
     mod.load_state_dict({k: torch.from_numpy(v) for k, v in state.items()})
     mod = mod.to(dev)
     x = x_cpu.to(dev)
-    if s["task"] not in ("gcn", "sage", "embedding") and not s.get("forward_only"):
+    # FAIRNESS FIX (2026-10-13 audit): gcn and sage were excluded here, so torch's backward
+    # computed only the weight gradients while ours' GCNConv/SAGEConv.backward also computes
+    # grad_x (GCN: one more GEMM; SAGE: a GEMM, two SpMMs and an add), ours doing more work.
+    # x now requires grad on gcn and sage too, so both arms compute dx. Results raced before
+    # this change were wrong for this lane; apply extra scrutiny.
+    if s["task"] != "embedding" and not s.get("forward_only"):
         x.requires_grad_(True)             # backward computes dx, as ours' backward returns it
                                            # (embedding: integer ids, the gradient is the table's)
     extra = tuple(e.to(dev) for e in extra_cpu)
+    if s["task"] == "gcn" and GCN_TORCH_KW.get("cached"):
+        # FAIRNESS FIX (2026-10-13 audit): GCNConv(cached=True) fills its cache on the first
+        # call; filled inside a compiled forward, the next call would fail dynamo's guard on
+        # `_cached_edge_index` and recompile inside a timed round. One untimed eager forward
+        # here fills it before torch.compile first runs (ours fills its own cache in the
+        # untimed warm-up). Results raced before this change were wrong for this lane; apply
+        # extra scrutiny.
+        with torch.no_grad():
+            mod(x, *extra)
+        _torch_sync(torch, dev)
+        info["gcn_cache"] = "PyG GCNConv(cached=True), filled by one untimed forward before the clock"
     run = torch.compile(mod) if mode == "compile" else mod
     dt = torch.bfloat16 if prec == "bf16" else None
-    info["config"] = "%s on %s, %s, %s" % (type(mod).__name__, dev, mode, prec)
+    info["config"] = "%s on %s, %s, %s%s" % (type(mod).__name__, dev, mode, prec,
+                                            ", cached=True" if s["task"] == "gcn" else "")
     dyh = {}
 
     def forward():
@@ -5305,7 +5623,11 @@ def _aft_capture_worker(args, B, D, rec, runner):
 
 
 def worker(args):
-    global _NEURAL_FIXTURES
+    global _NEURAL_FIXTURES, _OURS_INIT
+    # FAIRNESS FIX (2026-10-13 audit): the torch twins of the RNN/LSTM/GRU and CNN lanes read
+    # ours' exported initial weights and row orders from here (_read_ours_init). Results raced
+    # before this change were wrong for this lane; apply extra scrutiny.
+    _OURS_INIT = getattr(args, "ours_init", None)
     proto = os.fdopen(os.dup(1), "w", buffering=1)
     os.dup2(2, 1)
     sys.stdout = sys.stderr
@@ -5913,10 +6235,32 @@ def race(args):
     if args.smoke_rows:
         env_extra["MOJOLEARN_ALGOS_SMOKE_ROWS"] = str(args.smoke_rows)
     arm_python = dict(a.split("=", 1) for a in (args.arm_python or []))
+    # FAIRNESS FIX (2026-10-13 audit): the RNN/LSTM/GRU and CNN torch twins started from numpy
+    # weights and row orders that are not ours' (see _read_ours_init). Ours' initial weights
+    # and orders are now exported once, untimed, under OUR interpreter, and every torch arm
+    # loads them; when the export fails the torch arms are refused by name (no worker starts).
+    # Results raced before this change were wrong for this lane; apply extra scrutiny.
+    refused_before, ours_init_path = {}, None
+    torch_arms = [a for a in arms if a.startswith("torch-")]
+    if LANES[lane]["kind"] in OURS_INIT_KINDS and torch_arms:
+        ours_init_path, why = _export_ours_init(args, lane, ds, tag, env_extra)
+        result["ours_init"] = {"path": ours_init_path, "refused": why}
+        if ours_init_path is None:
+            refused_before = {a: why for a in torch_arms}
     for arm in arms:
+        if arm in refused_before:
+            workers[arm] = _tool("bench_board_neural").RefusedArm()
+            result["arms"][arm] = {"command": None, "warmup_ms": None, "ms": [], "infer_ms": [],
+                                   "infer_warmup_ms": None, "digests": [], "mem": [],
+                                   "status": "refused", "error": refused_before[arm]}
+            print("ALGOS-REFUSED lane=%s dataset=%s arm=%s stage=plan detail=%s"
+                  % (lane, ds, arm, json.dumps(refused_before[arm])), flush=True)
+            continue
         py = arm_python.get(arm) or (args.ours_python if arm in OURS_ARMS else args.theirs_python)
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm, "--lane", lane,
                                  "--dataset", ds, "--data", args.data]
+        if ours_init_path is not None and arm.startswith("torch-"):
+            cmd += ["--ours-init", ours_init_path]
         if frozen_config is not None:
             cmd += ["--neural-ab-config", frozen_config]
         if LANES[lane]["kind"] == "layer":    # the ours arms read x/state/dy from here; torch checks
@@ -5936,6 +6280,8 @@ def race(args):
         result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [], "infer_ms": [],
                                "infer_warmup_ms": None, "digests": [], "mem": [], "status": "ok"}
     for arm, w in workers.items():
+        if arm in refused_before:          # FAIRNESS FIX (2026-10-13 audit): refused above, no worker
+            continue
         msg = w.read(args.ready_seconds)
         if msg is not None and msg.get("event") == "skipped":
             w.alive = False
@@ -6084,6 +6430,16 @@ def race(args):
                  json.dumps(result["quality"].get(arm, {}), sort_keys=True, default=str)), flush=True)
     if has_infer(lane):
         result["infer"] = infer
+    # FAIRNESS FIX (2026-10-13 audit): on the neural-network lanes (layers, RNN/LSTM/GRU, CNN,
+    # GCN, GraphSAGE), when a torch compile arm timed out, the other torch arms stayed ordinary
+    # opponents (another setting silently promoted). They now carry `not_opponent` (board mode
+    # "context", no ratio). Results raced before this change were wrong for this lane; apply
+    # extra scrutiny.
+    if LANES[lane]["kind"] in NEURAL_KINDS:
+        BBN = _tool("bench_board_neural")
+        result["opponent_rule"] = BBN.OPPONENT_RULE
+        for arm, why in sorted(BBN.mark_not_opponents(lane, result["arms"]).items()):
+            print("ALGOS-NOT-OPPONENT lane=%s dataset=%s arm=%s %s" % (lane, ds, arm, why), flush=True)
     result["finished"] = now_utc()
     out_json = os.path.join(args.out, "%s.json" % tag)
     with open(out_json + ".tmp", "w") as fh:
@@ -6175,7 +6531,18 @@ def build_parser():
     w.add_argument("--data", required=True)
     w.add_argument("--neural-ab-config", help="frozen neural A/B JSON from conductor")
     w.add_argument("--neural-fixtures", default=None, help="the layer lanes' fixture dir (from the conductor)")
+    # FAIRNESS FIX (2026-10-13 audit): ours' exported initial weights and row orders for the
+    # RNN/LSTM/GRU and CNN torch twins (the conductor runs `ours-init`). Results raced before
+    # this change were wrong for this lane; apply extra scrutiny.
+    w.add_argument("--ours-init", default=None,
+                   help="ours' initial weights and row orders (npz from `ours-init`, the conductor)")
     w.add_argument("--full-tree-workload", action="store_true")
+    oi = sub.add_parser("ours-init", help="write ours' initial weights and per-epoch row orders for "
+                                          "an RNN/LSTM/GRU or CNN race (OUR interpreter, untimed)")
+    oi.add_argument("--lane", required=True, choices=LANE_ORDER)
+    oi.add_argument("--dataset", required=True)
+    oi.add_argument("--data", required=True)
+    oi.add_argument("--out", required=True)
     sub.add_parser("table")
     b = sub.add_parser("builds", help="print the BUILDS= list (bindings/build_*.sh, device + host twins) a race "
                                       "of these lanes needs, e.g. for `lq add nv RACE main <lanes> <ds> BUILDS=...`")
@@ -6199,6 +6566,8 @@ def main(argv=None):
         return prep(args)
     if args.cmd == "worker":
         return worker(args)
+    if args.cmd == "ours-init":            # FAIRNESS FIX (2026-10-13 audit): see _read_ours_init
+        return ours_init_main(args)
     if args.cmd == "table":
         print(json.dumps({l: lane_config(l) for l in LANE_ORDER}, indent=1, sort_keys=True))
         return 0

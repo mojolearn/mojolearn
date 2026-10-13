@@ -82,6 +82,15 @@ cell; nothing falls back to another setting or device. Every bf16 and TF32
 arm is ANOTHER PRECISION than ours; its quality columns (loss or output
 difference against ours) show how far.
 
+FAIRNESS FIX (2026-10-13 audit): a compile arm that times out leaves the race
+without an opponent (torch's fastest setting is unmeasured; the other torch
+arms are recorded as context: `not_opponent`, board mode "context", no ratio)
+instead of silently promoting the eager arm, as it did on AMD samba-train-step.
+The Mamba and Samba torch twins below are pure-PyTorch references and are
+refused by name (REFERENCE_TWIN_LANES); they were reported as opponents.
+Results raced before this change were wrong for these lanes; apply extra
+scrutiny.
+
 The torch models (every one is an existing repo twin; nothing new invented):
   lm-*          tools/torch_lm_step_opponent.py build_model (SDPA; on the
                 torch.cuda API a probed backend is pinned for the fp32/tf32
@@ -276,11 +285,16 @@ NOT_PLANNED = {
 
 #: The board's "Not covered" lines for the neural family.
 NOT_COVERED = [
-    "The Mamba opponents are the repo's pure-PyTorch references (mamba/corpus/gen_corpus.py: "
-    "mamba_ssm's selective_scan_ref for Mamba-1, the chunked SSD reference for Mamba-2, the "
-    "SISO reference for Mamba-3), not mamba-ssm's fused CUDA/Triton kernels, which the board "
-    "does not install; a Mamba ratio here is against a reference implementation, not a "
-    "deployment kernel.",
+    # FAIRNESS FIX (2026-10-13 audit): this line used to present the pure-PyTorch Mamba
+    # references as the Mamba opponents. The torch arms of those lanes (and of Samba, whose
+    # Mamba-3 layers are the same reference) are now refused by name (REFERENCE_TWIN_LANES).
+    # Results raced before this change were wrong for this lane; apply extra scrutiny.
+    "The Mamba and Samba lanes have no opponent on this board: the repo's torch twins are "
+    "pure-PyTorch references (mamba/corpus/gen_corpus.py: mamba_ssm's selective_scan_ref for "
+    "Mamba-1, the chunked SSD reference for Mamba-2, the SISO reference for Mamba-3, and the "
+    "Samba stack built on that Mamba-3 reference), not mamba-ssm's fused CUDA/Triton kernels, "
+    "which the board does not install; a reference implementation is not an opponent, so "
+    "those torch arms are refused by name.",
     "The blocks' backward (the Mamba and TransformerBlock VJPs), ragged `lengths` and a "
     "prefill followed by decode are public and not raced; the zero-state forward (*-forward) "
     "and the zero-state token-by-token decode (*-decode) are.",
@@ -292,6 +306,86 @@ NOT_COVERED = [
     "The GPT-3-small target shape is not on the board (the LM lanes use the smaller control "
     "shape so one shape runs on every box, a 16 GB Mac included).",
 ]
+
+# FAIRNESS FIX (2026-10-13 audit): the torch twins of these lanes are pure-PyTorch REFERENCE
+# implementations (a per-token Python loop for Mamba-1, the chunked reference for Mamba-2/3,
+# and the Samba stack built on the Mamba-3 reference), which this file's own docstring calls
+# "not a deployment kernel"; they were raced and reported as the opponent. A reference
+# implementation is not an opponent (an opponent is a library's own implementation through
+# its public API). The torch arms of these lanes are now refused by name at race time
+# (race(): no worker is started). mamba_ssm's fused kernels are the opponent where they run
+# (lane/mamba-opp facde18cc adds them on NVIDIA; they are not on main). Results raced before
+# this change were wrong for this lane; apply extra scrutiny.
+REFERENCE_TWIN_LANES = {
+    lane: ("not an opponent: the torch twin of %s is a pure-PyTorch reference implementation "
+           "(mamba/corpus/gen_corpus.py%s), not a library kernel; mamba_ssm's fused kernels are "
+           "the opponent only where they run (2026-10-13 fairness audit)"
+           % (lane, " m3_forward inside the Samba stack" if lane.startswith("samba") else ""))
+    for lane in ("mamba1-forward", "mamba2-forward", "mamba3-forward", "samba-train-step",
+                 "samba-forward", "mamba1-infer", "mamba2-infer", "mamba3-infer", "samba-infer")}
+
+# FAIRNESS FIX (2026-10-13 audit): when a compile arm timed out, the race silently promoted the
+# eager arm to the opponent (AMD samba-train-step: both compile arms timed out and eager became
+# the opponent, while compile took 1/3.8-1/3.4 of eager's time on NVIDIA). Now a compile arm that
+# times out marks every other torch arm of its device class `not_opponent` (board mode
+# "context", no ratio): torch's fastest setting is unmeasured, so the race has no opponent rather
+# than another one. Results raced before this change were wrong for this lane; apply extra
+# scrutiny.
+PRECISIONS = ("fp32", "tf32", "bf16", "int8")
+OPPONENT_RULE = ("a compile arm that times out leaves the race without an opponent (torch's "
+                 "fastest setting is unmeasured) instead of promoting another arm (2026-10-13 "
+                 "fairness audit)")
+
+
+def arm_precision(arm):
+    """'torch-compile-bf16' -> 'bf16'; 'mamba-ssm-tf32' -> 'tf32'; None when the name has none."""
+    last = str(arm).rsplit("-", 1)[-1]
+    return last if last in PRECISIONS else None
+
+
+def mark_not_opponents(lane, arms_result):
+    """Set `not_opponent` (the reason) on every completed non-mojolearn arm of a race result whose
+    device class (GPU torch or CPU torch) has a compile arm that timed out: torch's fastest
+    setting is then unmeasured and no other setting is promoted to the opponent.
+    bench_board.classical_cells records such a cell as mode "context" with no ratio. Returns
+    {arm: reason} for the arms it marked."""
+    marked = {}
+
+    def _ours(arm):
+        return str(arm).startswith("ours")
+
+    def _device_class(arm):
+        return "cpu" if str(arm).startswith("torch-cpu-") else "gpu"
+    for t, ta in arms_result.items():
+        if _ours(t) or "-compile-" not in str(t) or ta.get("status") != "timeout":
+            continue
+        for arm, a in arms_result.items():
+            if arm == t or _ours(arm) or a.get("not_opponent") or _device_class(arm) != _device_class(t):
+                continue
+            a["not_opponent"] = marked[arm] = (
+                "%s timed out, so torch's fastest setting on %s is unmeasured; no other setting is "
+                "promoted to the opponent" % (t, lane))
+    return marked
+
+
+class RefusedArm:
+    """FAIRNESS FIX (2026-10-13 audit): the stand-in for an arm a race refuses before starting
+    its worker (a reference twin, a torch arm without ours' exported init): never alive, reads
+    nothing, so every loop of the conductor skips it and its status stays "refused"."""
+    alive = False
+    info = None
+
+    def read(self, *_a, **_k):
+        return None
+
+    def send(self, *_a, **_k):
+        pass
+
+    def kill(self, *_a, **_k):
+        pass
+
+    def close(self, *_a, **_k):
+        pass
 
 # ---------------------------------------------------------------------------
 # Shapes
@@ -533,6 +627,12 @@ def lane_settings(lane):
             s["quality"] += ", untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)"
     s["torch_settings"] = {a: precision_text(arm_setting(a)[1]) for a in
                            ["torch-" + x for x in TORCH_SETTINGS]}
+    # FAIRNESS FIX (2026-10-13 audit): the reference-twin refusal is part of the lane's
+    # settings, so the opponent store's settings key changes and no reference cell stored
+    # before is reused as an opponent. Results raced before this change were wrong for this
+    # lane; apply extra scrutiny.
+    if lane in REFERENCE_TWIN_LANES:
+        s["opponent_refused"] = REFERENCE_TWIN_LANES[lane]
     return s
 
 
@@ -2175,7 +2275,20 @@ def race(args):
     result["comparison_scope"] = ("declared public experimental operation; not the ordinary lane boundary"
                                   if operation != "model_default" else "ordinary lane boundary")
     workers = {}
+    # FAIRNESS FIX (2026-10-13 audit): a torch arm on a lane whose only torch twin is a
+    # pure-PyTorch reference was raced and reported as the opponent. It is now refused by name
+    # here (no worker starts; the cell reads REFUSED with the reason). Results raced before
+    # this change were wrong for this lane; apply extra scrutiny.
+    refused_before = {a: REFERENCE_TWIN_LANES[lane] for a in arms
+                      if lane in REFERENCE_TWIN_LANES and a not in OUR_ARMS}
     for arm in arms:
+        if arm in refused_before:
+            workers[arm] = RefusedArm()
+            result["arms"][arm] = {"command": None, "warmup_ms": None, "ms": [], "digests": [],
+                                   "mem": [], "status": "refused", "error": refused_before[arm]}
+            print("NEURAL-REFUSED lane=%s arm=%s stage=plan detail=%s"
+                  % (lane, arm, json.dumps(refused_before[arm])), flush=True)
+            continue
         py = args.ours_python if arm in OUR_ARMS else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--shape", shape, "--data", data_path]
@@ -2186,6 +2299,8 @@ def race(args):
         result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [], "digests": [],
                                "mem": [], "status": "ok"}
     for arm, w in workers.items():
+        if arm in refused_before:
+            continue
         msg = w.read(args.ready_seconds)
         if msg is None or msg.get("event") != "ready":
             w.kill("not_ready", msg)
@@ -2326,6 +2441,13 @@ def race(args):
         print("NEURAL lane=%s arm=%s status=%s median_ms=%s quality=%s"
               % (lane, arm, a["status"], a["median_ms"],
                  json.dumps(result["quality"].get(arm, {}), sort_keys=True)), flush=True)
+    # FAIRNESS FIX (2026-10-13 audit): when a compile arm timed out, the other torch arms were
+    # recorded as ordinary opponents (the eager arm silently became the opponent). They now
+    # carry `not_opponent` (shown as context, never the opponent). Results raced before this
+    # change were wrong for this lane; apply extra scrutiny.
+    result["opponent_rule"] = OPPONENT_RULE
+    for arm, why in sorted(mark_not_opponents(lane, result["arms"]).items()):
+        print("NEURAL-NOT-OPPONENT lane=%s arm=%s %s" % (lane, arm, why), flush=True)
     result["finished"] = now_utc()
     out_json = os.path.join(args.out, "%s.json" % tag)
     with open(out_json + ".tmp", "w") as fh:

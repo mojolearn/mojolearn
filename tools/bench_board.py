@@ -83,8 +83,9 @@ WHAT IT REUSES (it re-implements no measurement)
   rosters    tools/bench_all_ours.sh's per-lane NVIDIA rosters.
 
 NEURAL, NOT COVERED: bench_board_neural.NOT_COVERED and NOT_PLANNED (the
-Mamba opponents are pure-PyTorch references, not mamba-ssm's fused kernels;
-the blocks' backward and decode are not raced; TF32 exists on NVIDIA CUDA
+Mamba and Samba torch twins are pure-PyTorch references, not mamba-ssm's fused
+kernels, and are refused by name: FAIRNESS FIX 2026-10-13 audit, they were
+reported as opponents before; the blocks' backward and decode are not raced; TF32 exists on NVIDIA CUDA
 only; the GPT-3-small target shape is off the board). tools/speed_gemm_arm.py,
 tools/speed_torch_seq.py's timing harness and bench/model/harness.py time
 source-built Mojo binaries, not the wheel, and are not used here (the board
@@ -1884,6 +1885,14 @@ def classical_cells(ctx, race, r):
                     library_version=info.get("version"),
                     comparability={"span": span, "span_asymmetry": asym},
                     verdict=verdict)
+        # FAIRNESS FIX (2026-10-13 audit): an arm the driver marks `not_opponent` (a sibling of
+        # a compile arm that timed out: bench_board_neural.mark_not_opponents) was recorded as
+        # an ordinary opponent and silently became the fastest opponent. It is now a "context"
+        # cell: shown, never an opponent, no ratio (add_ratios). Results raced before this
+        # change were wrong for this lane; apply extra scrutiny.
+        if a.get("not_opponent") and arm_library(arm) != "mojolearn":
+            cell.update(mode="context", not_opponent=a["not_opponent"],
+                        verdict="NOT-AN-OPPONENT(%s)" % a["not_opponent"])
         cell.update(memory_fields(a.get("mem")))
         if mode:
             cell["mode_witness"] = info.get("numeric_mode_used")
@@ -2007,6 +2016,11 @@ def add_ratios(cells):
         # Opponents only. FAST over IDENTICAL is the cost of identity, an
         # internal number that never reaches a board (ENGINEERING_RULES 0b-iii).
         if id(c) not in done or c["library"] == "mojolearn" or c.get("hardware_comparable") is False:
+            continue
+        # FAIRNESS FIX (2026-10-13 audit): a context cell (not_opponent: a sibling of a compile
+        # arm that timed out) got a ratio like an opponent. It gets none now. Results raced
+        # before this change were wrong for this lane; apply extra scrutiny.
+        if c.get("mode") == "context":
             continue
         if ours_id and c is not ours_id:
             c["ratio_ours_identical_over"] = ours_id["median_ms"] / c["median_ms"]
