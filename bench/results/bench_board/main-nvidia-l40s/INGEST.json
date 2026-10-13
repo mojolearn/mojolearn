@@ -1,20 +1,19 @@
 {
- "generated": "2026-10-13T01:43:08Z",
+ "generated": "2026-10-13T07:59:52Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-13T01:43:08Z",
+  "generated": "2026-10-13T07:59:52Z",
   "grid_logs": [
-   "nv=/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/gridlogs_nvc3.txt"
+   "nv=/Users/andrewhendel/mojolearn-evidence/r43/ingest/nv-gridlogs.txt"
   ],
   "json_dir": null,
   "results": [
-   "nv=/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-   "nv=/Users/andrewhendel/mojolearn-evidence/rfe-istella-20261012/ingest/rfe_exact_nv.txt"
+   "nv=/Users/andrewhendel/mojolearn-evidence/r43/ingest/nv-results.txt"
   ]
  },
  "skip_notes": [],
  "skipped": {
-  "ALGOS: arm sklearn-cpu": 62
+  "ALGOS: arm sklearn-cpu": 4
  },
- "summary": "MAINBOARD column=nvidia-l40s label=main@8899093fc races=245 add=0 change=0 drop=0 failed=0 ledger=43 withheld_opponents=4 identity=n/a:245"
+ "summary": "MAINBOARD column=nvidia-l40s label=main@4c75b4144 races=248 add=3 change=3 drop=0 failed=0 ledger=6 withheld_opponents=4 identity=n/a:248"
 }

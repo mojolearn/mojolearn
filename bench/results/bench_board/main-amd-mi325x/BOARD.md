@@ -1,14 +1,14 @@
 # mojolearn benchmark board
 
-Generated 2026-10-13T01:43:09Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-13T07:59:53Z from `board.json` (schema `mojolearn-bench-board/1`).
 
-> MAIN BOARD amd-mi325x, version label main@4e9a2bf60. Unreleased: not reproducible by pip install; the release boards are the reference.
+> MAIN BOARD amd-mi325x, version label main@a6b5f76cb. Unreleased: not reproducible by pip install; the release boards are the reference.
 
-> Cells: 226 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@4e9a2bf60 (2026-10-12T22:57:32Z). Boxes: AMD Instinct MI325X (amd, DO).
+> Cells: 229 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@a6b5f76cb (2026-10-13T03:41:45Z). Boxes: AMD Instinct MI325X (amd, DO).
 
-> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 28 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
+> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 12 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
-> Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: n/a 226).
+> Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: n/a 229).
 
 > Opponents: copied from the stored opponent boards (opponents-20261006, release-board-resume-r2), never re-run here; `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 4 races.
 
@@ -16,7 +16,7 @@ Generated 2026-10-13T01:43:09Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Identity
 
-Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: n/a 226.
+Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: n/a 229.
 
 DIFFER: none.
 
@@ -47,8 +47,8 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | memory bytes | - |
 | OS | - |
 | Python | - |
-| mojolearn | main@4e9a2bf60 (wheel none (unreleased; built from source at each cell's commit), sha256 -) |
-| script commit | 4e9a2bf60449564e6ec188dcad82ff7eccc72b58 |
+| mojolearn | main@a6b5f76cb (wheel none (unreleased; built from source at each cell's commit), sha256 -) |
+| script commit | a6b5f76cb303cf3124a16d352c73930f089b1a51 |
 | patch sync | - |
 | modes | identical |
 | rounds | 1 timed after 1 warm-up, arms interleaved round by round |
@@ -71,7 +71,7 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 
 ## Coverage
 
-Races: 226 planned, 226 done, 0 failed, 0 unsupported, 0 pending. Cells: 624 (HOST-MEMORY 1, REFUSED 12, ok 611).
+Races: 229 planned, 229 done, 0 failed, 0 unsupported, 0 pending. Cells: 630 (HOST-MEMORY 1, REFUSED 13, ok 616).
 
 ## Quality at a glance
 
@@ -139,6 +139,9 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | dynamic-optimized-theta | taxi-hourly | forecast_rmse (lower is better) | - | 49.086628 | statsforecast-cpu 49.314797 |
 | algos | eigh | synthetic | max_eigenvalue_error | - | 3.692e-07 | torch-gpu 1.254e-06; numpy-cpu 3.49e-08 |
 | algos | eigh | synthetic | relative_residual | - | 6.672e-07 | torch-gpu 1.269e-06; numpy-cpu 2.824e-08 |
+| algos | elliptic-envelope | istella | fraction_flagged | - | 0.092480 | sklearn-cpu - |
+| algos | elliptic-envelope | taxi | fraction_flagged | - | 0.102090 | sklearn-cpu 0.102470 |
+| algos | elliptic-envelope | taxi | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
 | algos | embedding | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000 |
 | algos | embedding | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000 |
 | algos | enet-cv | istella | r2 (higher is better) | - | 0.326805 | sklearn-cpu 0.326805 |
@@ -243,7 +246,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | maxpool2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | maxpool2d | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | min-cov-det | istella | n_features | - | 220 | sklearn-cpu - |
-| algos | min-cov-det | istella | rel_diff_vs_sklearn | - | 0.239333 | sklearn-cpu - |
+| algos | min-cov-det | taxi | n_features | - | 11 | sklearn-cpu 11 |
 | algos | minibatch-kmeans | istella | n_clusters | - | 8 | sklearn-cpu 8 |
 | algos | minibatch-kmeans | istella | silhouette (higher is better) | - | 0.116696 | sklearn-cpu 0.111849 |
 | algos | minibatch-kmeans | istella | ari_vs_ours (1 is our partition exactly) | - | - | sklearn-cpu 0.622446 |
@@ -1263,11 +1266,11 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### gmm / istella (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt (amd/a0536)`, ran on AMD Instinct MI325X (amd, DO) job a0536
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/r43/ingest/amd-gridlogs.txt (amd/a1590)`, ran on AMD Instinct MI325X (amd, DO) job a1590
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@de2b2b739) | identical | 541.5 | 541.5..541.5 | 1 | - | - | 541.5 | - | - (stored whole) | - | - | - | - | bic=-3.851e+07, mean_log_likelihood=200.794500, n_iter=24 | - | main board, one scored run | - | ok (main@de2b2b739 amd/a0536 2026-10-08; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.42 (source build, main@a6b5f76cb) | identical | 591.2 | 591.2..591.2 | 1 | - | - | 591.2 | - | - (stored whole) | - | - | - | - | bic=-3.851e+07, mean_log_likelihood=200.794500, n_iter=24 | - | main board, one scored run | - | ok (main@a6b5f76cb amd/a1590 2026-10-13; identity vs the nvidia columns: n/a) |
 
 settings: n_components=8, covariance_type='full', tol=1e-3, reg_covar=1e-6 on taxi and 3e-3 on Istella-S (GMM_REG_COVAR), max_iter=100, init_params='kmeans', n_init=1, warm_start=False, random_state=7. Rows: 100000 fit and 20000 held-out stride rows of the reg block (standardized by the fit rows); an explicitly full_dataset_coverage recipe retains all fit/eval rows. Timed: fit.
 
@@ -1279,11 +1282,11 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### gmm / taxi (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt (amd/a0536)`, ran on AMD Instinct MI325X (amd, DO) job a0536
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/r43/ingest/amd-gridlogs.txt (amd/a1590)`, ran on AMD Instinct MI325X (amd, DO) job a1590
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@de2b2b739) | identical | 56.3 | 56.3..56.3 | 1 | - | - | 56.3 | - | - (stored whole) | - | - | - | - | bic=-3.668e+06, mean_log_likelihood=12.807640, n_iter=29 | - | main board, one scored run | - | ok (main@de2b2b739 amd/a0536 2026-10-08; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.42 (source build, main@a6b5f76cb) | identical | 61.5 | 61.5..61.5 | 1 | - | - | 61.5 | - | - (stored whole) | - | - | - | - | bic=-3.668e+06, mean_log_likelihood=12.807640, n_iter=29 | - | main board, one scored run | - | ok (main@a6b5f76cb amd/a1590 2026-10-13; identity vs the nvidia columns: n/a) |
 
 settings: n_components=8, covariance_type='full', tol=1e-3, reg_covar=1e-6 on taxi and 3e-3 on Istella-S (GMM_REG_COVAR), max_iter=100, init_params='kmeans', n_init=1, warm_start=False, random_state=7. Rows: 100000 fit and 20000 held-out stride rows of the reg block (standardized by the fit rows); an explicitly full_dataset_coverage recipe retains all fit/eval rows. Timed: fit.
 
@@ -2395,6 +2398,40 @@ memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round)
 memory, numpy-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
 
 settings: {'UPLO': 'L'}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### elliptic-envelope / istella (rows full, shape X 100000x220; Xq 100000x220; y 100000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/r43/ingest/amd-results.txt (amd/a1589)`, ran on AMD Instinct MI325X (amd, DO) job a1589
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.42 (source build, main@a6b5f76cb) | identical | 239074.1 | 239074.1..239074.1 | 1 | - | - | 239074.1 | - | - (stored whole) | - | - | - | - | fraction_flagged=0.092480 | - | main board, one scored run | - | ok (main@a6b5f76cb amd/a1589 2026-10-13; identity vs the nvidia columns: n/a) |
+| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(timeout: null) (copied from release-board-resume-r2; measured this run) |
+
+settings: {'contamination': 0.1, 'random_state': 7}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### elliptic-envelope / taxi (rows full, shape X 100000x11; Xq 100000x11; y 100000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/r43/ingest/amd-results.txt (amd/a1589)`, ran on AMD Instinct MI325X (amd, DO) job a1589
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.42 (source build, main@a6b5f76cb) | identical | 9759.6 | 9759.6..9759.6 | 1 | - | - | 9759.6 | - | - (stored whole) | - | - | - | - | fraction_flagged=0.102090 | - | main board, one scored run | - | ok (main@a6b5f76cb amd/a1589 2026-10-13; identity vs the nvidia columns: n/a) |
+| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 1240.4 | 1240.4..1240.4 | 1 | 7.868 | - | 1240.4 | 1240.4 | 0.00 (cpu-arm) | 7.868 (whole/whole) | - | 368.1 | - | fraction_flagged=0.102470, jaccard_vs_sklearn=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
+
+settings: {'contamination': 0.1, 'random_state': 7}. Rows: None. Timed: None.
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3564,12 +3601,31 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### min-cov-det / istella (rows full, shape X 100000x220; Xq 100000x220; y 100000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0010)`, ran on AMD Instinct MI325X (amd, DO) job a0010
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/r43/ingest/amd-results.txt (amd/a1589)`, ran on AMD Instinct MI325X (amd, DO) job a1589
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@1658ba796) | identical | 268914.6 | 268914.6..268914.6 | 1 | - | - | 268914.6 | - | - (stored whole) | - | - | - | - | n_features=220, rel_diff_vs_sklearn=0.239333 | - | main board, one scored run | - | ok (main@1658ba796 amd/a0010 2026-10-12; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.42 (source build, main@a6b5f76cb) | identical | 243389.1 | 243389.1..243389.1 | 1 | - | - | 243389.1 | - | - (stored whole) | - | - | - | - | n_features=220 | - | main board, one scored run | - | ok (main@a6b5f76cb amd/a1589 2026-10-13; identity vs the nvidia columns: n/a) |
 | sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(timeout: null) (copied from release-board-resume-r2; measured this run) |
+
+settings: {'random_state': 7}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### min-cov-det / taxi (rows full, shape X 100000x11; Xq 100000x11; y 100000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/r43/ingest/amd-results.txt (amd/a1589)`, ran on AMD Instinct MI325X (amd, DO) job a1589
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.42 (source build, main@a6b5f76cb) | identical | 9851.8 | 9851.8..9851.8 | 1 | - | - | 9851.8 | - | - (stored whole) | - | - | - | - | n_features=11 | - | main board, one scored run | - | ok (main@a6b5f76cb amd/a1589 2026-10-13; identity vs the nvidia columns: n/a) |
+| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 1251.0 | 1251.0..1251.0 | 1 | 7.875 | - | 1251.0 | 1251.0 | 0.00 (cpu-arm) | 7.875 (whole/whole) | - | 366.5 | - | n_features=11 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+
+memory, ours: host not sampled; GPU not sampled
+
+memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
 
 settings: {'random_state': 7}. Rows: None. Timed: None.
 
