@@ -271,6 +271,8 @@ def reset_caches():
     _PYTHON_FILES = None
     _ENUMERATORS = None
     _LANE_SOURCES = None
+    global _LANE_SEED_CALLS
+    _LANE_SEED_CALLS = None
     _SOURCE_HASHED = None
     _CONSTANTS = None
     _EXTENDERS = None
@@ -1691,6 +1693,7 @@ def host_routes(hs=None):
 
 
 _LANE_SOURCES = None
+_LANE_SEED_CALLS = None
 
 
 def lane_sources():
@@ -1896,6 +1899,7 @@ def lane_sources():
         """Is `binding` resolved by a door this lane runs whole (see `_own`)."""
         return binding in _own(lane)[2]
 
+    seed_calls = {}
     for lane in reach:
         matched, files, doors, bindings = reach[lane]
         # THE NAMES THIS LANE'S OWN DOORS CALL (2026-09-23; this was every
@@ -1909,6 +1913,19 @@ def lane_sources():
         used = _own(lane)[1]
         mojo = set()
         binding_use = {}
+        # EVERY BINDING CONTRIBUTION, RECORDED (lane/lane-select-mojo,
+        # 2026-10-12): (binding source, wide, the exports this lane calls in
+        # it, the files it contributed). `mojo_edit_lanes` reads it to tell a
+        # Mojo file a lane reaches through named exports (the definition graph
+        # can narrow it) from one it reaches through a whole-closure fallback
+        # (the old whole-file rule stands for that lane).
+        calls = seed_calls[lane] = []
+
+        def recorded_seeds(src, wide=True):
+            got = binding_seeds(src, used, wide)
+            exports_of = _binding_exports(src)
+            calls.append((src, wide, tuple(sorted(e for e in used if e in exports_of)), frozenset(got)))
+            return got
         source_only_hosts = set()
         for binding in bindings:
             gpu_src = os.path.join("bindings", binding + ".mojo")
@@ -1921,7 +1938,7 @@ def lane_sources():
             # what kept the shared ones from handing over their trees.
             wide = True if _whole(lane, binding) else "narrow"
             binding_use[binding] = dict(wide=wide, exports=sorted(e for e in used if e in _binding_exports(gpu_src)))
-            mojo |= binding_seeds(gpu_src, used, wide)
+            mojo |= recorded_seeds(gpu_src, wide)
             for host in sorted(routed.get(binding, ())):
                 host_src = os.path.join("bindings", host + ".mojo")
                 # WHOSE CPU PATH IS THIS. A lane is served by a host binding
@@ -1939,7 +1956,7 @@ def lane_sources():
                 # hands every core lane the k-means, DBSCAN, k-NN and scaler
                 # oracles at once. A lane not declared for it (reached through
                 # a shared helper only) falls back to the source, not the tree.
-                host_seeds = binding_seeds(host_src, used, True if _whole(lane, host) else "narrow")
+                host_seeds = recorded_seeds(host_src, True if _whole(lane, host) else "narrow")
                 if host_seeds == {host_src}:
                     source_only_hosts.add(host_src)
                 mojo |= host_seeds
@@ -1959,7 +1976,7 @@ def lane_sources():
             # `_mojo_closure([src])`, the build's walk) is the derived answer
             # and is never narrower than the declaration; the doors are in the
             # lane's Python closure already, or the lane does not load them.
-            mojo |= binding_seeds(src, used)
+            mojo |= recorded_seeds(src)
             mojo.add(hs.build_shim(fam))
         # THE SOURCE CARRIES ITS EXECUTORS (lane/lazy-imports-2, 2026-10-11).
         # A host binding taken as its source alone (the lane loads the binary on
@@ -1991,6 +2008,8 @@ def lane_sources():
                          declared=sorted(declared),
                          families=sorted(fams), mojo=len(mojo), exports=len(used),
                          ubiquitous=sorted(ubiquitous), binding_use=binding_use)
+    global _LANE_SEED_CALLS
+    _LANE_SEED_CALLS = seed_calls
     _LANE_SOURCES = (sources, why)
     return _LANE_SOURCES
 
