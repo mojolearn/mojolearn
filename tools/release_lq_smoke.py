@@ -67,10 +67,15 @@ def sha256(path):
 def lq_target(lq, box):
     """The ssh target lq itself uses for BOX (its NV=/AMD= line), as argv."""
     var = BOXES[box]
-    m = re.search(rf'^\s*{var}="([^"]+)"|[;\s]{var}="([^"]+)"', Path(lq).read_text(), re.M)
+    # lq reads `NV=${LQ_NV:-"<default>"}`: the LQ_<VAR> override wins, as it
+    # does for lq itself (a replacement pod or droplet), else lq's default.
+    env = os.environ.get(f"LQ_{var}")
+    if env:
+        return shlex.split(env)
+    m = re.search(rf'(?:^|[;\s]){var}=(?:\$\{{LQ_{var}:-)?"([^"]+)"', Path(lq).read_text(), re.M)
     if not m:
         raise SystemExit(f"lq-smoke: no {var}=\"...\" ssh target in {lq}")
-    return shlex.split(m.group(1) or m.group(2))
+    return shlex.split(m.group(1))
 
 
 def box_plan(smoke_args, remote_dir):
