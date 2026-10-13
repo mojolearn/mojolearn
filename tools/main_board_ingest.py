@@ -764,6 +764,14 @@ def copy_opponents(BB, sources, family, lane, race_id, archive=None, backfill=No
                                  "box": (box.get("host") or {}).get("hostname"),
                                  "gpu": (box.get("gpu") or {}).get("name"),
                                  "measured": (c.get("stored") or {}).get("measured_at") or rr.get("finished")}
+            span = (oc.get("comparability") or {}).get("span") or {}
+            if span.get("input_home") == "host" and isinstance(span.get("upload_ms_untimed"), (int, float)):
+                # FAIRNESS FIX (2026-10-13 audit): cells copied from the 2026-10-06 opponent boards carry the label
+                # input_home "host" although their upload ran before the clock (upload_ms_untimed is set; the driver
+                # label was fixed on 2026-10-08, 06b172ccb). The tables then left out the dagger that says the
+                # opponent's clock excludes its copy. A recorded untimed upload means the inputs were on the device.
+                span["input_home"] = "device"
+                span["input_home_relabelled"] = "host -> device (upload_ms_untimed recorded; 2026-10-13 audit)"
             old = oc.get("source")
             oc["source"] = "copied from %s%s" % (src["label"], ("; " + old) if old else "")
             # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
