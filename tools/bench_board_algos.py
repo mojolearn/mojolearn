@@ -687,7 +687,7 @@ for _slug, _fn, _blk, _k in (("select-f-classif", "f_classif", "cls", 0.5),
          sub=({"X": SUB["mid"]} if _fn.startswith("mutual") else {}),
          sk="sklearn.feature_selection:SelectKBest", params=dict(k="half"),
          notes=["k = d // 2; score_func = %s (ours: mojolearn.%s)" % (_fn, _fn)])
-_add("rfe", xlane="prep", ours="RFE", task="select", block="cls", sub={"X": SUB["knn"]},
+_add("rfe", xlane="prep", ours="RFE", task="select", block="cls", sub={"X": SUB["knn"]}, quality="select-exact",
      sk="sklearn.feature_selection:RFE",
      params=dict(estimator=_E("LogisticRegression", max_iter=200), n_features_to_select="half",
                  step=0.1),
@@ -1519,6 +1519,9 @@ QUALITY_TEXT = {
     "embed": "trustworthiness k=15 over every embedded row",
     "impute": "RMSE over the masked cells; max abs diff vs scikit-learn",
     "select": "selected-feature Jaccard against scikit-learn's selection",
+    "select-exact": "selected-feature Jaccard against an exact RFE (scikit-learn RFE with "
+                    "LogisticRegression(solver='newton-cholesky', tol=1e-10) in float64, untimed) "
+                    "and against scikit-learn's selection",
     "covariance": "relative Frobenius difference of covariance_ vs scikit-learn",
     "labels": "exact agreement with scikit-learn's output",
     "radius": "neighbours found in total; fraction of queries whose neighbour count equals "
@@ -2889,7 +2892,7 @@ def _build_est(lane, arm, D):
             o["mean"] = _arr(est.mean_, np.float64)
         if qk == "perplexity":
             o["components"] = _arr(est.components_, np.float64)
-        if qk == "select":
+        if qk in ("select", "select-exact"):
             if hasattr(est, "get_support"):
                 sup = _arr(est.get_support(), np.int64)
             elif hasattr(est, "support_"):
@@ -5178,6 +5181,23 @@ def _modularity(ip, ix, lab):
     return inside / m2 - float((tot / m2) ** 2 @ np.ones_like(tot))
 
 
+def _exact_rfe_support(lane, D):
+    """The selection an exactly solved RFE makes: the lane's step and n_features_to_select with
+    LogisticRegression(solver='newton-cholesky', tol=1e-10) in float64 at the nested estimator's C.
+    The lane's own LogisticRegression(max_iter=200) stops before convergence on wide blocks (istella:
+    scikit-learn warns on every fit), so scikit-learn's selection is one inexact answer among others,
+    not a reference (rfe-istella-20261012). Untimed scorer work, the same for every arm."""
+    np = _np()
+    from sklearn.feature_selection import RFE as _RFE
+    from sklearn.linear_model import LogisticRegression as _LR
+    p = _derived_params(lane, D, LANES[lane]["params"])
+    est = p["estimator"]
+    r = _RFE(_LR(solver="newton-cholesky", tol=1e-10, max_iter=500, C=float(est["kw"].get("C", 1.0))),
+             n_features_to_select=p["n_features_to_select"], step=p["step"])
+    r.fit(D["X"].astype(np.float64), D["y"])
+    return np.asarray(r.support_, dtype=bool)
+
+
 def quality(lane, D, outs):
     if LANES[lane]["kind"] == "extra":
         return _EXTRA.quality(lane, D, outs, globals())
@@ -5189,6 +5209,7 @@ def quality(lane, D, outs):
     ref_arm = "scipy-cpu"                 # the function-call lanes' reference arm
     ref_fn = outs.get(ref_arm)
     q = {}
+    exact = None                          # select-exact: the exact RFE selection, computed once
     for arm, o in outs.items():
         e = {}
         try:
@@ -5233,12 +5254,17 @@ def quality(lane, D, outs):
                 e["masked_rmse"] = float(np.sqrt(np.mean((o["pred"][m] - D["Xq_true"][m]) ** 2)))
                 if ref is not None and arm != "sklearn-cpu":
                     e["max_abs_diff_vs_sklearn"] = float(np.max(np.abs(o["pred"] - ref["pred"])))
-            elif qk == "select":
+            elif qk in ("select", "select-exact"):
                 sup = o["support"].astype(bool)
                 e["n_selected"] = int(sup.sum())
                 if ref is not None:
                     r = ref["support"].astype(bool)
                     e["jaccard_vs_sklearn"] = float((sup & r).sum()) / max(1, float((sup | r).sum()))
+                if qk == "select-exact":
+                    if exact is None:
+                        exact = _exact_rfe_support(lane, D)
+                    r = exact
+                    e["jaccard_vs_exact"] = float((sup & r).sum()) / max(1, float((sup | r).sum()))
             elif qk == "covariance":
                 e["n_features"] = int(o["covariance"].shape[0])
                 if ref is not None and arm != "sklearn-cpu":

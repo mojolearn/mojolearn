@@ -277,6 +277,13 @@ def test_quality_by_kind():
     sup = {"support": np.array([1, 0, 1, 0])}
     q = A.quality("select-chi2", {}, {"sklearn-cpu": sup, "ours": {"support": np.array([1, 1, 1, 0])}})
     assert q["ours"]["jaccard_vs_sklearn"] == pytest.approx(2 / 3)
+    pytest.importorskip("sklearn")
+    Xs = rng.standard_normal((400, 6)).astype(np.float32)
+    ys = (Xs[:, 0] - Xs[:, 2] > 0).astype(np.float32)
+    exact = A._exact_rfe_support("rfe", {"X": Xs, "y": ys})
+    assert exact[0] and exact[2] and exact.sum() == 3
+    q = A.quality("rfe", {"X": Xs, "y": ys}, {"ours": {"support": exact.astype(np.int64)}})
+    assert q["ours"]["jaccard_vs_exact"] == 1.0 and "exact" not in q
     phi = rng.standard_normal((5, 3))
     q = A.quality("tree-shap", {}, {"x": {"phi": phi, "base": np.ones(5), "margin": phi.sum(1) + 1}})
     assert q["x"]["max_additivity_error"] < 1e-12
