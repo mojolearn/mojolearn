@@ -138,7 +138,12 @@ PINS_COMMON = ["statsmodels==0.15.0", "statsforecast==2.1.1", "arch==8.0.0", "pr
                "networkx==3.6.1", "shap==0.51.0", "implicit==0.7.3",
                "torch-geometric==2.8.0.post1", "gpytorch==1.15.2", "faiss-cpu==1.15.1",
                # the bpe-encode and bpe-train opponent (Hugging Face tokenizers)
-               "tokenizers==0.23.2"]
+               "tokenizers==0.23.2",
+               # FAIRNESS FIX (2026-10-13 audit): the moe lane's opponent is transformers' own
+               # MixtralSparseMoeBlock (bench_board_neural.TRANSFORMERS_PIN; torchvision for
+               # resnet-block comes with torch, tools/bench_board.py DEFAULT_TORCHVISION_SPEC).
+               # Results raced before this change were wrong for this lane; apply extra scrutiny.
+               "transformers==5.17.0"]
 PINS = {"apple": list(PINS_COMMON), "amd": list(PINS_COMMON),
         "nvidia": list(PINS_COMMON)}
 #: installed from the rapids index with the pinned cuml/cuvs set
@@ -379,9 +384,18 @@ _add("pa-reg", xlane="linear", ours="PassiveAggressiveRegressor", task="reg", bl
      mism=["ours batch_size=0 (per-sample updates, scikit-learn's form; ours defaults to 256)"])
 _add("ridge-clf", xlane="linear", ours="RidgeClassifier", task="clf", block="cls",
      sk="sklearn.linear_model:RidgeClassifier", params=dict(alpha=1.0, random_state=SEED))
+# FAIRNESS FIX (2026-10-13 audit): ours' batch_size was left at its default (None: minibatches of
+# 4096 rows in IDENTICAL mode, per-sample otherwise) while scikit-learn's SGDOneClassSVM is
+# per-sample SGD: two algorithms (istella flagged 0.00044 vs 0.0933). Ours is pinned to its
+# documented per-sample fit (batch_size=0) through `ours_extra` (scikit-learn has no batch_size, so
+# it cannot be a shared param). Results raced before this change were wrong for this lane; apply extra
+# scrutiny.
 _add("sgd-ocsvm", xlane="linear", ours="SGDOneClassSVM", task="outlier", block="cls",
      sk="sklearn.linear_model:SGDOneClassSVM", params=dict(nu=0.1, max_iter=20, tol=None,
-                                                          random_state=SEED))
+                                                          random_state=SEED),
+     ours_extra=dict(batch_size=0),
+     mism=["ours takes batch_size=0 (its per-sample fit, scikit-learn's algorithm); scikit-learn "
+           "SGDOneClassSVM has no batch_size and is always per-sample"])
 _ALPHAS = [0.001, 0.01, 0.1, 1.0, 10.0]
 _add("ridge-cv", xlane="linear", ours="RidgeCV", task="reg", block="reg",
      sk="sklearn.linear_model:RidgeCV", params=dict(alphas=_ALPHAS, cv=5),
@@ -1053,8 +1067,12 @@ _add("moe", xlane="sequence", ours=("MoEBlock",), kind="layer",
      task="moe", block="tensor", datasets=("synthetic",), torch=True, forward_only=True,
      params=dict(hidden_size=1024, intermediate_size=2816, num_experts=8, top_k=2,
                  norm_topk_prob=True),
-     notes=["x (8192, 1024); the torch arm is a transcription of HF MixtralSparseMoeBlock.forward "
-            "(softmax router, top-2, renormalized weights, SwiGLU experts)",
+     # FAIRNESS FIX (2026-10-13 audit): the torch arm is transformers' own MixtralSparseMoeBlock now
+     # (it was the harness's transcription). Results raced before this change were wrong for this
+     # lane; apply extra scrutiny.
+     notes=["x (8192, 1024); the torch arm is transformers' own MixtralSparseMoeBlock (softmax "
+            "router, top-2, renormalized weights, SwiGLU experts, no jitter), the fixture's "
+            "per-expert weights mapped into its layout",
             "forward only on every arm (ours exports no MoEBlock backward, "
             "sequence/NOT_IMPLEMENTED.tsv): the fit column times one forward, torch under "
             "no_grad; ours loads torch's weights in HF's fused layout (router (E, D), "
@@ -1468,7 +1486,12 @@ _add("global-maxpool", xlane="cnn", ours=("AdaptiveMaxPool2d", "GlobalMaxPool2d"
 _add("resnet-block", xlane="cnn", ours=("BasicBlock", "ResNetBasicBlock"), kind="layer",
      task="resnet", block="tensor", datasets=("synthetic",), torch=True,
      params=dict(inplanes=64, planes=64),
-     notes=["torchvision BasicBlock semantics (conv3x3-BN-ReLU-conv3x3-BN + identity, ReLU), "
+     # FAIRNESS FIX (2026-10-13 audit): the torch arm is torchvision's own BasicBlock now (it was
+     # the harness's transcription). Results raced before this change were wrong for this lane;
+     # apply extra scrutiny.
+     notes=["torch arm: torchvision.models.resnet.BasicBlock (stride 1, no downsample), torch's "
+            "seeded init via the neural fixture; ours loads the same weights",
+            "torchvision BasicBlock semantics (conv3x3-BN-ReLU-conv3x3-BN + identity, ReLU), "
             "x (64, 64, 56, 56)"])
 # FAIRNESS FIX (2026-10-13 audit): the torch GCNConv rebuilt the normalized graph on every call
 # (cached=False) while ours caches it; the torch arm also skipped grad_x on both graph lanes
@@ -1788,6 +1811,9 @@ TORCH_GPU = {"nvidia": ("eager-fp32", "compile-fp32", "eager-tf32", "compile-tf3
              "amd": ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16"),
              "apple": ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16")}
 
+#: the torch optimizers with a fused GPU kernel (fused=True) raced as torch-fused-fp32
+FUSED_TORCH_OPTIMIZERS = ("SGD", "Adam", "AdamW")
+
 _NVIDIA_ONLY = ("cuml-gpu", "cuvs-gpu", "cugraph-gpu", "cupy-gpu", "implicit-gpu", "xgboost-gpu")
 #: FAIRNESS FIX (2026-10-13 audit): hipVS (AMD's cuVS port, `pip install amd-hipvs`, the
 #: `cuvs` API) is the AMD GPU opponent of the vector-search lanes it implements (IVF-PQ,
@@ -1811,7 +1837,12 @@ def opponents(vendor, lane):
     if s["kind"] == "optim":
         if not s.get("torch_opt"):
             return ()
-        return tuple("torch-" + t for t in ("eager-fp32", "compile-fp32"))
+        # FAIRNESS FIX (2026-10-13 audit): torch's fused optimizer kernel (fused=True, its fastest
+        # path for SGD / Adam / AdamW) was never raced; torch-fused-fp32 races it (refused by name
+        # where the device has none). Results raced before this change were wrong for this lane;
+        # apply extra scrutiny.
+        fused = ("fused-fp32",) if s["torch_opt"] in FUSED_TORCH_OPTIMIZERS else ()
+        return tuple("torch-" + t for t in ("eager-fp32", "compile-fp32") + fused)
     if s.get("sk"):
         arms.append("sklearn-cpu")
     for arm in s["other"]:
@@ -3744,12 +3775,22 @@ def _build_cnnclf(lane, arm, D):
                 return m(x)
         return m(x)
 
+    # FAIRNESS FIX (2026-10-13 audit): every fit built and torch.compile'd a new module, so the
+    # compile arm compiled (or failed dynamo's guards and recompiled) inside every timed round.
+    # The module and its compiled callable are built ONCE here (the untimed warm-up round
+    # compiles); each fit puts ours' initial weights back into the same parameters in place (the
+    # host-to-device copy stays inside the clock, as before) and builds a fresh SGD over them.
+    # Results raced before this change were wrong for this lane; apply extra scrutiny.
+    torch.manual_seed(SEED)
+    m_once = net().to(dev)
+    fwd_once = torch.compile(m_once) if mode == "compile" else m_once
+    info["build_once"] = "module and compiled callable built once; initial weights reloaded per fit"
+
     def fit():
         torch.manual_seed(SEED)
-        m = net()
+        m = m_once
         ours_init(m)
-        m = m.to(dev)
-        fwd = torch.compile(m) if mode == "compile" else m
+        fwd = fwd_once
         opt = torch.optim.SGD(m.parameters(), lr=p["learning_rate"], momentum=p["momentum"],
                               dampening=p["dampening"], nesterov=p["nesterov"],
                               weight_decay=p["weight_decay"])
@@ -3843,12 +3884,22 @@ def _build_seqmodel(lane, arm, D):
                 return net(x)
         return net(x)
 
+    # FAIRNESS FIX (2026-10-13 audit): every fit built and torch.compile'd a new module, so the
+    # compile arm compiled (or recompiled) inside every timed round. The module and its compiled
+    # callable are built ONCE here (the untimed warm-up round compiles); each fit loads ours'
+    # initial weights into the same parameters in place (load_state_dict copies; the
+    # host-to-device copy stays inside the clock) and builds a fresh Adam over them. Results raced
+    # before this change were wrong for this lane; apply extra scrutiny.
+    torch.manual_seed(SEED)
+    net_once = Net().to(dev)
+    fwd_once = torch.compile(net_once) if mode == "compile" else net_once
+    info["build_once"] = "module and compiled callable built once; initial weights reloaded per fit"
+
     def fit():
         torch.manual_seed(SEED)
-        net = Net()
+        net = net_once
         net.load_state_dict(init)
-        net = net.to(dev)
-        fwd = torch.compile(net) if mode == "compile" else net
+        fwd = fwd_once
         opt = torch.optim.Adam(net.parameters(), lr=p["learning_rate"], betas=tuple(oo["betas"]),
                                eps=oo["eps"], weight_decay=oo["weight_decay"])
         bs = p["batch_size"]
@@ -4834,6 +4885,109 @@ def _MoE(torch, hidden_size, intermediate_size, num_experts, top_k, norm_topk_pr
     return MoE()
 
 
+def _hf_moe_block(torch, p, state, arm):
+    """FAIRNESS FIX (2026-10-13 audit): transformers' own MixtralSparseMoeBlock (softmax router,
+    top-k, renormalized weights, SwiGLU experts) in place of the harness's transcription of it
+    (_MoE, kept only as the seeded weight source the neural fixtures were generated from). The
+    fixture's per-expert weights (gate.weight, experts.<e>.w1/w2/w3.weight) are mapped into the
+    installed version's layout (per-expert modules, or the fused gate_up_proj / down_proj
+    experts), loaded strictly and read back bit for bit; any layout this cannot map refuses the
+    arm by name. Unverified at runtime against transformers 5.17.0. Results raced before this
+    change were wrong for this lane; apply extra scrutiny."""
+    np = _np()
+    try:
+        import transformers
+        from transformers import MixtralConfig
+        from transformers.models.mixtral.modeling_mixtral import MixtralSparseMoeBlock
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("REFUSED: %s: transformers' MixtralSparseMoeBlock does not import (%r); the "
+                           "harness's MoE transcription is not an opponent" % (arm, exc))
+    E, D, F, K = (int(p["num_experts"]), int(p["hidden_size"]), int(p["intermediate_size"]),
+                  int(p["top_k"]))
+    if not p.get("norm_topk_prob", True):
+        raise RuntimeError("REFUSED: %s: Mixtral renormalizes its top-k weights; this lane says not" % arm)
+    cfg = MixtralConfig(hidden_size=D, intermediate_size=F, num_local_experts=E,
+                        num_experts_per_tok=K, hidden_act="silu", router_jitter_noise=0.0,
+                        num_hidden_layers=1, num_attention_heads=8, num_key_value_heads=8,
+                        vocab_size=8)
+    torch.manual_seed(SEED)
+    blk = MixtralSparseMoeBlock(cfg)
+    blk.eval()
+    have = {k: tuple(v.shape) for k, v in blk.state_dict().items()}
+    t = lambda a: torch.from_numpy(np.ascontiguousarray(a, dtype=np.float32))  # noqa: E731
+    w1 = [state["experts.%d.w1.weight" % e] for e in range(E)]
+    w2 = [state["experts.%d.w2.weight" % e] for e in range(E)]
+    w3 = [state["experts.%d.w3.weight" % e] for e in range(E)]
+    sd = {}
+    if "experts.0.w1.weight" in have:                    # the per-expert layout
+        sd["gate.weight"] = t(state["gate.weight"])
+        for e in range(E):
+            for k, w in (("w1", w1), ("w2", w2), ("w3", w3)):
+                sd["experts.%d.%s.weight" % (e, k)] = t(w[e])
+    else:                                                # the fused experts layout
+        router = [k for k, s_ in have.items() if not k.startswith("experts.") and s_ == (E, D)]
+        gu = [k for k in have if k.startswith("experts.") and "gate_up" in k]
+        dn = [k for k in have if k.startswith("experts.") and "down" in k]
+        if len(router) != 1 or len(gu) != 1 or len(dn) != 1 or len(have) != 3:
+            raise RuntimeError("REFUSED: %s: transformers %s MixtralSparseMoeBlock state %r is not a "
+                               "layout this harness maps" % (arm, transformers.__version__, have))
+        gate_up = np.stack([np.concatenate([w1[e], w3[e]]) for e in range(E)])   # (E, 2F, D)
+        down = np.stack(w2)                                                      # (E, D, F)
+        if have[gu[0]] == (E, D, 2 * F):
+            gate_up = np.ascontiguousarray(gate_up.transpose(0, 2, 1))
+        if have[dn[0]] == (E, F, D):
+            down = np.ascontiguousarray(down.transpose(0, 2, 1))
+        sd = {router[0]: t(state["gate.weight"]), gu[0]: t(gate_up), dn[0]: t(down)}
+    for k, v in sd.items():
+        if have.get(k) != tuple(v.shape):
+            raise RuntimeError("REFUSED: %s: %s is %s in transformers, the fixture maps %s"
+                               % (arm, k, have.get(k), tuple(v.shape)))
+    blk.load_state_dict(sd, strict=True)
+    got = blk.state_dict()
+    for k, v in sd.items():
+        if not torch.equal(got[k].detach().cpu(), v):
+            raise RuntimeError("REFUSED: %s: %s did not load the fixture's float32 bits" % (arm, k))
+    nn = torch.nn
+
+    class MoE(nn.Module):
+        """transformers MixtralSparseMoeBlock over the (tokens, hidden) input."""
+
+        def __init__(self):
+            super().__init__()
+            self.blk = blk
+
+        def forward(self, h):
+            out = self.blk(h.reshape(1, h.shape[0], h.shape[1]))
+            out = out[0] if isinstance(out, (tuple, list)) else out
+            return out.reshape(h.shape)
+    mod = MoE()
+    mod.library = "transformers %s MixtralSparseMoeBlock" % transformers.__version__
+    return mod
+
+
+def _library_layer(torch, s, make, state, arm):
+    """FAIRNESS FIX (2026-10-13 audit): the module a torch layer arm races: the library's own class
+    where the harness used its own transcription (resnet-block: torchvision's BasicBlock; moe:
+    transformers' MixtralSparseMoeBlock), else the lane's torch module. Returns (module, loaded):
+    loaded True when the weights are already in it. A missing library refuses by name; the
+    harness's own module is never raced instead. Results raced before this change were wrong for
+    this lane; apply extra scrutiny."""
+    t, p = s["task"], s["params"]
+    if t == "resnet":
+        try:
+            from torchvision.models.resnet import BasicBlock
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError("REFUSED: %s: torchvision does not import (%r); the harness's BasicBlock "
+                               "is not an opponent" % (arm, exc))
+        mod = BasicBlock(p["inplanes"], p["planes"])       # stride 1, no downsample: the lane's block
+        import torchvision
+        mod.library = "torchvision %s BasicBlock" % torchvision.__version__
+        return mod, False
+    if t == "moe":
+        return _hf_moe_block(torch, p, state, arm), True
+    return make(), False
+
+
 def _basic_block(torch, inplanes, planes):
     nn = torch.nn
 
@@ -5076,9 +5230,16 @@ def _build_layer(lane, arm, D):
         info["torch_geometric"] = torch_geometric.__version__
     torch.backends.cuda.matmul.allow_tf32 = prec == "tf32"
     torch.backends.cudnn.allow_tf32 = prec == "tf32"
-    mod = make()
+    # FAIRNESS FIX (2026-10-13 audit): resnet-block and moe raced the harness's own BasicBlock and
+    # MoE transcription; _library_layer races torchvision's and transformers' classes (the harness
+    # modules stay the seeded weight source of the fixtures, `ref` above). Results raced before
+    # this change were wrong for this lane; apply extra scrutiny.
+    mod, loaded = _library_layer(torch, s, make, state, arm)
     _neural_ab_layer_mode(mod, s)
-    mod.load_state_dict({k: torch.from_numpy(v) for k, v in state.items()})
+    if not loaded:
+        mod.load_state_dict({k: torch.from_numpy(v) for k, v in state.items()})
+    if getattr(mod, "library", None):
+        info["twin"] = mod.library
     mod = mod.to(dev)
     x = x_cpu.to(dev)
     # FAIRNESS FIX (2026-10-13 audit): gcn and sage were excluded here, so torch's backward
@@ -5145,6 +5306,34 @@ def _build_layer(lane, arm, D):
     return Runner(info, fit, outputs, infer, record=rec)
 
 
+def _opt_state_snapshot(torch, opt, p):
+    """The optimizer's per-parameter state right after construction (empty for the lazily
+    initialized optimizers, e.g. Adagrad's `sum` and `step` for the eager ones)."""
+    import copy
+    return {k: (v.detach().clone() if torch.is_tensor(v) else copy.deepcopy(v))
+            for k, v in opt.state.get(p, {}).items()}
+
+
+def _opt_state_reset(torch, opt, p, snap):
+    """Put the optimizer back to its constructed state IN PLACE (the same optimizer object, the
+    same state dict, so a compiled step keeps its guards): lazily initialized state is dropped,
+    eagerly initialized tensors are copied back."""
+    import copy
+    if not snap:
+        opt.state.pop(p, None)
+        return
+    st = opt.state[p]
+    for k in list(st):
+        if k not in snap:
+            del st[k]
+    with torch.no_grad():
+        for k, v in snap.items():
+            if torch.is_tensor(v) and torch.is_tensor(st.get(k)):
+                st[k].copy_(v)
+            else:
+                st[k] = v.clone() if torch.is_tensor(v) else copy.deepcopy(v)
+
+
 def _build_optim(lane, arm, D):
     np = _np()
     s = LANES[lane]
@@ -5165,6 +5354,7 @@ def _build_optim(lane, arm, D):
         # device step, or MOJOLEARN_SEQ_DEVICE_IO_OFF=1 (the before arm), keep host arrays.
         to_dev = None
         grads_run = grads
+        resident = False
         if getattr(cls, "__module__", "").endswith("_x_sequence_optim"):
             from mojolearn._x_sequence_device import to_device as to_dev
             g0 = to_dev(grads[0])
@@ -5173,16 +5363,53 @@ def _build_optim(lane, arm, D):
                 info["input_home"] = "device"
             else:
                 to_dev = None
+        elif getattr(cls, "__module__", "").endswith("_training_impl"):
+            # FAIRNESS FIX (2026-10-13 audit): mojolearn.training's SGD / Adam / AdamW ran on host
+            # arrays (`opt.step([g])`), so the 16,777,216-float parameter went up AND down every
+            # step inside ours' clock while torch's parameter and gradients stayed on the device.
+            # Ours' public resident path is used now where the build has it: the gradients go up
+            # before the clock (as torch's g_dev), the parameter goes up inside it
+            # (`params_to_device()`, as torch's p0.to(dev)), every step is `step_device([g])`, and
+            # the parameter comes back in the outputs, outside the clock (`params_to_host()`).
+            # A build without it (params_resident_available() False) keeps the host path, named
+            # in info. Results raced before this change were wrong for this lane; apply extra
+            # scrutiny.
+            try:
+                ok = bool(cls([p0[:1].copy()], **hyper).params_resident_available())
+                if ok:
+                    from mojolearn._training_impl import train_to_device
+                    grads_run = [train_to_device(gr) for gr in grads]
+            except Exception as exc:  # noqa: BLE001  (a CPU host twin: no device arrays)
+                ok, grads_run = False, grads
+                info["resident_error"] = repr(exc)[:300]
+            if ok:
+                resident = True
+                info["input_home"] = "device"
+                info["resident_path"] = ("params_to_device + step_device(device grads) + "
+                                         "params_to_host (outside the clock)")
+            else:
+                info["resident_path"] = "unavailable on this build: host arrays every step"
 
         def fit():
             p = to_dev(p0) if to_dev else p0.copy()
             opt = cls([p], **hyper)
-            for gr in grads_run:
-                opt.step([gr])
+            if resident:
+                opt.params_to_device()
+                for gr in grads_run:
+                    opt.step_device([gr])
+                S["opt"] = opt
+            else:
+                for gr in grads_run:
+                    opt.step([gr])
+                S["opt"] = None
             S["p"] = p
+
+        def outputs():
+            if S.get("opt") is not None:
+                S["opt"].params_to_host()          # outside the clock (outputs are read after it)
+            return {"param": np.asarray(S["p"], dtype=np.float32)}
         rec = dict(hyper, __library__="mojolearn")
-        return _with_upload(Runner(info, fit, lambda: {"param": np.asarray(S["p"], dtype=np.float32)},
-                                   record=rec),
+        return _with_upload(Runner(info, fit, outputs, record=rec),
                             [("p0", p0)] + [("grad%d" % i, gr) for i, gr in enumerate(grads)])
     import torch
     dev = _torch_device(torch)
@@ -5192,15 +5419,53 @@ def _build_optim(lane, arm, D):
     ocls = getattr(torch.optim, s["torch_opt"], None)
     if ocls is None:
         raise RuntimeError("REFUSED: torch %s has no torch.optim.%s" % (torch.__version__, s["torch_opt"]))
+    import inspect
+    try:
+        sig = inspect.signature(ocls).parameters
+    except (TypeError, ValueError):
+        sig = {}
+    # FAIRNESS FIX (2026-10-13 audit): the implementation switch was left at torch's default; it
+    # is pinned per arm now: eager and compile run the foreach implementation (foreach=True,
+    # torch's default on GPUs, stated), and torch-fused-fp32 runs torch's fused kernel
+    # (fused=True), torch's fastest optimizer path, refused by name where this torch has none for
+    # the class or the device. Results raced before this change were wrong for this lane; apply
+    # extra scrutiny.
+    impl = {}
+    if mode == "fused":
+        if "fused" not in sig:
+            raise RuntimeError("REFUSED: %s: torch.optim.%s takes no fused= in torch %s"
+                               % (arm, s["torch_opt"], torch.__version__))
+        impl = {"fused": True}
+    elif "foreach" in sig:
+        impl = {"foreach": True}
     g_dev = [torch.from_numpy(gr).to(dev) for gr in grads]
-    info["config"] = "torch.optim.%s([p], %s) on %s, %s" % (s["torch_opt"], hyper, dev, mode)
-    # read back from a constructed optimizer (its defaults are what every step uses)
-    rec = _BP().arm_record(ocls([torch.nn.Parameter(torch.zeros(1))], **hyper))
+    p0_host = torch.from_numpy(p0)
+    # FAIRNESS FIX (2026-10-13 audit): every fit built a new optimizer and a new
+    # torch.compile(opt.step), so the compile arm recompiled (dynamo's guards on the new instance
+    # fail) inside every timed round. The parameter, the optimizer and the compiled step are
+    # built ONCE here; the untimed warm-up round compiles; each fit puts the parameter back from
+    # the host (the same upload as before) and the optimizer back to its constructed state in
+    # place (_opt_state_reset), then runs the 10 steps. The eager arm does the same per-round
+    # work. Results raced before this change were wrong for this lane; apply extra scrutiny.
+    p = torch.nn.Parameter(p0_host.to(dev))
+    try:
+        opt = ocls([p], **dict(hyper, **impl))
+    except (RuntimeError, ValueError, TypeError) as exc:
+        raise RuntimeError("REFUSED: %s: torch.optim.%s(%s) does not construct on %s: %r"
+                           % (arm, s["torch_opt"], impl, dev, exc))
+    snap = _opt_state_snapshot(torch, opt, p)
+    step = torch.compile(opt.step) if mode == "compile" else opt.step
+    info["config"] = "torch.optim.%s([p], %s) on %s, %s" % (s["torch_opt"], dict(hyper, **impl), dev, mode)
+    info["implementation"] = impl or "torch default (no foreach/fused argument)"
+    info["build_once"] = "parameter, optimizer and compiled step built once; reset in place per round"
+    # read back from the constructed optimizer (its defaults are what every step uses)
+    rec = _BP().arm_record(opt)
 
     def fit():
-        p = torch.nn.Parameter(torch.from_numpy(p0).to(dev))
-        opt = ocls([p], **hyper)
-        step = torch.compile(opt.step) if mode == "compile" else opt.step
+        with torch.no_grad():
+            p.copy_(p0_host.to(dev))
+        p.grad = None
+        _opt_state_reset(torch, opt, p, snap)
         for gr in g_dev:
             p.grad = gr
             step()
@@ -6790,17 +7055,26 @@ def race(args):
         for arm in live[shift:] + live[:shift]:
             w = workers[arm]
             w.send("round %d" % r)
-            msg = w.read(args.warmup_seconds if r == 0 else args.round_seconds)
+            # FAIRNESS FIX (2026-10-13 audit): a torch.compile arm compiles in its untimed warm-up
+            # and gets its own longer deadline (bench_board_neural.warmup_deadline); its warm-up
+            # is recorded as compile_warmup_ms. Results raced before this change were wrong for
+            # this lane; apply extra scrutiny.
+            deadline = _tool("bench_board_neural").warmup_deadline(arm, args) if r == 0 else args.round_seconds
+            msg = w.read(deadline)
             if msg is None or msg.get("event") != "round":
                 status = "timeout" if msg is None else "error"
                 w.kill(status, msg)
                 result["arms"][arm].update(status=status, error=msg, failed_round=r)
+                if r == 0 and status == "timeout":
+                    result["arms"][arm]["warmup_deadline_s"] = deadline
                 print("ALGOS-REFUSED lane=%s dataset=%s arm=%s stage=round%d detail=%s"
                       % (lane, ds, arm, r, json.dumps(msg)), flush=True)
                 continue
             a = result["arms"][arm]
             if r == 0:
                 a["warmup_ms"], a["infer_warmup_ms"] = msg["ms"], msg.get("infer_ms")
+                if "-compile-" in arm:
+                    a["compile_warmup_ms"], a["warmup_deadline_s"] = msg["ms"], deadline
             else:
                 a["ms"].append(msg["ms"])
                 if msg.get("infer_ms") is not None:
@@ -6966,6 +7240,10 @@ def build_parser():
                    help="construct every arm, read its parameters back, write <out>/<tag>.params.json "
                         "and stop before the warm-up (the board's opponent-store lookup)")
     r.add_argument("--warmup-seconds", type=float, default=1800)
+    # FAIRNESS FIX (2026-10-13 audit): a torch.compile arm's own warm-up deadline. Results raced
+    # before this change were wrong for this lane; apply extra scrutiny.
+    r.add_argument("--compile-warmup-seconds", type=float, default=None,
+                   help="warm-up deadline of a torch.compile arm; default 8 x --round-seconds")
     r.add_argument("--round-seconds", type=float, default=1800)
     w = sub.add_parser("worker")
     w.add_argument("--arm", required=True)

@@ -82,22 +82,28 @@ cell; nothing falls back to another setting or device. Every bf16 and TF32
 arm is ANOTHER PRECISION than ours; its quality columns (loss or output
 difference against ours) show how far.
 
-FAIRNESS FIX (2026-10-13 audit): a compile arm that times out leaves the race
-without an opponent (torch's fastest setting is unmeasured; the other torch
-arms are recorded as context: `not_opponent`, board mode "context", no ratio)
-instead of silently promoting the eager arm, as it did on AMD samba-train-step.
-The Mamba and Samba torch twins below are pure-PyTorch references and are
-refused by name (REFERENCE_TWIN_LANES); they were reported as opponents.
-Results raced before this change were wrong for these lanes; apply extra
-scrutiny.
+FAIRNESS FIX (2026-10-13 audit): a compile arm gets its warm-up (the compile)
+outside the timed rounds with its own longer deadline (--compile-warmup-seconds)
+and its warm-up time is recorded as `compile_warmup_ms`; if it still times out
+the race has no opponent (the other torch arms are recorded as context:
+`not_opponent`, board mode "context", no ratio) instead of silently promoting
+the eager arm, as it did on AMD samba-train-step. Results raced before this
+change were wrong for these lanes; apply extra scrutiny.
 
-The torch models (every one is an existing repo twin; nothing new invented):
-  lm-*          tools/torch_lm_step_opponent.py build_model (SDPA; on the
-                torch.cuda API a probed backend is pinned for the fp32/tf32
-                columns, torch's own pick for bf16).
+The torch models (FAIRNESS FIX 2026-10-13 audit: library classes, not harness
+twins; the harness-written ByteDecoder / LlamaEager twins and the pure-PyTorch
+Mamba references were the opponents before; see "library opponents" below):
+  lm-*          transformers LlamaForCausalLM at ours' architecture (untied
+                head, final norm Identity, SDPA; on the torch.cuda API a
+                probed SDPA backend is pinned for the fp32/tf32 columns,
+                torch's own pick for bf16).
   gemm          a @ b.
-  transformer   tools/speed_torch_seq.py LlamaEager.block with sdpa=True
-                (torch's scaled_dot_product_attention, causal mask).
+  transformer   transformers LlamaDecoderLayer (SDPA, causal) with
+                LlamaRotaryEmbedding; the decode lane uses its DynamicCache.
+  mamba1/2/3, arms mamba-ssm-fp32 (NVIDIA, AMD) / mamba-ssm-tf32 (NVIDIA):
+                mamba_ssm's own fused kernels (Block + Mamba / Mamba2 /
+                Mamba3 SISO), our weights loaded. The torch-* arms below are
+                the pure-PyTorch references and are REFUSED by name.
   mamba1        mamba/corpus/gen_corpus.py block_forward: the PURE-PYTORCH
                 reference (mamba_ssm's selective_scan_ref, a per-token Python
                 loop). NOT a fused deployment kernel: mamba-ssm's CUDA
@@ -108,9 +114,10 @@ The torch models (every one is an existing repo twin; nothing new invented):
                 not the Triton kernels.
   mamba3        gen_corpus.py m3_forward: the pure-PyTorch Mamba-3 SISO
                 reference, not the fused kernels.
-  samba         embedding, then per layer m3_forward or LlamaEager.block
-                (SDPA), final RMSNorm (eps 1e-5), tied head, mean CE,
-                torch.optim.AdamW: the stack composed from those two twins.
+  samba         torch Embedding, then per layer mamba_ssm's Mamba3 Block or
+                transformers' LlamaDecoderLayer, F.rms_norm (eps 1e-5), tied
+                head, mean CE, torch.optim.AdamW; refused where mamba_ssm
+                does not import (Apple, the CPU).
   mlp           F.linear, ReLU, F.linear, mean CE, torch.optim.AdamW.
 gen_corpus.py sets torch's deterministic switch and one thread at import; the
 worker turns both back (tools/speed_torch_seq.py DEVIATION 1856) and records
@@ -256,11 +263,37 @@ NO_COMPILE = ("mamba1-forward", "mamba1-infer",
               "transformer-decode")
 VENDORS = ("apple", "nvidia", "amd")
 
+# FAIRNESS FIX (2026-10-13 audit): the Mamba lanes' only opponents on main were the repo's
+# pure-PyTorch references (a reference implementation is not an opponent). mamba_ssm's own
+# fused kernels (lane/mamba-opp facde18cc, Andrew 2026-09-29 "we should be using the strongest
+# opponent always") come onto main as the Mamba opponent: on NVIDIA as built there, and on AMD
+# from mamba_ssm's ROCm/HIP source build (tools/bench_board.py MAMBA_SSM_BUILD["amd"]; never
+# built or run on the board's AMD box: unverified at runtime). Apple has no mamba_ssm build
+# (CUDA/HIP and Triton only), so the Mamba lanes there have no opponent. One block is
+# mamba_ssm's modules/block.py Block (fused Triton add+RMSNorm, the mixer, residual in fp32)
+# around its mixer: mamba_simple.Mamba on the fast path (causal_conv1d + mamba_inner_fn, the
+# selective-scan kernel), mamba2.Mamba2 on the memory-efficient path
+# (mamba_split_conv1d_scan_combined, the SSD Triton kernels), mamba3.Mamba3 SISO
+# (mamba3_siso_combined, Triton). Weights, input and dtype (float32) are ours, loaded with
+# load_state_dict(strict=True) and read back bit for bit. Settings, the precision in the name:
+#   mamba-ssm-fp32   TF32 off in torch and TRITON_F32_DEFAULT=ieee, so every fp32 tl.dot in
+#                    the Triton kernels is IEEE fp32 (ours' precision).
+#   mamba-ssm-tf32   TF32 on in torch and TRITON_F32_DEFAULT=tf32 (Triton's own default, what an
+#                    out-of-the-box install runs); NVIDIA only (TF32 is a CUDA tensor-core mode).
+# Pinned to the state-spaces/mamba commit mamba/corpus/gen_corpus.py cites (PyPI 2.3.2.post1 is
+# an older Mamba-3). Results raced before this change were wrong for this lane; apply extra
+# scrutiny.
+MAMBA_SSM_ARMS = ("mamba-ssm-fp32", "mamba-ssm-tf32")
+MAMBA_SSM_LANES = ("mamba1-forward", "mamba2-forward", "mamba3-forward")
+MAMBA_SSM_VENDOR_ARMS = {"nvidia": MAMBA_SSM_ARMS, "amd": ("mamba-ssm-fp32",)}
+MAMBA_SSM_VENDORS = tuple(MAMBA_SSM_VENDOR_ARMS)
+
 #: Our arms: `ours` IDENTICAL, `ours-fast` the Apple FAST neural tier.
 OUR_ARMS = ("ours", "ours-fast")
 OUR_MODE = {"ours": "identical", "ours-fast": "fast"}
 ARMS = OUR_ARMS + tuple("torch-" + s for s in TORCH_SETTINGS) \
-    + tuple("torch-cpu-" + s for s in CPU_SETTINGS) + ("torch-eager-int8", "torch-compile-int8")
+    + tuple("torch-cpu-" + s for s in CPU_SETTINGS) + ("torch-eager-int8", "torch-compile-int8") \
+    + MAMBA_SSM_ARMS
 #: gemm-int8's torch settings: torch._int_mm (int8 x int8 -> int32), no autocast, no TF32
 INT8_COLUMNS = {"eager_int8": dict(tf32=False, compile=False, autocast=None),
                 "compile_int8": dict(tf32=False, compile=True, autocast=None)}
@@ -281,20 +314,33 @@ NOT_PLANNED = {
        "KV cache; transformer-decode races the eager arms only"]
     + (["gemm-int8: torch._int_mm is a CUDA kernel; torch on %s has no int8 matmul, so ours "
         "races alone" % {"apple": "MPS", "amd": "ROCm"}[v]] if v != "nvidia" else [])
+    # FAIRNESS FIX (2026-10-13 audit): where mamba_ssm's kernels do not exist the Mamba and Samba
+    # lanes have no opponent (the pure-PyTorch references are refused, not raced). Results raced
+    # before this change were wrong for this lane; apply extra scrutiny.
+    + ({"apple": ["mamba-ssm-* on mamba*-forward, and the Samba torch arms: mamba_ssm's kernels "
+                  "are CUDA/HIP and Triton (no Metal build exists), so the Mamba and Samba lanes "
+                  "have no opponent on Apple (the torch references are refused)"],
+        "amd": ["mamba-ssm-tf32: TF32 is an NVIDIA CUDA mode; mamba_ssm races in float32 "
+                "(mamba-ssm-fp32, from its ROCm/HIP source build) on AMD"]}.get(v, [])
+       + ["mamba-ssm bf16: our Mamba blocks are float32, so mamba_ssm races in float32 (and its "
+          "TF32 setting on NVIDIA)"])
     for v in VENDORS}
 
 #: The board's "Not covered" lines for the neural family.
 NOT_COVERED = [
     # FAIRNESS FIX (2026-10-13 audit): this line used to present the pure-PyTorch Mamba
-    # references as the Mamba opponents. The torch arms of those lanes (and of Samba, whose
-    # Mamba-3 layers are the same reference) are now refused by name (REFERENCE_TWIN_LANES).
+    # references as the Mamba opponents. Those torch arms are refused by name
+    # (REFERENCE_TWIN_LANES); mamba_ssm's fused kernels are the opponent where they are built
+    # (MAMBA_SSM_VENDOR_ARMS), and the Samba torch arms run mamba_ssm's Mamba3 layers.
     # Results raced before this change were wrong for this lane; apply extra scrutiny.
-    "The Mamba and Samba lanes have no opponent on this board: the repo's torch twins are "
-    "pure-PyTorch references (mamba/corpus/gen_corpus.py: mamba_ssm's selective_scan_ref for "
-    "Mamba-1, the chunked SSD reference for Mamba-2, the SISO reference for Mamba-3, and the "
-    "Samba stack built on that Mamba-3 reference), not mamba-ssm's fused CUDA/Triton kernels, "
-    "which the board does not install; a reference implementation is not an opponent, so "
-    "those torch arms are refused by name.",
+    "The Mamba lanes' torch-* arms would be the repo's pure-PyTorch references "
+    "(mamba/corpus/gen_corpus.py: mamba_ssm's selective_scan_ref for Mamba-1, the chunked SSD "
+    "reference for Mamba-2, the SISO reference for Mamba-3), not mamba-ssm's fused CUDA/Triton "
+    "kernels; a reference implementation is not an opponent, so they are refused by name. The "
+    "Mamba opponent is mamba_ssm's own fused kernels (mamba-ssm-fp32 on NVIDIA and AMD, "
+    "mamba-ssm-tf32 on NVIDIA), and the Samba torch arms run mamba_ssm's Mamba3 layers with "
+    "transformers' LlamaDecoderLayer attention; where mamba_ssm is not built (Apple) those "
+    "lanes have no opponent.",
     "The blocks' backward (the Mamba and TransformerBlock VJPs), ragged `lengths` and a "
     "prefill followed by decode are public and not raced; the zero-state forward (*-forward) "
     "and the zero-state token-by-token decode (*-decode) are.",
@@ -313,16 +359,19 @@ NOT_COVERED = [
 # "not a deployment kernel"; they were raced and reported as the opponent. A reference
 # implementation is not an opponent (an opponent is a library's own implementation through
 # its public API). The torch arms of these lanes are now refused by name at race time
-# (race(): no worker is started). mamba_ssm's fused kernels are the opponent where they run
-# (lane/mamba-opp facde18cc adds them on NVIDIA; they are not on main). Results raced before
-# this change were wrong for this lane; apply extra scrutiny.
+# (race(): no worker is started). mamba_ssm's fused kernels (MAMBA_SSM_VENDOR_ARMS, from
+# lane/mamba-opp facde18cc) are the opponent where they are built. Results raced before this
+# change were wrong for this lane; apply extra scrutiny.
 REFERENCE_TWIN_LANES = {
     lane: ("not an opponent: the torch twin of %s is a pure-PyTorch reference implementation "
            "(mamba/corpus/gen_corpus.py%s), not a library kernel; mamba_ssm's fused kernels are "
            "the opponent only where they run (2026-10-13 fairness audit)"
            % (lane, " m3_forward inside the Samba stack" if lane.startswith("samba") else ""))
-    for lane in ("mamba1-forward", "mamba2-forward", "mamba3-forward", "samba-train-step",
-                 "samba-forward", "mamba1-infer", "mamba2-infer", "mamba3-infer", "samba-infer")}
+    # samba-train-step / samba-forward are not here: their torch arms now run mamba_ssm's Mamba3
+    # layers (TorchArm._build_samba) and refuse by name where mamba_ssm does not import. The CPU
+    # lanes stay: mamba_ssm's kernels need a GPU, so a CPU torch twin is always the reference.
+    for lane in ("mamba1-forward", "mamba2-forward", "mamba3-forward", "mamba1-infer",
+                 "mamba2-infer", "mamba3-infer", "samba-infer")}
 
 # FAIRNESS FIX (2026-10-13 audit): when a compile arm timed out, the race silently promoted the
 # eager arm to the opponent (AMD samba-train-step: both compile arms timed out and eager became
@@ -366,6 +415,24 @@ def mark_not_opponents(lane, arms_result):
                 "%s timed out, so torch's fastest setting on %s is unmeasured; no other setting is "
                 "promoted to the opponent" % (t, lane))
     return marked
+
+
+def is_compile_arm(arm):
+    """A torch.compile arm (torch-compile-*, torch-cpu-compile-*)."""
+    return "-compile-" in str(arm)
+
+
+def warmup_deadline(arm, args):
+    """FAIRNESS FIX (2026-10-13 audit): the warm-up round's deadline. A compile arm compiles in
+    its untimed warm-up and gets --compile-warmup-seconds (default 8 x the round deadline: 4 h on
+    the full shape), not the eager arms' --warmup-seconds: samba-train-step's compile arms timed
+    out at 1800 s and the eager arm silently became the opponent. Results raced before this
+    change were wrong for this lane; apply extra scrutiny."""
+    base = getattr(args, "warmup_seconds", 1800)
+    if not is_compile_arm(arm):
+        return base
+    cw = getattr(args, "compile_warmup_seconds", None)
+    return max(base, cw if cw else 8 * getattr(args, "round_seconds", base))
 
 
 class RefusedArm:
@@ -459,6 +526,12 @@ def opponents(vendor, lane):
         arms = ["torch-" + s for s in GPU_SETTINGS[vendor]]
     if lane in NO_COMPILE:
         arms = [a for a in arms if "-compile-" not in a]
+    # FAIRNESS FIX (2026-10-13 audit): mamba_ssm's fused kernels are the Mamba opponent where
+    # they are built (NVIDIA, AMD); the torch reference arms stay planned and are refused by name
+    # at race time. Results raced before this change were wrong for this lane; apply extra
+    # scrutiny.
+    if lane in MAMBA_SSM_LANES:
+        arms += list(MAMBA_SSM_VENDOR_ARMS.get(vendor, ()))
     return tuple(arms)
 
 
@@ -536,43 +609,53 @@ def shape_text(lane, shape):
 
 
 #: The board's per-lane settings text (what each side calls).
+# FAIRNESS FIX (2026-10-13 audit): the LM, transformer and Samba torch calls name transformers' and
+# mamba_ssm's own classes (they named the harness's twins); the Mamba torch calls name the refused
+# references and the mamba-ssm arms. The changed text is part of the lane settings, so no cell
+# stored under the old twins is reused. Results raced before this change were wrong for these
+# lanes; apply extra scrutiny.
 LANE_TEXT = {
     "lm-train-step": ("mojolearn.LanguageModelTrainer(resident=True, step_result='lean').train_step(ids)",
-                      "tools/torch_lm_step_opponent.py build_model; zero_grad; forward + mean CE; "
-                      "backward; torch.optim.AdamW step; loss.item()"),
+                      "transformers LlamaForCausalLM (ours' architecture: untied head, no final "
+                      "norm, sdpa), ours' weights; zero_grad; forward + mean CE; backward; "
+                      "torch.optim.AdamW step; loss.item()"),
     "lm-forward": ("mojolearn.LanguageModelTrainer(resident=True).logits(ids)",
-                   "no_grad forward of the same twin to logits; logits.cpu()"),
+                   "no_grad forward of the same transformers LlamaForCausalLM to logits; logits.cpu()"),
     "gemm": ("mojolearn.linalg.matmul(a, b)", "a.to(dev) @ b.to(dev), .cpu()"),
     "gemm-bf16": ("mojolearn.linalg.matmul_bf16(a_bf16, b_bf16) (bf16 bits made before the clock)",
                   "a_bf16.to(dev) @ b_bf16.to(dev) under the setting, .float().cpu()"),
     "gemm-int8": ("mojolearn.linalg.matmul_int8((a_codes, 0), (b_codes, 0)) = a @ b.T exactly",
                   "torch._int_mm(a.to(dev), b.to(dev).t()), .float().cpu()"),
     "lm-infer": ("mojolearn.LanguageModelInference(parameters, shape=cfg).logits(ids) (CPU)",
-                 "no_grad forward of the tools/torch_lm_step_opponent.py twin on the CPU"),
+                 "no_grad forward of the same transformers LlamaForCausalLM on the CPU"),
     "lm-host-train-step": ("mojolearn.LanguageModelHostTrainer(parameters, shape=cfg).train_step(ids) (CPU)",
-                           "the same twin on the CPU; zero_grad; forward + mean CE; backward; "
-                           "torch.optim.AdamW step; loss.item()"),
+                           "the same transformers LlamaForCausalLM on the CPU; zero_grad; forward + "
+                           "mean CE; backward; torch.optim.AdamW step; loss.item()"),
     "transformer-forward": ("mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
-                            "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)"),
+                            "transformers LlamaDecoderLayer (sdpa, LlamaRotaryEmbedding), ours' weights"),
     "transformer-infer": ("mojolearn.TransformerBlockInference(...).forward(x) (CPU host binding)",
-                          "LlamaEager.block(sdpa=True) on the CPU"),
+                          "transformers LlamaDecoderLayer on the CPU"),
     "mamba1-forward": ("mojolearn.Mamba1Block(weights).forward(x)",
-                       "mamba/corpus/gen_corpus.py block_forward (pure-PyTorch reference scan)"),
+                       "mamba-ssm-*: mamba_ssm Block(Mamba, fused fast path), ours' weights; the "
+                       "torch-* reference arms (gen_corpus.py block_forward) are refused"),
     "mamba1-infer": ("mojolearn.Mamba1BlockInference(weights).forward(x) (CPU host binding)",
                      "gen_corpus.py block_forward on the CPU"),
     "mamba2-forward": ("mojolearn.Mamba2Block(weights).forward(x)",
-                       "mamba/corpus/gen_corpus.py m2_forward (pure-PyTorch chunked SSD reference)"),
+                       "mamba-ssm-*: mamba_ssm Block(Mamba2, mem-eff SSD Triton path), ours' weights; "
+                       "the torch-* reference arms (gen_corpus.py m2_forward) are refused"),
     "mamba2-infer": ("mojolearn.Mamba2BlockInference(weights).forward(x) (CPU host binding)",
                      "gen_corpus.py m2_forward on the CPU"),
     "mamba3-forward": ("mojolearn.Mamba3Block(weights).forward(x)",
-                       "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)"),
+                       "mamba-ssm-*: mamba_ssm Block(Mamba3 SISO Triton), ours' weights; the torch-* "
+                       "reference arms (gen_corpus.py m3_forward) are refused"),
     "mamba3-infer": ("mojolearn.Mamba3BlockInference(weights).forward(x) (CPU host binding)",
                      "gen_corpus.py m3_forward on the CPU"),
     "samba-train-step": ("mojolearn.SambaStack(config, weights).train_step(inputs, targets)",
-                         "embedding + m3_forward / LlamaEager.block layers + RMSNorm + tied head; "
-                         "mean CE; backward; torch.optim.AdamW step; loss.item()"),
+                         "torch Embedding + mamba_ssm Mamba3 Block / transformers LlamaDecoderLayer "
+                         "layers + F.rms_norm + tied head; mean CE; backward; torch.optim.AdamW "
+                         "step; loss.item()"),
     "samba-forward": ("mojolearn.SambaStack(config, weights).forward(inputs)",
-                      "no_grad forward of the same stack twin to logits"),
+                      "no_grad forward of the same mamba_ssm + transformers stack to logits"),
     "samba-infer": ("mojolearn.SambaInference(config, weights).forward(inputs) (CPU host binding)",
                     "the same stack twin on the CPU"),
     "mlp-train-step": ("mojolearn.SmallMLPTrainer(w1, b1, w2, b2).train_step(X, y)",
@@ -582,9 +665,9 @@ LANE_TEXT = {
     "transformer-decode": ("mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim)"
                            ".decode_session(state): state.cached_tokens = 0; load_state(); "
                            "step(x[:, t:t+1]) for t < L (resident GPU decode, one token per call)",
-                           "LlamaEager pieces (tools/speed_torch_seq.py) as a KV-cache decode: per "
-                           "token RMSNorm, project + RoPE at position t, cache append, sdpa over "
-                           "the cache, o_proj, MLP; x uploaded once, outputs .cpu() once"),
+                           "transformers LlamaDecoderLayer over its own DynamicCache, one token per "
+                           "call at position t (RoPE from LlamaRotaryEmbedding); x uploaded once, "
+                           "outputs .cpu() once"),
     "mamba1-decode": ("mojolearn.Mamba1Block(weights).decode_session(state): load_state(); "
                       "step(x[:, t:t+1]) for t < L (resident GPU decode)", "none (ours alone)"),
     "mamba2-decode": ("mojolearn.Mamba2Block(weights): state = allocate_state(B); "
@@ -1204,6 +1287,13 @@ class OursBlock(Ours):
                                _mode_of(self.block, ml), "cpu" if cpu else "gpu")
         self.info.update(call=LANE_TEXT[lane][0], cls=cls.__name__)
         self.record = _ours_record(lane)
+        if lane in MAMBA_SSM_LANES:
+            # FAIRNESS FIX (2026-10-13 audit): the block's structural constants, read from the
+            # INSTALLED class's module (and the block), compared with what the mamba-ssm arms'
+            # constructed modules hold (tools/bench_board_params.py ssm_*), so the real-kernel
+            # opponent is checked to run ours' block. Results raced before this change were
+            # wrong for this lane; apply extra scrutiny.
+            self.record.update(ours_ssm_record(model, sys.modules[cls.__module__], self.block))
         self.decode_tokens = self.decode_session = self.decode_state = None
         if lane in DECODE_LANES:
             if self.operation != "model_default":
@@ -1582,6 +1672,7 @@ class TorchArm:
     def __init__(self, lane, shape, data, arm):
         import numpy as np
         self.np, self.lane, self.shape, self.data = np, lane, shape, data
+        self.arm = arm
         where, setting = arm_setting(arm)
         if where != DEVICE_OF[lane]:
             raise RuntimeError("REFUSED: arm %s runs on the %s and lane %s's class on the %s"
@@ -1707,13 +1798,50 @@ class TorchArm:
         self.module = self._module({}, lambda p, a, b: a @ b)
 
     def _build_lm(self):
+        # FAIRNESS FIX (2026-10-13 audit): this arm ran tools/torch_lm_step_opponent.py's
+        # ByteDecoder, a decoder this harness wrote from torch ops (hand-written RMSNorm, RoPE and
+        # SwiGLU around SDPA): code our harness wrote is not an opponent. It now runs transformers'
+        # own LlamaForCausalLM configured to ours' exact architecture (hf_llama_config: untied
+        # head, SwiGLU, no biases, RMSNorm eps and RoPE base read back), its final norm replaced by
+        # Identity because ours' byte LM applies none before the head, with ours' initial weights
+        # (the same flat file, mapped by hf_lm_state_name, read back bit for bit) and the same
+        # batches; the loss is torch's mean cross-entropy on the next bytes, as before. Results
+        # raced before this change were wrong for this lane; apply extra scrutiny.
         torch, np, twin = self.torch, self.np, self.twin
+        F = torch.nn.functional
         dims = lm_dims(self.lane, self.shape)
+        b, l, dm, h, kv, hd, ff, layers, vocab = dims
         flat = torch.from_numpy(np.ascontiguousarray(self.data["init"]))
-        model = twin.build_model(torch, dims, twin.registry(dims), flat, self.dev)
-        n = sum(p.numel() for p in model.parameters())
-        if n != flat.numel():
-            raise RuntimeError("REFUSED: torch model has %d parameters, the input %d" % (n, flat.numel()))
+        shapes = twin.registry(dims)
+        total = 0
+        for _, shp in shapes:
+            n = 1
+            for v in shp:
+                n *= int(v)
+            total += n
+        if total != flat.numel():
+            raise RuntimeError("REFUSED: the LM registry has %d parameters, the input %d" % (total, flat.numel()))
+        transformers, cfg = hf_llama_config(self.arm, vocab=vocab, d_model=dm, n_heads=h, n_kv=kv,
+                                            head_dim=hd, intermediate=ff, layers=layers, max_pos=l,
+                                            eps=twin.RMS_EPS, theta=twin.ROPE_THETA)
+        from transformers import LlamaForCausalLM
+        torch.manual_seed(SEED)
+        model = LlamaForCausalLM(cfg)
+        model.model.norm = torch.nn.Identity()       # ours' LM has no final norm before the head
+        state, off = {}, 0
+        for name, shp in shapes:
+            n = 1
+            for v in shp:
+                n *= int(v)
+            state[hf_lm_state_name(name)] = flat[off:off + n].reshape(shp).clone()
+            off += n
+        hf_load_exact(torch, model, state, self.arm)
+        model = model.to(self.dev)
+        theta = hf_check_rotary(torch, model.model.rotary_emb, hd, twin.ROPE_THETA, self.arm)
+        attn = getattr(model.config, "_attn_implementation", None)
+        if attn != "sdpa":
+            raise RuntimeError("REFUSED: %s: transformers' attention implementation reads back %r, not "
+                               "sdpa" % (self.arm, attn))
         if self.kind == "cuda":
             self.info["sdpa"] = twin.choose_sdpa_backend(
                 torch, "auto", self.dev, dims, self._sync,
@@ -1722,9 +1850,25 @@ class TorchArm:
             self.info["sdpa"] = {"backend": "torch_default",
                                  "selection": "%s: torch's own dispatch (no backend switches exist)"
                                               % self.kind}
+        self.info["twin"] = ("transformers %s LlamaForCausalLM (attn sdpa, rms_norm_eps %g, RoPE base %g "
+                             "read back, untied head, final norm Identity: ours has none), ours' "
+                             "initial weights" % (transformers.__version__, cfg.rms_norm_eps, theta))
+        self.info["transformers_version"] = transformers.__version__
         self.batches = self.data["batches"]
         if self.train:
-            self.module = model
+            model.train()
+
+            class Step(torch.nn.Module):
+                def __init__(self):
+                    super().__init__()
+                    self.m = model
+
+                def forward(self, ids):
+                    logits = self.m(input_ids=ids[:, :-1], use_cache=False).logits
+                    return F.cross_entropy(logits.reshape(b * l, vocab).float(),
+                                           ids[:, 1:].reshape(b * l), reduction="mean")
+
+            self.module = Step()
         else:
             model.eval()
 
@@ -1734,10 +1878,64 @@ class TorchArm:
                     self.m = model
 
                 def forward(self, ids):
-                    return self.m(ids, return_logits=True)
+                    return self.m(input_ids=ids, use_cache=False).logits
 
             self.module = Logits()
             self.host = [torch.from_numpy(np.ascontiguousarray(self.batches[0][:, :-1]).astype(np.int64))]
+
+    def _hf_layer(self, W, d, length, eps, theta):
+        """transformers' own LlamaDecoderLayer holding ours' block weights W (our names, numpy),
+        with RoPE cos/sin for positions 0..length-1 from its LlamaRotaryEmbedding, precomputed on
+        the device before the clock (as the previous twin precomputed its tables). FAIRNESS FIX
+        (2026-10-13 audit): replaces tools/speed_torch_seq.py's LlamaEager, harness code. Results
+        raced before this change were wrong for this lane; apply extra scrutiny."""
+        torch, np = self.torch, self.np
+        transformers, cfg = hf_llama_config(self.arm, vocab=1, d_model=d["d_model"],
+                                            n_heads=d["n_heads"], n_kv=d["n_kv"],
+                                            head_dim=d["head_dim"], intermediate=d["intermediate"],
+                                            layers=1, max_pos=length, eps=eps, theta=theta)
+        from transformers.models.llama.modeling_llama import LlamaDecoderLayer, LlamaRotaryEmbedding
+        torch.manual_seed(SEED)
+        layer = LlamaDecoderLayer(cfg, layer_idx=0)
+        state = {HF_LAYER_NAME[k]: torch.from_numpy(np.ascontiguousarray(v)) for k, v in W.items()}
+        hf_load_exact(torch, layer, state, self.arm)
+        layer = layer.to(self.dev)
+        rotary = LlamaRotaryEmbedding(config=cfg).to(self.dev)
+        back = hf_check_rotary(torch, rotary, d["head_dim"], theta, self.arm)
+        pos = torch.arange(length, device=self.dev)[None, :]
+        with torch.no_grad():
+            cos, sin = rotary(torch.zeros((1, length, d["d_model"]), dtype=torch.float32,
+                                          device=self.dev), pos)
+        self.block_consts = {"eps": float(cfg.rms_norm_eps), "rope_theta": back}
+        self.info["transformers_version"] = transformers.__version__
+        return layer, cfg, cos, sin, pos
+
+    def _hf_layer(self, W, d, length, eps, theta):
+        """transformers' own LlamaDecoderLayer holding ours' block weights W (our names, numpy),
+        with RoPE cos/sin for positions 0..length-1 from its LlamaRotaryEmbedding, precomputed on
+        the device before the clock (as the previous twin precomputed its tables). FAIRNESS FIX
+        (2026-10-13 audit): replaces tools/speed_torch_seq.py's LlamaEager, harness code. Results
+        raced before this change were wrong for this lane; apply extra scrutiny."""
+        torch, np = self.torch, self.np
+        transformers, cfg = hf_llama_config(self.arm, vocab=1, d_model=d["d_model"],
+                                            n_heads=d["n_heads"], n_kv=d["n_kv"],
+                                            head_dim=d["head_dim"], intermediate=d["intermediate"],
+                                            layers=1, max_pos=length, eps=eps, theta=theta)
+        from transformers.models.llama.modeling_llama import LlamaDecoderLayer, LlamaRotaryEmbedding
+        torch.manual_seed(SEED)
+        layer = LlamaDecoderLayer(cfg, layer_idx=0)
+        state = {HF_LAYER_NAME[k]: torch.from_numpy(np.ascontiguousarray(v)) for k, v in W.items()}
+        hf_load_exact(torch, layer, state, self.arm)
+        layer = layer.to(self.dev)
+        rotary = LlamaRotaryEmbedding(config=cfg).to(self.dev)
+        back = hf_check_rotary(torch, rotary, d["head_dim"], theta, self.arm)
+        pos = torch.arange(length, device=self.dev)[None, :]
+        with torch.no_grad():
+            cos, sin = rotary(torch.zeros((1, length, d["d_model"]), dtype=torch.float32,
+                                          device=self.dev), pos)
+        self.block_consts = {"eps": float(cfg.rms_norm_eps), "rope_theta": back}
+        self.info["transformers_version"] = transformers.__version__
+        return layer, cfg, cos, sin, pos
 
     def _llama(self, W, d, length):
         """tools/speed_torch_seq.py's LlamaEager over tensors named as ours."""
@@ -1753,49 +1951,64 @@ class TorchArm:
                               self.torch.float32)
 
     def _build_transformer(self):
+        # FAIRNESS FIX (2026-10-13 audit): this arm ran tools/speed_torch_seq.py's LlamaEager (harness
+        # code from torch ops), forward and per-token decode. It now runs transformers' own
+        # LlamaDecoderLayer with ours' weights (_hf_layer), SDPA attention, and for the decode lane
+        # the layer's own KV cache (transformers DynamicCache), one token per call. Results raced
+        # before this change were wrong for this lane; apply extra scrutiny.
+        torch = self.torch
         d = _dims_of(self.lane, self.shape)
-        B, L, dm = d["batch"], d["length"], d["d_model"]
-        params = self._dev_params()
-        blk = self._llama(params, d, L)
-
-        def forward(p, x):
-            blk.W = {LLAMA_NAME.get(k, k): v for k, v in p.items()}
-            return blk.block(x.reshape(B * L, dm), None, B, L, sdpa=True)[0].reshape(B, L, dm)
-
-        if self.lane == "transformer-decode":
-            torch = self.torch
-            F = torch.nn.functional
-            hkv, hd = d["n_kv"], d["head_dim"]
-
-            def forward(p, x):            # noqa: F811  (the decode twin replaces the prefill one)
-                # LlamaEager's own pieces at L = 1, the position cfg["ctx"] = t
-                # (its RoPE row and its causal mask), K/V appended to a cache
-                # allocated once per call: the textbook KV-cache decode.
-                blk.W = {LLAMA_NAME.get(k, k): v for k, v in p.items()}
-                kc = torch.empty((B, hkv, L, hd), dtype=x.dtype, device=x.device)
-                vc = torch.empty_like(kc)
-                outs = []
-                for t in range(L):
-                    blk.cfg["ctx"] = t
-                    xt = x[:, t, :]
-                    h = blk._rms(xt, blk.W["norm1.weight"])
-                    q, k, v = blk.project(h, B, 1)
-                    kc[:, :, t:t + 1] = k
-                    vc[:, :, t:t + 1] = v
-                    ctxv = blk.attention_sdpa(q, kc[:, :, :t + 1], vc[:, :, :t + 1], B, 1)
-                    r1 = xt + F.linear(ctxv, blk.W["o_proj.weight"])
-                    outs.append(r1 + blk.mlp(blk._rms(r1, blk.W["norm2.weight"])))
-                blk.cfg["ctx"] = 0
-                return torch.stack(outs, dim=1)
-
-            self.module = self._module(params, forward)
-            self.host = [self._t(self.data["x"])]
-            self.info["twin"] = ("tools/speed_torch_seq.py LlamaEager pieces (_rms, project, "
-                                 "attention_sdpa, mlp) as a per-token KV-cache decode")
-            return
-        self.module = self._module(params, forward)
+        L = d["length"]
+        layer, cfg, cos, sin, pos = self._hf_layer(_weights(self.data), d, L, BLOCK_NORM_EPS,
+                                                   BLOCK_ROPE_THETA)
+        layer.eval()
         self.host = [self._t(self.data["x"])]
-        self.info["twin"] = "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)"
+        if self.lane == "transformer-decode":
+            import inspect
+            from transformers import DynamicCache
+            try:
+                params = inspect.signature(layer.forward).parameters
+            except (TypeError, ValueError):
+                params = {}
+            cache_kw = ("past_key_value" if "past_key_value" in params and "past_key_values" not in params
+                        else "past_key_values")
+            try:
+                inspect.signature(DynamicCache).bind(config=cfg)
+                new_cache = lambda: DynamicCache(config=cfg)  # noqa: E731
+            except TypeError:
+                new_cache = DynamicCache
+
+            class Decode(torch.nn.Module):
+                def __init__(self):
+                    super().__init__()
+                    self.layer = layer
+
+                def forward(self, x):
+                    cache = new_cache()
+                    outs = []
+                    for t in range(L):
+                        outs.append(hf_layer_call(self.layer, x[:, t:t + 1, :], cos[:, t:t + 1],
+                                                  sin[:, t:t + 1], pos[:, t:t + 1], use_cache=True,
+                                                  cache_position=pos[0, t:t + 1], **{cache_kw: cache}))
+                    return torch.cat(outs, dim=1)
+
+            self.module = Decode()
+            self.info["twin"] = ("transformers %s LlamaDecoderLayer, one token per call over its "
+                                 "DynamicCache (%s=)" % (self.info["transformers_version"], cache_kw))
+            return
+
+        class Block(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layer = layer
+
+            def forward(self, x):
+                return hf_layer_call(self.layer, x, cos, sin, pos)
+
+        self.module = Block()
+        self.info["twin"] = ("transformers %s LlamaDecoderLayer (attn sdpa, rms_norm_eps %g, RoPE base "
+                             "read back), ours' weights" % (self.info["transformers_version"],
+                                                            cfg.rms_norm_eps))
 
     def _mamba_call(self, model):
         corpus = _load_mamba_corpus_restoring(self.torch, self.info)
@@ -1807,6 +2020,12 @@ class TorchArm:
         return lambda p, x: corpus.m3_forward(p, x, f32)["residual.out"].reshape(x.shape)
 
     def _build_mamba(self):
+        # FAIRNESS FIX (2026-10-13 audit): the only torch Mamba twin is the pure-PyTorch reference,
+        # which is not an opponent; race() refuses these arms before a worker starts, and the
+        # worker refuses too (a direct `worker` call). mamba_ssm's kernels are MambaSsmArm. Results
+        # raced before this change were wrong for this lane; apply extra scrutiny.
+        if self.lane in REFERENCE_TWIN_LANES:
+            raise RuntimeError("REFUSED: " + REFERENCE_TWIN_LANES[self.lane])
         model = MODEL_OF[self.lane]
         call = self._mamba_call(model)
         self.uses_default_device = True
@@ -1819,50 +2038,81 @@ class TorchArm:
     _build_mamba1 = _build_mamba2 = _build_mamba3 = _build_mamba
 
     def _build_samba(self):
-        torch = self.torch
+        # FAIRNESS FIX (2026-10-13 audit): this stack ran the pure-PyTorch Mamba-3 reference
+        # (gen_corpus.py m3_forward) and the harness's LlamaEager attention blocks: a reference and
+        # harness code are not an opponent. It now runs mamba_ssm's own Mamba3 Block (the SISO
+        # Triton kernels; refused by name where mamba_ssm does not import, e.g. Apple, or a CPU
+        # lane) and transformers' own LlamaDecoderLayer for the attention layers, ours' weights in
+        # every one (read back bit for bit), torch's Embedding, F.rms_norm (eps 1e-5) and the tied
+        # head, mean CE, torch.optim.AdamW. UNVERIFIED AT RUNTIME: mamba_ssm Mamba3's backward
+        # (samba-train-step), its behaviour under autocast and torch.compile, and the ROCm build.
+        # Results raced before this change were wrong for this lane; apply extra scrutiny.
+        torch, np = self.torch, self.np
         F = torch.nn.functional
+        if self.kind != "cuda":
+            raise RuntimeError("REFUSED: %s on %s: mamba_ssm's Mamba3 kernels run on CUDA or ROCm/HIP "
+                               "only; there is no library Mamba-3 on this device and the pure-PyTorch "
+                               "reference is not an opponent" % (self.arm, self.kind))
         d = _dims_of(self.lane, self.shape)
         B, L, dm, V = d["batch"], d["length"], d["d_model"], d["vocab"]
-        m3 = self._mamba_call("mamba3")
-        params = self._dev_params()
+        corpus = _load_mamba_corpus_restoring(torch, self.info)
+        W = _weights(self.data)
         hd = dm // d["n_heads"]
-        attn = {}
+        layers, kinds, rope, ssm_back = torch.nn.ModuleList(), [], None, None
         for i, kind in enumerate(d["layers"]):
-            if kind == "attention":
-                pre = "layers.%d." % i
-                attn[i] = self._llama({k[len(pre):]: v for k, v in params.items() if k.startswith(pre)},
-                                      dict(d, n_kv=d["n_heads"], head_dim=hd), L)
+            pre = "layers.%d." % i
+            w = {k[len(pre):]: v for k, v in W.items() if k.startswith(pre)}
+            if kind == "mamba3":
+                blk, ssm_back, _eps_back, fused, _cfg, _eps = mamba_ssm_block(
+                    torch, self.dev, "mamba3", corpus, dm, w, self.arm)
+                layers.append(blk)
+                self.info["mamba3_fused_path"] = fused
+            else:
+                layer, _cfg, cos, sin, pos = self._hf_layer(
+                    w, dict(d, n_kv=d["n_heads"], head_dim=hd), L, BLOCK_NORM_EPS, BLOCK_ROPE_THETA)
+                layers.append(layer)
+                rope = (cos, sin, pos)
+            kinds.append(kind)
+        embed = torch.nn.Embedding(V, dm)
+        hf_load_exact(torch, embed, {"weight": torch.from_numpy(np.ascontiguousarray(W["embed.weight"]))},
+                      self.arm)
+        embed = embed.to(self.dev)
+        norm_w = torch.nn.Parameter(torch.from_numpy(np.ascontiguousarray(W["norm_f.weight"])).to(self.dev))
         eps = float(torch.tensor(SAMBA_NORM_EPS, dtype=torch.float32))
-        # the final norm's eps as passed to ours (the blocks' eps is read back in _llama)
+        # the final norm's eps as passed to ours; the attention layers' eps and RoPE base read back
         self.block_consts = dict(self.block_consts, eps=SAMBA_NORM_EPS)
+        self.info.update(_mamba_ssm_info(torch, self.arm, None))
         train = self.train
 
-        def forward(p, ids, targets=None):
-            x = F.embedding(ids, p["embed.weight"])
-            for i, kind in enumerate(d["layers"]):
-                pre = "layers.%d." % i
-                w = {k[len(pre):]: v for k, v in p.items() if k.startswith(pre)}
-                if kind == "mamba3":
-                    x = m3(w, x)
-                else:
-                    blk = attn[i]
-                    blk.W = {LLAMA_NAME.get(k, k): v for k, v in w.items()}
-                    x = blk.block(x.reshape(B * L, dm), None, B, L, sdpa=True)[0].reshape(B, L, dm)
-            h = _rms(torch, x, p["norm_f.weight"], eps)
-            logits = F.linear(h, p["embed.weight"])
-            if not train:
-                return logits
-            return F.cross_entropy(logits.reshape(B * L, V).float(), targets.reshape(B * L),
-                                   reduction="mean")
+        class Stack(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.embed, self.layers, self.norm_w = embed, layers, norm_w
 
-        self.uses_default_device = True
-        self.module = self._module(params, forward)
+            def forward(self, ids, targets=None):
+                x = self.embed(ids)
+                for kind, m in zip(kinds, self.layers):
+                    if kind == "mamba3":
+                        h, r = m(x)
+                        x = h + r
+                    else:
+                        x = hf_layer_call(m, x, rope[0], rope[1], rope[2])
+                logits = F.linear(F.rms_norm(x, (dm,), self.norm_w, eps), self.embed.weight)
+                if not train:
+                    return logits
+                return F.cross_entropy(logits.reshape(B * L, V).float(), targets.reshape(B * L),
+                                       reduction="mean")
+
+        self.module = Stack()
+        self.module.train(train)
         self.batches = self.data["batches"]
         if not train:
-            self.host = [torch.from_numpy(self.np.ascontiguousarray(self.batches[0][:, :-1]).astype(self.np.int64))]
-        self.info["twin"] = ("embedding; per layer mamba/corpus/gen_corpus.py m3_forward or "
-                             "tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps "
-                             "1e-5; tied head; mean CE")
+            self.host = [torch.from_numpy(np.ascontiguousarray(self.batches[0][:, :-1]).astype(np.int64))]
+        self.info["twin"] = ("torch Embedding; per layer mamba_ssm Mamba3 Block (%s) or transformers %s "
+                             "LlamaDecoderLayer; F.rms_norm eps 1e-5; tied head; mean CE"
+                             % (self.info.get("mamba3_fused_path"), self.info.get("transformers_version")))
+        if ssm_back is not None:
+            self.info["mamba3_config_readback"] = ssm_back
 
     def _build_mlp(self):
         torch = self.torch
@@ -1955,6 +2205,385 @@ def _load_speed_torch_seq(torch, info):
     return mod
 
 
+# ---------------------------------------------------------------------------
+# FAIRNESS FIX (2026-10-13 audit): library opponents in place of harness-written twins
+# ---------------------------------------------------------------------------
+# The LM and transformer torch twins were code this harness wrote from torch ops
+# (tools/torch_lm_step_opponent.py ByteDecoder, tools/speed_torch_seq.py LlamaEager), and the
+# Mamba twins pure-PyTorch references: neither is a library's own implementation. They are
+# replaced by transformers' own Llama classes (LlamaForCausalLM, LlamaDecoderLayer,
+# LlamaRotaryEmbedding, DynamicCache) configured to ours' exact architecture, and mamba_ssm's own
+# fused blocks, every one loaded with ours' initial weights and read back bit for bit. The torch
+# settings (eager/compile x fp32/tf32/bf16 autocast) are unchanged. transformers is pinned in
+# tools/bench_board.py NEURAL_PINS (TRANSFORMERS_PIN); mamba_ssm in MAMBA_SSM_BUILD. NONE OF THIS
+# HAS RUN: the transformers 5.17.0 constructor/forward signatures used below (and mamba_ssm's
+# ROCm build, Mamba3 backward and autocast/compile behaviour inside the Samba stack) are
+# unverified at runtime; every mismatch refuses the arm by name instead of falling back.
+# Results raced before this change were wrong for these lanes; apply extra scrutiny.
+TRANSFORMERS_PIN = "transformers==5.17.0"
+
+#: The mamba_ssm modules each model runs, and our weight names -> the Block's state-dict names
+#: (block.norm = the block RMSNorm, block.mixer = the mixer).
+MAMBA_SSM_MIXER = {"mamba1": "mamba_ssm.modules.mamba_simple.Mamba",
+                   "mamba2": "mamba_ssm.modules.mamba2.Mamba2",
+                   "mamba3": "mamba_ssm.modules.mamba3.Mamba3"}
+MAMBA_SSM_BLOCK_NORM = {"mamba1": "norm.weight", "mamba2": "block_norm.weight",
+                        "mamba3": "block_norm.weight"}
+
+
+def _floats(v):
+    return None if v is None else [float(x) for x in v]
+
+
+def ours_ssm_record(model, mod, block):
+    """Ours' Mamba structural constants under the canonical ssm_* names: the profile constants
+    of the installed mojolearn._mamba_impl and the block's own attributes."""
+    if model == "mamba1":
+        return {"ssm_d_state": mod._M1_D_STATE, "ssm_d_conv": mod._M1_D_CONV,
+                "ssm_expand": mod._M1_EXPAND, "ssm_dt_rank": getattr(block, "dt_rank", None)}
+    if model == "mamba2":
+        return {"ssm_d_state": mod._M2_D_STATE, "ssm_d_conv": mod._M2_D_CONV,
+                "ssm_expand": mod._M2_EXPAND, "ssm_headdim": mod._M2_HEADDIM,
+                "ssm_ngroups": mod._M2_NGROUPS, "ssm_chunk_size": mod._M2_CHUNK_SIZE,
+                "ssm_dt_limit": _floats(getattr(block, "dt_limit", None))}
+    return {"ssm_d_state": mod._M3_D_STATE, "ssm_expand": mod._M3_EXPAND,
+            "ssm_headdim": mod._M3_HEADDIM, "ssm_ngroups": mod._M3_NGROUPS,
+            "ssm_chunk_size": mod._M3_CHUNK_SIZE, "ssm_rope_angles": mod._M3_NUM_ROPE_ANGLES}
+
+
+def mamba_ssm_state_name(model, name):
+    """Our weight name -> the mamba_ssm Block's state-dict name."""
+    return "norm.weight" if name == MAMBA_SSM_BLOCK_NORM[model] else "mixer." + name
+
+
+def mamba_ssm_setting(arm):
+    """'mamba-ssm-fp32' -> {'tf32': False, 'triton_f32_default': 'ieee'}."""
+    if arm not in MAMBA_SSM_ARMS:
+        raise ValueError("not a mamba-ssm arm: %r" % arm)
+    tf32 = arm.endswith("-tf32")
+    return {"tf32": tf32, "triton_f32_default": "tf32" if tf32 else "ieee"}
+
+
+def mamba_ssm_config(model, corpus, dm):
+    """The mixer's constructor arguments (every one EXPLICIT, never the library default) and the
+    block norm's eps, from mamba/corpus/gen_corpus.py: the constants our blocks use."""
+    if model == "mamba1":
+        return dict(d_state=corpus.D_STATE, d_conv=corpus.D_CONV, expand=corpus.EXPAND,
+                    dt_rank=-(-dm // 16), conv_bias=True, bias=False,
+                    use_fast_path=True), corpus.EPS
+    if model == "mamba2":
+        return dict(d_state=corpus.M2_D_STATE, d_conv=corpus.M2_D_CONV, expand=corpus.M2_EXPAND,
+                    headdim=corpus.M2_HEADDIM, ngroups=corpus.M2_NGROUPS, D_has_hdim=False,
+                    rmsnorm=True, norm_before_gate=False, dt_limit=(0.0, float("inf")),
+                    bias=False, conv_bias=True, chunk_size=corpus.M2_CHUNK,
+                    use_mem_eff_path=True), corpus.M2_EPS
+    return dict(d_state=corpus.M3_D_STATE, expand=corpus.M3_EXPAND, headdim=corpus.M3_HEADDIM,
+                ngroups=corpus.M3_NGROUPS, rope_fraction=0.5, A_floor=corpus.M3_A_FLOOR,
+                is_outproj_norm=False, is_mimo=False,
+                chunk_size=corpus.M3_CHUNK), corpus.M3_EPS
+
+
+def mamba_ssm_readback(model, block):
+    """The constructed Block's structural values under the canonical ssm_* names (compared with
+    ours' by tools/bench_board_params.py) and the norms' eps (checked against the corpus)."""
+    m = block.mixer
+    rec = {"ssm_d_state": int(m.d_state), "ssm_expand": int(m.expand)}
+    eps = {"block_norm_eps": float(block.norm.eps)}
+    if model == "mamba1":
+        rec.update(ssm_d_conv=int(m.d_conv), ssm_dt_rank=int(m.dt_rank))
+    elif model == "mamba2":
+        rec.update(ssm_d_conv=int(m.d_conv), ssm_headdim=int(m.headdim),
+                   ssm_ngroups=int(m.ngroups), ssm_chunk_size=int(m.chunk_size),
+                   ssm_dt_limit=[float(v) for v in m.dt_limit])
+        eps["gated_norm_eps"] = float(m.norm.eps)
+    else:
+        rec.update(ssm_headdim=int(m.headdim), ssm_ngroups=int(m.num_bc_heads),
+                   ssm_chunk_size=int(m.chunk_size), ssm_rope_angles=int(m.num_rope_angles))
+        eps.update(B_norm_eps=float(m.B_norm.eps), C_norm_eps=float(m.C_norm.eps))
+    return rec, eps
+
+
+def _mamba_ssm_source():
+    """(version text, pip's direct_url record) of the installed mamba_ssm: a git build's version
+    carries the commit (the board pins one)."""
+    import importlib.metadata as md
+    import mamba_ssm
+    ver = str(getattr(mamba_ssm, "__version__", "unknown"))
+    url = None
+    for dist in ("mamba_ssm", "mamba-ssm"):
+        try:
+            raw = md.distribution(dist).read_text("direct_url.json")
+        except md.PackageNotFoundError:
+            continue
+        if raw:
+            url = json.loads(raw)
+            break
+    commit = ((url or {}).get("vcs_info") or {}).get("commit_id")
+    return (ver + "+g" + commit[:12] if commit else ver), url
+
+
+def _dist_version(name):
+    import importlib.metadata as md
+    try:
+        return md.version(name)
+    except md.PackageNotFoundError:
+        return None
+
+
+def _mamba_ssm_fused_path(model, mixer_mod, arm):
+    """THE FUSED PATH OR NOTHING: an arm that would leave mamba_ssm's fused path (no
+    causal_conv1d) refuses by name instead."""
+    if model == "mamba3":
+        return "mamba3_siso_combined (Triton)"
+    if getattr(mixer_mod, "causal_conv1d_fn", None) is None:
+        raise RuntimeError("REFUSED: %s: causal_conv1d does not import, so mamba_ssm would leave "
+                           "its fused path; install the board's pinned causal-conv1d" % arm)
+    if model == "mamba1":
+        return "mamba_inner_fn (causal_conv1d + selective_scan kernel, fused)"
+    return "mamba_split_conv1d_scan_combined (causal_conv1d + SSD Triton kernels, gated RMSNorm)"
+
+
+def mamba_ssm_block(torch, dev, model, corpus, dm, weights, arm):
+    """mamba_ssm's own Block(norm = Triton RMSNorm, mixer, fused_add_norm, residual in fp32)
+    holding ours' float32 weights `weights` (our names), read back bit for bit. Returns (block,
+    structural read-back, eps read-back, fused path, eps). Raises REFUSED when mamba_ssm does
+    not import on this box (never a reference fallback)."""
+    import numpy as np
+    try:
+        from functools import partial
+        from mamba_ssm.modules.block import Block
+        from mamba_ssm.ops.triton.layer_norm import RMSNorm
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("REFUSED: %s: mamba_ssm does not import in %s (%r); there is no library "
+                           "Mamba kernel on this box and the pure-PyTorch reference is not an "
+                           "opponent" % (arm, sys.executable, exc))
+    cfg, eps = mamba_ssm_config(model, corpus, dm)
+    mod_name, cls_name = MAMBA_SSM_MIXER[model].rsplit(".", 1)
+    mixer_mod = importlib.import_module(mod_name)
+    mixer_cls = getattr(mixer_mod, cls_name)
+    fused = _mamba_ssm_fused_path(model, mixer_mod, arm)
+    f32 = torch.float32
+    block = Block(dm, partial(mixer_cls, device=dev, dtype=f32, **cfg), torch.nn.Identity,
+                  norm_cls=partial(RMSNorm, eps=eps, device=dev, dtype=f32),
+                  fused_add_norm=True, residual_in_fp32=True).to(dev)
+    sd = {}
+    for k, v in weights.items():
+        t = torch.from_numpy(np.ascontiguousarray(v))
+        if model == "mamba3" and k in ("B_bias", "C_bias"):
+            t = t.reshape(t.shape[0], 1, t.shape[1])      # [H, N] -> [H, mimo_rank 1, N]
+        sd[mamba_ssm_state_name(model, k)] = t
+    block.load_state_dict(sd, strict=True)
+    for k, v in sd.items():            # every parameter holds our bits
+        got = block.state_dict()[k].detach().cpu()
+        if got.dtype != f32 or not torch.equal(got.reshape(v.shape), v):
+            raise RuntimeError("REFUSED: %s: %s did not load our float32 bits" % (arm, k))
+    readback, eps_back = mamba_ssm_readback(model, block)
+    for k, v in eps_back.items():
+        if v != eps:
+            raise RuntimeError("REFUSED: %s: %s is %r, ours uses %r" % (arm, k, v, eps))
+    return block, readback, eps_back, fused, cfg, eps
+
+
+def _mamba_ssm_info(torch, arm, setting):
+    import mamba_ssm
+    version, direct_url = _mamba_ssm_source()
+    try:
+        import triton
+        triton_ver = triton.__version__
+        f32_default = getattr(getattr(getattr(triton, "knobs", None), "language", None),
+                              "fp32_default", None)
+    except Exception:  # noqa: BLE001
+        triton_ver, f32_default = None, None
+    if f32_default is not None and setting is not None and f32_default != setting["triton_f32_default"]:
+        raise RuntimeError("REFUSED: %s: Triton's fp32 default reads back %r, not %r"
+                           % (arm, f32_default, setting["triton_f32_default"]))
+    return {"mamba_ssm_version": version, "mamba_ssm_direct_url": direct_url,
+            "mamba_ssm_file": getattr(mamba_ssm, "__file__", None), "triton_version": triton_ver,
+            "triton_f32_default": f32_default if f32_default is not None
+            else os.environ.get("TRITON_F32_DEFAULT"),
+            "causal_conv1d_version": _dist_version("causal_conv1d") or _dist_version("causal-conv1d"),
+            "torch_version_hip": getattr(torch.version, "hip", None)}
+
+
+class MambaSsmArm:
+    """mamba_ssm's fused kernels on one Mamba forward lane: Block(norm = Triton RMSNorm, mixer,
+    fused_add_norm, residual in fp32); the output is mixer(norm(x)) + x, the block's residual
+    add. The clock: host x to the device, the block, the output back on the host, synchronized
+    (the torch arms' clock). FAIRNESS FIX (2026-10-13 audit): brought onto main from
+    lane/mamba-opp facde18cc (NVIDIA) and opened to AMD's ROCm/HIP build (float32 only there;
+    unverified at runtime). Results raced before this change were wrong for this lane; apply
+    extra scrutiny."""
+
+    def __init__(self, lane, shape, data, arm):
+        if lane not in MAMBA_SSM_LANES:
+            raise RuntimeError("REFUSED: %s races the Mamba forward lanes only (%s), not %s"
+                               % (arm, ", ".join(MAMBA_SSM_LANES), lane))
+        import numpy as np
+        self.np, self.lane = np, lane
+        setting = mamba_ssm_setting(arm)
+        # the Triton fp32 dot precision, set before any kernel compiles
+        os.environ["TRITON_F32_DEFAULT"] = setting["triton_f32_default"]
+        torch, dev, kind, name, sync = _torch_device()
+        hip = getattr(torch.version, "hip", None)
+        if kind != "cuda":
+            raise RuntimeError("REFUSED: %s: mamba_ssm's kernels run on CUDA or ROCm/HIP only; "
+                               "this torch is %s" % (arm, kind))
+        if hip and setting["tf32"]:
+            raise RuntimeError("REFUSED: %s: TF32 is an NVIDIA CUDA mode; on ROCm mamba_ssm races "
+                               "mamba-ssm-fp32 only" % arm)
+        self.torch, self.dev, self._sync = torch, dev, sync
+        twin = _load("torch_lm_step_opponent")
+        precision = twin.set_precision(torch, setting["tf32"])
+        torch.manual_seed(SEED)
+        info = {}
+        corpus = _load_mamba_corpus_restoring(torch, info)
+        model = MODEL_OF[lane]
+        d = _dims_of(lane, shape)
+        block, readback, eps_back, fused, cfg, eps = mamba_ssm_block(
+            torch, dev, model, corpus, d["d_model"], _weights(data), arm)
+        block.eval()
+        self.block = block
+        self.host = [torch.from_numpy(np.ascontiguousarray(data["x"]))]
+        self.info = dict(info)
+        self.info.update(_mamba_ssm_info(torch, arm, setting))
+        self.info.update({
+            "library": "mamba-ssm", "version": self.info["mamba_ssm_version"], "device": "gpu",
+            "device_name": name, "torch_version": torch.__version__,
+            "torch_version_cuda": torch.version.cuda, "torch_backend": "rocm" if hip else kind,
+            "setting": arm[len("mamba-ssm-"):],
+            "precision": ("float32 weights and activations; TF32 %s in torch; Triton fp32 tl.dot "
+                          "input_precision %s" % ("ON" if setting["tf32"] else "off",
+                                                  setting["triton_f32_default"])),
+            "mode": "mamba_ssm fused kernels, eager, %s" % arm[len("mamba-ssm-"):],
+            "precision_readback": precision, "mixer": MAMBA_SSM_MIXER[model],
+            "mixer_config": json.dumps(cfg, sort_keys=True, default=str),
+            "block": "mamba_ssm.modules.block.Block(norm=Triton RMSNorm eps %g, fused_add_norm=True, "
+                     "residual_in_fp32=True, mlp=Identity); out = mixer(norm(x)) + x" % eps,
+            "fused_path": fused, "norm_eps_readback": eps_back, "config_readback": readback,
+            "weights": "ours, load_state_dict(strict=True), read back bit for bit",
+            "compile": "eager (mamba_ssm's own kernels)", "pre_clock_fit": False,
+            "input_home": "host",
+            "call": "mamba_ssm Block(%s).forward(x) on %s; h + residual; .cpu()"
+                    % (MAMBA_SSM_MIXER[model].rsplit(".", 1)[1], dev)})
+        self.record = {"__library__": "mamba-ssm", "seed": SEED}
+        self.record.update(readback)
+        self.out = None
+        sync()
+
+    def call(self):
+        torch = self.torch
+        x = self.host[0].to(self.dev)
+        with torch.no_grad():
+            h, r = self.block(x)
+            out = h + r
+        self.out = out.float().cpu().numpy()
+
+    def sync(self):
+        self._sync()
+
+    def outputs(self):
+        return {"y": self.out}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self.out).data)[:16]
+
+
+#: ours' TransformerBlock / SambaStack attention names -> transformers' LlamaDecoderLayer names
+HF_LAYER_NAME = {"input_layernorm.weight": "input_layernorm.weight",
+                 "post_attention_layernorm.weight": "post_attention_layernorm.weight",
+                 "q_proj.weight": "self_attn.q_proj.weight", "k_proj.weight": "self_attn.k_proj.weight",
+                 "v_proj.weight": "self_attn.v_proj.weight", "o_proj.weight": "self_attn.o_proj.weight",
+                 "gate_proj.weight": "mlp.gate_proj.weight", "up_proj.weight": "mlp.up_proj.weight",
+                 "down_proj.weight": "mlp.down_proj.weight"}
+#: tools/torch_lm_step_opponent.py registry names (the flat init's order) -> LlamaForCausalLM's
+HF_LM_BLOCK_NAME = {"norm1_w": "input_layernorm.weight", "w_q": "self_attn.q_proj.weight",
+                    "w_k": "self_attn.k_proj.weight", "w_v": "self_attn.v_proj.weight",
+                    "w_o": "self_attn.o_proj.weight", "norm2_w": "post_attention_layernorm.weight",
+                    "w_gate": "mlp.gate_proj.weight", "w_up": "mlp.up_proj.weight",
+                    "w_down": "mlp.down_proj.weight"}
+
+
+def hf_lm_state_name(name):
+    """tools/torch_lm_step_opponent.py registry name -> LlamaForCausalLM state-dict name."""
+    if name == "embed":
+        return "model.embed_tokens.weight"
+    if name == "lm_head":
+        return "lm_head.weight"
+    block, part = name.split(".", 1)
+    return "model.layers.%d.%s" % (int(block[len("block"):]), HF_LM_BLOCK_NAME[part])
+
+
+def _transformers(arm):
+    try:
+        import transformers
+        from transformers import LlamaConfig
+        from transformers.models.llama import modeling_llama
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("REFUSED: %s: transformers does not import in %s (%r); the board pins %s "
+                           "(tools/bench_board.py NEURAL_PINS) and the harness's own twin is not an "
+                           "opponent" % (arm, sys.executable, exc, TRANSFORMERS_PIN))
+    return transformers, LlamaConfig, modeling_llama
+
+
+def hf_llama_config(arm, *, vocab, d_model, n_heads, n_kv, head_dim, intermediate, layers,
+                    max_pos, eps, theta):
+    """A LlamaConfig of ours' exact architecture, every field explicit (never a library
+    default): SwiGLU MLP, no biases, RMSNorm eps, default RoPE at base `theta`, SDPA attention,
+    no dropout, untied head (the LM sets tying itself)."""
+    transformers, LlamaConfig, _ = _transformers(arm)
+    kw = dict(vocab_size=int(vocab), hidden_size=int(d_model), intermediate_size=int(intermediate),
+              num_hidden_layers=int(layers), num_attention_heads=int(n_heads),
+              num_key_value_heads=int(n_kv), head_dim=int(head_dim), hidden_act="silu",
+              max_position_embeddings=int(max_pos), rms_norm_eps=float(eps), rope_theta=float(theta),
+              attention_bias=False, mlp_bias=False, attention_dropout=0.0,
+              tie_word_embeddings=False, use_cache=False, initializer_range=0.02,
+              attn_implementation="sdpa")
+    cfg = LlamaConfig(**kw)
+    if hasattr(cfg, "rope_parameters"):          # transformers' newer RoPE field
+        try:
+            cfg.rope_parameters = {"rope_type": "default", "rope_theta": float(theta)}
+        except Exception:  # noqa: BLE001  (read back below through the rotary inv_freq)
+            pass
+    return transformers, cfg
+
+
+def hf_check_rotary(torch, rotary, head_dim, theta, arm):
+    """transformers' rotary inv_freq must be ours' default RoPE at base `theta` (float32), or the
+    arm refuses: this is the read-back of the RoPE base whatever the config field is called."""
+    import numpy as np
+    inv = rotary.inv_freq.detach().float().cpu().numpy()
+    want = (1.0 / (np.float32(theta) ** (np.arange(0, head_dim, 2, dtype=np.float32)
+                                         / np.float32(head_dim)))).astype(np.float32)
+    if inv.shape != want.shape or not np.allclose(inv, want, rtol=1e-6, atol=0):
+        raise RuntimeError("REFUSED: %s: transformers' rotary inv_freq is not the default RoPE at "
+                           "base %g (max rel diff %s)" % (arm, theta, float(np.max(np.abs(inv - want) / want))
+                                                          if inv.shape == want.shape else inv.shape))
+    scaling = float(getattr(rotary, "attention_scaling", 1.0))
+    if scaling != 1.0:
+        raise RuntimeError("REFUSED: %s: transformers' rotary attention_scaling is %r, not 1" % (arm, scaling))
+    return float(theta)
+
+
+def hf_load_exact(torch, module, state, arm):
+    """load_state_dict(strict=True) of `state` ({hf name: tensor}) into `module`, read back bit for
+    bit (float32)."""
+    module.load_state_dict(state, strict=True)
+    got = module.state_dict()
+    for k, v in state.items():
+        g = got[k].detach().cpu()
+        if g.dtype != torch.float32 or tuple(g.shape) != tuple(v.shape) or not torch.equal(g, v.cpu()):
+            raise RuntimeError("REFUSED: %s: transformers module did not load our float32 bits for %s"
+                               % (arm, k))
+
+
+def hf_layer_call(layer, x, cos, sin, position_ids, **extra):
+    """LlamaDecoderLayer(x) with precomputed RoPE cos/sin; returns the hidden states whatever the
+    installed version returns (a tensor, or a tuple whose first item is the hidden states)."""
+    out = layer(x, attention_mask=None, position_ids=position_ids, position_embeddings=(cos, sin),
+                **extra)
+    return out[0] if isinstance(out, (tuple, list)) else out
+
+
 def build_runner(lane, arm, shape, data, ab_config=None):
     operation = _neural_ab_operation(ab_config)
     supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "transformer_forward_vjp_tape", "mamba3_owned_forward", "lm_chunked_head_v2",
@@ -1994,6 +2623,8 @@ def build_runner(lane, arm, shape, data, ab_config=None):
         return OURS[model](lane, shape, data)
     if operation != "model_default":
         raise RuntimeError("REFUSED: experimental operation has no matched opponent implementation")
+    if arm in MAMBA_SSM_ARMS:            # FAIRNESS FIX (2026-10-13 audit): the real Mamba kernels
+        return MambaSsmArm(lane, shape, data, arm)
     return TorchArm(lane, shape, data, arm)
 
 
@@ -2280,7 +2911,7 @@ def race(args):
     # here (no worker starts; the cell reads REFUSED with the reason). Results raced before
     # this change were wrong for this lane; apply extra scrutiny.
     refused_before = {a: REFERENCE_TWIN_LANES[lane] for a in arms
-                      if lane in REFERENCE_TWIN_LANES and a not in OUR_ARMS}
+                      if lane in REFERENCE_TWIN_LANES and a.startswith("torch-")}
     for arm in arms:
         if arm in refused_before:
             workers[arm] = RefusedArm()
@@ -2347,16 +2978,24 @@ def race(args):
         for arm in live[shift:] + live[:shift]:
             w = workers[arm]
             w.send("round %d" % r)
-            msg = w.read(args.warmup_seconds if r == 0 else args.round_seconds)
+            msg = w.read(warmup_deadline(arm, args) if r == 0 else args.round_seconds)
             if msg is None or msg.get("event") != "round":
                 status = "timeout" if msg is None else "error"
                 w.kill(status, msg)
                 result["arms"][arm].update(status=status, error=msg, failed_round=r)
+                if r == 0 and status == "timeout":
+                    result["arms"][arm]["warmup_deadline_s"] = warmup_deadline(arm, args)
                 print("NEURAL-REFUSED lane=%s arm=%s stage=round%d detail=%s"
                       % (lane, arm, r, json.dumps(msg)), flush=True)
                 continue
             if r == 0:
                 result["arms"][arm]["warmup_ms"] = msg["ms"]
+                if is_compile_arm(arm):
+                    # FAIRNESS FIX (2026-10-13 audit): the compile (torch.compile's first call)
+                    # is this untimed warm-up round; its time is recorded on its own. Results
+                    # raced before this change were wrong for this lane; apply extra scrutiny.
+                    result["arms"][arm]["compile_warmup_ms"] = msg["ms"]
+                    result["arms"][arm]["warmup_deadline_s"] = warmup_deadline(arm, args)
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
             result["arms"][arm]["digests"].append(msg["digest"])
@@ -2475,6 +3114,11 @@ def build_parser():
                    help="construct every arm, read its parameters back, write <out>/<tag>.params.json "
                         "and stop before the warm-up (the board's opponent-store lookup)")
     r.add_argument("--warmup-seconds", type=int, default=1800)
+    # FAIRNESS FIX (2026-10-13 audit): a compile arm's own warm-up deadline (warmup_deadline).
+    # Results raced before this change were wrong for this lane; apply extra scrutiny.
+    r.add_argument("--compile-warmup-seconds", type=int, default=None,
+                   help="warm-up deadline of a torch.compile arm (its compile is the untimed "
+                        "warm-up round); default 8 x --round-seconds")
     r.add_argument("--round-seconds", type=int, default=1800)
     r.add_argument("--keep-outputs", action="store_true",
                    help="keep every arm's saved outputs as <out>/<lane>-<data>-<arm>.outputs.npz "

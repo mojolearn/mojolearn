@@ -142,7 +142,9 @@ STUB_NEURAL = textwrap.dedent(r'''
     p = argparse.ArgumentParser()
     p.add_argument("cmd")
     for f in ("--lane", "--shape", "--arms", "--rounds", "--out", "--work", "--ours-python",
-              "--theirs-python", "--ready-seconds", "--warmup-seconds", "--round-seconds"):
+              "--theirs-python", "--ready-seconds", "--warmup-seconds", "--round-seconds",
+              # FAIRNESS FIX (2026-10-13 audit): a compile arm's own warm-up deadline
+              "--compile-warmup-seconds"):
         p.add_argument(f)
     a = p.parse_args()
     assert a.cmd == "race" and a.ours_python and a.theirs_python
@@ -745,6 +747,11 @@ def test_plan_neural_fast_on_apple_only(vendor):
             want = [a for a in want if "-compile-" not in a]
         if r["lane"] in NO_TWIN_DECODE:
             want = []
+        if r["lane"] in ("mamba1-forward", "mamba2-forward", "mamba3-forward"):
+            # FAIRNESS FIX (2026-10-13 audit): mamba_ssm's fused kernels, the real Mamba opponent
+            # (the torch references are planned and refused by name at race time)
+            want = want + {"nvidia": ["mamba-ssm-fp32", "mamba-ssm-tf32"],
+                           "amd": ["mamba-ssm-fp32"]}.get(vendor, [])
         assert r["opponents"] == want, r["id"]
         assert r["arms"] == ours + want
         # TF32 exists on NVIDIA CUDA only; it is never planned elsewhere
@@ -759,7 +766,9 @@ def test_plan_neural_fast_on_apple_only(vendor):
     assert [r["id"] for r in small] == ["neural/gemm/gaussian/shape=small"]
     cells = sum(len(r["arms"]) for r in races)
     # +6 inference lanes (Oct 7 2026): apple 64 -> 82, amd 52 -> 64, nvidia 73 -> 88
-    assert cells == {"apple": 82, "amd": 64, "nvidia": 88}[vendor]
+    # FAIRNESS FIX (2026-10-13 audit): + the mamba-ssm arms on the three Mamba forward lanes
+    # (NVIDIA fp32 and tf32: +6; AMD fp32: +3)
+    assert cells == {"apple": 82, "amd": 67, "nvidia": 94}[vendor]
     assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 18, "cells": cells}}
 
 
@@ -799,9 +808,11 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # FAIRNESS FIX (2026-10-13 audit, decomposition group): the classical2 tsvd scikit-learn arm
 # (ARPACK, a different algorithm from ours' covariance_eigh) leaves Apple and AMD (-2 each:
 # Apple 342 -> 340 and classical2 130 -> 128, AMD 228 -> 226 and classical2 86 -> 84).
+# FAIRNESS FIX (2026-10-13 audit, neural group): the mamba-ssm arms add 6 NVIDIA and 3 AMD
+# neural cells (NVIDIA 267 -> 273 and neural 88 -> 94, AMD 226 -> 229 and neural 64 -> 67).
 @pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 340, 128, 82),
-                                                      ("nvidia", 267, 88, 88),
-                                                      ("amd", 226, 84, 64)])
+                                                      ("nvidia", 273, 88, 94),
+                                                      ("amd", 229, 84, 67)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0

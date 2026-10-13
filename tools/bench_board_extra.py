@@ -107,15 +107,28 @@ def register(add):
         params=dict(max_norm=1.0, norm_type=2.0, error_if_nonfinite=True),
         quality="x-clip",
         fit_text="clip_grad_norm_ over 8 fp32 gradients of 2,097,152 values", torch_fp32=True,
-        notes=["gradients default_rng(7) standard normal; every round clips the same arrays "
-               "again, on every arm, so each arm walks the same sequence"])
+        # FAIRNESS FIX (2026-10-13 audit): every round clipped the already-clipped arrays again
+        # (torch always multiplies by the clamped coefficient; ours scales only above max_norm),
+        # so the per-round work was not shown equal. Every round now clips a fresh copy of the
+        # unclipped gradients on every arm, put back after the round, outside the clock. Results
+        # raced before this change were wrong for this lane; apply extra scrutiny.
+        notes=["gradients default_rng(7) standard normal; every round clips the unclipped "
+               "gradients (restored after each round, outside the clock), on every arm, so each "
+               "arm scales the same arrays by the same coefficient every round"])
     add("cross-entropy", xlane="training", ours=("cross_entropy", "training.cross_entropy"),
         kind="extra", task="xent", block="tensor", datasets=("synthetic",),
         params=dict(reduction="mean", label_smoothing=0.0, ignore_index=-100),
         quality="x-xent",
         fit_text="cross_entropy(logits (8192 x 8192), targets) forward and dlogits",
         torch_fp32=True,
-        notes=["logits default_rng(7) standard normal, targets integers in [0, 8192)"])
+        # FAIRNESS FIX (2026-10-13 audit): ours' clock returned the whole (8192, 8192) dlogits to
+        # the host while torch's copied 256 rows; torch's clock now copies the whole gradient to
+        # the host too. Results raced before this change were wrong for this lane; apply extra
+        # scrutiny.
+        notes=["logits default_rng(7) standard normal, targets integers in [0, 8192)",
+               "both arms return the loss and the whole dlogits on the host inside the clock "
+               "(ours' cross_entropy(..., return_grad=True) returns a host array; torch copies "
+               "xt.grad to the host)"])
     for slug, what in (("bpe-encode", "encode_batch of 2,048 documents"),
                        ("bpe-train", "train a 4,096-token byte-level vocabulary")):
         add(slug, xlane="prep", ours=("BpeTokenizer",) if slug == "bpe-encode" else
@@ -315,11 +328,18 @@ def build(lane, arm, D, A):
         if ours:
             if t == "clip":
                 G = _grads(np, SEED)
+                G0 = [g.copy() for g in G]          # FAIRNESS FIX (2026-10-13 audit): the unclipped
 
                 def fit():
                     S["norm"] = float(fn(G, p["max_norm"], norm_type=p["norm_type"],
                                          error_if_nonfinite=p["error_if_nonfinite"]))
-                return Runner(info, fit, lambda: {"norm": np.array([S["norm"]])}, record=rec)
+
+                def outputs():
+                    # after the round's clocks: put the unclipped gradients back for the next round
+                    for g, g0 in zip(G, G0):
+                        np.copyto(g, g0)
+                    return {"norm": np.array([S["norm"]])}
+                return Runner(info, fit, outputs, record=rec)
             x, tg = _ce_inputs(np, SEED)
             tg32 = tg.astype(np.int32)
 
@@ -342,6 +362,10 @@ def build(lane, arm, D, A):
             params = [torch.nn.Parameter(torch.zeros(GRAD_SIZE, device=dev)) for _ in G]
             for q, g in zip(params, G):
                 q.grad = torch.from_numpy(g).to(dev)
+            # FAIRNESS FIX (2026-10-13 audit): the unclipped gradients, put back after each round
+            # (outside the clock) so every round clips the same unclipped arrays. Results raced
+            # before this change were wrong for this lane; apply extra scrutiny.
+            G0_dev = [q.grad.detach().clone() for q in params]
 
             def clip():
                 return torch.nn.utils.clip_grad_norm_(params, p["max_norm"], norm_type=p["norm_type"],
@@ -351,8 +375,14 @@ def build(lane, arm, D, A):
 
             def fit():
                 S["norm"] = float(run())
-            return Runner(info, fit, lambda: {"norm": np.array([S["norm"]])}, sync=sync,
-                          record=dict(rec, seed=SEED, **p))
+
+            def outputs():
+                with torch.no_grad():
+                    for q, g0 in zip(params, G0_dev):
+                        q.grad.copy_(g0)
+                sync()
+                return {"norm": np.array([S["norm"]])}
+            return Runner(info, fit, outputs, sync=sync, record=dict(rec, seed=SEED, **p))
         x_np, tg = _ce_inputs(np, SEED)
         xt = torch.from_numpy(x_np).to(dev).requires_grad_(True)
         tt = torch.from_numpy(tg).to(dev)
@@ -368,8 +398,11 @@ def build(lane, arm, D, A):
             xt.grad = None
             loss = run(xt, tt)
             loss.backward()
-            S["o"] = {"loss": np.array([float(loss.item())]),
-                      "grad": xt.grad[:256].float().cpu().numpy()}
+            # FAIRNESS FIX (2026-10-13 audit): the whole gradient comes to the host inside the
+            # clock, as ours' host return does (it copied 256 rows). Results raced before this
+            # change were wrong for this lane; apply extra scrutiny.
+            g_host = xt.grad.float().cpu().numpy()
+            S["o"] = {"loss": np.array([float(loss.item())]), "grad": g_host[:256].copy()}
         return Runner(info, fit, lambda: S["o"], sync=sync, record=dict(rec, seed=SEED, **p))
 
     # ---- BPE encode and train

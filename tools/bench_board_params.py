@@ -171,6 +171,14 @@ ALIASES = {
         "normalize": "normalize", "positive": "positive", "class_weight": "class_weight",
         "leaf_size": "leaf_size", "boosting_type": "boosting_type",
         "border_count": ("max_bin", _plus1),
+        # FAIRNESS FIX (2026-10-13 audit): neural Mamba blocks (tools/bench_board_neural.py): ours'
+        # profile constants and the mamba-ssm arms' constructed modules, the ssm_ prefix so no other
+        # library's get_params can collide. Results raced before this change were wrong for this
+        # lane; apply extra scrutiny.
+        "ssm_d_state": "ssm_d_state", "ssm_d_conv": "ssm_d_conv", "ssm_expand": "ssm_expand",
+        "ssm_dt_rank": "ssm_dt_rank", "ssm_headdim": "ssm_headdim", "ssm_ngroups": "ssm_ngroups",
+        "ssm_chunk_size": "ssm_chunk_size", "ssm_dt_limit": "ssm_dt_limit",
+        "ssm_rope_angles": "ssm_rope_angles",
         # classical and classical2 (tools/classical_two_datasets.py, tools/bench_board_more.py)
         "gamma": "gamma", "atol": "atol", "rtol": "rtol", "breadth_first": "breadth_first",
         "cluster_selection_method": "cluster_selection_method",

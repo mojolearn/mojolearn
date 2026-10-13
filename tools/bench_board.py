@@ -423,6 +423,10 @@ AMD_HIPVS_INDEX = "https://pypi.amd.com/rocm-7.2.3/simple/"
 AMD_HIPVS = ["amd-hipvs==1.0.0"]
 DEFAULT_TORCH_SPEC = {"apple": "torch==2.13.0", "nvidia": "torch==2.13.0+cu129",
                       "amd": AMD_TORCH_ROCM}
+#: FAIRNESS FIX (2026-10-13 audit): torchvision's build for each default torch (torch 2.13 pairs
+#: with torchvision 0.28), installed from the same index right after torch.
+DEFAULT_TORCHVISION_SPEC = {"apple": "torchvision==0.28.0", "nvidia": "torchvision==0.28.0+cu129",
+                            "amd": "torchvision==0.28.0+rocm7.1"}
 #: an EXTRA index for the default torch spec (PyPI stays the main index)
 DEFAULT_TORCH_EXTRA_INDEX = {"nvidia": "https://download.pytorch.org/whl/cu129",
                              "amd": "https://download.pytorch.org/whl/rocm7.1"}
@@ -437,7 +441,67 @@ CPU_ARM = "ours-cpu"
 #: The neural family's one extra pin: einops, which mamba/corpus/gen_corpus.py's
 #: verbatim selective_scan_ref (the Mamba-1 torch twin) imports (pixi.toml
 #: carries einops >= 0.8 for the same reference).
-NEURAL_PINS = ["einops==0.8.1"]
+NEURAL_PINS = ["einops==0.8.1",
+               # FAIRNESS FIX (2026-10-13 audit): the LM, transformer and Samba torch arms ran
+               # harness-written twins; they now run transformers' own Llama classes
+               # (bench_board_neural.TRANSFORMERS_PIN, the version lane/mamba-opp pinned for
+               # mamba_ssm), on every vendor. Results raced before this change were wrong for
+               # these lanes; apply extra scrutiny.
+               "transformers==5.17.0"]
+
+# FAIRNESS FIX (2026-10-13 audit): THE REAL MAMBA OPPONENT (tools/bench_board_neural.py
+# MAMBA_SSM_VENDOR_ARMS), from lane/mamba-opp facde18cc: mamba_ssm's fused kernels, pinned to the
+# state-spaces/mamba commit mamba/corpus/gen_corpus.py cites (its Mamba3 is the heavy-tail A our
+# Mamba3Block implements; PyPI's 2.3.2.post1 is an older Mamba-3). Both packages BUILD FROM SOURCE in
+# the board's venv against its torch (--no-build-isolation, --no-deps: mamba-ssm's install_requires
+# pull tilelang, quack-kernels and an unpinned transformers; transformers is pinned in NEURAL_PINS):
+#   nvidia  the pod's CUDA toolkit (/usr/local/cuda nvcc, CUDA 12.x) against torch 2.13.0+cu129;
+#           causal-conv1d (the fused path of Mamba/Mamba2 needs it) and mamba-ssm with
+#           MAMBA_KEEP_CUDA_BUILD=TRUE (the selective-scan kernel Mamba-1 runs). As built and run on
+#           the L40S on 2026-09-29 (release-board-resume-r2).
+#   amd     NEW, NEVER BUILT OR RUN (unverified at runtime): both setup.py files take their HIP path
+#           when torch is a ROCm build (torch 2.13.0+rocm7.1, AMD_TORCH_ROCM), with ROCm's hipcc
+#           (ROCM_HOME=/opt/rocm), PYTORCH_ROCM_ARCH=gfx942 (MI300X / MI325X); the Mamba-2 SSD and
+#           Mamba-3 SISO kernels are Triton (ROCm Triton from pytorch-triton-rocm). mamba-ssm-fp32
+#           only (TF32 is a CUDA mode).
+# A failed build is not fatal: the mamba-ssm arms (and the Samba torch arms, which run mamba_ssm's
+# Mamba3) then refuse by name (mamba_ssm or causal_conv1d does not import) in their cells; the
+# pure-PyTorch references are never raced instead. Results raced before this change were wrong for
+# these lanes; apply extra scrutiny.
+MAMBA_SSM_COMMIT = "e9594ce1c732d97440f0332fdc43170a2294dbfa"
+_MAMBA_SSM_TOOLS = ["ninja==1.13.2", "wheel==0.48.0", "packaging==26.3", "setuptools==84.0.0"]
+MAMBA_SSM_PINS = {"nvidia": list(_MAMBA_SSM_TOOLS), "amd": list(_MAMBA_SSM_TOOLS)}
+MAMBA_SSM_BUILD = {v: ["causal-conv1d==1.7.0",
+                       "mamba-ssm @ git+https://github.com/state-spaces/mamba@" + MAMBA_SSM_COMMIT]
+                   for v in ("nvidia", "amd")}
+MAMBA_SSM_BUILD_ENV = {"MAMBA_FORCE_BUILD": "TRUE", "MAMBA_KEEP_CUDA_BUILD": "TRUE",
+                       "CAUSAL_CONV1D_FORCE_BUILD": "TRUE"}
+#: the AMD build's extra environment (gfx942: MI300X and MI325X)
+MAMBA_SSM_BUILD_ENV_AMD = {"PYTORCH_ROCM_ARCH": "gfx942", "HIP_ARCHITECTURES": "gfx942"}
+
+
+def mamba_ssm_install_steps(python, vendor, opponent_wheels=None):
+    """[(argv, extra env)] that install the mamba-ssm opponent into `python`'s venv on `vendor`
+    ([] where it is not planned: Apple). With --opponent-wheels the two builds come from that
+    directory's prebuilt wheels instead."""
+    if vendor not in MAMBA_SSM_BUILD:
+        return []
+    pip = [python, "-m", "pip", "install", "--no-input", "--disable-pip-version-check"]
+    local = ["--no-index", "--find-links", os.path.abspath(opponent_wheels)] if opponent_wheels else []
+    env = dict(MAMBA_SSM_BUILD_ENV)
+    env["MAX_JOBS"] = str(max(1, min(32, os.cpu_count() or 1)))
+    if vendor == "nvidia":
+        if os.path.isdir("/usr/local/cuda") and not os.environ.get("CUDA_HOME"):
+            env["CUDA_HOME"] = "/usr/local/cuda"
+    else:
+        env.update(MAMBA_SSM_BUILD_ENV_AMD)
+        if os.path.isdir("/opt/rocm") and not os.environ.get("ROCM_HOME"):
+            env["ROCM_HOME"] = "/opt/rocm"
+    builds = MAMBA_SSM_BUILD[vendor]
+    if opponent_wheels:           # a wheel directory holds the built wheels by name
+        builds = [b.split(" @ ", 1)[0] for b in builds]
+    return [(pip + local + MAMBA_SSM_PINS[vendor], {}),
+            (pip + local + ["--no-build-isolation", "--no-deps"] + builds, env)]
 
 
 def now_utc():
@@ -745,7 +809,11 @@ def arm_library(arm):
     if arm in ("ours", "ours-ab", "ours-fast", "ours-base", CPU_ARM):
         return "mojolearn"
     head = arm.split("-", 1)[0]
-    return {"sklearn": "scikit-learn", "umap": "umap-learn", "hf": "tokenizers"}.get(head, head)
+    # FAIRNESS FIX (2026-10-13 audit): the mamba-ssm-* arms (mamba_ssm's own kernels) are
+    # library mamba-ssm. Results raced before this change were wrong for this lane; apply extra
+    # scrutiny.
+    return {"sklearn": "scikit-learn", "umap": "umap-learn", "hf": "tokenizers",
+            "mamba": "mamba-ssm"}.get(head, head)
 
 
 def arm_device(arm, vendor):
@@ -1085,6 +1153,11 @@ def pinned_package_names():
     names = {"torch"}
     reqs = [r for _, rs in opponent_pins().values() for r in rs]
     reqs += [r for rs in MORE_PINS.values() for r in rs] + list(NEURAL_PINS)
+    # FAIRNESS FIX (2026-10-13 audit): the mamba-ssm opponent's pins and builds are part of the
+    # resume key. Results raced before this change were wrong for this lane; apply extra scrutiny.
+    reqs += [r for rs in MAMBA_SSM_PINS.values() for r in rs]
+    reqs += [r for rs in MAMBA_SSM_BUILD.values() for r in rs]
+    reqs += list(DEFAULT_TORCHVISION_SPEC.values())
     reqs += [r for rs in ALGOS.PINS.values() for r in rs]
     reqs += [r for rs in ALGOS.RAPIDS_EXTRA.values() for r in rs]
     reqs += list(AMD_HIPVS)                # FAIRNESS FIX (2026-10-13 audit): hipVS on AMD
@@ -1198,6 +1271,15 @@ def setup_python(args, vendor, out, log):
         if run_logged(cmd + shlex.split(torch_spec), None, log, 3600) != 0:
             print("bench_board: torch install failed (%s); torch arms will refuse by name"
                   % torch_spec, flush=True)
+        # FAIRNESS FIX (2026-10-13 audit): torchvision (the resnet-block lane's opponent is
+        # torchvision's own BasicBlock, not the harness's), the build matching the default torch,
+        # from the same index; its own pip call, so a failure only refuses that arm by name.
+        # Unverified at runtime (the +cu129 / +rocm7.1 builds of 0.28.0). Results raced before
+        # this change were wrong for this lane; apply extra scrutiny.
+        tv_spec = DEFAULT_TORCHVISION_SPEC.get(vendor) if args.torch_spec is None else None
+        if tv_spec and run_logged(cmd + ["--no-deps", tv_spec], None, log, 3600) != 0:
+            print("bench_board: torchvision install failed (%s); the resnet-block torch arms will "
+                  "refuse by name" % tv_spec, flush=True)
     for idx, reqs in opponent_requirements(vendor, opponent_pins()):
         cmd = list(pip)
         if args.opponent_wheels:
@@ -1268,8 +1350,21 @@ def setup_python(args, vendor, out, log):
             cmd += ["--no-index", "--find-links", os.path.abspath(args.opponent_wheels)]
         rc = run_logged(cmd + NEURAL_PINS, None, log, 3600)
         if rc != 0:
-            print("bench_board: neural opponent install rc %d for %s (the Mamba-1 torch arms will "
-                  "refuse by name)" % (rc, " ".join(NEURAL_PINS)), flush=True)
+            print("bench_board: neural opponent install rc %d for %s (the transformers torch arms "
+                  "will refuse by name)" % (rc, " ".join(NEURAL_PINS)), flush=True)
+        # FAIRNESS FIX (2026-10-13 audit): the mamba-ssm arms: two source builds (MAMBA_SSM_BUILD's
+        # comment), CUDA on NVIDIA, ROCm/HIP on AMD (unverified at runtime). Results raced before
+        # this change were wrong for this lane; apply extra scrutiny.
+        for argv, extra in mamba_ssm_install_steps(python, vendor, args.opponent_wheels):
+            env = dict(os.environ, **extra) if extra else None
+            for bindir in ("/usr/local/cuda/bin", "/opt/rocm/bin"):
+                if env is not None and os.path.isdir(bindir):
+                    env["PATH"] = bindir + os.pathsep + env.get("PATH", "")
+            rc = run_logged(argv, env, log, 3 * 3600)
+            if rc != 0:
+                print("bench_board: mamba-ssm opponent install rc %d (%s); the mamba-ssm arms and "
+                      "the Samba torch arms will refuse by name" % (rc, " ".join(argv[6:])), flush=True)
+                break
     return python, wheel
 
 
@@ -1903,6 +1998,7 @@ def algos_cmd(ctx, race):
         cmd += ["--smoke-rows", str(int(race["rows"]))]
     n = len(race["arms"])
     ceiling = 600 + rsec * n * 2 + rsec * ctx["rounds"] * n + 900
+    cmd, ceiling = _compile_warmup(cmd, ceiling, race["arms"], rsec)   # FAIRNESS FIX (2026-10-13 audit)
     return cmd, {}, ceiling
 
 
@@ -1945,7 +2041,26 @@ def neural_cmd(ctx, race):
            "--round-seconds", str(rsec)]
     n = len(race["arms"])
     ceiling = 600 + rsec * n * 2 + rsec * ctx["rounds"] * n + 900
+    cmd, ceiling = _compile_warmup(cmd, ceiling, race["arms"], rsec)
     return cmd, {}, ceiling
+
+
+#: FAIRNESS FIX (2026-10-13 audit): a torch.compile arm compiles in its untimed warm-up round and
+#: gets COMPILE_WARMUP_FACTOR x the round deadline for it (4 h on the full neural shape): with the
+#: eager arms' deadline samba-train-step's compile arms timed out at 1800 s and the eager arm
+#: silently became the opponent. The race records the warm-up as compile_warmup_ms. Results raced
+#: before this change were wrong for this lane; apply extra scrutiny.
+COMPILE_WARMUP_FACTOR = 8
+
+
+def _compile_warmup(cmd, ceiling, arms, rsec):
+    """(cmd + --compile-warmup-seconds, ceiling + the extra warm-up) when a compile arm races."""
+    n_compile = sum(1 for a in arms if "-compile-" in a)
+    if not n_compile:
+        return cmd, ceiling
+    csec = COMPILE_WARMUP_FACTOR * rsec
+    return (cmd + ["--compile-warmup-seconds", str(csec)],
+            ceiling + n_compile * max(0, csec - rsec))
 
 
 def neural_json_path(ctx, race):
@@ -2010,6 +2125,12 @@ def classical_cells(ctx, race, r):
         # an ordinary opponent and silently became the fastest opponent. It is now a "context"
         # cell: shown, never an opponent, no ratio (add_ratios). Results raced before this
         # change were wrong for this lane; apply extra scrutiny.
+        if a.get("compile_warmup_ms") is not None:
+            # FAIRNESS FIX (2026-10-13 audit): torch.compile's warm-up (the compile), untimed,
+            # recorded beside the timed median. Results raced before this change were wrong for
+            # this lane; apply extra scrutiny.
+            cell.update(compile_warmup_ms=a["compile_warmup_ms"],
+                        warmup_deadline_s=a.get("warmup_deadline_s"))
         if a.get("not_opponent") and arm_library(arm) != "mojolearn":
             cell.update(mode="context", not_opponent=a["not_opponent"],
                         verdict="NOT-AN-OPPONENT(%s)" % a["not_opponent"])
@@ -3089,7 +3210,16 @@ def render_board(result):
              "far. An arm torch cannot run on this box is REFUSED by name in its cell. Every "
              "clock is host in, host out, synchronized. Every arm starts from the same "
              "parameters and reads the same inputs, so losses and outputs are comparable; "
-             "`max_abs_diff_vs_ours` / `max_rel_diff_vs_ours` are the arm's output against ours.")
+             "`max_abs_diff_vs_ours` / `max_rel_diff_vs_ours` are the arm's output against ours. "
+             # FAIRNESS FIX (2026-10-13 audit): the models are library classes now (they were the
+             # harness's twins and pure-PyTorch references). Results raced before this change were
+             # wrong for these lanes; apply extra scrutiny.
+             "The torch models are library classes: transformers' LlamaForCausalLM / "
+             "LlamaDecoderLayer for the LM and transformer lanes, mamba_ssm's Mamba3 blocks with "
+             "transformers' attention layers for Samba; the Mamba lanes' opponent is mamba_ssm's "
+             "own fused kernels (`mamba-ssm-fp32`, and `mamba-ssm-tf32` on NVIDIA), and their "
+             "pure-PyTorch reference torch arms are REFUSED by name. A compile arm compiles in its "
+             "untimed warm-up (`compile_warmup_ms`).")
     L.append("- `installed_wheel` confirms our binding loaded from site-packages, not the repo tree.")
     L.append("- Our CPU is never raced or reported: the board races only our GPU, against GPU "
              "opponents; a race keeps CPU opponents only when it has no GPU opponent (Andrew, "
