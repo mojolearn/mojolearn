@@ -143,7 +143,8 @@ def test_dry_run_counts_inference_cells(env, capsys):
     # trees: 12 races, arms (ours, ours-ab + opponents) x 2 batches; classical:
     # kmeans/pca/ols/svc x 2 datasets, every arm once. Opponents are what the plan
     # races: a race with a GPU opponent drops its CPU ones (Oct 2 2026), so on Apple
-    # kmeans/pca/ols/svc keep only torch-gpu (3 arms each: 24 cells); trees keep their
+    # pca/ols keep only torch-gpu, kmeans (no GPU opponent since the 2026-10-13 audit) and svc
+    # their CPU opponent (3 arms each: 24 cells); trees keep their
     # CPU opponents (no GPU one) for 164 cells. Never an ours-cpu cell.
     trees = sum(2 * (2 + len(bb.gpu_opponents_first(v))) * len(bb.tree_task_datasets(l, bb.DATASETS))
                 for l, v in bb.TREE_OPPONENTS["apple"].items())
@@ -180,13 +181,16 @@ def test_run_infer_cells_ratios_and_board(ienv):
     assert ic[("ours", "test")]["batch_rows"] == 500 and ic[("ours", "large")]["batch_rows"] == 1000
     km = res["races"]["classical/kmeans/taxi/rows=1000"]
     kc = {c["arm"]: c for c in km["infer_cells"]}
-    # torch-gpu is a GPU opponent, so sklearn-cpu does not race (Oct 2 2026)
-    assert set(kc) == {"ours", "ours-fast", "torch-gpu"}
-    assert kc["torch-gpu"]["ratio_ours_identical_over"] == pytest.approx(6 / 16)
-    assert kc["torch-gpu"]["verdict"].startswith("SPAN-ASYMMETRIC")
+    # FAIRNESS FIX (2026-10-13 audit): torch-gpu was the harness's own k-means, not a
+    # library; it is no opponent, Apple has no library GPU k-means, so sklearn-cpu races
+    # (a race with no GPU opponent keeps its CPU ones, Oct 2 2026). Results raced before
+    # this change were wrong for this lane; apply extra scrutiny.
+    assert set(kc) == {"ours", "ours-fast", "sklearn-cpu"}
+    assert kc["sklearn-cpu"]["ratio_ours_identical_over"] == pytest.approx(6 / 16)
+    assert kc["sklearn-cpu"]["verdict"] == "LIKE-FOR-LIKE-SPAN"
     assert kc["ours-fast"]["quality"]["bits_equal_vs_ours"] is True
     board = (ienv["out"] / "BOARD.md").read_text()
-    # rf: 4 arms x 2 batches; kmeans: ours, ours-fast, torch-gpu; each on taxi and Istella
+    # rf: 4 arms x 2 batches; kmeans: ours, ours-fast, sklearn-cpu; each on taxi and Istella
     assert "## Inference at a glance" in board and "Inference cells: 22 (ok 22)." in board
     assert "inference call, sklearn-rf-cpu: stub sklearn-rf-cpu predict_proba(X), column 1" in board
     assert not bbt.BANNED.search(board)

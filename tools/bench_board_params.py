@@ -182,6 +182,12 @@ ALIASES = {
         "set_op_mix_ratio": "set_op_mix_ratio", "local_connectivity": "local_connectivity",
         "negative_sample_rate": "negative_sample_rate", "repulsion_strength": "repulsion_strength",
         "assign_labels": "assign_labels", "start_periods": "start_periods",
+        # FAIRNESS FIX (2026-10-13 audit): PageRank's stopping threshold, the L1
+        # change below which every arm stops (n x tol), declared by every graph
+        # arm of tools/bench_board_algos.py and compared here; before, cuGraph's
+        # unscaled tol was not comparable. Results raced before this change were
+        # wrong for this lane; apply extra scrutiny.
+        "l1_stop_threshold": "l1_stop_threshold",
         # gbm-bench's binary classification weight (tools/bench_board_harness.py)
         "scale_pos_weight": ("scale_pos_weight", _unit_if_none),
         # the cuML benchmark's KMeans cuml_args, TargetEncoder and MBSGD values
@@ -313,10 +319,22 @@ EXCEPTIONS = [
     ("svc", "seed", "ours*", "mojolearn SVC refuses random_state without probability=True (the fit "
      "draws nothing); scikit-learn and cuML get 7"),
     ("svc", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
-    ("dbscan", "algorithm", "sklearn-cpu*", "an exact eps search on every arm: ours 'rbc' (its "
-     "default), scikit-learn has no 'rbc' and runs 'brute' (the cuML benchmark's cpu_args)"),
-    ("dbscan", "algorithm", "cuml-gpu", "an exact eps search on every arm: ours 'rbc', cuml-gpu "
-     "'brute' (cuml-gpu-rbc races 'rbc')"),
+    # FAIRNESS FIX (2026-10-13 audit): two rows here excused ours' DBSCAN
+    # algorithm='rbc' against 'brute' on cuml-gpu and scikit-learn, a different
+    # neighbour search. Ours now races 'brute' (tools/classical_two_datasets.py
+    # OursDBSCAN), so the rows are gone and a differing algorithm refuses the
+    # race. Results raced before this change were wrong for this lane; apply
+    # extra scrutiny.
+    # FAIRNESS FIX (2026-10-13 audit): k-means stopping rules differed (ours and
+    # cuML an absolute squared center shift < tol, scikit-learn tol relative to
+    # the mean feature variance). scikit-learn now gets tol / mean(var(X)), the
+    # same absolute threshold, so its tol VALUE differs by design and is excused
+    # here. Results raced before this change were wrong for this lane; apply
+    # extra scrutiny.
+    ("kmeans", "tol", "sklearn-cpu*", "the same stopping rule on every arm: total squared center "
+     "shift below 1e-7 (ours and cuML read tol as that absolute threshold, cuVS kmeans.cuh "
+     "sqrdNormError < tol); scikit-learn reads tol relative to mean(var(X, axis=0)) "
+     "(_kmeans.py _tolerance), so it is given 1e-7 / mean(var(X)) of the same rows"),
     ("hdbscan", "max_cluster_size", "sklearn-cpu*", "no limit on every arm: ours and cuML spell "
      "it 0, scikit-learn None"),
     ("umap", "seed", "umap-learn-cpu-unseeded", "raced unseeded on purpose: seeded umap-learn runs "
@@ -404,8 +422,30 @@ EXCEPTIONS = [
      "1.7.2 metric=True with dissimilarity='euclidean'"),
     ("algos/tsne", "init", "cuml-gpu", "cuML TSNE takes only init='random' and draws its own "
      "start; ours and scikit-learn start from the same seed-7 array"),
-    ("algos/tsne", "learning_rate", "cuml-gpu", "cuML names its rate schedule "
-     "learning_rate_method='adaptive'; ours and scikit-learn learning_rate='auto'"),
+    # FAIRNESS FIX (2026-10-13 audit): cuML t-SNE ran method='fft' with
+    # learning_rate_method='adaptive', which at n = 20,000 rewrites its rate to
+    # n / 3 = 6,667, early_exaggeration to 24 and n_neighbors to 78
+    # (t_sne.pyx _init_params), against ours' 'auto' 416.7, 12 and 91. cuML now
+    # runs method='exact' with learning_rate_method='none' and learning_rate =
+    # ours' resolved 'auto' value (tools/bench_board_algos.py _derived_params),
+    # so the VALUE is ours' rate and only its spelling differs. Results raced
+    # before this change were wrong for this lane; apply extra scrutiny.
+    ("algos/tsne", "learning_rate", "cuml-gpu", "the same rate, spelled differently: ours and "
+     "scikit-learn learning_rate='auto' (max(n / early_exaggeration / 4, 50)); cuML gets that "
+     "value as a float with learning_rate_method='none' (its 'adaptive' rewrites the rate, the "
+     "exaggeration and n_neighbors). cuML's non-adaptive schedule doubles the rate after the "
+     "exaggeration phase (t_sne.pyx post_learning_rate = 2 x learning_rate), which its Python "
+     "API cannot switch off"),
+    # FAIRNESS FIX (2026-10-13 audit): cuGraph pagerank stopped when the
+    # unscaled L1 change fell below tol (1e-6) while ours and networkx stop below
+    # n x tol (0.02 at 20,000 nodes), 20,000x tighter on cuGraph. cuGraph now
+    # gets tol = n x tol; l1_stop_threshold (n x tol) is declared and compared
+    # on every arm. Results raced before this change were wrong for this lane;
+    # apply extra scrutiny.
+    ("algos/pagerank", "tol", "cugraph-gpu", "the same stopping rule, spelled differently: ours "
+     "and networkx stop when the L1 change of the scores is below n x tol (networkx pagerank: "
+     "err < N * tol), cuGraph when it is below its tol (unscaled), so cuGraph is given n x tol; "
+     "l1_stop_threshold is equal on every arm"),
     ("algos/sgd-clf", "max_iter", "cuml-gpu", "cuML MBSGD reads epochs=100, not max_iter"),
     ("algos/sgd-clf", "tol", "cuml-gpu", "cuML MBSGD tol=0.0 is its no-early-stop value; ours "
      "and scikit-learn tol=None"),

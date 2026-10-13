@@ -147,7 +147,12 @@ classical_arms_for() {
         return
     fi
     case "$_l" in
-        kmeans|pca|knn) echo "ours,cuml-gpu,torch-gpu" ;;
+        # FAIRNESS FIX (2026-10-13 audit): kmeans and knn raced torch-gpu, the
+        # harness's own k-means / kNN from torch ops, not a library; dropped
+        # (classical_two_datasets.REFUSED_ARMS refuses it). Results raced before
+        # this change were wrong for these lanes; apply extra scrutiny.
+        kmeans|knn)     echo "ours,cuml-gpu" ;;
+        pca)            echo "ours,cuml-gpu,torch-gpu" ;;
         # FAIRNESS FIX (2026-10-13 audit): the OLS torch arms are harness-written, not
         # opponents (classical_two_datasets.REFUSED_ARMS). Results raced before this change
         # were wrong for this lane; apply extra scrutiny.

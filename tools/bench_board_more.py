@@ -171,6 +171,25 @@ UMAP_NEIGHBORS = 5
 UMAP_EPOCHS = 500
 GMM_COMPONENTS = 8
 IVF_NLIST, IVF_NPROBE, IVF_K = 1024, 32, 10
+
+
+def _ours_ivf_train_rows(n, nlist):
+    """How many rows OUR IVFIndex trains its coarse k-means on (IDENTICAL):
+    every s-th row, s = ivf_trainset_stride(n, n_lists)
+    (ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo, IVF_TRAINSET_STRIDE,
+    in ours since 3c76388c9, 2026-10-08), transcribed in integers (the same
+    function as tools/bench_board_algos.py's).
+
+    FAIRNESS FIX (2026-10-13 audit): each library trained its quantizer on its
+    own default sample (FAISS 256 rows per list = 262,144 rows, cuVS
+    kmeans_trainset_fraction 0.5 by default). Both opponents are now given this
+    count explicitly. Results raced before this change were wrong for this
+    lane; apply extra scrutiny."""
+    if n <= 1 or nlist < 1:
+        return n
+    target = min(n // 2, 256 * nlist)          # IVF_TRAIN_ROWS_PER_LIST
+    target = max(target, min(n, 39 * nlist), nlist)   # IVF_TRAIN_MIN_ROWS_PER_LIST
+    return n // max(1, n // target)
 ARIMA_ORDER = (1, 0, 1)
 ARIMA_SEASONAL = (0, 0, 0, 0)
 #: Holt-Winters convergence tolerance: ours' and cuML's parameter (their
@@ -573,8 +592,13 @@ LANE_CONFIG = {
                   "seed 7" % (IVF_NLIST, IVF_NPROBE, IVF_K),
         "timed": "build + search of every query",
         "quality": "recall@10 against a float64 NumPy brute force",
-        "mismatches": ["quantizer training set: each library's own (FAISS subsamples to 256 rows "
-                       "per list; cuVS kmeans_trainset_fraction 0.5; ours its own)",
+        # FAIRNESS FIX (2026-10-13 audit): the quantizer training set was each
+        # library's default; now every arm trains on ours' row count. Results
+        # raced before this change were wrong for this lane; apply extra scrutiny.
+        "mismatches": ["quantizer training set: ours' count on every arm (ours every s-th row, "
+                       "ivf_trainset_stride: 200,000 of 400,000; cuVS kmeans_trainset_fraction = "
+                       "that count / n, its own strided subsample; FAISS max_points_per_centroid "
+                       "= that count // n_lists, its own seeded sample)",
                        "seed: ours random_state=7, faiss cp.seed=7; cuVS IndexParams takes none"],
     },
 }
@@ -957,14 +981,20 @@ def build(lane, arm, D, rec):
         info = {"library": "faiss", "version": faiss.__version__, "device": "cpu",
                 "pre_clock_fit": False, "input_home": "host",
                 "omp_threads": faiss.omp_get_max_threads(),
-                "config": "IndexIVFFlat(IndexFlatL2(d), d, %d, METRIC_L2); cp.niter=20, cp.seed=7; "
+                "config": "IndexIVFFlat(IndexFlatL2(d), d, %d, METRIC_L2); cp.niter=20, cp.seed=7, "
+                          "cp.max_points_per_centroid=ours' training rows // n_lists; "
                           "train + add + search, nprobe=%d, k=%d" % (IVF_NLIST, IVF_NPROBE, IVF_K)}
         info.update(_load("classical_two_datasets")._host_info())
         X, Q = D["index"], D["queries"]
         nlist = min(IVF_NLIST, X.shape[0] // 4)
+        # FAIRNESS FIX (2026-10-13 audit): FAISS trained on its default sample
+        # (256 rows per list); it now trains on ours' count. Results raced before
+        # this change were wrong for this lane; apply extra scrutiny.
+        per_list = max(1, _ours_ivf_train_rows(X.shape[0], nlist) // nlist)
         declared = {"__library__": "faiss", "seed": SEED, "nlist": nlist,
                     "nprobe": min(IVF_NPROBE, nlist), "n_neighbors": IVF_K,
-                    "metric": "sqeuclidean", "kmeans_n_iters": 20}
+                    "metric": "sqeuclidean", "kmeans_n_iters": 20,
+                    "max_points_per_centroid": per_list}
 
         def call():
             d = X.shape[1]
@@ -972,6 +1002,7 @@ def build(lane, arm, D, rec):
             index = faiss.IndexIVFFlat(quant, d, nlist, faiss.METRIC_L2)
             index.cp.niter = 20
             index.cp.seed = SEED
+            index.cp.max_points_per_centroid = per_list
             index.train(X)
             index.add(X)
             index.nprobe = min(IVF_NPROBE, nlist)
@@ -985,16 +1016,24 @@ def build(lane, arm, D, rec):
         dev, info, sync = _cuml({"index": D["index"], "queries": D["queries"]})
         info.update(library="cuvs", version=getattr(cuvs, "__version__", "unknown"),
                     config="cuvs.neighbors.ivf_flat build(IndexParams(n_lists=%d, metric='sqeuclidean', "
-                           "kmeans_n_iters=20)) + search(SearchParams(n_probes=%d), k=%d)"
+                           "kmeans_n_iters=20, kmeans_trainset_fraction=ours' training rows / n)) + "
+                           "search(SearchParams(n_probes=%d), k=%d)"
                            % (IVF_NLIST, IVF_NPROBE, IVF_K))
         nlist = min(IVF_NLIST, D["index"].shape[0] // 4)
+        # FAIRNESS FIX (2026-10-13 audit): kmeans_trainset_fraction was left at
+        # cuVS's default; it is now pinned to ours' training-row count over n
+        # (cuVS subsamples with a stride, as ours does). Results raced before this
+        # change were wrong for this lane; apply extra scrutiny.
+        frac = _ours_ivf_train_rows(D["index"].shape[0], nlist) / float(D["index"].shape[0])
         # cuVS ivf_flat IndexParams takes no seed
         declared = {"__library__": "cuvs", "nlist": nlist, "nprobe": min(IVF_NPROBE, nlist),
-                    "n_neighbors": IVF_K, "metric": "sqeuclidean", "kmeans_n_iters": 20}
+                    "n_neighbors": IVF_K, "metric": "sqeuclidean", "kmeans_n_iters": 20,
+                    "kmeans_trainset_fraction": frac}
 
         def call():
             idx = ivf_flat.build(ivf_flat.IndexParams(n_lists=nlist, metric="sqeuclidean",
-                                                      kmeans_n_iters=20), dev["index"])
+                                                      kmeans_n_iters=20,
+                                                      kmeans_trainset_fraction=frac), dev["index"])
             _d, ind = ivf_flat.search(ivf_flat.SearchParams(n_probes=min(IVF_NPROBE, nlist)), idx,
                                       dev["queries"], IVF_K)
             S["ind"] = ind

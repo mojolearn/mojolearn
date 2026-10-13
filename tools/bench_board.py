@@ -267,35 +267,42 @@ def tree_devices(vendor, lane):
 
 
 #: Classical opponents, exact arm names built by tools/classical_two_datasets.py.
+#: FAIRNESS FIX (2026-10-13 audit): kmeans and knn listed `torch-gpu`, k-means
+#: and kNN that tools/classical_two_datasets.py writes from torch ops (not a
+#: library), as the GPU opponent on every vendor. It is dropped from those two
+#: lanes (the driver also refuses it by name, REFUSED_ARMS); AMD and Apple
+#: have no library GPU k-means or kNN installed, so those races have only the
+#: CPU opponent. Results raced before this change were wrong for these lanes;
+#: apply extra scrutiny.
 CLASSICAL_OPPONENTS = {
     "apple": {
-        "kmeans": ("sklearn-cpu", "torch-gpu"),
+        "kmeans": ("sklearn-cpu",),
         "pca": ("sklearn-cpu", "torch-gpu"),
         # FAIRNESS FIX (2026-10-13 audit): the OLS torch arms are harness-written, not an
         # opponent (classical_two_datasets.REFUSED_ARMS); here and on nvidia and amd below.
         # Results raced before this change were wrong for this lane; apply extra scrutiny.
         "ols": ("sklearn-cpu",),
-        "knn": ("sklearn-cpu", "torch-gpu"),
+        "knn": ("sklearn-cpu",),
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),
         "dbscan": ("sklearn-cpu",),
         "hdbscan": ("sklearn-cpu",),
     },
     "nvidia": {                              # bench_all_ours.sh's classical_arms_for
-        "kmeans": ("cuml-gpu", "torch-gpu"),
+        "kmeans": ("cuml-gpu",),
         "pca": ("cuml-gpu", "torch-gpu"),
         "ols": ("cuml-gpu",),                # FAIRNESS FIX (2026-10-13 audit): torch arms refused
-        "knn": ("cuml-gpu", "torch-gpu"),
+        "knn": ("cuml-gpu",),
         "kde": ("cuml-gpu",),
         "svc": ("cuml-gpu",),
         "dbscan": ("cuml-gpu",),             # cuml-gpu-rbc overflows at 1M rows
         "hdbscan": ("cuml-gpu",),
     },
     "amd": {                                 # tools/classical_hotaisle_leg.sh's arms
-        "kmeans": ("sklearn-cpu", "torch-gpu"),
+        "kmeans": ("sklearn-cpu",),
         "pca": ("sklearn-cpu", "torch-gpu"),
         "ols": ("sklearn-cpu",),             # FAIRNESS FIX (2026-10-13 audit): torch arms refused
-        "knn": ("sklearn-cpu", "torch-gpu"),
+        "knn": ("sklearn-cpu",),
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),
         "dbscan": ("sklearn-cpu",),

@@ -461,11 +461,34 @@ _add("pagerank", xlane="neighbors", ours=("PageRank",), kind="graph", task="page
      block="graphs", params=dict(alpha=0.85, tol=1e-6, max_iter=100),
      other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"}, mism=[_GRAPH_MISM],
      notes=["graph: the symmetric 10-nearest-neighbour graph of %d stride rows of the cls block "
-            "(float64 brute force in prep), unweighted" % GRAPH_SMALL])
+            "(float64 brute force in prep), unweighted" % GRAPH_SMALL,
+            # FAIRNESS FIX (2026-10-13 audit): cuGraph stopped below its unscaled tol
+            # (1e-6), ours and networkx below n x tol (0.02): 20,000x tighter on
+            # cuGraph. One rule now on every arm, and cuGraph's graph is stored
+            # transposed as its pagerank asks. Results raced before this change were
+            # wrong for this lane; apply extra scrutiny.
+            "stopping rule on every arm: the L1 change of the scores below n x tol, at most "
+            "max_iter=100 iterations (ours and networkx: tol=1e-6 is per node, networkx "
+            "err < N * tol; cuGraph's tol is the unscaled L1 bound, so it is given n x tol)",
+            "cuGraph: from_cudf_edgelist(renumber=False, store_transposed=True) before the clock "
+            "(pagerank's documented layout; without it cuGraph transposes on every call)"])
+# FAIRNESS FIX (2026-10-13 audit): connected-components raced a 20,000-node
+# graph (the `graphs` block, sized for ours' former dense adjacency), where
+# cuGraph's time was its per-call Python/cudf overhead (renumbering on) and
+# networkx on the CPU beat it. It now races the 100,000-node `graph` block (its
+# k=2 graph; ours takes the CSR since 2026-10-01, so the dense limit is gone)
+# with cuGraph's documented fast path (renumber=False for 0..n-1 vertex ids,
+# the Graph built before its clock; _build_graph). Results raced before this
+# change were wrong for this lane; apply extra scrutiny.
 _add("connected-components", xlane="neighbors", ours=("connected_components", "ConnectedComponents"),
-     kind="graph", task="components", block="graphs",
+     kind="graph", task="components", block="graph",
      other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"}, mism=[_GRAPH_MISM],
-     notes=["the kNN graph with k=2 (sparse enough to have more than one component)"])
+     notes=["the symmetric 2-nearest-neighbour graph of %d stride rows of the cls block "
+            "(float64 brute force in prep; sparse enough to have more than one component), "
+            "unweighted" % GRAPH_NODES,
+            "cuGraph: Graph(directed=False).from_cudf_edgelist(renumber=False) built before "
+            "the clock (vertex ids are already 0..n-1); ours' CSR arrays are built before its "
+            "clock and uploaded inside it"])
 _add("louvain", xlane="neighbors", ours=("Louvain",), kind="graph", task="louvain", block="graphs",
      params=dict(resolution=1.0, seed=SEED),
      other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
@@ -1210,11 +1233,21 @@ _add("embedding", xlane="embedding", ours=("Embedding",), kind="layer", task="em
 # ---- lane ann -------------------------------------------------------------
 _ANN = ("the classical knn lane's block (tools/knn_datasets.real_block, the classical2 ivf "
         "block): 400,000 index rows, 4,000 queries, raw")
+# FAIRNESS FIX (2026-10-13 audit): the opponents' coarse-quantizer training
+# sets were their library defaults (cuVS ivf_sq 262,144 rows against ours' all
+# 400,000 at de2b2b739). Declared here, set in _build_ann. Results raced before
+# this change were wrong for these lanes; apply extra scrutiny.
+_ANN_TRAIN = ("coarse k-means training rows: ours' count on every arm (ours every s-th row, "
+              "ivf_trainset_stride: 200,000 of 400,000; cuVS kmeans_trainset_fraction = that "
+              "count / n (ivf_pq), max_train_points_per_cluster = count // n_lists (ivf_sq, "
+              "199,680 rows); FAISS max_points_per_centroid = count // n_lists, its seeded "
+              "sample); 20 k-means iterations on every arm. cuVS ivf_sq trains its "
+              "scalar-quantizer ranges on that sample, ours over every row")
 _add("ivf-pq", xlane="ann", ours=("IVFPQIndex",), kind="ann", task="ivf-pq", block="ivf",
      params=dict(n_lists=1024, n_probes=32, n_neighbors=10, pq_bits=8, kmeans_n_iters=20,
                  random_state=SEED),
      other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"},
-     notes=[_ANN, "pq_dim = d when d <= 16 else d // 4 (taxi 11, Istella 55); no refine"])
+     notes=[_ANN, "pq_dim = d when d <= 16 else d // 4 (taxi 11, Istella 55); no refine"], mism=[_ANN_TRAIN])
 _add("cagra", xlane="ann", ours=("CAGRAIndex", "CagraIndex"), kind="ann", task="cagra", block="ivf",
      params=dict(graph_degree=32, intermediate_graph_degree=64, itopk_size=64, n_neighbors=10,
                  random_state=SEED),
@@ -1230,18 +1263,43 @@ _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
                     method="barnes_hut", metric="euclidean", n_iter_without_progress=1000,
                     min_grad_norm=0.0),
      cuml="cuml.manifold:TSNE",
-     cuml_params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate_method="adaptive",
-                      init="random", random_state=SEED, method="fft"),
-     mism=["gradients: ours exact repulsion over k-NN affinities (no Barnes-Hut atomics under "
-           "IDENTICAL); scikit-learn Barnes-Hut (angle=0.5, scikit-learn only); cuML FFT",
+     # FAIRNESS FIX (2026-10-13 audit): cuML raced method='fft' (an O(n)
+     # approximation of the repulsion; ours computes it exactly, O(n^2)) with
+     # learning_rate_method='adaptive', which at n = 20,000 rewrote its rate to
+     # 6,667, its early exaggeration to 24 and its k-NN to 78 (t_sne.pyx
+     # _init_params) against ours' 416.7, 12 and 91, and it could stop early on
+     # min_grad_norm=1e-7. cuML now runs its own exact algorithm (method='exact':
+     # attractive forces over the sparse k-NN P, exact all-pairs repulsion,
+     # exact_tsne.cuh, the algorithm ours implements), adaptive off, ours'
+     # resolved rate, 12, 91 neighbours ("tsne_auto" / "tsne_k" resolved in
+     # _derived_params), ours' 250 exaggeration steps and 0.5 / 0.8 momentum,
+     # and min_grad_norm=0.0 so it runs exactly max_iter steps as ours does.
+     # Results raced before this change were wrong for this lane; apply extra
+     # scrutiny.
+     cuml_params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0,
+                      late_exaggeration=1.0, max_iter=1000, learning_rate_method="none",
+                      learning_rate="tsne_auto", n_neighbors="tsne_k", method="exact",
+                      exaggeration_iter=250, pre_momentum=0.5, post_momentum=0.8,
+                      min_grad_norm=0.0, perplexity_max_iter=100, metric="euclidean",
+                      square_distances=True, init="random", random_state=SEED),
+     mism=["gradients: ours and cuML exact repulsion over k-NN affinities (cuML method='exact'; "
+           "no Barnes-Hut atomics under IDENTICAL); scikit-learn Barnes-Hut (angle=0.5, "
+           "scikit-learn only)",
+           "learning rate: ours and scikit-learn 'auto' = max(n / early_exaggeration / 4, 50); "
+           "cuML that value with learning_rate_method='none', which doubles it after the 250 "
+           "exaggeration steps (t_sne.pyx post_learning_rate = 2 x learning_rate; no Python "
+           "switch). Every arm runs the same number of steps",
+           "k-NN: 91 = min(n - 1, floor(3 x perplexity) + 1) neighbours on ours and "
+           "scikit-learn (its rule), cuML n_neighbors=91 by its own exact k-NN",
            "init: ours and scikit-learn start from the SAME array, ours' 'random' rule "
            "(default_rng(7).uniform(-5e-5, 5e-5, (n, 2)) float32); cuML takes only 'random' "
-           "and draws its own start",
-           "scikit-learn's early stop is switched off (n_iter_without_progress=1000, "
-           "min_grad_norm=0.0): ours runs exactly max_iter steps"])
+           "or 'pca' and draws its own start",
+           "early stop off on every arm: scikit-learn n_iter_without_progress=1000, "
+           "min_grad_norm=0.0; cuML min_grad_norm=0.0; ours runs exactly max_iter steps. "
+           "n_iter is in every quality cell"])
 _add("ivf-sq", xlane="ann", ours=("IVFSQIndex",), kind="ann", task="ivf-sq", block="ivf",
      params=dict(n_lists=1024, n_probes=32, n_neighbors=10, kmeans_n_iters=20, random_state=SEED),
-     other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"}, notes=[_ANN, "8-bit scalar quantizer"])
+     other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"}, notes=[_ANN, "8-bit scalar quantizer"], mism=[_ANN_TRAIN])
 _add("ivf-rabitq", xlane="ann", ours=("IVFRaBitQIndex",), kind="ann", task="ivf-rabitq",
      block="ivf", params=dict(n_lists=1024, n_probes=32, n_neighbors=10, kmeans_n_iters=20,
                               random_state=SEED),
@@ -1250,7 +1308,7 @@ _add("ivf-refine", xlane="ann", ours=("IVFPQIndex",), kind="ann", task="ivf-refi
      params=dict(n_lists=1024, n_probes=32, n_neighbors=10, pq_bits=8, kmeans_n_iters=20,
                  refine_ratio=4, random_state=SEED),
      other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"},
-     notes=[_ANN, "IVF-PQ search of 4k candidates then an exact re-rank to k"])
+     notes=[_ANN, "IVF-PQ search of 4k candidates then an exact re-rank to k"], mism=[_ANN_TRAIN])
 _add("ivf-filter", xlane="ann", ours=("IVFPQIndex",), kind="ann", task="ivf-filter", block="ivf",
      params=dict(n_lists=1024, n_probes=32, n_neighbors=10, pq_bits=8, kmeans_n_iters=20,
                  random_state=SEED),
@@ -2350,6 +2408,18 @@ def _derived_params(lane, D, params):
                                + 1).tolist()
     if p.get("init") == "seeded":       # t-SNE: ours' 'random' start, handed to every arm that takes one
         p["init"] = np.random.default_rng(SEED).uniform(-5e-5, 5e-5, (X.shape[0], 2)).astype(np.float32)
+    # FAIRNESS FIX (2026-10-13 audit): cuML t-SNE ran its adaptive schedule
+    # (rate n / 3, exaggeration 24, 78 neighbours at n = 20,000). Its rate and
+    # k-NN count are now ours' own resolved values: learning_rate 'auto' as ours
+    # resolves it (python/mojolearn/_expansion_ann.py TSNE.fit:
+    # max(n / early_exaggeration / 4, 50)) and k = min(n - 1, int(3 x
+    # perplexity) + 1) (x_ann/tsne_core.mojo tsne_nn, scikit-learn's rule).
+    # Results raced before this change were wrong for this lane; apply extra
+    # scrutiny.
+    if p.get("learning_rate") == "tsne_auto":
+        p["learning_rate"] = max(X.shape[0] / float(p["early_exaggeration"]) / 4.0, 50.0)
+    if p.get("n_neighbors") == "tsne_k":
+        p["n_neighbors"] = min(X.shape[0] - 1, int(3.0 * float(p["perplexity"])) + 1)
     return p
 
 
@@ -2958,6 +3028,13 @@ def _build_est(lane, arm, D):
             o["proba1"] = P[:, -1] if P.ndim == 2 and P.shape[1] == 2 else P
         if "out" in S:
             o["out"] = _arr(S["out"], np.float64)
+        if lane == "tsne" and getattr(est, "n_iter_", None) is not None:
+            # FAIRNESS FIX (2026-10-13 audit): the steps each t-SNE arm really ran
+            # were not recorded (cuML could stop early on min_grad_norm). n_iter_
+            # of every arm now reaches the quality cell. Results raced before this
+            # change were wrong for this lane; apply extra scrutiny.
+            o["n_iter"] = np.array([int(np.asarray(_arr(est.n_iter_, np.int64)).reshape(-1)[0])],
+                                   dtype=np.int64)
         if qk == "cca":
             a, b_ = S["pred"]
             o["xs"], o["ys"] = _arr(a, np.float64), _arr(b_, np.float64)
@@ -3563,7 +3640,15 @@ def _build_graph(lane, arm, D):
             if t == "pagerank":
                 return {"scores": _arr(sc if sc is not None else e.scores_, np.float64)}
             return {"labels": _arr(e.labels_, np.int64)}
-        return Runner(info, fit, outputs, record=dict(p, __library__="mojolearn"))
+        rec = dict(p, __library__="mojolearn")
+        if t == "pagerank":
+            # FAIRNESS FIX (2026-10-13 audit): the stopping threshold (ours stops
+            # when the L1 change < n x tol, _expansion_neighbors.py PageRank),
+            # declared so the parameter check compares it with cuGraph's. Results
+            # raced before this change were wrong for this lane; apply extra
+            # scrutiny.
+            rec["l1_stop_threshold"] = n * float(p["tol"])
+        return Runner(info, fit, outputs, record=rec)
     lib = s["other"][arm]
     if lib == "networkx":
         import networkx as nx
@@ -3588,6 +3673,8 @@ def _build_graph(lane, arm, D):
                           "components": "nx.connected_components",
                           "louvain": "nx.community.louvain_communities(resolution=1.0, seed=7)"}[t]
         rec = dict(p, __library__="networkx")
+        if t == "pagerank":
+            rec["l1_stop_threshold"] = n * float(p["tol"])   # nx.pagerank: err < N * tol
         return Runner(info, fit, lambda: S["o"], record=rec)
     import cudf
     import cugraph
@@ -3596,14 +3683,31 @@ def _build_graph(lane, arm, D):
     src = np.repeat(np.arange(n), np.diff(ip))
     df = cudf.DataFrame({"src": src.astype(np.int32), "dst": ix.astype(np.int32)})
     G = cugraph.Graph(directed=False)
-    G.from_cudf_edgelist(df, source="src", destination="dst")
-    info["config"] = {"pagerank": "cugraph.pagerank(alpha=0.85, tol=1e-6, max_iter=100)",
-                      "components": "cugraph.connected_components",
-                      "louvain": "cugraph.louvain(resolution=1.0, max_level=100)"}[t]
+    # FAIRNESS FIX (2026-10-13 audit): the Graph was built with cuGraph's
+    # defaults (renumber=True, store_transposed=False), so every timed call paid
+    # an unrenumber of its result and pagerank a transpose of the graph: per-call
+    # overhead that dominated the 20,000-node races (networkx on the CPU beat
+    # cuGraph on connected components). The vertex ids are already 0..n-1, so
+    # renumber=False (cuGraph's documented case for it), and pagerank's graph is
+    # stored transposed as cuGraph asks. Still built before the clock. Results
+    # raced before this change were wrong for these lanes; apply extra scrutiny.
+    G.from_cudf_edgelist(df, source="src", destination="dst", renumber=False,
+                         store_transposed=(t == "pagerank"))
+    # FAIRNESS FIX (2026-10-13 audit): cuGraph's pagerank tol is the unscaled L1
+    # bound (it stopped 20,000x tighter than ours at 20,000 nodes); it is given
+    # n x tol, the bound ours and networkx apply. Results raced before this
+    # change were wrong for this lane; apply extra scrutiny.
+    pr_tol = n * float(p["tol"]) if t == "pagerank" else None
+    info["config"] = {"pagerank": "cugraph.pagerank(alpha=%r, tol=%r (= n x %r), max_iter=%r) on "
+                                  "Graph(renumber=False, store_transposed=True)"
+                                  % (p.get("alpha"), pr_tol, p.get("tol"), p.get("max_iter")),
+                      "components": "cugraph.connected_components on Graph(renumber=False)",
+                      "louvain": "cugraph.louvain(resolution=1.0, max_level=100) on "
+                                 "Graph(renumber=False)"}[t]
 
     def fit():
         if t == "pagerank":
-            S["df"] = cugraph.pagerank(G, alpha=p["alpha"], tol=p["tol"], max_iter=p["max_iter"])
+            S["df"] = cugraph.pagerank(G, alpha=p["alpha"], tol=pr_tol, max_iter=p["max_iter"])
         elif t == "components":
             S["df"] = cugraph.connected_components(G)
         else:
@@ -3616,6 +3720,8 @@ def _build_graph(lane, arm, D):
         full[df["vertex"].to_numpy()] = df[col].to_numpy()
         return {"scores": full.astype(np.float64)} if t == "pagerank" else {"labels": full.astype(np.int64)}
     rec = dict(p, __library__="cugraph")
+    if t == "pagerank":
+        rec.update(tol=pr_tol, l1_stop_threshold=pr_tol)   # what cuGraph was given
     if t == "louvain":
         rec.pop("seed", None)            # cuGraph louvain takes no seed
     return Runner(info, fit, outputs, None, sync, record=rec)
@@ -3625,6 +3731,26 @@ def _build_graph(lane, arm, D):
 
 def _pq_dim(d):
     return d if d <= 16 else d // 4
+
+
+def _ours_ivf_train_rows(n, nlist):
+    """How many rows OUR IVF builds train the coarse k-means on (IDENTICAL):
+    every s-th row, s = ivf_trainset_stride(n, n_lists)
+    (ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo, IVF_TRAINSET_STRIDE,
+    in ours since 3c76388c9, 2026-10-08), transcribed in integers.
+
+    FAIRNESS FIX (2026-10-13 audit): the opponents' quantizer training sets
+    were left at their library defaults (cuVS ivf_sq at most 256 rows per list,
+    cuVS ivf_flat / ivf_pq kmeans_trainset_fraction 0.5, FAISS
+    max_points_per_centroid 256), so on the ivf-sq race (ours at de2b2b739,
+    before the stride, trained on all 400,000 rows) cuVS trained on 262,144:
+    less work in its clock. Every opponent is now given this count. Results
+    raced before this change were wrong for these lanes; apply extra scrutiny."""
+    if n <= 1 or nlist < 1:
+        return n
+    target = min(n // 2, 256 * nlist)          # IVF_TRAIN_ROWS_PER_LIST
+    target = max(target, min(n, 39 * nlist), nlist)   # IVF_TRAIN_MIN_ROWS_PER_LIST
+    return n // max(1, n // target)
 
 
 def _build_ann(lane, arm, D):
@@ -3640,6 +3766,7 @@ def _build_ann(lane, arm, D):
     S = {}
     sync = None
     allowed = (np.arange(n) % 2 == 0)
+    n_train = _ours_ivf_train_rows(n, nlist)   # FAIRNESS FIX (2026-10-13 audit): every arm's trainset
     if arm in OURS_ARMS:
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
@@ -3705,6 +3832,12 @@ def _build_ann(lane, arm, D):
             if hasattr(idx, "cp"):
                 idx.cp.niter = 20
                 idx.cp.seed = SEED
+                # FAIRNESS FIX (2026-10-13 audit): FAISS's coarse k-means trained on
+                # its default sample (256 rows per list, 262,144 rows); it now trains
+                # on ours' count (_ours_ivf_train_rows; FAISS samples n_train // nlist
+                # rows per list). Results raced before this change were wrong for
+                # this lane; apply extra scrutiny.
+                idx.cp.max_points_per_centroid = max(1, n_train // nlist)
             if t == "ivf-refine":
                 idx = faiss.IndexRefineFlat(idx)
                 idx.k_factor = p["refine_ratio"]
@@ -3731,7 +3864,8 @@ def _build_ann(lane, arm, D):
                        efSearch=64, n_neighbors=k)
         else:
             rec = dict(__library__="faiss", n_lists=nlist, n_probes=nprobe, n_neighbors=k,
-                       kmeans_n_iters=20, seed=SEED)
+                       kmeans_n_iters=20, seed=SEED,
+                       max_points_per_centroid=max(1, n_train // nlist))
             if t in ("ivf-pq", "ivf-refine", "ivf-filter"):
                 rec.update(pq_dim=_pq_dim(d), pq_bits=8)
             if t == "ivf-refine":
@@ -3743,6 +3877,19 @@ def _build_ann(lane, arm, D):
     info.update(library="cuvs", version=getattr(cuvs, "__version__", "unknown"))
     from cuvs.neighbors import ivf_flat, ivf_pq, cagra
 
+    # FAIRNESS FIX (2026-10-13 audit): cuVS ivf_sq ran with kmeans_n_iters and
+    # max_train_points_per_cluster at its defaults (its trainset 262,144 rows, its
+    # scalar-quantizer ranges trained on that subset: recall 0.773 against ours'
+    # 0.935 on taxi), and ivf_pq / ivf_flat with kmeans_trainset_fraction at its
+    # default. Every coarse quantizer now trains on ours' count (n_train,
+    # _ours_ivf_train_rows: cuVS's own strided fraction n_train / n for ivf_pq /
+    # ivf_flat, n_train // nlist rows per list for ivf_sq), with 20 k-means
+    # iterations and 256 PQ training rows per code (ours IDN_PQ_TRAIN_ROWS_PER_CODE)
+    # pinned explicitly. Results raced before this change were wrong for these
+    # lanes; apply extra scrutiny.
+    trainset_fraction = n_train / float(n)
+    per_list = max(1, n_train // nlist)
+
     def fit():
         if t == "cagra":
             S["i"] = cagra.build(cagra.IndexParams(graph_degree=p["graph_degree"],
@@ -3750,14 +3897,21 @@ def _build_ann(lane, arm, D):
                                  dev["index"])
         elif t in ("ivf-pq", "ivf-refine"):
             S["i"] = ivf_pq.build(ivf_pq.IndexParams(n_lists=nlist, metric="sqeuclidean",
-                                                     kmeans_n_iters=20, pq_dim=_pq_dim(d), pq_bits=8),
+                                                     kmeans_n_iters=20, pq_dim=_pq_dim(d), pq_bits=8,
+                                                     kmeans_trainset_fraction=trainset_fraction,
+                                                     max_train_points_per_pq_code=256),
                                   dev["index"])
         elif t == "ivf-sq":
             from cuvs.neighbors import ivf_sq
-            S["i"] = ivf_sq.build(ivf_sq.IndexParams(n_lists=nlist, metric="sqeuclidean"), dev["index"])
+            S["i"] = ivf_sq.build(ivf_sq.IndexParams(n_lists=nlist, metric="sqeuclidean",
+                                                     kmeans_n_iters=20,
+                                                     max_train_points_per_cluster=per_list),
+                                  dev["index"])
         else:
             S["i"] = ivf_flat.build(ivf_flat.IndexParams(n_lists=nlist, metric="sqeuclidean",
-                                                         kmeans_n_iters=20), dev["index"])
+                                                         kmeans_n_iters=20,
+                                                         kmeans_trainset_fraction=trainset_fraction),
+                                    dev["index"])
 
     def infer():
         if t == "cagra":
@@ -3781,9 +3935,14 @@ def _build_ann(lane, arm, D):
         rec.update(graph_degree=p["graph_degree"], intermediate_graph_degree=p["intermediate_graph_degree"],
                    itopk_size=p["itopk_size"])
     else:
-        rec.update(n_lists=nlist, n_probes=nprobe)
+        rec.update(n_lists=nlist, n_probes=nprobe, kmeans_n_iters=20)
         if t in ("ivf-pq", "ivf-refine"):
-            rec.update(pq_dim=_pq_dim(d), pq_bits=8, kmeans_n_iters=20)
+            rec.update(pq_dim=_pq_dim(d), pq_bits=8, kmeans_trainset_fraction=trainset_fraction,
+                       max_train_points_per_pq_code=256)
+        elif t == "ivf-sq":
+            rec.update(max_train_points_per_cluster=per_list)
+        info["config"] += " coarse trainset %d of %d rows (ours' count)" % (
+            n_train if t != "ivf-sq" else min(n, per_list * nlist), n)
     return Runner(info, fit, lambda: {"ind": _arr(S["ind"], np.int64)}, infer, sync, record=rec)
 
 
@@ -5447,6 +5606,8 @@ def quality(lane, D, outs):
                 E = o["out"]
                 e["trustworthiness_k15"] = (more.trustworthiness(D["X"], E) if np.all(np.isfinite(E))
                                             else None)
+                if "n_iter" in o:          # t-SNE: the steps the arm ran (FAIRNESS FIX 2026-10-13)
+                    e["n_iter"] = int(o["n_iter"].reshape(-1)[0])
             elif qk == "impute":
                 m = np.isnan(D["Xq"])
                 e["masked_rmse"] = float(np.sqrt(np.mean((o["pred"][m] - D["Xq_true"][m]) ** 2)))

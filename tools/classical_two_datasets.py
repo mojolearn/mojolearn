@@ -95,6 +95,11 @@ THE ARMS (0b-iii: only OUR IDENTICAL arm against the opponent's FAST arm)
                 Their FAST arm: the inputs are uploaded BEFORE the clock
                 (upload_ms is in the ready record), the clock ends at
                 torch.cuda.synchronize(). Not written for kde and svc.
+                FAIRNESS FIX (2026-10-13 audit): the kmeans and knn torch-gpu
+                arms are the harness's own algorithms, not a library's, and
+                are refused (REFUSED_ARMS); before, they were raced as the
+                GPU opponent on AMD and Apple. Results raced before this change
+                were wrong for those lanes; apply extra scrutiny.
   torch-gpu-eigh  OLS only: centered normal equations through eigh with a
                 pseudo-inverse cutoff. FAIRNESS FIX (2026-10-13 audit): it and
                 the OLS torch-gpu arm are harness-written, not a library's
@@ -192,23 +197,39 @@ DATASETS = ("taxi", "istella")
 #: Every arm a lane has. A leg names the ones it races with --arms (NVIDIA:
 #: ours, cuml-gpu and torch; AMD: ours, torch ROCm and scikit-learn on the CPU).
 ARMS = {
-    "kmeans": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
+    # FAIRNESS FIX (2026-10-13 audit): the kmeans and knn rosters listed
+    # `torch-gpu`, k-means (index_add_) and kNN (cdist + topk) that this harness
+    # writes from torch primitives, raced as if it were a library opponent (the
+    # only GPU opponent on AMD and Apple). It is removed from both rosters, and a
+    # leg that still names it gets a refusal with the reason (REFUSED_ARMS,
+    # `race`). No library k-means or kNN is installed for ROCm or Metal on the
+    # boxes, so those races have no GPU opponent there. Results raced before
+    # this change were wrong for this lane; apply extra scrutiny.
+    "kmeans": ("ours", "cuml-gpu", "sklearn-cpu"),
     "pca": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
     # FAIRNESS FIX (2026-10-13 audit): torch-gpu and torch-gpu-eigh are OLS written by this
     # harness from torch primitives (TorchOLS, TorchOLSEigh), not a library's estimator; they
     # are no longer opponents (REFUSED_ARMS). Results raced before this change were wrong for
     # this lane; apply extra scrutiny.
     "ols": ("ours", "cuml-gpu", "sklearn-cpu"),
-    "knn": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
+    "knn": ("ours", "cuml-gpu", "sklearn-cpu"),
     "kde": ("ours", "cuml-gpu", "sklearn-cpu"),
     "svc": ("ours", "cuml-gpu", "sklearn-cpu"),
     # Lane linear-cluster-istella (2026-09-11): DBSCAN at 1,000,000 rows,
     # measurement only. `cuml-gpu` is cuML's default eps search ('brute'),
-    # `cuml-gpu-rbc` its random ball cover; ours runs its default ('rbc').
+    # `cuml-gpu-rbc` its random ball cover.
+    # FAIRNESS FIX (2026-10-13 audit): ours ran algorithm='rbc' while the raced
+    # cuml-gpu arm ran 'brute' (cuml-gpu-rbc, the same algorithm as ours, was
+    # never raced: it overflows at 1,000,000 rows), so the two arms ran different
+    # neighbour searches. Ours now runs algorithm='brute', the algorithm of
+    # cuml-gpu and scikit-learn, and cuml-gpu-rbc leaves the roster (racing it
+    # beside ours' brute would be a different algorithm again; the parameter
+    # check refuses it). Results raced before this change were wrong for this
+    # lane; apply extra scrutiny.
     # HDBSCAN: ours (mojolearn.HDBSCAN, shipped since 0.8.x), cuML on NVIDIA,
     # scikit-learn on the CPU, every arm with the SAME min_samples,
     # min_cluster_size, metric and cluster selection (CumlHDBSCAN's).
-    "dbscan": ("ours", "cuml-gpu", "cuml-gpu-rbc", "sklearn-cpu"),
+    "dbscan": ("ours", "cuml-gpu", "sklearn-cpu"),
     "hdbscan": ("ours", "cuml-gpu", "sklearn-cpu"),
 }
 #: FAIRNESS FIX (2026-10-13 audit): arms that are not opponents, with the reason. race()
@@ -222,6 +243,18 @@ REFUSED_ARMS = {
     ("ols", "torch-gpu-eigh"): "harness-written: OLS assembled by this harness from torch ops "
                                "(centered normal equations, torch.linalg.eigh, a pseudo-inverse "
                                "cutoff); not a library's implementation",
+    # FAIRNESS FIX (2026-10-13 audit): TorchKMeans and TorchKNN below are this
+    # harness's own k-means and kNN, written from torch ops; they were raced as
+    # the GPU opponent on AMD and Apple. Refused now, never raced. Results raced
+    # before this change were wrong for these lanes; apply extra scrutiny.
+    ("kmeans", "torch-gpu"): "harness-written: k-means assembled by this harness from torch ops "
+                             "(greedy k-means++ plus Lloyd by addmm/argmin/index_add_), not a "
+                             "library's implementation; no library GPU k-means is installed on "
+                             "AMD or Apple, so those races have no GPU opponent",
+    ("knn", "torch-gpu"): "harness-written: brute-force kNN assembled by this harness from torch "
+                          "ops (torch.cdist plus topk per query chunk), not a library's "
+                          "implementation; no library GPU kNN is installed on AMD or Apple, so "
+                          "those races have no GPU opponent",
 }
 BLOCK_OF = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
             "kde": "kde", "svc": "svc", "dbscan": "dbscan", "hdbscan": "dbscan"}
@@ -247,6 +280,16 @@ KMEANS_OVERSAMPLING = 0.0
 #: One tol on every arm that takes one (the harness leaves it at the
 #: libraries' defaults). ours and cuML refuse tol <= 0 ("invalid parameter
 #: (tol<=0)"), so 0.0 cannot be the shared value.
+#: THE STOPPING RULE, THE SAME ON EVERY ARM: stop after the iteration whose
+#: total squared center shift sum_c ||c_new - c_old||^2 falls below KMEANS_TOL
+#: (an absolute threshold), or after KMEANS_ITER iterations. That is cuVS's
+#: rule (detail/kmeans.cuh: `if (sqrdNormError < params.tol) done = true`,
+#: inertia_check off by default, cuML exposes no switch) and ours (a
+#: transcription, cluster/impl/detail/kmeans_common.mojo check_convergence).
+#: scikit-learn's tol is RELATIVE (center_shift_tot <= tol * mean(var(X, axis=0)),
+#: sklearn/cluster/_kmeans.py _tolerance), so it is given
+#: KMEANS_TOL / mean(var(X, axis=0)) of the same fit rows (SkKMeans), which is
+#: the same absolute threshold.
 KMEANS_TOL = 1e-7
 #: cuML benchmark PCA shared_args n_components=10
 PCA_COMPONENTS = 10
@@ -282,19 +325,33 @@ CONFIG = {
         "rows": "big block: 4,000,000 taxi rows or the Istella-S train split, raw",
         "params": "n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's "
                   "KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic "
-                  "sequential seeding), tol=1e-7, metric='euclidean', Lloyd; seed 7 (ours, "
-                  "scikit-learn and cuML random_state=7, torch a generator seeded 7)",
+                  "sequential seeding), tol=1e-7 (an absolute squared center shift on every "
+                  "arm; scikit-learn's relative tol rescaled to it), metric='euclidean', Lloyd; "
+                  "seed 7 (ours, scikit-learn and cuML random_state=7)",
         "timed": "fit (the k-means++ seeding included on every arm)",
+        # FAIRNESS FIX (2026-10-13 audit): the stopping rule differed by arm:
+        # ours and cuML stop on an absolute squared center shift < 1e-7, while
+        # scikit-learn read tol=1e-7 as relative to the mean feature variance and
+        # the harness torch arm ran scikit-learn's rule (it ran 91 iterations to
+        # ours' 33 on AMD Istella). Now every arm stops on the same absolute
+        # threshold within the same max_iter=300 (KMEANS_TOL), n_iter is recorded
+        # for every arm with its ratio over ours, and the torch arm is refused
+        # (REFUSED_ARMS). Results raced before this change were wrong for this
+        # lane; apply extra scrutiny.
         "mismatches": [
             "k-means++: each library draws its own start from its own generator seeded 7, so "
-            "the starts differ; scikit-learn greedy k-means++ (2 + log k candidates per center), "
-            "ours and cuML the sequential k-means++ of cuML (oversampling_factor=0), torch-gpu "
-            "scikit-learn's greedy rule written out",
-            "tol=1e-7 on ours, scikit-learn and cuML (ours and cuML refuse 0); each library "
-            "applies it through its own convergence test; torch-gpu stops by scikit-learn's "
-            "(center shift <= tol x mean feature variance). n_iter is in every quality cell",
+            "the starts differ and so may n_iter; scikit-learn greedy k-means++ (2 + log k "
+            "candidates per center), ours and cuML the sequential k-means++ of cuML "
+            "(oversampling_factor=0)",
+            "stopping rule, the same on every arm: total squared center shift below 1e-7 "
+            "(absolute) or max_iter=300. ours and cuML tol=1e-7 is that threshold (cuVS "
+            "kmeans.cuh sqrdNormError < tol; inertia_check off); scikit-learn's tol is relative "
+            "to mean(var(X)), so it gets 1e-7 / mean(var(X)) of the same rows (the same "
+            "absolute threshold; it also stops when no label changes, a zero shift). n_iter and "
+            "n_iter_over_ours are in every quality cell",
             "algorithm: scikit-learn algorithm='lloyd'; ours and cuML have no such parameter "
-            "(Lloyd); torch-gpu is written as Lloyd",
+            "(Lloyd)",
+            "torch-gpu: refused, not an opponent (the harness's own k-means from torch ops)",
         ],
     },
     "pca": {
@@ -333,11 +390,16 @@ CONFIG = {
     "knn": {
         "rows": "knn block: 400,000 index rows, 4,000 queries, raw",
         "params": "n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', "
-                  "algorithm='brute' (ours, scikit-learn, cuML); torch cdist p=2 plus topk",
+                  "algorithm='brute' (ours, scikit-learn, cuML)",
         "timed": "kneighbors; the fit (index) is before the clock on every arm",
         "mismatches": [
-            "seed: no arm has a seed argument (exact search); torch-gpu torch.manual_seed(7)",
+            "seed: no arm has a seed argument (exact search)",
             "query_tile: ours only (tiling, results unchanged); n_jobs=-1: scikit-learn only",
+            # FAIRNESS FIX (2026-10-13 audit): torch-gpu (cdist + topk written by
+            # this harness) was the GPU opponent on AMD and Apple. Refused now
+            # (REFUSED_ARMS). Results raced before this change were wrong for
+            # this lane; apply extra scrutiny.
+            "torch-gpu: refused, not an opponent (the harness's own cdist + topk kNN)",
         ],
     },
     "kde": {
@@ -370,11 +432,14 @@ CONFIG = {
         "params": "eps=3, min_samples=2 (the cuML benchmark's DBSCAN) on every arm; "
                   "metric='euclidean'",
         "timed": "fit",
+        # FAIRNESS FIX (2026-10-13 audit): ours raced algorithm='rbc' against
+        # cuML's 'brute'. Every raced arm now runs 'brute'. Results raced before
+        # this change were wrong for this lane; apply extra scrutiny.
         "mismatches": [
             "seed: no arm has a seed argument (deterministic)",
-            "algorithm (an exact neighbor search on every arm, results unchanged): ours 'rbc' "
-            "(its default), scikit-learn 'brute' (the cuML benchmark's cpu_args; it has no "
-            "'rbc'), cuml-gpu 'brute', cuml-gpu-rbc 'rbc'",
+            "algorithm='brute' on every raced arm (ours, cuml-gpu, scikit-learn: the cuML "
+            "benchmark's cpu_args); ours' default 'rbc' is not raced, and cuml-gpu-rbc "
+            "(overflows at 1,000,000 rows) is not on the roster",
             "leaf_size=30 and n_jobs=-1: scikit-learn only",
         ],
     },
@@ -392,8 +457,15 @@ CONFIG = {
             "runner.h:68-80 (ours transcribes it) runs the k-NN at min_samples + 1 including the "
             "point itself; scikit-learn's kneighbors(X, min_samples) counts the point itself "
             "(its HDBSCAN Notes say so). tools/bench_board_params.py maps both to one canonical value",
-            "scikit-learn algorithm='auto', leaf_size=40, n_jobs=-1: its own; cuML build_algo "
-            "at its default",
+            # FAIRNESS FIX (2026-10-13 audit): cuML's k-NN graph builder was left
+            # at its library default (build_algo; 'brute_force' in 26.08, an
+            # exact k-NN as ours). It is now pinned to 'brute_force' explicitly so
+            # a default change cannot move cuML to approximate 'nn_descent'.
+            # Results raced before this change were wrong for this lane; apply
+            # extra scrutiny.
+            "k-NN graph: exact on every arm; cuML build_algo='brute_force' pinned (an exact "
+            "brute-force k-NN, as ours); scikit-learn algorithm='auto', leaf_size=40, "
+            "n_jobs=-1: its own exact search",
         ],
     },
 }
@@ -1125,14 +1197,27 @@ class SkKMeans:
         self.X, self.init = data["X"], data["init"]
         self.est = None
         self.info = _sklearn_info()
-        self.info["config"] = ("KMeans(n_clusters=%d, init=%r, n_init=1, max_iter=%d, tol=%g, "
-                               "algorithm='lloyd', random_state=%d)"
-                               % (KMEANS_K, KMEANS_INIT, KMEANS_ITER, KMEANS_TOL, SEED))
+        # FAIRNESS FIX (2026-10-13 audit): scikit-learn got tol=1e-7, which it
+        # reads as RELATIVE (center_shift_tot <= tol * mean(var(X, axis=0)),
+        # sklearn/cluster/_kmeans.py _tolerance), while ours and cuML stop on the
+        # ABSOLUTE squared shift < 1e-7: a different stopping rule. It now gets
+        # KMEANS_TOL / mean(var(X, axis=0)) of the same rows, computed here
+        # (outside the clock) with scikit-learn's own expression, so its
+        # absolute threshold is KMEANS_TOL as on ours and cuML. Results raced
+        # before this change were wrong for this lane; apply extra scrutiny.
+        mean_var = float(np.mean(np.var(self.X, axis=0)))
+        self.tol = KMEANS_TOL / mean_var if mean_var > 0.0 else KMEANS_TOL
+        self.info["tol_rule"] = ("absolute squared center shift < %g: scikit-learn tol = %g / "
+                                 "mean(var(X, axis=0)) = %g / %r = %r"
+                                 % (KMEANS_TOL, KMEANS_TOL, KMEANS_TOL, mean_var, self.tol))
+        self.info["config"] = ("KMeans(n_clusters=%d, init=%r, n_init=1, max_iter=%d, tol=%r "
+                               "(= %g / mean feature variance), algorithm='lloyd', random_state=%d)"
+                               % (KMEANS_K, KMEANS_INIT, KMEANS_ITER, self.tol, KMEANS_TOL, SEED))
         self.params_obj = self.make()
 
     def make(self):
         return self.KMeans(n_clusters=KMEANS_K, init=KMEANS_INIT, n_init=1,
-                           max_iter=KMEANS_ITER, tol=KMEANS_TOL, algorithm="lloyd",
+                           max_iter=KMEANS_ITER, tol=self.tol, algorithm="lloyd",
                            random_state=SEED)
 
     def call(self):
@@ -1855,11 +1940,16 @@ class OursDBSCAN:
         self.params_obj = self.make()
         self.info = _ours_info(self.ml, self.params_obj)
         self.info["config"] = ("mojolearn.DBSCAN(eps=%r, min_samples=%d, metric='euclidean', "
-                               "algorithm='rbc' (its default)); fit timed" % (self.eps, self.min_samples))
+                               "algorithm='brute'); fit timed" % (self.eps, self.min_samples))
 
     def make(self):
+        # FAIRNESS FIX (2026-10-13 audit): ours ran algorithm='rbc' (a random
+        # ball cover) while the raced cuml-gpu arm ran 'brute' (an all-pairs
+        # scan): different algorithms. Ours now runs 'brute', the algorithm of
+        # cuml-gpu and scikit-learn. Results raced before this change were wrong
+        # for this lane; apply extra scrutiny.
         return self.ml.DBSCAN(eps=self.eps, min_samples=self.min_samples, metric="euclidean",
-                              algorithm="rbc")
+                              algorithm="brute")
 
     def call(self):
         est = self.make()
@@ -1882,12 +1972,17 @@ class CumlDBSCAN:
         t, self.info = _cuml_setup({"X": data["X"]})
         self.x = t["X"]
         self.eps, self.min_samples = _dbscan_params(rec["dataset"])
+        # FAIRNESS FIX (2026-10-13 audit): cuML ran calc_core_sample_indices=False
+        # (no core-sample pass) while ours computes core_sample_indices_ on every
+        # fit, so cuML's clock covered less work. It now runs True, its own
+        # default and ours' behaviour. Results raced before this change were
+        # wrong for this lane; apply extra scrutiny.
         self.params_obj, self.kw = construct_tolerant(
             DBSCAN, dict(eps=self.eps, min_samples=self.min_samples, metric="euclidean",
-                         algorithm=self.ALGO, calc_core_sample_indices=False, output_type="cupy"),
+                         algorithm=self.ALGO, calc_core_sample_indices=True, output_type="cupy"),
             self.info)
         self.info["config"] = ("cuml.cluster.DBSCAN(eps=%r, min_samples=%d, metric='euclidean', "
-                               "algorithm=%r, calc_core_sample_indices=False, output_type='cupy'); "
+                               "algorithm=%r, calc_core_sample_indices=True, output_type='cupy'); "
                                "fit timed" % (self.eps, self.min_samples, self.ALGO))
         self.est = None
 
@@ -1969,8 +2064,13 @@ class CumlHDBSCAN:
         n = int(rec.get("hdbscan", {}).get("rows", HDBSCAN_ROWS))
         t, self.info = _cuml_setup({"X": data["X"][:n]})
         self.x = t["X"]
+        # FAIRNESS FIX (2026-10-13 audit): build_algo (how cuML builds its k-NN
+        # graph) was left at the library default; it is pinned to 'brute_force',
+        # the exact k-NN ours uses ('nn_descent' would be approximate). Results
+        # raced before this change were wrong for this lane; apply extra scrutiny.
         self.params_obj, self.kw = construct_tolerant(
-            HDBSCAN, dict(HDBSCAN_KW, max_cluster_size=0, output_type="cupy"), self.info)
+            HDBSCAN, dict(HDBSCAN_KW, max_cluster_size=0, build_algo="brute_force",
+                          output_type="cupy"), self.info)
         self.info["config"] = ("cuml.cluster.HDBSCAN(%s) on the block's first %d rows; fit timed"
                                % (", ".join("%s=%r" % kv for kv in sorted(self.kw.items())), n))
         self.est = None
@@ -2522,9 +2622,18 @@ def quality(lane, data, outs, rec, *, knn_k=None):
                 total += float(np.maximum(d.min(axis=1), 0.0).sum())
             q[arm] = {"inertia": total, "n_iter": int(o["n_iter"][0])}
         ref = q.get("ours", {}).get("inertia")
+        # FAIRNESS FIX (2026-10-13 audit): an opponent that ran MORE Lloyd
+        # iterations than ours was not flagged (the torch arm ran 91 to ours' 33
+        # on AMD Istella). Every arm's n_iter now sits beside ours' as
+        # n_iter_over_ours (above 1: the opponent iterated more than ours).
+        # Results raced before this change were wrong for this lane; apply extra
+        # scrutiny.
+        ref_iter = q.get("ours", {}).get("n_iter")
         for arm in q:
             if ref:
                 q[arm]["inertia_over_ours"] = q[arm]["inertia"] / ref
+            if ref_iter:
+                q[arm]["n_iter_over_ours"] = q[arm]["n_iter"] / ref_iter
     elif lane == "pca":
         X = data["X"]
         n = X.shape[0]

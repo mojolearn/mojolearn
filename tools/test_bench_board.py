@@ -478,8 +478,11 @@ def test_run_schema_ratios_quality_and_board(env):
     assert rf["ours"]["ratio_ours_fast_over"] is None
     km = {c["arm"]: c for c in res["races"]["classical/kmeans/taxi/rows=1000"]["cells"]}
     assert km["ours-fast"]["mode"] == "fast" and km["ours-fast"]["mode_witness"] == "fast"
-    assert km["torch-gpu"]["verdict"].startswith("SPAN-ASYMMETRIC")
-    assert "sklearn-cpu" not in km          # a GPU opponent races, so CPU opponents don't
+    # FAIRNESS FIX (2026-10-13 audit): torch-gpu (the harness's own k-means) is no
+    # opponent; Apple has no library GPU k-means, so its CPU opponent races. Results
+    # raced before this change were wrong for this lane; apply extra scrutiny.
+    assert "torch-gpu" not in km
+    assert km["sklearn-cpu"]["verdict"] == "LIKE-FOR-LIKE-SPAN"
     assert "reference" not in km["ours"]["quality"]
     # classical blocks live in the cache, not beside board.json
     assert (env["out"] / "cache" / "ctd-data" / "rows-1000" / "big-taxi.json").exists()
@@ -743,9 +746,13 @@ def test_fast_for_neural_is_the_apple_tier(env):
 
 # Oct 7 2026: the six GPU inference lanes (transformer-decode, mamba1/2/3-decode, samba-decode,
 # mlp-predict) add 6 races and 18 Apple / 15 NVIDIA / 12 AMD neural cells
+# FAIRNESS FIX (2026-10-13 audit): the harness-written torch arms are no opponents. NVIDIA
+# kmeans and knn lose torch-gpu (-4) and ols torch-gpu and torch-gpu-eigh (-4): 275 -> 267;
+# AMD ols keeps one CPU cell where two torch cells raced (-2): 234 -> 232; Apple keeps its
+# count (scikit-learn races where torch-gpu did, no GPU opponent left).
 @pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 346, 134, 82),
-                                                      ("nvidia", 275, 88, 88),
-                                                      ("amd", 234, 90, 64)])
+                                                      ("nvidia", 267, 88, 88),
+                                                      ("amd", 232, 90, 64)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
