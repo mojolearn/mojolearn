@@ -38,7 +38,9 @@ trap 'rm -f "$STAMP"' EXIT INT TERM
 # Refreshed every build. These are COPIES of the repository root's files, and
 # a stale copy in a published wheel is a wrong LICENSE or a wrong README on
 # PyPI. python/.gitignore keeps them out of the checkout.
-cp "$here/LICENSE" "$here/NOTICE" "$here/README.md" "$here/python/"
+cp "$here/LICENSE" "$here/NOTICE" "$here/python/"
+# The README with its repository-relative links made absolute, so they resolve on PyPI.
+python3 "$here/tools/pypi_readme.py" "$here/README.md" "$here/python/README.md"
 # CITATION.cff goes INSIDE the package, not beside pyproject.toml: it is
 # shipped as package data so `pip install` carries the machine-readable
 # citation. Attribution that lives only in the git repository does not
