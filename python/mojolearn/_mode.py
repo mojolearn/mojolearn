@@ -12,18 +12,18 @@ library was shipping a choice you had to make from the shell.
 It is now three things, and only the first is unchanged:
 
     ONE install                    the wheel carries every tier's binaries
-    a default you can set in code  mojolearn.set_numeric_mode("deterministic")
+    a default you can set in code  mojolearn.set_numeric_mode("identical")
     a per-estimator parameter      RandomForestClassifier(numeric_mode=...)
 
 The environment variable still works and still sets the STARTING default, so
 nothing written against the old spelling breaks.
 
-WHY THIS IS AN ATTRIBUTE LOOKUP AND NOT A REBIND. **The three tiers are one
-source under one flag, not three implementations.** `GLOBAL_NUMERIC_MODE` in
+WHY THIS IS AN ATTRIBUTE LOOKUP AND NOT A REBIND. **The tiers are one
+source under one flag, not separate implementations.** `GLOBAL_NUMERIC_MODE` in
 `checks/numerics.mojo` is that flag; `PIN_DETERMINISM` and
 `PIN_CROSS_VENDOR` derive from it and every kernel reads those. But the flag
 is COMPTIME, which is what lets the fast build carry none of the pinning code
-at all rather than branching past it at run time, so the three settings are
+at all rather than branching past it at run time, so the settings are
 compiled and shipped side by side and a Python parameter selects among them
 rather than flipping anything inside one of them. That is
 `_backend.load_set`, and every call site therefore has to ask for its binding
@@ -31,8 +31,8 @@ at CALL TIME rather than binding a module-level name at import.
 
 THAT THE TIERS COEXIST IS MEASURED (2026-08-29). Each `.so` carries its own
 Mojo runtime and opens its own device context, so "two of them in one process
-will fight" was the real risk. All three were loaded together and then called
-INTERLEAVED -- fast, deterministic, identical, fast -- twice, on one
+will fight" was the real risk. They were loaded together and then called
+INTERLEAVED -- fast, identical, fast -- twice, on one
 256x4096 @ 4096x128 product on an Apple M4. Each returned its own arithmetic
 every time, and a call made after the identical set did not inherit its
 answer. See `_backend.load_set`'s header.
@@ -203,7 +203,7 @@ class NumericModeMixin(ParamsMixin):
         Returns
         -------
         str
-            ``'identical'``, ``'deterministic'`` or ``'fast'``, read from the compiled
+            ``'identical'`` or ``'fast'``, read from the compiled
             binary the estimator uses, not from the argument it was given.
         """
         module = self._bind()

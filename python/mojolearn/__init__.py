@@ -18,8 +18,7 @@ and the post-step parameters and both Adam moments. Both are one model profile
 at one batch shape; identity is claimed per shape, because the weight gradients
 contract over the token count.
 
-The tree and classical estimators additionally offer ``fast`` and
-``deterministic``. THE NEURAL SURFACE DOES NOT: ``TransformerBlock``, the
+The tree and classical estimators additionally offer ``fast``. THE NEURAL SURFACE DOES NOT: ``TransformerBlock``, the
 Mamba blocks, the training ops and the byte LM build ``identical`` only,
 because their fused kernels are gated on the identical contract and the lower
 tiers ran the unfused path -- slower than the default, promising less. Asking
@@ -34,17 +33,14 @@ the current surface and limitations.
 from ._version import __version__
 
 # THE NUMERIC MODE IS CHOSEN HERE, BEFORE ANY BINDING IS IMPORTED.
-# MOJOLEARN_NUMERIC_MODE picks one of THREE tiers, each keeping the one
-# below it: `fast` (explicit opt-in, no promise), `deterministic` (same bits
-# run to run on ONE device) and `identical` (the default; also the same bits across
-# Metal, CUDA and HIP). NOT EVERY LANE OFFERS ALL THREE -- the neural
+# MOJOLEARN_NUMERIC_MODE picks one of TWO tiers: `fast` (explicit opt-in,
+# no promise) and `identical` (the default; the same bits across
+# Metal, CUDA and HIP). NOT EVERY LANE OFFERS BOTH -- the neural
 # bindings are identical-only (`_backend._IDENTICAL_ONLY`), and asking them
 # for a lower tier raises rather than quietly resolving to something else.
-# Each upper tier loads its own binary set from
-# python/mojolearn/<tier>/*.so under the canonical names; see
-# _backend.py, whose allow-list refused `deterministic` outright until
-# 2026-08-29 and so made a tier that existed in the compiler
-# unreachable from Python.
+# The identical tier loads its own binary set from
+# python/mojolearn/identical/*.so under the canonical names; see
+# _backend.py.
 from . import _backend as _backend
 
 _backend.select()
@@ -54,11 +50,11 @@ numeric_mode = _backend.numeric_mode
 #: sets the starting value, but it is no longer the only way in: the mode is
 #: a runtime choice, and estimators take a per-instance `numeric_mode=`.
 #:
-#:     mojolearn.set_numeric_mode("deterministic")     # process default
+#:     mojolearn.set_numeric_mode("fast")     # process default
 #:     mojolearn.RandomForestClassifier(numeric_mode="identical")
 #:
-#: All three tiers ship in ONE wheel and can be loaded into ONE process at
-#: once -- measured on 2026-08-29 by calling all three interleaved and
+#: Both tiers ship in ONE wheel and can be loaded into ONE process at
+#: once -- measured on 2026-08-29 by calling them interleaved and
 #: checking each returned its own arithmetic. See `_backend.load_set`. The
 #: process default still applies to the lanes that HAVE the tier; a neural
 #: estimator under a `fast` default raises rather than silently upgrading.
@@ -66,7 +62,7 @@ set_numeric_mode = _backend.set_default_mode
 
 #: `numeric_profile`: THE NUMBER FORMAT OF THE MATRIX PRODUCTS. Its own
 #: parameter, beside `numeric_mode` and independent of it: the mode is the
-#: promise (identical, deterministic, fast), the profile is what the
+#: promise (identical, fast), the profile is what the
 #: products compute in. Since 2026-09-29 the INFERENCE default is
 #: `fixed15_v1` for the transformer models of `mojolearn.models`; every
 #: other family (the Mamba models, a bare TransformerBlock) and every

@@ -15,7 +15,7 @@ name = "mojolearn"
 # Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
 # version bump is a visible edit in both places rather than one.
 version = "0.8.43"
-description = "GPU machine learning in Mojo for Apple silicon Metal, NVIDIA CUDA, and AMD HIP, with fast, deterministic, and cross-vendor identical modes for certified configurations"
+description = "GPU machine learning in Mojo for Apple silicon Metal, NVIDIA CUDA, and AMD HIP, with fast and cross-vendor identical modes for certified configurations"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -191,9 +191,8 @@ include-package-data = false
 # block; FIRST COMPILED 2026-09-02 on the M4, APPLE ONLY, with its Python
 # surface gate green in all three tiers on that one box).
 #
-# THE GLOB CARRIES THREE TIERS, NOT TWO (2026-08-29): the FAST set here,
-# the IDENTICAL set under identical/, and the DETERMINISTIC set under
-# deterministic/. `_backend.py` loads whichever tier is asked for -- by
+# THE GLOB CARRIES TWO TIERS (2026-08-29): the FAST set here and
+# the IDENTICAL set under identical/. `_backend.py` loads whichever tier is asked for -- by
 # `MOJOLEARN_NUMERIC_MODE` at import, by `mojolearn.set_numeric_mode()` at
 # runtime, or per estimator by `numeric_mode=` -- and more than one of them
 # can be live in one process.
@@ -202,17 +201,12 @@ include-package-data = false
 # is on disk and packages nothing when a directory is empty. Which tiers a
 # given release actually carries is build_release_wheel.sh's decision
 # (EXT_NAMES is THE list, and it refuses a stale file by mtime), not this
-# line's. The sentence that stood here said a release may ship two tiers
-# because "the deterministic tier's pin coverage is not finished"; that
-# reason expired on 2026-08-29, when the tier was measured STABLE on Apple,
-# NVIDIA and AMD against a FAST arm that moved on all three
-# (bench/results/stability/RESULTS.md), and MODES in build_release_wheel.sh
-# now defaults to all three. The distinction is kept anyway, because a
+# line's. MODES in build_release_wheel.sh defaults to both tiers. The distinction is kept anyway, because a
 # hotfix wheel cut with MOJOLEARN_RELEASE_MODES set to fewer tiers must
 # still produce a valid artifact.
 # THE LINUX LAYOUT IS ADMITTED TOO (2026-08-29, ARCHITECTURE AXIS ADDED
 # 2026-08-30): one directory per vendor, one per GPU ARCHITECTURE inside it
-# (sm_80, gfx942, ...), the same three tiers inside each architecture, and
+# (sm_80, gfx942, ...), the same tiers inside each architecture, and
 # the MAX runtime `.so` staged under a `.libs/` directory
 # (docs/LINUX_WHEEL.md). The architecture level exists because one
 # `mojo build` emits device code for exactly one architecture and no PTX --
@@ -231,7 +225,7 @@ mojolearn = [
     "CITATION.cff",
     "Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf",
     "ALPHA_API.md",
-    "*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib",
+    "*.so", "identical/*.so", ".dylibs/*.dylib",
     # DEVIATION 2610: the host (CPU) bindings, loaded by path or through
     # _backend.load_host_module, never by the GPU vendor selector. Every
     # family marked ships_in_wheel in host_surface.py is built and read back.
@@ -254,9 +248,9 @@ mojolearn = [
     "verify_reference/*.json",
     "verify_reference/models/*",
     "verify_reference/ctr_models/*.npz",
-    "cuda/*.so", "cuda/identical/*.so", "cuda/deterministic/*.so", "cuda/.libs/*",
-    "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/deterministic/*.so", "cuda/sm_*/.libs/*",
-    "hip/*.so", "hip/identical/*.so", "hip/deterministic/*.so", "hip/.libs/*",
-    "hip/gfx*/*.so", "hip/gfx*/identical/*.so", "hip/gfx*/deterministic/*.so", "hip/gfx*/.libs/*",
+    "cuda/*.so", "cuda/identical/*.so", "cuda/.libs/*",
+    "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/.libs/*",
+    "hip/*.so", "hip/identical/*.so", "hip/.libs/*",
+    "hip/gfx*/*.so", "hip/gfx*/identical/*.so", "hip/gfx*/.libs/*",
     ".libs/*",
 ]

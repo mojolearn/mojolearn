@@ -2,30 +2,23 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which binaries this process runs: the numeric-mode selector.
 
-THREE builds of every extension module can sit in the package, one per tier
-of a LADDER in which each rung keeps the rung below it:
+TWO builds of every extension module can sit in the package, one per tier:
 
     python/mojolearn/_mojolearn*.so                   NUMERIC_FAST
-    python/mojolearn/deterministic/_mojolearn*.so     NUMERIC_DETERMINISTIC
     python/mojolearn/identical/_mojolearn*.so         NUMERIC_IDENTICAL
 
     fast           no promise; speed only. The same fit on the same box may
                    return different bits on two runs, and on the histogram
                    lanes it measurably does.
-    deterministic  same box, same build, same input -> the same bits, every
-                   run. Says NOTHING about a second box.
-    identical      all of the above, AND the same bits on Metal, CUDA and
-                   HIP. A strict superset, which is why `PIN_DETERMINISM` in
-                   `checks/numerics.mojo` is true under both upper tiers.
+    identical      the same bits on every run, and the same bits on Metal,
+                   CUDA and HIP.
 
 `MOJOLEARN_NUMERIC_MODE=<tier>` in the environment AT IMPORT TIME makes
 `mojolearn` load that set under the canonical module names, so every caller's
 `from . import _mojolearn_gbdt` sees the right arithmetic (IDENTITY_PATHS.md;
 E1/archive/evidence/E2_RESULTS.md are the measurements). Unset selects `identical`. Explicit `fast` loads the baseline
 set. Anything else raises: a mode that is accepted and ignored is worse than
-one refused -- which is exactly what this selector did to `deterministic`
-until 2026-08-29, when the tier existed in the compiler and was unreachable
-from Python because this function's allow-list had two entries in it.
+one refused.
 
 The mode is a BUILD DEFINE (`-D MOJOLEARN_NUMERIC_IDENTICAL=1`, read by
 `checks/numerics.mojo` through `is_defined`), and the identical binaries
@@ -40,14 +33,14 @@ measurement is impossible to label correctly by accident.
 THE VENDOR AXIS (2026-08-29, docs/LINUX_WHEEL.md)
 -------------------------------------------------
 The tier ladder above is one axis. The Linux wheel adds a second: ONE PyPI
-name carries a CUDA set and a HIP set, each in all three tiers, and the
+name carries a CUDA set and a HIP set, each in both tiers, and the
 vendor is picked AT IMPORT. The layout is one directory per accelerator API,
 and the tier layout above repeats INSIDE it unchanged:
 
-    macOS (unchanged)          python/mojolearn/{,deterministic,identical}/*.so
-    Linux                      python/mojolearn/cuda/{,deterministic,identical}/*.so
-                               python/mojolearn/hip/{,deterministic,identical}/*.so
-    a source checkout on a     python/mojolearn/{,deterministic,identical}/*.so
+    macOS (unchanged)          python/mojolearn/{,identical}/*.so
+    Linux                      python/mojolearn/cuda/{,identical}/*.so
+                               python/mojolearn/hip/{,identical}/*.so
+    a source checkout on a     python/mojolearn/{,identical}/*.so
     Linux box (every E1 leg)   ("flat": whatever bindings/build_*.sh wrote)
 
 `_layout()` decides which of the three this install is by LOOKING AT THE
@@ -85,7 +78,7 @@ H100 carried `sm_90a` only, installed cleanly on an A40, and failed 27 of
 29 lanes with CUDA_ERROR_NO_BINARY_FOR_GPU. A portable wheel therefore
 carries one set PER ARCHITECTURE, one directory level under the vendor:
 
-    python/mojolearn/cuda/sm_80/{,deterministic,identical}/*.so
+    python/mojolearn/cuda/sm_80/{,identical}/*.so
     python/mojolearn/cuda/sm_90a/...
     python/mojolearn/hip/gfx942/...
 
@@ -313,7 +306,7 @@ _MODULES = (
 _MODULES += tuple(host_surface.expansion_gpu_bindings())
 
 #: ONE RULE FOR TIERS (DEVIATION 2490, 2026-09-10): THE TREE LANES SHIP
-#: THREE TIERS, EVERYTHING ELSE SHIPS IDENTICAL ONLY.
+#: TWO TIERS, EVERYTHING ELSE SHIPS IDENTICAL ONLY.
 #:
 #: The product is cross-vendor bitwise identity. That is the thing no other
 #: library sells, on any platform, and it is the default tier. A FAST tier
@@ -355,8 +348,7 @@ _TIERED = frozenset({
 
 #: Classical ML ships a FAST tier too (2026-09-25, reversing DEVIATION 2490
 #: for everything that is not a neural network). IDENTICAL stays the default
-#: everywhere; FAST is opt-in and promises speed and quality, not bits. The
-#: DETERMINISTIC tier stays tree-only.
+#: everywhere; FAST is opt-in and promises speed and quality, not bits.
 _CLASSICAL_FAST = frozenset({
     "_mojolearn",  # k-means and k-NN; buffer helpers stay IDENTICAL
     "_mojolearn_estimators",
@@ -400,13 +392,12 @@ def _offers(name, mode):
         return True
     if mode == "fast":
         return name in _FAST_TIERED
-    return name in _TIERED
+    return False
 _SELECTED = None
 
 _IDENTICAL_ONLY_REASON = (
-    "Trees, classical ML and the neural blocks ship a fast tier and only the "
-    "tree lanes (GradientBoosting, RandomForest, ExtraTrees) ship a "
-    "deterministic tier; this binding ships IDENTICAL only."
+    "Trees, classical ML and the neural blocks ship a fast tier; this "
+    "binding ships IDENTICAL only."
 )
 
 
@@ -418,7 +409,7 @@ def _identical_only_reason(name):
 #: Tier name -> the code `<ext>_numeric_mode()` reports, which is the
 #: `NUMERIC_*` constant in `checks/numerics.mojo`. Keep the two in step:
 #: this dict is how a binary in the wrong directory is caught.
-_MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
+_MODE_CODE = {"fast": 0, "identical": 1}
 _CODE_MODE = {v: k for k, v in _MODE_CODE.items()}
 
 
@@ -845,7 +836,7 @@ def _missing_plugin_error(vendors, probe, present, forced=None):
 
 #: Directory names that count as an architecture level under a vendor
 #: directory: sm_80, sm_90a, gfx90a, gfx942, ... Anything else under the
-#: vendor directory (deterministic/, identical/, .libs/) is not one.
+#: vendor directory (identical/, .libs/) is not one.
 _ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
 
 _ARCH_SELECTED = None
@@ -1317,7 +1308,7 @@ def requested_mode():
     if mode not in _MODE_CODE:
         raise ImportError(
             f"mojolearn: MOJOLEARN_NUMERIC_MODE={mode!r}; it must be 'fast', "
-            "'deterministic' or 'identical' (the default)"
+            "or 'identical' (the default)"
         )
     return mode
 
@@ -1930,8 +1921,8 @@ def select():
         # the whole library down.
         #
         # Measured on a rented RTX 4090, 2026-08-29: a leg that deliberately
-        # built four of the ten bindings got tables from the deterministic and
-        # identical arms -- three lanes REFUSED by name, the rest measured --
+        # built four of the ten bindings got tables from the identical arm
+        # -- three lanes REFUSED by name, the rest measured --
         # and from the fast arm got a traceback ending "cannot import name
         # '_mojolearn_trees' ... (most likely due to a circular import)",
         # which names the wrong cause and loses every lane that would have
@@ -2035,15 +2026,14 @@ def select():
 # back a namespace. It does not touch `sys.modules` under the canonical names
 # and does not disturb whatever `select()` installed.
 #
-# **THAT THREE SETS CAN COEXIST IS MEASURED, NOT ASSUMED** (2026-08-29). Each
+# **THAT THE SETS CAN COEXIST IS MEASURED, NOT ASSUMED** (2026-08-29). Each
 # `.so` carries its own Mojo runtime and opens its own device context, so
 # "they will conflict" was the live risk and the reason the parameter form was
-# not attempted earlier. All three were loaded into one process, then called
-# INTERLEAVED -- fast, deterministic, identical, fast -- twice over, on one
+# not attempted earlier. The sets were loaded into one process, then called
+# INTERLEAVED -- fast, identical, fast -- twice over, on one
 # 256x4096 @ 4096x128 product on an Apple M4. Each returned its own
-# arithmetic every time (fast and deterministic bit-identical to each other,
-# which is correct because no determinism pin exists in the GEMM path;
-# identical differing, which is the pinned profile), and a call after the
+# arithmetic every time (identical differing from fast, which is the pinned
+# profile), and a call after the
 # identical set did not inherit its answer.
 #
 # THE PyInit SYMBOL IS WHY THE NAMES ARE DOTTED. CPython derives the init
@@ -2173,7 +2163,7 @@ def load_set(mode):
     if mode not in _MODE_CODE:
         raise ValueError(
             f"mojolearn: numeric_mode={mode!r}; it must be 'fast', "
-            "'deterministic' or 'identical' (the default)"
+            "or 'identical' (the default)"
         )
     if mode in _SETS:
         return _SETS[mode]
@@ -2245,16 +2235,13 @@ def set_default_mode(mode):
     a later fit.
 
     - ``"identical"`` (default): the same bits on NVIDIA and AMD GPUs.
-    - ``"deterministic"``: reproducible results run to run.
     - ``"fast"``: the fastest arithmetic, for Apple GPUs; no bitwise promise.
 
-    Not every family offers every mode: ``"deterministic"`` is offered by the
-    tree ensembles (gradient boosting, random forest, extra trees) only.
     Using a family under a mode it does not ship raises ImportError.
 
     Parameters
     ----------
-    mode : {"identical", "deterministic", "fast"} or None
+    mode : {"identical", "fast"} or None
         The new default; None keeps the current one.
 
     Returns
@@ -2279,7 +2266,7 @@ def binding(name, mode=None):
     """Resolve a binding and reject a readable compiled-mode mismatch at call time."""
     requested = default_mode() if mode is None else mode
     if not isinstance(requested, str) or requested.strip().lower() not in _MODE_CODE:
-        raise ValueError("numeric_mode must be fast, deterministic, identical or None")
+        raise ValueError("numeric_mode must be fast, identical or None")
     requested = requested.strip().lower()
     if not _offers(name, requested):
         raise ValueError(
@@ -2314,7 +2301,7 @@ _MISSING = []
 
 
 class _MissingUpperTier(type(sys)):
-    """Stands in for a deterministic or identical binary that is not built.
+    """Stands in for an identical binary that is not built.
     Importing it succeeds (the package imports every binding at load);
     touching any attribute raises with the build command FOR THE TIER THAT
     WAS ASKED FOR -- it used to say "identical" whatever you asked for, which
@@ -2395,23 +2382,18 @@ def _build_script(name):
     }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 
-# 'fast', 'deterministic' or 'identical' -- what this process LOADED,
+# 'fast' or 'identical' -- what this process LOADED,
 # cross-checked against the gbdt binary's own compile-time answer when it
 # exposes one.
-#
-# The cross-check read `== 1 else "fast"` until 2026-08-29. A deterministic
-# binary reports 2, so that spelling called it "fast" and AGREED with a
-# selector that had loaded fast, reporting no conflict while the caller
-# held the wrong arm.
 #
 # IT REPORTS THE CURRENT DEFAULT, NOT THE IMPORT-TIME ONE. It returned
 # `_SELECTED` -- what `select()` loaded before the first estimator existed
 # -- until 2026-08-29, which meant that after
 #
-#     mojolearn.set_numeric_mode("deterministic")
+#     mojolearn.set_numeric_mode("identical")
 #
 # this function still answered "fast" while every estimator built after
-# that line ran deterministic. A function whose whole purpose is that "a
+# that line ran identical. A function whose whole purpose is that "a
 # run cannot be mislabeled by accident" was the one thing mislabeling it.
 # `numeric_mode_used()` on an estimator instance was already right, so the
 # two disagreed. Found by running the pair, not by reading them.
@@ -2420,7 +2402,7 @@ def numeric_mode():
 
     Returns
     -------
-    {"identical", "deterministic", "fast"}
+    {"identical", "fast"}
         The mode estimators use when they are not given ``numeric_mode=``
         (see :func:`mojolearn.set_numeric_mode`). Where the loaded binaries
         report their compiled mode, it is checked against this answer.
