@@ -1407,11 +1407,33 @@ def binding_additions(ref, path):
         return "\n".join(lines)
 
     exports = set()
-    for name, body in ob.items():
+    # the module init last: its new def_function lines may name what an import between blocks gained
+    for name, body in sorted(ob.items(), key=lambda kv: kv[0].startswith("PyInit_")):
         if trimmed(nb[name]) == trimmed(body):
             continue
         if not name.startswith("PyInit_"):
-            return None
+            # AN IMPORT BETWEEN BLOCKS MAY ONLY GAIN NAMES (2026-10-13). _mojolearn_x_decomp.mojo has import lines
+            # after its first def, so they sit inside a block; `from m import a, b` becoming `from m import a, b, c`
+            # there binds a new name nothing old can resolve to, exactly the prelude rule above. Every other line of
+            # the block must be unchanged and in place.
+            olines, nlines = trimmed(body).splitlines(), trimmed(nb[name]).splitlines()
+            if len(olines) != len(nlines):
+                return None
+            for was_l, now_l in zip(olines, nlines):
+                if was_l == now_l:
+                    continue
+                now, was = one_line.match(now_l.strip()), one_line.match(was_l.strip())
+                if not (now and was and now.group(1) == was.group(1)):
+                    return None
+                now_names = {n.strip() for n in now.group(2).split(",")}
+                was_names = {n.strip() for n in was.group(2).split(",")}
+                if not was_names < now_names:
+                    return None
+                for new_name in now_names - was_names:
+                    if re.search(r"\b%s\b" % re.escape(new_name), old):
+                        return None
+                    imported.add(new_name)
+            continue
         olines = trimmed(body).splitlines()
         nlines = trimmed(nb[name]).splitlines()
         it = iter(nlines)
@@ -1978,11 +2000,13 @@ def mojo_edit_lanes(ref, path, hit, graph):
     for lane in sorted(hit):
         calls = _LANE_SEED_CALLS.get(lane)
         if calls is None:
+            lanes.add(lane)                  # kept = still selected: the fallback never drops a lane
             kept.add(lane)
             chains[lane] = [f"kept whole-file: no recorded binding contributions for {lane}"]
             continue
         through = [c for c in calls if path in c[3]]
         if not through:
+            lanes.add(lane)
             kept.add(lane)
             chains[lane] = [f"kept whole-file: {path} reaches {lane} outside every binding export "
                             "(a trait conformer or a build shim)"]
