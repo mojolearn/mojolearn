@@ -83,35 +83,42 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 5. Read logs with grep and short tails; never paste whole logs. Tell every subagent the same.
 6. OPPONENT CLOCKS (Andrew, 2026-10-07/08; audit tools/board_clock_audit.py): every stored opponent cell carries a comparability span (input_home, inside_clock, upload_ms_untimed). Our board fit clock includes the host-to-device copy of X. The neural torch twins move inputs inside their clock too (whole/whole, comparable as is). The classical torch-gpu columns and the algos torch/cupy/gpytorch GPU arms time with inputs already on the device (kernel-only); cuML/cuVS/cuGraph record their copy separately. The board shows both clocks per cell where derivable (whole = kernel + copy): torch-GPU ratios kernel/kernel, every other opponent whole/whole, never an invented copy time. NO opponent re-score. Our arm records its copy separately (upload_ms_separate; classical since freeze-20261007; algos driver owes the probe), then only OUR cells on the MIXED lanes are re-raced.
 
-## Race fairness (Andrew, 2026-10-13)
+## Race fairness: what the measurements are for (Andrew, 2026-10-13)
 
-A 2026-10-13 audit found that many board races were not like-for-like. These rules apply to every race,
-whether ours is faster or slower, on every vendor and in every mode.
+The boards measure the cost of bitwise identity: mojolearn's IDENTICAL mode against the best real library
+implementation of the same algorithm, on the same kind of hardware, with the same settings. Every result is
+shown, wins and losses alike. Only a broken comparison is hidden.
 
-- **Same settings.** Every setting that changes the work is pinned to one explicit value on both arms (never a
-  library default on one side), read back from the constructed objects by `tools/bench_board_params.py`, and
-  must report `MATCHED`. A race whose arms were never compared is not shown.
-- **Same work.** Same algorithm, same model, same problem, same stopping rule, same precision, and inputs
-  prepared the same way inside or outside both clocks. Ours silently ignoring a declared setting is unfair.
-- **A real opponent.** An opponent is a library's own implementation called through its public API. Code our
-  harness writes from primitives (a torch k-means, a cdist+topk kNN, an eigh OLS, a pure-PyTorch reference
-  model) is never an opponent. A reference implementation, an outdated library version, a slow host, a slow code
-  path, FP64 on a GPU built for FP32, or a compile timeout that silently promotes a slower arm cripples the
-  opponent and is unfair.
-- **More iterations is unfair.** An opponent that runs more iterations than ours is not doing the same work.
-- **Fair both ways.** A race that is unfair to ours is just as wrong.
-- **Accepted:** different random starts (for example each arm's own k-means++ draw) and margins inside
-  run-to-run noise.
-- **Ties are not cited.** ours/theirs between 0.95 and 1.05 is a tie: it is raced again before it is shown.
-- **Marks live on the race.** Every (mode, phase) row of a race in `board.json` carries an entry in
-  `race["audit"]` (verdict, reason, evidence, opponent, ratio, date, pairing fingerprint); an entry with
-  `rerace: "x"` must be raced again, and `race["rerace"]` is `"x"` when any entry is. Audits write these by hand;
-  `tools/main_board_ingest.py` (`apply_fairness`) keeps an entry only while the measurements it judged are
-  unchanged and judges every other row by `fairness_rule`: no MATCHED parity check and no audit means `x`.
-  The paper (mlsys) and mojolearn.org omit every row marked `x`.
-- **Code fixes are labelled.** Every race-code change from the audit carries a `FAIRNESS FIX (2026-10-13 audit)`
-  comment saying what was wrong before; results raced before such a change get extra scrutiny.
-- **Audits never rerun anything.** They read boards, logs and code; reruns happen only when the owner asks.
+A race is GOOD when both arms run the same algorithm with the same settings on the same kind of box. These do
+not make a race bad:
+- random seeds or random starts (initial weights, k-means++ draws, sampling): ideally both arms use the same
+  seed, but different or random seeds are acceptable;
+- anything mojolearn does because bitwise identity requires it and the opponent does not: FP32 instead of TF32
+  or bf16, fixed reduction order, exact instead of approximate kernels, extra deterministic work, its
+  host-to-device copy inside its clock. That is the identity penalty the boards exist to measure;
+- the opponent's own fast settings and modes (bf16 or TF32 arms, torch.compile, its GPU defaults);
+- the library version or host the opponent was measured on, when the settings match;
+- a tie (ours/theirs between 0.95 and 1.05): it is shown like any other result.
+
+A race is BROKEN, marked rerace "x" and omitted from the paper and mojolearn.org, when:
+- a setting that changes the work differs between the arms (tolerance, solver, algorithm, model, precision, a
+  cache or precompute one arm uses and the other is told not to), unless the difference is required by bitwise
+  identity on our side;
+- the opponent is code our harness wrote rather than a library's own implementation;
+- either arm ran more iterations than the other (the opponent more than ours, or ours more than the opponent).
+
+When only one opponent arm of a race is broken (for example harness-written), that arm is excluded
+(race["opponents_excluded"]) and the race is shown against its remaining opponents; the whole race is hidden
+only when no valid opponent is left.
+
+Every (mode, phase) row of a race in board.json carries an entry in race["audit"] (verdict, reason, evidence,
+opponent, ratio, date, pairing fingerprint); an entry with rerace "x" is broken, and race["rerace"] is "x" when
+any of its entries is. tools/main_board_ingest.py (apply_fairness) keeps an entry only while the measurements it
+judged are unchanged; a row no audit covers is recorded UNCHECKED and shown until an audit judges it.
+
+Fix the race code rather than dropping an opponent; drop an opponent only when no real library implementation
+exists for that vendor. Every race-code fix from an audit carries a `FAIRNESS FIX (2026-10-13 audit)` comment
+saying what was wrong before; results raced before such a change get extra scrutiny. Audits never rerun anything.
 
 ## Incremental experiment delivery (owner, 2026-10-05)
 

@@ -1087,7 +1087,8 @@ def collect(BB, args, resolve, skips):
 # copied from other boards and never compared the two arms' settings ("params_check: not checked"), and an audit
 # mark written on a race was lost at the next rebuild. Now every (mode, phase) row of a race carries an entry in
 # race["audit"]: a verdict from a human audit (FAIR, SUSPECT, UNFAIR, TIE; written by hand) or one from
-# fairness_rule(). An entry with rerace "x" must be raced again before it is shown; the paper (mlsys) and
+# fairness_rule() (MATCHED, UNCHECKED, TIE). Only an UNFAIR or TIE entry has rerace "x": it must be raced again
+# before it is shown, win or lose; an UNCHECKED row stays shown until an audit judges it. The paper (mlsys) and
 # mojolearn.org omit those rows, and race["rerace"] is "x" when any of its entries is. An entry survives a rebuild
 # only while the measurements it judged are unchanged (its "pairing" fingerprint); a changed row is judged again.
 TIE_BAND = (0.95, 1.05)
@@ -1116,13 +1117,13 @@ def pairing(race, mode, phase):
 
 
 def fairness_rule(race, mode, phase, today):
-    """The entry for a row no audit covers, or None when there is no row (no our cell, no completed opponent).
-    A row is shown only after a MATCHED settings-parity check of both arms (tools/bench_board_params.py); a tie
-    (ours/theirs within TIE_BAND against the fastest completed GPU opponent, else the fastest completed opponent)
-    is never shown: it is raced again first."""
+    """The entry for a row no audit covers, or None when there is no row (no our cell, no completed opponent that
+    is not excluded). Such a row is recorded MATCHED (settings-parity check of both arms passed), TIE or UNCHECKED
+    and is shown; only an audit's UNFAIR verdict hides a row (AGENTS.md "Race fairness")."""
     cells = _phase_cells(race, phase)
     ours = next((c for c in cells if c.get("arm") == _our_arm(mode)), None)
-    opps = [c for c in cells if c.get("mode") == "opponent" and _completed(c)]
+    excluded = set((race.get("opponents_excluded") or {}).get("arms") or [])
+    opps = [c for c in cells if c.get("mode") == "opponent" and _completed(c) and c.get("arm") not in excluded]
     if ours is None or not opps:
         return None
     best = min([c for c in opps if c.get("device") == "gpu"] or opps, key=lambda c: c["median_ms"])
@@ -1131,10 +1132,13 @@ def fairness_rule(race, mode, phase, today):
              "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
              "pairing": pairing(race, mode, phase)}
     if race.get("params_check") != "MATCHED":
-        entry.update(verdict="UNCHECKED", rerace="x",
-                     reason="no MATCHED settings-parity check of both arms and no audit")
+        # Shown, win or lose (Andrew, 2026-10-13: "show everything, not just where we win"): only a row confirmed
+        # broken (an audit's UNFAIR, or a tie) is hidden. UNCHECKED records that no audit or parity check covers it.
+        entry.update(verdict="UNCHECKED", rerace="",
+                     reason="no MATCHED settings-parity check of both arms and no audit yet; shown until audited")
     elif ratio is not None and TIE_BAND[0] <= ratio <= TIE_BAND[1]:
-        entry.update(verdict="TIE", rerace="x", reason="a tie is not cited until it is raced again")
+        # A tie is a result like any other and is shown (Andrew, 2026-10-13).
+        entry.update(verdict="TIE", rerace="", reason="a tie (ours/theirs within TIE_BAND); shown")
     else:
         entry.update(verdict="MATCHED", rerace="", reason="settings-parity check MATCHED")
     return entry
@@ -1151,6 +1155,10 @@ def apply_fairness(board, prev, today):
         for rid, rr in ((board.get(section) or {}).items()):
             old = ((prev_races.get(rid) or ((prev or {}).get("extra_races") or {}).get(rid) or {})
                    .get("audit") or {})
+            # Opponent arms an audit excluded (for example harness-written) stay excluded while the race is unchanged.
+            prev_rr = prev_races.get(rid) or ((prev or {}).get("extra_races") or {}).get(rid) or {}
+            if prev_rr.get("opponents_excluded") and not rr.get("opponents_excluded"):
+                rr["opponents_excluded"] = prev_rr["opponents_excluded"]
             audit = {}
             for mode in modes:
                 for phase in ("fit", "infer"):

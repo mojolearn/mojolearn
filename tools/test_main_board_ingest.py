@@ -252,18 +252,31 @@ class FairnessMarks(unittest.TestCase):
     def board(self, **races):
         return {"config": {"modes": ["identical"]}, "races": races}
 
-    def test_unchecked_rows_are_marked(self):
-        b = self.board(r=self.race(5.0, 10.0))
-        self.assertEqual(MB.apply_fairness(b, None, "2026-10-13"), 1)
-        e = b["races"]["r"]["audit"]["identical/fit"]
-        self.assertEqual((e["verdict"], e["rerace"], b["races"]["r"]["rerace"]), ("UNCHECKED", "x", "x"))
+    def test_unchecked_rows_are_recorded_and_shown(self):
+        b = self.board(r=self.race(5.0, 10.0), slow=self.race(20.0, 10.0))
+        self.assertEqual(MB.apply_fairness(b, None, "2026-10-13"), 0)
+        for rid in ("r", "slow"):
+            e = b["races"][rid]["audit"]["identical/fit"]
+            self.assertEqual((e["verdict"], e["rerace"]), ("UNCHECKED", ""))
+            self.assertNotIn("rerace", b["races"][rid])
 
     def test_matched_rows_pass_and_ties_are_marked(self):
         b = self.board(win=self.race(5.0, 10.0, "MATCHED"), tie=self.race(9.8, 10.0, "MATCHED"))
         MB.apply_fairness(b, None, "2026-10-13")
         self.assertNotIn("rerace", b["races"]["win"])
         self.assertEqual(b["races"]["tie"]["audit"]["identical/fit"]["verdict"], "TIE")
-        self.assertEqual(b["races"]["tie"]["rerace"], "x")
+        self.assertNotIn("rerace", b["races"]["tie"])          # ties are shown
+
+    def test_excluded_opponents_are_ignored_and_carried(self):
+        r = self.race(5.0, 10.0, "MATCHED")
+        r["cells"].append({"arm": "torch-gpu", "mode": "opponent", "device": "gpu", "status": "ok", "median_ms": 1.0})
+        r["opponents_excluded"] = {"arms": ["torch-gpu"], "reason": "harness-written"}
+        b = self.board(r=r)
+        MB.apply_fairness(b, None, "2026-10-13")
+        self.assertEqual(b["races"]["r"]["audit"]["identical/fit"]["opponent"], "cuml-gpu")
+        nxt = self.board(r=self.race(5.0, 10.0, "MATCHED"))
+        MB.apply_fairness(nxt, b, "2026-10-13")
+        self.assertEqual(nxt["races"]["r"]["opponents_excluded"]["arms"], ["torch-gpu"])
 
     def test_an_audit_survives_only_while_its_measurements_are_unchanged(self):
         prev = self.board(r=self.race(5.0, 10.0))
