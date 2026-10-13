@@ -1,0 +1,48 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "apple-holes",
+ "branch": "lane/apple-holes",
+ "head": "97e02b4bb",
+ "controls": {
+  "mcd_chol": {
+   "define": "MOJOLEARN_IDN_MCD_CHOL_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_MCD_CHOL_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "x_decomp/mcd.mojo:60",
+    "x_decomp/kit_device.mojo:1030",
+    "x_decomp/device.mojo:2820",
+    "x_decomp/host.mojo:431"
+   ],
+   "binding": "_mojolearn_x_decomp (device) + _mojolearn_x_decomp_host (host column)",
+   "bits_change": true,
+   "status": "new",
+   "note": "MinCovDet/EllipticEnvelope IDENTICAL C-step: log det by potrf_lower + chol_logdet and distances rowsum((Xc L^-T)^2) with L^-1 = trsm_lower(L, I), instead of partial-pivot LU + round-robin Jacobi pinvh per C-step (thousands of launches at p=220; Apple identical 225 s at 2,000 rows, race timeout at 100k). Non-PD covariance keeps -inf + pinvh. No size rule. A/B: NV + AMD min-cov-det / elliptic-envelope taxi and istella plus one non-board shape; quality: support Jaccard vs sklearn."
+  },
+  "gmm_fast_ff_cov": {
+   "define": "MOJOLEARN_GMM_FAST_FF_COV_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_GMM_FAST_FF_COV_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "mixture/checks/mstep.mojo:1081",
+    "mixture/ff_fast.mojo:1"
+   ],
+   "binding": "_mojolearn_mixture (FAST, Apple)",
+   "bits_change": true,
+   "status": "new",
+   "note": "FAST + Apple, d <= 32: GaussianMixture covariance accumulated (Dot2) and precision Cholesky factored in float-float, reg_covar added exactly; float32 dropped the ridge on variances >= 8 and failed taxi with ill-defined covariance. A/B on M3: gmm taxi + istella, speed and held-out mean log-likelihood."
+  }
+ }
+}
