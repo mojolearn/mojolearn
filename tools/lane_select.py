@@ -112,6 +112,10 @@ INERT_PREFIXES = (
     # six_lane_grid.py), never by a build; .libs/ and .dylibs/ hold the packed runtime libraries whose SOURCE
     # (packaging/portable_math) stays attributed on its own.
     "experiments/six_lane_integration/grid_controls/", "python/mojolearn/.libs/", "python/mojolearn/.dylibs/",
+    # The public docs site (2026-10-13): reStructuredText, the Sphinx conf.py and its exclude list build
+    # docs.mojolearn.org and nothing a lane imports. Its .rst pages were UNATTRIBUTED, which made the 0.8.44
+    # ONLY_CHANGED re-record select all 439 lanes (cpu-rerecord-0844/changed.err).
+    "docs-site/",
     "run/", "build/", ".github/", "AUTHORS", "CHANGELOG", "CITATION",
     "CONTRIBUTING", "GOVERNANCE", "LICENSE", "NOTICE", "README", "ROADMAP",
     "SECURITY", "SUPPORT",
@@ -162,6 +166,13 @@ SELECTION_MACHINERY = (
     os.path.join("tools", "lane_map_import_graph.py"),
     os.path.join("tools", "tests", "test_lane_map_import_graph.py"),
     os.path.join("tools", "bincache.py"),
+    # The changed-lanes checks (2026-10-13): they list the changed lanes, print the lq lines that record them
+    # and summarize a verify report; they run lanes through the public CLI and the record script, never inside one.
+    os.path.join("tools", "record_changed_lanes.py"),
+    os.path.join("tools", "changed_lanes_check.sh"),
+    os.path.join("tools", "changed_lanes_summary.py"),
+    os.path.join("tools", "mac_changed_lanes.sh"),
+    os.path.join("tools", "test_changed_lanes_summary.py"),
 )
 
 #: FILES THE HARNESS IMPORTS WHILE IT RECORDS A COLUMN. `lane_applicability.py`
@@ -175,6 +186,147 @@ SELECTION_MACHINERY = (
 HARNESS_RUNTIME_IMPORTS = (
     os.path.join("tools", "lane_applicability.py"),
 )
+
+#: THE INSTALLED VERIFIER'S HARNESS: ORCHESTRATION VERSUS BYTES (Andrew, 2026-10-13). `python -m
+#: mojolearn verify` runs the identity_break lanes through the byte copy of the harness
+#: (`_identity_break.py`); the fixture bytes and the hashing come from it, and from the few
+#: functions of `_verify_all.py` that feed them. Everything else in the verifier ORCHESTRATES: it
+#: spawns and bounds cell workers, handles their crashes, schedules cells and formats the report. No
+#: lane computes through that code, so a change confined to it moves no bit and selects NO lane
+#: (the 0.8.44 re-record asked why a crash-handling edit of `cmd_verify_all` should re-record every
+#: lane). A change that can move fixture bytes or a hash still selects EVERY lane, by rule.
+#: The split is an ALLOWLIST of orchestration: a definition not named here, a changed module-level
+#: statement (imports aside) or an unreadable diff counts as bytes, so new verifier code is never
+#: quietly inert. tools/test_lane_select.py::test_verify_harness_orchestration_is_inert_and_bytes_are_every_lane
+#: holds both directions.
+#: Whole files that only orchestrate: the bounded, disposable cell workers.
+VERIFY_ORCHESTRATION_FILES = (
+    os.path.join(PKG, "_verify_worker.py"),
+)
+VERIFY_ALL = os.path.join(PKG, "_verify_all.py")
+#: The definitions of `_verify_all.py` that only orchestrate or report. NOT here (they feed bytes or
+#: hashes, so a change to them selects every lane): load_harness, harness_path, run_cell,
+#: _probe_stepfull, _probe_arrays, _collapse, smoke_cell, run_smoke, run_models, portable_contract_inputs,
+#: verification_contract, the commitment and challenge digests, seeds and fixtures, _read_cells,
+#: _value_kind, judge_rows, select_lanes and every definition added after this list was written.
+VERIFY_ALL_ORCHESTRATION = frozenset({
+    # errors, logging and refusals
+    "CannotRun", "_emit", "_capped", "_error_text", "_finish", "_challenge_refusal", "_compare_refusal",
+    # the drivers: cell workers, crash handling, scheduling (the fixtures they pass come from the harness)
+    "cmd_verify_all", "_cmd_self_test", "_cmd_cross_check", "_cross_check_batched", "_reexec_identical",
+    "_depth", "_extra_parts",
+    # reporting: counts, verdict text, accounting of which lanes ran
+    "summarize", "lane_state_from_rows", "lane_accounting", "lane_verdict_gaps", "lane_scope",
+    "lane_scope_clause", "verdict", "format_self_test", "format_cross_check", "_cell_lines", "format_compare",
+    "_commitment_lines", "_challenge_lines", "_challenge_printout", "detail_line", "lanes_line",
+    "format_lane_accounting", "harness_note", "format_human", "lane_counts",
+})
+VERIFY_HARNESS_WHY = {}
+
+
+#: THE RELEASE OWNER'S BUILD LIST (tools/release_reuse.py, Andrew 2026-10-13). With
+#: MOJOLEARN_RELEASE_BUILD_ONLY=gbdt,x_decomp,... the reuse plan BUILDS only those bindings (and their
+#: `_host` twins; `core` is bindings/build.sh) and ships the published bytes of every other binding whose
+#: only change is source. The lanes a release checks are then those whose bindings BUILD: a Mojo source or
+#: a binding build script that no listed binding compiles cannot move a shipped bit, so it is inert here
+#: exactly when the reuse plan reuses its bindings. Python, the toolchain and the Linux set builders keep
+#: their own rules (Python ships fresh in every wheel; the toolchain is every lane).
+RELEASE_BUILD_ONLY_ENV = "MOJOLEARN_RELEASE_BUILD_ONLY"
+_BUILD_ONLY_CLOSURE = {}
+
+
+def release_build_only():
+    """The stems MOJOLEARN_RELEASE_BUILD_ONLY names, or None when unset (read
+    at call time, like release_reuse.BUILD_ONLY at import)."""
+    raw = os.environ.get(RELEASE_BUILD_ONLY_ENV, "")
+    stems = frozenset(s.strip() for s in raw.split(",") if s.strip())
+    return stems or None
+
+
+def build_only_scripts(stems):
+    """The build scripts of the bindings `stems` names, as release_reuse
+    matches them (a stem, or a stem whose `_host` twin it is)."""
+    out = set()
+    for stem in stems:
+        for name in (("build.sh", "build_core_host.sh") if stem == "core"
+                     else (f"build_{stem}.sh", f"build_{stem}_host.sh")):
+            rel = os.path.join("bindings", name)
+            if os.path.isfile(os.path.join(ROOT, rel)):
+                out.add(rel)
+    return out
+
+
+def build_only_inert(path, stems):
+    """A reason when `path` (a Mojo source or a binding build script) is
+    compiled into none of the bindings the release owner's list builds, else
+    None. A list naming no existing build script never makes a path inert."""
+    if not (path.endswith(".mojo") or (path.startswith("bindings" + os.sep) and path.endswith(".sh"))):
+        return None
+    if stems not in _BUILD_ONLY_CLOSURE:
+        import lane_map_import_graph
+        scripts = build_only_scripts(stems)
+        files = set(scripts)
+        for script in scripts:
+            files |= lane_map_import_graph.mojo_closure(script)[0]
+        _BUILD_ONLY_CLOSURE[stems] = (scripts, files)
+    scripts, files = _BUILD_ONLY_CLOSURE[stems]
+    if not scripts or path in files:
+        return None
+    return (f"{RELEASE_BUILD_ONLY_ENV}={','.join(sorted(stems))}: no binding the release builds compiles it, "
+            "so the published bytes ship (tools/release_reuse.py) and no lane's bits move")
+
+
+def _top_level_units(text):
+    """{name: code dump} of a module's top-level definitions and a list of the
+    dumps of its other statements (imports dropped), docstrings stripped; None
+    when it does not parse."""
+    try:
+        tree = _strip_docstrings(ast.parse(text))
+    except SyntaxError:
+        return None
+    defs, others = {}, []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            defs[node.name] = ast.dump(node)
+        elif not isinstance(node, (ast.Import, ast.ImportFrom)):
+            others.append(ast.dump(node))
+    return defs, others
+
+
+def verify_harness_change(ref, path):
+    """"inert" when the diff of the verifier file `path` since `ref` is
+    confined to orchestration (VERIFY_ORCHESTRATION_FILES, or definitions in
+    VERIFY_ALL_ORCHESTRATION plus added or removed definitions), else
+    "every": it can move fixture bytes or a hash. The reason is in
+    VERIFY_HARNESS_WHY[f"{ref}:{path}"]."""
+    key = f"{ref}:{path}"
+    if path in VERIFY_ORCHESTRATION_FILES:
+        VERIFY_HARNESS_WHY[key] = "a verifier file that only orchestrates (cell workers, crash handling)"
+        return "inert"
+    old = _git_show(ref, path) if ref else None
+    try:
+        new = _read(path)
+    except OSError:
+        new = None
+    a = _top_level_units(old) if old is not None else None
+    b = _top_level_units(new) if new is not None else None
+    if a is None or b is None:
+        VERIFY_HARNESS_WHY[key] = "no readable diff (no ref, or a side does not parse)"
+        return "every"
+    if a[1] != b[1]:
+        VERIFY_HARNESS_WHY[key] = "a module-level statement changed"
+        return "every"
+    # An added definition runs only when a changed one calls it, and a removed one stops running only
+    # when its callers changed; both are judged by those callers.
+    changed = sorted(n for n in set(a[0]) & set(b[0]) if a[0][n] != b[0][n])
+    feeding = [n for n in changed if n not in VERIFY_ALL_ORCHESTRATION]
+    if feeding:
+        VERIFY_HARNESS_WHY[key] = "it can move fixture bytes or a hash: " + ", ".join(feeding[:6])
+        return "every"
+    VERIFY_HARNESS_WHY[key] = ("orchestration and reporting only: " + (", ".join(changed[:6]) or "none")
+                               + (" and more" if len(changed) > 6 else ""))
+    return "inert"
+
 
 #: RENTAL MEASUREMENT TOOLING (2026-09-25). Leg bodies, session scripts and
 #: probes that run on a rented box to build a binding from the checkout, time
@@ -2686,8 +2838,11 @@ def _git_show(ref, path):
     key = f"{ref}:{path}"
     if key not in _GIT_SHOW:
         try:
-            _GIT_SHOW[key] = subprocess.run(["git", "-C", ROOT, "show", key],
-                                            capture_output=True, text=True, check=True).stdout
+            # errors="replace": a binary path in the diff (a .so, a wheel, a lease file) raised
+            # UnicodeDecodeError here, and identity_columns.py changed-lanes turned that into "cannot diff:
+            # every lane re-recorded" (the 0.8.44 floor diff, 2026-10-13). Binary text never parses as code.
+            _GIT_SHOW[key] = subprocess.run(["git", "-C", ROOT, "show", key], capture_output=True, text=True,
+                                            encoding="utf-8", errors="replace", check=True).stdout
         except subprocess.CalledProcessError:
             _GIT_SHOW[key] = None
     return _GIT_SHOW[key]
@@ -6114,6 +6269,12 @@ def select(paths, ref=None, sources=None, backend=None):
             reasons[path] = (f"host-binding routing only: {HOST_BINDING_ONLY[path]}; a {backend} device "
                              "column never loads it")
             continue
+        build_only = release_build_only()
+        why_reused = build_only_inert(path, build_only) if build_only else None
+        if why_reused:
+            inert.append(path)
+            reasons[path] = why_reused
+            continue
         other = _other_platform_tree(path, backend)
         if other:
             inert.append(path)
@@ -6200,6 +6361,18 @@ def select(paths, ref=None, sources=None, backend=None):
             # reaches names it, and the harness still runs it on every column.
             all_lanes_by_rule(path, "imported by the harness while it records every column; what it writes "
                                     "there (degenerate_lanes) is derived over every lane")
+            continue
+        if path in VERIFY_ORCHESTRATION_FILES or path == VERIFY_ALL:
+            # BEFORE `unreachable`: no lane's closure holds the verifier, and its byte-feeding code still
+            # decides what every lane's verify cell compares. See VERIFY_ALL_ORCHESTRATION.
+            kind = verify_harness_change(ref, path)
+            why = VERIFY_HARNESS_WHY.get(f"{ref}:{path}", "")
+            if kind == "inert":
+                inert.append(path)
+                reasons[path] = "the installed verifier's orchestration: no lane computes through it (" + why + ")"
+            else:
+                all_lanes_by_rule(path, "the installed verifier's fixture bytes or hashing every lane's verify "
+                                        "cell compares (" + why + ")")
             continue
         why_test = test_module_inert(path)
         if why_test:

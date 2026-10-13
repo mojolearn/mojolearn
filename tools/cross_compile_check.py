@@ -10,12 +10,17 @@ GPU box (2026-09-25).
     python3 tools/cross_compile_check.py --ref v0.8.22 --list-json plan.json   # the job list only
     python3 tools/cross_compile_check.py --summarize results/ --plan plan.json  # merge job results
 
-ON GITHUB FOR A RELEASE. .github/workflows/cross-compile-check.yml runs the
+NOT RUN BY THE RELEASE since 2026-10-13 (Andrew): GitHub's free runners have no
+GPU, so this only catches NVIDIA/AMD-only compile errors and never checks bits;
+the release's own NVIDIA/AMD build legs hit the same compile error within
+minutes on a $1-4/h box, so the extra step and wait per release aren't worth
+it. The release does not run it; this stays a manual tool.
+
+ON GITHUB, BY HAND. .github/workflows/cross-compile-check.yml runs the
 same selection (--list-json, one source of truth) and then one standard
 runner per binding x tier x arch (--only/--tiers/--archs), in parallel;
---summarize merges their result files into one verdict table. `pixi run
-release` dispatches it on the frozen commit (tools/release.py, the
-cross-compile step). The local task is unchanged.
+--summarize merges their result files into one verdict table. The local
+task is unchanged.
 
 WHY. 0.8.19's `fast` svm binding never finished compiling for NVPTX or AMDGPU:
 every Linux leg sat on it for more than 33 minutes and was killed by its build
