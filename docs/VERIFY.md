@@ -23,10 +23,9 @@ A pass covers the selected fixtures, routes and properties; it does not prove
 every input, parameter combination or GPU generation.
 
 Recorded hashes belong to one release. While mojolearn is alpha, a release may
-change IDENTICAL output bits. Apple, NVIDIA and AMD must agree within that release
-against the same reference hashes. Apple FAST is a separate mode with no bitwise
-identity guarantee; it does not relax Apple IDENTICAL. Use the references shipped
-with the installed wheel.
+change `identical` output bits. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+Within a release they agree against the same reference hashes. Use the references
+shipped with the installed wheel.
 
 **Known 0.8.43 verifier defect:** it accepts Apple's separately recorded hashes
 instead of requiring the shared reference. That behavior is a bug, not the identity

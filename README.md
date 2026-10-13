@@ -7,10 +7,10 @@
 
 The same machine-learning workload can produce different bits on different
 GPUs, changing predictions, learned models and subsequent training updates.
-mojolearn is a GPU machine-learning library whose default **identical** mode
-produces bitwise-identical results across verified Apple, NVIDIA and AMD GPUs
-and x86-64 and Arm CPUs. Results agree bit for bit, not merely within a
-numerical tolerance.
+mojolearn is a GPU machine-learning library whose default mode is **identical**.
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+Its x86-64 and Arm CPU bindings give the same bits too. Results agree bit for bit,
+not merely within a numerical tolerance.
 
 - **Training and inference for transformers and hybrids.** Decoder language
   models, Mamba-1/2/3 state-space models and Samba attention/state-space
@@ -93,14 +93,14 @@ verifier.
 
 ## Numeric modes
 
-`identical` is the default. On Apple GPUs, `fast` is an opt-in for most
-families; it is not offered on NVIDIA, AMD or the CPU. Gradient boosting, random
+`identical` is the default. `fast` is available on Apple GPUs only, as an
+opt-in for most families. Gradient boosting, random
 forests and Extra Trees also offer `deterministic`. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md#numeric-modes) has
 the table by family.
 
 | mode | contract |
 |---|---|
-| `identical` | The same bits on Apple, NVIDIA and AMD GPUs within one release. Apple FAST is a separate mode and does not relax this requirement. |
+| `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
 | `deterministic` | The same bits on repeated runs on one device. |
 | `fast` | Apple GPUs only: throughput, with no repeatability promise. |
 
@@ -178,8 +178,8 @@ print(model.predict_proba(X[:5]))
 print(model.numeric_mode_used(), mojolearn.vendor())
 ```
 
-Run the same script on an Apple, NVIDIA or AMD GPU and the model and its
-predictions are the same bits.
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. Run the same script on
+any of them and the model and its predictions are the same bits.
 
 ## Verify it yourself
 
