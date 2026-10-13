@@ -91,6 +91,7 @@ from gbdt.methods.sym_iter_fast import (
     sym_split_planes,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    SYM_RIDX_SPLITS_2031,
     run_sequential_two_level_feature_freq_tree,
     enqueue_snap_plane,
     run_tree_layout,
@@ -866,6 +867,10 @@ def fit_two_level_feature_freq_tree(
     ctx.enqueue_function[two_level_leaf_partials_kernel](
         rows.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows),
         d_tab.unsafe_ptr(), leaf_part.unsafe_ptr(),
+        # where the split schedule left the stat planes: in place beside
+        # the row ids under the index-only schedule, moved with them under
+        # the permuting reorder (`two_level_leaf_partials_kernel`)
+        Int32(1) if SYM_RIDX_SPLITS_2031 else Int32(0),
         grid_dim=(TL_GRID, n_leaves, 1), block_dim=(TL_BLOCK, 1, 1),
     )
     var d_leaves = ctx.enqueue_create_buffer[DType.float32](n_leaves)
