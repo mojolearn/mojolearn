@@ -1440,6 +1440,584 @@ def binding_additions(ref, path):
 #: Calls that RESOLVE a binding by name, and the assignment targets that hold
 #: one. `_backend.binding("_mojolearn_rf")`, `self._bind("_mojolearn")`,
 #: `load_host_module(basename)`, `_BINDING = "_mojolearn_rf"`.
+# ------------------------------------------- Mojo edits, definition by definition
+#
+# lane/lane-select-mojo (2026-10-12). A changed .mojo file used to select every
+# lane whose binding reaches it: lane/apple-holes edited MinCovDet, chi2 and
+# GaussianMixture and got 463 of 507 lanes, because x_decomp/kit.mojo,
+# device.mojo and exec_trait.mojo are in every x_decomp lane's closure and
+# mixture/checks/mstep.mojo in every lane that reaches the mixture tree. A
+# function body runs only where it is called, so an edit to one is about the
+# lanes whose exports reach it. Python files have had this since 2026-09-27
+# (`python_edit_lanes`); this is the Mojo analogue, built the conservative way:
+#
+#   * WHAT CHANGED is read per top-level definition (fn/def, struct/trait,
+#     module comptime/alias/var), and per METHOD inside a struct or trait.
+#     Old and new texts are compared unit by unit (comment-only lines aside).
+#     Module-level text that is no definition and no import (a `comptime
+#     assert`, a stray statement), a change to a module init (`PyInit_*`), a
+#     changed star import or anything the scanner cannot read with certainty
+#     (an unclosed string or bracket, an odd indent) keeps the whole file.
+#   * A CHANGED IMPORT changes what its names mean, so every definition whose
+#     text names a local the imports bound differently is changed too.
+#   * THE GRAPH is text: an identifier in a definition's text that equals a
+#     definition name in its own file or in any file it imports (followed
+#     through re-exports and aliases) is an edge. A struct or trait reached
+#     reaches its header; a method of it is reached when its name appears in
+#     the text of anything reached (dunders and `write_to`/`write_repr_to`
+#     always: the language calls them by itself). Over-approximate by design.
+#   * THE ROOTS are a lane's exports (`recorded_seeds` in `lane_sources`): the
+#     impl `m.def_function[impl]("export")` registers and its parameters. A lane
+#     that reaches the file through a binding whose exports it does not call
+#     (the whole-closure fallback), through a trait conformer or a build shim,
+#     or through an export whose impl cannot be resolved, keeps the old
+#     whole-file rule, and the reason says how many lanes did.
+
+MOJO_EDIT_WHY = {}
+
+_MOJO_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_MOJO_DEF_RE = re.compile(r"^(?:fn|def)\s+([A-Za-z_][A-Za-z0-9_]*)")
+_MOJO_TYPE_RE = re.compile(r"^(?:struct|trait)\s+([A-Za-z_][A-Za-z0-9_]*)")
+_MOJO_VALUE_RE = re.compile(r"^(?:comptime|alias|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:[:=\[]|$)")
+_MOJO_NOT_A_NAME = frozenset({"if", "for", "while", "assert", "elif", "else"})
+#: Methods the language calls without the caller writing their name: every
+#: dunder (construction, copy, move, destruction, operators, iteration) and
+#: the `Writable` pair `print`/`String(...)` call.
+_MOJO_IMPLICIT_METHODS = frozenset({"write_to", "write_repr_to"})
+
+
+def _mojo_scan(text):
+    """[(line, cont)] for a Mojo source, `cont` True when the line begins
+    inside a string or an open bracket (or after a backslash), so it belongs
+    to the statement above it whatever its indent. None when the text cannot
+    be read with certainty: a bracket closes below zero, a one-quote string
+    runs past its line, or a string or bracket is still open at the end."""
+    out, depth, quote, backslash = [], 0, None, False
+    for line in text.splitlines():
+        out.append((line, depth > 0 or quote is not None or backslash))
+        backslash = False
+        i, n = 0, len(line)
+        while i < n:
+            c = line[i]
+            if quote:
+                if c == "\\":
+                    i += 2
+                    continue
+                if line.startswith(quote, i):
+                    i += len(quote)
+                    quote = None
+                    continue
+                i += 1
+                continue
+            if c == "#":
+                break
+            if line.startswith('"""', i) or line.startswith("'''", i):
+                quote = line[i:i + 3]
+                i += 3
+                continue
+            if c in "\"'":
+                quote = c
+            elif c in "([{":
+                depth += 1
+            elif c in ")]}":
+                depth -= 1
+                if depth < 0:
+                    return None
+            i += 1
+        if quote in ('"', "'"):
+            return None
+        if quote is None and depth == 0 and line.split("#", 1)[0].rstrip().endswith("\\"):
+            backslash = True
+    if depth or quote or backslash:
+        return None
+    return out
+
+
+def _mojo_statements(scanned, indent):
+    """Group scanned lines into statements that begin at exactly `indent`
+    columns: [(first line, [(line, cont)])]. Blank lines and comment-only lines that
+    do not continue a string or bracket are dropped (they compile to nothing).
+    None when a line that starts a statement sits at an indent other than
+    `indent` before any statement began, or shallower than `indent`."""
+    out = []
+    for line, cont in scanned:
+        stripped = line.strip()
+        if not cont and (not stripped or stripped.startswith("#")):
+            continue
+        lead = len(line) - len(line.lstrip(" \t"))
+        if not cont and lead == indent:
+            out.append((stripped, [(line.rstrip(), cont)]))
+            continue
+        if not cont and lead < indent:
+            return None
+        if not out:
+            return None
+        out[-1][1].append((line.rstrip(), cont))
+    return out
+
+
+def _mojo_is_docstring(first):
+    """A statement that is a bare string literal (a module or struct
+    docstring): it compiles to nothing."""
+    return re.match(r'^[rRbBuU]?(?:"""|\'\'\')', first) is not None
+
+
+def _mojo_import_bindings(stmt):
+    """(local, module, original name or None, star) for one import statement's
+    text; None when it is not one. `import a.b` binds `a`, `import a.b as c`
+    binds `c`, `from m import x as y` binds `y` to m's `x`."""
+    flat = " ".join(part.split("#", 1)[0] for part in stmt.splitlines())
+    flat = flat.replace("(", " ").replace(")", " ")
+    m = re.match(r"^\s*from\s+(\.*[A-Za-z_][\w.]*|\.+)\s+import\s+(.*)$", flat)
+    if m:
+        out = []
+        for part in m.group(2).split(","):
+            bits = part.split()
+            if not bits:
+                continue
+            if bits[0] == "*":
+                out.append(("*", m.group(1), None, True))
+            elif len(bits) == 3 and bits[1] == "as":
+                out.append((bits[2], m.group(1), bits[0], False))
+            elif len(bits) == 1:
+                out.append((bits[0], m.group(1), bits[0], False))
+            else:
+                return None
+        return out
+    m = re.match(r"^\s*import\s+(.*)$", flat)
+    if m:
+        out = []
+        for part in m.group(1).split(","):
+            bits = part.split()
+            if len(bits) == 3 and bits[1] == "as":
+                out.append((bits[2], bits[0], None, False))
+            elif len(bits) == 1:
+                out.append((bits[0].split(".")[0], bits[0], None, False))
+            else:
+                return None
+        return out
+    return None
+
+
+def _mojo_units(text):
+    """The definitions of one Mojo source, or None when it cannot be read
+    with certainty.
+
+    dict(top={name: (kind, [texts])}, methods={type: {method: [texts]}},
+    residue=[texts], imports={local: set of (module, original)}, stars=set of
+    modules). `kind` is "def", "type" (struct or trait: its texts are the
+    HEADER, every member that is not a method) or "value". A name defined more
+    than once (overloads) keeps every text, in order."""
+    scanned = _mojo_scan(text)
+    if scanned is None:
+        return None
+    stmts = _mojo_statements(scanned, 0)
+    if stmts is None:
+        return None
+    top, methods, residue, imports, stars = {}, {}, [], {}, set()
+    pending = []
+    for first, pairs in stmts:
+        lines = [ln for ln, _ in pairs]
+        body = "\n".join(lines)
+        if _mojo_is_docstring(first) and not pending:
+            continue
+        if first.startswith("@"):
+            pending.append(body)
+            continue
+        deco, pending = pending, []
+        whole = "\n".join(deco + [body])
+        if first.startswith(("from ", "import ")) and not deco:
+            bound = _mojo_import_bindings(body)
+            if bound is None:
+                return None
+            for local, module, orig, star in bound:
+                if star:
+                    stars.add(module)
+                else:
+                    imports.setdefault(local, set()).add((module, orig))
+            continue
+        m = _MOJO_DEF_RE.match(first)
+        if m:
+            kind, texts = top.setdefault(m.group(1), ("def", []))
+            if kind != "def":
+                return None
+            texts.append(whole)
+            continue
+        m = _MOJO_TYPE_RE.match(first)
+        if m:
+            name = m.group(1)
+            if name in top:
+                return None
+            # The header line(s) are the statement's first line and the lines
+            # that continue it; members start at the first non-continuation
+            # line, at that line's indent.
+            k = 1
+            while k < len(pairs) and pairs[k][1]:
+                k += 1
+            head, rest = lines[:k], pairs[k:]
+            header = deco + ["\n".join(head)]
+            mine = {}
+            starts = [ln for ln, cont in rest
+                      if not cont and ln.strip() and not ln.strip().startswith("#")]
+            if starts:
+                member_indent = len(starts[0]) - len(starts[0].lstrip(" \t"))
+                if member_indent == 0:
+                    return None
+                sub = _mojo_statements(rest, member_indent)
+                if sub is None:
+                    return None
+                mdeco = []
+                for mfirst, mpairs in sub:
+                    mbody = "\n".join(ln for ln, _ in mpairs)
+                    if _mojo_is_docstring(mfirst) and not mdeco:
+                        continue
+                    if mfirst.startswith("@"):
+                        mdeco.append(mbody)
+                        continue
+                    mm = _MOJO_DEF_RE.match(mfirst)
+                    if mm:
+                        mine.setdefault(mm.group(1), []).append("\n".join(mdeco + [mbody]))
+                    else:
+                        header.extend(mdeco + [mbody])
+                    mdeco = []
+                header.extend(mdeco)
+            top[name] = ("type", ["\n".join(header)])
+            methods[name] = mine
+            continue
+        m = _MOJO_VALUE_RE.match(first)
+        if m and m.group(1) not in _MOJO_NOT_A_NAME and not deco:
+            kind, texts = top.setdefault(m.group(1), ("value", []))
+            if kind != "value":
+                return None
+            texts.append(whole)
+            continue
+        residue.append(whole)
+    if pending:
+        residue.extend(pending)
+    return dict(top=top, methods=methods, residue=residue, imports=imports, stars=stars)
+
+
+def _mojo_unit_texts(units):
+    """node -> its text, for every unit of a parsed file: ("t", name) for a
+    top-level definition (a type's header), ("m", type, method) for a method."""
+    out = {}
+    for name, (_, texts) in units["top"].items():
+        out[("t", name)] = "\n".join(texts)
+    for name, ms in units["methods"].items():
+        for meth, texts in ms.items():
+            out[("m", name, meth)] = "\n".join(texts)
+    return out
+
+
+def mojo_changed_definitions(old_text, new_text):
+    """(changed units, why) for one Mojo file's edit; units are ("t", name)
+    and ("m", type, method). None for the units when the edit is not confined
+    to named definitions, with `why` saying what kept the whole file. A new
+    file (`old_text` None) changes every unit it defines."""
+    new = _mojo_units(new_text)
+    if new is None:
+        return None, "the new text could not be read with certainty (a string or bracket left open, an odd indent)"
+    old = _mojo_units(old_text) if old_text is not None else dict(
+        top={}, methods={}, residue=list(new["residue"]), imports={}, stars=set(new["stars"]))
+    if old is None:
+        return None, "the old text could not be read with certainty (a string or bracket left open, an odd indent)"
+    if old["residue"] != new["residue"]:
+        return None, ("module-level text outside any definition or import changed (a comptime assert, "
+                      "a decorator with no definition, a stray statement)")
+    if old["stars"] != new["stars"]:
+        return None, "a star import changed (every name it binds is unknown)"
+    old_t, new_t = _mojo_unit_texts(old), _mojo_unit_texts(new)
+    changed = {u for u in set(old_t) | set(new_t) if old_t.get(u) != new_t.get(u)}
+    # A type whose kind flipped, or a name that moved between a type and a
+    # function, is a changed top-level name either way.
+    for name in set(old["top"]) | set(new["top"]):
+        if old["top"].get(name, (None,))[0] != new["top"].get(name, (None,))[0]:
+            changed.add(("t", name))
+    rebound = {n for n in set(old["imports"]) | set(new["imports"])
+               if old["imports"].get(n) != new["imports"].get(n)}
+    # A NAME THAT IS GONE is not in the new graph, so nothing can reach it.
+    # A top-level name removed changes what its unchanged users in this file
+    # now resolve to (an import of the same name, say): they are rebound. A
+    # method removed may leave a trait's default in its place for callers
+    # whose text is unchanged: the type's header stands for it, so every
+    # lane that reaches the type is selected.
+    for unit in [u for u in changed if u not in new_t]:
+        if unit[0] == "t":
+            rebound.add(unit[1])
+        elif ("t", unit[1]) in new_t:
+            changed.add(("t", unit[1]))
+    if rebound:
+        for unit, text in new_t.items():
+            if rebound & set(_MOJO_IDENT_RE.findall(text)):
+                changed.add(unit)
+    for unit in changed:
+        if unit[0] == "t" and unit[1].startswith("PyInit_"):
+            return None, "the module init (PyInit_*) changed: what it registers reaches every export"
+    return changed, ""
+
+
+class _MojoDefGraph:
+    """The name-level reference graph over the tree's Mojo sources, read once
+    per `select` (so a test that seeds a file's text sees that text). Nodes
+    are ("t", file, name) and ("m", file, type, method), and ("f", file) for a
+    whole file `_mojo_units` cannot read: such a file is ONE node, reached by
+    any identifier its text carries, so nothing behind it is lost."""
+
+    def __init__(self):
+        self._units, self._resolve, self._targets, self._idents = {}, {}, {}, {}
+        self._closure, self._bindings, self._exported, self._file_idents = {}, {}, {}, {}
+
+    def file_idents(self, rel):
+        if rel not in self._file_idents:
+            try:
+                self._file_idents[rel] = frozenset(_MOJO_IDENT_RE.findall(_read(rel)))
+            except OSError:
+                self._file_idents[rel] = frozenset()
+        return self._file_idents[rel]
+
+    def units(self, rel):
+        if rel not in self._units:
+            try:
+                self._units[rel] = _mojo_units(_read(rel))
+            except OSError:
+                self._units[rel] = None
+        return self._units[rel]
+
+    def bindings(self, rel):
+        """local -> [(module, original)] over EVERY import in the file, the
+        ones inside function bodies included."""
+        if rel not in self._bindings:
+            out = {}
+            try:
+                text = _read(rel)
+            except OSError:
+                text = ""
+            text = re.sub(r"\(\s*([^()]*?)\s*\)", lambda m: m.group(1).replace("\n", " "), text, flags=re.S)
+            for line in text.splitlines():
+                bound = _mojo_import_bindings(line) if re.match(r"^\s*(?:from|import)\s", line) else None
+                for local, module, orig, star in bound or ():
+                    out.setdefault("*" if star else local, []).append((module, orig))
+            self._bindings[rel] = out
+        return self._bindings[rel]
+
+    def exported(self, rel, name, seen=None):
+        """The definitions `name` means when imported from `rel`: its own, or
+        followed through `rel`'s imports (a package `__init__.mojo` re-exports)
+        and star imports."""
+        if seen is None:
+            if (rel, name) not in self._exported:
+                self._exported[(rel, name)] = self.exported(rel, name, set())
+            return self._exported[(rel, name)]
+        if (rel, name) in seen:
+            return set()
+        seen.add((rel, name))
+        units = self.units(rel)
+        if units is None:
+            return {("f", rel)} if name in self.file_idents(rel) else set()
+        if name in units["top"]:
+            return {("t", rel, name)}
+        out = set()
+        bound = self.bindings(rel)
+        for module, orig in bound.get(name, ()):
+            if orig is None:
+                continue
+            for g in _mojo_module_files(module, rel, [orig]):
+                out |= self.exported(g, orig, seen)
+        for module, _ in bound.get("*", ()):
+            for g in _mojo_module_files(module, rel, ["*"]):
+                out |= self.exported(g, name, seen)
+        return out
+
+    def resolve(self, rel, ident):
+        """The definitions an identifier written in `rel` can name: one of
+        `rel`'s own, one any file it imports defines or re-exports, or the
+        original of an alias it imported."""
+        key = (rel, ident)
+        if key not in self._resolve:
+            out = set()
+            units = self.units(rel)
+            if units is None:
+                if ident in self.file_idents(rel):
+                    out.add(("f", rel))
+            elif ident in units["top"]:
+                out.add(("t", rel, ident))
+            for g in _mojo_imports(rel):
+                out |= self.exported(g, ident)
+            for module, orig in self.bindings(rel).get(ident, ()):
+                if orig is not None and orig != ident:
+                    for g in _mojo_module_files(module, rel, [orig]):
+                        out |= self.exported(g, orig)
+            self._resolve[key] = out
+        return self._resolve[key]
+
+    def text(self, node):
+        if node[0] == "f":
+            try:
+                return _read(node[1])
+            except OSError:
+                return ""
+        units = self.units(node[1])
+        if units is None:
+            return ""
+        if node[0] == "t":
+            return "\n".join(units["top"].get(node[2], (None, []))[1])
+        return "\n".join(units["methods"].get(node[2], {}).get(node[3], []))
+
+    def idents(self, node):
+        if node not in self._idents:
+            self._idents[node] = frozenset(_MOJO_IDENT_RE.findall(self.text(node)))
+        return self._idents[node]
+
+    def targets(self, node):
+        if node not in self._targets:
+            out = set()
+            for ident in self.idents(node):
+                out |= self.resolve(node[1], ident)
+            out.discard(node)
+            self._targets[node] = sorted(out)
+        return self._targets[node]
+
+    def roots(self, src, export):
+        """The nodes one binding export starts from: its impl and the
+        identifiers in the impl's parameter list, resolved in the binding
+        source. Empty when the impl cannot be resolved."""
+        impl = _binding_exports(src).get(export)
+        if impl is None:
+            return set()
+        roots = set(self.resolve(src, impl))
+        if not roots:
+            return set()
+        for name in _binding_export_params(src).get(export, ()):
+            roots |= self.resolve(src, name)
+        return roots
+
+    def closure(self, src, export):
+        """node -> the node it was reached from (None for a root), for every
+        node one export reaches; None when its roots cannot be resolved."""
+        key = (src, export)
+        if key in self._closure:
+            return self._closure[key]
+        roots = self.roots(src, export)
+        if not roots:
+            self._closure[key] = None
+            return None
+        parent, queue, mentioned, waiting = {}, [], set(), {}
+
+        def visit(node, came):
+            if node not in parent:
+                parent[node] = came
+                queue.append(node)
+
+        for r in sorted(roots):
+            visit(r, None)
+        k = 0
+        while k < len(queue):
+            node = queue[k]
+            k += 1
+            if node[0] == "t":
+                units = self.units(node[1])
+                for meth in sorted((units or {}).get("methods", {}).get(node[2], {})):
+                    m = ("m", node[1], node[2], meth)
+                    if meth in mentioned or meth in _MOJO_IMPLICIT_METHODS or (
+                            meth.startswith("__") and meth.endswith("__")):
+                        visit(m, node)
+                    else:
+                        waiting.setdefault(meth, []).append((m, node))
+            fresh = self.idents(node) - mentioned
+            mentioned |= fresh
+            for ident in sorted(fresh):
+                for m, owner in waiting.pop(ident, ()):
+                    visit(m, owner)
+            for t in self.targets(node):
+                visit(t, node)
+        self._closure[key] = parent
+        return parent
+
+
+def _mojo_node_label(node):
+    if node[0] == "f":
+        return f"{node[1]} (whole file)"
+    return f"{node[1]}:{node[2]}" if node[0] == "t" else f"{node[1]}:{node[2]}.{node[3]}"
+
+
+def mojo_edit_lanes(ref, path, hit, graph):
+    """(changed definition labels, selected lanes, lane -> chain, kept lanes)
+    for one Mojo source's diff against `ref`, or None (whole file, with the
+    reason in MOJO_EDIT_WHY) when the edit is not confined to named
+    definitions or the lanes' binding contributions were not recorded.
+
+    A lane in `hit` is SELECTED when an export it calls reaches a changed
+    definition (the chain says how), KEPT by the old whole-file rule when it
+    reaches the file in a way no export explains (`kept`), and dropped
+    otherwise."""
+    key = f"{ref}:{path}"
+    MOJO_EDIT_WHY.pop(key, None)
+    if _LANE_SEED_CALLS is None:
+        MOJO_EDIT_WHY[key] = "no recorded binding contributions for this map"
+        return None
+    if not os.path.exists(os.path.join(ROOT, path)) and path not in _read.cache:
+        MOJO_EDIT_WHY[key] = "the file is gone from the tree"
+        return None
+    if path in source_hashed_files():
+        MOJO_EDIT_WHY[key] = ("its bytes are hashed while the library runs (source_hashed_files), so any "
+                              "edit, a comment included, moves a recorded value")
+        return None
+    old_text = _git_show(ref, path)
+    try:
+        new_text = _read(path)
+    except OSError:
+        MOJO_EDIT_WHY[key] = "the new text could not be read"
+        return None
+    changed, why = mojo_changed_definitions(old_text, new_text)
+    if changed is None:
+        MOJO_EDIT_WHY[key] = why
+        return None
+    nodes = {(u[0], path) + u[1:] for u in changed}
+    labels = sorted(_mojo_node_label(n) for n in nodes)
+    lanes, chains, kept = set(), {}, set()
+    for lane in sorted(hit):
+        calls = _LANE_SEED_CALLS.get(lane)
+        if calls is None:
+            kept.add(lane)
+            chains[lane] = [f"kept whole-file: no recorded binding contributions for {lane}"]
+            continue
+        through = [c for c in calls if path in c[3]]
+        if not through:
+            kept.add(lane)
+            chains[lane] = [f"kept whole-file: {path} reaches {lane} outside every binding export "
+                            "(a trait conformer or a build shim)"]
+            continue
+        found, opaque = None, []
+        for src, wide, exports, _ in through:
+            if not exports:
+                opaque.append(f"kept whole-file: {lane} calls no export of {src} (wide={wide})")
+                continue
+            for export in exports:
+                parent = graph.closure(src, export)
+                if parent is None:
+                    opaque.append(f"kept whole-file: export {export} of {src} has an impl this "
+                                  "graph cannot resolve")
+                    continue
+                hits = sorted(n for n in nodes if n in parent)
+                if hits:
+                    steps, node = [], hits[0]
+                    while node is not None:
+                        steps.append(_mojo_node_label(node))
+                        node = parent[node]
+                    found = f"{lane} -> {export} ({src}) -> " + " -> ".join(reversed(steps))
+                    break
+            if found:
+                break
+        if found:
+            lanes.add(lane)
+            chains[lane] = [found]
+        elif opaque:
+            lanes.add(lane)
+            kept.add(lane)
+            chains[lane] = opaque[:1]
+    return labels, lanes, chains, kept
+
+
 _BINDING_CALLS = frozenset({"binding", "_bind", "load_host_module", "host_module_path"})
 _BINDING_TARGETS = ("_BINDING", "_EXT_NAME", "_EXT", "_MODULE_NAME", "_EXTENSION")
 
@@ -5428,6 +6006,7 @@ def select(paths, ref=None, sources=None, backend=None):
     rev = reverse_map(sources)
     lanes, reasons, unattributed, inert = set(), {}, [], []
     by_path, every_rules = {}, {}
+    chains, mojo_graph = {}, None        # lane -> how a Mojo definition edit reached it
 
     def all_lanes_by_rule(path, why):
         lanes.update(every)
@@ -5663,6 +6242,25 @@ def select(paths, ref=None, sources=None, backend=None):
                 reasons[path] = (f"a binding that only GAINED exports ({', '.join(sorted(added)) or 'none'}): "
                                  f"the {len(users)} lane(s) that really use it, of the {len(hit)} that load it")
                 continue
+        if hit and ref and path.endswith(".mojo") and sources is lane_sources()[0]:
+            if mojo_graph is None:
+                mojo_graph = _MojoDefGraph()
+            edited = mojo_edit_lanes(ref, path, hit, mojo_graph)
+            if edited is not None:
+                labels, users, lane_chains, kept = edited
+                lanes.update(users)
+                by_path[path] = set(users)
+                for lane, chain in lane_chains.items():
+                    if lane in users:
+                        chains.setdefault(lane, []).extend(chain)
+                shown = ", ".join(labels[:6]) + (f" and {len(labels) - 6} more" if len(labels) > 6 else "")
+                shown = shown or "none, comments only"
+                reasons[path] = (f"a Mojo source whose diff is confined to named definitions ({shown}): "
+                                 f"the {len(users) - len(kept)} lane(s) whose binding exports "
+                                 f"reach one through the definition graph, plus {len(kept)} kept by the "
+                                 f"whole-file rule (reached outside any export they call), of the {len(hit)} "
+                                 f"that compile it")
+                continue
         if hit and ref and path.endswith(".py") and path.startswith(PKG + os.sep):
             edited = python_edit_lanes(ref, path, sources, rev)
             if edited is not None:
@@ -5678,6 +6276,9 @@ def select(paths, ref=None, sources=None, backend=None):
             lanes.update(hit)
             by_path[path] = set(hit)
             reasons[path] = f"{len(hit)} lane(s)"
+            if path.endswith(".mojo") and f"{ref}:{path}" in MOJO_EDIT_WHY:
+                reasons[path] += (" (whole file, every lane that compiles it: "
+                                  + MOJO_EDIT_WHY[f"{ref}:{path}"] + ")")
             continue
         if path.startswith("bindings" + os.sep) and path.endswith(".sh"):
             roots = build_script_roots(path)
@@ -5694,7 +6295,7 @@ def select(paths, ref=None, sources=None, backend=None):
                          "reaches names it or its directory")
     return dict(lanes=sorted(lanes, key=every.index), fallback=False, reasons=reasons,
                 unattributed=sorted(unattributed), inert=sorted(inert), total=len(every),
-                every_rules=every_rules,
+                every_rules=every_rules, chains=chains,
                 by_path={p: sorted(v, key=every.index) for p, v in by_path.items()})
 
 
@@ -5830,6 +6431,8 @@ def main(argv=None):
             print(f"#   {lane}: bindings={','.join(ev['bindings']) or '-'} "
                   f"families={','.join(ev['families']) or '-'} "
                   f"python={ev['python']} mojo={ev['mojo']}")
+            for chain in sel.get("chains", {}).get(lane, ()):
+                print(f"#     via {chain}")
     if args.files:
         files = sorted(set().union(*[sources[n] for n in sel["lanes"]])) if sel["lanes"] else []
         for rel in files:
