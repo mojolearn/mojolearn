@@ -84669,9 +84669,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.95,
           "pairing": "17241cc05a5c18d7",
-          "reason": "a tie (ours/theirs 0.95): not cited until rerun (Andrew, 2026-10-13); each arm draws its own k-means++ start; ours ran MORE iterations (accepted: Andrew, 2026-10-13)",
-          "rerace": "",
-          "verdict": "TIE"
+          "reason": "iterations differ: ours 33, cuml-gpu 21; audit note: a tie (ours/theirs 0.95): not cited until rerun (Andrew, 2026-10-13); each arm draws its own k-means++ start; ours ran MORE iterations (accepted: Andrew, 2026-10-13)",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -85007,6 +85007,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
@@ -85020,9 +85021,9 @@
           "opponent": "cuml-gpu",
           "ours_over_theirs": 0.61,
           "pairing": "ba542556bdf532f1",
-          "reason": "each arm draws its own k-means++ start; ours ran MORE iterations (accepted: Andrew, 2026-10-13)",
-          "rerace": "",
-          "verdict": "FAIR"
+          "reason": "iterations differ: ours 91, cuml-gpu 32; audit note: each arm draws its own k-means++ start; ours ran MORE iterations (accepted: Andrew, 2026-10-13)",
+          "rerace": "x",
+          "verdict": "UNFAIR"
         }
       },
       "cells": [
@@ -85358,6 +85359,7 @@
       },
       "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
       "rc": null,
+      "rerace": "x",
       "rows": null,
       "shape": null,
       "status": "done"
