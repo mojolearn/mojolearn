@@ -2055,6 +2055,12 @@ class TorchArm:
                                "reference is not an opponent" % (self.arm, self.kind))
         d = _dims_of(self.lane, self.shape)
         B, L, dm, V = d["batch"], d["length"], d["d_model"], d["vocab"]
+        # the Mamba3 Triton kernels' fp32 tl.dot precision follows the arm's setting (Triton's own
+        # default is TF32 on NVIDIA): IEEE on the fp32 and bf16 arms, TF32 on the tf32 arms, set
+        # before any kernel compiles, as the mamba-ssm-* arms do
+        tf32 = self.info["setting"].endswith("tf32")
+        os.environ["TRITON_F32_DEFAULT"] = "tf32" if tf32 else "ieee"
+        self.info["triton_f32_default_set"] = os.environ["TRITON_F32_DEFAULT"]
         corpus = _load_mamba_corpus_restoring(torch, self.info)
         W = _weights(self.data)
         hd = dm // d["n_heads"]
@@ -2081,7 +2087,8 @@ class TorchArm:
         eps = float(torch.tensor(SAMBA_NORM_EPS, dtype=torch.float32))
         # the final norm's eps as passed to ours; the attention layers' eps and RoPE base read back
         self.block_consts = dict(self.block_consts, eps=SAMBA_NORM_EPS)
-        self.info.update(_mamba_ssm_info(torch, self.arm, None))
+        self.info.update(_mamba_ssm_info(torch, self.arm,
+                                         {"triton_f32_default": os.environ["TRITON_F32_DEFAULT"]}))
         train = self.train
 
         class Stack(torch.nn.Module):
