@@ -402,3 +402,153 @@ def _decomp_batch_als(ml, e, Xh):
 
 
 _batch_decl(_decomp_batch_als, "x-decomp-als", revision="expansion-batch-2026-09-28-v1")
+
+
+# ---------------------------------------------------------------------------
+# WIDE EIGH LANES (lane eigh-wide-fixtures, 2026-10-13).
+#
+# Since lane apple-neighbors-gpu-cpu (2026-10-13) every IDENTICAL eigh from
+# n = TD_MIN_N takes the tridiagonal solve (x_decomp/eigh_tridiag_cells.mojo
+# TD_MIN_N = 2 TD_NB = 64; DevExec._eigh_on, the resident Kit.eigh at
+# x_decomp/kit_device.mojo `eigh`, and HostExec.eigh on the CPU column), the
+# Jacobi below it or on a refusal. Every lane above decomposes a matrix at most
+# the fixture's 16 (or `odd`'s 17) columns wide, so none of them reaches that
+# route. These lanes do, through each public consumer of the kit's eigh, and
+# leave every lane above (and its reference rows) untouched.
+#
+# THE WIDTHS come from the route's own boundary, not from any board shape:
+#   72  just above TD_MIN_N: two full 32-wide panels and a partial third
+#       (the trailing-panel arm of the blocked reduction);
+#   128 comfortably above it: four full panels, no partial panel (the
+#       exact-multiple arm), twice the minimum.
+# Each matrix is built so its spectrum is separated where it can be (more
+# rows than columns), so the solve is taken rather than refused; the
+# `repeated` part of the linalg lane is the deliberate refusal arm at n >= 64.
+# Sizes keep each cell to a few seconds on one device.
+#
+# THE INPUT: the fixture's own float32 values re-cut row-major to the needed
+# (rows, width). A reshape of a contiguous array moves bytes and does no
+# arithmetic, so every box hands the solver the same matrix.
+_decomp_eigh_widths = (72, 128)
+
+
+def _decomp_eigh_wide(A, rows, width, start=0):
+    """Test input only: A's values from flat offset `start`, re-cut to
+    (rows, width) in row-major order (byte moves, no arithmetic)."""
+    flat = np.ascontiguousarray(A, dtype=np.float32).reshape(-1)
+    need = rows * width
+    if start + need > flat.size:
+        raise ValueError(f"wide eigh fixture: {rows}x{width} from offset {start} needs "
+                         f"{start + need} values, the fixture has {flat.size}")
+    return np.ascontiguousarray(flat[start:start + need].reshape(rows, width))
+
+
+@lane("x-decomp-eigh-wide-linalg")
+def _(ml, X, yc, yr, Xh=None):
+    """`linalg.eigh` (x_decomp's kit eigh) at n = 72 and 128. Three parts a
+    width: a Gram of 2n rows (full rank, separated spectrum: the
+    tridiagonal solve), a non-symmetric square read through each triangle
+    (L and U: the mirror before the solve), and a diagonal with a repeated
+    eigenvalue block (the refusal, so the Jacobi fallback at n >= 64)."""
+    out = {}
+    for w in _decomp_eigh_widths:
+        gram = _fixture_gram(_decomp_eigh_wide(X, 2 * w, w))
+        ns = _decomp_eigh_wide(X, w, w, start=2 * w * w)
+        d = np.arange(1, w + 1, dtype=np.float32)
+        d[:8] = np.float32(4.0)
+        rep = np.ascontiguousarray(np.diag(d))
+        for name, m, uplo in (("gram", gram, "L"), ("lower", ns, "L"), ("upper", ns, "U"), ("repeated", rep, "L")):
+            ev, V = ml.linalg.eigh(m, UPLO=uplo)
+            out[f"{name}{w}"] = _h(ev, V)
+    return _fit(out)
+
+
+@lane("x-decomp-eigh-wide-fastica")
+def _(ml, X, yc, yr, Xh=None):
+    """FastICA at d = 72 and 128 with n_components = d: the whitening eigh of
+    the d x d Gram and, every iteration, the parallel decorrelation's eigh of
+    W W^T (n_components x n_components), both from n = 64. 4d rows."""
+    out, first = {}, None
+    for w in _decomp_eigh_widths:
+        S = _decomp_eigh_wide(X, 4 * w, w)
+        m = ml.FastICA(n_components=w, random_state=2, max_iter=8)
+        src = m.fit_transform(S)
+        out[f"fit{w}"] = _h(src, m.components_, m.mixing_, m.whitening_, np.int32(m.n_iter_))
+        out[f"inv{w}"] = _h(m.inverse_transform(src[:32]))
+        first = first or m
+    return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 72)),))
+
+
+@lane("x-decomp-eigh-wide-rotation")
+def _(ml, X, yc, yr, Xh=None):
+    """FactorAnalysis rotations with n_components = 72 (varimax) and 128
+    (quartimax): `_polar`'s eigh of A^T A is n_components x n_components,
+    every rotation step. d = n_components + 8 (so the fit has spare
+    features), 4d rows (the n >= d EM branch), a short EM."""
+    out, first = {}, None
+    for nc, method in ((72, "varimax"), (128, "quartimax")):
+        d = nc + 8
+        S = _decomp_eigh_wide(X, 4 * d, d)
+        m = ml.FactorAnalysis(n_components=nc, rotation=method, max_iter=5).fit(S)
+        out[f"{method}{nc}"] = _h(m.components_, m.noise_variance_, m.transform(S[:64]))
+        first = first or m
+    return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 80)),))
+
+
+@lane("x-decomp-eigh-wide-factor-analysis")
+def _(ml, X, yc, yr, Xh=None):
+    """FactorAnalysis with fewer rows than features (the n < d EM branch,
+    every iteration an eigh of the d x d scaled Gram) at d = 72 and 128.
+    n = d - 1: one null direction, a single isolated zero eigenvalue rather
+    than a cluster, so the tridiagonal solve is taken."""
+    out, first = {}, None
+    for w in _decomp_eigh_widths:
+        S = _decomp_eigh_wide(X, w - 1, w)
+        m = ml.FactorAnalysis(n_components=4, max_iter=10).fit(S)
+        out[f"fit{w}"] = _h(m.components_, m.noise_variance_, np.float64(m.loglike_[-1]), np.int32(m.n_iter_))
+        out[f"T{w}"] = _h(m.transform(S[:32]), m.score_samples(S[:32]))
+        out[f"cov{w}"] = _h(m.get_covariance(), m.get_precision())
+        first = first or m
+    return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 72)),
+                                       e.score_samples(_decomp_eigh_wide(Xh, 256, 72))))
+
+
+@lane("x-decomp-eigh-wide-mincovdet")
+def _(ml, X, yc, yr, Xh=None):
+    """MinCovDet at d = 72 and 128, 3d rows: precision_ is the pseudo-inverse
+    of the reweighted d x d covariance through eigh (and a C-step whose
+    Cholesky stops falls back to the same pinvh)."""
+    out, first = {}, None
+    for w in _decomp_eigh_widths:
+        S = _decomp_eigh_wide(X, 3 * w, w)
+        m = ml.MinCovDet(random_state=0).fit(S)
+        out[f"fit{w}"] = _h(m.location_, m.covariance_, m.precision_, np.asarray(m.support_, dtype=np.int8),
+                            m.dist_, m.raw_location_, m.raw_covariance_)
+        out[f"maha{w}"] = _h(m.mahalanobis(S[:64]))
+        first = first or m
+    return _fit(out, first, lambda e: (e.mahalanobis(_decomp_eigh_wide(Xh, 256, 72)),))
+
+
+@lane("x-decomp-eigh-wide-kpca")
+def _(ml, X, yc, yr, Xh=None):
+    """KernelPCA's dense eigensolve (x_decomp's eigh of the centered n x n
+    kernel matrix) at n = 72 and 128 samples of the fixture's own columns:
+    rbf (full rank, the tridiagonal solve) and cosine."""
+    out, first = {}, None
+    for w in _decomp_eigh_widths:
+        for kern in ("rbf", "cosine"):
+            m = ml.KernelPCA(n_components=4, kernel=kern, eigen_solver="dense")
+            Z = m.fit_transform(X[:w])
+            out[f"{kern}{w}"] = _h(Z, m.eigenvalues_, m.eigenvectors_)
+            first = first or m
+    return _fit(out, first, lambda e: (e.transform(Xh[:128]),))
+
+
+_batch_decl("n/a:matrix factorization (each eigh consumes a complete square matrix; there is no row "
+            "axis whose elements are independent queries)", "x-decomp-eigh-wide-linalg")
+_batch_decl(_rows_calls("transform", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 72)), "x-decomp-eigh-wide-fastica")
+_batch_decl(_rows_calls("transform", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 80)), "x-decomp-eigh-wide-rotation")
+_batch_decl(_rows_calls("transform", "score_samples", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 72)),
+            "x-decomp-eigh-wide-factor-analysis")
+_batch_decl(_rows_calls("mahalanobis", prep=lambda Xh: _decomp_eigh_wide(Xh, 256, 72)), "x-decomp-eigh-wide-mincovdet")
+_batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-decomp-eigh-wide-kpca")
