@@ -4,6 +4,10 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- `mojolearn doctor` recognizes the published Linux wheels: it lists the installed `mojolearn-nvidia` and
+  `mojolearn-amd` packages and their GPU architecture sets, and reports whether the backend loaded instead of
+  saying no Linux wheel is published.
+
 - Correct the IDENTICAL verifier: Apple, NVIDIA and AMD must use the same reference hashes.
   Remove the Apple-only lookup introduced in 0.8.43 and restore Apple participation in reference
   conflicts and corroboration. Apple FAST has no identity promise; it does not exempt IDENTICAL.
