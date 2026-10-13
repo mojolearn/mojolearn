@@ -1137,7 +1137,7 @@ _add("voting-clf", xlane="trees", ours="VotingClassifier", task="clf", block="cl
      mism=["nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"])
 _add("voting-reg", xlane="trees", ours="VotingRegressor", task="reg", block="reg",
      sk="sklearn.ensemble:VotingRegressor",
-     params=dict(estimators=[("ridge", _E("Ridge", alpha=1.0)), ("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000, random_state=SEED)),
+     params=dict(estimators=[("ridge", _E("Ridge", alpha=1.0)), ("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000)),
                              ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED))]),
      mism=["nested DecisionTreeRegressor(max_depth=8): ours is its forest builder with one tree, splitting on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("stacking-clf", xlane="trees", ours="StackingClassifier", task="clf", block="cls",
@@ -1148,7 +1148,7 @@ _add("stacking-clf", xlane="trees", ours="StackingClassifier", task="clf", block
      mism=["nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"])
 _add("stacking-reg", xlane="trees", ours="StackingRegressor", task="reg", block="reg",
      sk="sklearn.ensemble:StackingRegressor",
-     params=dict(estimators=[("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000, random_state=SEED)),
+     params=dict(estimators=[("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000)),
                              ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED))],
                  final_estimator=_E("Ridge", alpha=1.0), cv=5),
      mism=["nested DecisionTreeRegressor(max_depth=8): ours is its forest builder with one tree, splitting on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
@@ -1168,6 +1168,37 @@ _add("ovr", xlane="trees", ours="OneVsRestClassifier", task="clf", block="mc",
 _add("calibrated", xlane="trees", ours="CalibratedClassifierCV", task="clf", block="cls",
      sk="sklearn.calibration:CalibratedClassifierCV",
      params=dict(estimator=_E("GaussianNB"), method="sigmoid", cv=5, ensemble=True))
+# FAIRNESS FIX (2026-10-13 audit, second pass), the trees expansion lanes above:
+# - scikit-learn's trees search EXACT thresholds; ours' DecisionTree* (alone, or nested in
+#   bagging, AdaBoost, voting and stacking) splits on 128 quantile bins per feature (256 in FAST).
+#   That is a different split algorithm (a sort per node against a histogram pass) and a
+#   different model, raced as if comparable; the scikit-learn arm of each such lane is refused
+#   (cuML's one-tree forest, the same binned algorithm, still races decision-tree-* on NVIDIA).
+# - voting-reg and stacking-reg passed random_state=7 to the nested Lasso, which ours refuses
+#   (cyclic coordinate descent draws nothing) so ours never ran; scikit-learn's cyclic Lasso
+#   reads none either, so it is dropped on both arms (in the _add calls above).
+# - scikit-learn's meta-estimators ran at n_jobs None, one job, while its forest and bagging
+#   arms already take every core: calibrated, multioutput-* and ovr now pass n_jobs=-1.
+# - dart / dart-reg: XGBoost's DART grows depth-wise with no max_drop, no min_child_samples
+#   (min_child_weight 1.0 instead) and its own drop schedule, against ours' and LightGBM's
+#   leaf-wise DART at the same 20-row floor: different settings and growth; refused.
+# Results raced before this change were wrong for these lanes; apply extra scrutiny.
+_DT_EXACT_REFUSED = ("different algorithm: scikit-learn's trees search exact thresholds; ours' "
+                     "DecisionTree splits on 128 quantile bins per feature (256 in FAST)")
+for _lane in ("decision-tree-clf", "decision-tree-reg", "bagging-clf", "bagging-reg",
+              "adaboost-clf", "adaboost-reg", "voting-clf", "voting-reg", "stacking-clf",
+              "stacking-reg"):
+    LANES[_lane]["refused"]["sklearn-cpu"] = _DT_EXACT_REFUSED
+for _lane in ("calibrated", "multioutput-clf", "multioutput-reg", "ovr"):
+    LANES[_lane].setdefault("sk_extra", {})["n_jobs"] = -1
+_DART_XGB_REFUSED = ("different settings and growth: XGBoost's DART grows depth-wise with no "
+                     "max_drop and no min_child_samples (min_child_weight 1.0); ours and LightGBM "
+                     "grow leaf-wise DART at max_drop 50 and a 20-row floor")
+for _lane in ("dart", "dart-reg"):
+    for _arm in ("xgboost-cpu", "xgboost-gpu"):
+        LANES[_lane]["refused"][_arm] = _DART_XGB_REFUSED
+del _lane, _arm
+
 # FAIRNESS FIX (2026-10-13 audit): tree-shap raced ours explaining its own RandomForestRegressor
 # with 100-row background covers against XGBoost (and shap, LightGBM) explaining their own GBDT with
 # training covers: different models, different covers. No opponent here can explain ours' forest with
@@ -1184,6 +1215,14 @@ _add("tree-shap", xlane="trees", ours="TreeExplainer", kind="shap", task="tree-s
      notes=["ours explains its RandomForestRegressor (100 trees, depth 6) fit before the clock, node "
             "covers from 100 background rows; timed = the SHAP values of 10,000 rows. Every opponent "
             "is refused: none explains that model with those covers (2026-10-13 audit)"])
+# FAIRNESS FIX (2026-10-13 audit, second pass): the tree-shap refusal also goes through the
+# shared `refused` table, so the opponents are planned out and listed as refused by name.
+# Results raced before this change were wrong for this lane; apply extra scrutiny.
+for _arm in ("shap-cpu", "xgboost-cpu", "xgboost-gpu", "lightgbm-cpu"):
+    LANES["tree-shap"]["refused"][_arm] = (
+        "a different model: ours explains its RandomForestRegressor with node covers from 100 "
+        "background rows; this arm explains its own library's GBDT with training covers")
+del _arm
 # lane shap-xvendor-identity (2026-10-08): ours explains this library's device ridge.
 # FAIRNESS FIX (2026-10-13 audit): the opponents explained a different model (the NumPy closed form
 # of the ridge, host-BLAS coefficients) and cuML evaluated it as a float64 cupy GEMV (FP64 on the

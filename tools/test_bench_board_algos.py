@@ -118,8 +118,17 @@ def test_tables_are_complete_and_stdlib_only():
     # different algorithm from ours' minibatch SGD), so off NVIDIA they race ours alone too.
     # FAIRNESS FIX (2026-10-13 audit): incremental-pca's opponents (cuML, scikit-learn) run a
     # different per-batch algorithm and are refused, so it races ours alone too.
-    assert alone == {"lion", "lamb", "sgd-clf", "sgd-reg", "incremental-pca"}
+    # FAIRNESS FIX (2026-10-13 audit, second pass): tree-shap refuses every opponent (a different
+    # model), and the lanes whose ours estimator is or nests the binned DecisionTree refuse
+    # scikit-learn's exact-threshold trees, so off NVIDIA (decision-tree-*) or everywhere they
+    # race ours alone too.
+    assert alone == {"lion", "lamb", "sgd-clf", "sgd-reg", "incremental-pca", "tree-shap",
+                     "decision-tree-clf", "decision-tree-reg", "bagging-clf", "bagging-reg",
+                     "adaboost-clf", "adaboost-reg", "voting-clf", "voting-reg",
+                     "stacking-clf", "stacking-reg"}
     assert any(w.startswith("cuml-gpu on incremental-pca: refused") for w in A.not_planned("nvidia"))
+    assert any(w.startswith("sklearn-cpu on bagging-clf: refused") for w in A.not_planned("apple"))
+    assert "xgboost-cpu" not in A.opponents("apple", "dart") and "lightgbm-cpu" in A.opponents("apple", "dart")
     assert any("Lion and LAMB" in w for w in A.not_planned("nvidia"))
     assert any(w.startswith("sklearn-cpu on sgd-clf: refused") for w in A.not_planned("amd"))
     code = ("import sys, importlib.util; sys.modules['numpy'] = None; "
@@ -169,11 +178,12 @@ def test_opponent_rosters():
     # FAIRNESS FIX (2026-10-13 audit): scikit-learn's per-sample SGD is refused (see LANES)
     assert nv["sgd-clf"] == ("cuml-gpu",)
     assert A.opponents("amd", "sgd-reg") == ()
-    assert nv["dart"] == ("lightgbm-cpu", "xgboost-cpu", "xgboost-gpu")
+    # FAIRNESS FIX (2026-10-13 audit, second pass): XGBoost's depth-wise DART is refused (see LANES)
+    assert nv["dart"] == ("lightgbm-cpu",)
     assert nv["ivf-pq"] == ("faiss-cpu", "cuvs-gpu")
     assert nv["pagerank"] == ("networkx-cpu", "cugraph-gpu")
     assert nv["lstm-clf"][0] == "torch-eager-fp32" and "torch-compile-tf32" in nv["lstm-clf"]
-    assert nv["dart-reg"] == ("lightgbm-cpu", "xgboost-cpu", "xgboost-gpu")
+    assert nv["dart-reg"] == ("lightgbm-cpu",)
     # FAIRNESS FIX (2026-10-13 audit): cuML AutoARIMA is float64 only and ours float32: refused
     assert nv["autoarima"] == ("statsforecast-cpu",)
     assert nv["gaussian-rp"] == nv["sparse-rp"] == ("sklearn-cpu", "cuml-gpu")

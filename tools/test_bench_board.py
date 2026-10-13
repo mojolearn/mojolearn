@@ -395,6 +395,40 @@ def test_opponent_pins_come_from_opponent_wheels_sh():
     assert len(bb.opponent_requirements("apple", pins)) == 1
 
 
+def test_fairness_fix_20261013_amd_installs_rocm_xgboost(monkeypatch):
+    """FAIRNESS FIX (2026-10-13 audit): on AMD the board installs AMD's ROCm build of the same
+    XGBoost release (amd_xgboost 3.2.0) from the index matching the box's ROCm, instead of PyPI's
+    CUDA wheel, and falls back to PyPI's xgboost when no index fits. Results raced before this
+    change were wrong for the AMD tree lanes; apply extra scrutiny."""
+    import tempfile
+    pins = bb.opponent_pins()
+    rocm = next(v for k, v in pins.items() if k.startswith("rocm-xgboost-"))
+    assert rocm[1] == ["amd_xgboost==3.2.0"] and rocm[0].startswith("https://pypi.amd.com/")
+    trees = next(v for k, v in pins.items() if k.startswith("trees-"))
+    assert "xgboost==3.2.0" in trees[1]           # the same release on every vendor
+    monkeypatch.delenv("MOJOLEARN_AMD_XGB_INDEX", raising=False)
+    with tempfile.TemporaryDirectory() as d:
+        f = os.path.join(d, "version")
+        for box, want in (("7.1.1-38", "rocm-7.1.1"), ("7.2.3", "rocm-7.2.3"),
+                          ("7.0.2-56", "rocm-7.0.2"), ("7.1.0", "rocm-7.0.2")):
+            with open(f, "w") as fh:
+                fh.write(box)
+            assert want in bb.amd_xgboost_index("DEFAULT", f), box
+        with open(f, "w") as fh:
+            fh.write("6.4.4")
+        assert bb.amd_xgboost_index("DEFAULT", f) is None
+        assert bb.amd_xgboost_index("DEFAULT", os.path.join(d, "missing")) == "DEFAULT"
+    monkeypatch.setattr(bb, "amd_xgboost_index", lambda default, *a: default)
+    groups = bb.opponent_requirements("amd", pins)
+    assert not any(r.startswith("xgboost==") for _, reqs in groups for r in reqs)
+    assert groups[-1] == (rocm[0], ["amd_xgboost==3.2.0"])
+    monkeypatch.setattr(bb, "amd_xgboost_index", lambda default, *a: None)
+    assert bb.opponent_requirements("amd", pins) == [trees]
+    assert bb.amd_xgboost_fallback(pins) == ["xgboost==3.2.0"]
+    for v in ("apple", "nvidia"):
+        assert bb.opponent_requirements(v, pins)[0] == trees
+
+
 def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     rc = bb.main(["--dry-run", "--vendor", "apple"] + env["base"])
     assert rc == 0

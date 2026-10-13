@@ -270,12 +270,12 @@ EXCEPTIONS = [
      "subsample 1.0"),
     ("gbdt-*", "boosting_type", "xgboost-*", "different vocabularies: ours and CatBoost 'Plain' "
      "(not Ordered), XGBoost booster 'gbtree'; both plain gradient boosting"),
-    ("gbdt-*", "boosting_type", "lightgbm-*", "different vocabularies: ours and CatBoost 'Plain' "
-     "(not Ordered), LightGBM 'gbdt'; both plain gradient boosting"),
-    ("gbdt-*", "min_child_weight", "lightgbm-*", "LightGBM 4.7.0 aborts a boosted tree at "
-     "min_child_weight 0 (best_split_info.left_count > 0) and keeps 1e-3; ours has no hessian floor"),
-    ("gbdt-*", "min_samples_leaf", "lightgbm-*", "LightGBM keeps min_child_samples 20 (it aborts at "
-     "the other arms' value); ours and CatBoost min_data_in_leaf 1"),
+    # FAIRNESS FIX (2026-10-13 audit, second pass): three LightGBM rows removed here
+    # (boosting_type, min_child_weight and min_samples_leaf on gbdt-*). They excused LightGBM
+    # racing min_child_samples 20 and min_child_weight 1e-3 against every other arm's 1 and 0,
+    # another stopping rule; every boosted LightGBM arm is now refused by name
+    # (tools/speed_gbdt_arm.py lightgbm_arms, lightgbm_rank_arms). Results raced before this
+    # change were wrong for these lanes; apply extra scrutiny.
     # FAIRNESS FIX (2026-10-13 audit): three rows removed here. ("gbdt-depthwise",
     # min_child_weight, *) excused ours' missing hessian floor while Depthwise ran Cosine on ours
     # against XGBoost's Newton L2 gain; Depthwise now scores NewtonL2 and ours takes
@@ -294,10 +294,12 @@ EXCEPTIONS = [
      "the symmetric grower it is unset (CatBoost has none; XGBoost gamma 0, LightGBM 0)")
     for lane in ("gbdt-symmetric*", "gbdt-rank-*", "gbdt-multiclass", "gbdt-ordered")
 ] + [
-    (lane, "grow_policy", "xgboost-*", "ours and CatBoost fit this loss on the symmetric grower "
-     "only; XGBoost has none and runs depthwise at the same depth")
-    for lane in ("gbdt-rank-*", "gbdt-multiclass")
-] + [
+    # FAIRNESS FIX (2026-10-13 audit, second pass): the (gbdt-rank-*, gbdt-multiclass,
+    # grow_policy, xgboost-*) rows are removed: they excused XGBoost racing depthwise trees
+    # against ours' symmetric ones, a different algorithm; those XGBoost arms are now refused by
+    # name (tools/speed_gbdt_arm.py xgboost_arms, xgboost_rank_arms). Results raced before this
+    # change were wrong for these lanes; apply extra scrutiny.
+
     ("rf", "max_leaves", "*", "no leaf cap on any arm: ours max_leaves -1 (cuML's sentinel), "
      "sklearn max_leaf_nodes None (a value would switch it to best-first growth), LightGBM "
      "num_leaves 65536 = 2 ** max_depth, never reached at depth 16"),

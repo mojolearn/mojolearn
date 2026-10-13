@@ -62,10 +62,20 @@ LIST_DIR="$ROOT/bench/results/dataset_store/groups"
 # cuvs-cu12 on pypi.nvidia.com at all (checked 2026-09-17: the index jumps
 # 26.6.0 -> 26.8.1), which is why `cuvs-cu12==26.8.0` in a leg resolves to
 # nothing. cuml-cu12 IS 26.8.0; the two packages are not released in lockstep.
+#
+# FAIRNESS FIX (2026-10-13 audit): on AMD the pinned PyPI xgboost 3.2.0 is a CUDA build, so
+# every AMD xgboost-gpu cell refused and XGBoost raced on the host CPU although XGBoost has an
+# AMD GPU path: a crippled opponent. AMD's ROCm build of the same release, amd_xgboost 3.2.0
+# (https://rocm.docs.amd.com/projects/xgboost/en/latest/install/install.html: MI300X, MI325X;
+# Python 3.10-3.12; Ubuntu 24.04; device='cuda' with tree_method='hist'), is the AMD set below.
+# Its index here is the default; tools/bench_board.py amd_xgboost_index picks the AMD index that
+# matches the box's /opt/rocm/.info/version (7.2.3, 7.1.1 or 7.0.2). Results raced before this
+# change were wrong for the AMD tree lanes; apply extra scrutiny.
 setspec() {
     printf '%s\n' \
 "trees-linux-x86_64-cp311	-	catboost==1.2.10 xgboost==3.2.0 lightgbm==4.7.0 scikit-learn==1.7.2" \
-"rapids-linux-x86_64-cp311	https://pypi.nvidia.com	cuml-cu12==26.8.0 cuvs-cu12==26.8.1"
+"rapids-linux-x86_64-cp311	https://pypi.nvidia.com	cuml-cu12==26.8.0 cuvs-cu12==26.8.1" \
+"rocm-xgboost-linux-x86_64-cp312	https://pypi.amd.com/rocm-7.1.1/simple	amd_xgboost==3.2.0"
 }
 
 # The interpreter and platform tags a set resolves for, derived from its name

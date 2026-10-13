@@ -173,6 +173,27 @@ def test_fairness_fix_20261013_tree_lane_settings():
             fn("gbdt-categorical", cat, types.SimpleNamespace(cat_idx=spec.TAXI_CAT_COLUMNS), ["gpu"])
 
 
+def test_fairness_fix_20261013_second_pass_refusals():
+    """FAIRNESS FIX (2026-10-13 audit, second pass): opponents that run another algorithm or
+    other settings than ours are refused by name before any import. Results raced before this
+    change were wrong for these lanes; apply extra scrutiny."""
+    plain = types.SimpleNamespace(cat_idx=None)
+    for lane in ("gbdt-lossguide", "gbdt-multiclass", "rf", "et"):
+        with pytest.raises(RuntimeError, match="MIN-CHILD|ROW-SAMPLING"):
+            spec.lightgbm_arms(lane, spec.lane_config(lane, "shipped"), plain, ["cpu"])
+    with pytest.raises(RuntimeError, match="DIFFERENT-GROWER"):
+        spec.xgboost_arms("gbdt-multiclass", spec.lane_config("gbdt-multiclass", "shipped"),
+                          plain, ["cpu"])
+    for lane in ("gbdt-rank-yetirank", "gbdt-rank-pairlogit"):
+        with pytest.raises(RuntimeError, match="DIFFERENT-ALGORITHM"):
+            spec.xgboost_rank_arms(lane, spec.lane_config(lane, "shipped"), None, ["cpu"])
+    with pytest.raises(RuntimeError, match="DIFFERENT-ALGORITHM"):
+        spec.lightgbm_rank_arms("gbdt-rank-yetirank", spec.lane_config("gbdt-rank-yetirank",
+                                                                       "shipped"), None, ["cpu"])
+    with pytest.raises(RuntimeError, match="DIFFERENT-ALGORITHM"):
+        spec.sklearn_forest_arm("rf", spec.lane_config("rf", "shipped"), plain)
+
+
 # --- quality functions -------------------------------------------------------
 
 def test_ndcg_matches_the_rank_driver():
@@ -371,5 +392,7 @@ def test_xgboost_gpu_refuses_without_the_vendor_backend(monkeypatch, capsys, ven
     assert "xgboost-cpu" in names
     assert ("xgboost-gpu" in names) is not refused
     assert ("FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu" in out) is refused
-    rarms = spec.xgboost_rank_arms("gbdt-rank-yetirank", {}, None, ["cpu", "gpu"])
-    assert ("xgboost-gpu" in [a.name for a in rarms]) is not refused
+    # FAIRNESS FIX (2026-10-13 audit): XGBRanker is refused by name on the ranking lanes
+    # (depthwise trees with LambdaMART or sampled pairs against oblivious YetiRank/PairLogit).
+    with pytest.raises(RuntimeError, match="DIFFERENT-ALGORITHM"):
+        spec.xgboost_rank_arms("gbdt-rank-yetirank", {}, None, ["cpu", "gpu"])

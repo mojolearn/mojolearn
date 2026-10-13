@@ -1749,6 +1749,12 @@ TASK_LANES = {
         objectives={"mojolearn": "YetiRank", "catboost": "YetiRank",
                     "xgboost": "rank:ndcg", "lightgbm": "lambdarank"},
         mismatches=(
+            # FAIRNESS FIX (2026-10-13 audit): the arms named below are refused by name in
+            # their builders. Results raced before this change were wrong for this lane;
+            # apply extra scrutiny.
+            "XGBoost and LightGBM are refused (2026-10-13 audit): depthwise or leaf-wise trees "
+            "with LambdaMART objectives are a different algorithm from YetiRank on oblivious "
+            "trees; CatBoost races",
             "grower: ours and CatBoost fit YetiRank on symmetric trees (ours has no other "
             "policy for a ranking loss); XGBoost depthwise at depth 6, LightGBM leaf-wise "
             "capped at depth 6 and 64 leaves, because neither has an oblivious grower",
@@ -1772,6 +1778,11 @@ TASK_LANES = {
         objectives={"mojolearn": "PairLogit", "catboost": "PairLogit",
                     "xgboost": "rank:pairwise"},
         mismatches=(
+            # FAIRNESS FIX (2026-10-13 audit): the arms named below are refused by name in
+            # their builders. Results raced before this change were wrong for this lane;
+            # apply extra scrutiny.
+            "XGBoost is refused (2026-10-13 audit): depthwise trees with sampled pairs are a "
+            "different algorithm from PairLogit over every pair on oblivious trees; CatBoost races",
             "grower: ours and CatBoost fit PairLogit on symmetric trees (ours has no other "
             "policy for a ranking loss); XGBoost depthwise at depth 6",
             "objective: XGBoost rank:pairwise is the same pairwise logistic loss, but it "
@@ -1788,6 +1799,12 @@ TASK_LANES = {
         objectives={"mojolearn": "MultiClass", "catboost": "MultiClass",
                     "xgboost": "multi:softprob", "lightgbm": "multiclass"},
         mismatches=(
+            # FAIRNESS FIX (2026-10-13 audit): the arms named below are refused by name in
+            # their builders. Results raced before this change were wrong for this lane;
+            # apply extra scrutiny.
+            "XGBoost and LightGBM are refused (2026-10-13 audit): one depthwise or leaf-wise tree "
+            "per class per round is a different model from one oblivious vector-leaf tree; "
+            "CatBoost races",
             "grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other "
             "policy for a multiclass loss); XGBoost depthwise at depth 8, LightGBM leaf-wise "
             "capped at depth 8 and 256 leaves, because neither has an oblivious grower",
@@ -2559,6 +2576,17 @@ def xgboost_arms(lane, cfg, data, devices):
             "CATEGORICAL-ALGORITHM: XGBoost's categorical split (partition search, or one-hot "
             "up to max_cat_to_onehot) is not the one-hot/CTR target statistics ours and CatBoost "
             "run on the declared columns; a different algorithm is not raced")
+    if cfg.get("grow_policy") == "SymmetricTree" and cfg.get("xgboost_grow_policy"):
+        # FAIRNESS FIX (2026-10-13 audit): on the symmetric task lanes (gbdt-multiclass) XGBoost
+        # raced its own depthwise grower, one tree PER CLASS per round, against ours' and
+        # CatBoost's one oblivious tree with a vector of class values per leaf: a different
+        # algorithm and a different model (taxi: 99,745 leaves against 128,000). XGBoost has no
+        # oblivious grower, so the arm is refused by name; CatBoost is the lane's opponent.
+        # Results raced before this change were wrong for this lane; apply extra scrutiny.
+        raise RuntimeError(
+            "DIFFERENT-GROWER: ours and CatBoost fit this loss on oblivious (symmetric) trees; "
+            "XGBoost has no symmetric grower and would race depthwise trees, one per class, "
+            "a different algorithm")
     import xgboost as xgb
 
     policy = cfg.get("xgboost_grow_policy") or {
@@ -2729,6 +2757,25 @@ def lightgbm_arms(lane, cfg, data, devices):
             "max_cat_to_onehot, else its gradient-sorted partition) is not the one-hot/CTR "
             "target statistics ours and CatBoost run on the declared columns; a different "
             "algorithm is not raced")
+    # FAIRNESS FIX (2026-10-13 audit): the remaining LightGBM arms raced other settings than
+    # ours. Boosted lanes: LightGBM 4.7.0 aborts a tree at the lanes' min_child_samples 1 and
+    # min_child_weight 0 (best_split_info.left_count > 0), so it ran its defaults 20 and 1e-3,
+    # a different stopping rule from every other arm (and, on the symmetric task lanes, leaf-wise
+    # trees per class against ours' oblivious trees). Forest lanes: its rf boosting refuses
+    # bagging_fraction 1.0, so each tree sampled 63.2% of rows WITHOUT replacement against ours'
+    # n draws with replacement (rf) or every row (et), with its own bin finder and one random bin
+    # threshold for et (taxi et: 66,043 leaves against ours' 881,399). Both are refused by name.
+    # Results raced before this change were wrong for these lanes; apply extra scrutiny.
+    if lane in ("rf", "et"):
+        raise RuntimeError(
+            "ROW-SAMPLING: LightGBM's rf boosting refuses bagging_fraction 1.0, so each tree would "
+            "sample 63.2%% of rows without replacement where ours %s; another sample is another "
+            "forest" % ("draws n rows with replacement" if lane == "rf" else "uses every row"))
+    raise RuntimeError(
+        "MIN-CHILD: LightGBM 4.7.0 aborts at the lane's min_child_samples 1 and min_child_weight 0, "
+        "and its defaults 20 and 1e-3 are another stopping rule than every other arm's; %s"
+        % ("it also has no oblivious grower for this loss" if cfg.get("lightgbm_leafwise")
+           else "the arm is not raced with other settings"))
     import lightgbm as lgb
 
     forest = lane in ("rf", "et")
@@ -2926,6 +2973,15 @@ def xgboost_rank_arms(lane, cfg, data, devices):
     """XGBRanker, the lane's closest objective (rank:ndcg beside YetiRank,
     rank:pairwise beside PairLogit), depthwise at the lane's depth
     (TASK_LANES mismatches)."""
+    # FAIRNESS FIX (2026-10-13 audit): XGBRanker raced depthwise trees with LambdaMART
+    # (rank:ndcg) or sampled pairs (rank:pairwise, lambdarank_pair_method at its default) against
+    # ours' and CatBoost's oblivious trees with YetiRank or PairLogit over every pair of a query:
+    # a different grower and a different objective. Refused by name; CatBoost is the lane's
+    # opponent. Results raced before this change were wrong for these lanes; apply extra scrutiny.
+    raise RuntimeError(
+        "DIFFERENT-ALGORITHM: ours and CatBoost fit %s on oblivious trees; XGBoost would race "
+        "depthwise trees with %s, a different grower and objective"
+        % (cfg.get("loss"), (cfg.get("objectives") or {}).get("xgboost")))
     import xgboost as xgb
 
     def make(device):
@@ -2966,6 +3022,14 @@ def lightgbm_rank_arms(lane, cfg, data, devices):
     (20 and 1e-3, as tools/speed_gbdt_rank.py leaves them): at 0 LightGBM
     4.7.0 aborts the first lambdarank tree ("Check failed:
     (best_split_info.left_count) > (0)", the Apple board smoke, 2026-09-26)."""
+    # FAIRNESS FIX (2026-10-13 audit): LGBMRanker raced lambdarank (NDCG-weighted LambdaMART) on
+    # leaf-wise trees at LightGBM's own min_child_samples 20 and min_child_weight 1e-3 against
+    # ours' and CatBoost's YetiRank on oblivious trees: a different objective, grower and stopping
+    # rule. Refused by name. Results raced before this change were wrong for this lane; apply
+    # extra scrutiny.
+    raise RuntimeError(
+        "DIFFERENT-ALGORITHM: ours and CatBoost fit YetiRank on oblivious trees; LightGBM would "
+        "race lambdarank on leaf-wise trees at min_child_samples 20, a different objective and grower")
     import lightgbm as lgb
 
     def make(device_type):
@@ -3050,6 +3114,17 @@ def sklearn_forest_arm(lane, cfg, data):
     default grows every tree until its leaves are pure, which is a different
     and far more expensive tree than cuML's depth-16 default, and comparing
     them would be comparing tree sizes."""
+    if lane == "rf":
+        # FAIRNESS FIX (2026-10-13 audit): DEVIATION 1834 said it outright: scikit-learn's
+        # RandomForest searches EXACT thresholds (it has no bin count) where ours and cuML split
+        # on 128 quantile bins, an algorithm difference (sorting every node's values against a
+        # histogram pass) recorded instead of corrected. A different algorithm is not raced:
+        # the arm is refused by name; ExtraTrees (et), where both draw a uniform random threshold,
+        # still races scikit-learn. Results raced before this change were wrong for this lane;
+        # apply extra scrutiny.
+        raise RuntimeError(
+            "DIFFERENT-ALGORITHM: scikit-learn's RandomForest searches exact thresholds; ours "
+            "splits on %d quantile bins per feature (cuML's algorithm)" % cfg["n_bins"])
     import sklearn.ensemble as sken
 
     common = dict(

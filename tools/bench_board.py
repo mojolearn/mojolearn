@@ -174,9 +174,12 @@ TREE_OPPONENTS = {
     },
     # AMD (CONTRIBUTING.md, comparing against libraries without a GPU path):
     # a library with an AMD GPU path runs on the GPU, one without runs on this
-    # box's CPU on every core. xgboost-gpu needs a ROCm build of XGBoost; the
-    # pinned PyPI wheel is CUDA, so that arm refuses by name unless the image
-    # carries one, and xgboost-cpu stands beside it.
+    # box's CPU on every core. xgboost-gpu needs a ROCm build of XGBoost.
+    # FAIRNESS FIX (2026-10-13 audit): the board now installs AMD's ROCm build
+    # amd_xgboost 3.2.0 on AMD (opponent_requirements), so xgboost-gpu races on
+    # the GPU; before, the pinned PyPI CUDA wheel made it refuse and XGBoost raced
+    # only on the host CPU (a crippled opponent). Results raced before this change
+    # were wrong for the AMD tree lanes; apply extra scrutiny.
     "amd": {
         "gbdt-symmetric": ("catboost-cpu",),
         "gbdt-symmetric-1000": ("catboost-cpu",),
@@ -755,13 +758,70 @@ def opponent_pins(path=None):
     return out
 
 
+#: FAIRNESS FIX (2026-10-13 audit): the pypi.amd.com indexes that publish amd_xgboost 3.2.0 (AMD's
+#: ROCm build of the release NVIDIA races, rocm.docs.amd.com/projects/xgboost install page),
+#: newest first. Results raced before this change were wrong for the AMD tree lanes; apply extra
+#: scrutiny.
+AMD_XGB_ROCM_INDEXES = ("7.2.3", "7.1.1", "7.0.2")
+
+
+def _version_tuple(text):
+    m = re.match(r"\s*(\d+)\.(\d+)(?:\.(\d+))?", text or "")
+    return tuple(int(g or 0) for g in m.groups()) if m else None
+
+
+def amd_xgboost_index(default, version_file="/opt/rocm/.info/version"):
+    """The pypi.amd.com index whose amd_xgboost matches this box's ROCm: the newest of
+    AMD_XGB_ROCM_INDEXES at or below the box's version, `default` when the version cannot be
+    read, None when the box's ROCm is older than every index (no amd_xgboost 3.2.0 for it).
+    MOJOLEARN_AMD_XGB_INDEX overrides.
+
+    FAIRNESS FIX (2026-10-13 audit): see AMD_XGB_ROCM_INDEXES. Results raced before this
+    change were wrong for the AMD tree lanes; apply extra scrutiny."""
+    over = os.environ.get("MOJOLEARN_AMD_XGB_INDEX", "").strip()
+    if over:
+        return over
+    try:
+        with open(version_file) as fh:
+            box = _version_tuple(fh.read())
+    except OSError:
+        box = None
+    if box is None:
+        return default
+    for v in AMD_XGB_ROCM_INDEXES:
+        if _version_tuple(v) <= box:
+            return "https://pypi.amd.com/rocm-%s/simple" % v
+    return None
+
+
+def amd_xgboost_fallback(pins):
+    """The PyPI xgboost pin installed when amd_xgboost cannot be: its CPU arm still races and
+    its GPU arm refuses by name (NO ROCm BUILD, speed_gbdt_arm._xgb_gpu_refusal)."""
+    trees = next((v for k, v in pins.items() if k.startswith("trees-")), None)
+    return [r for r in (trees[1] if trees else []) if r.lower().startswith("xgboost==")]
+
+
 def opponent_requirements(vendor, pins):
-    """[(extra index or None, [reqs])] to install for this vendor."""
+    """[(extra index or None, [reqs])] to install for this vendor.
+
+    FAIRNESS FIX (2026-10-13 audit): on AMD, XGBoost is AMD's ROCm build amd_xgboost (the
+    rocm-xgboost-* set of tools/opponent_wheels.sh, the same 3.2.0 release, from the index
+    matching the box's ROCm) instead of PyPI's CUDA xgboost, so the AMD xgboost-gpu arm races on
+    the GPU with the same pinned settings as on NVIDIA (device='cuda' is also ROCm's device
+    string). Results raced before this change were wrong for the AMD tree lanes; apply extra
+    scrutiny."""
     trees = next((v for k, v in pins.items() if k.startswith("trees-")), None)
     rapids = next((v for k, v in pins.items() if k.startswith("rapids-")), None)
+    rocm_xgb = next((v for k, v in pins.items() if k.startswith("rocm-xgboost-")), None)
     groups = []
     if trees:
-        groups.append(trees)
+        idx = amd_xgboost_index(rocm_xgb[0]) if (vendor == "amd" and rocm_xgb) else None
+        if idx:
+            groups.append((trees[0], [r for r in trees[1]
+                                      if not r.lower().startswith("xgboost==")]))
+            groups.append((idx, list(rocm_xgb[1])))
+        else:
+            groups.append(trees)
     if vendor == "nvidia" and rapids:
         groups.append(rapids)
     return groups
@@ -1131,6 +1191,19 @@ def setup_python(args, vendor, out, log):
         if rc != 0:
             print("bench_board: opponent install rc %d for %s (their arms will refuse by name)"
                   % (rc, " ".join(reqs)), flush=True)
+            # FAIRNESS FIX (2026-10-13 audit): when AMD's ROCm build cannot install, PyPI's
+            # xgboost still gives the CPU arm, and the GPU arm refuses by name (NO ROCm BUILD).
+            # Results raced before this change were wrong for the AMD tree lanes; apply extra
+            # scrutiny.
+            fallback = (amd_xgboost_fallback(opponent_pins())
+                        if any(r.lower().startswith("amd_xgboost") for r in reqs) else [])
+            if fallback:
+                fcmd = list(pip)
+                if args.opponent_wheels:
+                    fcmd += ["--no-index", "--find-links", os.path.abspath(args.opponent_wheels)]
+                if run_logged(fcmd + fallback, None, log, 3600) != 0:
+                    print("bench_board: fallback install of %s failed too (the XGBoost arms will "
+                          "refuse by name)" % " ".join(fallback), flush=True)
     if "classical2" in (args.families or ""):
         cmd = list(pip)
         if args.opponent_wheels:
@@ -2943,7 +3016,9 @@ def render_board(result):
     for k, v in rows:
         L.append("| %s | %s |" % (k, _f(v)))
     pk = box.get("packages") or {}
-    opp = ["catboost", "xgboost", "lightgbm", "scikit-learn", "cuml-cu12", "cuvs-cu12", "torch",
+    # FAIRNESS FIX (2026-10-13 audit): AMD's ROCm XGBoost is the distribution amd-xgboost
+    opp = ["catboost", "xgboost", "amd-xgboost", "amd_xgboost", "lightgbm", "scikit-learn",
+           "cuml-cu12", "cuvs-cu12", "torch",
            "umap-learn", "pynndescent", "numba", "statsmodels", "faiss-cpu", "numpy"]
     L.append("| opponent versions | %s |" % ", ".join(
         "%s %s" % (p, pk[p]) for p in opp if p in pk) or "-")
