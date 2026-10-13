@@ -2,18 +2,27 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## Unreleased
+## 0.8.44 (published 2026-10-13)
 
+- Gradient boosting with `grow_policy="Lossguide"` (and any fit where `max_leaves` is below `2**max_depth`) no longer
+  writes past a host buffer when it reads leaf statistics back from the GPU. On Apple this could crash the process
+  intermittently.
+- Two-level feature-frequency boosting computes the correct leaf values on NVIDIA, AMD and the CPU: the leaf step read
+  per-row statistics at the wrong position after the rows were reordered. Apple was already correct; all four now agree.
+- `eigh` on the CPU uses the same tridiagonal solver as the GPU from 64 columns up, so KernelPCA, FastICA, factor
+  rotations, FactorAnalysis and MinCovDet give the same bits on the CPU and the GPU. The tridiagonal solver flushes
+  subnormal values the same way on every device.
+- `python -m mojolearn verify --all` records a check whose worker crashes and continues with the rest, instead of
+  stopping the whole run. The run still reports the crash and exits non-zero.
+- Verification covers `eigh` and its consumers at 72 and 128 columns.
 - The `deterministic` numeric mode has been removed; use `identical`.
 - `mojolearn doctor` recognizes the published Linux wheels: it lists the installed `mojolearn-nvidia` and
   `mojolearn-amd` packages and their GPU architecture sets, and reports whether the backend loaded instead of
   saying no Linux wheel is published.
-
 - Correct the IDENTICAL verifier: Apple, NVIDIA and AMD must use the same reference hashes.
   Remove the Apple-only lookup introduced in 0.8.43 and restore Apple participation in reference
   conflicts and corroboration. Apple FAST has no identity promise; it does not exempt IDENTICAL.
-  This corrects verification and the documented contract, not numerical kernels: the known 72
-  Apple feature-frequency differences remain failures pending numerical repair.
+  This corrects verification and the documented contract.
 
 ## 0.8.43 (published 2026-10-13)
 
