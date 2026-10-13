@@ -1,6 +1,6 @@
 # mojolearn 0.8.43
 
-Source commit b99b0900e457fa5f2205384e3985f7433d704d5a; release tooling at 7b4d384fe5b82a8fd84befbe47e03023b158aee7. Published 2026-10-13. See CHANGELOG.md.
+Source commit b99b0900e457fa5f2205384e3985f7433d704d5a; release tooling at a5ff8ab573edc33b771e0378e1b782b19caa7aa0. Published 2026-10-13. See CHANGELOG.md.
 
 ## Identity
 
