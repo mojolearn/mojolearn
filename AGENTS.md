@@ -42,8 +42,8 @@ toolchain internals, or ship unsupported build modes. Record the ask for Modular
 No dispatch, tile, threshold, cap or route rule may key on an exact benchmark dimension, a size chosen to sit just above or
 below a board row (rows, features, classes, k, vocabulary), or a board dataset name. This applies to FAST and to IDENTICAL on
 every vendor. A rule must come from size, hardware or cost reasoning that covers neighboring shapes, stated in a comment.
-In IDENTICAL, removing such a rule may change bits: that is allowed, because bits only have to match across NVIDIA and
-AMD within one version, never across versions (Andrew, 2026-10-07: identity across the two GPU vendors only). Change all columns together. Each removal gets an
+In IDENTICAL, removing such a rule may change bits: that is allowed, because bits must match across Apple, NVIDIA and
+AMD within one version, never across versions (Andrew, 2026-10-13, supersedes the 2026-10-07 vendor exception). Change all columns together. Each removal gets an
 A/B with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.
 
 ## Measurement process (owner, 2026-10-05)
@@ -74,7 +74,9 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 2. IDENTICAL switches are decided by NVIDIA and AMD together: the verdict is the AVERAGE of the two vendors' ratios against the
    average noise floor (Andrew, 2026-10-08: "the average of the two must be better"); a vendor pulling the other way is flagged
    on the cell (vendor split) but does not block the average. Apple never votes on IDENTICAL switches and IDENTICAL is never
-   tuned for Apple; Apple digests are recorded but not required to match (2026-10-07).
+   tuned for Apple. This performance voting rule does not relax correctness: Apple IDENTICAL hashes MUST match
+   NVIDIA and AMD within the same release (Andrew, 2026-10-13). Apple FAST has no cross-vendor identity promise.
+   Never accept a separate Apple reference to turn an IDENTICAL mismatch into a pass.
 3. Measure IDENTICAL on NVIDIA, AMD and Apple and update every board (main board included) as results land, through the
    board tools only. A full-board run is IDENTICAL on the three; FAST is not rerun.
 4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.

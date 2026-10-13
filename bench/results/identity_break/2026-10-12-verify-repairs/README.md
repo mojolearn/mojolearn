@@ -1,5 +1,13 @@
 # Published-wheel verification repairs
 
+**Correction, 2026-10-13:** the Apple-only reference policy used in this report was
+incorrect. IDENTICAL requires Apple, NVIDIA and AMD to match the same hashes;
+Apple FAST is separate. The 72 feature-frequency differences accepted below are
+unresolved numerical failures, not repaired cross-vendor identity. The corrected
+verifier reports all 72 as DIVERGENT. Original reports and counts are retained as
+historical evidence of the affected verifier. The neural cross-vendor comparison
+below remains valid because its actual hashes agreed across all three vendors.
+
 Source repair: `87e6005eaad08b3f67a25d4e344a555bb2590e7e`. The starting installation
 was PyPI `mojolearn==0.8.42`, source witness
 `0db362a62516faef0a52b112e93f7cba5e212a2b`. Native binaries were reused unchanged;

@@ -158,10 +158,10 @@ def test_build_table_newest_wins_and_same_commit_disagreement_is_a_conflict(tmp_
     table = vref.build_table([str(d / n) for n in files], H, str(tmp_path))
     a = table["cells"]["lane-a/base"]["train"]
     assert a["ref"] == "1111111111111111" and set(a["cols"]) == {"apple", "nvidia"}, "a sabotage file must never be admitted"
-    # Apple is recorded, never required (identity is NVIDIA and AMD only): an
-    # Apple column that disagrees is kept as its own value, not a conflict.
+    # Apple has the same identity requirement as NVIDIA and AMD: a different
+    # Apple result at the same commit is a conflict, never another pass.
     b = table["cells"]["lane-b/base"]["train"]
-    assert not b.get("conflict") and b["ref"] == "6666666666666666"
+    assert b.get("conflict") and b["ref"] is None
     assert b["cols"]["apple"][1] == "5555555555555555"
     # Two GPU vendors that disagree at one commit ARE a conflict.
     c = table["cells"]["lane-c/base"]["train"]

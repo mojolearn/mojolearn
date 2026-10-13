@@ -100,7 +100,7 @@ the table by family.
 
 | mode | contract |
 |---|---|
-| `identical` | The same bits on NVIDIA and AMD GPUs (the release requirement); Apple GPU and CPU results are recorded beside them. |
+| `identical` | The same bits on Apple, NVIDIA and AMD GPUs within one release. Apple FAST is a separate mode and does not relax this requirement. |
 | `deterministic` | The same bits on repeated runs on one device. |
 | `fast` | Apple GPUs only: throughput, with no repeatability promise. |
 

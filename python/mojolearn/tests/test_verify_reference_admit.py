@@ -430,7 +430,7 @@ def test_partial_fit_name_exception_cannot_hide_partial_or_bad_evidence(broken):
 
 # THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag). A record
 # labelled nvidia-ptx-<gpu>-sm80 is the `ptx` device class; it is judged against
-# the NVIDIA == AMD reference and never decides or corroborates one.
+# the Apple == NVIDIA == AMD reference and never decides or corroborates one.
 
 def test_a_ptx_label_is_the_ptx_device_class():
     assert vref.PTX_CLASS in vref.CLASSES
@@ -486,21 +486,20 @@ def test_a_differing_ptx_value_is_listed_and_the_reference_stays(tmp_path, monke
         [('x/base', 'train', 'b'*16, 'a'*16)]
 
 
-def test_apple_difference_is_recorded_without_invalidating_gpu_pair(tmp_path, monkeypatch):
+def test_apple_difference_cannot_be_admitted_as_an_alternative_reference(tmp_path, monkeypatch):
     table = _ptx_table(tmp_path, monkeypatch, [
         ('amd', 'amd-test', 'a' * 16), ('nvidia', 'nvidia-test', 'a' * 16),
         ('zz-apple', 'apple-test', 'b' * 16)])
-    shared = table['cells']['x/base']['train']
-    assert shared['ref'] == 'a' * 16 and not shared.get('conflict')
-    assert vref.entry(table, 'x', 'base', 'train', device_class='apple')['ref'] == 'b' * 16
-    assert vref.judge('b' * 16, shared)[0] == 'DIVERGENT'
+    # The newest Apple value has no independent corroboration. It cannot
+    # become a passing Apple-only reference, even when NVIDIA and AMD agree.
+    assert not table['cells']
 
 
 @pytest.mark.parametrize('other', ['apple', 'cpu'])
-def test_other_class_cannot_corroborate_single_nvidia_sample(tmp_path, monkeypatch, other):
+def test_other_native_class_can_corroborate_single_nvidia_sample(tmp_path, monkeypatch, other):
     table = _ptx_table(tmp_path, monkeypatch, [
         ('nvidia', 'nvidia-test', 'a' * 16), (other, other + '-test', 'a' * 16)])
-    assert not table['cells']
+    assert table['cells']['x/base']['train']['ref'] == 'a' * 16
 
 
 @pytest.mark.parametrize('columns', [

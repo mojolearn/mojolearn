@@ -25,9 +25,9 @@ so the cell reads OWED until a record at the new revision is committed.
 WHICH HASH WINS. Lanes change: a fix moves a hash and only some vendors are
 re-recorded before the next release record. So per cell, part and device
 class the NEWEST admitted column wins (commit time, then record directory,
-then file name). NVIDIA and AMD decide the shared GPU reference; Apple keeps
-its own regression reference and cannot invalidate their agreement. Legacy
-host-only cells retain their existing admission rules. A deciding class whose
+then file name). Apple, NVIDIA and AMD use one shared GPU reference. Apple
+has no separate acceptable IDENTICAL hash. Legacy host-only cells retain
+their existing admission rules. A deciding class whose
 newest value differs from it at an OLDER commit is kept as `superseded`
 (the record moved on and that class was not re-recorded); a class that
 differs at the SAME commit is a disagreement inside the record itself, and
@@ -76,9 +76,9 @@ CLASSES = ("apple", "nvidia", "amd", "cpu", "ptx")
 #: THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag): the
 #: NVIDIA PTX set (mojolearn-nvidia's cuda_ptx/sm_80) recorded on an NVIDIA box,
 #: labelled `nvidia-ptx-<gpu>-sm80`. It is judged against the reference and
-#: never decides one: the reference is NVIDIA == AMD, and a PTX value that
+#: never decides one: the reference is Apple == NVIDIA == AMD, and a PTX value that
 #: differs is listed (`ptx_divergent`) as a bug to fix, never a conflict that
-#: would take the cell from the NVIDIA and AMD users.
+#: would take the cell from the native GPU users.
 PTX_CLASS = "ptx"
 
 #: what `mojolearn.vendor()` reads back, as a device class of the table
@@ -155,16 +155,8 @@ def entry(table, lane, fixture, part, device_class=None):
     """The table entry of one cell part, or None when no record has it."""
     cell = table["cells"].get(f"{lane}/{fixture}")
     ent = None if cell is None else cell.get(part)
-    if ent and device_class == "apple":
-        # IDENTICAL requires NVIDIA == AMD within a version. Apple keeps
-        # its own recorded regression values; it neither votes on nor has
-        # to match that pair (owner, 2026-10-07). A missing Apple observation
-        # is still owed, never an interchangeable second acceptable hash.
-        own = ent.get("cols", {}).get("apple")
-        if own is None:
-            return None
-        index, value = (own, ent.get("ref")) if isinstance(own, int) else own
-        return dict(ref=value, cols={"apple": index}, reference_scope="apple")
+    # IDENTICAL means one expected hash on Apple, NVIDIA and AMD. A retained
+    # Apple observation is evidence, never an alternative passing answer.
     if not ent or part != "model" or device_class not in ("cpu", "apple", "nvidia", "amd", "ptx"):
         return ent
     # These CPU lanes load the GPU's saved file; they do not write a model.
@@ -182,7 +174,7 @@ def entry(table, lane, fixture, part, device_class=None):
         return ent
     if device_class == "cpu":
         return dict(ref=cpu_na, cols={"cpu": cpu[0]})
-    gpu = {cls: value for cls, value in values.items() if cls in ("nvidia", "amd", "ptx")}
+    gpu = {cls: value for cls, value in values.items() if cls in ("apple", "nvidia", "amd", "ptx")}
     hashes = {value for _, value in gpu.values()}
     if not gpu or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{16}", value)
                       for value in hashes):
@@ -561,7 +553,8 @@ def _corroborated(by_cls, ref):
     """Two witnesses of `ref`: two device classes, or one class fitted twice."""
     # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a
     # reason to rerun. Records are taken at --repeats 1, so the witness that
-    # admits a reference is a second device class (NVIDIA == AMD); "one class
+    # admits a reference is a second device class; Apple participates in the
+    # same identity contract as NVIDIA and AMD. "One class
     # fitted twice" stays readable only for the older two-sample records.
     if ref.startswith("n/a:"):
         return True          # a declaration the harness makes, not a measurement
@@ -705,13 +698,9 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
     for (cell_key, part, cls), won in best.items():
         grouped.setdefault((cell_key, part), {})[cls] = won
     def deciding(g):
-        # The PTX column never decides a reference (PTX_CLASS): only the
-        # device classes the identity rule names do, NVIDIA == AMD.
-        paired = {c: w for c, w in g.items() if c in ("nvidia", "amd")}
-        # Preserve host-only/legacy reference coverage when neither GPU
-        # vendor has a column. Apple observations still live in cols, but
-        # cannot replace or invalidate a NVIDIA/AMD reference.
-        return paired or {c: w for c, w in g.items() if c != PTX_CLASS}
+        # Apple is a full participant in IDENTICAL, including conflict and
+        # corroboration checks. PTX keeps its separate codegen evidence role.
+        return {c: w for c, w in g.items() if c != PTX_CLASS}
 
     def newest(g):
         return max(g, key=lambda c: g[c][0])
