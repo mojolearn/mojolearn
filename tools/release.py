@@ -69,13 +69,10 @@ THE STEPS
                      freeze HEAD (the tree must be clean and pushed). Once
                      frozen, the four freeze steps only check the frozen source
   rehearsal          pixi run release-rehearsal in the source checkout, logs kept
-  cross-compile      (core-linux, beside the rehearsal) dispatch
-                     .github/workflows/cross-compile-check.yml on the frozen
-                     commit against the previous release's source commit and
-                     wait: every changed Linux GPU binding x tier x arch
-                     compiled on GitHub's free runners in parallel. Any FAIL,
-                     TIMEOUT, STALLED or MISSING job stops the Linux pipelines
-                     by name before linux-builds rents a box
+  cross-compile      SKIPPED since 2026-10-13 (one-line message; Release.RUN_CROSS_COMPILE):
+                     GitHub's runners have no GPU, so it only caught compile errors the
+                     NVIDIA/AMD build legs hit within minutes; still a manual tool
+                     (tools/cross_compile_check.py, .github/workflows/cross-compile-check.yml)
   reuse-plan         tools/release_reuse.py: for every binding of every set
                      (cuda sm_89, the cuda sm_80 PTX slot, hip gfx942, the host bindings,
                      the runtime closure, the macOS wheel) REUSE the bytes the
@@ -752,8 +749,12 @@ STEP_TABLE = [
     ("freeze-commit", "common", ["freeze-docs-facts"], None),
     ("rehearsal", "common", ["freeze-commit"], None),
     ("reuse-plan", "common", ["rehearsal"], None),
+    # cross-compile is skipped with a one-line message (Release.RUN_CROSS_COMPILE): GitHub's free runners have
+    # no GPU, so it only catches NVIDIA/AMD-only compile errors and never checks bits; the release's own
+    # NVIDIA/AMD build legs hit the same error within minutes on a $1-4/h box (Andrew, 2026-10-13). So
+    # linux-builds no longer needs it.
     ("cross-compile", "core-linux", ["freeze-commit"], None),
-    ("linux-builds", "core-linux", ["reuse-plan", "cross-compile"], None),
+    ("linux-builds", "core-linux", ["reuse-plan"], None),
     ("macos-build", "macos", ["reuse-plan"], "mac"),
     ("macos-smoke", "macos", ["macos-build"], "mac"),
     # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
@@ -786,7 +787,8 @@ PIPELINES = {
                   publish="publish-macos",
                   platform="macos"),
     "core-linux": dict(builds=["linux-builds", "linux-wait", "linux-assemble", "linux-pack"],
-                       checks=["cross-compile"], publish="publish-core-linux", platform="linux"),
+                       # no "cross-compile" check: the step is skipped in the release (Release.RUN_CROSS_COMPILE)
+                       checks=[], publish="publish-core-linux", platform="linux"),
     "nvidia": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-nvidia", platform="nvidia"),
     "amd": dict(builds=[], checks=["gpu-column-amd"], publish="publish-amd", platform="amd"),
 }
@@ -1277,6 +1279,11 @@ class Release:
         return "PASS, logs " + str(work)
 
     # ------------------------------------------------------------ cross-compile (GitHub)
+    # NOT RUN IN THE RELEASE (Andrew, 2026-10-13): GitHub's free runners have no GPU, so this step only
+    # catches NVIDIA/AMD-only compile errors and never checks bits; the release's own NVIDIA/AMD build
+    # legs hit the same compile error within minutes on a $1-4/h box, so the extra step and wait per
+    # release aren't worth it. The code stays as a manual tool; RUN_CROSS_COMPILE = True turns it back on.
+    RUN_CROSS_COMPILE = False
     XCC_WORKFLOW = "cross-compile-check.yml"
     # sm_90a out for 0.8.37 (gpu_plugins.py); sm_80 is the PTX slot, compiled like any arch
     # (Andrew 2026-10-10: PTX is a normal target; no flag).
@@ -1307,7 +1314,13 @@ class Release:
         """CROSS-COMPILE ON GITHUB, RELEASE ONLY. The frozen commit's changed
         Linux GPU bindings, every tier and arch, each on its own free runner;
         diffed against the previous release's source commit (the reuse plan's
-        base). Refuses when there is no such commit: it never widens."""
+        base). Refuses when there is no such commit: it never widens.
+        Skipped unless RUN_CROSS_COMPILE (see the comment above it)."""
+        if not self.RUN_CROSS_COMPILE:
+            # no GPU on GitHub's runners: compile-only, no bits; the NVIDIA/AMD build legs hit the same
+            # compile error within minutes (Andrew, 2026-10-13)
+            return ("SKIPPED: not run in the release (no GPU on GitHub's runners, compile-only; the NVIDIA/AMD "
+                    "build legs catch the same compile errors)")
         prev = release_reuse.previous_release() or {}
         base = prev.get("source_commit")
         if not base:
