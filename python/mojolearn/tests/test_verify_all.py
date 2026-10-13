@@ -127,7 +127,7 @@ def _column(vendor, commit, cells, fixtures):
 
 def test_build_table_newest_wins_and_same_commit_disagreement_is_a_conflict(tmp_path):
     class H:
-        LANES = {"lane-a": None, "lane-b": None}
+        LANES = {"lane-a": None, "lane-b": None, "lane-c": None}
         FIXTURES = ["base"]
         __file__ = __file__
 
@@ -149,7 +149,8 @@ def test_build_table_newest_wins_and_same_commit_disagreement_is_a_conflict(tmp_
     d.mkdir(parents=True)
     files = {
         "apple-m4.json": _column("apple-m4", "a" * 40, {"lane-a/base": stable("1111111111111111"), "lane-b/base": stable("5555555555555555")}, fx),
-        "nvidia-h100.json": _column("nvidia-h100", "a" * 40, {"lane-a/base": stable("1111111111111111"), "lane-b/base": stable("6666666666666666")}, fx),
+        "nvidia-h100.json": _column("nvidia-h100", "a" * 40, {"lane-a/base": stable("1111111111111111"), "lane-b/base": stable("6666666666666666"), "lane-c/base": stable("7777777777777777")}, fx),
+        "amd-mi325x.json": _column("amd-mi325x", "a" * 40, {"lane-c/base": stable("8888888888888888")}, fx),
         "amd-mi300x.sabotage.json": _column("amd-mi300x", "a" * 40, {"lane-a/base": stable("ffffffffffffffff")}, fx),
     }
     for name, body in files.items():
@@ -157,8 +158,14 @@ def test_build_table_newest_wins_and_same_commit_disagreement_is_a_conflict(tmp_
     table = vref.build_table([str(d / n) for n in files], H, str(tmp_path))
     a = table["cells"]["lane-a/base"]["train"]
     assert a["ref"] == "1111111111111111" and set(a["cols"]) == {"apple", "nvidia"}, "a sabotage file must never be admitted"
+    # Apple is recorded, never required (identity is NVIDIA and AMD only): an
+    # Apple column that disagrees is kept as its own value, not a conflict.
     b = table["cells"]["lane-b/base"]["train"]
-    assert b.get("conflict") and b["ref"] is None
+    assert not b.get("conflict") and b["ref"] == "6666666666666666"
+    assert b["cols"]["apple"][1] == "5555555555555555"
+    # Two GPU vendors that disagree at one commit ARE a conflict.
+    c = table["cells"]["lane-c/base"]["train"]
+    assert c.get("conflict") and c["ref"] is None
     assert table["cells"]["lane-a/base"]["infer"]["ref"] == "n/a:function"
 
 
@@ -1003,6 +1010,11 @@ def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
 #: mamba2-dtlimit was re-recorded at its corrected clamp on 2026-09-17;
 #: see identity_break/2026-09-17_cpu-mamba2-completion/cpu-mac-clean.json.
 #:
+#: SIX MOVED ON 2026-10-12 (fa2fe4ff3, neural references refreshed from the
+#: NVIDIA, AMD and Apple records, which agree): the mamba and samba stepfull
+#: refs below are those columns' bits; the CPU column keeps its old value as a
+#: separate, recorded-not-required column.
+#:
 #: FOUR OF THESE MOVED ON 2026-09-17 (lane/reference-regen) and the reason is
 #: the fixture, not the arithmetic: `transformer`, `transformer-window` and
 #: `mamba3` are at `norms-near-one-1` (their two same-shape RMSNorm weights
@@ -1017,12 +1029,12 @@ def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
 STEPFULL_LANES = {
     "transformer": "5b8c0b041a329128",
     "transformer-window": "787dac866cd00329",
-    "mamba1": "f582474b00117f8e",
-    "mamba2": "bfd516aa93fe1b12",
-    "mamba2-dtlimit": "6cefffbc50e10b84",
-    "mamba3": "c1eb221a7da85e5d",
-    "samba": "e9c89afd1eb7f273",
-    "samba-untied-dropout-accum": "dd836479c7307500",
+    "mamba1": "6e21208f557bb185",
+    "mamba2": "c0c30ec2f1a45a88",
+    "mamba2-dtlimit": "276422ada7a5be99",
+    "mamba3": "e30df96eef191869",
+    "samba": "6769e357ec578a6e",
+    "samba-untied-dropout-accum": "628a553365f27edb",
 }
 
 
