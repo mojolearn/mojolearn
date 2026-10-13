@@ -9,8 +9,8 @@ The same machine-learning workload can produce different bits on different
 GPUs, changing predictions, learned models and subsequent training updates.
 mojolearn is a GPU machine-learning library whose default mode is **identical**.
 In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
-Its x86-64 Linux and Apple silicon CPU bindings give the same bits too. Results agree
-bit for bit, not merely within a numerical tolerance.
+Its x86-64 and Arm CPU bindings give the same bits too. Results agree bit for bit,
+not merely within a numerical tolerance.
 
 - **Training and inference for transformers and hybrids.** Decoder language
   models, Mamba-1/2/3 state-space models and Samba attention/state-space
@@ -251,5 +251,3 @@ license; see [NOTICE](NOTICE).
 
 To cite mojolearn, use [CITATION.cff](CITATION.cff). The concept DOI is
 [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632).
-The paper, *Bitwise-Identical Machine Learning Across Metal, CUDA, and HIP*, is at
-[mojolearn.org/paper.pdf](https://mojolearn.org/paper.pdf).

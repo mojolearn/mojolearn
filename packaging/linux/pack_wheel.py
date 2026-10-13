@@ -590,8 +590,6 @@ def plugin_project(proj, vendor, version, arches):
     row = gpu_plugins.package(vendor)
     out = {k: proj[k] for k in ("authors", "maintainers", "license", "urls", "keywords",
                                 "classifiers", "requires-python", "license-files") if k in proj}
-    # A vendor wheel is Linux-only: drop the core's macOS classifier from it.
-    out["classifiers"] = [c for c in out.get("classifiers", []) if not c.startswith("Operating System :: MacOS")]  # glue: metadata filter
     out.update(name=row["distribution"], version=version,
                description=(f"{row['label']} GPU binaries for mojolearn {version} "
                             f"({', '.join(sorted(arches))}); installed by pip install mojolearn"),
@@ -1016,9 +1014,7 @@ def main(argv=None, _gates=True):
     if proj["version"] != version:
         raise SystemExit(f"pack_wheel: pyproject says {proj['version']}, "
                          f"_version.py says {version}")
-    # Relative repository links resolve to nothing on PyPI; tools/pypi_readme.py makes them absolute.
-    from pypi_readme import pypi_readme  # noqa: E402  (tools/ is on sys.path above)
-    readme = pypi_readme((REPO / "README.md").read_text())
+    readme = (REPO / "README.md").read_text()
 
     witnesses = host_witnesses(a.set)
     sets = [t for s in a.set for t in load_set(s, include_byte_lm=strict, host_witnesses_by_name=witnesses)]

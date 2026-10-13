@@ -65,7 +65,7 @@ fails on that line, not at a later `fit`.
 Estimators that take `numeric_mode=` include `RandomForestClassifier`, `RandomForestRegressor`,
 `ExtraTreesClassifier`, `ExtraTreesRegressor`, `DecisionTreeClassifier`, `GradientBoostingClassifier`,
 `GradientBoostingRegressor`, `StandardScaler`, `MinMaxScaler`, `MLPClassifier` and the sequence and
-time-series estimators except `ExponentialSmoothing` and `AutoARIMA`, which always use the process mode. Check an estimator's signature in the [API reference](../api/index.rst).
+time-series estimators. Check an estimator's signature in the [API reference](../api/index.rst).
 The default `numeric_mode=None` means "use the process mode".
 
 ```python

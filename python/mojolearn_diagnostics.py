@@ -50,13 +50,8 @@ PRESENCE_ONLY_ENVIRONMENT_KEYS = (
 # directory itself and every other tier is a subdirectory of the same name;
 # see python/mojolearn/_backend.py, which is what actually loads them.
 NUMERIC_TIERS = ("fast", "identical")
-NATIVE_DISTRIBUTIONS = (
-    "mojolearn",
-    "mojolearn-nvidia",
-    "mojolearn-amd",
-)
 RELEVANT_DISTRIBUTIONS = (
-    *NATIVE_DISTRIBUTIONS,
+    "mojolearn",
     "numpy",
     "mojo",
     "max",
@@ -102,49 +97,34 @@ def _distribution_versions() -> dict[str, str | None]:
 
 def _native_files() -> list[dict[str, Any]]:
     """Describe packaged native files without exposing their absolute paths."""
+    try:
+        distribution = importlib.metadata.distribution("mojolearn")
+    except importlib.metadata.PackageNotFoundError:
+        return []
+
     records: list[dict[str, Any]] = []
-    for name in NATIVE_DISTRIBUTIONS:
-        try:
-            distribution = importlib.metadata.distribution(name)
-        except importlib.metadata.PackageNotFoundError:
+    for relative in distribution.files or ():
+        relative_text = str(relative)
+        if not relative_text.endswith((".so", ".dylib")):
             continue
-        for relative in distribution.files or ():
-            relative_text = str(relative)
-            if not relative_text.endswith((".so", ".dylib")):
-                continue
-            absolute = Path(distribution.locate_file(relative))
-            record: dict[str, Any] = {
-                "distribution": name,
-                "relative_path": relative_text,
-                "exists": absolute.is_file(),
-            }
-            if absolute.is_file():
-                digest = hashlib.sha256()
-                with absolute.open("rb") as stream:
-                    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                        digest.update(chunk)
-                record.update(size=absolute.stat().st_size, sha256=digest.hexdigest())
-            records.append(record)
+        absolute = Path(distribution.locate_file(relative))
+        record: dict[str, Any] = {
+            "relative_path": relative_text,
+            "exists": absolute.is_file(),
+        }
+        if absolute.is_file():
+            digest = hashlib.sha256()
+            with absolute.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            record.update(size=absolute.stat().st_size, sha256=digest.hexdigest())
+        records.append(record)
     return records
 
 
 #: Architecture directory names under a vendor (the architecture axis,
 #: 2026-08-30): sm_80, sm_90a, gfx90a, gfx942, ...
 _ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
-_GPU_DIRECTORIES = ("cuda", "hip", "cuda_native", "cuda_ptx", "hip_native")
-
-
-def _installed_gpu_sets(native_files: list[dict[str, Any]]) -> list[str]:
-    """Report carried GPU sets, without claiming they can run on this device."""
-    sets = set()
-    for record in native_files:
-        parts = Path(record["relative_path"]).parts
-        if (record.get("exists") and len(parts) >= 4
-                and parts[0] == "mojolearn" and parts[1] in _GPU_DIRECTORIES
-                and _ARCH_RE.fullmatch(parts[2])
-                and parts[-1].startswith("_mojolearn") and parts[-1].endswith(".so")):
-            sets.add("/".join(parts[1:3]))
-    return sorted(sets)
 
 
 def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
@@ -181,7 +161,7 @@ def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
         counts[tier] += 1
         vendor = "flat"
         for i, part in enumerate(parts):
-            if part in _GPU_DIRECTORIES:
+            if part in ("cuda", "hip"):
                 vendor = part
                 # THE ARCHITECTURE AXIS (2026-08-30): one directory per GPU
                 # architecture under the vendor. Keyed together so "20 fast"
@@ -233,38 +213,27 @@ def _gpu_facts() -> dict[str, Any]:
     return facts
 
 
-def _support_classification(probe: dict[str, Any]) -> dict[str, str]:
-    """Separate a published wheel platform from a successful backend import.
-
-    GPU utility availability is not evidence of compatible binaries. Let the
-    loader probe report failure for a missing set, driver or runtime instead.
-    """
+def _support_classification(gpu: dict[str, Any]) -> dict[str, str]:
     system = platform.system()
     machine = platform.machine().lower()
-    wheel_platform = {("Darwin", "arm64"): "macOS arm64",
-                      ("Linux", "x86_64"): "Linux x86-64"}.get((system, machine))
-    if wheel_platform is None:
+    if system == "Darwin" and machine == "arm64":
         return {
-            "level": "compatibility-report",
-            "reason": "no published wheel platform matches this OS and architecture; consult the release support matrix for source builds",
+            "level": "supported",
+            "reason": "macOS arm64 is the released wheel platform; exact certification depends on the release support matrix",
         }
-    result = probe.get("result", {})
-    if probe.get("returncode") != 0 or not result.get("ok"):
+    if gpu["nvidia"].get("available"):
         return {
-            "level": "load-failed",
-            "reason": f"{wheel_platform} wheels are published, but this installation failed its import probe; check installed GPU sets, package versions and driver/runtime requirements",
+            "level": "source-build",
+            "reason": "CUDA is supported from source on the release's tested GPU columns; no Linux wheel is currently published",
         }
-    vendor = result.get("vendor")
-    backend = {"cuda": "NVIDIA CUDA", "hip": "AMD HIP", "metal": "Apple Metal",
-               "cpu": "CPU"}.get(vendor)
-    if backend is None:
+    if gpu["amd"].get("available"):
         return {
-            "level": "backend-unconfirmed",
-            "reason": f"{wheel_platform} wheels are published and the package imports, but the loaded backend could not be confirmed",
+            "level": "source-build",
+            "reason": "HIP is supported from source on the release's tested GPU columns; no Linux wheel is currently published",
         }
     return {
-        "level": "imported",
-        "reason": f"{wheel_platform} wheels are published; the {backend} backend loaded. An import pass does not certify every algorithm or numerical result; consult the release support matrix and run verify for the selected checks",
+        "level": "compatibility-report",
+        "reason": "no released GPU column was detected; reports are welcome but this environment is not certified",
     }
 
 
@@ -340,7 +309,6 @@ def _import_probe() -> dict[str, Any]:
 def collect_diagnostics() -> dict[str, Any]:
     gpu = _gpu_facts()
     native_files = _native_files()
-    probe = _import_probe()
     return {
         "schema_version": SCHEMA_VERSION,
         "recorded_at_utc": _datetime.datetime.now(_datetime.timezone.utc)
@@ -367,12 +335,11 @@ def collect_diagnostics() -> dict[str, Any]:
         ),
         "distributions": _distribution_versions(),
         "native_files": native_files,
-        "gpu_sets": _installed_gpu_sets(native_files),
         "numeric_tiers": _installed_tiers(native_files),
         "gpu": gpu,
-        "support": _support_classification(probe),
+        "support": _support_classification(gpu),
         "mojo_version": _run(["mojo", "--version"]),
-        "import_probe": probe,
+        "import_probe": _import_probe(),
         "privacy": {
             "policy": "allowlist",
             "omitted": [
@@ -397,11 +364,6 @@ def _summary(report: dict[str, Any]) -> str:
         "platform: {system} {release} {machine}".format(**report["platform"]),
         f"python: {report['platform']['python_version']}",
         f"mojolearn: {versions.get('mojolearn') or 'not installed'}",
-        f"mojolearn-nvidia: {versions.get('mojolearn-nvidia') or 'not installed'}",
-        f"mojolearn-amd: {versions.get('mojolearn-amd') or 'not installed'}",
-        "GPU architecture sets installed: {}".format(
-            ", ".join(report["gpu_sets"]) or "none (Apple Metal uses a flat layout)"
-        ),
         f"numeric mode requested: {report['environment'].get('MOJOLEARN_NUMERIC_MODE', 'identical (default)')}",
         f"numeric mode loaded: {report['import_probe'].get('result', {}).get('numeric_mode') or 'unknown (import probe did not report one)'}",
         f"vendor loaded: {report['import_probe'].get('result', {}).get('vendor') or 'unknown (import probe did not report one)'}",
