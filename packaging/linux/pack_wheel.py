@@ -1016,7 +1016,9 @@ def main(argv=None, _gates=True):
     if proj["version"] != version:
         raise SystemExit(f"pack_wheel: pyproject says {proj['version']}, "
                          f"_version.py says {version}")
-    readme = (REPO / "README.md").read_text()
+    # Relative repository links resolve to nothing on PyPI; tools/pypi_readme.py makes them absolute.
+    from pypi_readme import pypi_readme  # noqa: E402  (tools/ is on sys.path above)
+    readme = pypi_readme((REPO / "README.md").read_text())
 
     witnesses = host_witnesses(a.set)
     sets = [t for s in a.set for t in load_set(s, include_byte_lm=strict, host_witnesses_by_name=witnesses)]
