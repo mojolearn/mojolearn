@@ -33,7 +33,7 @@ def fixtures():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=['fast', 'deterministic', 'identical'], required=True)
+    parser.add_argument('--mode', choices=['fast', 'identical'], required=True)
     parser.add_argument('--device', required=True, help='Actual device, recorded by the operator')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()

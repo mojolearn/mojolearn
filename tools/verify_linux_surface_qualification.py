@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import struct
 
-MODES = {'fast': 0, 'deterministic': 2, 'identical': 1}
+MODES = {'fast': 0, 'identical': 1}
 # Every binding of _backend._MODULES except the byte LM, which expected_bindings
 # adds when packaged. packaging/check_ext_lists.py holds this set to _MODULES.
 BINDINGS = {'_mojolearn' + suffix for suffix in ('', '_gbdt', '_estimators', '_rf', '_trees',
@@ -171,8 +171,8 @@ def is_release_profile(audit):
 
 def expected_jobs(audit):
     # DEVIATION 2490: the smoke runs in every tier (it asserts the tree
-    # lanes launch and every other binding refuses by name under fast and
-    # deterministic); every other surface is an identical-only family and
+    # lanes launch and every other binding refuses by name under fast);
+    # every other surface is an identical-only family and
     # runs under identical alone.
     jobs = {('smoke', m) for m in MODES} | {(s, 'identical') for s in SURFACES}
     if is_release_profile(audit):  # DEVIATION 2290
@@ -181,14 +181,14 @@ def expected_jobs(audit):
 
 
 # DEVIATION 2490 (2026-09-10): only the three tree bindings ship every tier.
-# Every other binding is IDENTICAL only, so a fast or deterministic set holds
-# exactly TIERED and the identical set holds all of BINDINGS (plus the byte LM
+# Every other binding is IDENTICAL only, so the fast set holds
+# TIERED plus CLASSICAL_FAST and the identical set holds all of BINDINGS (plus the byte LM
 # when packaged). packaging/check_ext_lists.py holds this set to
 # mojolearn._backend._TIERED; it is spelled here because this module is the
 # read-only admission side and never imports the package.
 TIERED = frozenset({'_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees'})
-# Classical ML ships the fast tier too (2026-09-25); deterministic stays
-# tree-only. packaging/check_ext_lists.py holds this to _backend._CLASSICAL_FAST.
+# Classical ML ships the fast tier too (2026-09-25).
+# packaging/check_ext_lists.py holds this to _backend._CLASSICAL_FAST.
 CLASSICAL_FAST = frozenset({'_mojolearn' + suffix for suffix in (
     '', '_estimators', '_svm', '_solver', '_metrics', '_preprocessing', '_tsa',
     '_linalg', '_arima', '_gp', '_kernel_methods', '_mixture', '_hdbscan',
@@ -207,7 +207,7 @@ def expected_bindings(mode, byte_lm=False):
         return BINDINGS | ({'_mojolearn_byte_lm'} if byte_lm else set())
     if mode == 'fast':
         return set(TIERED | CLASSICAL_FAST)
-    return set(TIERED)
+    raise ValueError('unknown numeric mode: ' + mode)
 
 
 def check_byte_lm_host(installed, audit):

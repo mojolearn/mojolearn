@@ -29,7 +29,7 @@ class InstalledInventoryTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(name.encode())
                 hashes[path.relative_to(package).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
-                code = {'fast': 0, 'deterministic': 2, 'identical': 1}[mode]
+                code = {'fast': 0, 'identical': 1}[mode]
                 class Binding:
                     __file__ = str(path)
                     binding_name = name
@@ -57,14 +57,14 @@ class InstalledInventoryTests(unittest.TestCase):
 
     def test_all_advertised_bindings_and_only_supported_tiers_load(self):
         # fast = 3 tree + 15 classical bindings since classical FAST (2e62edbd1)
-        for mode, count in [('fast', 18), ('deterministic', 3), ('identical', 23)]:
+        for mode, count in [('fast', 18), ('identical', 23)]:
             with self.subTest(mode=mode):
                 loaded, rows = self.readback(mode)
                 self.assertEqual(loaded, expected_bindings(mode, True))
                 self.assertEqual(len(rows), count)
                 for name in loaded & (MODE_READBACK | {'_mojolearn_byte_lm'}):
                     self.assertEqual(rows[name]['mode_code'],
-                                     {'fast': 0, 'deterministic': 2, 'identical': 1}[mode])
+                                     {'fast': 0, 'identical': 1}[mode])
 
     def test_every_required_identical_mode_getter_is_enforced(self):
         for name in MODE_READBACK | {'_mojolearn_byte_lm'}:

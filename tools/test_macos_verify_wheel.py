@@ -27,7 +27,7 @@ class WheelMatrixTests(unittest.TestCase):
         self.bin.mkdir()
         for name in ('dirname', 'basename', 'mktemp', 'rm', 'mkdir', 'env'):
             (self.bin / name).symlink_to(shutil.which(name))
-        self.env = dict(os.environ, PATH=str(self.bin), MOJOLEARN_RELEASE_MODES='fast deterministic identical')
+        self.env = dict(os.environ, PATH=str(self.bin), MOJOLEARN_RELEASE_MODES='fast identical')
 
     def interpreters(self, versions=range(10, 15), *, venv_fail=False, smoke_fail=False,
                      smoke_output='', runtime_fail=False):

@@ -146,7 +146,7 @@ def save(path, record):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("fast", "deterministic", "identical"), required=True)
+    parser.add_argument("--mode", choices=("fast", "identical"), required=True)
     parser.add_argument("--device", required=True, help="Actual device reported by the main operator")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--source-root", type=Path, default=Path(__file__).resolve().parents[1])

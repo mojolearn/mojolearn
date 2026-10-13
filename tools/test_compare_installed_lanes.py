@@ -98,7 +98,7 @@ class InstalledLaneTests(unittest.TestCase):
             path.write_text(json.dumps(record))
             gate.installed(directory, 'ordered-rmse', 'identical', audit)
             row = bindings['_mojolearn_gbdt']
-            row['path'] = row['path'].replace('/identical/', '/deterministic/')
+            row['path'] = row['path'].replace('/identical/', '/')
             audit['extension_hashes'][row['path'].removeprefix(base + '/')] = row['sha256']
             path.write_text(json.dumps(record))
             with self.assertRaisesRegex(ValueError, 'path/tier differs'):

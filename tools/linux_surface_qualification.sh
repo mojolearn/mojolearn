@@ -3,7 +3,7 @@
 # repaired wheel with COMPLETE advertised vendor sets. Never publishes or rents.
 #
 # build: tools/linux_surface_qualification.sh build /absolute/artifacts
-# build-tier: tools/linux_surface_qualification.sh build-tier OUT fast|deterministic|identical
+# build-tier: tools/linux_surface_qualification.sh build-tier OUT fast|identical
 # qualify: tools/linux_surface_qualification.sh qualify WHEEL SHA256 cuda|hip OUT BUILD_PROVENANCE_JSON
 # qualify-release-linux3: same first four args, then PROOF_DIRECTORY ARCH
 #   (qualify-release-0.6.1 is its deprecated alias, DEVIATION 2290; the version
@@ -52,7 +52,7 @@ if [[ "$ACTION" = build || "$ACTION" = build-tier ]]; then
     unset MOJOLEARN_BUILD_SCRIPTS MOJOLEARN_BUILD_TIERS
     if [[ "$ACTION" = build-tier ]]; then
         tier=${2:?tier}
-        case "$tier" in fast|deterministic|identical) ;; *) exit 2 ;; esac
+        case "$tier" in fast|identical) ;; *) exit 2 ;; esac
         export MOJOLEARN_BUILD_TIERS="$tier"
         echo 'PARTIAL SINGLE TIER: retain for assembly; never publish or claim installed-wheel qualification' > "$DEST/PARTIAL.txt"
     fi
@@ -71,7 +71,7 @@ import os
 byte_lm = os.environ.get('MOJOLEARN_PACKAGE_BYTE_LM', '0') == '1'
 print(' '.join(f'expected_bindings_{m}={len(expected_bindings(m, byte_lm))}' for m in MODES))
 PYCOUNTS
-        echo "expected_tiers=${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
+        echo "expected_tiers=${MOJOLEARN_BUILD_TIERS:-fast identical}"
         echo "build_jobs=$BUILD_JOBS cpu_affinity_max=$BUILD_CORES compiler_jobs=2 blas_threads=1"
         echo "cpu_affinity=$cores"
         echo "artifact=$ACTION vendor set; not a wheel or publication"
@@ -261,7 +261,7 @@ with zipfile.ZipFile(wheel) as z:
         assert hashed == 'sha256=' + actual and int(size) == len(value), ('Bad RECORD', path)
     assert declared == set(paths), 'RECORD does not cover whole archive'
     for p in paths:
-        match = re.fullmatch(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so', p)
+        match = re.fullmatch(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/(?:(identical)/)?(_mojolearn[^/]*)\.so', p)
         if match:
             vendor, arch, mode, extension = match.groups()
             extension_hashes[p.removeprefix('mojolearn/')] = hashlib.sha256(z.read(p)).hexdigest()
@@ -282,7 +282,7 @@ with zipfile.ZipFile(wheel) as z:
     vendors = {v for v, _, _ in sets}
     assert required_vendor in vendors, 'Wheel lacks requested vendor'
     for vendor, arch in {(v, a) for v, a, _ in sets}:
-        for mode in ('fast', 'deterministic', 'identical'):
+        for mode in ('fast', 'identical'):
             assert sets.get((vendor, arch, mode)) == names, ('Incomplete set', vendor, arch, mode)
     assert set(proof['extensions']) == {p for p in paths if p.startswith('mojolearn/' + required_vendor + '/') and p.endswith('.so') and '/_mojolearn' in p}, 'Provenance/wheel vendor coverage differs'
     assert {'mojolearn/' + m for m in host_extension_hashes} == host_members_wanted, ('Wheel host binding inventory differs from the manifest', sorted(host_extension_hashes))
@@ -365,7 +365,7 @@ for name in sorted(all_bindings):
     assert audit['extension_hashes'].get(member) == row['sha256'], ('Installed binary differs from wheel', member)
     if name in getters:
         row['mode_code'] = int(getattr(binding, getters[name])())
-        assert row['mode_code'] == {'fast': 0, 'identical': 1, 'deterministic': 2}[os.environ['MOJOLEARN_NUMERIC_MODE']]
+        assert row['mode_code'] == {'fast': 0, 'identical': 1}[os.environ['MOJOLEARN_NUMERIC_MODE']]
     else:
         row['mode_readback'] = 'unavailable; build provenance and functional gate required'
     readback[name] = row
@@ -424,7 +424,7 @@ unset PYTHONPATH PYTHONHOME MOJOLEARN_VENDOR MOJOLEARN_ARIMA_GATE_QUICK MOJOLEAR
 export MOJOLEARN_WHEEL_AUDIT="$DEST/wheel-audit.json"
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 MOJOLEARN_EXPECT_VENDOR="$VENDOR" MOJOLEARN_REPO="$ROOT"
 cd "$DEST"
-for mode in fast deterministic identical; do
+for mode in fast identical; do
     export MOJOLEARN_NUMERIC_MODE="$mode"
     # DEVIATION 2490: the job set per tier comes from the verifier's
     # expected_jobs so the on-box loop and the admission side cannot drift.

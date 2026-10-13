@@ -35,7 +35,7 @@ class IdenticalDefaultTests(unittest.TestCase):
             self.assertIs(self.backend.load_set(None), sentinel)
 
     def test_explicit_modes_still_honored(self):
-        for mode in ('fast', 'deterministic', 'identical'):
+        for mode in ('fast', 'identical'):
             with self.subTest(mode=mode), patch.dict('os.environ', {'MOJOLEARN_NUMERIC_MODE': mode}, clear=True):
                 self.assertEqual(self.backend.requested_mode(), mode)
 

@@ -22,14 +22,13 @@ def test_manifest_apple_adds_fast_without_changing_linux():
                                               'mojolearn/identical/_mojolearn_byte_lm.so'}
     assert {b.tier for b in reuse.bindings(reuse.LINUX) if b.name == BYTE} == {'identical'}
     for vendor in (None, 'cuda', 'hip', 'metal'):
-        assert BYTE not in reuse.tier_names('deterministic', True, vendor=vendor)
         assert BYTE not in reuse.tier_names('fast', False, vendor=vendor)
 
 
 @pytest.mark.parametrize('enabled', [0, 1])
 def test_shell_build_plan_agrees_with_apple_manifest(enabled):
     function = BUILD[BUILD.index('build_pairs() {'):BUILD.index('# HEAVIEST FIRST.')]
-    env = dict(os.environ, MODES='fast deterministic identical', BUILD_SCRIPTS='build_gbdt.sh',
+    env = dict(os.environ, MODES='fast identical', BUILD_SCRIPTS='build_gbdt.sh',
                IDENTICAL_ONLY_SCRIPTS='', FAST_CLASSICAL_SCRIPTS='build_training.sh',
                HOST_FAMILIES='byte_lm', PACKAGE_BYTE_LM=str(enabled))
     rows = subprocess.check_output(['sh', '-c', function+'\nbuild_pairs'], env=env, text=True).splitlines()

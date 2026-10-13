@@ -86,7 +86,7 @@ import bincache  # noqa: E402
 PROFILE_SCHEMA = "mojolearn.prebuild-profile.v1"
 PLAN_SCHEMA = "mojolearn.prebuild-plan.v1"
 PROFILES = ROOT / "tools" / "prebuild_profiles.json"
-TIERS = ("fast", "deterministic", "identical")
+TIERS = ("fast", "identical")
 #: Parts of a key's fields that come from the commit, not the box.
 COMMIT_FIELDS = ("script", "args", "source", "toolchain")
 #: The cheapest box first; a RunPod "no stock" walks to the next.

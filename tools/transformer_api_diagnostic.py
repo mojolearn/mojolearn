@@ -25,7 +25,7 @@ import traceback
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, required=True)
-    parser.add_argument("--mode", choices=("fast", "deterministic", "identical"),
+    parser.add_argument("--mode", choices=("fast", "identical"),
                         required=True)
     parser.add_argument("--stack-interval", type=float, default=30.0)
     args = parser.parse_args()

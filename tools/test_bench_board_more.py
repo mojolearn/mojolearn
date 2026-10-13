@@ -270,7 +270,7 @@ def test_mode_readback_uses_the_constant_else_the_tier_directory(tmp_path, monke
     backend.binding = lambda name, mode: mods[name]
     backend._vendor_fn = lambda short: short.replace("_mojolearn_", "") + "_vendor"
     backend.tier_dir = lambda m: str(base) if m == "fast" else str(base / m)
-    backend._CODE_MODE = {0: "fast", 1: "identical", 2: "deterministic"}
+    backend._CODE_MODE = {0: "fast", 1: "identical"}
     fake._backend = backend
     monkeypatch.setitem(sys.modules, "mojolearn", fake)
     monkeypatch.setitem(sys.modules, "mojolearn._backend", backend)

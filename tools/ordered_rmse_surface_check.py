@@ -32,7 +32,7 @@ def expect_refusal(call, exception, label):
 
 def main():
     mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").lower()
-    require(mode in ("fast", "deterministic", "identical"), "unknown numeric mode")
+    require(mode in ("fast", "identical"), "unknown numeric mode")
     set_numeric_mode(mode)
     options = dict(n_estimators=3, max_depth=2, border_count=7,
                    learning_rate=0.2, l2_leaf_reg=1.0, numeric_mode=mode)
@@ -55,7 +55,7 @@ def main():
     binding = first._bind("_mojolearn_gbdt")
     actual_code = int(binding.gbdt_numeric_mode())
     actual_vendor = str(binding.gbdt_vendor())
-    require(actual_code == {"fast": 0, "identical": 1, "deterministic": 2}[mode],
+    require(actual_code == {"fast": 0, "identical": 1}[mode],
             "native numeric-mode readback does not match requested tier")
     require(actual_vendor in ("metal", "hip", "cuda"), "native vendor readback missing")
     print(f"ORDERED_PYTHON_NATIVE {mode} {actual_vendor}", flush=True)
@@ -101,7 +101,7 @@ def main():
     repeat_exact = (model_text == str(second.model_)
                     and np.array_equal(prediction.view(np.uint32),
                                        repeat_prediction.view(np.uint32)))
-    if mode in ("identical", "deterministic"):
+    if mode == "identical":
         require(repeat_exact, "pinned mode repeat fit/model prediction bits differ")
     with tempfile.TemporaryDirectory(prefix="mojolearn-ordered-") as directory:
         path = Path(directory) / "ordered.npz"

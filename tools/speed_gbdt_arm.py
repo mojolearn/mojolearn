@@ -235,7 +235,7 @@ def numeric_mode_label():
     Opponent-only runs retain this label solely as experiment context.
     """
     mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower()
-    if mode not in ("fast", "deterministic", "identical"):
+    if mode not in ("fast", "identical"):
         raise ValueError("invalid MOJOLEARN_NUMERIC_MODE: " + repr(mode))
     return mode.upper()
 

@@ -24,7 +24,7 @@ for _name in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS',
               'NUMEXPR_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS'):
     os.environ[_name] = '1'
 
-MODES = {'fast': 0, 'deterministic': 2, 'identical': 1}
+MODES = {'fast': 0, 'identical': 1}
 CASE = 'mamba/corpus/mamba3/m3_base_b2_l4_d32'
 WEIGHTS = {
     'block_norm.weight': (32,), 'in_proj.weight': (419, 32), 'dt_bias': (1,),
