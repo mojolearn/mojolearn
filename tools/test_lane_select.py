@@ -2489,3 +2489,187 @@ def test_a_gate_helper_nothing_names_is_inert_and_says_so():
     lanes, why = _gate_answer(_gate_edit(("\n\n_IVF_EXTRAS = {",
                                           "\n\n\ndef _unused_probe(e, Q):\n    return Q\n\n\n_IVF_EXTRAS = {")))
     assert lanes == [] and "_unused_probe" in why, (lanes, why)
+
+
+# ---------------------------------------------------------------- 2026-10-12
+# MOJO EDITS, DEFINITION BY DEFINITION (lane/lane-select-mojo). lane/apple-holes
+# edited MinCovDet, chi2 and GaussianMixture and selected 463 of 507 lanes: a
+# changed .mojo file selected every lane whose binding reaches it. The edit is
+# now read per definition and per struct method, and a lane is selected when
+# an export it calls reaches a changed one through the name graph.
+
+MOJO_BASE = '''"""A probe module."""
+from pkg.a import helper, other
+from pkg.b import Thing as T
+
+comptime LIMIT = 4
+
+
+@always_inline
+def alpha(x: Int) -> Int:
+    # a comment
+    return helper(x) + LIMIT
+
+
+def beta(x: Int) -> Int:
+    return other(x)
+
+
+struct Box[E: AnyType](Movable):
+    """A box."""
+    var n: Int
+
+    def __init__(out self):
+        self.n = 0
+
+    def grow(mut self, k: Int):
+        self.n += alpha(k)
+
+    @staticmethod
+    def shrink(k: Int) -> Int:
+        return T.go(k)
+
+
+def PyInit__probe() abi("C") -> PythonObject:
+    var m = PythonModuleBuilder("_probe")
+    m.def_function[beta]("beta")
+    return m.finalize()
+'''
+
+
+def _mojo_changed(new, old=MOJO_BASE):
+    return lane_select.mojo_changed_definitions(old, new)
+
+
+def test_a_mojo_edit_is_read_definition_by_definition():
+    def one(old, new):
+        assert old in MOJO_BASE, old
+        return _mojo_changed(MOJO_BASE.replace(old, new, 1))
+
+    assert _mojo_changed(MOJO_BASE) == (set(), "")
+    assert one("    # a comment\n", "    # another comment\n")[0] == set(), "a comment compiles to nothing"
+    assert one('"""A probe module."""', '"""A probe module, reworded."""')[0] == set()
+    assert one("return other(x)", "return other(x + 1)")[0] == {("t", "beta")}
+    assert one("self.n += alpha(k)", "self.n += alpha(k) * 2")[0] == {("m", "Box", "grow")}
+    assert one("        return T.go(k)", "        return T.go(k + 1)")[0] == {("m", "Box", "shrink")}
+    assert one("    var n: Int\n", "    var n: Int\n    var m: Int\n")[0] == {("t", "Box")}, \
+        "a field is the struct's header"
+    assert one("comptime LIMIT = 4", "comptime LIMIT = 5")[0] == {("t", "LIMIT")}
+    # An import that binds a name differently changes every definition naming it.
+    got = one("from pkg.b import Thing as T", "from pkg.c import Thing as T")[0]
+    assert got == {("m", "Box", "shrink")}, got
+    # A new method on a struct is that method, not the struct.
+    got = one("    @staticmethod\n", "    def extra(self) -> Int:\n        return 1\n\n    @staticmethod\n")[0]
+    assert got == {("m", "Box", "extra")}, got
+    # A removed method may leave a trait default behind: the header stands for it.
+    got = one("    def grow(mut self, k: Int):\n        self.n += alpha(k)\n\n", "")[0]
+    assert ("t", "Box") in got and ("m", "Box", "grow") in got, got
+
+
+def test_a_mojo_edit_outside_named_definitions_keeps_the_whole_file():
+    for label, old, new in (
+            ("a module-level statement", "comptime LIMIT = 4\n", "comptime LIMIT = 4\ncomptime assert LIMIT > 0\n"),
+            ("a star import", "from pkg.a import helper, other\n", "from pkg.a import *\n"),
+            ("the module init", '    m.def_function[beta]("beta")\n',
+             '    m.def_function[beta]("beta")\n    m.def_function[alpha]("alpha")\n'),
+            ("an unclosed bracket", "return other(x)", "return other(x"),
+    ):
+        assert old in MOJO_BASE, label
+        changed, why = _mojo_changed(MOJO_BASE.replace(old, new, 1))
+        assert changed is None and why, f"{label}: was narrowed to {changed}"
+
+
+def _insert_after_signature(text, head, line):
+    """`text` with `line` inserted as the first body line of the definition
+    whose header starts with `head` (its signature may span lines)."""
+    at = text.index(head)
+    end = at
+    while True:
+        nl = text.index("\n", end)
+        if text[end:nl].split("#", 1)[0].rstrip().endswith(":"):
+            return text[:nl + 1] + line + text[nl + 1:]
+        end = nl + 1
+
+
+def _mojo_select(path, new):
+    with _Seeded({path: lane_select._read(path)}, {path: new}):
+        return lane_select.select([path], ref=_FAKE_REF)
+
+
+def test_a_hunk_inside_one_mojo_def_selects_only_the_lanes_reaching_it():
+    """The apple-holes chi2 shape: a body edit to `chi2_quantile` selects the
+    lanes whose exports reach it, not every lane that compiles x_decomp."""
+    path = "x_decomp/chi2.mojo"
+    old = lane_select._read(path)
+    new = _insert_after_signature(old, "def chi2_quantile(", "    var _lane_select_probe = 0\n")
+    _, rev = _lane_sets()
+    hit = rev.get(path, set())
+    assert len(hit) > 20, "x_decomp/chi2.mojo is reached by few lanes; the case proves nothing"
+    sel = _mojo_select(path, new)
+    reason = sel["reasons"][path]
+    assert reason.startswith("a Mojo source whose diff is confined to named definitions "
+                             "(x_decomp/chi2.mojo:chi2_quantile)"), reason
+    got = set(sel["lanes"])
+    assert got <= hit and len(got) < len(hit) // 2, (len(got), len(hit))
+    for lane in got:
+        chain = " ".join(sel["chains"][lane])
+        assert chain.endswith("x_decomp/chi2.mojo:chi2_quantile") or "kept whole-file" in chain, chain
+
+
+def test_a_mojo_struct_method_hunk_selects_the_callers_of_that_method():
+    """A body edit to `Kit.lda_bound` selects the lanes that reach Kit AND
+    name `lda_bound`; an edit to Kit's header selects every lane reaching Kit."""
+    path = "x_decomp/kit.mojo"
+    old = lane_select._read(path)
+    meth = _insert_after_signature(old, "    def lda_bound(", "        var _lane_select_probe = 0\n")
+    assert "struct Kit[E: Exec](Movable):\n    var one: Mat\n" in old, "Kit's header moved; update this replay"
+    head = old.replace("struct Kit[E: Exec](Movable):\n    var one: Mat\n",
+                       "struct Kit[E: Exec](Movable):\n    var one: Mat\n    var _lane_select_probe: Int\n", 1)
+    _, rev = _lane_sets()
+    hit = rev.get(path, set())
+    m_sel, h_sel = _mojo_select(path, meth), _mojo_select(path, head)
+    assert "(x_decomp/kit.mojo:Kit.lda_bound)" in m_sel["reasons"][path], m_sel["reasons"][path]
+    assert "(x_decomp/kit.mojo:Kit)" in h_sel["reasons"][path], h_sel["reasons"][path]
+    m_lanes, h_lanes = set(m_sel["lanes"]), set(h_sel["lanes"])
+    assert m_lanes <= h_lanes <= hit, (len(m_lanes), len(h_lanes), len(hit))
+    assert len(m_lanes) < len(h_lanes), "a method edit selected as much as a header edit"
+    for lane in m_lanes - {n for n, c in m_sel["chains"].items() if "kept whole-file" in " ".join(c)}:
+        assert m_sel["chains"][lane][0].endswith("x_decomp/kit.mojo:Kit.lda_bound"), m_sel["chains"][lane]
+
+
+def test_a_mojo_module_level_hunk_keeps_every_lane_that_compiles_the_file():
+    path = "x_decomp/chi2.mojo"
+    old = lane_select._read(path)
+    assert "comptime CHI2_BISECT = 80\n" in old, "chi2.mojo changed shape; update this replay"
+    new = old.replace("comptime CHI2_BISECT = 80\n", "comptime CHI2_BISECT = 80\ncomptime assert CHI2_BISECT > 0\n", 1)
+    _, rev = _lane_sets()
+    sel = _mojo_select(path, new)
+    assert set(sel["lanes"]) == rev[path], (len(sel["lanes"]), len(rev[path]))
+    assert "whole file" in sel["reasons"][path] and "module-level text" in sel["reasons"][path], \
+        sel["reasons"][path]
+
+
+def test_a_lane_whose_export_mapping_is_unknown_keeps_the_whole_file_rule():
+    """A lane with no recorded binding contributions, or one that reaches the
+    file through a binding whose exports it does not call, is kept."""
+    path = "x_decomp/chi2.mojo"
+    old = lane_select._read(path)
+    new = _insert_after_signature(old, "def chi2_quantile(", "    var _lane_select_probe = 0\n")
+    _, rev = _lane_sets()
+    base = set(_mojo_select(path, new)["lanes"])
+    dropped = sorted(rev[path] - base)
+    assert len(dropped) >= 2, "the edit dropped too few lanes to test the fallback"
+    unknown, opaque = dropped[0], dropped[1]
+    calls = lane_select._LANE_SEED_CALLS
+    saved = {n: calls[n] for n in (unknown, opaque)}
+    try:
+        del calls[unknown]
+        calls[opaque] = [(src, True, (), files) for src, _, _, files in saved[opaque]]
+        sel = _mojo_select(path, new)
+    finally:
+        calls.update(saved)
+    got = set(sel["lanes"])
+    assert {unknown, opaque} <= got, sorted({unknown, opaque} - got)
+    assert "no recorded binding contributions" in sel["chains"][unknown][0], sel["chains"][unknown]
+    assert "calls no export" in sel["chains"][opaque][0], sel["chains"][opaque]
+    assert got - {unknown, opaque} == base, "the fallback changed other lanes' answers"
