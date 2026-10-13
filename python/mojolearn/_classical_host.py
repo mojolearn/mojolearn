@@ -102,6 +102,7 @@ _HOST_BASENAMES = {
     "_mojolearn_estimators": _HOST_BASENAME,
     "_mojolearn_svm": "_mojolearn_svm_host",
     "_mojolearn": "_mojolearn_core_host",
+    "_mojolearn_x_neighbors": "_mojolearn_x_neighbors_host",
     # The inference-only binding a wheel ships, never the reference one, so
     # a GPU box checks the binary a CPU-only install runs.
     "_mojolearn_mixture": "_mojolearn_mixture_infer_host",
@@ -130,15 +131,19 @@ def binary_paths():
 
 
 class _HostBound:
-    """`_bind` answers the CPU binding of the class's own family
-    (`_BINDING`) and refuses every other family by name, so a host subclass
-    can never reach a GPU binding by accident."""
+    """Bind the class's family and declared helpers to CPU modules only.
+
+    Undeclared families are refused, so a host subclass cannot reach a GPU
+    binding by accident.
+    """
 
     _HOST_INFERENCE_ONLY = True
+    _HOST_AUX_BINDINGS = ()
 
     def _bind(self, name=None):
         name = name or self._BINDING
-        if name != self._BINDING or name not in _HOST_BASENAMES:
+        if ((name != self._BINDING and name not in self._HOST_AUX_BINDINGS)
+                or name not in _HOST_BASENAMES):
             raise ImportError(
                 f"mojolearn: the host {type(self).__name__} serves "
                 f"{self._BINDING} only, not {name}"
@@ -390,6 +395,10 @@ class HostRadiusNeighbors(_HostBound, RadiusNeighbors):
     binding's radius_neighbors_count and radius_neighbors_fill (the radius
     training lanes' ball cover restated as an exhaustive scan)."""
     _HOST_ARRAYS = ("_index",)
+    # Sorted ragged results use the expansion binding's compiled segmented
+    # sort. Route that helper to its host binary as well as the core radius
+    # search; accepting an arbitrary family here could reach the GPU.
+    _HOST_AUX_BINDINGS = ("_mojolearn_x_neighbors",)
 
 
 class HostARIMA(_HostBound, ARIMA):

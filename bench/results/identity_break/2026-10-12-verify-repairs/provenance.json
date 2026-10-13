@@ -1,0 +1,51 @@
+[
+  {
+    "vendor": "apple",
+    "scope": "routine",
+    "source": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/pip_verify/20261012-205427/full.json",
+    "source_sha256": "a8906b5ac5a363b7a26df910ac2688be71d70927097c5be9101d1133a8e60710",
+    "record": "bench/results/identity_break/2026-10-12-verify-repairs/apple/routine.from-verify.json"
+  },
+  {
+    "vendor": "apple",
+    "scope": "neural",
+    "source": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/apple-neural-baseline.json",
+    "source_sha256": "a99f1a12ada7c605bf871e748d9a42e42444fe3762d15c66d875ebbbad69c96a",
+    "record": "bench/results/identity_break/2026-10-12-verify-repairs/apple/neural.from-verify.json"
+  },
+  {
+    "vendor": "nvidia",
+    "scope": "neural",
+    "source": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/runpod/neural.json",
+    "source_sha256": "5f3e9acb9b8c9040947ba9eb0a0e0939725061bac44b2d112e3ce876421592a5",
+    "record": "bench/results/identity_break/2026-10-12-verify-repairs/nvidia/neural.from-verify.json"
+  },
+  {
+    "vendor": "amd",
+    "scope": "neural",
+    "source": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/do/neural.json",
+    "source_sha256": "ea9ea4fd4b64253132f99b6935d6773fecf451bdcb2d27cfc19a509c96b724e3",
+    "record": "bench/results/identity_break/2026-10-12-verify-repairs/amd/neural.from-verify.json"
+  },
+  {
+    "vendor": "apple",
+    "scope": "repaired",
+    "source": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/apple-repaired-column.json",
+    "source_sha256": "45c786035a7d4eea7c8753301e4990843248c0a0696b4094ca6982b057ea283f",
+    "record": "bench/results/identity_break/2026-10-12-verify-repairs/apple/repaired.identical.json"
+  },
+  {
+    "vendor": "nvidia",
+    "scope": "repaired",
+    "source": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/runpod/repaired-column.json",
+    "source_sha256": "e998836610c98c91103c1c22da44ba345076f70333cd3684d2e105315fda7f03",
+    "record": "bench/results/identity_break/2026-10-12-verify-repairs/nvidia/repaired.identical.json"
+  },
+  {
+    "vendor": "amd",
+    "scope": "repaired",
+    "source": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/do/repaired-column.json",
+    "source_sha256": "2450618a88154c38daf7f089f5f9748fd9cd6d12415fb30e006b84c66d8b4035",
+    "record": "bench/results/identity_break/2026-10-12-verify-repairs/amd/repaired.identical.json"
+  }
+]

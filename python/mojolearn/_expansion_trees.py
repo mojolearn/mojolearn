@@ -2437,7 +2437,11 @@ class DARTClassifier(_DARTBase):
         raw = self._raw(X)
         n = len(raw)
         acc = empty((2 * n,), "<f8")
-        self._bind().x_trees_stack_w64([addr_ro(zeros((n,), "<f8"), name="zero"), addr_ro(raw, name="raw")],
+        # The binding borrows addresses, not array owners. Keep the zero
+        # column alive until it has been copied: an inline temporary dies
+        # after addr_ro(), before the native call, corrupting the first row.
+        zero = zeros((n,), "<f8")
+        self._bind().x_trees_stack_w64([addr_ro(zero, name="zero"), addr_ro(raw, name="raw")],
                                        addr(acc, name="proba"), [n])
         self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, 2])
         return acc.reshape((n, 2))

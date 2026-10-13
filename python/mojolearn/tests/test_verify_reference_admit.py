@@ -315,7 +315,7 @@ def test_the_key_being_absent_reads_as_not_narrowed():
 
 
 @pytest.mark.parametrize('second,admitted', [('agrees', True), ('differs', False), ('absent', False)])
-def test_one_fit_on_two_device_classes_is_a_reference(tmp_path, monkeypatch, second, admitted):
+def test_one_fit_on_nvidia_and_amd_is_a_reference(tmp_path, monkeypatch, second, admitted):
     """EVERY CELL IS FITTED ONCE. One fit is a value; the same hash from a
     second device class is what makes it a reference. One class alone, or two
     classes that disagree, give no reference."""
@@ -327,8 +327,8 @@ def test_one_fit_on_two_device_classes_is_a_reference(tmp_path, monkeypatch, sec
         return dict(mode='identical',commit='a'*40,vendor=vendor,
             cells={'x/base':dict(verdict='STABLE',hashes=[value])},
             fixtures={'base':dict(X='f'*16,y_clf='f'*16,y_reg='f'*16)},heldout={'base':dict(X='f'*16)})
-    paths=[tmp_path/'cpu.json']
-    paths[0].write_text(json.dumps(column('cpu-test','a'*16)))
+    paths=[tmp_path/'amd.json']
+    paths[0].write_text(json.dumps(column('amd-test','a'*16)))
     if second!='absent':
         paths.append(tmp_path/'nvidia.json')
         paths[1].write_text(json.dumps(column('nvidia-test','a'*16 if second=='agrees' else 'b'*16)))
@@ -337,7 +337,7 @@ def test_one_fit_on_two_device_classes_is_a_reference(tmp_path, monkeypatch, sec
     ref=table['cells'].get('x/base',{}).get('train',{}).get('ref')
     assert (ref=='a'*16) is admitted
     if admitted:
-        assert set(table['cells']['x/base']['train']['cols'])=={'cpu','nvidia'}
+        assert set(table['cells']['x/base']['train']['cols'])=={'amd','nvidia'}
 
 
 def test_scoped_admission_accepts_the_two_witness_policy():
@@ -484,6 +484,23 @@ def test_a_differing_ptx_value_is_listed_and_the_reference_stays(tmp_path, monke
     assert isinstance(ent['cols']['amd'], int) and isinstance(ent['cols']['nvidia'], int)
     assert [(r['cell'], r['part'], r['ptx'], r['reference']) for r in table['ptx_divergent']] == \
         [('x/base', 'train', 'b'*16, 'a'*16)]
+
+
+def test_apple_difference_is_recorded_without_invalidating_gpu_pair(tmp_path, monkeypatch):
+    table = _ptx_table(tmp_path, monkeypatch, [
+        ('amd', 'amd-test', 'a' * 16), ('nvidia', 'nvidia-test', 'a' * 16),
+        ('zz-apple', 'apple-test', 'b' * 16)])
+    shared = table['cells']['x/base']['train']
+    assert shared['ref'] == 'a' * 16 and not shared.get('conflict')
+    assert vref.entry(table, 'x', 'base', 'train', device_class='apple')['ref'] == 'b' * 16
+    assert vref.judge('b' * 16, shared)[0] == 'DIVERGENT'
+
+
+@pytest.mark.parametrize('other', ['apple', 'cpu'])
+def test_other_class_cannot_corroborate_single_nvidia_sample(tmp_path, monkeypatch, other):
+    table = _ptx_table(tmp_path, monkeypatch, [
+        ('nvidia', 'nvidia-test', 'a' * 16), (other, other + '-test', 'a' * 16)])
+    assert not table['cells']
 
 
 @pytest.mark.parametrize('columns', [

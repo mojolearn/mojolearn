@@ -23,8 +23,10 @@ A pass covers the selected fixtures, routes and properties; it does not prove
 every input, parameter combination or GPU generation.
 
 Recorded hashes belong to one release. While mojolearn is alpha, a release may
-change IDENTICAL output bits; the promise is the same bits across hardware for
-the same release, so verify against the hashes shipped with the installed wheel.
+change IDENTICAL output bits. NVIDIA and AMD must agree within that release.
+Apple compares with its own recorded hashes and does not vote on the NVIDIA/AMD
+reference. A missing Apple record remains unverified. Use the references shipped
+with the installed wheel.
 
 Inspect the installed package's scope before running the checks:
 
@@ -32,6 +34,7 @@ Inspect the installed package's scope before running the checks:
 python -m mojolearn verify          # inference + classical training, base fixture
 python -m mojolearn verify --quick  # representative checks, same combined scope
 python -m mojolearn verify --neural-training  # explicit neural training scope
+python -m mojolearn verify --neural-training --all  # neural scope, all nine fixtures
 python -m mojolearn verify --coverage
 python -m mojolearn verify --coverage --json-out coverage.json
 python -m mojolearn verify --all --json-out verification.json
