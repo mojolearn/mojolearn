@@ -290,13 +290,10 @@ struct Mcd[E: Exec]:
         L^{-1} = `trsm_lower(L, I)` through the executor (`Exec.chol_inv`)."""
         var n = A.r
         var li = Mat(n, n)
-        var st = Mat(1, 3)
+        var st = Mat(1, 2)
         self.k.chol_inv(A, li, st)
         if Int(st.d[0]) != 0:
             return Chol(_neg_inf(), Mat(0, 0))
-        if Int(st.d[2]) == 1:
-            # the batched order's -sum log L_jj (kit_device `DMcd.chol_batch`)
-            return Chol(-2.0 * Float64(st.d[1]), li^)
         return Chol(Float64(st.d[1]), li^)
 
     def mahal_chol(self, X: Mat, loc: Mat, Li: Mat) raises -> Mat:
