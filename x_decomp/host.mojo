@@ -13,6 +13,8 @@ x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
 from x_decomp.classical_cells import contrast_pair, centered_gram_cell
 from x_decomp.rr_solve import host_eigh_rr_sorted
+from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN, TD_MIN_N
+from x_decomp.eigh_tridiag_host import host_eigh_td
 from x_decomp.eigh_scale import host_es_scale_ptr, host_es_unscale_ptr
 from x_decomp.rr_svd import host_rr_svd
 from std.memory import bitcast
@@ -459,6 +461,17 @@ struct HostExec(Exec):
             for j in range(n):
                 if (uplo == 1 and i < j) or (uplo == 2 and i > j):
                     m[i * n + j] = m[j * n + i]
+        # DevExec._eigh_on's route (lane apple-neighbors-gpu-cpu, 2026-10-13):
+        # the IDENTICAL tridiagonal solve from n = TD_MIN_N on a copy (the
+        # device's `_eigh_td_try` works on a copy too), the Jacobi below on
+        # the untouched input when it refuses. Before, the host kept the
+        # Jacobi at every n, so every eigh from n = 64 split the GPU and CPU
+        # columns (x_decomp/eigh_tridiag_host.mojo).
+        comptime if EIGH_TD_IDN:
+            if n >= TD_MIN_N:
+                var work = m.copy()
+                if host_eigh_td(work, n, w, v):
+                    return
         _host_eigh_rr_one(m, w, v, n)
 
     @staticmethod

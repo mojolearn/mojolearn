@@ -1436,9 +1436,9 @@ class KernelPCA(_XNeighbors):
         # Apple alike, no vendor gate) eigh from n = 2 TD_NB (64) is the
         # tridiagonal route (x_decomp/eigh_tridiag.mojo EIGH_TD_IDN, default
         # since 2026-10-11), below that and on a clustered-spectrum refusal
-        # the round-robin Jacobi (x_decomp/rr.mojo); the host binding keeps
-        # the Jacobi at every n, so its digest here is recorded, not
-        # required, from n = 64 (lane apple-kpca, 2026-10-12).
+        # the round-robin Jacobi (x_decomp/rr.mojo); the host binding takes
+        # the same route with the same words since 2026-10-13
+        # (x_decomp/eigh_tridiag_host.mojo; lane apple-neighbors-gpu-cpu).
         c = n if self.n_components is None else min(n, int(self.n_components))
         import array
         from ._expansion_decomp import _Kit, _M

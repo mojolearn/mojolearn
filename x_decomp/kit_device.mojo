@@ -36,6 +36,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from x_decomp.api import _f, _i, _n
 from x_decomp.cells import F32Ptr, I32Ptr
+from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN
 from x_decomp.device import (
     DevExec,
     LU_SCAL_LEN,
@@ -919,7 +920,18 @@ struct DKit(Movable):
         var da = self.ctx.enqueue_create_buffer[DType.float32](max(n * n, 1))
         if n > 0:
             self.ctx.enqueue_copy(dst_buf=da.create_sub_buffer[DType.float32](0, n * n), src_buf=self._sub(A))
-        _ = DevExec._eigh_par_on(self.ctx, da, wh.p(), vh.p(), n)
+        # IDENTICAL: DevExec.eigh's route, `_eigh_on` (the tridiagonal solve
+        # from n = TD_MIN_N, the Jacobi below it or on a refusal), so the
+        # resident kit and `DevExec.eigh` agree again and both equal the host
+        # column's `HostExec.eigh` (lane apple-neighbors-gpu-cpu, 2026-10-13).
+        # Since EIGH_TD_IDN became the default (2026-10-11) this call kept the
+        # Jacobi at every n while `DevExec.eigh` did not, so the resident
+        # FastICA / rotation / FactorAnalysis / MinCovDet routes and their
+        # Kit[DevExec] twins differed from n = 64. FAST keeps the Jacobi here.
+        comptime if EIGH_TD_IDN:
+            DevExec._eigh_on(self.ctx, da, wh.p(), vh.p(), n, 0)
+        else:
+            _ = DevExec._eigh_par_on(self.ctx, da, wh.p(), vh.p(), n)
         _ = da^
         self.hold_f.clear()
         self.hold_i.clear()

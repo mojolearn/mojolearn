@@ -42,6 +42,12 @@ H = X.copy(); H[::7, 2] = np.nan
 lab = np.where(np.arange(96) % 3 == 0, y, -1)
 
 
+NAMES = ["lof.score_samples", "lof.predict", "lof.fit_predict", "nc.predict", "nc.predict_proba",
+         "nc.predict_log_proba", "ocsvm.decision_function", "ocsvm.predict", "kpca.transform",
+         "pcs.transform", "achi2.transform", "schi2.transform", "lp.predict_proba", "ls.predict_proba",
+         "knn_imputer.transform", "pagerank", "connected_components", "louvain", "svgp.mean", "svgp.var"]
+
+
 def calls():
     out = []
     lof = ml.LocalOutlierFactor(n_neighbors=5, novelty=True).fit(X)
@@ -64,16 +70,22 @@ def calls():
     sg = ml.SVGP(n_inducing=8).fit(X, X[:, 0])
     out += list(sg.predict_f(Xh))
     h = hashlib.sha256()
+    parts = []
     for a in out:
         a = np.ascontiguousarray(np.asarray(a))
-        h.update(str(a.dtype).encode() + str(a.shape).encode() + a.tobytes())
-    return h.hexdigest()
+        word = str(a.dtype).encode() + str(a.shape).encode() + a.tobytes()
+        h.update(word)
+        parts.append(hashlib.sha256(word).hexdigest()[:16])
+    return h.hexdigest(), parts
 
 
-first = calls()
-second = calls()
+first, first_parts = calls()
+second, _ = calls()
 print("FIRST", first)
 print("SECOND", second)
+assert len(first_parts) == len(NAMES), (len(first_parts), len(NAMES))
+for name, part in zip(NAMES, first_parts):
+    print("PART", name, part)
 assert first == second, "a second call in the same process moved the bits"
 '''
 
@@ -84,10 +96,15 @@ def _run(env_extra):
     proc = subprocess.run([sys.executable, "-c", _SCRIPT], env=env, capture_output=True,
                           text=True, timeout=900)
     assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-4000:]
-    return [l for l in proc.stdout.splitlines() if l.startswith("FIRST")][0].split()[1]
+    lines = proc.stdout.splitlines()
+    first = [l for l in lines if l.startswith("FIRST")][0].split()[1]
+    parts = dict(l.split()[1:3] for l in lines if l.startswith("PART "))
+    return first, parts
 
 
 def test_every_entry_point_twice_on_gpu_and_cpu():
-    gpu = _run({})
-    cpu = _run({"MOJOLEARN_VENDOR": "cpu", "MOJOLEARN_HOST_DIR": str(PKG / "host")})
-    assert gpu == cpu, (gpu, cpu)
+    gpu, gpu_parts = _run({})
+    cpu, cpu_parts = _run({"MOJOLEARN_VENDOR": "cpu", "MOJOLEARN_HOST_DIR": str(PKG / "host")})
+    # the entry points whose bits differ, by name, so a split names its lane
+    split = sorted(k for k in gpu_parts if gpu_parts[k] != cpu_parts.get(k))
+    assert gpu == cpu, (gpu, cpu, split)
