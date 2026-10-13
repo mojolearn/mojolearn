@@ -472,8 +472,8 @@ FAMILIES = {
 
 
 def plan_for(config):
-    """The `ModelPlan` of an `HFConfig` (or a dict), or `UnsupportedModel`
-    BY NAME."""
+    """The `ModelPlan` of an `HFConfig` (or a dict), or an `UnsupportedModel`
+    that names the unsupported model type or field."""
     if isinstance(config, dict):
         config = HFConfig(config)
     mt = config.model_type

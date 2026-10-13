@@ -572,8 +572,7 @@ GBDT_ESTIMATORS = {
 class HostGBDT:
     """CPU inference for a saved gradient-boosting model.
 
-    Loads a file written by ``GradientBoosting.save`` (also ``OrderedRMSE``
-    and ``ExperimentalTwoLevelFeatureFreq`` models) and predicts on the CPU,
+    Loads a file written by ``GradientBoosting.save`` and predicts on the CPU,
     with no GPU needed. ``predict`` returns what ``GradientBoosting.predict``
     returns for the same file. Models with categorical (CTR) columns are
     supported; a model that uses CTR table types with no prediction-time

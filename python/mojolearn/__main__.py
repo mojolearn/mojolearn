@@ -41,7 +41,7 @@ EXIT CODES, because people put this in continuous integration.
     0  VERIFIED       the card matched the reference, stage for stage
     1  MISMATCH       the fit ran, the card differs, a stage is named
     2  USAGE          bad arguments
-    3  REFUSED        this process loaded the FAST binaries, which make no
+    3  REFUSED        this process loaded the `fast` binaries, which make no
                       identity claim; nothing was judged
     4  CANNOT RUN     no GPU, no identical binaries, the fit raised, the
                       trace never reached the binary, or no comparator
@@ -190,9 +190,9 @@ def build_parser():
     parser = argparse.ArgumentParser(
         prog="python -m mojolearn",
         description=(
-            "Check mojolearn's cross-vendor bitwise identity claim on this "
-            "machine. See docs/VERIFY.md for what a local run does and does "
-            "not prove."),
+            "In identical mode, mojolearn returns the same bits on Apple, "
+            "NVIDIA and AMD GPUs. Check that claim on this machine. See "
+            "docs/VERIFY.md for what a local run does and does not prove."),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "exit codes\n"

@@ -109,6 +109,9 @@ from mojolearn import lm_corpus
 corpus = lm_corpus.prepare("corpus/input.txt", vocab="ranks.tsv")
 batches = corpus.batches(batch=4, length=2048)
 shape = mojolearn.LanguageModelConfig(batch=4, length=2048, vocab_size=corpus.n_vocab)
+registry = mojolearn.LanguageModelTrainer.parameter_registry(shape)   # sized for this vocabulary
+n_params = registry[-1]["offset"] + registry[-1]["size"]
+params = (0.02 * rng.standard_normal(n_params)).astype(np.float32)
 trainer = mojolearn.LanguageModelTrainer(params, shape=shape, data_schedule=batches.data_schedule())
 trainer.train_step(batches.ids(0))
 ```

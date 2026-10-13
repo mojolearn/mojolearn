@@ -39,13 +39,13 @@ architecture: 0.8.41's NVIDIA package carries `sm_89` only (see the table above)
 | AMD | MI325X | `gfx942` | HIP |
 | AMD | MI300X | `gfx942` | HIP |
 | CPU | x86-64 (Linux) | x86-64 | host bindings |
-| CPU | Arm (Linux ARM64, Apple silicon macOS) | arm64 | host bindings |
+| CPU | Apple silicon (macOS) | arm64 | host bindings |
 
 ## Numeric modes
 
 | Mode | Contract |
 |---|---|
-| `identical` | The default. For the same release, inputs and supported configuration, raw result bits must match across Apple Metal, NVIDIA CUDA and AMD HIP. Apple has no separate acceptable reference hash. CPU host-binding coverage is documented per API. |
+| `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. CPU host-binding coverage is documented per API. |
 | `deterministic` | Repeated execution on the same device and build returns the same bits. No cross-vendor promise. |
 | `fast` | Apple GPUs only. Performance oriented; no repeatability or cross-vendor promise. |
 

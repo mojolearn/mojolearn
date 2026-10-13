@@ -38,8 +38,8 @@ build; mojolearn never substitutes the CPU for a GPU it cannot serve.
 | Vendor | Package | Architectures | Examples |
 |---|---|---|---|
 | Apple | `mojolearn` (macOS) | Apple silicon, built at the M1 instruction-set floor | M1 to M4 families |
-| NVIDIA | `mojolearn-nvidia` | `sm_89` | L40S, L40, L4, RTX 4090, RTX 6000 Ada |
-| AMD | `mojolearn-amd` | `gfx942` (exact match required) | Instinct MI300X, MI325X |
+| NVIDIA | `mojolearn-nvidia` | {{nvidia_arches}} | {{nvidia_examples}} |
+| AMD | `mojolearn-amd` | {{amd_arches}} (exact match required) | {{amd_examples}} |
 
 NVIDIA needs only the driver (`libcuda`); no CUDA toolkit is required. AMD needs the `amdgpu` driver
 and the ROCm HIP runtime (`libamdhip64`, ROCm 6 or 7).

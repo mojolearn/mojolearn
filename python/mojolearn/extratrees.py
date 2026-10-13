@@ -430,7 +430,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
     honoured or refused by name; none is accepted and ignored.
 
     `X` is converted to float32; NaN or infinity in `X` raises `ValueError`.
-    `y` may hold numbers or strings; NaN labels are refused. Supports the `fast`, `deterministic` and
+    `y` may hold numbers or strings; NaN labels are refused. Supports the `fast` (Apple GPUs only), `deterministic` and
     `identical` numeric modes through `numeric_mode`.
 
     Parameters
@@ -491,6 +491,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         `fast` mode and 'sequential' otherwise.
     numeric_mode : {'fast', 'deterministic', 'identical'} or None, default None
         Numeric mode for this estimator; None uses the package default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -674,7 +675,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
 
     `X` is converted to float32; NaN or infinity in `X` raises `ValueError`.
     `y` is converted to float32. Leaf values are means of fixed-point
-    quantized labels. Supports the `fast`, `deterministic` and
+    quantized labels. Supports the `fast` (Apple GPUs only), `deterministic` and
     `identical` numeric modes through `numeric_mode`.
 
     Parameters
@@ -734,6 +735,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         `fast` mode and 'sequential' otherwise.
     numeric_mode : {'fast', 'deterministic', 'identical'} or None, default None
         Numeric mode for this estimator; None uses the package default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------

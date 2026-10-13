@@ -473,7 +473,7 @@ class Mamba1Block(_MambaBase):
     returns (B, L, d_model) float32, with the recurrent state explicit and
     caller-owned (`Mamba1State`).
 
-    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast'.
+    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast' (Apple GPUs only).
     Inputs, weights and state must be float32: bfloat16, float16 and float64 are
     refused by name rather than converted, and non-finite values are refused by name.
     Arrays are read through the buffer protocol, so NumPy is not required; arrays the
@@ -687,7 +687,7 @@ class Mamba1Block(_MambaBase):
 
         Recomputes the forward with the current weights on every call; no earlier
         forward or cached state is used or changed. Runs under ``numeric_mode``
-        'identical' or 'fast'; other modes raise `NotImplementedError`. Gradients with
+        'identical' or 'fast' (Apple GPUs only); other modes raise `NotImplementedError`. Gradients with
         respect to a carried state, decode backward and final-state cotangents are not
         available.
 
@@ -1043,7 +1043,7 @@ class Mamba2Block(_MambaBase):
     Takes (B, L, d_model) float32 and returns (B, L, d_model) float32, with the
     recurrent state explicit and caller-owned (`Mamba2State`).
 
-    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast'.
+    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast' (Apple GPUs only).
     Inputs, weights and state must be float32: bfloat16, float16 and float64 are
     refused by name rather than converted, and non-finite values are refused by name.
     Arrays are read through the buffer protocol, so NumPy is not required; arrays the
@@ -1276,7 +1276,7 @@ class Mamba2Block(_MambaBase):
 
         Recomputes the forward with the current weights on every call; no earlier
         forward or cached state is used or changed. Runs under ``numeric_mode``
-        'identical' or 'fast'; other modes raise `NotImplementedError`. Gradients with
+        'identical' or 'fast' (Apple GPUs only); other modes raise `NotImplementedError`. Gradients with
         respect to a carried state, decode backward and final-state cotangents are not
         available.
 
@@ -1610,7 +1610,7 @@ class Mamba3Block(_MambaBase):
     is applied inside the core (no gated output norm), and B and C have their own
     RMSNorms with per-head biases added after the norm.
 
-    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast'.
+    Constructor keyword ``numeric_mode`` selects 'identical' (the default) or 'fast' (Apple GPUs only).
     Inputs, weights and state must be float32: bfloat16, float16 and float64 are
     refused by name rather than converted, and non-finite values are refused by name.
     Arrays are read through the buffer protocol, so NumPy is not required; arrays the
@@ -2102,7 +2102,7 @@ class Mamba3Block(_MambaBase):
 
         Recomputes the forward with the current weights on every call; no earlier
         forward or cached state is used or changed. Runs under ``numeric_mode``
-        'identical' or 'fast'; other modes raise `NotImplementedError`. Gradients with
+        'identical' or 'fast' (Apple GPUs only); other modes raise `NotImplementedError`. Gradients with
         respect to a carried state, decode backward and final-state cotangents are not
         available.
 

@@ -681,6 +681,7 @@ class SVC(NumericModeMixin):
         vote. Must be False with 'ovo' (scikit-learn's rule).
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -2027,6 +2028,7 @@ class SVR(NumericModeMixin):
         Only None is accepted; results are mojolearn Arrays.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator; None uses the process default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------

@@ -1,0 +1,24 @@
+{#- Link previews: the same social card as every mojolearn.org page (conf.py html_context share_*). -#}
+{%- extends "!layout.html" %}
+{%- block extrahead %}
+  {{ super() }}
+  {%- set share_title = (title | striptags | e) ~ " | mojolearn docs" if title else "mojolearn docs" %}
+  <meta property="og:title" content="{{ share_title }}" />
+  <meta property="og:description" content="{{ share_description | e }}" />
+  <meta property="og:type" content="website" />
+  {%- if pageurl %}
+  <meta property="og:url" content="{{ pageurl | e }}" />
+  {%- endif %}
+  <meta property="og:site_name" content="mojolearn" />
+  <meta property="og:image" content="{{ share_image }}" />
+  <meta property="og:image:secure_url" content="{{ share_image }}" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Bitwise Identical AI" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="{{ share_title }}" />
+  <meta name="twitter:description" content="{{ share_description | e }}" />
+  <meta name="twitter:image" content="{{ share_image }}" />
+  <meta name="twitter:image:alt" content="Bitwise Identical AI" />
+{%- endblock extrahead %}
