@@ -39,7 +39,7 @@ architecture: 0.8.41's NVIDIA package carries `sm_89` only (see the table above)
 | AMD | MI325X | `gfx942` | HIP |
 | AMD | MI300X | `gfx942` | HIP |
 | CPU | x86-64 (Linux) | x86-64 | host bindings |
-| CPU | Apple silicon (macOS) | arm64 | host bindings |
+| CPU | Arm (Linux ARM64, Apple silicon macOS) | arm64 | host bindings |
 
 ## Numeric modes
 
