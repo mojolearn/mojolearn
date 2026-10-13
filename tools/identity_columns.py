@@ -13,6 +13,13 @@ no binding is imported and nothing runs on a device.
         each column record against _verify_reference.admit() and the current
         harness fixtures; one IDCOLUMN line per file; exit 1 if any is not
         admissible
+  identity_columns.py from-verify REPORT --harness EXACT_SOURCE --out COLUMN
+        reuse all measured parts of a completed installed-verifier report;
+        requires its exact harness, input fingerprints, native binary witnesses
+        and passing verifier self-test. Local failures stay unusable. A mismatch
+        against an older reference is an observation, not a local failure.
+        The resulting column still requires ordinary reference admission and
+        independent device corroboration; it retains the original report hash.
   identity_columns.py changed-lanes [--table TABLE] [--since SHA] [--scope routine]
         INCREMENTAL RE-RECORD (Andrew 2026-10-10: re-record only what changed;
         every other row is kept): the profile's lanes whose bits can have moved
@@ -26,9 +33,12 @@ no binding is imported and nothing runs on a device.
         from a record at SHA and which still rest on an older commit
 """
 import argparse
+import gzip
+import hashlib
 import importlib.util
 import json
 import os
+import re
 import sys
 import types
 from pathlib import Path
@@ -123,6 +133,103 @@ def cmd_check(args):
               f"cells={len(cells)} [{vs}]" + (f" reason={why}" if why else ""))
         bad += bool(why)
     return 1 if bad else 0
+
+
+def record_from_verify(report, h, report_sha256):
+    """Reuse measured verifier values, preserving their original provenance.
+
+    A reference mismatch is distinct from a failed local property. Only a
+    completed, witnessed execution can supply values; admission still needs
+    the independent device witnesses enforced by the reference builder.
+    Collapsed repeats contribute one observation, never invented samples.
+    """
+    def require(ok, message):
+        if not ok:
+            raise ValueError(message)
+
+    require(report.get("format") == "mojolearn.verify-all-report.v1", "not a verifier report")
+    device = report.get("device", {})
+    require(device.get("numeric_mode") == "identical", "report is not IDENTICAL")
+    require(re.fullmatch(r"[0-9a-f]{40}", str(device.get("commit", ""))), "missing source commit")
+    require(device.get("device_class") in ("apple", "nvidia", "amd", "cpu", "ptx"), "missing device class")
+    require(report.get("self_test", {}).get("passed") is True, "verifier self-test did not pass")
+    contract = report.get("verification_contract", {})
+    source_sha = hashlib.sha256(Path(h.__file__).read_bytes()).hexdigest()
+    require(contract.get("harness_sha256") == source_sha == report.get("harness", {}).get("sha256"),
+            "provide the exact harness that executed this report")
+    lanes, fixtures = report.get("lanes", []), report.get("fixtures", [])
+    require(lanes and len(set(lanes)) == len(lanes) and set(lanes) <= set(h.LANES), "invalid lane selection")
+    require(fixtures and len(set(fixtures)) == len(fixtures) and set(fixtures) <= set(h.FIXTURES),
+            "invalid fixture selection")
+    execution = report.get("execution", {})
+    require(execution.get("interrupted") is None and execution.get("completed_cells") ==
+            execution.get("total_cells") == len(lanes) * len(fixtures), "incomplete execution")
+    require(report.get("bindings") and not report.get("bindings_error"), "missing native witnesses")
+    for binding in report["bindings"]:
+        require(binding.get("module") and binding.get("size", 0) > 0 and
+                re.fullmatch(r"[0-9a-f]{64}", str(binding.get("sha256", ""))), "invalid native witness")
+    for fixture in fixtures:
+        values = h.fixture(fixture)
+        require(contract.get("fixtures", {}).get(fixture) ==
+                dict(zip(("X", "y_clf", "y_reg"), map(h._h, values))), "fixture bytes differ")
+        require(contract.get("heldout", {}).get(fixture) == dict(X=h._h(h.heldout(fixture))),
+                "held-out bytes differ")
+    v = vref()
+    parts = v.PARTS + v.OPTIONAL_PARTS
+    rows = [r for r in report.get("cells", []) if r.get("lane") in lanes]
+    indexed = {(r["lane"], r["fixture"], r["part"]): r for r in rows}
+    expected = {(l, f, p) for l in lanes for f in fixtures for p in parts}
+    require(len(indexed) == len(rows) and set(indexed) == expected, "missing or duplicate cell parts")
+    cells = {}
+    for (lane, fixture, part), row in indexed.items():
+        value = row.get("value")
+        require(row.get("state") in v.STATES, "unknown part state")
+        if row.get("state") == v.REFUSED or row.get("local_check") == "failed":
+            verdict = "REFUSED" if row.get("state") == v.REFUSED else "DIVERGENT"
+        elif isinstance(value, str) and re.fullmatch(r"[0-9a-f]{16}", value):
+            verdict = "STABLE"
+        elif isinstance(value, str) and value.startswith("n/a:"):
+            verdict = "N/A"
+        else:
+            verdict = "DIVERGENT"  # MOVED / BATCH_MOVED remain unusable evidence.
+        cell = cells.setdefault(lane + "/" + fixture, {})
+        cell["hashes" if part == "train" else part] = [value]
+        cell["verdict" if part == "train" else part + "_verdict"] = verdict
+        if verdict in ("REFUSED", "DIVERGENT"):
+            cell.setdefault("errors", {})[part] = row.get("detail", "local check failed")
+    return dict(mode="identical", vendor=device["device_class"], commit=device["commit"],
+                commit_source=device.get("commit_source"), platform=device.get("platform"),
+                repeats=1, complete=True, partial_column=False, parts_omitted=[],
+                parts_collected=[p for p in parts if p not in ("train", "infer", "model")],
+                fixtures=contract["fixtures"], heldout=contract["heldout"], heldout_seed=1,
+                lane_revisions=dict(h.LANE_REVISIONS), batch_revisions=contract.get("batch_revisions", {}),
+                cells=cells, package=dict(device, bindings=report["bindings"]),
+                verifier_observation=dict(report_sha256=report_sha256, harness_sha256=source_sha,
+                                          reported_repeats=report["repeats"],
+                                          original_verdict=report.get("verdict")),
+                **{p + "_protocol": value for p, value in contract.get("protocols", {}).items()})
+
+
+def cmd_from_verify(args):
+    raw = Path(args.report).read_bytes()
+    h = _load("identity_report_harness", Path(args.harness))
+    result = record_from_verify(json.loads(raw), h, hashlib.sha256(raw).hexdigest())
+    target = Path(args.out)
+    retained = target.with_suffix(".source-report.json.gz")
+    if target.exists() or retained.exists():
+        raise FileExistsError("record or retained report already exists")
+    # Retain the original report bytes with the derived record so its source
+    # survives a checkout move or cleanup of a remote testing machine.
+    with retained.open("xb") as stream:
+        with gzip.GzipFile(filename="", mode="wb", fileobj=stream, mtime=0) as compressed:
+            compressed.write(raw)
+    result["verifier_observation"]["report"] = retained.name
+    result["verifier_observation"]["report_encoding"] = "gzip"
+    with open(args.out, "x") as stream:
+        json.dump(result, stream, sort_keys=True, indent=2)
+        stream.write("\n")
+    print(f"VERIFIER-OBSERVATION {args.out}: {len(result['cells'])} cells; admission pending")
+    return 0
 
 
 def cmd_report(args):
@@ -238,6 +345,10 @@ def main():
     a.add_argument("--shard", default="")
     c = sub.add_parser("check")
     c.add_argument("files", nargs="+")
+    v = sub.add_parser("from-verify", help="retain completed verifier observations for reference admission")
+    v.add_argument("report")
+    v.add_argument("--harness", required=True, help="exact identity_break.py that ran the report")
+    v.add_argument("--out", required=True)
     g = sub.add_parser("changed-lanes")
     g.add_argument("--table", default=str(PKG / "verify_reference" / "table.json"))
     g.add_argument("--since", default="", help="one commit for every lane instead of each lane's own record commit")
@@ -249,7 +360,7 @@ def main():
     r.add_argument("--out", default="")
     args = ap.parse_args()
     args.cmd = args.cmd.replace("-", "_")
-    return dict(lanes=cmd_lanes, check=cmd_check, report=cmd_report,
+    return dict(lanes=cmd_lanes, check=cmd_check, report=cmd_report, from_verify=cmd_from_verify,
                 changed_lanes=cmd_changed_lanes)[args.cmd](args)
 
 

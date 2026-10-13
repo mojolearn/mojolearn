@@ -7,8 +7,9 @@ WHAT IT IS. One small JSON shipped in the wheel at
 (`<lane>/<fixture>`) and every part (`train`, `infer`, `model`, `batch`,
 `stepfull`) it holds the hash the committed records agree on, and which
 record each device class (apple, nvidia, amd, cpu) got it from, with that
-record's directory and commit. No hash in it is typed: `build_table` reads the JSON columns
-`tools/identity_break.py --json` wrote under `bench/results/identity_break/`.
+record's directory and commit. No hash in it is typed: `build_table` reads the
+JSON columns under `bench/results/identity_break/`, produced by the identity
+harness or retained from witnessed verifier reports by `identity_columns.py`.
 
 WHICH RECORDS COUNT. A column is admitted only if it is identical mode, names
 a commit, ran the default fixture size on one device, is not a sabotage run
@@ -24,7 +25,9 @@ so the cell reads OWED until a record at the new revision is committed.
 WHICH HASH WINS. Lanes change: a fix moves a hash and only some vendors are
 re-recorded before the next release record. So per cell, part and device
 class the NEWEST admitted column wins (commit time, then record directory,
-then file name). The cell's reference is the newest of those. A class whose
+then file name). NVIDIA and AMD decide the shared GPU reference; Apple keeps
+its own regression reference and cannot invalidate their agreement. Legacy
+host-only cells retain their existing admission rules. A deciding class whose
 newest value differs from it at an OLDER commit is kept as `superseded`
 (the record moved on and that class was not re-recorded); a class that
 differs at the SAME commit is a disagreement inside the record itself, and
@@ -42,7 +45,8 @@ FORMAT (`mojolearn.verify-reference.v1`)
                                            "conflict": true (only when set)}}}
 
 `ref` is a 16-hex hash or an `n/a:<reason>` string. A `cols` entry that is a
-bare index agrees with `ref`; a pair is a superseded value.
+bare index agrees with `ref`; a pair carries a distinct value, including an
+Apple value that is intentionally independent of the NVIDIA/AMD reference.
 
 This module imports nothing from the package at module level, so the table
 can be built and read on a machine with no binding built.
@@ -151,6 +155,16 @@ def entry(table, lane, fixture, part, device_class=None):
     """The table entry of one cell part, or None when no record has it."""
     cell = table["cells"].get(f"{lane}/{fixture}")
     ent = None if cell is None else cell.get(part)
+    if ent and device_class == "apple":
+        # IDENTICAL requires NVIDIA == AMD within a version. Apple keeps
+        # its own recorded regression values; it neither votes on nor has
+        # to match that pair (owner, 2026-10-07). A missing Apple observation
+        # is still owed, never an interchangeable second acceptable hash.
+        own = ent.get("cols", {}).get("apple")
+        if own is None:
+            return None
+        index, value = (own, ent.get("ref")) if isinstance(own, int) else own
+        return dict(ref=value, cols={"apple": index}, reference_scope="apple")
     if not ent or part != "model" or device_class not in ("cpu", "apple", "nvidia", "amd", "ptx"):
         return ent
     # These CPU lanes load the GPU's saved file; they do not write a model.
@@ -168,7 +182,7 @@ def entry(table, lane, fixture, part, device_class=None):
         return ent
     if device_class == "cpu":
         return dict(ref=cpu_na, cols={"cpu": cpu[0]})
-    gpu = {cls: value for cls, value in values.items() if cls in ("apple", "nvidia", "amd", "ptx")}
+    gpu = {cls: value for cls, value in values.items() if cls in ("nvidia", "amd", "ptx")}
     hashes = {value for _, value in gpu.values()}
     if not gpu or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{16}", value)
                       for value in hashes):
@@ -693,7 +707,11 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
     def deciding(g):
         # The PTX column never decides a reference (PTX_CLASS): only the
         # device classes the identity rule names do, NVIDIA == AMD.
-        return {c: w for c, w in g.items() if c != PTX_CLASS}
+        paired = {c: w for c, w in g.items() if c in ("nvidia", "amd")}
+        # Preserve host-only/legacy reference coverage when neither GPU
+        # vendor has a column. Apple observations still live in cols, but
+        # cannot replace or invalidate a NVIDIA/AMD reference.
+        return paired or {c: w for c, w in g.items() if c != PTX_CLASS}
 
     def newest(g):
         return max(g, key=lambda c: g[c][0])
@@ -723,7 +741,8 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
                 ent["cols"][cls] = [renum[idx], value]
                 ptx_divergent.append(dict(cell=cell_key, part=part, ptx=value, reference=ref,
                                           record=f"{records[idx]['dir']}/{records[idx]['file']}"))
-            elif k[0] == n_key[0] and records[idx]["commit"] == records[by_cls[newest_cls][1]]["commit"]:
+            elif (cls in decide and k[0] == n_key[0]
+                  and records[idx]["commit"] == records[by_cls[newest_cls][1]]["commit"]):
                 ent["conflict"] = True
                 ent["cols"][cls] = [renum[idx], value]
             else:

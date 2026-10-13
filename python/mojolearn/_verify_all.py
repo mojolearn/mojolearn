@@ -3495,6 +3495,7 @@ def judge_rows(raw, table, families=None, unreferenced_lanes=(), device_class=No
         state, detail = vref.judge(r["value"], ent, r.get("error"))
         out.append(dict(lane=lane, fixture=r["fixture"], part=part, value=r["value"], state=state,
                         detail=detail, reference=(ent or {}).get("ref"),
+                        reference_scope=(ent or {}).get("reference_scope", "shared"),
                         columns=vref.columns_of(table, ent),
                         # carried through from the run: a cell reported at zero
                         # seconds did not happen, so the document keeps it

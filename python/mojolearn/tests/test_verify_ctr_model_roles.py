@@ -38,20 +38,31 @@ def test_cpu_counts_no_model_bytes_and_reload_errors_still_fail():
     assert bad["state"] == "REFUSED"
 
 
-def test_gpu_disagreement_is_never_resolved_by_picking_this_device():
+def test_apple_uses_its_record_and_does_not_vote_on_gpu_pair():
     data = table()
     data["cells"][LANE + "/base"]["model"]["cols"]["nvidia"] = [2, "0" * 16]
     ent = ref.entry(data, LANE, "base", "model", device_class="apple")
-    assert ent["conflict"] and ref.judge(HASH, ent)[0] == "OWED"
+    assert ent["reference_scope"] == "apple"
+    assert ref.judge(HASH, ent)[0] == "IDENTICAL"
+    assert ref.judge("0" * 16, ent)[0] == "DIVERGENT"
+
+
+def test_nvidia_amd_disagreement_still_has_no_reference():
+    data = table()
+    data["cells"][LANE + "/base"]["model"]["cols"].update(
+        nvidia=[2, HASH], amd=[3, "0" * 16])
+    for device in ("nvidia", "amd"):
+        ent = ref.entry(data, LANE, "base", "model", device_class=device)
+        assert ent["conflict"] and ref.judge(HASH, ent)[0] == "OWED"
 
 
 def test_unrecorded_cpu_exemption_and_other_lane_na_are_not_invented():
     data = table()
     data["cells"][LANE + "/base"]["model"]["cols"].pop("cpu")
-    assert ref.entry(data, LANE, "base", "model", device_class="apple")["ref"] == NA
+    assert ref.entry(data, LANE, "base", "model", device_class="cpu")["ref"] == NA
     data = table()
     data["cells"]["par-cd/base"] = data["cells"].pop(LANE + "/base")
-    assert ref.entry(data, "par-cd", "base", "model", device_class="apple")["ref"] == NA
+    assert ref.entry(data, "par-cd", "base", "model", device_class="cpu")["ref"] == NA
 
 
 def test_coverage_reports_the_same_device_role_as_execution():
