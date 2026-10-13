@@ -4,6 +4,7 @@
 #
 #   bash tools/release_linux_publish.sh <final .whl> <tag> <none|testpypi|pypi> <workdir> --light-smoke <results.json>
 #   bash tools/release_linux_publish.sh <final .whl> <tag> <none|testpypi|pypi> <workdir> --full
+#   bash tools/release_linux_publish.sh <final .whl> <tag> <none|testpypi|pypi> <workdir> --preverified
 #
 # THE LIGHT ROUTE IS THE DEFAULT. --light-smoke takes the
 # tools/qualify_verifier_wheel.py --scope expanded receipt for the exact Linux
@@ -11,6 +12,12 @@
 # for that one platform. The full native Linux certification route is opt-in
 # with --full. With neither, the script refuses: until 0.8.12 an omitted flag
 # silently chose the full route.
+# --preverified (Linux or macOS; tools/release.py's default since 2026-10-13) is
+# docs/RELEASE_CHECKLIST.md "Releasing changes already checked before merge":
+# the manifest records qualification_reuse {source_commit, basis "completed
+# checks on merged main", new_runtime_verification false}, no receipt is
+# attached, and the workflow runs validation_profile=preverified (artifact
+# integrity only).
 # MOJOLEARN_ARTIFACT_SOURCE_COMMIT optionally pins an older frozen artifact
 # source when only pack/publish tools changed; defaults to HEAD. The release
 # tag still names the current tools, while the wheel and receipt keep their
@@ -44,7 +51,7 @@ PUBLISH="${3:?none|testpypi|pypi}"
 WORK="${4:?workdir}"
 case "$PUBLISH" in none|testpypi|pypi) ;; *) echo "publish must be none, testpypi or pypi" >&2; exit 2 ;; esac
 case "$TAG" in alpha-api-*) ;; *) echo "the workflow's alpha route requires an alpha-api-* tag" >&2; exit 2 ;; esac
-LIGHT_SMOKE=""; VALIDATION_PROFILE=light; LIGHT_PLATFORM=linux
+LIGHT_SMOKE=""; VALIDATION_PROFILE=light; LIGHT_PLATFORM=linux; PREVERIFIED=""
 case "${5:-}" in
   --light-smoke)
     [ "$#" -eq 6 ] || { echo "expected --light-smoke <results.json>" >&2; exit 2; }
@@ -53,17 +60,21 @@ case "${5:-}" in
   --full)
     [ "$#" -eq 5 ] || { echo "--full takes no argument" >&2; exit 2; }
     VALIDATION_PROFILE=full ;;
+  --preverified)
+    [ "$#" -eq 5 ] || { echo "--preverified takes no argument" >&2; exit 2; }
+    [ -z "${MOJOLEARN_QUAL_SM89:-}" ] || { echo "--preverified attaches no installed qualification; unset MOJOLEARN_QUAL_SM89" >&2; exit 2; }
+    VALIDATION_PROFILE=preverified; PREVERIFIED=1 ;;
   "")
-    echo "REFUSING: the light route is the default and needs --light-smoke <results.json> (tools/qualify_verifier_wheel.py --scope expanded on this exact wheel); pass --full to choose the full certification route" >&2
+    echo "REFUSING: the light route is the default and needs --light-smoke <results.json> (tools/qualify_verifier_wheel.py --scope expanded on this exact wheel); pass --full to choose the full certification route, or --preverified to publish on completed checks on merged main" >&2
     exit 2 ;;
-  *) echo "expected --light-smoke <results.json> or --full" >&2; exit 2 ;;
+  *) echo "expected --light-smoke <results.json>, --full or --preverified" >&2; exit 2 ;;
 esac
 # A manylinux wheel is the combined Linux wheel, or one package of the split
 # set: the core mojolearn-*, the plugins mojolearn_nvidia-* / mojolearn_amd-*.
 case "$WHL" in
   *manylinux*) ;;
   *macosx*)
-    [ -n "$LIGHT_SMOKE" ] || { echo "macOS publication requires --light-smoke" >&2; exit 2; }
+    [ -n "$LIGHT_SMOKE$PREVERIFIED" ] || { echo "macOS publication requires --light-smoke or --preverified" >&2; exit 2; }
     LIGHT_PLATFORM=macos ;;
   *) echo "REFUSING: $WHL is neither a repaired manylinux wheel nor a macOS wheel" >&2; exit 2 ;;
 esac
@@ -105,26 +116,32 @@ if [ -n "${MOJOLEARN_QUAL_SM89:-}" ]; then
 fi
 
 echo "== manifest =="
-python3 - "$ART/alpha-manifest.json" "$VERSION" "$(basename "$WHL")" "$WSHA" "$TSHA" "$ARTIFACT_SOURCE_COMMIT" "$LSHA" "$(basename "$LIGHT_ASSET")" <<'EOF'
+python3 - "$ART/alpha-manifest.json" "$VERSION" "$(basename "$WHL")" "$WSHA" "$TSHA" "$ARTIFACT_SOURCE_COMMIT" "$LSHA" "$(basename "$LIGHT_ASSET")" "$PREVERIFIED" <<'EOF'
 import json, sys
-out, version, wheel, wsha, tsha, source, smoke_sha, smoke_name = sys.argv[1:]
+out, version, wheel, wsha, tsha, source, smoke_sha, smoke_name, preverified = sys.argv[1:]
 doc = {"schema": "mojolearn.alpha-release.v1", "version": version, "release_profile": "alpha-api",
        "files": {wheel: wsha}}
 if smoke_sha:
     doc["light_smoke"] = {"source_commit": source, "receipts": {smoke_name: smoke_sha}}
+if preverified:
+    # packaging/verify_alpha_artifacts.py --preverified-source checks exactly these three fields
+    doc["qualification_reuse"] = {"source_commit": source, "basis": "completed checks on merged main",
+                                  "new_runtime_verification": False}
 if tsha:
     doc["linux_qualification"] = {"file": "linux-qualification.tar.gz", "sha256": tsha, "wheel": wheel}
 # tools/release.py (2026-10-08, releases rent nothing): a native set with no installed smoke is named,
 # e.g. {"sm_90a": "not run (no Hopper box held)"}; it publishes on its GitHub build receipt
 import os
 notes = json.loads(os.environ.get("MOJOLEARN_ALPHA_SMOKE_NOTES") or "{}")
-if notes:
+if notes and not preverified:
     doc["smoke"] = {str(k): str(v) for k, v in sorted(notes.items())}
 open(out, "w").write(json.dumps(doc, indent=2, sort_keys=True) + "\n")
 EOF
 MSHA=$(shasum -a 256 "$ART/alpha-manifest.json" | cut -d' ' -f1)
 if [ -n "$TAR" ]; then
   python3 packaging/verify_alpha_artifacts.py "$ART" --manifest-sha256 "$MSHA" --qualification-archive "$TAR" --source-root "$REPO" | tee "$WORK/file-admission.json"
+elif [ -n "$PREVERIFIED" ]; then
+  python3 packaging/verify_alpha_artifacts.py "$ART" --manifest-sha256 "$MSHA" --preverified-source "$ARTIFACT_SOURCE_COMMIT" | tee "$WORK/file-admission.json"
 else
   python3 packaging/verify_alpha_artifacts.py "$ART" --manifest-sha256 "$MSHA" | tee "$WORK/file-admission.json"
 fi
@@ -149,6 +166,7 @@ if ! gh release view "$TAG" >/dev/null 2>&1; then
   esac
   [ "$LIGHT_PLATFORM" != macos ] || NOTES="macOS arm64 wheel built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -z "$LIGHT_ASSET" ] || NOTES="$NOTES Exact installed wheel passed the expanded smoke; its receipt is attached."
+  [ -z "$PREVERIFIED" ] || NOTES="$NOTES Published on the checks completed on merged main (NVIDIA, AMD, Apple and CPU); the release checked artifact integrity and ran no new runtime verification."
   [ -z "${MOJOLEARN_ALPHA_SMOKE_NOTES:-}" ] || NOTES="$NOTES Installed smoke per native set: $MOJOLEARN_ALPHA_SMOKE_NOTES (alpha-manifest.json smoke)."
   # shellcheck disable=SC2086
   gh release create "$TAG" --latest --target "$HEAD_SHA" --title "$(basename "$WHL" | cut -d- -f1 | tr _ -) $VERSION $LIGHT_PLATFORM" --notes "$NOTES" \

@@ -8,6 +8,17 @@
     pixi run release 0.8.15                    everything up to publication
     pixi run release 0.8.15 --publish pypi     ... and publish, finish line, record
 
+NO GPU BY DEFAULT (Andrew 2026-10-13): identity and behavior are checked
+before merge on NVIDIA, AMD, Apple and CPU; the release only builds, checks
+artifact integrity and publishes. Linux builds on GitHub's free runners
+(--build-backend github only), gpu-column-* are SKIPPED, macos-build packs
+with --build-only, macos-smoke is tools/wheel_self_test.py (fresh venv,
+`verify --self-test`), every publish takes release_linux_publish.sh
+--preverified (validation_profile=preverified, qualification_reuse in the
+manifest, no receipt), and the rehearsal skips python-tests and the GPU-box
+leg dry-runs. --gpu-smoke restores the GPU route the step table below
+describes (wheel smokes, light-smoke receipts, any build backend).
+
 SEVERABLE PIPELINES (2026-09-25). After the common steps a release is four
 pipelines that run at once in one invocation, each publishing as soon as ITS
 OWN gates pass; a failure in one never blocks or undoes another:
@@ -87,15 +98,16 @@ THE STEPS
                      launched AT ONCE, detached, unless the leg is done at this
                      freeze or a completed leg of an earlier freeze has the same
                      set identity and build tooling (taken, not launched). The
-                     default backend `gpu-legs` builds on the GPU boxes: RunPod
+                     opt-in backend `gpu-legs` builds on the GPU boxes: RunPod
                      NVIDIA (walking NVIDIA_WALK on no stock) and a DigitalOcean
                      MI325X, or a Hot Aisle 1x MI300X when DigitalOcean has a GPU
                      droplet live or no token (--amd-build-provider do|hotaisle
-                     or MOJOLEARN_AMD_PROVIDER pins one). `cpu-box` (RunPod CPU
-                     pods) and `github` (GitHub's free runners,
-                     tools/release_github_build.py) are opt-in
+                     or MOJOLEARN_AMD_PROVIDER pins one), and `cpu-box` (RunPod CPU
+                     pods) are --gpu-smoke only; the default is `github`
+                     (GitHub's free runners, tools/release_github_build.py)
   macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
-  macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock;
+  macos-smoke        default: wheel_self_test.py (fresh venv, verify --self-test);
+                     --gpu-smoke: qualify_verifier_wheel.py --scope expanded under the Metal lock;
                      its self-test job is the bundled-table gate (0.8.35 shipped a
                      stale table): no PASSED receipt for these wheel bytes, no
                      publish-macos
@@ -106,13 +118,13 @@ THE STEPS
                      leg's set, or one synthesized from the published wheel
   linux-pack         pixi run -e pkg pack-linux-wheel --profile release-split
                      (the core and both plugins), audit.sh, strip, split_audit
-  gpu-column-nvidia  } the NVIDIA and AMD wheel smokes AT ONCE (detached
+  gpu-column-nvidia  } SKIPPED by default; with --gpu-smoke the NVIDIA and AMD wheel smokes AT ONCE (detached
   gpu-column-amd     } tools/release_wheel_smoke.sh, the core and both plugins
                        installed, verified against the admitted table; no
                        second identity pass of the changed lanes)
   publish-nvidia     }
-  publish-amd        } tools/release_linux_publish.sh ... --light-smoke, only
-  publish-core-linux }   with --publish; the plugins first, the core last
+  publish-amd        } tools/release_linux_publish.sh ... --preverified|--light-smoke, only
+  publish-core-linux }   with --publish (--preverified by default); the plugins first, the core last
   publish-macos      }
   finish-line        per published platform: pip install on this Mac (macOS);
                      pip download of the Linux file, sha256 compared (Linux)
@@ -1270,9 +1282,14 @@ class Release:
             self.save()
         return "frozen at " + head
 
+    #: the rehearsal without --gpu-smoke: no python-tests (merged main ran them) and no GPU-box leg
+    #: dry-runs (no GPU box builds); named with --only so an older source checkout's rehearsal parses it
+    REHEARSAL_NO_GPU = ("wheel-audit-tests", "docs-facts", "ext-lists", "ext-lists-host", "platform-math")
+
     def step_rehearsal(self):
         work = self.rel / "rehearsal"
-        self.must(["pixi", "run", "release-rehearsal", "--keep", work], log=self.rel / "rehearsal.log",
+        only = [] if self.gpu_smoke() else ["--only", ",".join(self.REHEARSAL_NO_GPU)]
+        self.must(["pixi", "run", "release-rehearsal", "--keep", work, *only], log=self.rel / "rehearsal.log",
                   what="release-rehearsal", cwd=self.src)
         return "PASS, logs " + str(work)
 
@@ -1558,8 +1575,9 @@ class Release:
             else:
                 release_reuse.assemble_macos(plan, self.previous_wheel("macos"), store, say=self.say)
             env.update(MOJOLEARN_REUSE_PLAN=str(store / "macos-plan.json"), MOJOLEARN_REUSE_DIR=str(store))
+        # without --gpu-smoke: --build-only (the checklist's preverified build; macos-smoke's self-test gates it)
         self.must([PY, str(ROOT / "tools" / "mac_slot.py"), "--slots", slots, "run", "--",
-                   "./packaging/macos/build_release_wheel.sh"],
+                   "./packaging/macos/build_release_wheel.sh", *([] if self.gpu_smoke() else ["--build-only"])],
                   env=env, log=self.rel / "macos-build.log", what="build_release_wheel.sh", cwd=src)
         if self.dry:
             return "would copy python/dist/*.whl to " + str(self.rel / "macos")
@@ -1577,8 +1595,35 @@ class Release:
                 return shutil.which(name)
         raise StepFailed("no python3.10..3.14 on PATH for the macOS smoke venv")
 
+    def macos_self_test(self):
+        """Without --gpu-smoke, the receipt publish-macos needs: tools/wheel_self_test.py."""
+        return self.rel / "self-test-macos" / "results.json"
+
+    def macos_self_test_passed(self):
+        sys.path.insert(0, str(ROOT / "tools"))
+        import wheel_self_test
+        w = self.macos_wheel()
+        return bool(w) and wheel_self_test.passed(self.macos_self_test(), w)
+
     def step_macos_smoke(self):
         w = self.macos_wheel()
+        if not self.gpu_smoke():
+            # docs/RELEASE_CHECKLIST.md's preverified macOS gate: a fresh venv, `verify --self-test`
+            # (the bundled reference table reproduces the wheel's own bits). Metal lock: it fits.
+            out = self.macos_self_test().parent
+            if self.macos_self_test_passed():
+                return "WHEEL-SELF-TEST PASSED (receipt exists)"
+            if not w and not self.dry:
+                raise StepFailed("no macOS wheel; run macos-build")
+            if out.exists() and not self.dry:
+                out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+            self.must([PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
+                       PY, str(ROOT / "tools" / "wheel_self_test.py"), w or "<macos wheel>", "--out", out,
+                       "--python", self.smoke_python() if not self.dry else "python3.12"],
+                      log=self.rel / "macos-smoke.log", what="macOS wheel self-test")
+            if not self.dry and not self.macos_self_test_passed():
+                raise StepFailed(f"macOS wheel self-test is not PASSED for this wheel: {self.macos_self_test()}")
+            return "WHEEL-SELF-TEST PASSED"
         out = self.rel / "smoke-macos"
         if w and smoke_passed(out / "results.json", w):
             return "PASSED (receipt exists)"
@@ -1927,7 +1972,14 @@ class Release:
     def hopper_required(self):
         """The Hopper column gates publish-nvidia only when it can run: a held
         Hopper box (--hopper-box), or the old rented route."""
+        if not self.gpu_smoke():
+            return False
         return self.smoke_via() == "rent" or bool(getattr(self.args, "hopper_box", ""))
+
+    def gpu_smoke(self):
+        """--gpu-smoke: the old GPU route. The CLI default is False (no GPU, Andrew 2026-10-13); an args
+        namespace built without the field (the older unit tests) keeps the GPU route they exercise."""
+        return bool(getattr(self.args, "gpu_smoke", True))
 
     def lq_smoke_command(self, name, vendor, final, out, work):
         """tools/release_lq_smoke.py for one column: the wheels, selection and
@@ -1951,12 +2003,18 @@ class Release:
             out += ["--plugin", str(plugin) if plugin else f"<final {SPLIT_PACKAGES[k][1]} wheel>"]
         return out
 
+    NO_GPU_SKIP = "SKIPPED: no GPU smoke (checked before merge; --gpu-smoke runs it); nothing rented, no lq"
+
     def step_gpu_column_nvidia(self):
         """The NVIDIA column alone (core + both plugins, as pip installs them); it gates mojolearn-nvidia."""
+        if not self.gpu_smoke():
+            return self.NO_GPU_SKIP
         self.run_columns(("nvidia",))
         return "NVIDIA wheel smoke PASSED against the admitted reference table"
 
     def step_gpu_column_nvidia_hopper(self):
+        if not self.gpu_smoke():
+            return self.NO_GPU_SKIP
         if not self.hopper_required():
             self.say("  nvidia-hopper: no Hopper box held (--hopper-box <ssh> runs it); nothing is rented")
             return ("SKIPPED: no Hopper box held; the sm_90a payload publishes on its GitHub build receipt, "
@@ -1966,6 +2024,8 @@ class Release:
 
     def step_gpu_column_amd(self):
         """The AMD column alone (core + both plugins, with the smoke); it gates mojolearn-amd."""
+        if not self.gpu_smoke():
+            return self.NO_GPU_SKIP
         self.run_columns(("amd",))
         return "AMD wheel smoke PASSED against the admitted reference table"
 
@@ -2078,7 +2138,8 @@ class Release:
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
                              f"{self.commit}")
-        if not self.dry and platform in SPLIT_PACKAGES and platform != "linux" and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
+        if not self.dry and self.gpu_smoke() and platform in SPLIT_PACKAGES and platform != "linux" \
+                and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
             raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
         if not self.dry and wheel and self.on_pypi(wheel):
             return "already on PyPI"
@@ -2100,15 +2161,17 @@ class Release:
         notes = self.smoke_notes(platform)
         if notes:
             env["MOJOLEARN_ALPHA_SMOKE_NOTES"] = json.dumps(notes, sort_keys=True)
+        # without --gpu-smoke: the checklist's preverified route (qualification_reuse, no receipt attached)
+        route = ["--light-smoke", smoke] if self.gpu_smoke() else ["--preverified"]
         self.must(["bash", "tools/release_linux_publish.sh", wheel or f"<{platform} wheel>", tag, target, work,
-                   "--light-smoke", smoke], env=env,
+                   *route], env=env,
                   log=self.rel / f"publish-{platform}.log", what=f"publish {platform}")
         return f"{target} via {tag} (source {self.commit[:12]}, tooling {self.tooling_commit[:12]})"
 
     def smoke_notes(self, platform):
         """{native set: smoke line} for the alpha manifest of a vendor wheel
         whose set had no installed smoke (sm_90a without a held Hopper box)."""
-        if platform == "nvidia" and not self.hopper_required() and "sm_90a" in GPU_PACKAGES["PLUGINS"]["cuda"]["arches"]:
+        if platform == "nvidia" and self.gpu_smoke() and not self.hopper_required() and "sm_90a" in GPU_PACKAGES["PLUGINS"]["cuda"]["arches"]:
             return {"sm_90a": HOPPER_NOT_RUN}
         return {}
 
@@ -2116,7 +2179,7 @@ class Release:
         """The receipt the split core publishes on, NVIDIA's. The core
         requires BOTH plugins, so it publishes only when BOTH vendors'
         columns PASSED (and after both plugins published, STEP_TABLE)."""
-        if self.dry:
+        if self.dry or not self.gpu_smoke():
             return self.rel / "smoke-linux" / "results.json"
         failed = [label for label, ok in (("NVIDIA Ada", self.nvidia_column_ok()),
                                           ("NVIDIA Hopper", self.hopper_column_ok() or not self.hopper_required()),
@@ -2129,9 +2192,13 @@ class Release:
 
     def step_publish_core_linux(self):
         smoke = self.core_receipt()
+        if not self.gpu_smoke():
+            return self.publish("linux", self.split_final("linux"), None), dict(smoke=None)
         return self.publish("linux", self.split_final("linux"), smoke), dict(smoke=str(smoke))
 
     def step_publish_nvidia(self):
+        if not self.gpu_smoke():
+            return self.publish("nvidia", self.split_final("nvidia"), None), dict(smoke=None)
         if not self.dry and not self.nvidia_column_ok():
             raise StepFailed("NVIDIA vendor wheel requires the Ada column")
         if not self.dry and self.hopper_required() and not self.hopper_column_ok():
@@ -2140,6 +2207,8 @@ class Release:
         return self.publish("nvidia", self.split_final("nvidia"), smoke), dict(smoke=str(smoke))
 
     def step_publish_amd(self):
+        if not self.gpu_smoke():
+            return self.publish("amd", self.split_final("amd"), None), dict(smoke=None)
         smoke = self.rel / "column-amd" / "results.json"
         return self.publish("amd", self.split_final("amd"), smoke), dict(smoke=str(smoke))
 
@@ -2149,6 +2218,12 @@ class Release:
         # same `verify --self-test`); its PASSED receipt for these bytes is
         # required even when publish-macos is run alone. The Apple-vs-previous
         # release cross-diff is deleted: identity is decided by the table admit.
+        if not self.gpu_smoke():
+            if not self.dry and not self.macos_self_test_passed():
+                raise StepFailed(f"no PASSED macOS wheel self-test for this wheel ({self.macos_self_test()}); "
+                                 "run macos-smoke")
+            return (self.publish("macos", self.macos_wheel(), None),
+                    dict(smoke=str(self.macos_self_test())))
         smoke = self.rel / "smoke-macos" / "results.json"
         if not self.dry and not smoke_passed(smoke, self.macos_wheel()):
             raise StepFailed(f"no PASSED macOS smoke receipt for this wheel ({smoke}); run macos-smoke")
@@ -2246,7 +2321,7 @@ class Release:
                 or self.rel / f"smoke-{platform}" / "results.json"
             for src, name in ((art / "artifact" / "alpha-manifest.json", f"alpha-manifest-{platform}.json"),
                               (art / "file-admission.json", f"file-admission-{platform}.json"),
-                              (Path(smoke), f"light-smoke-{platform}.json")):
+                              (Path(smoke), f"{'light-smoke' if self.gpu_smoke() else 'self-test'}-{platform}.json")):
                 if src.is_file():
                     shutil.copy2(src, rec / name)
         (rec / "README.md").write_text(self.readme())
@@ -2282,7 +2357,8 @@ class Release:
             smoke = (self.recorded(self.publish_step(platform)) or {}).get("smoke") or (
                 self.rel / ("column-amd" if platform == "amd" else "smoke-linux") / "results.json")
             rows.append((platform, self.split_final(platform), Path(smoke)))
-        return rows + [("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")]
+        return rows + [("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json" if self.gpu_smoke()
+                        else self.macos_self_test())]
 
     def readme(self):
         wheels = []
@@ -2298,7 +2374,7 @@ class Release:
             plat = wheel.name.split("-", 4)[-1][:-4]
             if wheel.name.split("-")[0] != "mojolearn":
                 plat = wheel.name.split("-")[0].replace("_", "-") + " " + plat
-            wheels.append(f"| {plat} | {sha256(wheel)} | {r.get('status', '?')}, {len(r.get('jobs', []))} jobs "
+            wheels.append(f"| {plat} | {sha256(wheel)} | {r.get('status', '?' if self.gpu_smoke() else 'preverified')}, {len(r.get('jobs', []))} jobs "
                           f"| {tag.get('result', '?') if platform in published else 'not yet published'} |")
         date = changelog_date(ROOT, self.version, text=file_at(self.commit, "CHANGELOG.md") or "")
         return "\n".join([
@@ -2309,9 +2385,12 @@ class Release:
             # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
             "One identity check per release: the admitted reference table "
             "(python/mojolearn/verify_reference/table.json, NVIDIA == AMD, "
-            "tools/admit_identity_columns.sh). Every wheel smoke below verifies the "
-            "installed wheel against it.", "",
-            "## Wheels (light route)", "",
+            "tools/admit_identity_columns.sh). " + (
+                "Every wheel smoke below verifies the installed wheel against it." if self.gpu_smoke() else
+                "Identity and behavior were checked before merge on NVIDIA, AMD, Apple and CPU; this release "
+                "built, checked artifact integrity and published (preverified route). The macOS wheel passed "
+                "`verify --self-test` in a fresh venv."), "",
+            "## Wheels (" + ("light" if self.gpu_smoke() else "preverified") + " route)", "",
             "| platform | sha256 | smoke | published |", "|---|---|---|---|", *wheels, "",
             f"Finish line: {(self.recorded('finish-line') or {}).get('result', 'not run')}.", "",
             "Provenance of every leg and column (built, or taken and why): release-provenance.json.", ""])
@@ -2587,7 +2666,7 @@ class Release:
                         for name in plan["legs"]:
                             row(name, *self.leg_status(name), indent="      ")
                 shown = {"gpu-column-nvidia": ("nvidia",), "gpu-column-amd": ("amd",)}.get(step)
-                if shown and c:
+                if shown and c and self.gpu_smoke():
                     for name, vendor, ok, out in self.column_specs():
                         if name in shown:
                             row(name, *self.column_status(name, vendor, ok, out), indent="      ")
@@ -2630,6 +2709,12 @@ def main(argv=None):
                     help="an existing checkout at the frozen source commit (default: this checkout when its HEAD "
                          "is the source commit, else a worktree under the release directory)")
     ap.add_argument("--build-backend", default="github", choices=sorted(BUILD_BACKENDS))
+    # WHY NO GPU BY DEFAULT (Andrew 2026-10-13): identity and behavior are checked before merge on NVIDIA,
+    # AMD, Apple and CPU; the release only builds, checks artifact integrity and publishes.
+    ap.add_argument("--gpu-smoke", action="store_true",
+                    help="the old GPU route: the NVIDIA/AMD wheel smokes (lq or rented), the expanded macOS smoke, "
+                         "light-smoke receipts and any --build-backend; default: no GPU (GitHub builds, the "
+                         "preverified publication route, the macOS verify --self-test gate)")
     # Inert since 2026-10-10 (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun): the
     # Apple cross-diff and release-check they steered are deleted; kept so
     # existing invocations still parse.
@@ -2660,6 +2745,11 @@ def main(argv=None):
         ap.error("version must look like 0.8.15 (or 0.9.0a1)")
     if args.status and (args.dry_run or args.only or args.redo or args.refreeze):
         ap.error("--status runs nothing; it takes no --dry-run, --only, --redo or --refreeze")
+    if not args.gpu_smoke and args.build_backend != "github":
+        ap.error(f"--build-backend {args.build_backend} uses rented boxes; without --gpu-smoke the Linux sets "
+                 "build on GitHub's free runners only")
+    if not args.gpu_smoke and (args.hopper_box or args.smoke_via != "lq"):
+        ap.error("--hopper-box and --smoke-via steer the GPU wheel smokes; they need --gpu-smoke")
     return Release(args).go()
 
 

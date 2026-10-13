@@ -4,5 +4,8 @@
 # (the test environment), and no single pixi environment has both.
 set -eu
 cd "$(dirname "$0")/.."
+# A fresh checkout (the release's source worktree) has neither environment yet: install them.
+[ -x .pixi/envs/test/bin/python ] || pixi install -e test
+[ -x .pixi/envs/pkg/bin/python ] || pixi install -e pkg
 SP=$(.pixi/envs/test/bin/python -c 'import os, pytest; print(os.path.dirname(os.path.dirname(pytest.__file__)))')
 exec .pixi/envs/pkg/bin/python -c "import sys; sys.path.append('$SP'); import pytest; sys.exit(pytest.main(['-q', '-p', 'no:cacheprovider', 'packaging/portable_math/test_wheel.py', 'packaging/linux/test_ptx_contract.py', 'packaging/linux/test_cubin_contract.py']))"

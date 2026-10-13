@@ -189,7 +189,7 @@ class ReleaseRoute(unittest.TestCase):
         with mock.patch.object(release.Release, "go", lambda self: self.args):
             parsed = release.main(["0.8.14", "--state-dir", str(self.tmp / "s")])
             self.assertEqual((parsed.smoke_via, parsed.hopper_box, parsed.smoke_branch), ("lq", "", "main"))
-            self.assertEqual(release.main(["0.8.14", "--state-dir", str(self.tmp / "s"), "--smoke-via", "rent"]).smoke_via,
+            self.assertEqual(release.main(["0.8.14", "--state-dir", str(self.tmp / "s"), "--gpu-smoke", "--smoke-via", "rent"]).smoke_via,
                              "rent")
         r = self.release()
         self.assertNotIn("gpu-column-nvidia-hopper", r.NEEDS["publish-nvidia"])

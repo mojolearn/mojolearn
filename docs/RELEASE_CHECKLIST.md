@@ -2,6 +2,16 @@
 
 ## Releasing changes already checked before merge
 
+This is the default release (Andrew 2026-10-13: identity and behavior are
+checked before merge on NVIDIA, AMD, Apple and CPU; the release only builds,
+checks artifact integrity and publishes). `pixi run release <v> --publish pypi`
+builds Linux on GitHub's free runners, skips the GPU wheel smokes, gates the
+macOS wheel on `tools/wheel_self_test.py` below, and publishes every package
+with `tools/release_linux_publish.sh ... --preverified`. Its rehearsal skips
+`python-tests` and the GPU-box leg dry-runs. `--gpu-smoke` restores the old
+route: the NVIDIA/AMD wheel smokes, the expanded macOS smoke and light-smoke
+receipts.
+
 When the user requests publication using completed checks on merged main,
 select `validation_profile=preverified` with prepared wheels and their pinned
 `artifact_source_commit`. The manifest records `qualification_reuse` with that

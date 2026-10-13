@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PublishCommandTests(unittest.TestCase):
-    def invoke(self, platform, receipt=True, failed=False, artifact_source=None, full=False, split=None):
+    def invoke(self, platform, receipt=True, failed=False, artifact_source=None, full=False, split=None, preverified=False):
         with tempfile.TemporaryDirectory(prefix='release publish ') as directory:
             root = Path(directory)
             for name in ('bin', 'python/mojolearn', 'tools', 'packaging'):
@@ -69,6 +69,8 @@ class PublishCommandTests(unittest.TestCase):
                 command.extend(['--light-smoke', str(report)])
             if full:
                 command.append('--full')
+            if preverified:
+                command.append('--preverified')
             result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
             record = root / 'commands'
             calls = record.read_text() if record.exists() else ''
@@ -133,6 +135,21 @@ class PublishCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('validation_profile=full', calls)
         self.assertNotIn('light_smoke', manifest)
+
+    def test_preverified_route_records_merged_checks_and_attaches_no_receipt(self):
+        # tools/release.py's default since 2026-10-13: no installed smoke, qualification_reuse instead
+        for platform in ('linux', 'macos'):
+            with self.subTest(platform=platform):
+                result, calls, manifest = self.invoke(platform, receipt=False, preverified=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('validation_profile=preverified', calls)
+                self.assertIn('light_platform=' + platform, calls)
+                self.assertIn('artifact_source_commit=' + 'a' * 40, calls)
+                self.assertNotIn('light-smoke-', calls)
+                self.assertNotIn('light_smoke', manifest)
+                self.assertEqual(manifest['qualification_reuse'], {
+                    'source_commit': 'a' * 40, 'basis': 'completed checks on merged main',
+                    'new_runtime_verification': False})
 
 if __name__ == '__main__':
     unittest.main()
