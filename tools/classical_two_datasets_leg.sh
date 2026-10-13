@@ -316,7 +316,15 @@ if has_phase setup; then
                 --extra-index-url=https://pypi.nvidia.com cuml-cu12==26.8.0
         else
             BASE=/usr/bin/python3
-            PIN="https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl#sha256=1d97c15798bf178299328032141a21d9777e7cdef59d5a7e3ac74e297c17198e https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d"
+            # FAIRNESS FIX (2026-10-13 audit): the AMD torch pin was 2.6.0+rocm6.4.1 (repo.radeon.com
+            # cp312 wheels), an outdated release; on the same MI325X host torch 2.13.0+rocm7.1 ran the
+            # same torch arms 1.7-9.4x faster (2026-09-30 board). The pin is now the current release
+            # from the PyTorch ROCm 7.1 index (tools/bench_board.py AMD_TORCH_ROCM), and the old
+            # torch 2.6.0+rocm6.2.4 fallback is gone: a torch that does not see the GPU leaves the
+            # torch arms refusing by name rather than racing an outdated build. Results raced before
+            # this change were wrong for every AMD torch arm; apply extra scrutiny.
+            PIN="torch==2.13.0+rocm7.1"
+            PIN_INDEX="--extra-index-url https://download.pytorch.org/whl/rocm7.1"
             # DEVIATION 2572: the pinned wheels are cp312. A box whose python3
             # is not 3.12 (or has no venv module) gets a 3.12 venv from uv.
             if "$BASE" -c 'import sys, venv, ensurepip; sys.exit(0 if sys.version_info[:2] == (3, 12) else 3)' > /dev/null 2>&1; then
@@ -330,11 +338,10 @@ if has_phase setup; then
             # 1.9.1), versions in versions.txt and pip_freeze.txt.
             # shellcheck disable=SC2086
             run wheels timeout -k 30 1200 "$VENV/bin/pip" install --disable-pip-version-check --no-input \
-                --only-binary=:all: $PIN numpy scipy scikit-learn threadpoolctl joblib pyarrow
+                --only-binary=:all: $PIN_INDEX $PIN numpy scipy scikit-learn threadpoolctl joblib pyarrow
             # torch runs the harness's kernels on the GPU (is_available alone can
-            # be True on a wheel built without this gfx target), or the second pin
-            # (PyTorch's own ROCm 6.2.4 wheel, ROCm libraries bundled) replaces
-            # it; torch_source.txt says which.
+            # be True on a wheel built without this gfx target); torch_source.txt
+            # says whether it did (no outdated fallback, see the FAIRNESS FIX above).
             TPROBE='import sys, torch
 print("available", torch.cuda.is_available(), "hip", torch.version.hip)
 if not torch.cuda.is_available(): sys.exit(3)
@@ -346,12 +353,9 @@ c = torch.addmm((a[:8] * a[:8]).sum(1)[None], a, a[:8].T, alpha=-2.0).argmin(1)
 torch.cuda.synchronize()
 print("device", torch.cuda.get_device_name(0), float(w[-1]), float(d.sum()), float(s.sum()), int(c.sum()))'
             if timeout -k 10 300 "$VENV/bin/python" -c "$TPROBE" > "$OUT/torch_probe1.log" 2>&1; then
-                echo "torch_source=repo.radeon.com rocm-rel-6.4.1 torch 2.6.0 (probe ran eigh, cdist, topk, lstsq, addmm on the GPU)" > "$OUT/torch_source.txt"
+                echo "torch_source=download.pytorch.org rocm7.1 torch 2.13.0 (probe ran eigh, cdist, topk, lstsq, addmm on the GPU)" > "$OUT/torch_source.txt"
             else
-                run torch-fallback timeout -k 30 1200 "$VENV/bin/pip" install --disable-pip-version-check --no-input \
-                    --force-reinstall --index-url https://download.pytorch.org/whl/rocm6.2.4 'torch==2.6.0+rocm6.2.4'
-                timeout -k 10 300 "$VENV/bin/python" -c "$TPROBE" > "$OUT/torch_probe2.log" 2>&1
-                echo "torch_source=download.pytorch.org rocm6.2.4 torch 2.6.0 (probe2 rc=$?; the repo.radeon.com pin did not see the GPU, torch_probe1.log)" > "$OUT/torch_source.txt"
+                echo "torch_source=download.pytorch.org rocm7.1 torch 2.13.0 DID NOT RUN on this GPU (torch_probe1.log); the torch arms refuse, no outdated fallback" > "$OUT/torch_source.txt"
             fi
         fi
         "$PY" -m pip freeze > "$OUT/pip_freeze.txt" 2>&1

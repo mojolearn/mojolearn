@@ -533,7 +533,9 @@ _add("svgp", xlane="neighbors", ours=("SVGP", "SparseVariationalGP"), kind="svgp
 _IPCA_REFUSED = ("fairness audit 2026-10-13: a different per-batch algorithm, the work "
                  "differs. Ours: thin SVD of each stacked batch through eigh of its d x d Gram "
                  "matrix; this library: a full thin SVD (LAPACK/cuSOLVER gesvd-family) of the "
-                 "stacked batch. No setting on either side selects the other's algorithm")
+                 "stacked batch. No setting on either side selects the other's algorithm, and no "
+                 "library offers ours' per-batch algorithm (cuML, scikit-learn and dask-ml "
+                 "IncrementalPCA all take a thin SVD; torch has no IncrementalPCA)")
 _add("incremental-pca", xlane="decomp", ours="IncrementalPCA", task="transform", block="tsvd",
      quality="pca", sk="sklearn.decomposition:IncrementalPCA",
      params=dict(n_components=10, batch_size=65536),     # cuML benchmark IncrementalPCA

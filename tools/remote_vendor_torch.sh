@@ -25,7 +25,12 @@ if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
   INDEX="https://download.pytorch.org/whl/cu129"
   echo "[vendor-torch] NVIDIA detected: $(nvidia-smi -L | head -1)"
 elif command -v rocminfo >/dev/null 2>&1 || command -v rocm-smi >/dev/null 2>&1; then
-  INDEX="https://download.pytorch.org/whl/rocm6.4"
+  # FAIRNESS FIX (2026-10-13 audit): the AMD index was PyTorch's rocm6.4 one, whose newest torch is
+  # older than the current release; the board's AMD torch is torch 2.13.0+rocm7.1 (tools/
+  # bench_board.py AMD_TORCH_ROCM), 1.7-9.4x faster than the 2.6.0 ROCm build on the same MI325X.
+  # The index is now rocm7.1. Results raced before this change were wrong for this opponent; apply
+  # extra scrutiny.
+  INDEX="https://download.pytorch.org/whl/rocm7.1"
   echo "[vendor-torch] AMD detected: $(rocm-smi --showproductname 2>/dev/null | grep -i 'card series' | head -1)"
 else
   echo "[vendor-torch] REFUSED: neither nvidia-smi nor rocminfo/rocm-smi on this box."

@@ -199,13 +199,20 @@ venv() {
         "$BASE" -m venv --system-site-packages "$VENV" || return 6
     fi
     "$VENV/bin/python" -m pip install --quiet --upgrade pip || true
-    if ! "$VENV/bin/python" -c 'import torch' >/dev/null 2>&1; then
+    # FAIRNESS FIX (2026-10-13 audit): the AMD pin was torch 2.6.0+rocm6.4.1 (repo.radeon.com cp312
+    # wheels), an outdated release (torch 2.13.0+rocm7.1 ran the board's torch arms 1.7-9.4x faster
+    # on the same MI325X host), and any torch the image already had was used whatever its version.
+    # The AMD pin is now torch 2.13.0+rocm7.1 from the PyTorch ROCm 7.1 index (tools/bench_board.py
+    # AMD_TORCH_ROCM), installed whenever the venv's torch is not that version. Results raced
+    # before this change were wrong for the AMD torch incumbent; apply extra scrutiny.
+    _torch_want=""; [ "$VENDOR" = amd ] && _torch_want="2.13.0+rocm7.1"
+    _torch_have=$("$VENV/bin/python" -c 'import torch; print(torch.__version__)' 2>/dev/null || true)
+    if [ -z "$_torch_have" ] || { [ -n "$_torch_want" ] && [ "$_torch_have" != "$_torch_want" ]; }; then
         case "$VENDOR" in
-            amd)  # the ROCm pin tools/torch_lm_step_opponent_leg.sh installed on the MI325X droplet
+            amd)
                 timeout 900 "$VENV/bin/python" -m pip install --quiet \
-                    'https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl#sha256=1d97c15798bf178299328032141a21d9777e7cdef59d5a7e3ac74e297c17198e' \
-                    'https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d' \
-                    'numpy==1.26.4' || return 7 ;;
+                    --extra-index-url https://download.pytorch.org/whl/rocm7.1 \
+                    'torch==2.13.0+rocm7.1' 'numpy==1.26.4' || return 7 ;;
             nvidia)
                 timeout 900 "$VENV/bin/python" -m pip install --quiet 'torch==2.4.1' 'numpy<2' \
                     --index-url https://download.pytorch.org/whl/cu124 --extra-index-url https://pypi.org/simple || return 7 ;;

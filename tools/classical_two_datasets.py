@@ -262,9 +262,18 @@ REFUSED_ARMS = {
     # FAIRNESS FIX (2026-10-13 audit): pca's torch-gpu arm was raced as an opponent; it is a
     # covariance eigh this harness wrote (TorchPCA). Results raced before this change were wrong
     # for this lane; apply extra scrutiny.
+    # Re-checked for a replacement (author's correction, same day): NVIDIA races cuML PCA
+    # (svd_solver='full' = COV_EIG_DQ, ours' covariance eigendecomposition). No library GPU PCA
+    # with this algorithm exists for AMD (ROCm-DS 26.03 has hipDF, hipMM, hipGRAPH, hipRAFT
+    # 1.0.0 whose Python API is common/random/sparse only, hipVS, dask-hip, hip-ucxx: no cuML
+    # port) or Apple (torch MPS has no linalg.eigh; MLX has no PCA), so there scikit-learn on the
+    # CPU is the only opponent.
     ("pca", "torch-gpu"): "harness-written: PCA assembled by this harness from torch ops (mean, "
                           "xc.T @ xc, torch.linalg.eigh); torch has no PCA estimator of this "
-                          "algorithm (torch.pca_lowrank is randomized, a different algorithm)",
+                          "algorithm (torch.pca_lowrank is randomized, a different algorithm); "
+                          "NVIDIA races cuML PCA (the same algorithm), and AMD and Apple have no "
+                          "library GPU PCA (ROCm-DS 26.03 has no cuML port), so scikit-learn on "
+                          "the CPU is their opponent",
 }
 BLOCK_OF = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
             "kde": "kde", "svc": "svc", "dbscan": "dbscan", "hdbscan": "dbscan"}

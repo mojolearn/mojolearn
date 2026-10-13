@@ -43,7 +43,9 @@
 #                  the installer's output included, lands in torch-pin.log;
 #                  every network step is under `timeout`. When the found torch
 #                  IS the pin (the RunPod NVIDIA image), none of this runs.
-#                    amd     torch 2.6.0+rocm6.4.1.git1ded221d and
+#                    amd     torch 2.13.0+rocm7.1 from the PyTorch ROCm 7.1
+#                            index, numpy 1.26.4 (FAIRNESS FIX 2026-10-13
+#                            audit; before: torch 2.6.0+rocm6.4.1.git1ded221d and
 #                            pytorch-triton-rocm 3.2.0+rocm6.4.1.git6da9e660,
 #                            cp312 wheels from repo.radeon.com rocm-rel-6.4.1
 #                            with sha256 pinned, numpy 1.26.4: exactly what
@@ -164,10 +166,16 @@ vendor_snapshot > "$OUT/vendor_before.txt" 2>&1
 
 case "$VENDOR" in
     amd)
-        PIN_VERSION="2.6.0+rocm6.4.1.git1ded221d"
+        # FAIRNESS FIX (2026-10-13 audit): the AMD pin was torch 2.6.0+rocm6.4.1 (repo.radeon.com
+        # cp312 wheels), an outdated release; on the same MI325X host torch 2.13.0+rocm7.1 ran the
+        # board's torch arms 1.7-9.4x faster (2026-09-30). The pin is now the current release from
+        # the PyTorch ROCm 7.1 index (tools/bench_board.py AMD_TORCH_ROCM); a box whose found torch
+        # is anything else installs it into the venv. Results raced before this change were wrong
+        # for this opponent; apply extra scrutiny.
+        PIN_VERSION="2.13.0+rocm7.1"
         PIN_PYTHON_MINOR="3.12"
-        PIN_ARGS="https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl#sha256=1d97c15798bf178299328032141a21d9777e7cdef59d5a7e3ac74e297c17198e https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d numpy==1.26.4"
-        PIN_INDEX_ARGS="" ;;
+        PIN_ARGS="torch==2.13.0+rocm7.1 numpy==1.26.4"
+        PIN_INDEX_ARGS="--extra-index-url https://download.pytorch.org/whl/rocm7.1" ;;
     nvidia)
         PIN_VERSION="2.4.1+cu124"
         PIN_PYTHON_MINOR=""
