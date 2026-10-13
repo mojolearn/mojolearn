@@ -19137,17 +19137,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 0.28,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "73fd360366dcbb35"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/gru-clf/taxi-hourly/rows=full": {
       "cells": [
@@ -19846,17 +19847,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.29,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "f8a84d0741d58379"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/gru-reg/synthetic/rows=full": {
       "cells": [
@@ -20565,17 +20567,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.26,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "f041d29743aad9dc"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/gru-reg/taxi-hourly/rows=full": {
       "cells": [
@@ -21284,17 +21287,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 0.29,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "cb14dae513176548"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/ivf-pq/istella/rows=full": {
       "cells": [
@@ -29965,17 +29969,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-eager-bf16",
           "ours_over_theirs": 0.74,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "a55e892faa39c64c"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/lstm-clf/taxi-hourly/rows=full": {
       "cells": [
@@ -30674,17 +30679,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 0.77,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "69cb63377e74a915"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/lstm-reg/synthetic/rows=full": {
       "cells": [
@@ -31393,17 +31399,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.68,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "20fbc5c642f0b891"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/lstm-reg/taxi-hourly/rows=full": {
       "cells": [
@@ -32112,17 +32119,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.68,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "424a3616abff284f"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/lstsq/istella/rows=full": {
       "cells": [
@@ -49095,17 +49103,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 0.35,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "02cc09412695b18e"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/rnn-clf/taxi-hourly/rows=full": {
       "cells": [
@@ -49809,17 +49818,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.41,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "3a2cde221c9a9576"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/rnn-reg/synthetic/rows=full": {
       "cells": [
@@ -50533,17 +50543,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-eager-fp32",
           "ours_over_theirs": 0.34,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "b4fd34ec9187f92c"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/rnn-reg/taxi-hourly/rows=full": {
       "cells": [
@@ -51257,17 +51268,18 @@
       "status": "done",
       "audit": {
         "identical/fit": {
-          "verdict": "SUSPECT",
-          "rerace": "",
-          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
-          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD torch opponent ran torch 2.6.0+rocm6.4.1, an outdated version; the same box's torch 2.13.0+rocm7.1 is 1.7-9.4x faster (every AMD torch opponent cell on the board); also weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "opponent cell version torch 2.6.0+rocm6.4.1.git1ded221d; release-board-resume-r2",
           "opponent": "torch-compile-fp32",
           "ours_over_theirs": 0.39,
           "date": "2026-10-13",
           "audit": "fairness audit 2026-10-13 (no reruns)",
           "pairing": "f36b1a84dc3a8a5f"
         }
-      }
+      },
+      "rerace": "x"
     },
     "algos/robust-scaler/istella/rows=full": {
       "cells": [
