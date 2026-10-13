@@ -984,7 +984,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 1.142,
+          "pairing": "125cca6331caeb6f",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/adagrad/synthetic/rows=full": {
       "cells": [
@@ -1353,7 +1366,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.716,
+          "pairing": "f61dd655a60588ed",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/adam/synthetic/rows=full": {
       "cells": [
@@ -1744,7 +1770,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 13.669,
+          "pairing": "ee7cc89b605ba707",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/adamax/synthetic/rows=full": {
       "cells": [
@@ -2127,7 +2166,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.654,
+          "pairing": "e105e1f3755aaf16",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/adamw/synthetic/rows=full": {
       "cells": [
@@ -2518,7 +2570,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 13.235,
+          "pairing": "81547caa2f29e61d",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/ard/istella/rows=full": {
       "cells": [
@@ -2787,7 +2852,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.087,
+          "pairing": "3ee234dce14b5b89",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/avgpool1d/synthetic/rows=full": {
       "cells": [
@@ -3373,7 +3451,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-compile-bf16",
+          "ours_over_theirs": 0.717,
+          "pairing": "7a9c024752de42d1",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/avgpool2d/synthetic/rows=full": {
       "cells": [
@@ -3964,7 +4055,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-compile-bf16",
+          "ours_over_theirs": 0.74,
+          "pairing": "34c1ad8fbd9180ce",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/batchnorm1d/synthetic/rows=full": {
       "cells": [
@@ -4558,7 +4662,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.834,
+          "pairing": "63fbcccd9f8838c4",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/batchnorm2d/synthetic/rows=full": {
       "cells": [
@@ -5152,7 +5269,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 0.955,
+          "pairing": "bd3c044ee2fd1b3c",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/bayesian-ridge/istella/rows=full": {
       "cells": [
@@ -5413,7 +5543,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.332,
+          "pairing": "c4e616d42f9fdaa4",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/bernoulli-nb/istella/rows=full": {
       "cells": [
@@ -5670,7 +5813,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.034,
+          "pairing": "cc7072b9a686df6f",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/bernoulli-nb/taxi/rows=full": {
       "cells": [
@@ -5927,7 +6083,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.139,
+          "pairing": "531d15fbb33ab083",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/binarizer/istella/rows=full": {
       "cells": [
@@ -6178,7 +6347,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.004,
+          "pairing": "6b72ec2c5c273890",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/binarizer/taxi/rows=full": {
       "cells": [
@@ -6429,7 +6611,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.051,
+          "pairing": "b6d256f6d4b6582b",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/categorical-nb/istella/rows=full": {
       "cells": [
@@ -6688,7 +6883,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.201,
+          "pairing": "659576d88e8e0376",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/categorical-nb/taxi/rows=full": {
       "cells": [
@@ -6947,7 +7155,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.243,
+          "pairing": "e4da382ea159d94c",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/cholesky/synthetic/rows=full": {
       "cells": [
@@ -7292,7 +7513,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 7.851,
+          "pairing": "3dffc09fd6e91465",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/cnn-clf/synthetic/rows=full": {
       "cells": [
@@ -7994,7 +8228,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD opponent is torch 2.6.0+rocm6.4.1, an outdated version (the same box's torch 2.13.0+rocm7.1 was 1.7-9.4x faster on the audited PCA/SVD lanes); ours draws its initial weights and per-epoch row orders in Mojo (InitStream, executor Feistel order) since 86b2bc254/4bdc5487e while the torch twin loads numpy default_rng(7) weights and orders",
+          "evidence": "cell version torch 2.6.0+rocm6.4.1; bench_board_algos.py:2960-2988",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 1.82,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "ac2bf59e0999e189"
+        }
+      },
+      "rerace": "x"
     },
     "algos/complement-nb/istella/rows=full": {
       "cells": [
@@ -8257,7 +8505,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.341,
+          "pairing": "db03c2c7802340ca",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/complement-nb/taxi/rows=full": {
       "cells": [
@@ -8520,7 +8781,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.769,
+          "pairing": "303893e7fc2cdd93",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/complement-nb/text/rows=full": {
       "cells": [
@@ -8783,7 +9057,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.078,
+          "pairing": "a7a76aede1bfe818",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/connected-components/istella/rows=full": {
       "cells": [
@@ -9025,7 +9312,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "networkx-cpu",
+          "ours_over_theirs": 0.118,
+          "pairing": "ab7194b2aa4f00db",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/connected-components/taxi/rows=full": {
       "cells": [
@@ -9267,7 +9567,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "networkx-cpu",
+          "ours_over_theirs": 0.122,
+          "pairing": "cdd5c8e6c18318ab",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/conv1d/synthetic/rows=full": {
       "cells": [
@@ -9875,7 +10188,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 5.716,
+          "pairing": "25a4c9df1ce4763b",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/conv2d/synthetic/rows=full": {
       "cells": [
@@ -10483,7 +10809,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 5.484,
+          "pairing": "b120ae8d2f254ffa",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/damped-ets/synthetic/rows=full": {
       "cells": [
@@ -10844,7 +11183,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "statsforecast-cpu",
+          "ours_over_theirs": 18.063,
+          "pairing": "360eeac5f95a0055",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/damped-ets/taxi-hourly/rows=full": {
       "cells": [
@@ -11205,7 +11557,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "statsforecast-cpu",
+          "ours_over_theirs": 27.996,
+          "pairing": "06454399614968ab",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/dropout2d/synthetic/rows=full": {
       "cells": [
@@ -11556,7 +11921,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.51,
+          "pairing": "7350e9836f990d89",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/dynamic-optimized-theta/synthetic/rows=full": {
       "cells": [
@@ -11802,7 +12180,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "statsforecast-cpu",
+          "ours_over_theirs": 2.161,
+          "pairing": "21dd4728ec797391",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/dynamic-optimized-theta/taxi-hourly/rows=full": {
       "cells": [
@@ -12048,7 +12439,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "statsforecast-cpu",
+          "ours_over_theirs": 5.524,
+          "pairing": "2a51b708596087d2",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/eigh/synthetic/rows=full": {
       "cells": [
@@ -12397,7 +12801,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.185,
+          "pairing": "c128802fc130d277",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/elliptic-envelope/istella/rows=full": {
       "cells": [
@@ -12886,7 +13303,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 7.868,
+          "pairing": "e947e391cbeb9ca0",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/embedding/synthetic/rows=full": {
       "cells": [
@@ -13265,7 +13695,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-compile-fp32",
+          "ours_over_theirs": 2.094,
+          "pairing": "e650fffe7ba40d60",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/enet-cv/istella/rows=full": {
       "cells": [
@@ -13548,7 +13991,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.018,
+          "pairing": "302db230cc26dcc6",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/enet-cv/taxi/rows=full": {
       "cells": [
@@ -13831,7 +14287,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.797,
+          "pairing": "8aa5460b1e1e1423",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/gaussian-nb/istella/rows=full": {
       "cells": [
@@ -14081,7 +14550,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.067,
+          "pairing": "41b0e7c6f8a9f5dd",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/gaussian-nb/taxi/rows=full": {
       "cells": [
@@ -14331,7 +14813,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.149,
+          "pairing": "a123fc174e64e0f5",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/gcn/istella/rows=full": {
       "cells": [
@@ -14928,7 +15423,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "ours caches the normalized graph between calls (filled in warm-up) while torch is PyG GCNConv(cached=False) and rebuilds it every call; ours' output is never checked against torch",
+          "evidence": "_expansion_cnn.py:2776-2781; bench_board_algos.py:3789",
+          "opponent": "torch-compile-bf16",
+          "ours_over_theirs": 0.92,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "59854558bda782ac"
+        }
+      },
+      "rerace": "x"
     },
     "algos/gcn/taxi/rows=full": {
       "cells": [
@@ -15525,7 +16034,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "ours caches the normalized graph between calls (filled in warm-up) while torch is PyG GCNConv(cached=False) and rebuilds it every call; ours' output is never checked against torch",
+          "evidence": "_expansion_cnn.py:2776-2781; bench_board_algos.py:3789",
+          "opponent": "torch-compile-bf16",
+          "ours_over_theirs": 0.49,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "257fa9a6cb2c9ae3"
+        }
+      },
+      "rerace": "x"
     },
     "algos/global-avgpool/synthetic/rows=full": {
       "cells": [
@@ -16091,7 +16614,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 0.315,
+          "pairing": "23b1605f0f2d0a43",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/global-maxpool/synthetic/rows=full": {
       "cells": [
@@ -16657,7 +17193,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.325,
+          "pairing": "8185becf937e5c29",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/graphsage/istella/rows=full": {
       "cells": [
@@ -17259,7 +17808,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "ours' SAGEConv.backward also computes grad_x (an extra GEMM, two SpMMs and an add) while the torch arm leaves x without requires_grad and computes weight gradients only: ours does more work; the AMD opponent is torch 2.6.0+rocm6.4.1, an outdated version (the same box's torch 2.13.0+rocm7.1 was 1.7-9.4x faster on the audited PCA/SVD lanes); ours' own-host output check failed (fixtures missing)",
+          "evidence": "bench_board_algos.py:4128; cell version torch 2.6.0; ours quality error",
+          "opponent": "torch-compile-bf16",
+          "ours_over_theirs": 1.84,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "aed0d31158c080df"
+        }
+      },
+      "rerace": "x"
     },
     "algos/graphsage/taxi/rows=full": {
       "cells": [
@@ -17861,7 +18424,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "ours' SAGEConv.backward also computes grad_x (an extra GEMM, two SpMMs and an add) while the torch arm leaves x without requires_grad and computes weight gradients only: ours does more work; the AMD opponent is torch 2.6.0+rocm6.4.1, an outdated version (the same box's torch 2.13.0+rocm7.1 was 1.7-9.4x faster on the audited PCA/SVD lanes)",
+          "evidence": "bench_board_algos.py:4128; cell version torch 2.6.0",
+          "opponent": "torch-compile-bf16",
+          "ours_over_theirs": 1.19,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "520abe734c863ea6"
+        }
+      },
+      "rerace": "x"
     },
     "algos/gru-clf/synthetic/rows=full": {
       "cells": [
@@ -18557,7 +19134,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 0.28,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "73fd360366dcbb35"
+        }
+      }
     },
     "algos/gru-clf/taxi-hourly/rows=full": {
       "cells": [
@@ -19253,7 +19843,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.29,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "f8a84d0741d58379"
+        }
+      }
     },
     "algos/gru-reg/synthetic/rows=full": {
       "cells": [
@@ -19959,7 +20562,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.26,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "f041d29743aad9dc"
+        }
+      }
     },
     "algos/gru-reg/taxi-hourly/rows=full": {
       "cells": [
@@ -20665,7 +21281,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 0.29,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "cb14dae513176548"
+        }
+      }
     },
     "algos/ivf-pq/istella/rows=full": {
       "cells": [
@@ -20922,7 +21551,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "faiss-cpu",
+          "ours_over_theirs": 0.106,
+          "pairing": "b852bf2879788b06",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/ivf-pq/taxi/rows=full": {
       "cells": [
@@ -21179,7 +21821,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "faiss-cpu",
+          "ours_over_theirs": 0.093,
+          "pairing": "681a3480d8dca66f",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/ivf-refine/istella/rows=full": {
       "cells": [
@@ -21438,7 +22093,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "faiss-cpu",
+          "ours_over_theirs": 0.096,
+          "pairing": "154e89602bdf6167",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/jl-min-dim/synthetic/rows=full": {
       "cells": [
@@ -21674,7 +22342,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.039,
+          "pairing": "9f55ba94a1b2d969",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/kbins/istella/rows=full": {
       "cells": [
@@ -21940,7 +22621,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.054,
+          "pairing": "dc489bab3e283dec",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/kbins/taxi/rows=full": {
       "cells": [
@@ -22206,7 +22900,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.089,
+          "pairing": "881839085e30ad18",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/kernel-pca/istella/rows=full": {
       "cells": [
@@ -22488,7 +23195,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 1.176,
+          "pairing": "1fc2852a14da40c9",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/kernel-pca/taxi/rows=full": {
       "cells": [
@@ -22770,7 +23490,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 1.098,
+          "pairing": "2c4c133f7edbf06c",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/kernel-shap/istella/rows=full": {
       "cells": [
@@ -23028,7 +23761,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "shap-cpu",
+          "ours_over_theirs": 0.797,
+          "pairing": "092df13428bb049e",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/kernel-shap/taxi/rows=full": {
       "cells": [
@@ -23286,7 +24032,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "shap-cpu",
+          "ours_over_theirs": 0.219,
+          "pairing": "f644a6715249db37",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/knn-imputer/istella/rows=full": {
       "cells": [
@@ -23549,7 +24308,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 1.413,
+          "pairing": "5e335df1de6ebb4d",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/knn-imputer/taxi/rows=full": {
       "cells": [
@@ -23812,7 +24584,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.579,
+          "pairing": "2c23a00c089e4481",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/label-binarizer/istella/rows=full": {
       "cells": [
@@ -24065,7 +24850,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.31,
+          "pairing": "ea0c8d9d373f55db",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/label-binarizer/taxi/rows=full": {
       "cells": [
@@ -24318,7 +25116,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 1.6,
+          "pairing": "ae6abe8960026020",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/label-encoder/istella/rows=full": {
       "cells": [
@@ -24569,7 +25380,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.426,
+          "pairing": "1812293a07f5fdd7",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/label-encoder/taxi/rows=full": {
       "cells": [
@@ -24820,7 +25644,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.134,
+          "pairing": "06b98095bbc976cf",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lamb/synthetic/rows=full": {
       "cells": [
@@ -25222,7 +26059,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 2.439,
+          "pairing": "769f0dac84fdfc8c",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lars/taxi/rows=full": {
       "cells": [
@@ -25479,7 +26329,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.104,
+          "pairing": "d5124a8e71a461bf",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lasso-cv/istella/rows=full": {
       "cells": [
@@ -25759,7 +26622,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.02,
+          "pairing": "cdff2dfa67c0b381",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lasso-cv/taxi/rows=full": {
       "cells": [
@@ -26039,7 +26915,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.717,
+          "pairing": "05b52fba41bef301",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lasso-lars/istella/rows=full": {
       "cells": [
@@ -26301,7 +27190,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.163,
+          "pairing": "f2697850fa1cbde2",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lasso-lars/taxi/rows=full": {
       "cells": [
@@ -26563,7 +27465,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.104,
+          "pairing": "554fe6a97c1e3e84",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/layernorm/synthetic/rows=full": {
       "cells": [
@@ -27148,7 +28063,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 1.446,
+          "pairing": "09e47a4d1bec306c",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lda-clf/istella/rows=full": {
       "cells": [
@@ -27396,7 +28324,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.08,
+          "pairing": "5f0ce1268aebe7e8",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lda-clf/taxi/rows=full": {
       "cells": [
@@ -27644,7 +28585,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.075,
+          "pairing": "03fb5594c5a93101",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lion/synthetic/rows=full": {
       "cells": [
@@ -28037,7 +28991,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "networkx-cpu",
+          "ours_over_theirs": 0.205,
+          "pairing": "09a4e4422046ce16",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/louvain/taxi/rows=full": {
       "cells": [
@@ -28286,7 +29253,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "networkx-cpu",
+          "ours_over_theirs": 0.066,
+          "pairing": "514ddc221323427d",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lstm-clf/synthetic/rows=full": {
       "cells": [
@@ -28982,7 +29962,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 0.74,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "a55e892faa39c64c"
+        }
+      }
     },
     "algos/lstm-clf/taxi-hourly/rows=full": {
       "cells": [
@@ -29678,7 +30671,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-compile-fp32",
+          "ours_over_theirs": 0.77,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "69cb63377e74a915"
+        }
+      }
     },
     "algos/lstm-reg/synthetic/rows=full": {
       "cells": [
@@ -30384,7 +31390,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.68,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "20fbc5c642f0b891"
+        }
+      }
     },
     "algos/lstm-reg/taxi-hourly/rows=full": {
       "cells": [
@@ -31090,7 +32109,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.68,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "424a3616abff284f"
+        }
+      }
     },
     "algos/lstsq/istella/rows=full": {
       "cells": [
@@ -31432,7 +32464,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.254,
+          "pairing": "14ebd428983aec26",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lstsq/taxi/rows=full": {
       "cells": [
@@ -31774,7 +32819,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.238,
+          "pairing": "865bae7fbd868058",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lu-factor/synthetic/rows=full": {
       "cells": [
@@ -32113,7 +33171,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 3.6,
+          "pairing": "40801128ab97caf7",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/lu-solve/synthetic/rows=full": {
       "cells": [
@@ -32455,7 +33526,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 3.636,
+          "pairing": "186ae180ae367fad",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/maxabs-scaler/istella/rows=full": {
       "cells": [
@@ -32702,7 +33786,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.146,
+          "pairing": "3872ab60a7eb4207",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/maxabs-scaler/taxi/rows=full": {
       "cells": [
@@ -32949,7 +34046,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.093,
+          "pairing": "ce71651099a637a1",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/maxpool1d/synthetic/rows=full": {
       "cells": [
@@ -33535,7 +34645,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 0.558,
+          "pairing": "d251831eb63fbda5",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/maxpool2d/synthetic/rows=full": {
       "cells": [
@@ -34121,7 +35244,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.66,
+          "pairing": "62dcdc3fdcf29ddc",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/min-cov-det/istella/rows=full": {
       "cells": [
@@ -34607,7 +35743,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 7.875,
+          "pairing": "ecadec17360de9b7",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/minibatch-kmeans/istella/rows=full": {
       "cells": [
@@ -34873,7 +36022,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 1.717,
+          "pairing": "ed067accae1161cd",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/minibatch-kmeans/taxi/rows=full": {
       "cells": [
@@ -35139,7 +36301,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 1.815,
+          "pairing": "95d5f8f5a4e10494",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/minmax-scaler/istella/rows=full": {
       "cells": [
@@ -35393,7 +36568,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.217,
+          "pairing": "b3317159d8550e46",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/minmax-scaler/taxi/rows=full": {
       "cells": [
@@ -35647,7 +36835,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.067,
+          "pairing": "ffc88921fb69164b",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/moe/synthetic/rows=full": {
       "cells": [
@@ -36244,7 +37445,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-compile-bf16",
+          "ours_over_theirs": 4.751,
+          "pairing": "0b8011c738991453",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/multilabel-binarizer/istella/rows=full": {
       "cells": [
@@ -36496,7 +37710,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.651,
+          "pairing": "7fad001b532a6f6f",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/multilabel-binarizer/taxi/rows=full": {
       "cells": [
@@ -36748,7 +37975,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 1.029,
+          "pairing": "1d2610a6d6398b3e",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/multinomial-nb/istella/rows=full": {
       "cells": [
@@ -37009,7 +38249,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.323,
+          "pairing": "74a913c8f9b1c6c6",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/multinomial-nb/taxi/rows=full": {
       "cells": [
@@ -37270,7 +38523,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.723,
+          "pairing": "395b650685319060",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/multinomial-nb/text/rows=full": {
       "cells": [
@@ -37531,7 +38797,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.065,
+          "pairing": "92818b5fccc7393f",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/nadam/synthetic/rows=full": {
       "cells": [
@@ -37920,7 +39199,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.579,
+          "pairing": "0d8160de71030fbb",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/nearest-centroid/istella/rows=full": {
       "cells": [
@@ -38166,7 +39458,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.057,
+          "pairing": "d7d03d0f640fd570",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/nearest-centroid/taxi/rows=full": {
       "cells": [
@@ -38412,7 +39717,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.184,
+          "pairing": "c592a4dca472f80c",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/normalizer/istella/rows=full": {
       "cells": [
@@ -38663,7 +39981,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.004,
+          "pairing": "11bf3d71b23b5f79",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/normalizer/taxi/rows=full": {
       "cells": [
@@ -38914,7 +40245,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.06,
+          "pairing": "6d0c26e2a91336a6",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/onehot/istella/rows=full": {
       "cells": [
@@ -39169,7 +40513,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 1.069,
+          "pairing": "f8b33cd37e692f6b",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/onehot/taxi/rows=full": {
       "cells": [
@@ -39424,7 +40781,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 1.454,
+          "pairing": "6b4703cd379a4554",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/optimized-theta/synthetic/rows=full": {
       "cells": [
@@ -39670,7 +41040,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "statsforecast-cpu",
+          "ours_over_theirs": 1.34,
+          "pairing": "35deb210a57cc4e9",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/optimized-theta/taxi-hourly/rows=full": {
       "cells": [
@@ -39916,7 +41299,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "statsforecast-cpu",
+          "ours_over_theirs": 0.954,
+          "pairing": "d4cee5ff73112337",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/ordinal/istella/rows=full": {
       "cells": [
@@ -40169,7 +41565,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.943,
+          "pairing": "11f8f2dd95be3590",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/ordinal/taxi/rows=full": {
       "cells": [
@@ -40422,7 +41831,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 1.557,
+          "pairing": "28d05e81c47dc135",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/pagerank/istella/rows=full": {
       "cells": [
@@ -40675,7 +42097,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "networkx-cpu",
+          "ours_over_theirs": 0.021,
+          "pairing": "ea0af028c7cba1a5",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/pagerank/taxi/rows=full": {
       "cells": [
@@ -40928,7 +42363,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "networkx-cpu",
+          "ours_over_theirs": 0.026,
+          "pairing": "2049dbeb0886a00d",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/permutation-shap/istella/rows=full": {
       "cells": [
@@ -41182,7 +42630,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "shap-cpu",
+          "ours_over_theirs": 0.088,
+          "pairing": "bd45997d1600c02b",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/permutation-shap/taxi/rows=full": {
       "cells": [
@@ -41436,7 +42897,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "shap-cpu",
+          "ours_over_theirs": 0.33,
+          "pairing": "38ad3869ac5ab258",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/poly-features/istella/rows=full": {
       "cells": [
@@ -41697,7 +43171,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.147,
+          "pairing": "7b0587e184b1b525",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/poly-features/taxi/rows=full": {
       "cells": [
@@ -41958,7 +43445,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.13,
+          "pairing": "1db377490af4ae01",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/power-transformer/istella/rows=full": {
       "cells": [
@@ -42211,7 +43711,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.005,
+          "pairing": "7e6564634e2ebb45",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/power-transformer/taxi/rows=full": {
       "cells": [
@@ -42464,7 +43977,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.006,
+          "pairing": "ff1c632beb591538",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/qr/istella/rows=full": {
       "cells": [
@@ -42812,7 +44338,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.369,
+          "pairing": "6c416724fadbd5d6",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/qr/taxi/rows=full": {
       "cells": [
@@ -43160,7 +44699,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.649,
+          "pairing": "461ee2eab8cea04f",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/quantile-transformer/istella/rows=full": {
       "cells": [
@@ -43713,7 +45265,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.001,
+          "pairing": "b147050b14272219",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/quantile/taxi/rows=full": {
       "cells": [
@@ -43978,7 +45543,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.002,
+          "pairing": "b372a55cdf75735c",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/randomized-svd/istella/rows=full": {
       "cells": [
@@ -44339,7 +45917,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent is code our own harness wrote, not a library; a harness-written opponent is not an opponent (Andrew, 2026-10-13); also measured on torch 2.6.0+rocm6.4.1 while the same host's torch 2.13.0+rocm7.1 is 1.7-9.4x faster",
+          "evidence": "tools/classical_two_datasets.py torch arms (TorchOLSEigh :1469, k-means index_add_ :1390, cdist+topk)",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.36,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "63fd908de5a0a147"
+        }
+      },
+      "rerace": "x"
     },
     "algos/randomized-svd/taxi/rows=full": {
       "cells": [
@@ -44700,7 +46292,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent is code our own harness wrote, not a library; a harness-written opponent is not an opponent (Andrew, 2026-10-13); also measured on torch 2.6.0+rocm6.4.1 while the same host's torch 2.13.0+rocm7.1 is 1.7-9.4x faster",
+          "evidence": "tools/classical_two_datasets.py torch arms (TorchOLSEigh :1469, k-means index_add_ :1390, cdist+topk)",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.21,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "aee06309a70e4dfa"
+        }
+      },
+      "rerace": "x"
     },
     "algos/resnet-block/synthetic/rows=full": {
       "cells": [
@@ -45273,7 +46879,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 6.106,
+          "pairing": "023dbf075c83de38",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/rfe/istella/rows=full": {
       "cells": [
@@ -45532,7 +47151,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.034,
+          "pairing": "2060202b82e92f4c",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/rfe/taxi/rows=full": {
       "cells": [
@@ -45791,7 +47423,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.089,
+          "pairing": "f6bf7ad7bf6ebccb",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/ridge-cv/istella/rows=full": {
       "cells": [
@@ -46061,7 +47706,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.802,
+          "pairing": "39414adb82d29610",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/ridge-cv/taxi/rows=full": {
       "cells": [
@@ -46331,7 +47989,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.29,
+          "pairing": "f43118e72cfb5161",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/rmsprop/synthetic/rows=full": {
       "cells": [
@@ -46707,7 +48378,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.667,
+          "pairing": "fde94ccb1586dbfa",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/rnn-clf/synthetic/rows=full": {
       "cells": [
@@ -47408,7 +49092,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-compile-fp32",
+          "ours_over_theirs": 0.35,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "02cc09412695b18e"
+        }
+      }
     },
     "algos/rnn-clf/taxi-hourly/rows=full": {
       "cells": [
@@ -48109,7 +49806,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.41,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "3a2cde221c9a9576"
+        }
+      }
     },
     "algos/rnn-reg/synthetic/rows=full": {
       "cells": [
@@ -48820,7 +50530,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.34,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "b4fd34ec9187f92c"
+        }
+      }
     },
     "algos/rnn-reg/taxi-hourly/rows=full": {
       "cells": [
@@ -49531,7 +51254,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "SUSPECT",
+          "rerace": "",
+          "reason": "weights/order mismatch (ours Mojo-drawn, torch numpy); ours 10-10 vs opponents 10-06; tiny model where per-step overhead dominates",
+          "evidence": "tools/bench_board_algos.py:2960,3065 at origin/main",
+          "opponent": "torch-compile-fp32",
+          "ours_over_theirs": 0.39,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "f36b1a84dc3a8a5f"
+        }
+      }
     },
     "algos/robust-scaler/istella/rows=full": {
       "cells": [
@@ -49794,7 +51530,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.048,
+          "pairing": "04dad766ad04f8db",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/robust-scaler/taxi/rows=full": {
       "cells": [
@@ -50057,7 +51806,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.083,
+          "pairing": "df005703ec833e6c",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-chi2/istella/rows=full": {
       "cells": [
@@ -50304,7 +52066,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.093,
+          "pairing": "8ec04c6b793d68e6",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-chi2/taxi/rows=full": {
       "cells": [
@@ -50551,7 +52326,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.178,
+          "pairing": "d52b231fb47d9253",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-d/synthetic/rows=full": {
       "cells": [
@@ -50797,7 +52585,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "statsmodels-cpu",
+          "ours_over_theirs": 0.24,
+          "pairing": "7f84fbfb90769ec6",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-d/taxi-hourly/rows=full": {
       "cells": [
@@ -51043,7 +52844,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "statsmodels-cpu",
+          "ours_over_theirs": 0.339,
+          "pairing": "8ad4112267d101aa",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-f-classif/istella/rows=full": {
       "cells": [
@@ -51290,7 +53104,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.08,
+          "pairing": "c71f90f5aec83252",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-f-classif/taxi/rows=full": {
       "cells": [
@@ -51537,7 +53364,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.235,
+          "pairing": "67e7a7b9c1b48261",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-f-regression/istella/rows=full": {
       "cells": [
@@ -51784,7 +53624,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.079,
+          "pairing": "ff97cc1adc253d81",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-f-regression/taxi/rows=full": {
       "cells": [
@@ -52031,7 +53884,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.235,
+          "pairing": "80dc72ea5e06a380",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-mutual-info-reg/istella/rows=full": {
       "cells": [
@@ -52284,7 +54150,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.149,
+          "pairing": "9d7cc580e9fe85cb",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-mutual-info-reg/taxi/rows=full": {
       "cells": [
@@ -52537,7 +54416,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.142,
+          "pairing": "76671a00e85a5627",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-mutual-info/istella/rows=full": {
       "cells": [
@@ -52790,7 +54682,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.011,
+          "pairing": "b7763e7c5d6689e7",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-mutual-info/taxi/rows=full": {
       "cells": [
@@ -53043,7 +54948,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.093,
+          "pairing": "43d2c50a30adb364",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-r-regression/istella/rows=full": {
       "cells": [
@@ -53290,7 +55208,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.073,
+          "pairing": "615b2a7923658eb2",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/select-r-regression/taxi/rows=full": {
       "cells": [
@@ -53537,7 +55468,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.297,
+          "pairing": "49390549471985bc",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/sgd-clf/istella/rows=full": {
       "cells": [
@@ -53832,7 +55776,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.141,
+          "pairing": "b3f2655f277ae6f7",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/sgd-clf/taxi/rows=full": {
       "cells": [
@@ -54127,7 +56084,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.277,
+          "pairing": "fb3ddf438867bcec",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/sgd/synthetic/rows=full": {
       "cells": [
@@ -54506,7 +56476,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 22.818,
+          "pairing": "3427c56d87b13946",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/sparse-coder/istella/rows=full": {
       "cells": [
@@ -54774,7 +56757,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 49.993,
+          "pairing": "a509aa3d00b36fad",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/sparse-coder/taxi/rows=full": {
       "cells": [
@@ -55042,7 +57038,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 47.262,
+          "pairing": "8b605e9ae2639f98",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/spline/istella/rows=full": {
       "cells": [
@@ -55300,7 +57309,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.395,
+          "pairing": "07be24078babc25b",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/spline/taxi/rows=full": {
       "cells": [
@@ -55558,7 +57580,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.294,
+          "pairing": "da0ebfc22a6dd1f3",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/standard-scaler/istella/rows=full": {
       "cells": [
@@ -55806,7 +57841,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.051,
+          "pairing": "34c3b7cbbebb3ffd",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/standard-scaler/taxi/rows=full": {
       "cells": [
@@ -56054,7 +58102,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.067,
+          "pairing": "992e3368a1ba7cb3",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/svd/istella/rows=full": {
       "cells": [
@@ -56406,7 +58467,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.341,
+          "pairing": "4678c798e5f4e4cf",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/svd/taxi/rows=full": {
       "cells": [
@@ -56758,7 +58832,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.07,
+          "pairing": "f353d51b7af420a1",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/svgp/istella/rows=full": {
       "cells": [
@@ -57149,7 +59236,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "different model: GPyTorch's eval-mode InducingPointKernel adds diag(K_ff - Q_ff) to the train covariance (sgpr_diagonal_correction default True), a FITC-style posterior, while ours solves Titsias's VFE posterior; ours also solves the inducing system in float-float and forms q_sqrt and the ELBO",
+          "evidence": "gpytorch 1.15.2 inducing_point_kernel.py _get_covariance, settings.py:347; bench_board_algos.py _build_svgp",
+          "opponent": "gpytorch-gpu",
+          "ours_over_theirs": 12.73,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "2b7e763890dd595f"
+        }
+      },
+      "rerace": "x"
     },
     "algos/svgp/taxi/rows=full": {
       "cells": [
@@ -57540,7 +59641,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "different model: GPyTorch's eval-mode InducingPointKernel adds diag(K_ff - Q_ff) to the train covariance (sgpr_diagonal_correction default True), a FITC-style posterior, while ours solves Titsias's VFE posterior; the models differ (R2 -0.209 vs ours -0.195)",
+          "evidence": "gpytorch 1.15.2 inducing_point_kernel.py _get_covariance, settings.py:347; bench_board_algos.py _build_svgp",
+          "opponent": "gpytorch-gpu",
+          "ours_over_theirs": 15.3,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "59f1f24869abcb58"
+        }
+      },
+      "rerace": "x"
     },
     "algos/target-encoder/istella/rows=full": {
       "cells": [
@@ -57808,7 +59923,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.389,
+          "pairing": "6d032dc9039d3dca",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/target-encoder/taxi/rows=full": {
       "cells": [
@@ -58076,7 +60204,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.617,
+          "pairing": "8c0a304bef04a0d8",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/theta/synthetic/rows=full": {
       "cells": [
@@ -58430,7 +60571,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "statsmodels-cpu",
+          "ours_over_theirs": 3.169,
+          "pairing": "27b0d07a492aafb5",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/theta/taxi-hourly/rows=full": {
       "cells": [
@@ -58784,7 +60938,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "statsmodels-cpu",
+          "ours_over_theirs": 7.471,
+          "pairing": "67a4488560655fcc",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/tree-shap/istella/rows=full": {
       "cells": [
@@ -59279,7 +61446,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "lightgbm-cpu",
+          "ours_over_theirs": 0.031,
+          "pairing": "4e333cc3886a3582",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/tree-shap/taxi/rows=full": {
       "cells": [
@@ -59774,7 +61954,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "lightgbm-cpu",
+          "ours_over_theirs": 0.024,
+          "pairing": "2c5bbdaf35bf8a40",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/tsne/istella/rows=full": {
       "cells": [
@@ -60048,7 +62241,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.068,
+          "pairing": "15e756a253e0d0f2",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/tsne/taxi/rows=full": {
       "cells": [
@@ -60322,7 +62528,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.068,
+          "pairing": "8f108eaeb2c71050",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/variance-threshold/istella/rows=full": {
       "cells": [
@@ -60566,7 +62785,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.027,
+          "pairing": "54886728e4a43e64",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "algos/variance-threshold/taxi/rows=full": {
       "cells": [
@@ -60810,7 +63042,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.041,
+          "pairing": "a9932262a2111a66",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical/dbscan/istella/rows=full": {
       "cells": [
@@ -61045,7 +63290,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.206,
+          "pairing": "3e76b1f2236f614d",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical/dbscan/taxi/rows=full": {
       "cells": [
@@ -61502,7 +63760,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.001,
+          "pairing": "8bd3e55dc6d47ae1",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical/hdbscan/taxi/rows=full": {
       "cells": [
@@ -61738,7 +64009,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.008,
+          "pairing": "4b350f0e2916332a",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical/kde/istella/rows=full": {
       "cells": [
@@ -61968,7 +64252,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.0,
+          "pairing": "d552b2beff555eb9",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical/kde/taxi/rows=full": {
       "cells": [
@@ -62198,7 +64495,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.002,
+          "pairing": "1ceb07dffc529f75",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical/kmeans/istella/rows=full": {
       "cells": [
@@ -62539,7 +64849,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent is code our own harness wrote, not a library; a harness-written opponent is not an opponent (Andrew, 2026-10-13); also the opponent ran more iterations than ours (Andrew, 2026-10-13: unfair) (91 vs 33)",
+          "evidence": "tools/classical_two_datasets.py torch arms (TorchOLSEigh :1469, k-means index_add_ :1390, cdist+topk)",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.09,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "2226666bed4a7b16"
+        }
+      },
+      "rerace": "x"
     },
     "classical/kmeans/taxi/rows=full": {
       "cells": [
@@ -62880,7 +65204,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent is code our own harness wrote, not a library; a harness-written opponent is not an opponent (Andrew, 2026-10-13)",
+          "evidence": "tools/classical_two_datasets.py torch arms (TorchOLSEigh :1469, k-means index_add_ :1390, cdist+topk)",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.35,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "6e2335d0cbb44068"
+        }
+      },
+      "rerace": "x"
     },
     "classical/knn/istella/rows=full": {
       "cells": [
@@ -63214,7 +65552,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent is code our own harness wrote, not a library; a harness-written opponent is not an opponent (Andrew, 2026-10-13)",
+          "evidence": "tools/classical_two_datasets.py torch arms (TorchOLSEigh :1469, k-means index_add_ :1390, cdist+topk)",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.93,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "4341114a36e67cda"
+        }
+      },
+      "rerace": "x"
     },
     "classical/knn/taxi/rows=full": {
       "cells": [
@@ -63548,7 +65900,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent is code our own harness wrote, not a library; a harness-written opponent is not an opponent (Andrew, 2026-10-13)",
+          "evidence": "tools/classical_two_datasets.py torch arms (TorchOLSEigh :1469, k-means index_add_ :1390, cdist+topk)",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.49,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "32adbef6626d372f"
+        }
+      },
+      "rerace": "x"
     },
     "classical/ols/istella/rows=full": {
       "cells": [
@@ -63979,7 +66345,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent torch-gpu-eigh is OLS our harness wrote from torch ops (and a different algorithm: eigh of the normal equations against ours' TSQR); its R2 0.152 vs ours 0.333",
+          "evidence": "classical_two_datasets.py TorchOLSEigh; linear_model.py _ols_tsqr_centered",
+          "opponent": "torch-gpu-eigh",
+          "ours_over_theirs": 10.39,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "49501e22aec8c03a"
+        }
+      },
+      "rerace": "x"
     },
     "classical/ols/taxi/rows=full": {
       "cells": [
@@ -64410,7 +66790,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent is code our own harness wrote, not a library; a harness-written opponent is not an opponent (Andrew, 2026-10-13)",
+          "evidence": "tools/classical_two_datasets.py torch arms (TorchOLSEigh :1469, k-means index_add_ :1390, cdist+topk)",
+          "opponent": "torch-gpu-eigh",
+          "ours_over_theirs": 0.41,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "d24a40cfccf2581d"
+        }
+      },
+      "rerace": "x"
     },
     "classical/pca/istella/rows=full": {
       "cells": [
@@ -64739,7 +67133,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "harness-written torch-gpu PCA (covariance eigh from torch ops), not a library opponent; removed. Also measured on outdated torch 2.6.0+rocm6.4.1 (the same arm took 9.29 ms on torch 2.13.0+rocm7.1 on the same MI325X host, 09-30); AMD pca now races scikit-learn only",
+          "evidence": "classical_two_datasets.py TorchPCA (now refused); opponents-20261006 /root/opponent-venv torch 2.6.0+rocm6.4.1 19.90 ms vs board-resume-r2 amd-mi325x torch 2.13.0+rocm7.1 9.29 ms",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 2.6,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "0637e29b16cc7d4d"
+        }
+      },
+      "rerace": "x"
     },
     "classical/pca/taxi/rows=full": {
       "cells": [
@@ -65068,7 +67476,21 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent is code our own harness wrote, not a library; a harness-written opponent is not an opponent (Andrew, 2026-10-13); also measured on torch 2.6.0+rocm6.4.1 while the same host's torch 2.13.0+rocm7.1 is 1.7-9.4x faster",
+          "evidence": "tools/classical_two_datasets.py torch arms (TorchOLSEigh :1469, k-means index_add_ :1390, cdist+topk)",
+          "opponent": "torch-gpu",
+          "ours_over_theirs": 0.7,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "ecb81babede15cb9"
+        }
+      },
+      "rerace": "x"
     },
     "classical/svc/istella/rows=full": {
       "cells": [
@@ -65299,7 +67721,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.06,
+          "pairing": "9bc7c1a17ff61a20",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical/svc/taxi/rows=full": {
       "cells": [
@@ -65530,7 +67965,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.875,
+          "pairing": "a218e97eb43a2815",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/elasticnet/istella/rows=full": {
       "cells": [
@@ -65770,7 +68218,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.031,
+          "pairing": "4efdf3fa8368e9b5",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/elasticnet/taxi/rows=full": {
       "cells": [
@@ -66010,7 +68471,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.044,
+          "pairing": "5af12e36fc767bf8",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/gmm/istella/rows=full": {
       "cells": [
@@ -66495,7 +68969,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "faiss-cpu",
+          "ours_over_theirs": 0.053,
+          "pairing": "1268bc2db4186d68",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/ivf/taxi/rows=full": {
       "cells": [
@@ -66720,7 +69207,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "faiss-cpu",
+          "ours_over_theirs": 0.322,
+          "pairing": "8f1990d8e931149b",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/lasso/istella/rows=full": {
       "cells": [
@@ -66959,7 +69459,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.012,
+          "pairing": "4893fbe7dddad05e",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/lasso/taxi/rows=full": {
       "cells": [
@@ -67198,7 +69711,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.041,
+          "pairing": "1f35c6a44da40829",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/logreg/istella/rows=full": {
       "cells": [
@@ -67440,7 +69966,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.103,
+          "pairing": "5a49e5867743569a",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/logreg/taxi/rows=full": {
       "cells": [
@@ -67682,7 +70221,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.1,
+          "pairing": "ae9ce6b12b73446d",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/ridge/istella/rows=full": {
       "cells": [
@@ -67920,7 +70472,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.098,
+          "pairing": "e4c11ee640c49142",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/ridge/taxi/rows=full": {
       "cells": [
@@ -68158,7 +70723,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.103,
+          "pairing": "3154a7af562c02e2",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/tsvd/istella/rows=full": {
       "cells": [
@@ -68389,7 +70967,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.043,
+          "pairing": "d1b4713b55fde517",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "classical2/tsvd/taxi/rows=full": {
       "cells": [
@@ -68620,7 +71211,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "sklearn-cpu",
+          "ours_over_theirs": 0.019,
+          "pairing": "65066ab2fbf6e107",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "neural/gemm/gaussian/shape=full": {
       "cells": [
@@ -69161,7 +71765,20 @@
       "rc": null,
       "rows": null,
       "shape": "full",
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 2.455,
+          "pairing": "426a448fc96d7c9e",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "neural/lm-forward/bytes/shape=full": {
       "cells": [
@@ -69702,7 +72319,21 @@
       "rc": null,
       "rows": null,
       "shape": "full",
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD opponent is torch 2.6.0+rocm6.4.1, an outdated version (the same box's torch 2.13.0+rocm7.1 was 1.7-9.4x faster on the audited PCA/SVD lanes); the torch LM twin is the harness's own ByteDecoder (tools/torch_lm_step_opponent.py build_model: hand-written RMSNorm/RoPE/SwiGLU around SDPA), not a library's model such as transformers' LlamaForCausalLM (vs compile-fp32: 2.32)",
+          "evidence": "cell version torch 2.6.0+rocm6.4.1",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 2.53,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "c78ba09657eaf646"
+        }
+      },
+      "rerace": "x"
     },
     "neural/lm-train-step/bytes/shape=full": {
       "cells": [
@@ -70327,7 +72958,21 @@
       "rc": null,
       "rows": null,
       "shape": "full",
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD opponent is torch 2.6.0+rocm6.4.1, an outdated version (the same box's torch 2.13.0+rocm7.1 was 1.7-9.4x faster on the audited PCA/SVD lanes); the torch LM twin is the harness's own ByteDecoder (tools/torch_lm_step_opponent.py build_model: hand-written RMSNorm/RoPE/SwiGLU around SDPA), not a library's model such as transformers' LlamaForCausalLM (vs compile-fp32: 2.83)",
+          "evidence": "cell version torch 2.6.0+rocm6.4.1",
+          "opponent": "torch-compile-bf16",
+          "ours_over_theirs": 5.25,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "adda222500491ad8"
+        }
+      },
+      "rerace": "x"
     },
     "neural/mamba1-forward/gaussian/shape=full": {
       "cells": [
@@ -70654,7 +73299,21 @@
       "rc": null,
       "rows": null,
       "shape": "full",
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent is the pure-PyTorch reference (a per-token Python loop for Mamba-1, the chunked reference for Mamba-2/3), which the harness calls not a deployment kernel; where the fused mamba-ssm kernel ran (NVIDIA) ours loses or ties",
+          "evidence": "tools/bench_board_neural.py:278",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 0.04,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "64d6badf9a462e9b"
+        }
+      },
+      "rerace": "x"
     },
     "neural/mamba2-forward/gaussian/shape=full": {
       "cells": [
@@ -71183,7 +73842,21 @@
       "rc": null,
       "rows": null,
       "shape": "full",
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the opponent is the pure-PyTorch reference (a per-token Python loop for Mamba-1, the chunked reference for Mamba-2/3), which the harness calls not a deployment kernel; where the fused mamba-ssm kernel ran (NVIDIA) ours loses or ties",
+          "evidence": "tools/bench_board_neural.py:278",
+          "opponent": "torch-compile-bf16",
+          "ours_over_theirs": 0.38,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "716db2dea46dd5d2"
+        }
+      },
+      "rerace": "x"
     },
     "neural/mlp-train-step/gaussian/shape=full": {
       "cells": [
@@ -71808,7 +74481,21 @@
       "rc": null,
       "rows": null,
       "shape": "full",
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD opponent is torch 2.6.0+rocm6.4.1, an outdated version (the same box's torch 2.13.0+rocm7.1 was 1.7-9.4x faster on the audited PCA/SVD lanes); otherwise like-for-like (same weights and batches, losses equal to 4e-7, FP32)",
+          "evidence": "cell version torch 2.6.0+rocm6.4.1; quality loss_last 1.1233609 vs 1.1233611",
+          "opponent": "torch-eager-fp32",
+          "ours_over_theirs": 2.58,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "b77d38c0ee436ce2"
+        }
+      },
+      "rerace": "x"
     },
     "neural/samba-forward/bytes/shape=full": {
       "cells": [
@@ -72377,7 +75064,21 @@
       "rc": null,
       "rows": null,
       "shape": "full",
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "TIE",
+          "rerace": "x",
+          "reason": "a tie (ours/theirs 0.99): not cited until rerun (Andrew, 2026-10-13); a tie (0.99), one run each; Mamba-3 layers are the reference",
+          "evidence": "cells source/copied_from",
+          "opponent": "torch-compile-bf16",
+          "ours_over_theirs": 0.99,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "105ed6484c4b9765"
+        }
+      },
+      "rerace": "x"
     },
     "neural/samba-train-step/bytes/shape=full": {
       "cells": [
@@ -72990,7 +75691,21 @@
       "rc": null,
       "rows": null,
       "shape": "full",
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "both torch compile arms timed out, so the eager arm became the opponent (compile is 3.4-3.8x faster than eager on NVIDIA); Mamba-3 layers are the reference",
+          "evidence": "cells status refused (timeout)",
+          "opponent": "torch-eager-bf16",
+          "ours_over_theirs": 0.54,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "dd8501300feab684"
+        }
+      },
+      "rerace": "x"
     },
     "neural/transformer-forward/gaussian/shape=full": {
       "cells": [
@@ -73527,7 +76242,21 @@
       "rc": null,
       "rows": null,
       "shape": "full",
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "verdict": "UNFAIR",
+          "rerace": "x",
+          "reason": "the AMD opponent is torch 2.6.0+rocm6.4.1, an outdated version (the same box's torch 2.13.0+rocm7.1 was 1.7-9.4x faster on the audited PCA/SVD lanes); the torch twin is the harness's transcription of HF's Llama block from torch ops (tools/speed_torch_seq.py LlamaEager: SDPA attention, hand-written RMSNorm/RoPE), not transformers' own LlamaDecoderLayer",
+          "evidence": "cell version torch 2.6.0+rocm6.4.1; tools/speed_torch_seq.py:506",
+          "opponent": "torch-compile-fp32",
+          "ours_over_theirs": 2.05,
+          "date": "2026-10-13",
+          "audit": "fairness audit 2026-10-13 (no reruns)",
+          "pairing": "c7f5ed87d1d0f170"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-categorical/taxi/rows=full": {
       "cells": [
@@ -74074,7 +76803,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "lightgbm-cpu",
+          "ours_over_theirs": 0.959,
+          "pairing": "26207e5d2e1bc1fa",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-depthwise/istella/rows=full": {
       "cells": [
@@ -74502,7 +77244,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "xgboost-cpu",
+          "ours_over_theirs": 0.393,
+          "pairing": "41cee5120ca276bf",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-depthwise/taxi/rows=full": {
       "cells": [
@@ -74930,7 +77685,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "xgboost-cpu",
+          "ours_over_theirs": 0.449,
+          "pairing": "33daf613e616379c",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-lossguide/istella/rows=full": {
       "cells": [
@@ -75462,7 +78230,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "lightgbm-cpu",
+          "ours_over_theirs": 0.325,
+          "pairing": "00adacc225629d1a",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-lossguide/taxi/rows=full": {
       "cells": [
@@ -75994,7 +78775,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "lightgbm-cpu",
+          "ours_over_theirs": 0.367,
+          "pairing": "54e8e0a79d8ea78f",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-multiclass/istella/rows=full": {
       "cells": [
@@ -76542,7 +79336,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "xgboost-cpu",
+          "ours_over_theirs": 0.132,
+          "pairing": "cb12b3bfaa3929fd",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-multiclass/taxi/rows=full": {
       "cells": [
@@ -77090,7 +79897,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "xgboost-cpu",
+          "ours_over_theirs": 0.169,
+          "pairing": "d115f8112e3f7a99",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-ordered/istella/rows=full": {
       "cells": [
@@ -77315,7 +80135,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "catboost-cpu",
+          "ours_over_theirs": 0.126,
+          "pairing": "2adc09c116ff9faa",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-ordered/taxi/rows=full": {
       "cells": [
@@ -77540,7 +80373,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "catboost-cpu",
+          "ours_over_theirs": 0.253,
+          "pairing": "70e678a9b583e11e",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-rank-pairlogit/istella/rows=full": {
       "cells": [
@@ -77966,7 +80812,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "xgboost-cpu",
+          "ours_over_theirs": 0.254,
+          "pairing": "0962731cdedd97c7",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-symmetric/istella/rows=full": {
       "cells": [
@@ -78191,7 +81050,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "catboost-cpu",
+          "ours_over_theirs": 0.135,
+          "pairing": "02f14847eac7b727",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     },
     "trees/gbdt-symmetric/taxi/rows=full": {
       "cells": [
@@ -78416,7 +81288,20 @@
       "rc": null,
       "rows": null,
       "shape": null,
-      "status": "done"
+      "status": "done",
+      "audit": {
+        "identical/fit": {
+          "rule": "main_board_ingest.fairness_rule (2026-10-13)",
+          "date": "2026-10-13",
+          "opponent": "catboost-cpu",
+          "ours_over_theirs": 0.186,
+          "pairing": "9a80df9e92de6c33",
+          "verdict": "UNCHECKED",
+          "rerace": "x",
+          "reason": "no MATCHED settings-parity check of both arms and no audit"
+        }
+      },
+      "rerace": "x"
     }
   },
   "schema": "mojolearn-bench-board/1",
