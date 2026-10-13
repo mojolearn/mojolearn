@@ -123,10 +123,16 @@ def test_tables_are_complete_and_stdlib_only():
     # model), and the lanes whose ours estimator is or nests the binned DecisionTree refuse
     # scikit-learn's exact-threshold trees, so off NVIDIA (decision-tree-*) or everywhere they
     # race ours alone too.
+    # FAIRNESS FIX (2026-10-13 audit): radius-neighbors refuses scikit-learn (a tree or brute
+    # search against ours' random ball cover; no library has the same algorithm), tsne refuses
+    # scikit-learn's Barnes-Hut (cuML method='exact' races on NVIDIA only), and cagra refuses
+    # faiss's HNSW (cuVS on NVIDIA and hipVS on AMD are CAGRA), so off those vendors they race
+    # ours alone. Results raced before this change were wrong for these lanes.
     assert alone == {"lion", "lamb", "sgd-clf", "sgd-reg", "incremental-pca", "tree-shap",
                      "decision-tree-clf", "decision-tree-reg", "bagging-clf", "bagging-reg",
                      "adaboost-clf", "adaboost-reg", "voting-clf", "voting-reg",
-                     "stacking-clf", "stacking-reg", "quantile"}
+                     "stacking-clf", "stacking-reg", "quantile", "radius-neighbors", "tsne",
+                     "cagra"}
     assert any(w.startswith("cuml-gpu on incremental-pca: refused") for w in A.not_planned("nvidia"))
     assert any(w.startswith("sklearn-cpu on bagging-clf: refused") for w in A.not_planned("apple"))
     assert "xgboost-cpu" not in A.opponents("apple", "dart") and "lightgbm-cpu" in A.opponents("apple", "dart")
@@ -189,7 +195,12 @@ def test_opponent_rosters():
     assert nv["autoarima"] == ("statsforecast-cpu",)
     assert nv["gaussian-rp"] == nv["sparse-rp"] == ("sklearn-cpu", "cuml-gpu")
     assert not A.LANES["gaussian-rp"].get("cuml_host_input")
-    assert A.opponents("amd", "ivf-pq") == ("faiss-cpu",)
+    # FAIRNESS FIX (2026-10-13 audit): hipVS (AMD's cuVS port) is the AMD GPU IVF-PQ and CAGRA
+    # opponent; faiss's HNSW is refused on cagra
+    assert A.opponents("amd", "ivf-pq") == ("faiss-cpu", "hipvs-gpu")
+    assert A.opponents("amd", "cagra") == ("hipvs-gpu",)
+    assert A.opponents("apple", "cagra") == () and A.opponents("apple", "tsne") == ()
+    assert "hipvs-gpu" not in nv["ivf-pq"] and nv["cagra"] == ("cuvs-gpu",)
     assert not any("tf32" in a for a in A.opponents("apple", "conv2d"))
 
 

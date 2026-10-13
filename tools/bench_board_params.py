@@ -188,6 +188,11 @@ ALIASES = {
         # unscaled tol was not comparable. Results raced before this change were
         # wrong for this lane; apply extra scrutiny.
         "l1_stop_threshold": "l1_stop_threshold",
+        # FAIRNESS FIX (2026-10-13 audit): the spectral eigensolver tolerance, pinned on every
+        # arm of classical2 spectral and spectral-embedding (it was each library's default, and
+        # never compared). Results raced before this change were wrong for those lanes; apply
+        # extra scrutiny.
+        "eigen_tol": "eigen_tol",
         # gbm-bench's binary classification weight (tools/bench_board_harness.py)
         "scale_pos_weight": ("scale_pos_weight", _unit_if_none),
         # the cuML benchmark's KMeans cuml_args, TargetEncoder and MBSGD values
@@ -368,6 +373,13 @@ EXCEPTIONS = [
      "scikit-learn precompute=True is that algorithm"),
     ("ivf", "seed", "cuvs-gpu", "cuVS ivf_flat IndexParams takes no seed and its k-means training "
      "samples rows; ours and faiss get 7"),
+    # FAIRNESS FIX (2026-10-13 audit): hipVS (AMD's cuVS port) replaces the harness-written torch
+    # arms on AMD; its Python API takes no seed, as cuVS's. Results raced before this change were
+    # wrong for these lanes; apply extra scrutiny.
+    ("ivf", "seed", "hipvs-gpu", "hipVS (AMD's cuVS port) ivf_flat IndexParams takes no seed and its "
+     "k-means training samples rows; ours and faiss get 7"),
+    ("kmeans", "seed", "hipvs-gpu", "hipVS (AMD's cuVS port) cuvs.cluster.kmeans KMeansParams takes "
+     "no seed: its k-means++ draws from cuVS's own generator; ours, cuML and scikit-learn get 7"),
     ("tsvd", "algorithm", "sklearn-cpu*", "scikit-learn TruncatedSVD has no 'covariance_eigh'; it "
      "runs 'arpack' at tol=0"),
     ("tsvd", "algorithm", "cuml-gpu", "cuML TruncatedSVD has no 'covariance_eigh'; it runs 'full'"),
@@ -407,9 +419,10 @@ EXCEPTIONS = [
     ("algos/cagra", "seed", "faiss-cpu", "faiss IndexHNSWFlat takes no seed argument (its level "
      "draw uses faiss' fixed internal seed)"),
 ] + [
-    ("algos/" + lane, "seed", "cuvs-gpu", "cuVS IndexParams take no seed and the index build "
+    ("algos/" + lane, "seed", arm, "cuVS IndexParams take no seed and the index build "
      "samples rows; ours and faiss get 7")
     for lane in ("ivf-pq", "ivf-sq", "ivf-refine", "cagra")
+    for arm in ("cuvs-gpu", "hipvs-gpu")    # hipvs-gpu: FAIRNESS FIX (2026-10-13 audit), hipVS on AMD
 ] + [
     ("algos/decision-tree-*", "max_leaves", "cuml-gpu", "no leaf cap on any arm: ours and "
      "scikit-learn max_leaf_nodes None (a value would switch both to best-first growth; ours "

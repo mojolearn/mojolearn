@@ -202,10 +202,18 @@ ARMS = {
     # writes from torch primitives, raced as if it were a library opponent (the
     # only GPU opponent on AMD and Apple). It is removed from both rosters, and a
     # leg that still names it gets a refusal with the reason (REFUSED_ARMS,
-    # `race`). No library k-means or kNN is installed for ROCm or Metal on the
-    # boxes, so those races have no GPU opponent there. Results raced before
-    # this change were wrong for this lane; apply extra scrutiny.
-    "kmeans": ("ours", "cuml-gpu", "sklearn-cpu"),
+    # `race`). Results raced before this change were wrong for this lane; apply
+    # extra scrutiny.
+    # FAIRNESS FIX (2026-10-13 audit, the author's correction): the harness
+    # arm is REPLACED where a library exists. `hipvs-gpu` is hipVS (AMD's port
+    # of cuVS, `pip install amd-hipvs`, the same `cuvs` Python API): its
+    # k-means (cuvs.cluster.kmeans) and brute-force kNN
+    # (cuvs.neighbors.brute_force) are the AMD GPU opponents, at the settings
+    # the NVIDIA cuML arms are pinned to. No maintained library k-means or kNN
+    # runs on the Apple GPU (MPS/Metal), so Apple keeps scikit-learn on the CPU.
+    # Results raced before this change were wrong for these lanes; apply extra
+    # scrutiny.
+    "kmeans": ("ours", "cuml-gpu", "hipvs-gpu", "sklearn-cpu"),
     # FAIRNESS FIX (2026-10-13 audit): pca's torch-gpu arm (TorchPCA) is harness code, a
     # covariance eigh written from torch ops, not a library's PCA, and was raced as an opponent.
     # It is removed from the roster and refused (REFUSED_ARMS). Results raced before this change
@@ -218,7 +226,7 @@ ARMS = {
     # (QR, ours' algorithm class; the only GPU driver torch has); see TorchOLS. Results raced
     # before this change were wrong for this lane; apply extra scrutiny.
     "ols": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
-    "knn": ("ours", "cuml-gpu", "sklearn-cpu"),
+    "knn": ("ours", "cuml-gpu", "hipvs-gpu", "sklearn-cpu"),
     "kde": ("ours", "cuml-gpu", "sklearn-cpu"),
     "svc": ("ours", "cuml-gpu", "sklearn-cpu"),
     # Lane linear-cluster-istella (2026-09-11): DBSCAN at 1,000,000 rows,
@@ -369,7 +377,9 @@ CONFIG = {
             "n_iter_over_ours are in every quality cell",
             "algorithm: scikit-learn algorithm='lloyd'; ours and cuML have no such parameter "
             "(Lloyd)",
-            "torch-gpu: refused, not an opponent (the harness's own k-means from torch ops)",
+            "torch-gpu: refused, not an opponent (the harness's own k-means from torch ops); "
+            "hipvs-gpu (AMD): hipVS cuvs.cluster.kmeans, init_method='KMeansPlusPlus' with "
+            "oversampling_factor=0, tol=1e-7 under cuVS's rule, squared L2, no seed argument",
         ],
     },
     "pca": {
@@ -425,7 +435,9 @@ CONFIG = {
             # this harness) was the GPU opponent on AMD and Apple. Refused now
             # (REFUSED_ARMS). Results raced before this change were wrong for
             # this lane; apply extra scrutiny.
-            "torch-gpu: refused, not an opponent (the harness's own cdist + topk kNN)",
+            "torch-gpu: refused, not an opponent (the harness's own cdist + topk kNN); "
+            "hipvs-gpu (AMD): hipVS cuvs.neighbors.brute_force, built before the clock, "
+            "search timed",
         ],
     },
     "kde": {
@@ -489,9 +501,9 @@ CONFIG = {
             # a default change cannot move cuML to approximate 'nn_descent'.
             # Results raced before this change were wrong for this lane; apply
             # extra scrutiny.
-            "k-NN graph: exact on every arm; cuML build_algo='brute_force' pinned (an exact "
-            "brute-force k-NN, as ours); scikit-learn algorithm='auto', leaf_size=40, "
-            "n_jobs=-1: its own exact search",
+            "k-NN graph: exact brute force on every arm; cuML build_algo='brute_force' pinned "
+            "(as ours); scikit-learn algorithm='brute' (FAIRNESS FIX 2026-10-13: it was 'auto', a "
+            "KD/ball tree), leaf_size=40 unused, n_jobs=-1",
         ],
     },
 }
@@ -1674,11 +1686,17 @@ def _cupy_sync():
     cp.cuda.runtime.deviceSynchronize()
 
 
-def _cuml_setup(arrays):
+def _cuml_setup(arrays, library="cuml"):
     """Upload `arrays` to the GPU as cupy arrays before any clock. Returns
-    (tensors, info)."""
+    (tensors, info). `library` is the arm's library: "cuml" records cuML's
+    version; "cuvs" (cuVS on NVIDIA, hipVS on AMD) records cuvs' and imports
+    no cuML (FAIRNESS FIX 2026-10-13 audit: hipVS arms on AMD, which has no
+    cuML)."""
     import cupy as cp
-    import cuml
+    if library == "cuml":
+        import cuml
+    else:
+        import cuvs as cuml   # noqa: F811 -- only its __version__ is read below
     cp.cuda.runtime.deviceSynchronize()
     t0 = time.perf_counter()
     dev = {k: cp.asarray(np.ascontiguousarray(v)) for k, v in arrays.items()}
@@ -1689,7 +1707,8 @@ def _cuml_setup(arrays):
         name = name.decode() if isinstance(name, bytes) else str(name)
     except Exception as exc:  # noqa: BLE001
         name = "unavailable (%r)" % (exc,)
-    info = {"library": "cuml", "version": cuml.__version__, "cupy": cp.__version__,
+    info = {"library": library, "version": getattr(cuml, "__version__", "unknown"),
+            "cupy": cp.__version__,
             "cuda_runtime": cp.cuda.runtime.runtimeGetVersion(),
             "cuda_driver_api": cp.cuda.runtime.driverGetVersion(),
             "device": "gpu", "device_name": name, "upload_ms_untimed": upload_ms,
@@ -1822,6 +1841,93 @@ class CumlKNN:
 
     def call(self):
         self.out = self.nn.kneighbors(self.q)
+
+    def sync(self):
+        _cupy_sync()
+
+    def outputs(self):
+        dist, ind = self.out
+        return {"ind": np.asarray(_to_host(ind), dtype=np.int64),
+                "dist": np.asarray(_to_host(dist), dtype=np.float32)}
+
+
+class HipvsKMeans:
+    """FAIRNESS FIX (2026-10-13 audit, the author's correction): the AMD GPU
+    k-means opponent was TorchKMeans, this harness's own k-means from torch
+    ops. It is replaced by a library: hipVS (AMD's port of cuVS, `pip install
+    amd-hipvs`, the same `cuvs` Python API), cuvs.cluster.kmeans, with the
+    settings the cuML arm is pinned to: n_clusters=8, k-means++ with
+    oversampling_factor=0 (the sequential seeding ours and cuML use),
+    max_iter=300, tol=1e-7 read by cuVS's own stopping rule (the squared
+    center shift, the rule ours transcribes), n_init=1, squared L2. Inputs go
+    to the device before the clock (the cuML arm's rule); fit is timed; labels
+    for the quality pass come from kmeans.predict after the clock. cuVS's
+    KMeansParams takes no seed. UNVERIFIED AT RUNTIME: no AMD box has run
+    this arm (2026-10-13). Results raced before this change were wrong for
+    this lane; apply extra scrutiny."""
+
+    def __init__(self, data, rec):
+        from cuvs.cluster import kmeans
+        self.kmeans = kmeans
+        t, self.info = _cuml_setup({"X": data["X"]}, library="cuvs")
+        self.info["library"] = "hipvs"
+        self.x = t["X"]
+        self.kw = dict(metric="sqeuclidean", n_clusters=KMEANS_K, init_method="KMeansPlusPlus",
+                       max_iter=KMEANS_ITER, tol=KMEANS_TOL, n_init=1,
+                       oversampling_factor=KMEANS_OVERSAMPLING)
+        self.params = kmeans.KMeansParams(**self.kw)
+        # Declared (a function call, not an estimator): the values `call` passes.
+        self.params_obj = {"__library__": "cuvs", "n_clusters": KMEANS_K, "init": KMEANS_INIT,
+                           "n_init": 1, "max_iter": KMEANS_ITER, "tol": KMEANS_TOL,
+                           "oversampling_factor": KMEANS_OVERSAMPLING}
+        self.info["config"] = ("cuvs.cluster.kmeans.fit(KMeansParams(%s), X) (hipVS); fit timed, "
+                               "labels by kmeans.predict after the clock"
+                               % ", ".join("%s=%r" % kv for kv in sorted(self.kw.items())))
+        self.out = None
+
+    def call(self):
+        self.out = self.kmeans.fit(self.params, self.x)
+
+    def sync(self):
+        _cupy_sync()
+
+    def outputs(self):
+        centroids, _inertia, n_iter = self.out
+        labels, _ = self.kmeans.predict(self.params, self.x, centroids)
+        return {"centers": np.asarray(_to_host(centroids), dtype=np.float32),
+                "labels": np.asarray(_to_host(labels), dtype=np.int32).reshape(-1),
+                "n_iter": np.array([int(n_iter)], dtype=np.int64)}
+
+
+class HipvsKNN:
+    """FAIRNESS FIX (2026-10-13 audit, the author's correction): the AMD GPU kNN
+    opponent was TorchKNN, this harness's cdist + topk. It is replaced by
+    hipVS's exact brute-force kNN (cuvs.neighbors.brute_force, AMD's port of
+    cuVS): the index is built before the clock, exactly as the cuML arm fits
+    before its clock, and search(index, queries, k=64) under metric='euclidean'
+    is timed. UNVERIFIED AT RUNTIME: no AMD box has run this arm (2026-10-13).
+    Results raced before this change were wrong for this lane; apply extra
+    scrutiny."""
+
+    def __init__(self, data, rec):
+        from cuvs.neighbors import brute_force
+        self.bf = brute_force
+        t, self.info = _cuml_setup({"index": data["index"], "queries": data["queries"]},
+                                   library="cuvs")
+        self.info["library"] = "hipvs"
+        self.q = t["queries"]
+        self.index = brute_force.build(t["index"], metric="euclidean")
+        _cupy_sync()
+        # Declared where it becomes true, as CumlKNN does: the build ran before the clock.
+        self.info["pre_clock_fit"] = True
+        self.info["config"] = ("cuvs.neighbors.brute_force.build(index, metric='euclidean') "
+                               "(hipVS) before the clock; search(index, queries, k=%d) timed" % KNN_K)
+        self.params_obj = {"__library__": "cuvs", "n_neighbors": KNN_K, "algorithm": "brute",
+                           "metric": "euclidean", "p": 2}
+        self.out = None
+
+    def call(self):
+        self.out = self.bf.search(self.index, self.q, KNN_K)
 
     def sync(self):
         _cupy_sync()
@@ -2160,13 +2266,22 @@ class SkHDBSCAN:
         self.X = data["X"][:n]
         self.est = None
         self.info = _sklearn_info()
-        self.info["config"] = ("sklearn.cluster.HDBSCAN(%s, max_cluster_size=None, n_jobs=-1) on the "
+        self.info["config"] = ("sklearn.cluster.HDBSCAN(%s, max_cluster_size=None, n_jobs=-1, "
+                               "algorithm='brute') on the "
                                "block's first %d rows; fit timed"
                                % (", ".join("%s=%r" % kv for kv in sorted(SKLEARN_HDBSCAN_KW.items())), n))
         self.params_obj = self.make()
 
     def make(self):
-        return self.HDBSCAN(max_cluster_size=None, n_jobs=-1, **SKLEARN_HDBSCAN_KW)
+        # FAIRNESS FIX (2026-10-13 audit): scikit-learn ran algorithm='auto' (a
+        # KD/ball tree for the core distances and its tree-based MST) against
+        # ours' exact brute-force k-NN: a different neighbour search (the DBSCAN
+        # ruling). It now runs algorithm='brute'. Its brute path holds the full
+        # n x n distance matrix (100,000 rows: 80 GB in float64), so a host
+        # without that memory refuses the arm by name. Results raced before this
+        # change were wrong for this lane; apply extra scrutiny.
+        return self.HDBSCAN(max_cluster_size=None, n_jobs=-1, algorithm="brute",
+                            **SKLEARN_HDBSCAN_KW)
 
     def call(self):
         est = self.make()
@@ -2187,6 +2302,7 @@ BUILDERS = {
     ("hdbscan", "ours"): OursHDBSCAN, ("hdbscan", "sklearn-cpu"): SkHDBSCAN,
     ("kmeans", "ours"): OursKMeans, ("kmeans", "sklearn-cpu"): SkKMeans, ("kmeans", "torch-gpu"): TorchKMeans,
     ("kmeans", "cuml-gpu"): CumlKMeans,
+    ("kmeans", "hipvs-gpu"): HipvsKMeans, ("knn", "hipvs-gpu"): HipvsKNN,  # FAIRNESS FIX (2026-10-13 audit)
     ("pca", "ours"): OursPCA, ("pca", "sklearn-cpu"): SkPCA, ("pca", "torch-gpu"): TorchPCA,
     ("pca", "cuml-gpu"): CumlPCA,
     ("ols", "ours"): OursOLS, ("ols", "sklearn-cpu"): SkOLS, ("ols", "torch-gpu"): TorchOLS,
@@ -2839,7 +2955,7 @@ def _span_facts(arm, info):
         # must not invent a number it did not take in this run.
         facts["inside_clock"] = "host_to_device_upload,host_validation,call"
         facts["input_home"] = "host"
-    elif library in ("cuml", "torch"):
+    elif library in ("cuml", "torch", "cuvs", "hipvs"):   # hipvs: FAIRNESS FIX (2026-10-13 audit)
         facts["inside_clock"] = "call"
         facts["input_home"] = "device"
     else:

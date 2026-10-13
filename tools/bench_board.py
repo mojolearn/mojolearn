@@ -308,10 +308,15 @@ CLASSICAL_OPPONENTS = {
         "hdbscan": ("cuml-gpu",),
     },
     "amd": {                                 # tools/classical_hotaisle_leg.sh's arms
-        "kmeans": ("sklearn-cpu",),
+        # FAIRNESS FIX (2026-10-13 audit, the author's correction): the harness-written torch
+        # k-means / kNN are REPLACED by a library on AMD, hipVS (AMD's cuVS port, AMD_HIPVS
+        # below): hipvs-gpu races, and scikit-learn on the CPU drops out by gpu_opponents_first.
+        # UNVERIFIED AT RUNTIME (no AMD box has run hipVS). Results raced before this change were
+        # wrong for these lanes; apply extra scrutiny.
+        "kmeans": ("sklearn-cpu", "hipvs-gpu"),
         "pca": ("sklearn-cpu",),
         "ols": ("sklearn-cpu", "torch-gpu"), # FAIRNESS FIX (2026-10-13 audit): -eigh refused
-        "knn": ("sklearn-cpu",),
+        "knn": ("sklearn-cpu", "hipvs-gpu"),
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),
         "dbscan": ("sklearn-cpu",),
@@ -404,6 +409,18 @@ AMD_TORCH_ROCM_OLD = (
     "cp312-cp312-linux_x86_64.whl"
     "#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d")
 AMD_TORCH_ROCM = "torch==2.13.0+rocm7.1"
+#: FAIRNESS FIX (2026-10-13 audit, the author's correction): hipVS, AMD's ROCm-DS port of cuVS
+#: (the same `cuvs` Python API: cluster.kmeans, neighbors.brute_force / ivf_flat / ivf_pq /
+#: cagra), is the AMD GPU opponent that replaces the harness-written torch k-means and kNN and
+#: joins the IVF / CAGRA lanes (arm `hipvs-gpu`). Installed exactly as its install page gives it
+#: (rocm.docs.amd.com/projects/hipVS/en/latest/install/install.html, 2026-10-13: Python 3.11 or
+#: 3.12, `pip install amd-hipvs==1.0.0 --extra-index-url=https://pypi.amd.com/rocm-7.2.3/simple/`);
+#: its Python packages need CuPy with ROCM_HOME set (its build page). UNVERIFIED AT RUNTIME: no AMD
+#: box has installed or run it (2026-10-13), and the index targets ROCm 7.2.3, so a box on an older
+#: ROCm may fail the install, which leaves the hipvs-gpu arms refusing by name. Results raced
+#: before this change were wrong for those lanes; apply extra scrutiny.
+AMD_HIPVS_INDEX = "https://pypi.amd.com/rocm-7.2.3/simple/"
+AMD_HIPVS = ["amd-hipvs==1.0.0"]
 DEFAULT_TORCH_SPEC = {"apple": "torch==2.13.0", "nvidia": "torch==2.13.0+cu129",
                       "amd": AMD_TORCH_ROCM}
 #: an EXTRA index for the default torch spec (PyPI stays the main index)
@@ -1070,6 +1087,7 @@ def pinned_package_names():
     reqs += [r for rs in MORE_PINS.values() for r in rs] + list(NEURAL_PINS)
     reqs += [r for rs in ALGOS.PINS.values() for r in rs]
     reqs += [r for rs in ALGOS.RAPIDS_EXTRA.values() for r in rs]
+    reqs += list(AMD_HIPVS)                # FAIRNESS FIX (2026-10-13 audit): hipVS on AMD
     for r in reqs:
         m = re.match(r"^([A-Za-z0-9_.-]+)", r)
         if m:
@@ -1205,6 +1223,18 @@ def setup_python(args, vendor, out, log):
                 if run_logged(fcmd + fallback, None, log, 3600) != 0:
                     print("bench_board: fallback install of %s failed too (the XGBoost arms will "
                           "refuse by name)" % " ".join(fallback), flush=True)
+    if vendor == "amd" and any(f in (args.families or "") for f in ("classical", "algos")):
+        # FAIRNESS FIX (2026-10-13 audit): hipVS (AMD_HIPVS), the AMD GPU k-means / kNN / IVF /
+        # CAGRA opponent; a failed install is not fatal (its arms refuse by name).
+        os.environ.setdefault("ROCM_HOME", "/opt/rocm")
+        cmd = list(pip)
+        if args.opponent_wheels:
+            cmd += ["--no-index", "--find-links", os.path.abspath(args.opponent_wheels)]
+        else:
+            cmd += ["--extra-index-url", AMD_HIPVS_INDEX]
+        if run_logged(cmd + AMD_HIPVS, None, log, 3600) != 0:
+            print("bench_board: hipVS install failed (%s); the hipvs-gpu arms will refuse by name"
+                  % " ".join(AMD_HIPVS), flush=True)
     if "classical2" in (args.families or ""):
         cmd = list(pip)
         if args.opponent_wheels:
@@ -3678,6 +3708,9 @@ def print_plan(vendor, modes, races, args, rows, data):
         "python %s" % args.python_env if args.python_env else "venv %s" % (args.venv or "<cache>/venv")))
     for idx, reqs in opponent_requirements(vendor, opponent_pins()):
         print("opponents pinned: %s%s" % (" ".join(reqs), (" (index %s)" % idx) if idx else ""))
+    if vendor == "amd":                    # FAIRNESS FIX (2026-10-13 audit): hipVS on AMD
+        print("hipVS (the AMD GPU k-means / kNN / IVF / CAGRA opponent, hipvs-gpu): %s (index %s; "
+              "unverified at runtime)" % (" ".join(AMD_HIPVS), AMD_HIPVS_INDEX))
     ts = args.torch_spec if args.torch_spec is not None else DEFAULT_TORCH_SPEC[vendor]
     print("torch: %s%s" % (ts or "the image's own (use --system-site-packages)",
                            " (extra index %s)" % DEFAULT_TORCH_EXTRA_INDEX[vendor]

@@ -164,6 +164,14 @@ TSVD_COMPONENTS = 10
 #: (the board's seed for this lane, bench_board_params.LANE_SEED)
 SPECTRAL_N_INIT = 1
 SPECTRAL_SEED = 42
+#: FAIRNESS FIX (2026-10-13 audit): one eigensolver tolerance on every spectral arm. It was each
+#: library's default: ours' Lanczos stops at 1e-5, scikit-learn's ARPACK at eigen_tol='auto' (0,
+#: machine precision), so the arms stopped at different accuracies. 1e-5 (ours' and cuVS's
+#: default) is now passed to ours, scikit-learn and cuML (where its build takes it). Each
+#: library applies it through its own convergence test (ARPACK's Ritz-value accuracy, ours'
+#: Lanczos residual), named in the lane's mismatches. Results raced before this change were
+#: wrong for these lanes; apply extra scrutiny.
+SPECTRAL_EIGEN_TOL = 1e-5
 #: cuML benchmark ElasticNet shared_args alpha=0.1, l1_ratio=0.5
 ENET_ALPHA = 0.1
 #: cuML benchmark UMAP shared_args n_neighbors=5, n_epochs=500
@@ -298,7 +306,11 @@ _CPU = {
 }
 OPPONENTS = {
     "apple": {lane: _CPU.get(lane, ("sklearn-cpu",)) for lane in LANE_ORDER},
-    "amd": {lane: _CPU.get(lane, ("sklearn-cpu",)) for lane in LANE_ORDER},
+    # FAIRNESS FIX (2026-10-13 audit): AMD's IVF-Flat opponent is hipVS on the GPU (AMD's cuVS
+    # port), not faiss on the CPU; the board races the GPU opponent when one exists. Results raced
+    # before this change were wrong for this lane; apply extra scrutiny.
+    "amd": dict({lane: _CPU.get(lane, ("sklearn-cpu",)) for lane in LANE_ORDER},
+                ivf=("faiss-cpu", "hipvs-gpu")),
     "nvidia": {
         "umap": ("cuml-gpu",),
         "spectral-embedding": ("cuml-gpu", "sklearn-cpu"),
@@ -331,7 +343,9 @@ NOT_PLANNED = {
     ] + ["scikit-learn on %s: refused, %s (2026-10-13 audit); no opponent on this box."
          % (_lane, _why) for (_lane, _arm), _why in sorted(REFUSED.items()) if _arm == "sklearn-cpu"],
     "amd": [
-        "cuML and cuVS: CUDA only; no ROCm build is pinned.",
+        "cuML: CUDA only; no ROCm build exists. cuVS's ROCm port, hipVS (amd-hipvs), is the "
+        "IVF-Flat GPU arm (hipvs-gpu); it has no ivf_sq, refine, UMAP, spectral or k-NN "
+        "estimators, so those lanes keep their CPU opponents.",
         "faiss-gpu: the pinned FAISS GPU builds are CUDA; faiss-cpu is the arm on this box.",
     ] + ["scikit-learn on %s: refused, %s (2026-10-13 audit); no opponent on this box."
          % (_lane, _why) for (_lane, _arm), _why in sorted(REFUSED.items()) if _arm == "sklearn-cpu"],
@@ -360,8 +374,9 @@ LANE_CONFIG = {
         "timed": "fit (ours fit_transform) from host rows to the embedding",
         "quality": "trustworthiness k=15 over every row (sklearn's formula, chunked)",
         "mismatches": [
-            "neighbors: ours exact brute force; umap-learn NN-descent (its choice above 4,096 rows); "
-            "cuML build_algo='brute_force_knn' (exact)",
+            "neighbors: exact on every arm: ours brute force; cuML build_algo='brute_force_knn'; "
+            "umap-learn the exact k-NN of scikit-learn's brute NearestNeighbors inside its clock, "
+            "passed as precomputed_knn (FAIRNESS FIX 2026-10-13: it was NN-descent, approximate)",
             "umap-learn-cpu: random_state=7 makes umap-learn run one thread (its rule)",
             "umap-learn-cpu-unseeded: random_state=None and n_jobs=-1, the every-core setting; "
             "the seed is the one parameter that differs",
@@ -374,14 +389,16 @@ LANE_CONFIG = {
         "params": "n_components=2, affinity='nearest_neighbors', n_neighbors=10, random_state=7",
         "timed": "fit_transform",
         "quality": "trustworthiness k=15 over every row",
-        "mismatches": ["eigensolver: ours Lanczos (default tolerance); scikit-learn arpack "
-                       "(its default); cuML its own"],
+        "mismatches": ["eigensolver: ours Lanczos, scikit-learn ARPACK, cuML its own; "
+                       "eigen_tol=1e-5 passed to every arm (FAIRNESS FIX 2026-10-13: it was each "
+                       "library's default, scikit-learn's 'auto' = machine precision), applied "
+                       "through each library's own convergence test"],
     },
     "gmm": {
         "rows": ("%d fit and %d held-out stride rows of the reg block (%s); "
                  "an explicitly full_dataset_coverage recipe retains all fit/eval rows")
                 % (GMM_FIT, GMM_EVAL, _STD),
-        "opponent_precision": "scikit-learn receives the same values promoted to float64 inside the fit clock; original float32 covariance failure retained",
+        "opponent_precision": "float32 on every arm (FAIRNESS FIX 2026-10-13: scikit-learn was promoted to float64 inside its clock); a float32 covariance failure refuses the arm by name",
         "params": "n_components=8, covariance_type='full', tol=1e-3, reg_covar=1e-6 on taxi and "
                   "3e-3 on Istella-S (GMM_REG_COVAR), max_iter=100, "
                   "init_params='kmeans', n_init=1, warm_start=False, random_state=7",
@@ -512,8 +529,10 @@ LANE_CONFIG = {
                   "random_state=42 (the cuML benchmark's SpectralClustering), "
                   "assign_labels='kmeans', n_components=8",
         "timed": "fit", "quality": "cluster count, silhouette, ARI vs ours",
-        "mismatches": ["eigensolver: ours Lanczos eigen_tol 1e-5 (its default); scikit-learn "
-                       "arpack eigen_tol='auto'; each library's own k-means on the embedding",
+        "mismatches": ["eigensolver: ours Lanczos, scikit-learn ARPACK, eigen_tol=1e-5 on every "
+                       "arm (FAIRNESS FIX 2026-10-13: scikit-learn's 'auto' was machine precision), "
+                       "each through its own convergence test; each library's own k-means on the "
+                       "embedding",
                        "gamma, degree, coef0: not read by the nearest_neighbors affinity; ours "
                        "refuses any value (None), scikit-learn holds 1.0, 3, 1"],
     },
@@ -964,9 +983,9 @@ def _sk_info():
     return ctd._sklearn_info()
 
 
-def _cuml(arrays):
+def _cuml(arrays, library="cuml"):
     ctd = _load("classical_two_datasets")
-    dev, info = ctd._cuml_setup(arrays)
+    dev, info = ctd._cuml_setup(arrays, library=library)
     return dev, info, ctd._cupy_sync
 
 
@@ -991,8 +1010,24 @@ def build(lane, arm, D, rec):
         if seeded:
             info["threads_note"] = "random_state set: umap-learn runs one thread (its rule)"
 
+        # FAIRNESS FIX (2026-10-13 audit): umap-learn built its k-NN graph by
+        # NN-descent (approximate; its choice above 4,096 rows) while ours (and
+        # cuML, build_algo='brute_force_knn') use the exact k-NN: a different
+        # algorithm for that stage. umap-learn now gets the exact k-NN through
+        # its documented precomputed_knn=(indices, distances) input, computed
+        # INSIDE its clock by scikit-learn's brute-force NearestNeighbors (every
+        # core), so its timed work is the exact graph plus its own UMAP. Results
+        # raced before this change were wrong for this lane; apply extra scrutiny.
+        from sklearn.neighbors import NearestNeighbors
+        info["config"] += ("; k-NN: sklearn NearestNeighbors(n_neighbors=%d, algorithm='brute', "
+                           "n_jobs=-1).kneighbors(X) inside the clock, passed as precomputed_knn"
+                           % UMAP_NEIGHBORS)
+
         def call():
-            S["e"] = umap.UMAP(**kw).fit(D["X"]).embedding_
+            nn = NearestNeighbors(n_neighbors=UMAP_NEIGHBORS, algorithm="brute", metric="euclidean",
+                                  n_jobs=-1).fit(D["X"])
+            dist, ind = nn.kneighbors(D["X"])
+            S["e"] = umap.UMAP(precomputed_knn=(ind, dist), **kw).fit(D["X"]).embedding_
         return Runner(info, call, lambda: {"embedding": np.asarray(S["e"], dtype=np.float32)},
                       params=umap.UMAP(**kw))
     if arm == "statsmodels-cpu":
@@ -1031,11 +1066,17 @@ def build(lane, arm, D, rec):
             S["ind"], S["keep"] = ind, (quant, index)
         return Runner(info, call, lambda: {"ind": np.asarray(S["ind"], dtype=np.int64)},
                       params=declared)
-    if arm == "cuvs-gpu":
+    # FAIRNESS FIX (2026-10-13 audit): hipvs-gpu is hipVS (AMD's cuVS port, the same `cuvs`
+    # API) on AMD, the same code and pinned settings as cuvs-gpu; AMD raced faiss on the CPU
+    # only. The upload helper no longer imports cuML (AMD has none). UNVERIFIED AT RUNTIME on
+    # AMD (2026-10-13). Results raced before this change were wrong for this lane; apply extra
+    # scrutiny.
+    if arm in ("cuvs-gpu", "hipvs-gpu"):
         from cuvs.neighbors import ivf_flat
         import cuvs
-        dev, info, sync = _cuml({"index": D["index"], "queries": D["queries"]})
-        info.update(library="cuvs", version=getattr(cuvs, "__version__", "unknown"),
+        dev, info, sync = _cuml({"index": D["index"], "queries": D["queries"]}, library="cuvs")
+        info.update(library="hipvs" if arm == "hipvs-gpu" else "cuvs",
+                    version=getattr(cuvs, "__version__", "unknown"),
                     config="cuvs.neighbors.ivf_flat build(IndexParams(n_lists=%d, metric='sqeuclidean', "
                            "kmeans_n_iters=20, kmeans_trainset_fraction=ours' training rows / n)) + "
                            "search(SearchParams(n_probes=%d), k=%d)"
@@ -1100,7 +1141,8 @@ def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=
         out = lambda: {"embedding": np.asarray(S["e"], dtype=np.float32)}  # noqa: E731
     elif lane == "spectral-embedding":
         make = lambda: ml.SpectralEmbedding(n_components=2, affinity="nearest_neighbors",  # noqa: E731
-                                            n_neighbors=10, random_state=SEED)
+                                            n_neighbors=10, random_state=SEED,
+                                            eigen_tol=SPECTRAL_EIGEN_TOL)
         def call():
             S["est"] = make()
             S["e"] = S["est"].fit_transform(X)
@@ -1125,7 +1167,8 @@ def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=
             make = lambda: ml.SpectralClustering(n_clusters=N_CLUSTERS, affinity="nearest_neighbors",  # noqa: E731
                                                  n_neighbors=10, assign_labels="kmeans",
                                                  n_init=SPECTRAL_N_INIT, n_components=N_CLUSTERS,
-                                                 random_state=SPECTRAL_SEED)
+                                                 random_state=SPECTRAL_SEED,
+                                                 eigen_tol=SPECTRAL_EIGEN_TOL)
         else:
             make = lambda: ml.AgglomerativeClustering(n_clusters=N_CLUSTERS, metric="euclidean",  # noqa: E731
                                                       connectivity="pairwise", linkage="single",
@@ -1263,7 +1306,8 @@ def _build_sklearn(lane, D, rec, S):
     if lane == "spectral-embedding":
         from sklearn.manifold import SpectralEmbedding
         make = lambda: SpectralEmbedding(n_components=2, affinity="nearest_neighbors", n_neighbors=10,  # noqa: E731
-                                         random_state=SEED, n_jobs=-1)
+                                         random_state=SEED, n_jobs=-1, eigen_solver="arpack",
+                                         eigen_tol=SPECTRAL_EIGEN_TOL)
         call = lambda: S.update(e=make().fit_transform(X))  # noqa: E731
         out = lambda: {"embedding": np.asarray(S["e"], dtype=np.float32)}  # noqa: E731
     elif lane == "gmm":
@@ -1271,16 +1315,19 @@ def _build_sklearn(lane, D, rec, S):
         make = lambda: GaussianMixture(n_components=GMM_COMPONENTS, covariance_type="full", tol=1e-3,  # noqa: E731
                                        reg_covar=_gmm_reg_covar(rec), max_iter=100, init_params="kmeans", n_init=1,
                                        warm_start=False, random_state=SEED)
-        # Float32 covariance accumulation can lose positive definiteness even
-        # after standardization. The retained sklearn failure recommends its
-        # float64 path; promoting these same values changes no samples or
-        # estimator parameters. Include the conversion in the timed fit call.
-        info.update(input_dtype=str(X.dtype), fit_dtype="float64",
-                    input_conversion_inside_clock=True,
+        # FAIRNESS FIX (2026-10-13 audit): scikit-learn's fit was promoted to
+        # float64 (inside its clock) after its float32 fit refused on taxi, while
+        # ours fits in float32: a different precision, and FP64 is a crippled
+        # opponent (the taxi cell took 122 s for 24 iterations against Istella's
+        # 7.9 s for 30). It now fits the same float32 rows as ours; if it refuses
+        # (ill-defined covariance), the arm refuses by name. Results raced before
+        # this change were wrong for this lane; apply extra scrutiny.
+        info.update(input_dtype=str(X.dtype), fit_dtype=str(X.dtype),
+                    input_conversion_inside_clock=False,
                     fit_rows=int(X.shape[0]), eval_rows=int(D["Xq"].shape[0]))
 
         def call():
-            S.update(est=make().fit(np.ascontiguousarray(X, dtype=np.float64)))
+            S.update(est=make().fit(X))
 
         def out():
             e = S["est"]
@@ -1297,7 +1344,8 @@ def _build_sklearn(lane, D, rec, S):
             make = lambda: SpectralClustering(n_clusters=N_CLUSTERS, affinity="nearest_neighbors",  # noqa: E731
                                               n_neighbors=10, assign_labels="kmeans",
                                               n_init=SPECTRAL_N_INIT, n_components=N_CLUSTERS,
-                                              random_state=SPECTRAL_SEED, n_jobs=-1)
+                                              random_state=SPECTRAL_SEED, n_jobs=-1,
+                                              eigen_solver="arpack", eigen_tol=SPECTRAL_EIGEN_TOL)
         else:
             from sklearn.cluster import AgglomerativeClustering
             make = lambda: AgglomerativeClustering(n_clusters=N_CLUSTERS, linkage="single",  # noqa: E731
@@ -1485,7 +1533,7 @@ def _build_cuml(lane, D, rec, S):
     elif lane == "spectral-embedding":
         from cuml.manifold import SpectralEmbedding
         make = tolerant(SpectralEmbedding, n_components=2, affinity="nearest_neighbors",
-                        n_neighbors=10, random_state=SEED)
+                        n_neighbors=10, random_state=SEED, eigen_tol=SPECTRAL_EIGEN_TOL)
         call = lambda: S.update(e=make().fit_transform(X))  # noqa: E731
         out = lambda: {"embedding": np.asarray(_host(S["e"]), dtype=np.float32)}  # noqa: E731
     elif lane == "tsvd":
@@ -1499,7 +1547,7 @@ def _build_cuml(lane, D, rec, S):
             from cuml.cluster import SpectralClustering
             make = tolerant(SpectralClustering, n_clusters=N_CLUSTERS, affinity="nearest_neighbors",
                             n_neighbors=10, n_init=SPECTRAL_N_INIT, n_components=N_CLUSTERS,
-                            random_state=SPECTRAL_SEED)
+                            random_state=SPECTRAL_SEED, eigen_tol=SPECTRAL_EIGEN_TOL)
         else:
             from cuml.cluster import AgglomerativeClustering
             make = tolerant(AgglomerativeClustering, n_clusters=N_CLUSTERS, metric="euclidean",

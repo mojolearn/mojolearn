@@ -412,9 +412,15 @@ _add("isotonic", xlane="linear", ours="IsotonicRegression", task="reg", block="r
      notes=["X = the one fit-row column most correlated with y (1-D, as isotonic regression takes)"])
 
 # ---- lane cluster ---------------------------------------------------------
+# FAIRNESS FIX (2026-10-13 audit): init_size (the rows the k-means++ start is drawn from) was left
+# at each library's default (scikit-learn 3 x batch_size; ours' None, unverified to be the same);
+# it is pinned to 3 x batch_size on both. n_iter and n_steps of every arm are recorded
+# (_ITER_LANES): early stopping by max_no_improvement can end the arms at different steps.
+# Results raced before this change were wrong for this lane; apply extra scrutiny.
 _add("minibatch-kmeans", xlane="cluster", ours="MiniBatchKMeans", task="cluster", block="cls",
      sk="sklearn.cluster:MiniBatchKMeans",
-     params=dict(n_clusters=8, batch_size=4096, max_iter=100, n_init=1, random_state=SEED))
+     params=dict(n_clusters=8, batch_size=4096, max_iter=100, n_init=1, init_size=3 * 4096,
+                 random_state=SEED))
 _add("bisecting-kmeans", xlane="cluster", ours="BisectingKMeans", task="cluster", block="cls",
      sk="sklearn.cluster:BisectingKMeans", params=dict(n_clusters=8, random_state=SEED))
 _add("meanshift", xlane="cluster", ours="MeanShift", task="cluster", block="cls",
@@ -422,9 +428,17 @@ _add("meanshift", xlane="cluster", ours="MeanShift", task="cluster", block="cls"
      params=dict(bin_seeding=True), sk_params=dict(bin_seeding=True, n_jobs=-1),
      notes=["bandwidth = the 0.3 quantile of pairwise distances over the first 1,000 fit rows, "
             "computed once in the conductor and passed to every arm"])
+# FAIRNESS FIX (2026-10-13 audit): algorithm='auto' and leaf_size=30 were declared on both, but
+# ours ignores them and always computes the full distance matrix (a brute-force search), while
+# scikit-learn's 'auto' builds a KD/ball tree: different neighbour searches. Both now run
+# algorithm='brute' (ours' own method; scikit-learn's brute NearestNeighbors). Results raced
+# before this change were wrong for this lane; apply extra scrutiny.
 _add("optics", xlane="cluster", ours="OPTICS", task="cluster", block="cls", sub={"X": SUB["quad"]},
-     sk="sklearn.cluster:OPTICS", params=dict(min_samples=10, xi=0.05),
-     sk_params=dict(min_samples=10, xi=0.05, n_jobs=-1))
+     sk="sklearn.cluster:OPTICS", params=dict(min_samples=10, xi=0.05, algorithm="brute"),
+     sk_params=dict(min_samples=10, xi=0.05, algorithm="brute", n_jobs=-1),
+     mism=["algorithm='brute' on both: ours always computes the full n x n distance matrix "
+           "(it accepts and ignores algorithm and leaf_size); scikit-learn's brute "
+           "NearestNeighbors for the core distances"])
 _add("affinity-prop", xlane="cluster", ours="AffinityPropagation", task="cluster", block="cls",
      sub={"X": SUB["tiny"]}, sk="sklearn.cluster:AffinityPropagation",
      params=dict(damping=0.5, max_iter=200, convergence_iter=15, random_state=SEED))
@@ -447,8 +461,19 @@ _add("lof", xlane="neighbors", ours="LocalOutlierFactor", task="outlier", block=
      sk_params=dict(n_neighbors=20, algorithm="brute", n_jobs=-1))
 _add("nearest-centroid", xlane="neighbors", ours="NearestCentroid", task="clf", block="cls",
      sk="sklearn.neighbors:NearestCentroid")
+# FAIRNESS FIX (2026-10-13 audit): ours' only search is a random ball cover (it refuses
+# 'brute', 'kd_tree' and 'ball_tree'); scikit-learn's 'auto' builds a KD/ball tree in fit and
+# queries it: different algorithms (the DBSCAN ruling: rbc against brute is not the same race),
+# and the fit column timed a tree build against ours' no-op. No library implements a random ball
+# cover radius search on the CPU (cuML's rbc has no radius query), so scikit-learn is refused and
+# the lane has no opponent. Results raced before this change were wrong for this lane; apply
+# extra scrutiny.
 _add("radius-neighbors", xlane="neighbors", ours=("RadiusNeighbors",), task="radius",
      block="cls", sub={"X": SUB["knn"], "Xq": SUB["small"]}, radius=True,
+     refused={"sklearn-cpu": "a different algorithm: ours' radius search is a random ball cover "
+                             "(it refuses brute and the trees); scikit-learn's is a KD/ball tree "
+                             "or brute force, and no library implements a random ball cover "
+                             "radius search for this device (2026-10-13 fairness audit)"},
      sk="sklearn.neighbors:NearestNeighbors",
      params=dict(metric="euclidean", algorithm="auto", p=2),
      sk_params=dict(metric="euclidean", algorithm="auto", p=2, n_jobs=-1),
@@ -528,8 +553,12 @@ _add("connected-components", xlane="neighbors", ours=("connected_components", "C
             "cuGraph: Graph(directed=False).from_cudf_edgelist(renumber=False) built before "
             "the clock (vertex ids are already 0..n-1); ours' CSR arrays are built before its "
             "clock and uploaded inside it"])
+# FAIRNESS FIX (2026-10-13 audit): the modularity-gain threshold was each library's default
+# (1e-7 on ours, networkx and cuGraph, but never passed); it is now pinned to 1e-7 on every
+# arm (_build_graph). Results raced before this change were wrong for this lane; apply extra
+# scrutiny.
 _add("louvain", xlane="neighbors", ours=("Louvain",), kind="graph", task="louvain", block="graphs",
-     params=dict(resolution=1.0, seed=SEED),
+     params=dict(resolution=1.0, threshold=1e-7, seed=SEED),
      other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
      mism=["networkx louvain_communities(seed=7) and cuGraph louvain (max_level=100) are "
            "order-dependent; ours pins a colour-batched move order (a fixed hash colouring, ties to the smallest community id)", _GRAPH_MISM])
@@ -691,9 +720,15 @@ _add("lda", xlane="decomp", ours="LatentDirichletAllocation", task="transform", 
                     n_jobs=-1))
 _add("classical-mds", xlane="decomp", ours="ClassicalMDS", task="embed", block="manifold",
      sub={"X": SUB["tiny"]}, sk="sklearn.manifold:ClassicalMDS", params=dict(n_components=2),
-     notes=["scikit-learn 1.7.2 has no ClassicalMDS: its arm is the same algorithm assembled from "
-            "scikit-learn, KernelPCA(kernel='precomputed', eigen_solver='dense') on -0.5 D^2 "
-            "(double-centred inside KernelPCA), unless the installed scikit-learn exports it"])
+     # FAIRNESS FIX (2026-10-13 audit): with the pinned scikit-learn 1.7.2 (no ClassicalMDS) the
+     # opponent was this harness's assembly of classical MDS (-0.5 D^2 handed to
+     # KernelPCA(kernel='precomputed')), not a library's ClassicalMDS. The assembly is no longer
+     # an opponent: the arm runs only when the installed scikit-learn exports
+     # sklearn.manifold.ClassicalMDS (1.8 and later) and refuses by name otherwise. Results
+     # raced before this change were wrong for this lane; apply extra scrutiny.
+     notes=["the opponent is scikit-learn's own sklearn.manifold.ClassicalMDS (scikit-learn 1.8 "
+            "and later); with an older scikit-learn (the pinned 1.7.2) the arm refuses by name: "
+            "a KernelPCA assembly by this harness is not an opponent"])
 _add("mb-dict-learning", xlane="decomp", ours="MiniBatchDictionaryLearning", task="transform",
      block="cls", sub={"X": SUB["mid"], "Xq": SUB["tiny"]}, quality="recon",
      sk="sklearn.decomposition:MiniBatchDictionaryLearning",
@@ -713,10 +748,17 @@ _add("sparse-coder", xlane="decomp", ours=("SparseCoder",), task="transform", bl
             "transform(Xq), the inference column: OMP with 4 nonzero coefficients per row",
             "mojolearn.sparse_encode is the same encoder as a function (SparseCoder.transform "
             "calls it); this lane is its race"])
+# FAIRNESS FIX (2026-10-13 audit): eigen_solver='auto' with tol=0 was declared on both, but ours
+# ignores tol and max_iter and solves exactly, while scikit-learn's 'auto' runs ARPACK at this
+# size: different eigensolvers. Both now run eigen_solver='dense' (ours' exact solve;
+# scikit-learn's full eigendecomposition). Results raced before this change were wrong for this
+# lane; apply extra scrutiny.
 _add("isomap", xlane="decomp", ours="Isomap", task="embed", block="manifold",
      sub={"X": SUB["quad"]}, sk="sklearn.manifold:Isomap",
-     params=dict(n_neighbors=10, n_components=2), sk_params=dict(n_neighbors=10, n_components=2,
-                                                                 n_jobs=-1))
+     params=dict(n_neighbors=10, n_components=2, eigen_solver="dense"),
+     sk_params=dict(n_neighbors=10, n_components=2, eigen_solver="dense", n_jobs=-1),
+     mism=["eigen_solver='dense' on both (ours ignores tol and max_iter; the dense solve reads "
+           "neither)", "path_method: ours always runs Dijkstra; scikit-learn 'auto'"])
 _add("mds", xlane="decomp", ours="MDS", task="embed", block="manifold", sub={"X": SUB["tiny"]},
      sk="sklearn.manifold:MDS", params=dict(n_components=2, n_init=1, max_iter=300, eps=1e-3,
                                              random_state=SEED),
@@ -725,10 +767,17 @@ _add("mds", xlane="decomp", ours="MDS", task="embed", block="manifold", sub={"X"
            "metric='euclidean', metric_mds=True, init='random' (scikit-learn 1.9's names); the "
            "pinned scikit-learn 1.7.2 metric=True, dissimilarity='euclidean' and a random start "
            "from random_state; each draws its own start"])
+# FAIRNESS FIX (2026-10-13 audit): eigen_solver='auto' with tol=1e-6 and max_iter=100 was declared
+# on both, but ours ignores tol (its iterative route stops on its own subspace tolerance, 1e-5)
+# while scikit-learn's ARPACK uses tol=1e-6: different stopping rules. Both now run
+# eigen_solver='dense' (ours' full exact solve; scikit-learn's dense eigh), which reads neither.
+# Results raced before this change were wrong for this lane; apply extra scrutiny.
 _add("lle", xlane="decomp", ours="LocallyLinearEmbedding", task="embed", block="manifold",
      sub={"X": SUB["quad"]}, sk="sklearn.manifold:LocallyLinearEmbedding",
-     params=dict(n_neighbors=10, n_components=2, random_state=SEED),
-     sk_params=dict(n_neighbors=10, n_components=2, random_state=SEED, n_jobs=-1))
+     params=dict(n_neighbors=10, n_components=2, eigen_solver="dense", random_state=SEED),
+     sk_params=dict(n_neighbors=10, n_components=2, eigen_solver="dense", random_state=SEED,
+                    n_jobs=-1),
+     mism=["eigen_solver='dense' on both; ours ignores tol and neighbors_algorithm (exact k-NN)"])
 _add("elliptic-envelope", xlane="decomp", ours="EllipticEnvelope", task="outlier", block="cls",
      sub={"X": SUB["mid"]}, sk="sklearn.covariance:EllipticEnvelope",
      params=dict(contamination=0.1, random_state=SEED))
@@ -1416,17 +1465,27 @@ _ANN_TRAIN = ("coarse k-means training rows: ours' count on every arm (ours ever
               "199,680 rows); FAISS max_points_per_centroid = count // n_lists, its seeded "
               "sample); 20 k-means iterations on every arm. cuVS ivf_sq trains its "
               "scalar-quantizer ranges on that sample, ours over every row")
+# FAIRNESS FIX (2026-10-13 audit): AMD raced faiss on the CPU though hipVS, AMD's port of cuVS
+# with the same ivf_pq API, is a library IVF-PQ for the AMD GPU; hipvs-gpu is its arm (AMD only,
+# the cuvs-gpu code path with the same pinned settings). Results raced before this change were
+# wrong for this lane; apply extra scrutiny.
 _add("ivf-pq", xlane="ann", ours=("IVFPQIndex",), kind="ann", task="ivf-pq", block="ivf",
      params=dict(n_lists=1024, n_probes=32, n_neighbors=10, pq_bits=8, kmeans_n_iters=20,
                  random_state=SEED),
-     other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"},
+     other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs", "hipvs-gpu": "cuvs"},
      notes=[_ANN, "pq_dim = d when d <= 16 else d // 4 (taxi 11, Istella 55); no refine"], mism=[_ANN_TRAIN])
+# FAIRNESS FIX (2026-10-13 audit): faiss-cpu raced HNSW (IndexHNSWFlat) against ours' CAGRA: a
+# different graph index. It is refused; the CAGRA opponents are cuVS on NVIDIA and hipVS (AMD's
+# cuVS port, the same cagra API) on AMD; Apple has none. Results raced before this change were
+# wrong for this lane; apply extra scrutiny.
 _add("cagra", xlane="ann", ours=("CAGRAIndex", "CagraIndex"), kind="ann", task="cagra", block="ivf",
      params=dict(graph_degree=32, intermediate_graph_degree=64, itopk_size=64, n_neighbors=10,
                  random_state=SEED),
-     other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"},
-     notes=[_ANN], mism=["faiss-cpu is HNSW (IndexHNSWFlat M=32, efConstruction=128, "
-                         "efSearch=64), the CPU graph index; cuvs-gpu is CAGRA itself"])
+     other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs", "hipvs-gpu": "cuvs"},
+     refused={"faiss-cpu": "a different algorithm: faiss-cpu's graph index is HNSW "
+                           "(IndexHNSWFlat), not CAGRA; FAISS builds CAGRA only on an NVIDIA GPU "
+                           "(2026-10-13 fairness audit)"},
+     notes=[_ANN], mism=["cuvs-gpu (NVIDIA) and hipvs-gpu (AMD, hipVS) are CAGRA itself"])
 _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
      sk="sklearn.manifold:TSNE",
      params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0, max_iter=1000,
@@ -1449,6 +1508,16 @@ _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
      # and min_grad_norm=0.0 so it runs exactly max_iter steps as ours does.
      # Results raced before this change were wrong for this lane; apply extra
      # scrutiny.
+     # FAIRNESS FIX (2026-10-13 audit): scikit-learn raced Barnes-Hut t-SNE (an approximate,
+     # O(n log n) repulsion) against ours' exact repulsion; its method='exact' is another
+     # algorithm again (a dense all-pairs P, not the sparse k-NN P). No CPU library implements
+     # ours' algorithm, so scikit-learn is refused; cuML (method='exact') is the opponent on
+     # NVIDIA, and AMD and Apple have none. Results raced before this change were wrong for this
+     # lane; apply extra scrutiny.
+     refused={"sklearn-cpu": "a different algorithm: scikit-learn's t-SNE is Barnes-Hut "
+                             "(approximate repulsion) or exact over a dense all-pairs P; ours "
+                             "is exact repulsion over the sparse k-NN P (cuML method='exact' is "
+                             "the same algorithm, NVIDIA only) (2026-10-13 fairness audit)"},
      cuml_params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0,
                       late_exaggeration=1.0, max_iter=1000, learning_rate_method="none",
                       learning_rate="tsne_auto", n_neighbors="tsne_k", method="exact",
@@ -1645,6 +1714,11 @@ TORCH_GPU = {"nvidia": ("eager-fp32", "compile-fp32", "eager-tf32", "compile-tf3
              "apple": ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16")}
 
 _NVIDIA_ONLY = ("cuml-gpu", "cuvs-gpu", "cugraph-gpu", "cupy-gpu", "implicit-gpu", "xgboost-gpu")
+#: FAIRNESS FIX (2026-10-13 audit): hipVS (AMD's cuVS port, `pip install amd-hipvs`, the
+#: `cuvs` API) is the AMD GPU opponent of the vector-search lanes it implements (IVF-PQ,
+#: CAGRA); before, AMD raced only faiss on the CPU. Results raced before this change were wrong
+#: for these lanes; apply extra scrutiny.
+_AMD_ONLY = ("hipvs-gpu",)
 
 
 def opponents(vendor, lane):
@@ -1672,6 +1746,8 @@ def opponents(vendor, lane):
     out = []
     for a in arms:
         if a in _NVIDIA_ONLY and vendor != "nvidia":
+            continue
+        if a in _AMD_ONLY and vendor != "amd":   # FAIRNESS FIX (2026-10-13 audit): hipVS
             continue
         if a in s.get("refused", {}):     # FAIRNESS FIX (2026-10-13 audit): see _add's `refused`
             continue
@@ -2920,9 +2996,9 @@ def _arr(a, dtype=None):
     return np.asarray(a, dtype=dtype) if dtype else np.asarray(a)
 
 
-def _cuml_up(arrays):
+def _cuml_up(arrays, library="cuml"):
     ctd = _tool("classical_two_datasets")
-    dev, info = ctd._cuml_setup(arrays)
+    dev, info = ctd._cuml_setup(arrays, library=library)
     return dev, info, ctd._cupy_sync
 
 
@@ -3056,7 +3132,14 @@ def _est_factory(lane, arm, D):
         except (ImportError, AttributeError):
             if lane != "classical-mds":
                 raise
-            cls = _SkClassicalMDS
+            # FAIRNESS FIX (2026-10-13 audit): the fallback raced _SkClassicalMDS, this
+            # harness's assembly of classical MDS from KernelPCA, as the opponent. Without
+            # scikit-learn's own ClassicalMDS (1.8 and later) the arm now refuses by name.
+            # Results raced before this change were wrong for this lane; apply extra scrutiny.
+            raise RuntimeError("REFUSED: sklearn-cpu is not raced on classical-mds: the installed "
+                               "scikit-learn has no sklearn.manifold.ClassicalMDS (1.8 and later); "
+                               "a KernelPCA assembly by this harness is not an opponent "
+                               "(2026-10-13 fairness audit)")
         params = _derived_params(lane, D, s.get("sk_params", s["params"]))
         params.update(s.get("sk_extra", {}))
         params = {k: _resolve(v, "sklearn") for k, v in params.items()}
@@ -3214,13 +3297,17 @@ def _build_est(lane, arm, D):
             o["proba1"] = P[:, -1] if P.ndim == 2 and P.shape[1] == 2 else P
         if "out" in S:
             o["out"] = _arr(S["out"], np.float64)
-        if lane == "tsne" and getattr(est, "n_iter_", None) is not None:
-            # FAIRNESS FIX (2026-10-13 audit): the steps each t-SNE arm really ran
-            # were not recorded (cuML could stop early on min_grad_norm). n_iter_
-            # of every arm now reaches the quality cell. Results raced before this
-            # change were wrong for this lane; apply extra scrutiny.
-            o["n_iter"] = np.array([int(np.asarray(_arr(est.n_iter_, np.int64)).reshape(-1)[0])],
-                                   dtype=np.int64)
+        if lane in _ITER_LANES:
+            # FAIRNESS FIX (2026-10-13 audit): the iterations (and mini-batch steps) each
+            # arm of an iterative lane really ran were not recorded, so an opponent that
+            # iterated more, or an early stop on one side, could not be seen. n_iter_ and
+            # n_steps_ of every arm now reach the quality cell. Results raced before this
+            # change were wrong for these lanes; apply extra scrutiny.
+            for attr, key in (("n_iter_", "n_iter"), ("n_steps_", "n_steps")):
+                v = getattr(est, attr, None)
+                if v is not None:
+                    o[key] = np.array([int(np.asarray(_arr(v, np.int64)).reshape(-1)[0])],
+                                      dtype=np.int64)
         if qk == "cca":
             a, b_ = S["pred"]
             o["xs"], o["ys"] = _arr(a, np.float64), _arr(b_, np.float64)
@@ -4114,15 +4201,20 @@ def _build_graph(lane, arm, D):
                 pr = nx.pagerank(G, alpha=p["alpha"], tol=p["tol"], max_iter=p["max_iter"])
                 S["o"] = {"scores": np.array([pr[i] for i in range(n)])}
             else:
+                # FAIRNESS FIX (2026-10-13 audit): louvain's threshold is passed (it was
+                # networkx's default). Results raced before this change were wrong for this
+                # lane; apply extra scrutiny.
                 comms = (nx.connected_components(G) if t == "components"
-                         else nx.community.louvain_communities(G, resolution=p["resolution"], seed=SEED))
+                         else nx.community.louvain_communities(G, resolution=p["resolution"],
+                                                               threshold=p["threshold"], seed=SEED))
                 lab = np.empty(n, dtype=np.int64)
                 for c, members in enumerate(comms):
                     lab[list(members)] = c
                 S["o"] = {"labels": lab}
         info["config"] = {"pagerank": "nx.pagerank(alpha=0.85, tol=1e-6, max_iter=100)",
                           "components": "nx.connected_components",
-                          "louvain": "nx.community.louvain_communities(resolution=1.0, seed=7)"}[t]
+                          "louvain": "nx.community.louvain_communities(resolution=1.0, threshold=1e-7, "
+                                     "seed=7)"}[t]
         rec = dict(p, __library__="networkx")
         if t == "pagerank":
             rec["l1_stop_threshold"] = n * float(p["tol"])   # nx.pagerank: err < N * tol
@@ -4153,8 +4245,8 @@ def _build_graph(lane, arm, D):
                                   "Graph(renumber=False, store_transposed=True)"
                                   % (p.get("alpha"), pr_tol, p.get("tol"), p.get("max_iter")),
                       "components": "cugraph.connected_components on Graph(renumber=False)",
-                      "louvain": "cugraph.louvain(resolution=1.0, max_level=100) on "
-                                 "Graph(renumber=False)"}[t]
+                      "louvain": "cugraph.louvain(resolution=1.0, max_level=100, threshold=1e-7) "
+                                 "on Graph(renumber=False)"}[t]
 
     def fit():
         if t == "pagerank":
@@ -4162,7 +4254,9 @@ def _build_graph(lane, arm, D):
         elif t == "components":
             S["df"] = cugraph.connected_components(G)
         else:
-            S["df"], _ = cugraph.louvain(G, resolution=p["resolution"], max_level=100)
+            # FAIRNESS FIX (2026-10-13 audit): threshold passed (it was cuGraph's default)
+            S["df"], _ = cugraph.louvain(G, resolution=p["resolution"], max_level=100,
+                                         threshold=p["threshold"])
 
     def outputs():
         df = S["df"].to_pandas().sort_values("vertex")
@@ -4182,6 +4276,14 @@ def _build_graph(lane, arm, D):
 
 def _pq_dim(d):
     return d if d <= 16 else d // 4
+
+
+#: FAIRNESS FIX (2026-10-13 audit): the iterative lanes whose arms stop on their own rule
+#: (or run a fixed count): every arm's n_iter_ / n_steps_ is recorded in the quality cell so
+#: an opponent that ran more iterations than ours, or an early stop, is visible. Results raced
+#: before this change were wrong for these lanes; apply extra scrutiny.
+_ITER_LANES = frozenset(("tsne", "mds", "minibatch-kmeans", "bisecting-kmeans", "bayesian-gmm",
+                         "affinity-prop"))
 
 
 def _ours_ivf_train_rows(n, nlist):
@@ -4324,8 +4426,13 @@ def _build_ann(lane, arm, D):
         return Runner(info, fit, lambda: {"ind": np.asarray(S["ind"], dtype=np.int64)}, infer,
                       record=rec)
     import cuvs
-    dev, info, sync = _cuml_up({"index": X, "queries": Q})
-    info.update(library="cuvs", version=getattr(cuvs, "__version__", "unknown"))
+    # FAIRNESS FIX (2026-10-13 audit): hipvs-gpu (AMD) is hipVS, AMD's port of cuVS with the
+    # same `cuvs` Python API, on the same code path and pinned settings as cuvs-gpu; the upload
+    # helper no longer imports cuML, which AMD does not have. Results raced before this change
+    # were wrong for these lanes; apply extra scrutiny.
+    dev, info, sync = _cuml_up({"index": X, "queries": Q}, library="cuvs")
+    info.update(library="hipvs" if arm == "hipvs-gpu" else "cuvs",
+                version=getattr(cuvs, "__version__", "unknown"))
     from cuvs.neighbors import ivf_flat, ivf_pq, cagra
 
     # FAIRNESS FIX (2026-10-13 audit): cuVS ivf_sq ran with kmeans_n_iters and
@@ -6127,8 +6234,6 @@ def quality(lane, D, outs):
                 E = o["out"]
                 e["trustworthiness_k15"] = (more.trustworthiness(D["X"], E) if np.all(np.isfinite(E))
                                             else None)
-                if "n_iter" in o:          # t-SNE: the steps the arm ran (FAIRNESS FIX 2026-10-13)
-                    e["n_iter"] = int(o["n_iter"].reshape(-1)[0])
             elif qk == "impute":
                 m = np.isnan(D["Xq"])
                 e["masked_rmse"] = float(np.sqrt(np.mean((o["pred"][m] - D["Xq_true"][m]) ** 2)))
@@ -6339,6 +6444,9 @@ def quality(lane, D, outs):
                 e["rel_error_vs_exact"] = _relfro(o["phi"], o["exact"])
         except Exception as exc:  # noqa: BLE001
             e = {"error": repr(exc)[:300]}
+        for key in ("n_iter", "n_steps"):       # FAIRNESS FIX (2026-10-13 audit): _ITER_LANES
+            if key in o and isinstance(e, dict) and "error" not in e:
+                e[key] = int(o[key].reshape(-1)[0])
         q[arm] = e
     if qk == "lu" and outs:
         n = next(iter(outs.values()))["x"].shape[0] // 64

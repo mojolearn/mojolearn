@@ -179,11 +179,15 @@ arms_for() {  # <lane>: the arms a race runs on this vendor
     else
         case "$1" in
             ols) _a="ours,sklearn-cpu,torch-gpu" ;;  # FAIRNESS FIX (2026-10-13 audit): -eigh refused
-            # FAIRNESS FIX (2026-10-13 audit): see above; on AMD and Apple no
-            # library GPU k-means or kNN is installed, so scikit-learn on the
-            # CPU is the only opponent. Results raced before this change were
-            # wrong for these lanes; apply extra scrutiny.
-            kmeans|knn) _a="ours,sklearn-cpu" ;;
+            # FAIRNESS FIX (2026-10-13 audit, the author's correction): the
+            # harness torch arms are REPLACED on AMD by hipVS (AMD's cuVS port,
+            # installed in setup below): hipvs-gpu is cuvs.cluster.kmeans and
+            # cuvs.neighbors.brute_force; scikit-learn stays beside it. This leg
+            # is the AMD one (this branch also covers any non-NVIDIA vendor; an
+            # Apple board does not use this leg). UNVERIFIED AT RUNTIME. Results
+            # raced before this change were wrong for these lanes; apply extra
+            # scrutiny.
+            kmeans|knn) _a="ours,sklearn-cpu,hipvs-gpu" ;;
             *) _a="ours,sklearn-cpu" ;;
         esac
     fi
@@ -352,6 +356,15 @@ s = torch.linalg.lstsq(a - a.mean(0), a[:, :1]).solution
 c = torch.addmm((a[:8] * a[:8]).sum(1)[None], a, a[:8].T, alpha=-2.0).argmin(1)
 torch.cuda.synchronize()
 print("device", torch.cuda.get_device_name(0), float(w[-1]), float(d.sum()), float(s.sum()), int(c.sum()))'
+            # FAIRNESS FIX (2026-10-13 audit): hipVS (AMD's ROCm-DS port of cuVS, the `cuvs` API),
+            # the AMD GPU k-means / kNN opponent that replaces the harness's torch arms, installed
+            # as its install page gives it (amd-hipvs 1.0.0 from AMD's ROCm 7.2.3 index; it needs
+            # CuPy with ROCM_HOME set). A failed install is not fatal: the hipvs-gpu arms refuse
+            # by name. UNVERIFIED AT RUNTIME (2026-10-13). Results raced before this change were
+            # wrong for those lanes; apply extra scrutiny.
+            export ROCM_HOME="${ROCM_HOME:-/opt/rocm}"
+            run hipvs timeout -k 30 1500 "$VENV/bin/pip" install --disable-pip-version-check --no-input \
+                --extra-index-url=https://pypi.amd.com/rocm-7.2.3/simple/ amd-hipvs==1.0.0 || true
             if timeout -k 10 300 "$VENV/bin/python" -c "$TPROBE" > "$OUT/torch_probe1.log" 2>&1; then
                 echo "torch_source=download.pytorch.org rocm7.1 torch 2.13.0 (probe ran eigh, cdist, topk, lstsq, addmm on the GPU)" > "$OUT/torch_source.txt"
             else
@@ -362,7 +375,7 @@ print("device", torch.cuda.get_device_name(0), float(w[-1]), float(d.sum()), flo
         "$PY" - > "$OUT/versions.txt" 2>&1 <<'PYV'
 import numpy
 print("numpy", numpy.__version__)
-for name in ("torch", "cuml", "cupy", "sklearn", "scipy", "pyarrow"):
+for name in ("torch", "cuml", "cuvs", "cupy", "sklearn", "scipy", "pyarrow"):
     try:
         mod = __import__(name)
         extra = ""
