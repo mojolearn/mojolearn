@@ -443,8 +443,11 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # 346 since Oct 7 2026: +18 cells from the six inference lanes (transformer-decode
     # ours, ours-fast, torch-eager-fp32, torch-eager-bf16 = 4; the four Mamba/Samba decode
     # lanes race ours and ours-fast alone = 8; mlp-predict ours, ours-fast + 4 torch = 6)
-    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 346
-    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 346 + sum(len(r["arms"]) for r in algos)) in text
+    # FAIRNESS FIX (2026-10-13 audit): 342 since the classical2 linearsvc / linearsvr races on
+    # Apple lost their scikit-learn arm (liblinear with a penalized intercept is a different
+    # algorithm and model from ours' L-BFGS primal; bench_board_more.REFUSED): 2 lanes x 2 datasets
+    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 342
+    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 342 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -785,9 +788,14 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # (-2): 275 -> 265; AMD ols keeps one CPU cell where two torch cells raced (-2): 234 -> 232;
 # Apple keeps its count (scikit-learn races where torch-gpu did, no GPU opponent left), and so
 # do AMD kmeans, knn and pca.
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 346, 134, 82),
-                                                      ("nvidia", 265, 88, 88),
-                                                      ("amd", 232, 90, 64)])
+# FAIRNESS FIX (2026-10-13 audit, linear group): ols torch-gpu is torch.linalg.lstsq(driver='gels'),
+# torch's own routine, and races again on NVIDIA (+2: 265 -> 267; on AMD it replaces the CPU cell);
+# the classical2 linearsvc / linearsvr scikit-learn arms (liblinear, a different algorithm and
+# model) leave Apple and AMD (-4 each: Apple 346 -> 342 and classical2 134 -> 130, AMD 232 -> 228
+# and classical2 90 -> 86).
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 342, 130, 82),
+                                                      ("nvidia", 267, 88, 88),
+                                                      ("amd", 228, 86, 64)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0

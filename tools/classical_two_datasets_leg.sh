@@ -164,10 +164,10 @@ arms_for() {  # <lane>: the arms a race runs on this vendor
     # extra scrutiny.
     if [ "$VENDOR" = nvidia ]; then
         case "$1" in
-            # FAIRNESS FIX (2026-10-13 audit): the OLS torch arms are harness-written, not
-            # opponents (classical_two_datasets.REFUSED_ARMS). Results raced before this change
-            # were wrong for this lane; apply extra scrutiny.
-            ols) _a="ours,cuml-gpu" ;;
+            # FAIRNESS FIX (2026-10-13 audit): torch-gpu-eigh is harness-written and refused
+            # (classical_two_datasets.REFUSED_ARMS); torch-gpu is torch.linalg.lstsq(driver='gels').
+            # Results raced before this change were wrong for this lane; apply extra scrutiny.
+            ols) _a="ours,cuml-gpu,torch-gpu" ;;
             # FAIRNESS FIX (2026-10-13 audit): kmeans and knn raced torch-gpu,
             # the harness's own k-means / kNN from torch ops, not a library;
             # dropped here and refused by the driver (REFUSED_ARMS). Results
@@ -178,7 +178,7 @@ arms_for() {  # <lane>: the arms a race runs on this vendor
         esac
     else
         case "$1" in
-            ols) _a="ours,sklearn-cpu" ;;  # FAIRNESS FIX (2026-10-13 audit): torch arms refused
+            ols) _a="ours,sklearn-cpu,torch-gpu" ;;  # FAIRNESS FIX (2026-10-13 audit): -eigh refused
             # FAIRNESS FIX (2026-10-13 audit): see above; on AMD and Apple no
             # library GPU k-means or kNN is installed, so scikit-learn on the
             # CPU is the only opponent. Results raced before this change were

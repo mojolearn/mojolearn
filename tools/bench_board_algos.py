@@ -259,13 +259,21 @@ _add("sgd-reg", xlane="linear", ours="SGDRegressor", task="reg", block="reg",
      cuml="cuml.linear_model:MBSGDRegressor",
      cuml_params=dict(_SGD_CUML, loss="squared_loss", power_t=0.25),
      refused={"sklearn-cpu": _SGD_SK_REFUSED}, mism=list(_SGD_MISM))
+# FAIRNESS FIX (2026-10-13 audit): the race declared solver='lbfgs' on both arms, but ours'
+# GLMs run Newton-Cholesky with a line search for either solver name
+# (python/mojolearn/_expansion_linear.py _GLMBase.fit), so scikit-learn ran L-BFGS against
+# ours' Newton. Both arms now take solver='newton-cholesky' (scikit-learn has it since 1.2).
+# Results raced before this change were wrong for these lanes; apply extra scrutiny.
+GLM_SOLVER = "newton-cholesky"
 for _slug, _cls, _kw, _why in (
         ("poisson", "PoissonRegressor", {}, "y = the reg target (taxi fare > 0; Istella grade >= 0)"),
         ("gamma", "GammaRegressor", {}, "y = the reg target + 1 (Gamma needs y > 0; Istella grades start at 0)"),
         ("tweedie", "TweedieRegressor", {"power": 1.5, "link": "log"}, "y = the reg target (>= 0)")):
     _add(_slug, xlane="linear", ours=_cls, task="reg", block="reg", target=_slug,
-         sk="sklearn.linear_model:" + _cls, params=dict(_kw, alpha=1e-4, max_iter=100, tol=1e-4),
-         notes=[_why])
+         sk="sklearn.linear_model:" + _cls,
+         params=dict(_kw, alpha=1e-4, max_iter=100, tol=1e-4, solver=GLM_SOLVER),
+         notes=[_why, "solver='newton-cholesky' on both arms: ours runs Newton-Cholesky with a "
+                "line search whatever the name (before 2026-10-13 scikit-learn raced 'lbfgs')"])
 _add("huber", xlane="linear", ours="HuberRegressor", task="reg", block="reg",
      sk="sklearn.linear_model:HuberRegressor",
      params=dict(epsilon=1.35, alpha=1e-4, max_iter=100, tol=1e-5))
@@ -331,21 +339,44 @@ if os.environ.get("MOJOLEARN_BENCH_LARS_DIRECT") == "1":
                 "No row, feature, iteration, target, seed or objective change. "
                 "Our native solver ignores precompute/eps; other arms unsupported here. "
                 "Finite predictions and R2>=0 required; no default promotion or A/B claim."])
+# FAIRNESS FIX (2026-10-13 audit): as on lars, ours' LassoLars never reads eps and always
+# factors the Gram, and precompute was left at each library's 'auto'. precompute=True is
+# pinned on both arms and the lane says what ours does with eps (LARS_EPS above). Results raced before this change were wrong for this lane; apply extra scrutiny.
 _add("lasso-lars", xlane="linear", ours="LassoLars", task="reg", block="reg",
-     sk="sklearn.linear_model:LassoLars", params=dict(alpha=0.01, max_iter=500, random_state=SEED))
+     sk="sklearn.linear_model:LassoLars",
+     params=dict(alpha=0.01, max_iter=500, random_state=SEED, precompute=True),
+     mism=["eps: ours does not read it (no eps floor; a pivot <= 0 or with root < 1e-7 drops "
+           "the candidate); scikit-learn floors the pivot at eps = 2**-52 and drops it below the "
+           "same 1e-7, so its rule is ours'", "precompute=True on both: ours always factors the "
+           "Gram (it ignores the argument)"])
+# FAIRNESS FIX (2026-10-13 audit): ours accepts solver='highs' and always runs ADMM, while
+# scikit-learn solved the HiGHS LP: a different algorithm, and ours silently ignored the
+# declared solver. No library has an ADMM quantile regression, so the scikit-learn arm is
+# refused and the lane has no opponent. Results raced before this change were wrong for this lane; apply extra scrutiny.
 _add("quantile", xlane="linear", ours="QuantileRegressor", task="reg", block="reg",
      sub={"X": SUB["mid"]}, sk="sklearn.linear_model:QuantileRegressor",
      params=dict(quantile=0.5, alpha=1e-4, solver="highs"),
-     mism=["solver: 'highs' passed to both; ours accepts the name and always runs ADMM "
-           "(max_iter=5000, tol=1e-4, ours only), scikit-learn solves the HiGHS LP"])
+     refused={"sklearn-cpu": "different algorithm: ours runs ADMM whatever solver it is given "
+                             "(max_iter=5000, tol=1e-4); scikit-learn's QuantileRegressor has "
+                             "only linear-programming solvers (HiGHS, interior point)"},
+     mism=["solver: ours accepts 'highs' and always runs ADMM (max_iter=5000, tol=1e-4); no "
+           "library implements an ADMM quantile regression, so no opponent races"])
+# FAIRNESS FIX (2026-10-13 audit): ours' Perceptron and passive-aggressive pair default to
+# minibatch steps of 256 rows, while scikit-learn updates per sample: a different algorithm.
+# Ours now races batch_size=0, its documented per-sample form (scikit-learn's); `ours_extra`
+# carries it to our arm only (scikit-learn has no batch_size). Results raced before this change were wrong for this lane; apply extra scrutiny.
 _add("perceptron", xlane="linear", ours="Perceptron", task="clf", block="cls",
-     sk="sklearn.linear_model:Perceptron", params=dict(max_iter=20, tol=None, random_state=SEED))
+     sk="sklearn.linear_model:Perceptron", params=dict(max_iter=20, tol=None, random_state=SEED),
+     ours_extra=dict(batch_size=0),
+     mism=["ours batch_size=0 (per-sample updates, scikit-learn's form; ours defaults to 256)"])
 _add("pa-clf", xlane="linear", ours="PassiveAggressiveClassifier", task="clf", block="cls",
      sk="sklearn.linear_model:PassiveAggressiveClassifier",
-     params=dict(C=1.0, max_iter=20, tol=None, random_state=SEED))
+     params=dict(C=1.0, max_iter=20, tol=None, random_state=SEED), ours_extra=dict(batch_size=0),
+     mism=["ours batch_size=0 (per-sample updates, scikit-learn's form; ours defaults to 256)"])
 _add("pa-reg", xlane="linear", ours="PassiveAggressiveRegressor", task="reg", block="reg",
      sk="sklearn.linear_model:PassiveAggressiveRegressor",
-     params=dict(C=1.0, max_iter=20, tol=None, random_state=SEED))
+     params=dict(C=1.0, max_iter=20, tol=None, random_state=SEED), ours_extra=dict(batch_size=0),
+     mism=["ours batch_size=0 (per-sample updates, scikit-learn's form; ours defaults to 256)"])
 _add("ridge-clf", xlane="linear", ours="RidgeClassifier", task="clf", block="cls",
      sk="sklearn.linear_model:RidgeClassifier", params=dict(alpha=1.0, random_state=SEED))
 _add("sgd-ocsvm", xlane="linear", ours="SGDOneClassSVM", task="outlier", block="cls",
@@ -355,15 +386,23 @@ _ALPHAS = [0.001, 0.01, 0.1, 1.0, 10.0]
 _add("ridge-cv", xlane="linear", ours="RidgeCV", task="reg", block="reg",
      sk="sklearn.linear_model:RidgeCV", params=dict(alphas=_ALPHAS, cv=5),
      notes=["cv=5: k-fold (cross_val_score's fold order), not the leave-one-out GCV of cv=None"])
+# FAIRNESS FIX (2026-10-13 audit): precompute was left at each library's 'auto' (scikit-learn
+# resolves it to the Gram at n_samples > n_features; ours ignores it and always sweeps per-fold
+# centered Grams, x_linear/enetcv_fast.mojo). precompute=True is pinned on both arms. Results raced before this change were wrong for this lane; apply extra scrutiny.
+_CV_MISM = ["precompute=True on both: ours ignores the argument and always sweeps each fold's "
+            "centered Gram (x_linear/enetcv_fast.mojo); scikit-learn's Gram coordinate descent"]
 _add("lasso-cv", xlane="linear", ours="LassoCV", task="reg", block="reg",
      sk="sklearn.linear_model:LassoCV",
-     params=dict(alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, random_state=SEED),
-     sk_params=dict(alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, random_state=SEED, n_jobs=-1))
+     params=dict(alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, random_state=SEED,
+                 precompute=True),
+     sk_params=dict(alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, random_state=SEED, n_jobs=-1,
+                    precompute=True), mism=list(_CV_MISM))
 _add("enet-cv", xlane="linear", ours="ElasticNetCV", task="reg", block="reg",
      sk="sklearn.linear_model:ElasticNetCV",
-     params=dict(l1_ratio=0.5, alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, random_state=SEED),
+     params=dict(l1_ratio=0.5, alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, random_state=SEED,
+                 precompute=True),
      sk_params=dict(l1_ratio=0.5, alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4,
-                    random_state=SEED, n_jobs=-1))
+                    random_state=SEED, n_jobs=-1, precompute=True), mism=list(_CV_MISM))
 _add("logreg-cv", xlane="linear", ours="LogisticRegressionCV", task="clf", block="cls",
      sk="sklearn.linear_model:LogisticRegressionCV",
      params=dict(Cs=[0.1, 1.0, 10.0], cv=5, max_iter=1000, random_state=SEED),
@@ -662,9 +701,11 @@ _add("mb-dict-learning", xlane="decomp", ours="MiniBatchDictionaryLearning", tas
                  transform_algorithm="lasso_cd", random_state=SEED),
      sk_params=dict(n_components=16, alpha=1.0, batch_size=256, max_iter=10,
                     transform_algorithm="lasso_cd", random_state=SEED, n_jobs=-1))
+# FAIRNESS FIX (2026-10-13 audit): scikit-learn's SparseCoder ran transform (OMP over 100,000
+# rows) at its default n_jobs=None, one core; sk_extra gives it every core. Results raced before this change were wrong for this lane; apply extra scrutiny.
 _add("sparse-coder", xlane="decomp", ours=("SparseCoder",), task="transform", block="cls",
      sub={"X": SUB["tiny"], "Xq": SUB["mid"]}, quality="vs-sklearn", dictionary=True,
-     sk="sklearn.decomposition:SparseCoder",
+     sk="sklearn.decomposition:SparseCoder", sk_extra=dict(n_jobs=-1),
      params=dict(transform_algorithm="omp", transform_n_nonzero_coefs=4, transform_alpha=None,
                  split_sign=False, positive_code=False, transform_max_iter=1000),
      notes=["dictionary = 64 stride rows of the fit block, each scaled to unit norm, the same "
@@ -752,7 +793,15 @@ for _slug, _cls, _kw, _blk, _cu in (
              "'averaged_inverted_cdf')"] if _slug == "kbins" else [])
          + (["cuML 26.08 MinMaxScaler has fixed unclipped transform behavior, equivalent to "
              "clip=False; the unsupported constructor keyword is omitted"]
-            if _slug == "minmax-scaler" else []))
+            if _slug == "minmax-scaler" else []),
+         # FAIRNESS FIX (2026-10-13 audit): the lane raced ours' and scikit-learn's lambda searches
+         # as one algorithm; they are not, and no setting of either matches the other, so the
+         # difference is declared (no harness fix). Results raced before this change were wrong
+         # for this lane; apply extra scrutiny.
+         mism=(["lambda search: ours golden-section, 48 steps in [-8, 8], float32 "
+                "(x_prep/transform.mojo PT_ITERS); scikit-learn and cuML scipy.optimize.brent "
+                "(bracket (-2, 2), tol 1.48e-8); the lambdas and outputs differ (rel 0.1 on "
+                "Istella)"] if _slug == "power-transformer" else []))
 _add("target-encoder", xlane="prep", ours="TargetEncoder", task="transform", block="cat", supervised=True,
      quality="vs-sklearn", sk="sklearn.preprocessing:TargetEncoder",
      # cuML benchmark TargetEncoder: shared smooth=0.0; cpu_args cv=4, random_state=42;
@@ -1448,9 +1497,9 @@ _add("ivf-filter", xlane="ann", ours=("IVFPQIndex",), kind="ann", task="ivf-filt
 _SHARED = {
     'sgd-clf': dict(l1_ratio=0.15, fit_intercept=True, epsilon=0.1, learning_rate='optimal', eta0=0.0, power_t=0.5, early_stopping=False, n_iter_no_change=5, average=False),
     'sgd-reg': dict(l1_ratio=0.15, fit_intercept=True, epsilon=0.1, learning_rate='invscaling', eta0=0.01, power_t=0.25, early_stopping=False, n_iter_no_change=5, average=False),
-    'poisson': dict(fit_intercept=True, solver='lbfgs'),
-    'gamma': dict(fit_intercept=True, solver='lbfgs'),
-    'tweedie': dict(fit_intercept=True, solver='lbfgs'),
+    'poisson': dict(fit_intercept=True, solver=GLM_SOLVER),   # FAIRNESS FIX (2026-10-13 audit): see GLM_SOLVER
+    'gamma': dict(fit_intercept=True, solver=GLM_SOLVER),   # FAIRNESS FIX (2026-10-13 audit): see GLM_SOLVER
+    'tweedie': dict(fit_intercept=True, solver=GLM_SOLVER),   # FAIRNESS FIX (2026-10-13 audit): see GLM_SOLVER
     'huber': dict(fit_intercept=True),
     'bayesian-ridge': dict(alpha_1=1e-06, alpha_2=1e-06, lambda_1=1e-06, lambda_2=1e-06, fit_intercept=True),
     'ard': dict(alpha_1=1e-06, alpha_2=1e-06, lambda_1=1e-06, lambda_2=1e-06, threshold_lambda=10000.0, fit_intercept=True),
@@ -1720,6 +1769,8 @@ def lane_config(lane):
         cfg["stride_subsets"] = dict(s["sub"])
     if s.get("refused"):                  # FAIRNESS FIX (2026-10-13 audit): see _add's `refused`
         cfg["refused_opponents"] = dict(s["refused"])
+    if s.get("ours_extra"):               # FAIRNESS FIX (2026-10-13 audit): see _est_factory
+        cfg["ours_only_params"] = _jsonable(s["ours_extra"])
     if s.get("dataset_params"):
         cfg["dataset_params"] = _jsonable(s["dataset_params"])
     return cfg
@@ -2984,6 +3035,10 @@ def _est_factory(lane, arm, D):
         params = {k: _resolve(v, "ours") for k, v in params.items()}
         for k in s.get("ours_drop", ()):     # an option ours does not take yet (named in mism)
             params.pop(k, None)
+        # FAIRNESS FIX (2026-10-13 audit): an option only ours has, set so ours runs the
+        # opponent's algorithm (e.g. batch_size=0, the per-sample form); named in the lane's
+        # mism. Results raced before this change were wrong for those lanes; apply extra scrutiny.
+        params.update(s.get("ours_extra", {}))
         if s.get("score_func"):
             import mojolearn as ml
             if not hasattr(ml, s["score_func"]):
@@ -3010,7 +3065,11 @@ def _est_factory(lane, arm, D):
             import sklearn.feature_selection as fs
             f = getattr(fs, s["score_func"])
             if s["score_func"].startswith("mutual"):
-                f = functools.partial(f, random_state=SEED)
+                # FAIRNESS FIX (2026-10-13 audit): mutual_info_* ran at its default n_jobs=None,
+                # one core; n_jobs=-1 gives it every core (a scikit-learn >= 1.5 argument).
+                # Results raced before this change were wrong for these lanes; apply extra
+                # scrutiny.
+                f = functools.partial(f, random_state=SEED, n_jobs=-1)
                 f.__name__ = s["score_func"]
             params["score_func"] = f
         return (lambda: cls(**params)), s["sk"], params

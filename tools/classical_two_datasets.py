@@ -211,11 +211,13 @@ ARMS = {
     # It is removed from the roster and refused (REFUSED_ARMS). Results raced before this change
     # were wrong for this lane; apply extra scrutiny.
     "pca": ("ours", "cuml-gpu", "sklearn-cpu"),
-    # FAIRNESS FIX (2026-10-13 audit): torch-gpu and torch-gpu-eigh are OLS written by this
-    # harness from torch primitives (TorchOLS, TorchOLSEigh), not a library's estimator; they
-    # are no longer opponents (REFUSED_ARMS). Results raced before this change were wrong for
-    # this lane; apply extra scrutiny.
-    "ols": ("ours", "cuml-gpu", "sklearn-cpu"),
+    # FAIRNESS FIX (2026-10-13 audit): torch-gpu-eigh was OLS written by this harness from
+    # torch primitives (the centered normal equations, torch.linalg.eigh and a pseudo-inverse
+    # cutoff), raced as an opponent; it is refused (REFUSED_ARMS). torch-gpu stays: it is
+    # torch's own least-squares routine, torch.linalg.lstsq, with its driver pinned to 'gels'
+    # (QR, ours' algorithm class; the only GPU driver torch has); see TorchOLS. Results raced
+    # before this change were wrong for this lane; apply extra scrutiny.
+    "ols": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
     "knn": ("ours", "cuml-gpu", "sklearn-cpu"),
     "kde": ("ours", "cuml-gpu", "sklearn-cpu"),
     "svc": ("ours", "cuml-gpu", "sklearn-cpu"),
@@ -241,9 +243,6 @@ ARMS = {
 #: rest of the race runs. Results raced before this change were wrong for these lanes; apply
 #: extra scrutiny.
 REFUSED_ARMS = {
-    ("ols", "torch-gpu"): "harness-written: OLS assembled by this harness from torch ops "
-                          "(centering, torch.linalg.lstsq, the intercept); torch has no "
-                          "least-squares estimator, so this is not a library's implementation",
     ("ols", "torch-gpu-eigh"): "harness-written: OLS assembled by this harness from torch ops "
                                "(centered normal equations, torch.linalg.eigh, a pseudo-inverse "
                                "cutoff); not a library's implementation",
@@ -407,7 +406,10 @@ CONFIG = {
             "511 columns; the condition number is not squared); its FAST fit (Apple) solves the "
             "equilibrated normal equations. cuML algorithm='qr' (geqrf, R x = Q^T y: the same "
             "QR of the tall design, no rank cutoff); scikit-learn scipy lstsq gelsd (SVD)",
-            "torch-gpu and torch-gpu-eigh: refused, harness-written (REFUSED_ARMS)",
+            "torch-gpu: torch.linalg.lstsq(driver='gels') on the centered data, torch's own "
+            "least-squares routine (QR without pivoting, full rank assumed; the only driver "
+            "torch has on CUDA and ROCm; MPS has no lstsq, so Apple has no torch arm)",
+            "torch-gpu-eigh: refused, harness-written (REFUSED_ARMS)",
             "scikit-learn positive=False and copy_X=True: parameters ours does not have",
         ],
     },
@@ -1554,26 +1556,42 @@ class TorchPCA:
         raise RuntimeError(self.REFUSED)
 
 
+#: FAIRNESS FIX (2026-10-13 audit): torch.linalg.lstsq's driver was left at torch's default;
+#: it is pinned to 'gels' (QR, the class of ours' TSQR; the only driver torch has on CUDA and
+#: ROCm). Results raced before this change were wrong for this lane; apply extra scrutiny.
+TORCH_LSTSQ_DRIVER = "gels"
+
+
 class TorchOLS:
-    """torch.linalg.lstsq on centered data, the call a competent user writes.
-    On CUDA its only driver is gels (QR without pivoting, full rank assumed);
-    the quality beside the cell says what that costs on Istella's
-    near-constant columns."""
+    """torch.linalg.lstsq on centered data: torch's own least-squares routine
+    through its public API (the intercept by centering, as ours, cuML and
+    scikit-learn fit it). Driver 'gels' (QR without pivoting, full rank
+    assumed); the quality beside the cell says what that costs on Istella's
+    near-constant columns. MPS has no lstsq: the arm refuses there."""
 
     def __init__(self, data, rec):
+        import torch
+        if not torch.cuda.is_available():
+            # FAIRNESS FIX (2026-10-13 audit): on Apple the arm failed at its warm-up
+            # (aten::linalg_lstsq is not implemented for MPS); it now refuses by name.
+            raise RuntimeError("REFUSED: torch.linalg.lstsq has no MPS implementation "
+                               "(aten::linalg_lstsq); no torch GPU least-squares routine here")
         self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"], "y": data["y"]})
         self.x, self.y = t["X"], t["y"]
-        self.info["config"] = ("xc = x - mean, yc = y - mean; torch.linalg.lstsq(xc, yc[:, None]) "
-                               "(default driver; gels on CUDA); intercept = ymean - xmean @ coef")
+        self.info["config"] = ("xc = x - mean, yc = y - mean; torch.linalg.lstsq(xc, yc[:, None], "
+                               "driver=%r); intercept = ymean - xmean @ coef" % TORCH_LSTSQ_DRIVER)
+        self.info["lstsq_driver"] = TORCH_LSTSQ_DRIVER
         self.coef = self.intercept = None
-        self.params_obj = {"__library__": "torch", "seed": SEED, "fit_intercept": True}
+        self.params_obj = {"__library__": "torch", "seed": SEED, "fit_intercept": True,
+                           "driver": TORCH_LSTSQ_DRIVER}
 
     def call(self):
         torch = self.torch
         x, y = self.x, self.y
         xm = x.mean(dim=0)
         ym = y.mean()
-        sol = torch.linalg.lstsq(x - xm, (y - ym).unsqueeze(1)).solution
+        sol = torch.linalg.lstsq(x - xm, (y - ym).unsqueeze(1),
+                                 driver=TORCH_LSTSQ_DRIVER).solution
         coef = sol[: x.shape[1], 0]
         self.coef = coef
         self.intercept = ym - xm @ coef

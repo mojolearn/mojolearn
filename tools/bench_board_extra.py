@@ -6,7 +6,8 @@ raced through tools/bench_board_algos.py's worker
 protocol, seed and parameter rules, and parameter check.
 
     qn-reg            QNRegressor(loss='squared_error')   cuml.solvers.QN(loss='l2') (NVIDIA),
-                                                           scikit-learn LinearRegression (CPU)
+                                                           scikit-learn TweedieRegressor(power=0,
+                                                           identity link, alpha=0, 'lbfgs') (CPU)
     kpss              kpss_test(Y, d=0)                    statsmodels kpss(regression='c',
                                                            nlags=ours' ceil(12 (n/100)^0.25))
     select-d          select_d(Y, D=0)                     the same kpss over d = 0, 1
@@ -72,11 +73,20 @@ def register(add):
     add("qn-reg", xlane="linear", ours="QNRegressor", kind="extra", task="qn", block="reg",
         datasets=_TAB, params=dict(QN), quality="x-qn",
         fit_text="fit(X, y)", other={"sklearn-cpu": "sklearn", "cuml-gpu": "cuml-qn"},
+        # FAIRNESS FIX (2026-10-13 audit): the CPU arm was scikit-learn LinearRegression, a
+        # closed-form lstsq, raced against ours' quasi-Newton iterations: a different algorithm.
+        # It is now scikit-learn's own L-BFGS on the same loss, TweedieRegressor(power=0,
+        # link='identity', alpha=0, solver='lbfgs'), with max_iter, tol and fit_intercept pinned
+        # to ours'. Results raced before this change were wrong for this lane; apply extra
+        # scrutiny.
         notes=["ours and cuML: the quasi-Newton solver on the squared loss, no penalty "
-               "(cuml.solvers.QN(loss='l2'), present in the pinned cuML 26.08); scikit-learn "
-               "LinearRegression is the CPU estimator with the same loss and penalty"],
-        mism=["scikit-learn LinearRegression solves the same least-squares problem in closed "
-              "form (scipy lstsq); it has no max_iter, tol or L-BFGS settings"])
+               "(cuml.solvers.QN(loss='l2'), present in the pinned cuML 26.08); scikit-learn: "
+               "TweedieRegressor(power=0, link='identity', alpha=0, solver='lbfgs'), its L-BFGS "
+               "(scipy L-BFGS-B) on the same half squared error"],
+        mism=["L-BFGS memory: ours and cuML 5; scikit-learn's scipy L-BFGS-B 10 (maxcor, not a "
+              "scikit-learn argument); line search at most 50 steps on every arm (scikit-learn "
+              "maxls=50)", "stopping: each library's own rule reads tol=1e-4 (scikit-learn "
+              "gtol on the projected gradient)"])
     add("kpss", xlane="sequence", ours="kpss_test", kind="extra", task="kpss", block="ts",
         datasets=_TS, params=dict(d=0, D=0, s=0, pval_threshold=0.05),
         quality="x-kpss",
@@ -225,12 +235,19 @@ def build(lane, arm, D, A):
                 S["pred"] = A["_arr"](m.predict(Xq), np.float32)
             return Runner(info, fit, lambda: {"pred": S["pred"]}, record=rec)
         if arm == "sklearn-cpu":
-            from sklearn.linear_model import LinearRegression
-            est = LinearRegression(fit_intercept=True)
-            info["config"] = "sklearn.linear_model.LinearRegression(fit_intercept=True)"
+            # FAIRNESS FIX (2026-10-13 audit): scikit-learn's L-BFGS on the squared loss, not the
+            # closed-form LinearRegression (see the lane's notes). Results raced before this change
+            # were wrong for this lane; apply extra scrutiny.
+            from sklearn.linear_model import TweedieRegressor
+            kw = dict(power=0.0, link="identity", alpha=0.0, solver="lbfgs",
+                      max_iter=p["max_iter"], tol=p["tol"], fit_intercept=p["fit_intercept"],
+                      warm_start=False)
+            est = TweedieRegressor(**kw)
+            info["config"] = "sklearn.linear_model.TweedieRegressor(%s)" % ", ".join(
+                "%s=%r" % kv for kv in sorted(kw.items()))
 
             def fit():
-                m = LinearRegression(fit_intercept=True).fit(X, y)
+                m = TweedieRegressor(**kw).fit(X, y)
                 S["pred"] = m.predict(Xq).astype(np.float32)
             return Runner(info, fit, lambda: {"pred": S["pred"]}, record=A["_BP"]().arm_record(est))
         from cuml.solvers import QN as CumlQN

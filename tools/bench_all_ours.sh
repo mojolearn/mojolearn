@@ -156,10 +156,10 @@ classical_arms_for() {
         # eigh from torch ops), not a library opponent; pca races cuML only. Results raced before
         # this change were wrong for this lane; apply extra scrutiny.
         pca)            echo "ours,cuml-gpu" ;;
-        # FAIRNESS FIX (2026-10-13 audit): the OLS torch arms are harness-written, not
-        # opponents (classical_two_datasets.REFUSED_ARMS). Results raced before this change
-        # were wrong for this lane; apply extra scrutiny.
-        ols)            echo "ours,cuml-gpu" ;;
+        # FAIRNESS FIX (2026-10-13 audit): torch-gpu-eigh is harness-written and refused
+        # (classical_two_datasets.REFUSED_ARMS); torch-gpu is torch.linalg.lstsq(driver='gels').
+        # Results raced before this change were wrong for this lane; apply extra scrutiny.
+        ols)            echo "ours,cuml-gpu,torch-gpu" ;;
         kde|svc)        echo "ours,cuml-gpu" ;;             # no torch arm exists
         dbscan)         echo "ours,cuml-gpu" ;;             # cuml-gpu-rbc overflows at 1M
         hdbscan)        echo "cuml-gpu" ;;                  # opponent-only, by construction

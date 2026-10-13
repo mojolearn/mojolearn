@@ -272,6 +272,19 @@ REFUSED = {
     ("elasticnet", "cuml-gpu"): "different algorithm: ours' coordinate descent forms X^T X once "
                                 "and sweeps the Gram; cuML's cd sweeps every row per coordinate "
                                 "and refuses precompute (UnsupportedOnGPU)",
+    # FAIRNESS FIX (2026-10-13 audit): scikit-learn's LinearSVC / LinearSVR are liblinear
+    # (dual coordinate descent, or for LinearSVC a primal trust-region Newton) with a penalized
+    # intercept (intercept_scaling), while ours and cuML run L-BFGS on the primal with an
+    # unpenalized intercept: a different algorithm and a different model. No CPU library has
+    # ours' formulation, so on Apple and AMD these lanes have no opponent; cuML stays on NVIDIA.
+    # Results raced before this change were wrong for these lanes; apply extra scrutiny.
+    ("linearsvc", "sklearn-cpu"): "different algorithm and model: liblinear (dual='auto' takes "
+                                  "its primal trust-region Newton here) with a penalized "
+                                  "intercept; ours and cuML L-BFGS on the primal with an "
+                                  "unpenalized intercept",
+    ("linearsvr", "sklearn-cpu"): "different algorithm and model: liblinear dual coordinate "
+                                  "descent with a penalized intercept; ours and cuML L-BFGS on "
+                                  "the primal with an unpenalized intercept",
 }
 
 #: Opponent arms per vendor and lane. Apple and AMD: the CPU libraries on every
@@ -304,6 +317,10 @@ OPPONENTS = {
         "ivf": ("cuvs-gpu",),
     },
 }
+# FAIRNESS FIX (2026-10-13 audit): a REFUSED (lane, arm) never stands in a roster, on any vendor.
+for _v in OPPONENTS:
+    for _lane in list(OPPONENTS[_v]):
+        OPPONENTS[_v][_lane] = tuple(a for a in OPPONENTS[_v][_lane] if (_lane, a) not in REFUSED)
 
 #: Opponents that are NOT on the board, by name, with the reason. The board
 #: prints this list; nothing is dropped silently.
@@ -311,11 +328,13 @@ NOT_PLANNED = {
     "apple": [
         "cuML and cuVS: CUDA only; no Apple build exists.",
         "faiss-gpu: CUDA only; faiss-cpu is the arm on this box.",
-    ],
+    ] + ["scikit-learn on %s: refused, %s (2026-10-13 audit); no opponent on this box."
+         % (_lane, _why) for (_lane, _arm), _why in sorted(REFUSED.items()) if _arm == "sklearn-cpu"],
     "amd": [
         "cuML and cuVS: CUDA only; no ROCm build is pinned.",
         "faiss-gpu: the pinned FAISS GPU builds are CUDA; faiss-cpu is the arm on this box.",
-    ],
+    ] + ["scikit-learn on %s: refused, %s (2026-10-13 audit); no opponent on this box."
+         % (_lane, _why) for (_lane, _arm), _why in sorted(REFUSED.items()) if _arm == "sklearn-cpu"],
     "nvidia": [
         "cuML GaussianMixture, GaussianProcessRegressor/Classifier, Nystroem, RBFSampler: "
         "cuML 26.8.0 has none; scikit-learn on the CPU is the arm.",
@@ -955,6 +974,8 @@ def build(lane, arm, D, rec):
     """The runner for (lane, arm) on the lane's arrays D."""
     np = _np()
     S = {}
+    if (lane, arm) in REFUSED:            # FAIRNESS FIX (2026-10-13 audit): see REFUSED
+        raise RuntimeError("REFUSED: %s is not raced on %s: %s" % (arm, lane, REFUSED[(lane, arm)]))
     if arm in ("ours", "ours-fast"):
         return _build_ours(lane, D, rec, S)
     if arm == "sklearn-cpu":
@@ -1436,9 +1457,6 @@ def _series_major(a, n_series):
 
 
 def _build_cuml(lane, D, rec, S):
-    if (lane, "cuml-gpu") in REFUSED:     # FAIRNESS FIX (2026-10-13 audit): see REFUSED
-        raise RuntimeError("REFUSED: cuml-gpu is not raced on %s: %s"
-                           % (lane, REFUSED[(lane, "cuml-gpu")]))
     np = _np()
     import cuml
     ctd = _load("classical_two_datasets")

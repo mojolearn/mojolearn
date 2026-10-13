@@ -237,7 +237,9 @@ def test_tables_are_complete_and_stdlib_only():
             assert k in cfg, (lane, k)
         assert bbm.has_fast(lane), lane      # every lane's binding ships FAST in 0.8.22
         for v in ("apple", "nvidia", "amd"):
-            assert bbm.OPPONENTS[v][lane], (v, lane)
+            # FAIRNESS FIX (2026-10-13 audit): a lane whose only arm on a vendor is REFUSED
+            # (a different algorithm) races ours alone there, named in NOT_PLANNED
+            assert bbm.OPPONENTS[v][lane] or any(l == lane for l, _a in bbm.REFUSED), (v, lane)
     # tools/bench_board.py imports this module on a box with no NumPy
     code = ("import sys, importlib.util; sys.modules['numpy'] = None; "
             "s = importlib.util.spec_from_file_location('m', %r); "

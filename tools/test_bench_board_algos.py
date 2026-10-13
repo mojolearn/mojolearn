@@ -116,6 +116,7 @@ def test_tables_are_complete_and_stdlib_only():
     # torch.optim has no Lion and no LAMB: those race ours alone, named in not_planned.
     # FAIRNESS FIX (2026-10-13 audit): the SGD lanes refuse scikit-learn's per-sample SGD (a
     # different algorithm from ours' minibatch SGD), so off NVIDIA they race ours alone too.
+    # quantile: ours runs ADMM, no library does (its scikit-learn arm is refused).
     # FAIRNESS FIX (2026-10-13 audit): incremental-pca's opponents (cuML, scikit-learn) run a
     # different per-batch algorithm and are refused, so it races ours alone too.
     # FAIRNESS FIX (2026-10-13 audit, second pass): tree-shap refuses every opponent (a different
@@ -125,7 +126,7 @@ def test_tables_are_complete_and_stdlib_only():
     assert alone == {"lion", "lamb", "sgd-clf", "sgd-reg", "incremental-pca", "tree-shap",
                      "decision-tree-clf", "decision-tree-reg", "bagging-clf", "bagging-reg",
                      "adaboost-clf", "adaboost-reg", "voting-clf", "voting-reg",
-                     "stacking-clf", "stacking-reg"}
+                     "stacking-clf", "stacking-reg", "quantile"}
     assert any(w.startswith("cuml-gpu on incremental-pca: refused") for w in A.not_planned("nvidia"))
     assert any(w.startswith("sklearn-cpu on bagging-clf: refused") for w in A.not_planned("apple"))
     assert "xgboost-cpu" not in A.opponents("apple", "dart") and "lightgbm-cpu" in A.opponents("apple", "dart")
