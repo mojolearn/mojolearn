@@ -177,6 +177,12 @@ if [ -n "${ONLY_CHANGED:-}" ]; then
     [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ] || die "ONLY_CHANGED excludes LANES and SHARD"
     since_arg=()
     [ "$ONLY_CHANGED" = table ] || since_arg=(--since "$ONLY_CHANGED")
+    # The column's GPU backend: a host-binding-only change cannot move a device
+    # column's bits, so lane_select leaves it out of an NVIDIA or AMD record.
+    case "$LABEL" in
+        nvidia-*) since_arg+=(--backend cuda) ;;
+        amd-*) since_arg+=(--backend hip) ;;
+    esac
     LANES=$("${PY[@]}" tools/identity_columns.py changed-lanes --scope "${SCOPE:-routine}" ${since_arg[@]+"${since_arg[@]}"} \
             2> "$OUT/$LABEL.changed-lanes.txt" | tail -n 1) || die "could not list the changed lanes (see $OUT/$LABEL.changed-lanes.txt)"
     grep -m 1 'CHANGED-LANES' "$OUT/$LABEL.changed-lanes.txt"

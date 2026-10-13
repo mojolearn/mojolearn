@@ -4998,6 +4998,12 @@ class _HarnessModel:
     def mutators(self):
         """Top-level defs and classes that change module-level state when called."""
         out = set()
+        # A name bound only by an import is a module (`np`), not module-level
+        # state: `np.add(a, b, out=a)` is a ufunc call, not `set.add`. Reading
+        # it as a mutation made the eigh lane's fixture helper a driver root
+        # and selected every lane (2026-10-13).
+        imported = {n for n, ks in self.defs.items()
+                    if all(isinstance(self.stmts[i], (ast.Import, ast.ImportFrom)) for i in ks)}
         for k, node in enumerate(self.stmts):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 continue
@@ -5013,7 +5019,7 @@ class _HarnessModel:
                             hit = True
                 elif isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) \
                         and n.func.attr in _MUTATING_METHODS and isinstance(n.func.value, ast.Name) \
-                        and n.func.value.id in self.top:
+                        and n.func.value.id in self.top and n.func.value.id not in imported:
                     hit = True
                 if hit:
                     out.add(node.name)
@@ -5901,6 +5907,17 @@ def changed_paths(ref):
 PLATFORM_BUILD_TREES = {"linux": "packaging/linux/", "macos": "packaging/macos/"}
 
 
+#: FILES THAT ONLY ROUTE THE CPU (HOST) BINDINGS. A device column (cuda, hip)
+#: never imports them, so their edits cannot move its bits; for those columns
+#: they are inert. Every other selection (no backend, cpu, metal) keeps the
+#: ordinary rules. Value: who loads the file, checked by grep of its importers.
+HOST_BINDING_ONLY = {
+    os.path.join("python", "mojolearn", "_classical_host.py"):
+        "imported only by _forest_host.py (the host model loader) and the expansion doors' host "
+        "subclasses, all of which bind *_host binaries",
+}
+
+
 def _other_platform_tree(path, backend):
     if backend in ("cuda", "hip"):
         own = "linux"
@@ -6083,6 +6100,11 @@ def select(paths, ref=None, sources=None, backend=None):
                 inert.append(path)
                 reasons[path] = (f"the {fid} expansion lane's {kind} fragment, which registers and "
                                  "names no lane yet")
+            continue
+        if backend in ("cuda", "hip") and path in HOST_BINDING_ONLY:
+            inert.append(path)
+            reasons[path] = (f"host-binding routing only: {HOST_BINDING_ONLY[path]}; a {backend} device "
+                             "column never loads it")
             continue
         other = _other_platform_tree(path, backend)
         if other:

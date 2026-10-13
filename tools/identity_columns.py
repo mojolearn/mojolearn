@@ -271,6 +271,35 @@ def cmd_report(args):
     return 0
 
 
+def _git(*args):
+    import subprocess
+    return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True)
+
+
+def is_ancestor(a, b):
+    return _git("merge-base", "--is-ancestor", a, b).returncode == 0
+
+
+def release_floor():
+    """The commit both GPU vendors' newest release rests on: the earlier of the
+    newest alpha-api-*-nvidia-* and -amd-* tags that are ancestors of HEAD (their
+    merge base if neither contains the other). None when either is missing, so
+    every row keeps its own record commit."""
+    tags = {}
+    for vendor in ("nvidia", "amd"):
+        out = _git("for-each-ref", "--sort=-creatordate", "--format=%(refname:short)",
+                   f"refs/tags/alpha-api-*-{vendor}-*").stdout.split()
+        tags[vendor] = next((t for t in out if is_ancestor(t, "HEAD")), None)
+    if not all(tags.values()):
+        return None
+    nv, amd = (_git("rev-parse", tags[v] + "^{commit}").stdout.strip() for v in ("nvidia", "amd"))
+    if is_ancestor(nv, amd):
+        return nv
+    if is_ancestor(amd, nv):
+        return amd
+    return _git("merge-base", nv, amd).stdout.strip() or None
+
+
 def cmd_changed_lanes(args):
     """INCREMENTAL RE-RECORD (Andrew 2026-10-10: identity runs ONCE; a mismatch
     is a bug to fix, never a reason to rerun). Re-record only what changed;
@@ -299,6 +328,19 @@ def cmd_changed_lanes(args):
                 c, t = records[idx].get("commit"), records[idx].get("commit_time") or 0
                 if c and (lane not in since or t < since[lane][1]):
                     since[lane] = (c, t)
+    # RELEASE FLOOR (Andrew 2026-10-12: "we should only need to verify a few
+    # things"). A shipped release admitted every row of its table for its own
+    # code (the release's one identity check), so a row whose record commit is
+    # older than the last release rests on that release, not on the record:
+    # only changes after the release can have moved it. Without the floor a
+    # row recorded weeks ago re-selected every lane on each release.
+    floor = None if args.since or args.no_release_floor else release_floor()
+    if floor:
+        for lane, (c, _t) in list(since.items()):
+            if is_ancestor(c, floor):
+                since[lane] = (floor, 0)
+        print(f"# release floor {floor[:12]} ({args.floor_desc or 'last NVIDIA/AMD release tags'}): rows recorded "
+              "before it are measured from it", file=sys.stderr)
     stale = set(vref().stale_reference_lanes(table, h))
     sources, _ = lane_select.lane_sources()
     picked_by = {}                       # commit -> set of lanes its diff reaches
@@ -313,7 +355,7 @@ def cmd_changed_lanes(args):
             if ref not in picked_by:
                 try:
                     paths = lane_select.changed_paths(ref)
-                    sel = lane_select.select(paths, ref=ref, sources=sources)
+                    sel = lane_select.select(paths, ref=ref, sources=sources, backend=args.backend or None)
                     if sel.get("unattributed"):
                         # the selector never widens or guesses: an unplaced
                         # path re-records every lane resting on this commit
@@ -353,6 +395,11 @@ def main():
     g.add_argument("--table", default=str(PKG / "verify_reference" / "table.json"))
     g.add_argument("--since", default="", help="one commit for every lane instead of each lane's own record commit")
     g.add_argument("--scope", choices=("routine", "neural-training", "all"), default="routine")
+    g.add_argument("--no-release-floor", action="store_true",
+                   help="measure each row from its own record commit even when a release shipped after it")
+    g.add_argument("--backend", choices=("cuda", "hip", "metal", "cpu"), default="",
+                   help="the column's backend: paths that cannot reach its binaries are inert (lane_select)")
+    g.set_defaults(floor_desc="")
     r = sub.add_parser("report")
     r.add_argument("--table", required=True)
     r.add_argument("--commit", required=True)
