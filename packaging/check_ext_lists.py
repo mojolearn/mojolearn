@@ -160,7 +160,7 @@ def _backend_tiered():
 
 
 def _backend_classical_fast():
-    """`_backend._CLASSICAL_FAST`: fast + identical, never deterministic."""
+    """`_backend._CLASSICAL_FAST`: fast + identical."""
     return _backend_names("_CLASSICAL_FAST")
 
 
@@ -351,7 +351,7 @@ def main():
         return 0
     want = truth()
     # Byte LM is an explicit IDENTICAL-only profile addition, not a binding
-    # required in FAST/DETERMINISTIC. Each pack/build/smoke must still name it.
+    # required in FAST. Each pack/build/smoke must still name it.
     profile_only = {"_mojolearn_byte_lm"}
     if not profile_only <= want:
         print("FAIL profile-only binding disappeared from backend")

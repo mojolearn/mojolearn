@@ -88,7 +88,7 @@ if [ "$CROSS_BUILD" = 1 ]; then
   say "3/5..5/5 gates (a) smoke, (b) sabotage, (d) nogpu: NOT APPLICABLE"
   say "  this box is $DEVICE_ARCH, the set is $ARCH; the binaries cannot run here"
   SMOKE_RC=0; SAB_RC=0; NOGPU_RC=0
-  for g in smoke_fast smoke_deterministic smoke_identical sabotage nogpu; do
+  for g in smoke_fast smoke_identical sabotage nogpu; do
     printf '{"verdict": "NOT APPLICABLE", "reason": "cross-build: box is %s, set is %s", "device_arch": "%s", "set_arch": "%s"}\n' \
       "$DEVICE_ARCH" "$ARCH" "$DEVICE_ARCH" "$ARCH" > "$D/gates/$g.json"
     echo "NOT APPLICABLE: cross-build, box is $DEVICE_ARCH and the set is $ARCH" > "$D/gates/$g.log"
@@ -97,7 +97,7 @@ else
 
 say "3/5 gate (a): smoke, every family, every tier"
 SMOKE_RC=0
-for tier in fast deterministic identical; do
+for tier in fast identical; do
   MOJOLEARN_NUMERIC_MODE=$tier PYTHONPATH="$PKGROOT" MOJOLEARN_REPO="$REPO" \
     timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" \
     $PY -u packaging/linux/smoke.py --vendor "$VENDOR" --arch "$ARCH" --json "$D/gates/smoke_$tier.json" \
@@ -123,7 +123,7 @@ fi
   fi
   echo "seconds=$(( $(date +%s) - T0 ))"
   cat "$D/wheels/SIZES.txt"
-  for tier in fast deterministic identical; do
+  for tier in fast identical; do
     echo "smoke[$tier]: $(tail -1 "$D/gates/smoke_$tier.log" 2>/dev/null)"
   done
   echo "sabotage: $(tail -1 "$D/gates/sabotage.log" 2>/dev/null)"
@@ -131,5 +131,5 @@ fi
 } | tee "$D/SUMMARY.txt"
 
 rm -rf "$PKGROOT" "$D/wheels/tools-venv"
-rm -rf "$SET"/_mojolearn*.so "$SET"/deterministic "$SET"/identical "$SET"/.libs
+rm -rf "$SET"/_mojolearn*.so "$SET"/identical "$SET"/.libs
 [ "$BUILD_RC" = 0 ] && [ "$SMOKE_RC" = 0 ] && [ "$SAB_RC" = 0 ]

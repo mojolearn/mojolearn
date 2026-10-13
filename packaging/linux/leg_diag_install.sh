@@ -116,7 +116,7 @@ PYEOF
 sed 's/^/    /' "$D/host_cpu.txt"
 
 SMOKE_RC=0
-for tier in fast deterministic identical; do
+for tier in fast identical; do
   # cwd is / so the checkout cannot shadow the installed package.
   ( cd / && MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_REPO="$REPO" \
       timeout -k 30 "${MOJOLEARN_SMOKE_TIMEOUT:-900}" \
@@ -142,7 +142,7 @@ mojolearn.KMeans(n_clusters=2).fit(X); print('FIT OK')
 done
 {
   echo "index=$IDX version=$VER vendor=$VENDOR smoke_rc=$SMOKE_RC"
-  for tier in fast deterministic identical; do
+  for tier in fast identical; do
     echo "smoke[$tier]: $(tail -1 "$D/gates/smoke_$tier.log" 2>/dev/null)"
   done
 } | tee "$D/SUMMARY.txt"

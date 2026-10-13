@@ -25,7 +25,7 @@ class DeviceGlue(unittest.TestCase):
             validate(rows)
 
     def test_other_bindings_and_unshipped_tiers_cannot_claim_no_image(self):
-        for tier, name in [('fast', '_mojolearn_gp'), ('deterministic', '_mojolearn_x_trees')]:
+        for tier, name in [('fast', '_mojolearn_gp')]:
             with self.assertRaisesRegex(ValueError, 'unregistered'):
                 validate([[tier, name, NO_IMAGE]])
 

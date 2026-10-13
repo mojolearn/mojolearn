@@ -327,7 +327,7 @@ jobs:
             exit 1
           }
           for v in 3.10 3.11 3.12 3.13 3.14; do
-            for mode in fast deterministic identical; do
+            for mode in fast identical; do
               grep -q "^PASS python$v \[$mode\]" build.log || {
                 echo "::error::python$v [$mode] is claimed but did not pass"; exit 1; }
             done

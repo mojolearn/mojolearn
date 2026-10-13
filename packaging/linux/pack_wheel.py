@@ -174,7 +174,7 @@ PKG = PY_DIR / "mojolearn"
 # `Mamba1Block` and `TransformerBlock` are both in `__all__`, so a Linux user
 # of that wheel gets an ImportError naming a build command they cannot run.
 EXT_NAMES = (
-    # The three TREE lanes: the only bindings with fast and deterministic
+    # The three TREE lanes: the only bindings with fast
     # tiers (DEVIATION 2490, 2026-09-10).
     "_mojolearn_gbdt", "_mojolearn_rf", "_mojolearn_trees",
 )
@@ -185,7 +185,7 @@ EXT_NAMES = (
 #: the miss the header above is about. `tier_names()` is the one place that
 #: decides, and it is the same shape `build_sets.sh` uses. The reasoning and
 #: the numbers are on `_TIERED` in python/mojolearn/_backend.py.
-#: CLASSICAL ML (2026-09-25): fast and identical, never deterministic.
+#: CLASSICAL ML (2026-09-25): fast and identical.
 FAST_CLASSICAL_NAMES = (
     "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm", "_mojolearn_solver",
     "_mojolearn_metrics", "_mojolearn_preprocessing", "_mojolearn_tsa",
@@ -200,7 +200,7 @@ FAST_CLASSICAL_NAMES = (
 #: optional byte LM is added by `tier_names(include_byte_lm=True)`.
 IDENTICAL_ONLY_NAMES = (
 )
-TIERS = ("fast", "deterministic", "identical")
+TIERS = ("fast", "identical")
 
 
 def tier_names(tier, include_byte_lm=False, *, vendor=None):
@@ -387,7 +387,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
             host_record[name] = dict(archive_path=f'mojolearn/host/{name}.so',
                                      sha256=sorted(set(seen.values()))[0],
                                      vendor='cpu', supported_modes=['identical'],
-                                     unsupported_modes=['fast', 'deterministic'],
+                                     unsupported_modes=['fast'],
                                      built_by=sorted(seen),
                                      origin='reused' if taken else 'built',
                                      **(reuse_origin(taken[0], taken[0].reuse['files'][f'host/{name}.so'])
@@ -512,11 +512,11 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                            from_legs={k: v for s in sets if s.reuse for k, v in (s.reuse.get('legs') or {}).items()}),
                 optional_native={**{n: {
                     'included': True, 'supported_modes': ['identical'],
-                    'unsupported_modes': ['fast', 'deterministic']}
+                    'unsupported_modes': ['fast']}
                     for n in ('_mojolearn_byte_lm',) + tuple(host_record) + IDENTICAL_ONLY_NAMES},
                     **{n: {
                     'included': True, 'supported_modes': ['fast', 'identical'],
-                    'unsupported_modes': ['deterministic']}
+                    'unsupported_modes': []}
                     for n in FAST_CLASSICAL_NAMES}},
                 # One record per host binding, keyed by basename, so the
                 # payload says which host families this wheel carries rather
