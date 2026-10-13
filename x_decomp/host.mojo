@@ -77,6 +77,7 @@ from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
 from cholesky.host.chol_oracle import chol_host_factor_lower, chol_host_trsm_lower
+from mixture.chol_order import GMM_IDN_CHOL_TPB, gmm_idn_chol_host
 # TOMBSTONE: MOJOLEARN_IDN_LU_DELAYED_UPDATE (loser: noise, lu-factor NV 1.02x / AMD 1.01x, bits changed) deleted 2026-10-11 by aaf94d8a9; code recoverable at aaf94d8a9^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_DELAYED_UPDATE.patch
 # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
@@ -429,15 +430,28 @@ struct HostExec(Exec):
 
     @staticmethod
     def chol_inv(a: F32Ptr, li: F32Ptr, st: F32Ptr, n: Int) raises:
-        """`Exec.chol_inv` in chol_oracle's host spelling of the profile
-        (`chol_host_factor_lower` at +0.0, `chol_host_trsm_lower` against I):
-        the device's `potrf_lower`, `chol_logdet` and `trsm_lower` words."""
+        """`Exec.chol_inv` on the host: `gmm_idn_chol_host` (the device's
+        `idn_precision_cholesky_kernel` order, x_decomp/kit_device.mojo
+        `DMcd.chol_batch`) up to GMM_IDN_CHOL_TPB, else chol_oracle's host
+        spelling of the blocked profile (`chol_host_factor_lower` at +0.0,
+        `chol_host_trsm_lower` against I)."""
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
+        if n <= GMM_IDN_CHOL_TPB:
+            var g = gmm_idn_chol_host(m, 0, n, Float32(0.0))
+            st.unsafe_store(0, Float32(g.info))
+            st.unsafe_store(1, g.logdet)
+            st.unsafe_store(2, Float32(1.0))
+            if g.info != 0:
+                return
+            for i in range(n * n):
+                li.unsafe_store(i, g.linv[i])
+            return
         var f = chol_host_factor_lower(m, n, Float32(0.0))
         st.unsafe_store(0, Float32(f.info))
         st.unsafe_store(1, f.logdet)
+        st.unsafe_store(2, Float32(0.0))
         if f.info != 0:
             return
         var b = List[Float32](length=n * n, fill=Float32(0.0))

@@ -2831,6 +2831,7 @@ struct DevExec(Exec):
         var run = potrf_lower(ctx, da, ws, n, trace)
         st.unsafe_store(0, Float32(run.info))
         st.unsafe_store(1, Float32(0.0))
+        st.unsafe_store(2, Float32(0.0))   # the blocked profile (Exec.chol_inv)
         if run.info == 0:
             var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
             st.unsafe_store(1, chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB))

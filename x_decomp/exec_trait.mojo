@@ -65,9 +65,11 @@ trait Exec:
 
     @staticmethod
     def chol_inv(a: F32Ptr, li: F32Ptr, st: F32Ptr, n: Int) raises:
-        """The blocked Cholesky profile (cholesky/checks/potrf.mojo, +0.0
-        ridge): st[0] = LAPACK's info, st[1] = log det, li = L^{-1} (n x n)
-        when info == 0 (MinCovDet's IDN_MCD_CHOL C-step)."""
+        """MinCovDet's IDN_MCD_CHOL factor: st[0] = info, li = L^{-1}
+        (n x n) when info == 0, st[2] the order that ran: 1 = the batched
+        one-launch order of mixture/chol_order.mojo (n <= GMM_IDN_CHOL_TPB;
+        st[1] = -sum log L_jj, log det = -2 st[1] in float64), 0 = the
+        blocked profile of cholesky/checks/potrf.mojo (st[1] = log det)."""
         ...
 
     @staticmethod

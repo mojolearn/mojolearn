@@ -85,6 +85,8 @@ from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
 from x_decomp.jacobi_par import pj_identity_kernel
 from x_decomp.mcd import IDN_MCD_CHOL
+from mixture.checks.mstep import idn_precision_cholesky_kernel
+from mixture.chol_order import GMM_IDN_CHOL_TPB
 from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
@@ -1081,6 +1083,140 @@ struct DMcd:
         var P = self.pinvh(cov)
         return self.mahal(X, loc, P)
 
+    # ---- IDN_MCD_CHOL, lane apple-holes: the C-steps of K candidates at once
+    def chol_batch(mut self, C: DMat, K: Int, d: Int, li: DMat, mut dets: List[Float64]) raises:
+        """Every candidate's covariance (C: K packed d x d blocks) factored in
+        ONE launch, a block per candidate (mixture/checks/mstep.mojo
+        `idn_precision_cholesky_kernel`, the IDENTICAL order of
+        mixture/chol_order.mojo, d <= GMM_IDN_CHOL_TPB): L^{-1} into li (K
+        packed blocks), log det = -2 (-sum log L_jj) into dets, -inf where
+        the factor stopped (info != 0). One wait for the K words (plus the
+        kit's NaN word). The host column runs `gmm_idn_chol_host`
+        (x_decomp/host.mojo `HostExec.chol_inv`): the same words."""
+        if K <= 0:
+            return
+        var L = DMat(K * d, d)
+        var pm = DMat(K * d, d)
+        var ldc = DMat(K, 1)
+        var inf = DMat(K, 1)
+        self.k.ctx.enqueue_function[idn_precision_cholesky_kernel](
+            C.p(), L.p(), li.p(), pm.p(), ldc.p(), inf.p().bitcast[Int32](), Int32(d),
+            grid_dim=(K, 1, 1), block_dim=(GMM_IDN_CHOL_TPB, 1, 1),
+        )
+        var hl = self.k.get(ldc)
+        var hi = self.k.get(inf)
+        self.k.sync()
+        for k in range(K):  # small-loop(K: C-step candidates): one word per candidate
+            var info = bitcast[DType.int32](hi.d[k])
+            dets[k] = _neg_inf() if info != Int32(0) else -2.0 * Float64(hl.d[k])
+        _ = L^
+        _ = pm^
+
+    def _load(mut self, X: DMat, b: DBatch, k: Int, s: DMat) raises:
+        """Candidate k's support s: its rows, mean and covariance into the
+        arenas (`take_rows`, `colmean`, `emp_cov_at`)."""
+        var Xs = self.k.gather_dev(X, s)
+        var loc = self.k.colmean(Xs)
+        var cov = self.emp_cov_at(Xs, loc)
+        self.k.put(b.sel_k(k), s)
+        self.k.put(b.loc_k(k), loc)
+        self.k.put(b.cov_k(k), cov)
+
+    @staticmethod
+    def _active(b: DBatch, mut active: List[Bool]) -> Bool:
+        """`det < prev_det and iters > 0 and det != -inf` per candidate."""
+        var anyk = False
+        for k in range(b.K):  # small-loop(K: C-step candidates): the loop's control words
+            var prev = b.pdet[k] if b.have_prev[k] else _pos_inf()
+            active[k] = b.det[k] < prev and b.iters[k] > 0 and b.det[k] != _neg_inf()
+            if active[k]:
+                anyk = True
+        return anyk
+
+    def c_steps_batch(
+        mut self, X: DMat, h: Int, n_iter: Int, K: Int, has_init: Bool, inits: DCands
+    ) raises -> DBatch:
+        """`c_step_chol` for K candidates in lockstep: candidate k runs the
+        same statements in the same order as alone (its draws in candidate
+        order, as the sequential loop drew them), but every step's K
+        factorizations are one launch and one wait. A candidate leaves the
+        loop when its own test fails and is never touched again."""
+        var d = X.c
+        var b = DBatch(K, d, h, X.r, n_iter)
+        if has_init:
+            var C0 = DMat(rows_of=inits.C, row0=0, rows=K * d)
+            var dets0 = List[Float64](length=K, fill=0.0)
+            self.chol_batch(C0, K, d, b.li, dets0)
+            for k in range(K):  # small-loop(K: C-step candidates): one distance and selection each
+                var d0: DMat
+                if dets0[k] != _neg_inf():
+                    d0 = self.mahal_chol(X, inits.loc(k), b.li_k(k))
+                else:
+                    var P0 = self.pinvh(inits.cov(k))
+                    d0 = self.mahal(X, inits.loc(k), P0)
+                var s0 = self.k.smallest_dev(d0, h)
+                self.k.put(b.dist_k(k), d0)
+                self._load(X, b, k, s0)
+        else:
+            for k in range(K):  # small-loop(K: C-step candidates): one draw and selection each
+                self.draws += 1
+                var rr = self.k.rand(1, X.r, self.seed, 1000 + self.draws, 0)
+                var s0 = self.k.smallest_dev(rr, h)
+                self._load(X, b, k, s0)
+        var d1 = List[Float64](length=K, fill=0.0)
+        self.chol_batch(b.cov, K, d, b.li, d1)
+        b.det = d1^
+        for k in range(K):  # small-loop(K: C-step candidates): the -inf start's pinvh
+            if b.det[k] == _neg_inf():
+                var P = self.pinvh(b.cov_k(k))
+                self.k.put(b.p_k(k), P)
+                b.has_p[k] = True
+        var active = List[Bool](length=K, fill=False)
+        var anyk = Self._active(b, active)
+        var nd = List[Float64](length=K, fill=0.0)
+        while anyk:
+            for k in range(K):  # small-loop(K: C-step candidates): one C-step each
+                if not active[k]:
+                    continue
+                self.k.put(b.p_k(k), b.li_k(k))
+                b.p_chol[k] = True
+                b.has_p[k] = True
+                var dd = self.mahal_chol(X, b.loc_k(k), b.p_k(k))
+                self.k.put(b.ploc_k(k), b.loc_k(k))
+                self.k.put(b.pcov_k(k), b.cov_k(k))
+                self.k.put(b.psel_k(k), b.sel_k(k))
+                b.have_prev[k] = True
+                b.pdet[k] = b.det[k]
+                var s1 = self.k.smallest_dev(dd, h)
+                self.k.put(b.dist_k(k), dd)
+                self._load(X, b, k, s1)
+                b.iters[k] -= 1
+            # every block refactors (an inactive candidate's covariance is
+            # unchanged, so its words are too); only the stepped ones read it
+            self.chol_batch(b.cov, K, d, b.li, nd)
+            for k in range(K):  # small-loop(K: C-step candidates): the new log determinants
+                if active[k]:
+                    b.det[k] = nd[k]
+            anyk = Self._active(b, active)
+        for k in range(K):  # small-loop(K: C-step candidates): sklearn's exit checks
+            if not b.has_p[k]:
+                raise Error("x_decomp MinCovDet: the first C-step's log determinant is not finite")
+            var up = b.have_prev[k] and b.det[k] > b.pdet[k]
+            if b.iters[k] == 0:
+                up = False
+            b.use_prev[k] = up
+        return b^
+
+    def batch_final_dist(mut self, X: DMat, b: DBatch, k: Int) raises -> DMat:
+        """`c_step`'s returned distances for candidate k: the last step's
+        when it kept the previous estimate, else under its chosen mean and
+        last P."""
+        if b.use_prev[k]:
+            return self.k.copy(b.dist_k(k))
+        if b.p_chol[k]:
+            return self.mahal_chol(X, b.loc_k(k), b.p_k(k))
+        return self.mahal(X, b.loc_k(k), b.p_k(k))
+
     def c_step_chol(
         mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, cov0: DMat, want_dist: Bool
     ) raises -> DEst:
@@ -1221,6 +1357,17 @@ struct DMcd:
         `_order_by_det`'s order) appended to `output`. The later stages read
         only a kept candidate's location and covariance."""
         var tr = DCands(trials, X.c)
+        comptime if IDN_MCD_CHOL:
+            if X.c <= GMM_IDN_CHOL_TPB and trials > 0:
+                var noinit = DCands(1, X.c)
+                var bt = self.c_steps_batch(X, h, n_iter, trials, False, noinit)
+                for t in range(trials):  # small-loop(trials: C-step candidates): one push each
+                    tr.push(self.k, bt.fin_loc(t), bt.fin_cov(t), bt.fin_det(t))
+                var top0 = _top_of(tr.det, keep)
+                for a in range(len(top0)):  # small-loop(top: kept candidates): two device copies a kept candidate
+                    var j = top0[a]
+                    output.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
+                return
         var none = DMat(0, 0)
         for _t in range(trials):  # small-loop(trials: C-step candidates): one enqueued C-step a candidate, the plan's trial count
             var e = self.c_step(X, h, n_iter, False, none, none, False)
@@ -1236,6 +1383,16 @@ struct DMcd:
         """`select_candidates` from initial estimates, the `keep` best
         locations and covariances appended to `output` (packed, as above)."""
         var tr = DCands(inits.count(), X.c)
+        comptime if IDN_MCD_CHOL:
+            if X.c <= GMM_IDN_CHOL_TPB and inits.count() > 0:
+                var bt = self.c_steps_batch(X, h, n_iter, inits.count(), True, inits)
+                for t in range(inits.count()):  # small-loop(inits: C-step candidates): one push each
+                    tr.push(self.k, bt.fin_loc(t), bt.fin_cov(t), bt.fin_det(t))
+                var top0 = _top_of(tr.det, keep)
+                for a in range(len(top0)):  # small-loop(top: kept candidates): two device copies a kept candidate
+                    var j = top0[a]
+                    output.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
+                return
         for t in range(inits.count()):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
             var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t), False)
             tr.push(self.k, e.loc, e.cov, e.det)
@@ -1251,6 +1408,34 @@ struct DMcd:
         (det, j) candidate kept whole (support rows and distances), every
         other one released as soon as it loses. A NaN determinant is
         refused after every C-step ran, as `_order_by_det` refused it."""
+        comptime if IDN_MCD_CHOL:
+            if X.c <= GMM_IDN_CHOL_TPB and inits.count() > 0:
+                var bt = self.c_steps_batch(X, h, n_iter, inits.count(), True, inits)
+                var bk = -1
+                var bkey = UInt64(0)
+                var nan0 = False
+                for t in range(inits.count()):  # small-loop(inits: C-step candidates): the (det, t) keys
+                    var f0 = Float32(bt.fin_det(t))
+                    if f0 != f0:
+                        nan0 = True
+                        continue
+                    var key0 = _key(f0, t)
+                    if bk < 0 or key0 < bkey:
+                        bkey = key0
+                        bk = t
+                if nan0:
+                    raise Error("x_decomp MinCovDet: a NaN distance or draw has no order (refused)")
+                if bk < 0:
+                    raise Error("x_decomp MinCovDet: no candidate to select from")
+                var fd = DMat(0, 1)
+                if want_dist:
+                    fd = self.batch_final_dist(X, bt, bk)
+                elif bt.use_prev[bk]:
+                    fd = self.k.copy(bt.dist_k(bk))
+                return DEst(
+                    self.k.copy(bt.fin_loc(bk)), self.k.copy(bt.fin_cov(bk)), bt.fin_det(bk),
+                    self.k.copy(bt.fin_sel(bk)), fd^,
+                )
         var best = Optional[DEst]()
         var best_key = UInt64(0)
         var nan_seen = False
@@ -1318,6 +1503,96 @@ struct DChol(Movable):
     def __init__(out self, det: Float64, var li: DMat):
         self.det = det
         self.li = li^
+
+
+struct DBatch(Movable):
+    """IDN_MCD_CHOL, lane apple-holes: K candidates' C-steps in lockstep
+    (`DMcd.c_steps_batch`). Every per-candidate matrix lives in a packed
+    arena (a view per candidate, as DCands), so one launch factors every
+    candidate's covariance and one wait brings every log determinant home;
+    the scalars the loop branches on are host lists."""
+    var K: Int
+    var d: Int
+    var h: Int
+    var r: Int
+    var loc: DMat
+    var cov: DMat
+    var ploc: DMat
+    var pcov: DMat
+    var sel: DMat
+    var psel: DMat
+    var dist: DMat
+    var p: DMat
+    var li: DMat
+    var det: List[Float64]
+    var pdet: List[Float64]
+    var iters: List[Int]
+    var have_prev: List[Bool]
+    var has_p: List[Bool]
+    var p_chol: List[Bool]
+    var use_prev: List[Bool]
+
+    def __init__(out self, K: Int, d: Int, h: Int, r: Int, n_iter: Int) raises:
+        self.K = K
+        self.d = d
+        self.h = h
+        self.r = r
+        self.loc = DMat(K, d)
+        self.cov = DMat(K * d, d)
+        self.ploc = DMat(K, d)
+        self.pcov = DMat(K * d, d)
+        self.sel = DMat(K * h, 1)
+        self.psel = DMat(K * h, 1)
+        self.dist = DMat(K * r, 1)
+        self.p = DMat(K * d, d)
+        self.li = DMat(K * d, d)
+        self.det = List[Float64](length=K, fill=0.0)
+        self.pdet = List[Float64](length=K, fill=0.0)
+        self.iters = List[Int](length=K, fill=n_iter)
+        self.have_prev = List[Bool](length=K, fill=False)
+        self.has_p = List[Bool](length=K, fill=False)
+        self.p_chol = List[Bool](length=K, fill=False)
+        self.use_prev = List[Bool](length=K, fill=False)
+
+    def loc_k(self, k: Int) raises -> DMat:
+        return DMat(rows_of=self.loc, row0=k, rows=1)
+
+    def cov_k(self, k: Int) raises -> DMat:
+        return DMat(rows_of=self.cov, row0=k * self.d, rows=self.d)
+
+    def ploc_k(self, k: Int) raises -> DMat:
+        return DMat(rows_of=self.ploc, row0=k, rows=1)
+
+    def pcov_k(self, k: Int) raises -> DMat:
+        return DMat(rows_of=self.pcov, row0=k * self.d, rows=self.d)
+
+    def sel_k(self, k: Int) raises -> DMat:
+        return DMat(rows_of=self.sel, row0=k * self.h, rows=self.h)
+
+    def psel_k(self, k: Int) raises -> DMat:
+        return DMat(rows_of=self.psel, row0=k * self.h, rows=self.h)
+
+    def dist_k(self, k: Int) raises -> DMat:
+        return DMat(rows_of=self.dist, row0=k * self.r, rows=self.r)
+
+    def p_k(self, k: Int) raises -> DMat:
+        return DMat(rows_of=self.p, row0=k * self.d, rows=self.d)
+
+    def li_k(self, k: Int) raises -> DMat:
+        return DMat(rows_of=self.li, row0=k * self.d, rows=self.d)
+
+    # the candidate's answer (`c_step`'s return, sklearn's use_prev rule)
+    def fin_loc(self, k: Int) raises -> DMat:
+        return self.ploc_k(k) if self.use_prev[k] else self.loc_k(k)
+
+    def fin_cov(self, k: Int) raises -> DMat:
+        return self.pcov_k(k) if self.use_prev[k] else self.cov_k(k)
+
+    def fin_sel(self, k: Int) raises -> DMat:
+        return self.psel_k(k) if self.use_prev[k] else self.sel_k(k)
+
+    def fin_det(self, k: Int) -> Float64:
+        return self.pdet[k] if self.use_prev[k] else self.det[k]
 
 
 struct DEst(Movable):
