@@ -882,10 +882,15 @@ def gbdt_feature_freq_host_fit(
         # the final row order's slice: plane 1 and plane 0 per row
         var leaf_targets = List[Float32](length=p_sz[leaf], fill=Float32(0.0))
         var leaf_weights = List[Float32](length=p_sz[leaf], fill=Float32(0.0))
+        # `stats` moved with `row_index` in the reorder above, so position
+        # `p`'s stats are at `p` (lane apple-feature-freq, 2026-10-13: this
+        # read `stats[row_index[p]]`, another row's stats, the device
+        # permuting schedule's same bug; Apple's index-only schedule was the
+        # right one)
         for i in range(p_sz[leaf]):
-            var row = row_index[p_off[leaf] + i]
-            leaf_targets[i] = stats[n_rows + row]
-            leaf_weights[i] = stats[row]
+            var pos = p_off[leaf] + i
+            leaf_targets[i] = stats[n_rows + pos]
+            leaf_weights[i] = stats[pos]
         var total = _ff_two_stage_sum(leaf_targets)
         var total_weight = _ff_two_stage_sum(leaf_weights)
         if total_weight > Float32(0.0):

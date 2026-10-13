@@ -90,11 +90,26 @@ def two_level_leaf_partials_kernel(
     n_in: Int32,
     leaf_tab: MutPointer[UInt32, MutAnyOrigin],
     partials: MutPointer[Float32, MutAnyOrigin],
+    stats_by_row: Int32,
 ):
     """Stage 1 of the leaf estimate. Grid `(TL_GRID, n_leaves, 1)`, block
     `(TL_BLOCK, 1, 1)`. Leaf `L = block_idx.y` owns the final row order's
     `[leaf_tab[2L], leaf_tab[2L] + leaf_tab[2L + 1])`; block `b` writes
-    `partials[(L * TL_GRID + b) * 2 + {0: target sum, 1: weight sum}]`."""
+    `partials[(L * TL_GRID + b) * 2 + {0: target sum, 1: weight sum}]`.
+
+    `stats_by_row` names where the split schedule left the stat planes.
+    The permuting reorder (`launch_reorder_in_leaves`) moves `stats` with
+    `rows`, so position `p`'s stats are at `p` (0). The index-only schedule
+    (`SYM_RIDX_SPLITS_2031`, default on Apple) moves only `rows`, so they
+    are at `rows[p]` (1). Either way the fold reads the same values in the
+    same order, so every column gets the same bits.
+
+    lane apple-feature-freq (2026-10-13): this kernel read `stats[rows[p]]`
+    under BOTH schedules. Under the permuting reorder that reads another
+    row's stats, so NVIDIA, AMD (and the host oracle, which mirrored it)
+    summed the wrong rows into every leaf, while Apple, on the index-only
+    schedule, summed the right ones. That was the Apple-only divergence on
+    every gbdt-feature-freq and gbdt-tensor-ctr-tables part."""
     var n = Int(n_in)
     var t = Int(thread_idx.x)
     var b = Int(block_idx.x)
@@ -105,9 +120,11 @@ def two_level_leaf_partials_kernel(
     var acc_w = Float32(0.0)
     var i = b * TL_BLOCK + t
     while i < size:
-        var row = Int(rows.unsafe_load(off + i))
-        acc_t = acc_t + stats.unsafe_load(n + row)
-        acc_w = acc_w + stats.unsafe_load(row)
+        var src = off + i
+        if stats_by_row != Int32(0):
+            src = Int(rows.unsafe_load(off + i))
+        acc_t = acc_t + stats.unsafe_load(n + src)
+        acc_w = acc_w + stats.unsafe_load(src)
         i += TL_STRIDE
     var s_t = halving_block_sum[TL_BLOCK](acc_t)
     var s_w = halving_block_sum[TL_BLOCK](acc_w)
