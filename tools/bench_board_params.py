@@ -187,6 +187,10 @@ ALIASES = {
         # the cuML benchmark's KMeans cuml_args, TargetEncoder and MBSGD values
         "oversampling_factor": "oversampling_factor", "smooth": "smooth", "cv": "cv",
         "eta0": "eta0",
+        # FAIRNESS FIX (2026-10-13 audit): the naive Bayes settings were never compared (cuML ran
+        # its defaults unchecked); they are now read back on every arm that has them. Results
+        # raced before this change were wrong for those lanes; apply extra scrutiny.
+        "fit_prior": "fit_prior", "binarize": "binarize", "var_smoothing": "var_smoothing",
     },
     # XGBoost's `gamma` is the minimum split loss reduction
     "xgboost": {"gamma": "min_split_gain", "max_bin": "max_bin", "booster": "boosting_type"},
@@ -322,12 +326,26 @@ EXCEPTIONS = [
     ("logreg", "l1_ratio", "*", "penalty='l2' on every arm: ours None, scikit-learn None or 0.0 "
      "(its l2 spelling from 1.8)"),
     ("linearsvc", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
-    ("ridge", "solver", "sklearn-cpu*", "ours and cuML 'eig' (eigendecomposition of the normal "
-     "equations); scikit-learn has no 'eig' and runs 'cholesky' on the same normal equations"),
+    # FAIRNESS FIX (2026-10-13 audit): the old reason said ours ran 'eig' like cuML; ours' IDENTICAL
+    # default is the Cholesky of the centered Gram, and cuML is refused on ridge. Results raced
+    # before this change were wrong for this lane; apply extra scrutiny.
+    ("ridge", "solver", "sklearn-cpu*", "ours is constructed solver='eig' (the only name it takes "
+     "besides 'auto') but its IDENTICAL fit solves the centered normal equations by Cholesky "
+     "(glm/impl/gram_solve.mojo; eigendecomposition only when its trust gate rejects the factor); "
+     "scikit-learn 'cholesky' is that algorithm"),
     ("lasso", "seed", "ours*", "mojolearn Lasso refuses random_state: it selects nothing with "
      "selection='cyclic'"),
     ("elasticnet", "seed", "ours*", "mojolearn ElasticNet refuses random_state: it selects nothing "
      "with selection='cyclic'"),
+    # FAIRNESS FIX (2026-10-13 audit): the race declared precompute=False on every arm while ours'
+    # coordinate descent sweeps the Gram; scikit-learn now races precompute=True. Results raced
+    # before this change were wrong for these lanes; apply extra scrutiny.
+    ("lasso", "precompute", "sklearn-cpu*", "ours takes only precompute=False but its coordinate "
+     "descent forms X^T X once and sweeps the Gram (solver/impl/cd_gram_rule.mojo); scikit-learn "
+     "precompute=True is that algorithm"),
+    ("elasticnet", "precompute", "sklearn-cpu*", "ours takes only precompute=False but its "
+     "coordinate descent forms X^T X once and sweeps the Gram (solver/impl/cd_gram_rule.mojo); "
+     "scikit-learn precompute=True is that algorithm"),
     ("ivf", "seed", "cuvs-gpu", "cuVS ivf_flat IndexParams takes no seed and its k-means training "
      "samples rows; ours and faiss get 7"),
     ("tsvd", "algorithm", "sklearn-cpu*", "scikit-learn TruncatedSVD has no 'covariance_eigh'; it "

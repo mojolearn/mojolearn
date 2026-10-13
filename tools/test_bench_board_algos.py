@@ -113,9 +113,12 @@ def test_tables_are_complete_and_stdlib_only():
         assert len(s["datasets"]) >= 2 or s["block"] in ("tensor", "optim", "dense", "sym", "images",
                                                           "corpus"), lane
         assert not tab or set(tab) == set(A.TAB), lane
-    # torch.optim has no Lion and no LAMB: those race ours alone, named in not_planned
-    assert alone == {"lion", "lamb"}
+    # torch.optim has no Lion and no LAMB: those race ours alone, named in not_planned.
+    # FAIRNESS FIX (2026-10-13 audit): the SGD lanes refuse scikit-learn's per-sample SGD (a
+    # different algorithm from ours' minibatch SGD), so off NVIDIA they race ours alone too.
+    assert alone == {"lion", "lamb", "sgd-clf", "sgd-reg"}
     assert any("Lion and LAMB" in w for w in A.not_planned("nvidia"))
+    assert any(w.startswith("sklearn-cpu on sgd-clf: refused") for w in A.not_planned("amd"))
     code = ("import sys, importlib.util; sys.modules['numpy'] = None; "
             "s = importlib.util.spec_from_file_location('m', %r); "
             "m = importlib.util.module_from_spec(s); s.loader.exec_module(m); print(len(m.LANES))"
@@ -160,7 +163,9 @@ def test_plan_has_every_lane_with_our_arms(vendor):
 
 def test_opponent_rosters():
     nv = {l: A.opponents("nvidia", l) for l in A.LANE_ORDER}
-    assert nv["sgd-clf"] == ("sklearn-cpu", "cuml-gpu")
+    # FAIRNESS FIX (2026-10-13 audit): scikit-learn's per-sample SGD is refused (see LANES)
+    assert nv["sgd-clf"] == ("cuml-gpu",)
+    assert A.opponents("amd", "sgd-reg") == ()
     assert nv["dart"] == ("lightgbm-cpu", "xgboost-cpu", "xgboost-gpu")
     assert nv["ivf-pq"] == ("faiss-cpu", "cuvs-gpu")
     assert nv["pagerank"] == ("networkx-cpu", "cugraph-gpu")

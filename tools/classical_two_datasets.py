@@ -96,9 +96,10 @@ THE ARMS (0b-iii: only OUR IDENTICAL arm against the opponent's FAST arm)
                 (upload_ms is in the ready record), the clock ends at
                 torch.cuda.synchronize(). Not written for kde and svc.
   torch-gpu-eigh  OLS only: centered normal equations through eigh with a
-                pseudo-inverse cutoff (the algorithm class of ours and of
-                cuML's algorithm='eig'; Istella has near-constant columns, so
-                it is kept beside the lstsq arm).
+                pseudo-inverse cutoff. FAIRNESS FIX (2026-10-13 audit): it and
+                the OLS torch-gpu arm are harness-written, not a library's
+                estimator, and are refused (REFUSED_ARMS); results raced with
+                them were wrong for this lane, apply extra scrutiny.
 
 INTERLEAVING. One worker process per arm holds the data and its library for
 the whole (lane, dataset); the conductor sends `round r` to each arm in turn,
@@ -193,7 +194,11 @@ DATASETS = ("taxi", "istella")
 ARMS = {
     "kmeans": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
     "pca": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
-    "ols": ("ours", "cuml-gpu", "torch-gpu", "torch-gpu-eigh", "sklearn-cpu"),
+    # FAIRNESS FIX (2026-10-13 audit): torch-gpu and torch-gpu-eigh are OLS written by this
+    # harness from torch primitives (TorchOLS, TorchOLSEigh), not a library's estimator; they
+    # are no longer opponents (REFUSED_ARMS). Results raced before this change were wrong for
+    # this lane; apply extra scrutiny.
+    "ols": ("ours", "cuml-gpu", "sklearn-cpu"),
     "knn": ("ours", "cuml-gpu", "torch-gpu", "sklearn-cpu"),
     "kde": ("ours", "cuml-gpu", "sklearn-cpu"),
     "svc": ("ours", "cuml-gpu", "sklearn-cpu"),
@@ -205,6 +210,18 @@ ARMS = {
     # min_cluster_size, metric and cluster selection (CumlHDBSCAN's).
     "dbscan": ("ours", "cuml-gpu", "cuml-gpu-rbc", "sklearn-cpu"),
     "hdbscan": ("ours", "cuml-gpu", "sklearn-cpu"),
+}
+#: FAIRNESS FIX (2026-10-13 audit): arms that are not opponents, with the reason. race()
+#: drops one a caller still names (a CTD-REFUSED line and result["refused_arms"]), and the
+#: rest of the race runs. Results raced before this change were wrong for these lanes; apply
+#: extra scrutiny.
+REFUSED_ARMS = {
+    ("ols", "torch-gpu"): "harness-written: OLS assembled by this harness from torch ops "
+                          "(centering, torch.linalg.lstsq, the intercept); torch has no "
+                          "least-squares estimator, so this is not a library's implementation",
+    ("ols", "torch-gpu-eigh"): "harness-written: OLS assembled by this harness from torch ops "
+                               "(centered normal equations, torch.linalg.eigh, a pseudo-inverse "
+                               "cutoff); not a library's implementation",
 }
 BLOCK_OF = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
             "kde": "kde", "svc": "svc", "dbscan": "dbscan", "hdbscan": "dbscan"}
@@ -297,11 +314,19 @@ CONFIG = {
         "rows": "big block, raw; R2 and RMSE on the 500,000 eval rows",
         "params": "fit_intercept=True",
         "timed": "fit",
+        # FAIRNESS FIX (2026-10-13 audit): this said ours solved the normal equations by eig
+        # beside cuML algorithm='eig'; ours' IDENTICAL fit is a TSQR (no Gram), and cuML now
+        # races its QR solver. Results raced before this change were wrong for this lane; apply
+        # extra scrutiny.
         "mismatches": [
-            "seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)",
-            "solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq "
-            "gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on "
-            "CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff",
+            "seed: no arm has a seed argument (closed-form fit)",
+            "solver (no parameter on ours): ours' IDENTICAL fit centers X and y and runs a blocked "
+            "Householder TSQR of [X | y], then the SVD of its small R with a pseudo-inverse "
+            "cutoff (python/mojolearn/linear_model.py _ols_tsqr_centered; tall designs, at most "
+            "511 columns; the condition number is not squared); its FAST fit (Apple) solves the "
+            "equilibrated normal equations. cuML algorithm='qr' (geqrf, R x = Q^T y: the same "
+            "QR of the tall design, no rank cutoff); scikit-learn scipy lstsq gelsd (SVD)",
+            "torch-gpu and torch-gpu-eigh: refused, harness-written (REFUSED_ARMS)",
             "scikit-learn positive=False and copy_X=True: parameters ours does not have",
         ],
     },
@@ -1633,7 +1658,11 @@ class CumlOLS:
         self.x, self.y = t["X"], t["y"]
         # copy_X=True where the build takes it: fit_intercept centers the
         # design matrix, and a centered device X would change every later round.
-        self.kw = dict(algorithm="eig", fit_intercept=True, output_type="cupy")
+        # FAIRNESS FIX (2026-10-13 audit): algorithm='eig' (normal equations, the condition
+        # number squared; R2 -11031 on Istella) raced ours' TSQR; 'qr' is cuML's QR solve of
+        # the same tall design. Results raced before this change were wrong for this lane;
+        # apply extra scrutiny.
+        self.kw = dict(algorithm="qr", fit_intercept=True, output_type="cupy")
         try:
             self.LR(copy_X=True, **self.kw)
             self.kw["copy_X"] = True
@@ -2795,6 +2824,14 @@ def race(args):
     else:
         arms = ["ours"]
     _probe().refuse_our_cpu_arms(arms, "classical_two_datasets")
+    # FAIRNESS FIX (2026-10-13 audit): an arm in REFUSED_ARMS is not an opponent; it is dropped
+    # by name and the race runs without it. Results raced before this change were wrong for
+    # those lanes; apply extra scrutiny.
+    refused_arms = {a: REFUSED_ARMS[(lane, a)] for a in arms if (lane, a) in REFUSED_ARMS}
+    for a, why in refused_arms.items():
+        print("CTD-REFUSED lane=%s dataset=%s arm=%s stage=plan detail=%s"
+              % (lane, args.dataset, a, json.dumps(why)), flush=True)
+    arms = [a for a in arms if a not in refused_arms]
     for a in arms:
         if (lane, a) not in BUILDERS:
             raise SystemExit("no arm %r for lane %r" % (a, lane))
@@ -2807,6 +2844,8 @@ def race(args):
               "rounds_requested": args.rounds, "started": now_utc(),
               "script": "tools/classical_two_datasets.py",
               "commit": os.environ.get("MOJOLEARN_REPO_COMMIT", "unknown")}
+    if refused_arms:                      # FAIRNESS FIX (2026-10-13 audit): see REFUSED_ARMS
+        result["refused_arms"] = refused_arms
     tag = "%s-%s" % (lane, ds)
     workers = {}
     for arm in arms:

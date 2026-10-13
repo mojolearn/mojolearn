@@ -210,6 +210,12 @@ def _add(slug, **spec):
     spec.setdefault("sub", {})
     spec.setdefault("cuml", None)
     spec.setdefault("other", {})
+    # FAIRNESS FIX (2026-10-13 audit): an opponent arm that does different work from ours (a
+    # different algorithm) raced as if comparable. `refused` maps such an arm to its reason:
+    # opponents() leaves it out, lane_config() prints it, and build() refuses it by name if a
+    # caller asks for it anyway. Results raced before this change were wrong for those lanes;
+    # apply extra scrutiny.
+    spec.setdefault("refused", {})
     if isinstance(spec["ours"], str):
         spec["ours"] = (spec["ours"],)
     LANES[slug] = spec
@@ -219,23 +225,40 @@ def _add(slug, **spec):
 # cuML benchmark MBSGDClassifier / MBSGDRegressor cuml_args eta0=0.005, epochs=100
 # (tools/bench_board_harness.py), on every arm: max_iter=100 is epochs=100, and
 # learning_rate is pinned 'constant' (cuML's default, the schedule eta0 sets)
+# FAIRNESS FIX (2026-10-13 audit): ours' batch_size was left at the library default (4096,
+# python/mojolearn/_expansion_linear.py) and never set by the harness; cuML's fit_intercept,
+# l1_ratio, power_t and n_iter_no_change were left at cuML's defaults; scikit-learn's per-sample
+# SGD raced ours' minibatch SGD as if it were the same algorithm, and the stored lane note said
+# ours was per-sample. Now every SGD setting is pinned explicitly on ours and cuML (batch_size
+# 4096 on both), and the scikit-learn arm is refused (a different algorithm). Results raced
+# before this change were wrong for this lane; apply extra scrutiny.
+SGD_BATCH = 4096
 _SGD = dict(penalty="l2", alpha=1e-4, max_iter=100, tol=None, shuffle=True, random_state=SEED,
-            learning_rate="constant", eta0=0.005)
+            learning_rate="constant", eta0=0.005, batch_size=SGD_BATCH, fit_intercept=True,
+            l1_ratio=0.15, n_iter_no_change=5, average=False, early_stopping=False,
+            warm_start=False)
+_SGD_CUML = dict(penalty="l2", alpha=1e-4, l1_ratio=0.15, fit_intercept=True, epochs=100,
+                 batch_size=SGD_BATCH, learning_rate="constant", eta0=0.005, tol=0.0,
+                 shuffle=True, n_iter_no_change=5)
+_SGD_SK_REFUSED = ("different algorithm: scikit-learn SGD updates per sample and has no "
+                   "batch_size; ours and cuML MBSGD take minibatch steps of %d rows" % SGD_BATCH)
+_SGD_MISM = ["minibatch SGD of %d rows a step on ours and cuML MBSGD (batch_size pinned on "
+             "both); scikit-learn's SGD is per-sample and is refused, not raced" % SGD_BATCH,
+             "cuML reads epochs=100 and tol=0.0 (no early stop); ours max_iter=100 and tol=None",
+             "intercept: cuML MBSGD centers X and y before the epochs (GLM preProcessData) and "
+             "recovers the intercept; ours learns the intercept in the SGD steps"]
 _add("sgd-clf", xlane="linear", ours="SGDClassifier", task="clf", block="cls",
-     sk="sklearn.linear_model:SGDClassifier", params=dict(_SGD, loss="hinge"),
+     sk="sklearn.linear_model:SGDClassifier",
+     params=dict(_SGD, loss="hinge", power_t=0.5, class_weight=None),
      cuml="cuml.linear_model:MBSGDClassifier",
-     cuml_params=dict(loss="hinge", penalty="l2", alpha=1e-4, epochs=100, batch_size=4096,
-                      learning_rate="constant", eta0=0.005, tol=0.0, shuffle=True),
-     mism=["cuML MBSGD and ours are mini-batch SGD (batch_size 4096, ours the default of "
-           "python/mojolearn/_expansion_linear.py); scikit-learn is per-sample SGD (the reference)",
-           "cuML reads epochs=100, the others max_iter=100"])
+     cuml_params=dict(_SGD_CUML, loss="hinge", power_t=0.5),
+     refused={"sklearn-cpu": _SGD_SK_REFUSED}, mism=list(_SGD_MISM))
 _add("sgd-reg", xlane="linear", ours="SGDRegressor", task="reg", block="reg",
-     sk="sklearn.linear_model:SGDRegressor", params=dict(_SGD, loss="squared_error"),
+     sk="sklearn.linear_model:SGDRegressor",
+     params=dict(_SGD, loss="squared_error", power_t=0.25),
      cuml="cuml.linear_model:MBSGDRegressor",
-     cuml_params=dict(loss="squared_loss", penalty="l2", alpha=1e-4, epochs=100,
-                      batch_size=4096, learning_rate="constant", eta0=0.005,
-                      tol=0.0, shuffle=True),
-     mism=["cuML MBSGD and ours are mini-batch SGD (batch_size 4096); scikit-learn is per-sample"])
+     cuml_params=dict(_SGD_CUML, loss="squared_loss", power_t=0.25),
+     refused={"sklearn-cpu": _SGD_SK_REFUSED}, mism=list(_SGD_MISM))
 for _slug, _cls, _kw, _why in (
         ("poisson", "PoissonRegressor", {}, "y = the reg target (taxi fare > 0; Istella grade >= 0)"),
         ("gamma", "GammaRegressor", {}, "y = the reg target + 1 (Gamma needs y > 0; Istella grades start at 0)"),
@@ -250,11 +273,30 @@ _add("bayesian-ridge", xlane="linear", ours="BayesianRidge", task="reg", block="
      sk="sklearn.linear_model:BayesianRidge", params=dict(max_iter=300, tol=1e-3))
 _add("ard", xlane="linear", ours="ARDRegression", task="reg", block="reg", sub={"X": SUB["mid"]},
      sk="sklearn.linear_model:ARDRegression", params=dict(max_iter=300, tol=1e-3))
+# FAIRNESS FIX (2026-10-13 audit): the race declared eps=2.22e-16 on every arm and read it back
+# from ours' get_params, but ours never passes eps to its kernel (python/mojolearn/
+# _expansion_linear.py _lars_fit; "Accepted for compatibility; ignored"), and precompute was left
+# at each library's 'auto'. Now precompute=True is pinned on every arm (ours always runs the Gram
+# form, x_linear/lars.mojo; cuML and scikit-learn 'auto' resolve to it at n_rows > n_cols) and
+# the lane says what ours really does with eps: it has no eps floor and drops a candidate whose
+# Cholesky pivot is non-positive or whose root is < 1e-7 (x_linear/lars.mojo:204). cuML floors
+# the new diagonal at eps and then drops it below 1e-7 (raft cholesky_r1_update.cuh:127,
+# cuml lars_impl.cuh:509), scikit-learn takes max(sqrt|c - v|, eps) and drops it below 1e-7, so
+# any eps in [0, 1e-7) is ours' rule on both; 2**-52 (both libraries' default) is kept there.
+# Results raced before this change were wrong for this lane; apply extra scrutiny.
+LARS_EPS = 2.220446049250313e-16
 _add("lars", xlane="linear", ours="Lars", task="reg", block="reg",
-     sk="sklearn.linear_model:Lars", params=dict(n_nonzero_coefs=500, fit_intercept=True, eps=2.220446049250313e-16,
-                                                 random_state=SEED),
+     sk="sklearn.linear_model:Lars", params=dict(n_nonzero_coefs=500, fit_intercept=True, eps=LARS_EPS,
+                                                 precompute=True, random_state=SEED),
      cuml="cuml.experimental.linear_model:Lars",   # eps set on every arm: a default is not a matched value
-     cuml_params=dict(n_nonzero_coefs=500, fit_intercept=True, eps=2.220446049250313e-16))
+     cuml_params=dict(n_nonzero_coefs=500, fit_intercept=True, eps=LARS_EPS, precompute=True),
+     mism=["eps: ours does not read it (its kernel has no eps floor; a pivot <= 0 or with root "
+           "< 1e-7 drops the candidate); cuML and scikit-learn floor the pivot at eps and drop it "
+           "below the same 1e-7, so eps = 2**-52 < 1e-7 gives them ours' rule. scikit-learn alone "
+           "takes |c - v| and keeps a candidate whose pivot square is negative but at least 1e-14 "
+           "in size, where ours and cuML drop it",
+           "precompute=True on every arm: ours always factors the Gram (it ignores the argument); "
+           "cuML and scikit-learn build it from X once"])
 if os.environ.get("MOJOLEARN_BENCH_LARS_STABLE") == "1":
     # A separate, opt-in recipe: never rewrite the historical LARS setting or
     # claim its failed quality was repaired under the original configuration.
@@ -439,10 +481,20 @@ _add("svgp", xlane="neighbors", ours=("SVGP", "SparseVariationalGP"), kind="svgp
             "NOT trained on any arm: ours sets q(u) to its optimum for the given "
             "hyperparameters (Titsias's collapsed bound, DEVIATION 5205); gpytorch is the same "
             "model through InducingPointKernel (SGPR, the collapsed bound) in an ExactGP with "
-            "ZeroMean, the same fixed hyperparameters, its prediction cache built in the fit clock"],
+            "ZeroMean, the same fixed hyperparameters, its prediction cache built in the fit clock",
+            # FAIRNESS FIX (2026-10-13 audit): the note above claimed the same model while
+            # GPyTorch's default added the FITC diagonal to the train covariance; see _build_svgp.
+            # Results raced before this change were wrong for this lane; apply extra scrutiny.
+            "gpytorch runs with gpytorch.settings.sgpr_diagonal_correction(False) in both clocks: "
+            "its default (True) adds diag(K_ff - Q_ff) to the train covariance in eval mode, a "
+            "FITC-style posterior and not the Titsias one ours computes (before 2026-10-13 it "
+            "raced with the correction on)"],
      mism=["no seed on any arm: nothing is drawn (fixed inducing points, closed form)",
            "jitter: ours 1e-6 on K_uu; gpytorch adds its own Cholesky jitter (1e-6 in float32) "
-           "only when a factorization fails"])
+           "only when a factorization fails",
+           "precision and outputs: ours solves the M x M inducing system in float-float and its fit "
+           "also forms q_sqrt and the ELBO; gpytorch float32, its fit clock builds the predictive "
+           "mean cache only (the covariance cache would add an n x M^2 product ours does not do)"])
 
 # ---- lane decomp + linalg -------------------------------------------------
 _add("incremental-pca", xlane="decomp", ours="IncrementalPCA", task="transform", block="tsvd",
@@ -693,17 +745,26 @@ _add("rfe", xlane="prep", ours="RFE", task="select", block="cls", sub={"X": SUB[
                  step=0.1),
      mism=["nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion",
            "jaccard_vs_sklearn compares two selections, neither exact: on istella (200k standardized rows) neither solver converges in 200 iterations (scikit-learn warns on all 12 fits); against an exact RFE (newton-cholesky, float64, tol 1e-10) scikit-learn's selection scores 0.789 and ours 0.746 at max_iter=200, and 0.760 and 0.930 once each solver reports convergence (evidence: rfe-istella-20261012)"])
+# FAIRNESS FIX (2026-10-13 audit): cuML's naive Bayes arms got only alpha (or nothing) and ran
+# fit_prior, binarize, var_smoothing and norm at cuML's defaults. Each setting cuML has is now
+# pinned to ours' value (cuML has no force_alpha; alpha=1.0 never reaches its 1e-10 floor).
+# Results raced before this change were wrong for these lanes; apply extra scrutiny.
+_NB_CUML = {"GaussianNB": dict(var_smoothing=1e-9),
+            "BernoulliNB": dict(alpha=1.0, binarize=0.0, fit_prior=True),
+            "CategoricalNB": dict(alpha=1.0, fit_prior=True),
+            "MultinomialNB": dict(alpha=1.0, fit_prior=True),
+            "ComplementNB": dict(alpha=1.0, fit_prior=True, norm=False)}
 for _slug, _cls, _blk, _cu in (("gaussian-nb", "GaussianNB", "cls", True),
                                ("bernoulli-nb", "BernoulliNB", "cls", True),
                                ("categorical-nb", "CategoricalNB", "cat", True)):
     _add(_slug, xlane="prep", ours=_cls, task="clf", block=_blk, sk="sklearn.naive_bayes:" + _cls,
-         cuml=("cuml.naive_bayes:" + _cls) if _cu else None,
+         cuml=("cuml.naive_bayes:" + _cls) if _cu else None, cuml_params=dict(_NB_CUML[_cls]),
          mism=(["min_categories = every code seen in X or Xq on ours and scikit-learn; "
                 "cuML has no min_categories option"] if _cls == "CategoricalNB" else []))
 for _slug, _cls in (("multinomial-nb", "MultinomialNB"), ("complement-nb", "ComplementNB")):
     _add(_slug, xlane="prep", ours=_cls, task="clf", block="countclf",
          datasets=("text", "taxi", "istella"), sk="sklearn.naive_bayes:" + _cls,
-         cuml="cuml.naive_bayes:" + _cls, params=dict(alpha=1.0),
+         cuml="cuml.naive_bayes:" + _cls, params=dict(alpha=1.0), cuml_params=dict(_NB_CUML[_cls]),
          notes=["text: byte-bigram counts of 2 KB documents, label = which corpus (enwik8 or "
                 "pile_github); taxi/Istella: the nonnegative block"])
 _add("lda-clf", xlane="prep", ours="LinearDiscriminantAnalysis", task="clf", block="cls",
@@ -1381,6 +1442,8 @@ def opponents(vendor, lane):
     for a in arms:
         if a in _NVIDIA_ONLY and vendor != "nvidia":
             continue
+        if a in s.get("refused", {}):     # FAIRNESS FIX (2026-10-13 audit): see _add's `refused`
+            continue
         if a not in out:
             out.append(a)
     return tuple(out)
@@ -1449,6 +1512,12 @@ def not_planned(vendor):
                    "IndexIVFPQ with an IDSelectorBatch is the matched arm")
     for name, why in NOT_RACED.items():
         out.append("%s: %s" % (name, why))
+    # FAIRNESS FIX (2026-10-13 audit): the opponents refused as different work, by name
+    for lane in LANE_ORDER:
+        for arm, why in sorted(LANES[lane].get("refused", {}).items()):
+            if arm in _NVIDIA_ONLY and vendor != "nvidia":
+                continue
+            out.append("%s on %s: refused (%s)" % (arm, lane, why))
     return out
 
 
@@ -1467,6 +1536,8 @@ def lane_config(lane):
         cfg["cuml"] = s["cuml"]
     if s["sub"]:
         cfg["stride_subsets"] = dict(s["sub"])
+    if s.get("refused"):                  # FAIRNESS FIX (2026-10-13 audit): see _add's `refused`
+        cfg["refused_opponents"] = dict(s["refused"])
     if s.get("dataset_params"):
         cfg["dataset_params"] = _jsonable(s["dataset_params"])
     return cfg
@@ -2701,6 +2772,9 @@ def build(lane, arm, D):
           "layer": _build_layer, "optim": _build_optim, "linalg": _build_linalg,
           "als": _build_als, "shap": _build_shap, "svgp": _build_svgp, "fn": _build_fn,
           "extra": lambda l, a, d: _EXTRA.build(l, a, d, globals())}[kind]
+    why = LANES[lane].get("refused", {}).get(arm)
+    if why:                               # FAIRNESS FIX (2026-10-13 audit): see _add's `refused`
+        raise RuntimeError("REFUSED: %s is not raced on %s: %s" % (arm, lane, why))
     if arm in OURS_ARMS:
         _ours_class(lane)                     # Skipped when not exported
     return fn(lane, arm, D)
@@ -4925,7 +4999,8 @@ def _build_svgp(lane, arm, D):
             "pre_clock_fit": False, "input_home": "device",
             "config": "gpytorch ExactGP(ZeroMean, InducingPointKernel(ScaleKernel(RBFKernel), Z=%d "
                       "stride rows, fixed)), GaussianLikelihood; outputscale %g, lengthscale %g, noise "
-                      "%g, none trained (SGPR, the collapsed bound); the fit clock builds the "
+                      "%g, none trained (SGPR, the collapsed bound); sgpr_diagonal_correction(False) "
+                      "(the Titsias posterior, no FITC diagonal); the fit clock builds the "
                       "prediction cache" % (Z0.shape[0], hyp["kernel_variance"], hyp["lengthscale"],
                                             hyp["noise_variance"])}
     Xt, yt = torch.from_numpy(X).to(dev), torch.from_numpy(y.astype(np.float32)).to(dev)
@@ -4946,6 +5021,17 @@ def _build_svgp(lane, arm, D):
         def forward(self, x):
             return gpytorch.distributions.MultivariateNormal(self.mean_module(x), self.covar_module(x))
 
+    # FAIRNESS FIX (2026-10-13 audit): in eval mode GPyTorch's InducingPointKernel adds the
+    # diagonal correction diag(K_ff - Q_ff) to the TRAIN covariance as well
+    # (gpytorch.settings.sgpr_diagonal_correction, default True; inducing_point_kernel.py
+    # _get_covariance), so its mean cache solved a FITC-style posterior, not the Titsias
+    # (VFE/DTC) posterior ours computes; the taxi R2 differed (-0.210 vs ours -0.195). The
+    # correction is now off in the fit and the predict clock, so both arms solve the same model.
+    # Results raced before this change were wrong for this lane; apply extra scrutiny.
+    def _ctx():
+        return (torch.no_grad(), gpytorch.settings.fast_pred_var(False),
+                gpytorch.settings.sgpr_diagonal_correction(False))
+
     def fit():
         torch.manual_seed(SEED)
         lik = gpytorch.likelihoods.GaussianLikelihood().to(dev)
@@ -4953,16 +5039,19 @@ def _build_svgp(lane, arm, D):
         model = GP(lik).to(dev)
         model.eval()
         lik.eval()
-        with torch.no_grad(), gpytorch.settings.fast_pred_var(False):
+        a, b, c = _ctx()
+        with a, b, c:
             model(Xqt[:1]).mean                # builds the predictive cache (the "fit")
         _torch_sync(torch, dev)
         S["m"] = model
 
     def infer():
-        with torch.no_grad(), gpytorch.settings.fast_pred_var(False):
+        a, b, c = _ctx()
+        with a, b, c:
             S["pred"] = S["m"](Xqt).mean
         _torch_sync(torch, dev)
-    rec = dict(hyp, __library__="gpytorch", n_inducing=int(Z0.shape[0]), seed=SEED)
+    rec = dict(hyp, __library__="gpytorch", n_inducing=int(Z0.shape[0]), seed=SEED,
+               sgpr_diagonal_correction=False)
     return Runner(info, fit, lambda: {"pred": _torch_metric_array(S["pred"])}, infer, record=rec)
 
 

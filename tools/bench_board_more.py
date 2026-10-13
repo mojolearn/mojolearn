@@ -232,6 +232,29 @@ def datasets_of(lane):
     return LANES[lane][2]
 
 
+#: FAIRNESS FIX (2026-10-13 audit): cuML arms that run a different algorithm from ours raced
+#: as if comparable. Ridge: ours' IDENTICAL default solves the centered Gram by Cholesky
+#: (glm/impl/gram_solve.mojo, MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE, the eigen route only when
+#: its trust gate rejects the factor) although it is constructed solver='eig'; cuML has no
+#: Cholesky solver and its 'eig' also forms U = A V. Lasso / ElasticNet: the race declared
+#: precompute=False, but ours' coordinate descent forms X^T X once and sweeps the Gram
+#: (solver/impl/cd.mojo CD_IDN_GRAM / CD_FAST_GRAM, shape rule solver/impl/cd_gram_rule.mojo),
+#: while cuML's cd sweeps every row per coordinate and refuses precompute (UnsupportedOnGPU).
+#: These arms now refuse by name (build() raises); scikit-learn, whose public API has the
+#: matching solver (Ridge 'cholesky', Lasso/ElasticNet precompute=True), is the arm instead.
+#: Results raced before this change were wrong for these lanes; apply extra scrutiny.
+REFUSED = {
+    ("ridge", "cuml-gpu"): "different algorithm: ours solves the centered normal equations by "
+                           "Cholesky (eigendecomposition only when its trust gate rejects the "
+                           "factor); cuML Ridge has no Cholesky solver ('eig' also forms U = A V)",
+    ("lasso", "cuml-gpu"): "different algorithm: ours' coordinate descent forms X^T X once and "
+                           "sweeps the Gram; cuML's cd sweeps every row per coordinate and "
+                           "refuses precompute (UnsupportedOnGPU)",
+    ("elasticnet", "cuml-gpu"): "different algorithm: ours' coordinate descent forms X^T X once "
+                                "and sweeps the Gram; cuML's cd sweeps every row per coordinate "
+                                "and refuses precompute (UnsupportedOnGPU)",
+}
+
 #: Opponent arms per vendor and lane. Apple and AMD: the CPU libraries on every
 #: core (none of them has an Apple or AMD GPU path). NVIDIA: cuML or cuVS where
 #: they carry the algorithm, scikit-learn or statsmodels on the CPU where they
@@ -248,8 +271,10 @@ OPPONENTS = {
         "umap": ("cuml-gpu",),
         "spectral-embedding": ("cuml-gpu", "sklearn-cpu"),
         "gmm": ("sklearn-cpu",),
-        "logreg": ("cuml-gpu",), "linearsvc": ("cuml-gpu",), "ridge": ("cuml-gpu",),
-        "lasso": ("cuml-gpu",), "elasticnet": ("cuml-gpu",), "linearsvr": ("cuml-gpu",),
+        # FAIRNESS FIX (2026-10-13 audit): ridge, lasso and elasticnet race scikit-learn's
+        # matching solver here; their cuML arms are REFUSED (above)
+        "logreg": ("cuml-gpu",), "linearsvc": ("cuml-gpu",), "ridge": ("sklearn-cpu",),
+        "lasso": ("sklearn-cpu",), "elasticnet": ("sklearn-cpu",), "linearsvr": ("cuml-gpu",),
         "tsvd": ("cuml-gpu",), "knn-clf": ("cuml-gpu",), "knn-reg": ("cuml-gpu",),
         "spectral": ("cuml-gpu", "sklearn-cpu"),
         "agglomerative": ("cuml-gpu",),
@@ -280,7 +305,8 @@ NOT_PLANNED = {
         "umap-learn and faiss-cpu: not installed on NVIDIA; cuML UMAP and cuVS are the arms.",
         "cuML SpectralClustering/SpectralEmbedding: present only in newer cuML; if the "
         "pinned 26.8.0 lacks them the arm refuses by name and scikit-learn stands beside it.",
-    ],
+    ] + ["cuML on %s: refused, %s (2026-10-13 audit); scikit-learn on the CPU is the arm."
+         % (_lane, _why) for (_lane, _arm), _why in sorted(REFUSED.items())],
 }
 
 #: What every arm of a lane is set to, and every mismatch that could not be
@@ -334,7 +360,9 @@ LANE_CONFIG = {
     "logreg": {
         "rows": "%d fit and %d held-out stride rows (%s)" % (LIN_ROWS, EVAL_ROWS, _STD),
         "params": "penalty='l2', C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True, "
-                  "class_weight=None; scikit-learn random_state=7",
+                  "class_weight=None; ours and cuML linesearch_max_iter=50, L-BFGS memory 5 "
+                  "(cuML lbfgs_memory=5; ours fixes 5); "
+                  "scikit-learn random_state=7",
         "timed": "fit",
         "quality": "held-out accuracy and log loss",
         "mismatches": ["solver: ours 'qn' (L-BFGS, cuML's), scikit-learn 'lbfgs', cuML 'qn'; "
@@ -353,31 +381,57 @@ LANE_CONFIG = {
                        "scikit-learn liblinear (dual='auto'), which penalizes the intercept",
                        "seed: ours and cuML LinearSVC have no seed argument"],
     },
+    # FAIRNESS FIX (2026-10-13 audit): the note said ours ran 'eig' like cuML; ours' IDENTICAL
+    # default is the Cholesky of the centered Gram. Results raced before this change were wrong
+    # for this lane; apply extra scrutiny.
     "ridge": {
         "rows": "%d fit and %d held-out stride rows (%s)" % (LIN_ROWS, EVAL_ROWS, _STD),
         "params": "alpha=1.0, fit_intercept=True; scikit-learn positive=False, random_state=7",
         "timed": "fit", "quality": "held-out R2 and RMSE",
-        "mismatches": ["solver, named on every arm: ours and cuML 'eig' (eigendecomposition of "
-                       "the normal equations), scikit-learn 'cholesky' (it has no 'eig')",
-                       "seed: ours and cuML Ridge have no seed argument"],
+        "mismatches": ["solver: ours is constructed solver='eig' (the only name it takes besides "
+                       "'auto'), but its IDENTICAL fit solves the centered normal equations "
+                       "(X - mu)^T (X - mu) + alpha I by Cholesky (glm/impl/gram_solve.mojo), "
+                       "falling back to the eigendecomposition only when its trust gate rejects "
+                       "the factor; its FAST fit (Apple) is the eigendecomposition. scikit-learn "
+                       "solver='cholesky' is the same algorithm. cuML is refused: it has no "
+                       "Cholesky solver and its 'eig' also forms U = A V",
+                       "seed: ours Ridge has no seed argument"],
     },
+    # FAIRNESS FIX (2026-10-13 audit): the lasso / elasticnet notes declared precompute=False on
+    # every arm, but ours' coordinate descent forms X^T X once and sweeps the Gram. scikit-learn
+    # now races precompute=True (its Gram coordinate descent) and cuML is refused. Results raced
+    # before this change were wrong for these lanes; apply extra scrutiny.
     "lasso": {
         "rows": "%d fit and %d held-out stride rows (%s)" % (LIN_ROWS, EVAL_ROWS, _STD),
         "params": "alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4, selection='cyclic', "
-                  "precompute=False, positive=False; ours and cuML solver='cd'",
+                  "positive=False; ours solver='cd' and precompute=False (the only value it "
+                  "takes), scikit-learn precompute=True",
         "timed": "fit", "quality": "held-out R2 and RMSE",
-        "mismatches": ["seed: ours refuses random_state (it selects nothing with "
-                       "selection='cyclic'), cuML has none; scikit-learn random_state=7",
+        "mismatches": ["precompute: ours is constructed precompute=False but its coordinate "
+                       "descent (IDENTICAL and FAST) forms X^T X and X^T y once and sweeps the "
+                       "Gram whenever solver/impl/cd_gram_rule.mojo's shape rule holds (tall, "
+                       "at most 256 columns: both datasets here); scikit-learn precompute=True "
+                       "is that algorithm. cuML is refused: its cd sweeps every row per "
+                       "coordinate and refuses precompute",
+                       "seed: ours refuses random_state (it selects nothing with "
+                       "selection='cyclic'); scikit-learn random_state=7",
                        "tol: each library's own stopping rule reads it"],
     },
     "elasticnet": {
         "rows": "%d fit and %d held-out stride rows (%s)" % (LIN_ROWS, EVAL_ROWS, _STD),
         "params": "alpha=0.1, l1_ratio=0.5 (the cuML benchmark's ElasticNet), fit_intercept=True, "
-                  "max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; "
-                  "ours and cuML solver='cd'",
+                  "max_iter=1000, tol=1e-4, selection='cyclic', positive=False; ours "
+                  "solver='cd' and precompute=False (the only value it takes), scikit-learn "
+                  "precompute=True",
         "timed": "fit", "quality": "held-out R2 and RMSE",
-        "mismatches": ["seed: ours refuses random_state (it selects nothing with "
-                       "selection='cyclic'), cuML has none; scikit-learn random_state=7",
+        "mismatches": ["precompute: ours is constructed precompute=False but its coordinate "
+                       "descent (IDENTICAL and FAST) forms X^T X and X^T y once and sweeps the "
+                       "Gram whenever solver/impl/cd_gram_rule.mojo's shape rule holds (tall, "
+                       "at most 256 columns: both datasets here); scikit-learn precompute=True "
+                       "is that algorithm. cuML is refused: its cd sweeps every row per "
+                       "coordinate and refuses precompute",
+                       "seed: ours refuses random_state (it selects nothing with "
+                       "selection='cyclic'); scikit-learn random_state=7",
                        "tol: each library's own stopping rule reads it"],
     },
     "linearsvr": {
@@ -1090,9 +1144,13 @@ def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=
     else:
         g, ls = (gamma_of(D), length_scale_of(D))
         ctors = {
+            # FAIRNESS FIX (2026-10-13 audit): linesearch_max_iter and cuML's lbfgs_memory were
+            # each library's default (50 and 5 on both; ours fixes the memory at 5); pinned on
+            # ours and cuML. Results raced before this change were wrong for this lane; apply
+            # extra scrutiny.
             "logreg": lambda: ml.LogisticRegression(penalty="l2", C=1.0, tol=1e-4, max_iter=1000,
                                                     fit_intercept=True, solver="qn",
-                                                    class_weight=None),
+                                                    class_weight=None, linesearch_max_iter=50),
             "linearsvc": lambda: ml.LinearSVC(penalty="l2", loss="squared_hinge", C=1.0, tol=1e-4,
                                               max_iter=1000, fit_intercept=True,
                                               penalized_intercept=False, class_weight=None),
@@ -1228,12 +1286,16 @@ def _build_sklearn(lane, D, rec, S):
             # 'auto' is 'cholesky' for this dense input; named, not left to resolve
             "ridge": lambda: lm.Ridge(alpha=1.0, fit_intercept=True, solver="cholesky",
                                       positive=False, random_state=SEED),
+            # FAIRNESS FIX (2026-10-13 audit): precompute=False ran scikit-learn's row sweeps
+            # against ours' Gram sweeps; precompute=True is its Gram coordinate descent, ours'
+            # algorithm. Results raced before this change were wrong for these lanes; apply
+            # extra scrutiny.
             "lasso": lambda: lm.Lasso(alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4,
-                                      selection="cyclic", precompute=False, positive=False,
+                                      selection="cyclic", precompute=True, positive=False,
                                       warm_start=False, random_state=SEED),
             "elasticnet": lambda: lm.ElasticNet(alpha=ENET_ALPHA, l1_ratio=0.5, fit_intercept=True,
                                                 max_iter=1000, tol=1e-4, selection="cyclic",
-                                                precompute=False, positive=False,
+                                                precompute=True, positive=False,
                                                 warm_start=False, random_state=SEED),
             "linearsvr": lambda: svm.LinearSVR(epsilon=0.0, loss="epsilon_insensitive", C=1.0,
                                                tol=1e-4, max_iter=1000, fit_intercept=True,
@@ -1335,6 +1397,9 @@ def _series_major(a, n_series):
 
 
 def _build_cuml(lane, D, rec, S):
+    if (lane, "cuml-gpu") in REFUSED:     # FAIRNESS FIX (2026-10-13 audit): see REFUSED
+        raise RuntimeError("REFUSED: cuml-gpu is not raced on %s: %s"
+                           % (lane, REFUSED[(lane, "cuml-gpu")]))
     np = _np()
     import cuml
     ctd = _load("classical_two_datasets")
@@ -1426,7 +1491,8 @@ def _build_cuml(lane, D, rec, S):
         ctors = {
             "logreg": (lm.LogisticRegression, dict(penalty="l2", C=1.0, tol=1e-4, max_iter=1000,
                                                    fit_intercept=True, solver="qn",
-                                                   class_weight=None)),
+                                                   class_weight=None, linesearch_max_iter=50,
+                                                   lbfgs_memory=5)),  # ours fixes 5 (linear_model.py)
             "linearsvc": (svm.LinearSVC, dict(penalty="l2", loss="squared_hinge", C=1.0, tol=1e-4,
                                               max_iter=1000, fit_intercept=True,
                                               penalized_intercept=False, class_weight=None)),

@@ -160,13 +160,16 @@ has_phase() {
 arms_for() {  # <lane>: the arms a race runs on this vendor
     if [ "$VENDOR" = nvidia ]; then
         case "$1" in
-            ols) _a="ours,cuml-gpu,torch-gpu,torch-gpu-eigh" ;;
+            # FAIRNESS FIX (2026-10-13 audit): the OLS torch arms are harness-written, not
+            # opponents (classical_two_datasets.REFUSED_ARMS). Results raced before this change
+            # were wrong for this lane; apply extra scrutiny.
+            ols) _a="ours,cuml-gpu" ;;
             kmeans|pca|knn) _a="ours,cuml-gpu,torch-gpu" ;;
             *) _a="ours,cuml-gpu" ;;
         esac
     else
         case "$1" in
-            ols) _a="ours,sklearn-cpu,torch-gpu,torch-gpu-eigh" ;;
+            ols) _a="ours,sklearn-cpu" ;;  # FAIRNESS FIX (2026-10-13 audit): torch arms refused
             kmeans|pca|knn) _a="ours,sklearn-cpu,torch-gpu" ;;
             *) _a="ours,sklearn-cpu" ;;
         esac

@@ -271,7 +271,10 @@ CLASSICAL_OPPONENTS = {
     "apple": {
         "kmeans": ("sklearn-cpu", "torch-gpu"),
         "pca": ("sklearn-cpu", "torch-gpu"),
-        "ols": ("sklearn-cpu", "torch-gpu"),
+        # FAIRNESS FIX (2026-10-13 audit): the OLS torch arms are harness-written, not an
+        # opponent (classical_two_datasets.REFUSED_ARMS); here and on nvidia and amd below.
+        # Results raced before this change were wrong for this lane; apply extra scrutiny.
+        "ols": ("sklearn-cpu",),
         "knn": ("sklearn-cpu", "torch-gpu"),
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),
@@ -281,7 +284,7 @@ CLASSICAL_OPPONENTS = {
     "nvidia": {                              # bench_all_ours.sh's classical_arms_for
         "kmeans": ("cuml-gpu", "torch-gpu"),
         "pca": ("cuml-gpu", "torch-gpu"),
-        "ols": ("cuml-gpu", "torch-gpu", "torch-gpu-eigh"),
+        "ols": ("cuml-gpu",),                # FAIRNESS FIX (2026-10-13 audit): torch arms refused
         "knn": ("cuml-gpu", "torch-gpu"),
         "kde": ("cuml-gpu",),
         "svc": ("cuml-gpu",),
@@ -291,7 +294,7 @@ CLASSICAL_OPPONENTS = {
     "amd": {                                 # tools/classical_hotaisle_leg.sh's arms
         "kmeans": ("sklearn-cpu", "torch-gpu"),
         "pca": ("sklearn-cpu", "torch-gpu"),
-        "ols": ("sklearn-cpu", "torch-gpu", "torch-gpu-eigh"),
+        "ols": ("sklearn-cpu",),             # FAIRNESS FIX (2026-10-13 audit): torch arms refused
         "knn": ("sklearn-cpu", "torch-gpu"),
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),

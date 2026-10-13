@@ -148,7 +148,10 @@ classical_arms_for() {
     fi
     case "$_l" in
         kmeans|pca|knn) echo "ours,cuml-gpu,torch-gpu" ;;
-        ols)            echo "ours,cuml-gpu,torch-gpu,torch-gpu-eigh" ;;
+        # FAIRNESS FIX (2026-10-13 audit): the OLS torch arms are harness-written, not
+        # opponents (classical_two_datasets.REFUSED_ARMS). Results raced before this change
+        # were wrong for this lane; apply extra scrutiny.
+        ols)            echo "ours,cuml-gpu" ;;
         kde|svc)        echo "ours,cuml-gpu" ;;             # no torch arm exists
         dbscan)         echo "ours,cuml-gpu" ;;             # cuml-gpu-rbc overflows at 1M
         hdbscan)        echo "cuml-gpu" ;;                  # opponent-only, by construction
