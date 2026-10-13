@@ -1025,6 +1025,7 @@ LANES = {}
 #: next record instead of DIVERGENT on a user's machine. `umap` also joins
 #: host_surface.PUBLIC_PENDING_LANES as `stale reference` until that record.
 LANE_REVISIONS = {
+    "linalg-eigh": "fixed-order-gram-1",
     "x-metrics-regression": "metrics-undefined-weighted-score-1",
     "trees-dart-options": "tree-shap-zero-cover-path-1",
     "trees-shap-tree": "tree-shap-zero-cover-path-1",
@@ -1177,6 +1178,7 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
+    "linalg-eigh": "2026-10-12: Gram fixture uses explicit float32 products and ascending-row sums; BLAS and array-layout dependent input bytes removed, fixture dimensions unchanged",
     "x-metrics-regression": "2026-09-28: undefined variance-weighted scores return explicit NaN before zero-times-infinity; platform NaN sign removed at API arithmetic, fixture sizes unchanged",
     "trees-dart-options": "2026-09-28: arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
     "trees-shap-tree": "2026-09-28: arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
@@ -4882,6 +4884,22 @@ def _(ml, X, yc, yr, Xh=None):
                      rank_deficient=_h(ml.linalg.qr(dup, mode="r"))))
 
 
+def _fixture_gram(g):
+    """Test input only: fixed float32 products and ascending-row sums.
+
+    BLAS changes its reduction order with the platform and array layout.
+    An eigensolver identity check must hand every device the same matrix.
+    Keep multiplication and addition separate so neither BLAS nor a fused
+    multiply-add can change the input's rounding.
+    """
+    g = np.asarray(g, dtype=np.float32)
+    gram = np.zeros((g.shape[1], g.shape[1]), dtype=np.float32)
+    for row in g:
+        product = row[:, None] * row[None, :]
+        np.add(gram, product, out=gram)
+    return gram
+
+
 @lane("linalg-eigh")
 def _(ml, X, yc, yr, Xh=None):
     """`linalg.eigh` through `_mojolearn_linalg_host::eigh`: the symmetric
@@ -4894,8 +4912,7 @@ def _(ml, X, yc, yr, Xh=None):
     performs no rotation at all and the answer is the input -- the arm that
     catches an ordering permutation applied unconditionally."""
     g = np.ascontiguousarray(X[:64, :5]).astype(np.float32)
-    gram = np.ascontiguousarray(g.T @ g)
-    gram = np.ascontiguousarray(((gram + gram.T) * np.float32(0.5)).astype(np.float32))
+    gram = _fixture_gram(g)
     rep = np.ascontiguousarray(np.diag(np.array([4.0, 4.0, 4.0, 1.0], np.float32)))
     diag = np.ascontiguousarray(np.diag(np.array([3.0, 0.5, 2.0, 9.0], np.float32)))
     out = {}
