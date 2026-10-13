@@ -31,7 +31,7 @@ Estimators with `save` and `load` in 0.8.41:
 
 | Family | Estimators |
 |---|---|
-| Trees and boosting | `GradientBoosting`, `GradientBoostingClassifier`, `GradientBoostingRegressor`, `OrderedRMSE`, `RandomForestClassifier`, `RandomForestRegressor`, `ExtraTreesClassifier`, `ExtraTreesRegressor`, `DecisionTreeClassifier`, `DecisionTreeRegressor`, `IsolationForest` |
+| Trees and boosting | `GradientBoosting`, `GradientBoostingClassifier`, `GradientBoostingRegressor`, `RandomForestClassifier`, `RandomForestRegressor`, `ExtraTreesClassifier`, `ExtraTreesRegressor`, `DecisionTreeClassifier`, `DecisionTreeRegressor`, `IsolationForest` |
 | Linear and kernel | `LinearRegression`, `Ridge`, `Lasso`, `ElasticNet`, `LogisticRegression`, `KernelRidge`, `Nystroem`, `RBFSampler`, `SVC`, `SVR` |
 | Neighbors and search | `NearestNeighbors`, `KNeighborsClassifier`, `KNeighborsRegressor`, `RadiusNeighbors`, `IVFIndex`, `IVFPQIndex`, `IVFSQIndex`, `IVFRaBitQIndex`, `CagraIndex` |
 | Clustering and density | `KMeans`, `DBSCAN`, `HDBSCAN`, `AgglomerativeClustering`, `SpectralClustering`, `GaussianMixture`, `KernelDensity` |
@@ -74,7 +74,7 @@ proba = mojolearn.host_predict_proba("forest.npz", X)
 | `mojolearn.host_predict(path, X)` | `host_model(path).predict(X)` |
 | `mojolearn.host_predict_proba(path, X)` | `host_model(path).predict_proba(X)` |
 | `mojolearn.HostForest.from_file(path)` | A saved random forest or Extra Trees model |
-| `mojolearn.HostGBDT.from_file(path)` | A saved `GradientBoosting` or `OrderedRMSE` model |
+| `mojolearn.HostGBDT.from_file(path)` | A saved `GradientBoosting` model |
 
 `HostForest` and `HostGBDT` have `predict`, `predict_proba`, `n_trees`, `inference_engine` and
 `model_sha256`, a SHA-256 over the model's arrays that you can record to name the model a prediction

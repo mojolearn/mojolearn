@@ -123,7 +123,7 @@ class CrostonClassic(_Croston):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``, ``'deterministic'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`).
+        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -162,7 +162,7 @@ class CrostonOptimized(_Croston):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``, ``'deterministic'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`).
+        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -200,7 +200,7 @@ class CrostonSBA(_Croston):
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``, ``'deterministic'``
         or ``'fast'``); None uses the process default (see
-        :func:`mojolearn.set_numeric_mode`).
+        :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------

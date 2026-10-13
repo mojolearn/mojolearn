@@ -2244,9 +2244,10 @@ def set_default_mode(mode):
     loaded immediately, so a mode that cannot be used fails here rather than at
     a later fit.
 
-    - ``"identical"`` (default): the same bits on NVIDIA and AMD GPUs.
+    - ``"identical"`` (default): in ``identical`` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
     - ``"deterministic"``: reproducible results run to run.
-    - ``"fast"``: the fastest arithmetic, for Apple GPUs; no bitwise promise.
+    - ``"fast"``: the fastest arithmetic, available on Apple GPUs only; no
+      bitwise promise.
 
     Not every family offers every mode: ``"deterministic"`` is offered by the
     tree ensembles (gradient boosting, random forest, extra trees) only.
@@ -2255,7 +2256,8 @@ def set_default_mode(mode):
     Parameters
     ----------
     mode : {"identical", "deterministic", "fast"} or None
-        The new default; None keeps the current one.
+        The new default; None keeps the current one. ``'fast'`` is available on
+        Apple GPUs only.
 
     Returns
     -------

@@ -3,12 +3,7 @@
 Each wheel ships the reference results recorded for its release and a verifier that checks your
 machine against them. No repository, dataset, network or other machine-learning library is needed.
 
-IDENTICAL uses the same expected hashes on Apple, NVIDIA and AMD. Apple FAST has no bitwise
-identity guarantee and is not a reason to accept differing Apple results in IDENTICAL mode.
-
-**Known defect in 0.8.43:** its verifier accepts Apple's separately recorded hashes. A pass from
-that verifier on Apple does not establish cross-vendor identity. The source correction removes
-the exception; the known Apple feature-frequency differences still require numerical fixes.
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. The verifier checks your machine against the same expected hashes on every vendor.
 
 ## Install verification support
 

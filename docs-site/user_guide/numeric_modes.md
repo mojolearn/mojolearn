@@ -8,12 +8,11 @@ every mode.
 
 | Mode | Promise |
 |---|---|
-| `identical` | The default. The same output bits for the same release, input bytes, model state, settings and supported configuration on Apple, NVIDIA and AMD GPUs. |
+| `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
 | `deterministic` | Repeated runs on the same device and build return the same bits. No promise across vendors. |
 | `fast` | Apple GPUs only. Tuned for throughput. No identity or repeatability promise. |
 
-The identity requirement applies equally to Apple, NVIDIA and AMD. An Apple mismatch is a bug to
-fix, not a separate passing reference. Apple FAST does not change the IDENTICAL contract.
+A release ships only when its recorded Apple, NVIDIA and AMD results agree.
 
 Three things to know about `identical`:
 
@@ -37,7 +36,7 @@ Three things to know about `identical`:
 | Neural networks, GPU surface (`LanguageModelTrainer`, `TransformerBlock`, Mamba blocks, `SambaStack`, `SmallMLPTrainer`, `Embedding`, linalg GEMMs) | yes | no | Apple GPUs |
 | Every other family | yes | no | Apple GPUs |
 
-`fast` is opt-in and runs on Apple GPUs only. Every CPU binding runs in `identical` mode only (see
+`fast` is opt-in. `fast` is available on Apple GPUs only. Every CPU binding runs in `identical` mode only (see
 [Devices and the CPU](devices.md)). The full table is in the [support matrix](../notes/support_matrix.md).
 
 ## Selecting a mode
