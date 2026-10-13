@@ -2673,3 +2673,68 @@ def test_a_lane_whose_export_mapping_is_unknown_keeps_the_whole_file_rule():
     assert "no recorded binding contributions" in sel["chains"][unknown][0], sel["chains"][unknown]
     assert "calls no export" in sel["chains"][opaque][0], sel["chains"][opaque]
     assert got - {unknown, opaque} == base, "the fallback changed other lanes' answers"
+
+
+# --------------------------------------------------------------------------
+# THE VERIFIER'S ORCHESTRATION IS INERT; ITS BYTES ARE EVERY LANE (Andrew, 2026-10-13).
+# A crash-handling edit of `cmd_verify_all` (0d7052751) must not re-record every lane; an edit
+# of `run_cell`, which builds the hashed parts every verify cell compares, still must.
+
+def test_verify_harness_orchestration_is_inert_and_bytes_are_every_lane():
+    path = lane_select.VERIFY_ALL
+    base = lane_select._read(path)
+    every = len(lane_select.all_lanes())
+    driver = base.replace("crash_streak_limit = 3", "crash_streak_limit = 4", 1)
+    assert driver != base, "the cmd_verify_all anchor moved; pick another orchestration line"
+    feeding = base.replace("    X, yc, yr = data\n    parts = tuple(vref.PARTS)",
+                           "    X, yc, yr = data\n    X = X[::-1]\n    parts = tuple(vref.PARTS)", 1)
+    assert feeding != base, "the run_cell anchor moved; pick another byte-feeding line"
+    module = base + "\nPARTS_OVERRIDE = 1\n"
+    added = base + "\n\ndef _a_new_report_helper():\n    return 1\n"
+    try:
+        for text in (driver, added):
+            ref = _with_fake(path, text, base)
+            sel = lane_select.select([path], ref=ref)
+            assert not sel["lanes"] and not sel["unattributed"] and path in sel["inert"], sel["reasons"]
+            assert "orchestration" in sel["reasons"][path]
+        for text, word in ((feeding, "run_cell"), (module, "module-level")):
+            ref = _with_fake(path, text, base)
+            sel = lane_select.select([path], ref=ref)
+            assert path in sel["every_rules"] and len(sel["lanes"]) == every, sel["reasons"]
+            assert word in sel["reasons"][path], sel["reasons"][path]
+        # no ref: nothing can be read, so it is bytes
+        assert path in lane_select.select([path])["every_rules"] or \
+            "docstrings" in lane_select.select([path])["reasons"][path]
+    finally:
+        _drop_fake(path)
+    worker = lane_select.VERIFY_ORCHESTRATION_FILES[0]
+    sel = lane_select.select([worker], ref="HEAD~1")
+    assert not sel["lanes"] and not sel["unattributed"], sel["reasons"]
+
+
+def test_release_build_only_keeps_the_lanes_whose_bindings_build():
+    """MOJOLEARN_RELEASE_BUILD_ONLY=svm: the svm binding's own source still
+    selects its lanes; a Mojo source only another binding compiles is inert,
+    because the published bytes of that binding ship (tools/release_reuse.py)."""
+    import lane_map_import_graph
+    svm = lane_map_import_graph.mojo_closure(os.path.join("bindings", "build_svm.sh"))[0]
+    gbdt = lane_map_import_graph.mojo_closure(os.path.join("bindings", "build_gbdt.sh"))[0]
+    only_gbdt = sorted(p for p in gbdt - svm if p.endswith(".mojo"))
+    assert only_gbdt, "no Mojo source is gbdt's alone; the case proves nothing"
+    own = os.path.join("bindings", "_mojolearn_svm.mojo")
+    assert own in svm
+    saved = os.environ.get(lane_select.RELEASE_BUILD_ONLY_ENV)
+    os.environ[lane_select.RELEASE_BUILD_ONLY_ENV] = "svm"
+    try:
+        sel = lane_select.select([only_gbdt[0]])
+        assert not sel["lanes"] and only_gbdt[0] in sel["inert"], sel["reasons"]
+        assert lane_select.RELEASE_BUILD_ONLY_ENV in sel["reasons"][only_gbdt[0]]
+        assert lane_select.build_only_inert(own, frozenset({"svm"})) is None
+        assert lane_select.build_only_inert("python/mojolearn/_backend.py", frozenset({"svm"})) is None
+        # a list naming no build script never makes a path inert
+        assert lane_select.build_only_inert(only_gbdt[0], frozenset({"no_such_binding"})) is None
+    finally:
+        if saved is None:
+            os.environ.pop(lane_select.RELEASE_BUILD_ONLY_ENV, None)
+        else:
+            os.environ[lane_select.RELEASE_BUILD_ONLY_ENV] = saved
