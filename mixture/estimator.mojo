@@ -1182,6 +1182,10 @@ def gaussian_mixture_fit(
     var log_det_chol = ctx.enqueue_create_buffer[DType.float32](ncomp)
     var means = ctx.enqueue_create_buffer[DType.float32](ncomp * d)
     var cov = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
+    # lane apple-holes: the covariance's float-float residual
+    # (mixture/checks/mstep.mojo GMM_FAST_FF_COV; FAST + Apple reads it)
+    var cov_lo = ctx.enqueue_create_buffer[DType.float32](max(ncomp * dd, 1))
+    var cov_lo_addr = Int(cov_lo.unsafe_ptr())
     var chol_l = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
     var linv = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
     var prec = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
@@ -1235,12 +1239,12 @@ def gaussian_mixture_fit(
     gmm_m_step(
         ctx, dx, dloginit, resp, nk, weights, log_weights, means, cov,
         mscratch, gws, n, d, ncomp, params.reg_covar, True, trace,
-        card_prefix + ".init", elem_tpb, comp_tpb, sabotage,
+        card_prefix + ".init", elem_tpb, comp_tpb, sabotage, cov_lo_addr,
     )
     var pre = gmm_precision_cholesky(
         ctx, cov, chol_l, linv, prec, log_det_chol, cws, dwork, d, ncomp,
         trace, card_prefix + ".init", elem_tpb, solve_tpb, panel_tpb,
-        chol_elem_tpb, sabotage,
+        chol_elem_tpb, sabotage, cov_lo_addr,
     )
     if pre.info != 0:
         raise Error(_collapse_message(0, pre, params))
@@ -1289,7 +1293,7 @@ def gaussian_mixture_fit(
         gmm_m_step(
             ctx, dx, logresp, resp, nk, weights, log_weights, means, cov,
             mscratch, gws, n, d, ncomp, params.reg_covar, False, trace,
-            tag, elem_tpb, comp_tpb, sabotage,
+            tag, elem_tpb, comp_tpb, sabotage, cov_lo_addr,
         )
         if st_on:
             ctx.synchronize()
@@ -1299,7 +1303,7 @@ def gaussian_mixture_fit(
         var p2 = gmm_precision_cholesky(
             ctx, cov, chol_l, linv, prec, log_det_chol, cws, dwork, d,
             ncomp, trace, tag, elem_tpb, solve_tpb, panel_tpb,
-            chol_elem_tpb, sabotage,
+            chol_elem_tpb, sabotage, cov_lo_addr,
         )
         if p2.info != 0:
             raise Error(_collapse_message(it, p2, params))
@@ -1363,6 +1367,7 @@ def gaussian_mixture_fit(
     _ = log_det_chol^
     _ = means^
     _ = cov^
+    _ = cov_lo^
     _ = chol_l^
     _ = linv^
     _ = prec^

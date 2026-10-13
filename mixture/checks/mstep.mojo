@@ -125,6 +125,8 @@ from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.info import has_apple_gpu_accelerator, is_apple_gpu
 from std.sys import llvm_intrinsic
+from checks.numerics import pinned_mul_f32
+from mixture.ff_fast import GF, gf_add, gf_add_f, gf_div, gf_f32, gf_mul, gf_of, gf_rn_add, gf_sqrt, gf_sub, gf_two_prod, gf_two_sum
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -1076,6 +1078,323 @@ def fused_precision_cholesky_kernel(
 #       d <= GMM_CHOL_TPB (a thread per column of L^{-1}).
 
 
+comptime GMM_FAST_FF_COV = (
+    GMM_FUSED_COV and GMM_FUSED_CHOL and not is_defined["MOJOLEARN_GMM_FAST_FF_COV_OFF"]()
+)
+# lane apple-holes (2026-10-12), FAST + Apple, d <= GMM_CHOL_MAX_D: the
+# covariance accumulated and the precision Cholesky factored in float-float
+# (mixture/ff_fast.mojo), the ridge added exactly. Cause: GaussianMixture
+# FAST refused taxi ("ill-defined empirical covariance") where IDENTICAL fits
+# (mean log-likelihood 12.81, 29 iterations). Every float32 step above loses
+# what reg_covar = 1e-6 is there to add: `ftz(v + reg_covar)` drops the
+# ridge outright once a variance is >= 8 (half an ulp of 8 is 4.8e-7), the
+# Gram's float32 folds carry ~1e-7 relative error per cell, and the float32
+# pivot `a_jj - l_j . l_j` of two (near-)collinear standardized features
+# cancels to that noise, so a component whose covariance + ridge is positive
+# definite in real arithmetic (scikit-learn's float64) fails its pivot. Here
+# the staged sqrt(r)(x - mu) products are summed with exact products and
+# compensated sums (Ogita, Rump and Oishi's Dot2), the blocks and the
+# division by nk are float-float, the ridge is added to the float-float
+# diagonal, and the factor and L^{-1} are float-float: the matrix factored is
+# the staged rows' Gram plus the ridge to ~1e-14, which is positive definite.
+# The covariance a caller reads is that value rounded once to float32 (its
+# residual goes to the Cholesky through `cov_lo`). FAST promises no bits.
+# `-D MOJOLEARN_GMM_FAST_FF_COV_OFF` restores the float32 kernels above.
+# A/B owed (M3: gmm taxi + istella, speed and mean log-likelihood).
+
+
+def gmm_ff_cov_blocks(n: Int, d: Int, ncomp: Int) -> Int:
+    """The row blocks of `fused_cov_partial_ff_kernel`: GMM_FUSED_BLOCKS, or
+    fewer when their hi and lo partials (2 * blocks * ncomp * d * d floats)
+    would not fit the M-step's `diff` + `scaled` scratch (2 * n * d)."""
+    var per = ncomp * d * d
+    if per <= 0:
+        return 0
+    var cap = (n * d) // per
+    return cap if cap < GMM_FUSED_BLOCKS else GMM_FUSED_BLOCKS
+
+
+def gmm_zero_f32_kernel(p: MutPointer[Float32, MutAnyOrigin], count: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(count):
+        p.unsafe_store(i, Float32(0))
+
+
+def fused_cov_partial_ff_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    means: MutPointer[Float32, MutAnyOrigin],
+    resp: MutPointer[Float32, MutAnyOrigin],
+    partials: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    ncomp_in: Int32,
+    nblk_in: Int32,
+):
+    """`fused_cov_partial_kernel` (the same tile, staging and 4 x 4 cell
+    groups) with every cell summed in float-float: Dot2's exact product
+    `two_prod(a, b)`, the running hi by `two_sum`, both error terms into lo.
+    The row lanes fold through the tile in two passes (hi, then lo).
+    Block b writes hi at `(b * ncomp + c) * d * d + cell` and lo at
+    `nblk * ncomp * d * d` past it."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var ncomp = Int(ncomp_in)
+    var nblk = Int(nblk_in)
+    var dp = _gmm_fused_dp(d)
+    var cdp = ncomp * dp
+    var q4 = dp // 4
+    var groups = ncomp * q4 * q4
+    var lanes = GMM_FUSED_TPB // groups
+    var t = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var g = t % groups
+    var lane = t // groups
+    var active = lane < lanes
+    var c = g // (q4 * q4)
+    var gi = (g % (q4 * q4)) // q4
+    var gj = g % q4
+    var oi = c * dp + 4 * gi
+    var oj = c * dp + 4 * gj
+    var rows_tile = GMM_FUSED_TILE // cdp
+    if rows_tile > GMM_FUSED_TPB // ncomp:
+        rows_tile = GMM_FUSED_TPB // ncomp
+    var st_r = t // ncomp
+    var st_c = t % ncomp
+    var s = stack_allocation[
+        GMM_FUSED_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var mu = stack_allocation[
+        GMM_FUSED_MAX_CD, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var e0 = t
+    while e0 < cdp:
+        var cc = e0 // dp
+        var ii = e0 % dp
+        mu[e0] = means.unsafe_load(cc * d + ii) if ii < d else Float32(0)
+        e0 += GMM_FUSED_TPB
+    var chunk = (n + nblk - 1) // nblk
+    var r0 = b * chunk
+    var r1 = r0 + chunk
+    if r1 > n:
+        r1 = n
+    var acc_hi = SIMD[DType.float32, 16](0.0)
+    var acc_lo = SIMD[DType.float32, 16](0.0)
+    barrier()
+    var base = r0
+    while base < r1:
+        var nr = r1 - base
+        if nr > rows_tile:
+            nr = rows_tile
+        if st_r < nr:
+            var row = base + st_r
+            var w = resp.unsafe_load(row * ncomp + st_c)
+            var sw = sqrt(w) if w > Float32(0) else Float32(0)
+            var so = st_r * cdp + st_c * dp
+            for ii in range(dp):
+                var v = Float32(0)
+                if ii < d:
+                    v = pinned_mul_f32(sw, gf_rn_add(x.unsafe_load(row * d + ii), -mu[st_c * dp + ii]))
+                s[so + ii] = v
+        barrier()
+        if active:
+            var r = lane
+            while r < nr:
+                comptime for u in range(4):
+                    var au = s[r * cdp + oi + u]
+                    comptime for v in range(4):
+                        var p = gf_two_prod(au, s[r * cdp + oj + v])
+                        var q = gf_two_sum(acc_hi[u * 4 + v], p.hi)
+                        acc_hi[u * 4 + v] = q.hi
+                        acc_lo[u * 4 + v] = gf_rn_add(acc_lo[u * 4 + v], gf_rn_add(q.lo, p.lo))
+                r += lanes
+        barrier()
+        base += nr
+    # fold the row lanes through the (now free) tile: hi, then lo
+    var tot_hi = acc_hi
+    var tot_lo = acc_lo
+    if active:
+        comptime for u in range(16):
+            s[t * 16 + u] = acc_hi[u]
+    barrier()
+    if lane == 0:
+        for l in range(1, lanes):
+            comptime for u in range(16):
+                var q = gf_add_f(GF(tot_hi[u], tot_lo[u]), s[(l * groups + g) * 16 + u])
+                tot_hi[u] = q.hi
+                tot_lo[u] = q.lo
+    barrier()
+    if active:
+        comptime for u in range(16):
+            s[t * 16 + u] = acc_lo[u]
+    barrier()
+    if lane == 0:
+        for l in range(1, lanes):
+            comptime for u in range(16):
+                var q = gf_add_f(GF(tot_hi[u], tot_lo[u]), s[(l * groups + g) * 16 + u])
+                tot_hi[u] = q.hi
+                tot_lo[u] = q.lo
+        var lo_off = nblk * ncomp * d * d
+        comptime for u in range(4):
+            comptime for v in range(4):
+                var i = 4 * gi + u
+                var jj = 4 * gj + v
+                if i < d and jj < d:
+                    var at = (b * ncomp + c) * d * d + i * d + jj
+                    partials.unsafe_store(at, tot_hi[u * 4 + v])
+                    partials.unsafe_store(lo_off + at, tot_lo[u * 4 + v])
+
+
+def fused_cov_finish_ff_kernel(
+    partials: MutPointer[Float32, MutAnyOrigin],
+    nk: MutPointer[Float32, MutAnyOrigin],
+    cov: MutPointer[Float32, MutAnyOrigin],
+    cov_lo: MutPointer[Float32, MutAnyOrigin],
+    d_in: Int32,
+    ncomp_in: Int32,
+    nblk_in: Int32,
+    reg_covar: Float32,
+):
+    """The blocks' float-float partials summed, divided by nk[k] and the
+    ridge added on the diagonal, all in float-float; `cov` gets the value
+    rounded once, `cov_lo` its residual (the Cholesky reads both)."""
+    var d = Int(d_in)
+    var dd = d * d
+    var cells = Int(ncomp_in) * dd
+    var nblk = Int(nblk_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= cells:
+        return
+    var lo_off = nblk * cells
+    var v = GF(Float32(0), Float32(0))
+    for b in range(nblk):
+        v = gf_add(v, GF(partials.unsafe_load(b * cells + cell), partials.unsafe_load(lo_off + b * cells + cell)))
+    var kc = cell // dd
+    var rem = cell % dd
+    v = gf_div(v, gf_of(nk.unsafe_load(kc)))
+    if rem // d == rem % d:
+        v = gf_add_f(v, reg_covar)
+    var r = gf_f32(v)
+    cov.unsafe_store(cell, r)
+    cov_lo.unsafe_store(cell, gf_f32(gf_sub(v, gf_of(r))))
+
+
+def fused_precision_cholesky_ff_kernel(
+    cov: MutPointer[Float32, MutAnyOrigin],
+    cov_lo: MutPointer[Float32, MutAnyOrigin],
+    chol_l: MutPointer[Float32, MutAnyOrigin],
+    linv: MutPointer[Float32, MutAnyOrigin],
+    prec: MutPointer[Float32, MutAnyOrigin],
+    log_det_chol: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    d_in: Int32,
+):
+    """`fused_precision_cholesky_kernel` in float-float on cov + cov_lo:
+    the same right-looking steps, pivot test, forward substitution and
+    outputs (each rounded once to float32); log_det_chol = -sum log L_jj
+    with log(hi + lo) = log(hi) + lo / hi."""
+    var d = Int(d_in)
+    var dd = d * d
+    var k = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var ah = stack_allocation[
+        GMM_CHOL_MAX_D * GMM_CHOL_MAX_D, Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var al = stack_allocation[
+        GMM_CHOL_MAX_D * GMM_CHOL_MAX_D, Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var xh = stack_allocation[
+        GMM_CHOL_MAX_D * GMM_CHOL_MAX_D, Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var xl = stack_allocation[
+        GMM_CHOL_MAX_D * GMM_CHOL_MAX_D, Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var flag = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var e = t
+    while e < dd:
+        var q = gf_two_sum(cov.unsafe_load(k * dd + e), cov_lo.unsafe_load(k * dd + e))
+        ah[e] = q.hi
+        al[e] = q.lo
+        e += GMM_CHOL_TPB
+    if t == 0:
+        flag[0] = 0
+    barrier()
+    for j in range(d):
+        if t == 0:
+            var p = GF(ah[j * d + j], al[j * d + j])
+            if p.hi > Float32(0):
+                var r = gf_sqrt(p)
+                ah[j * d + j] = r.hi
+                al[j * d + j] = r.lo
+            else:
+                flag[0] = Int32(j + 1)
+        barrier()
+        if flag[0] != 0:
+            break
+        var pj = GF(ah[j * d + j], al[j * d + j])
+        var i = j + 1 + t
+        while i < d:
+            var q = gf_div(GF(ah[i * d + j], al[i * d + j]), pj)
+            ah[i * d + j] = q.hi
+            al[i * d + j] = q.lo
+            i += GMM_CHOL_TPB
+        barrier()
+        var m = d - 1 - j
+        var cell = t
+        while cell < m * m:
+            var r = j + 1 + cell // m
+            var cc = j + 1 + cell % m
+            if cc <= r:
+                var q = gf_sub(
+                    GF(ah[r * d + cc], al[r * d + cc]),
+                    gf_mul(GF(ah[r * d + j], al[r * d + j]), GF(ah[cc * d + j], al[cc * d + j])),
+                )
+                ah[r * d + cc] = q.hi
+                al[r * d + cc] = q.lo
+            cell += GMM_CHOL_TPB
+        barrier()
+    var bad = flag[0]
+    if t == 0:
+        info.unsafe_store(k, bad)
+    if bad != 0:
+        return
+    if t < d:
+        var c = t
+        for i in range(d):
+            var v = GF(Float32(0.0), Float32(0.0))
+            var lii = GF(ah[i * d + i], al[i * d + i])
+            if i == c:
+                v = gf_div(gf_of(Float32(1.0)), lii)
+            elif i > c:
+                for m2 in range(c, i):
+                    v = gf_sub(v, gf_mul(GF(ah[i * d + m2], al[i * d + m2]), GF(xh[m2 * d + c], xl[m2 * d + c])))
+                v = gf_div(v, lii)
+            xh[i * d + c] = v.hi
+            xl[i * d + c] = v.lo
+    barrier()
+    e = t
+    while e < dd:
+        var r = e // d
+        var c = e % d
+        var lv = gf_f32(GF(ah[e], al[e])) if c <= r else Float32(0)
+        chol_l.unsafe_store(k * dd + e, lv)
+        var xv = gf_f32(GF(xh[e], xl[e])) if c <= r else Float32(0)
+        linv.unsafe_store(k * dd + e, xv)
+        prec.unsafe_store(k * dd + c * d + r, xv)
+        e += GMM_CHOL_TPB
+    if t == 0:
+        var sl = Float32(0)
+        for j in range(d):
+            var h = ah[j * d + j]
+            sl += log(h) + al[j * d + j] / h
+        log_det_chol.unsafe_store(k, -sl)
+
+
 @always_inline
 def _gmm_dev_barrier():
     """A block barrier that also orders DEVICE memory (Apple's `barrier()`
@@ -1506,6 +1825,7 @@ def gmm_precision_cholesky(
     panel_tpb: Int = CHOL_PANEL_TPB,
     chol_elem_tpb: Int = CHOL_ELEM_TPB,
     sabotage: Int = GMM_SAB_NONE,
+    cov_lo_addr: Int = 0,
 ) raises -> GmmMStepRun:
     """`_compute_precision_cholesky` for `covariance_type="full"`
     (`_gaussian_mixture.py:353-371`), component by component in ASCENDING
@@ -1636,12 +1956,26 @@ def gmm_precision_cholesky(
         if sabotage == GMM_SAB_NONE and not trace.enabled and d <= GMM_CHOL_MAX_D:
             var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
             var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
-            ctx.enqueue_function[fused_precision_cholesky_kernel](
-                cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
-                prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
-                d_info.unsafe_ptr(), Int32(d),
-                grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
-            )
+            var ff_chol = False
+            comptime if GMM_FAST_FF_COV:
+                ff_chol = cov_lo_addr != 0
+            if ff_chol:
+                # GMM_FAST_FF_COV: float-float factor of cov + cov_lo (the
+                # residual is zero when the M-step took a float32 route)
+                ctx.enqueue_function[fused_precision_cholesky_ff_kernel](
+                    cov.unsafe_ptr(), MutPointer[Float32, MutAnyOrigin](unsafe_from_address=cov_lo_addr),
+                    chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                    prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                    d_info.unsafe_ptr(), Int32(d),
+                    grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[fused_precision_cholesky_kernel](
+                    cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                    prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                    d_info.unsafe_ptr(), Int32(d),
+                    grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
+                )
             ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=d_info)
             ctx.synchronize()
             var fail_k = -1
@@ -1854,6 +2188,7 @@ def gmm_m_step(
     elem_tpb: Int = GMM_ELEM_TPB,
     comp_tpb: Int = GMM_COMP_TPB,
     sabotage: Int = GMM_SAB_NONE,
+    cov_lo_addr: Int = 0,
 ) raises:
     """**THE M-STEP'S MOMENTS.** `_estimate_gaussian_parameters` plus the
     weight normalization, in scikit-learn's order.
@@ -2073,21 +2408,55 @@ def gmm_m_step(
     var ncomp_loop = ncomp
     comptime if GMM_FAST_GRAM:
         fast_gram = sabotage == 0 and gram_splitk_applies(d, d, n)
-    comptime if GMM_FUSED_COV:
-        if fast_gram and divide_after != 0 and gmm_fused_cov_applies(n, d, ncomp):
-            ctx.enqueue_function[fused_cov_partial_kernel](
-                x.unsafe_ptr(), means.unsafe_ptr(), resp.unsafe_ptr(),
-                scaled.unsafe_ptr(), Int32(n), Int32(d), Int32(ncomp),
-                grid_dim=(GMM_FUSED_BLOCKS, 1, 1),
-                block_dim=(GMM_FUSED_TPB, 1, 1),
-            )
-            var cells = ncomp * d * d
-            ctx.enqueue_function[fused_cov_finish_kernel](
-                scaled.unsafe_ptr(), nk.unsafe_ptr(), cov.unsafe_ptr(),
-                Int32(d), Int32(ncomp), reg_covar,
-                grid_dim=((cells + 255) // 256, 1, 1),
+    comptime if GMM_FAST_FF_COV:
+        # the covariance's float-float residual for the precision Cholesky:
+        # zero unless the float-float pass below writes it (every other
+        # covariance route hands a plain float32 matrix)
+        if cov_lo_addr != 0 and ncomp * d * d > 0:
+            var cells0 = ncomp * d * d
+            ctx.enqueue_function[gmm_zero_f32_kernel](
+                MutPointer[Float32, MutAnyOrigin](unsafe_from_address=cov_lo_addr), Int32(cells0),
+                grid_dim=((cells0 + 255) // 256, 1, 1),
                 block_dim=(256, 1, 1),
             )
+    comptime if GMM_FUSED_COV:
+        if fast_gram and divide_after != 0 and gmm_fused_cov_applies(n, d, ncomp):
+            var cells = ncomp * d * d
+            var ff_done = False
+            comptime if GMM_FAST_FF_COV:
+                var nblk = gmm_ff_cov_blocks(n, d, ncomp)
+                if cov_lo_addr != 0 and nblk >= 1 and d <= GMM_CHOL_MAX_D:
+                    # hi and lo partials over `diff` + `scaled` (2 n d floats;
+                    # `diff` is unused on this route)
+                    var both = scratch.create_sub_buffer[DType.float32](0, 2 * n * d)
+                    ctx.enqueue_function[fused_cov_partial_ff_kernel](
+                        x.unsafe_ptr(), means.unsafe_ptr(), resp.unsafe_ptr(),
+                        both.unsafe_ptr(), Int32(n), Int32(d), Int32(ncomp), Int32(nblk),
+                        grid_dim=(nblk, 1, 1),
+                        block_dim=(GMM_FUSED_TPB, 1, 1),
+                    )
+                    ctx.enqueue_function[fused_cov_finish_ff_kernel](
+                        both.unsafe_ptr(), nk.unsafe_ptr(), cov.unsafe_ptr(),
+                        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=cov_lo_addr),
+                        Int32(d), Int32(ncomp), Int32(nblk), reg_covar,
+                        grid_dim=((cells + 255) // 256, 1, 1),
+                        block_dim=(256, 1, 1),
+                    )
+                    _ = both^
+                    ff_done = True
+            if not ff_done:
+                ctx.enqueue_function[fused_cov_partial_kernel](
+                    x.unsafe_ptr(), means.unsafe_ptr(), resp.unsafe_ptr(),
+                    scaled.unsafe_ptr(), Int32(n), Int32(d), Int32(ncomp),
+                    grid_dim=(GMM_FUSED_BLOCKS, 1, 1),
+                    block_dim=(GMM_FUSED_TPB, 1, 1),
+                )
+                ctx.enqueue_function[fused_cov_finish_kernel](
+                    scaled.unsafe_ptr(), nk.unsafe_ptr(), cov.unsafe_ptr(),
+                    Int32(d), Int32(ncomp), reg_covar,
+                    grid_dim=((cells + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
             fast_gram = False
             ncomp_loop = 0
     var pair_buffers=List[DeviceBuffer[DType.float32]]()
