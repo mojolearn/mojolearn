@@ -1642,8 +1642,11 @@ class TorchOLS:
                                "driver=%r); intercept = ymean - xmean @ coef" % TORCH_LSTSQ_DRIVER)
         self.info["lstsq_driver"] = TORCH_LSTSQ_DRIVER
         self.coef = self.intercept = None
-        self.params_obj = {"__library__": "torch", "seed": SEED, "fit_intercept": True,
-                           "driver": TORCH_LSTSQ_DRIVER}
+        # smoke-fixes (2026-10-14; ols: "missing real library implementation read-back: torch-gpu"): the arm
+        # names the torch routine it calls, torch.linalg.lstsq (as bench_board_algos.py records its torch
+        # linalg arms), so the record carries torch's own implementation, not this driver.
+        self.params_obj = {"__library__": "torch", "__implementation__": torch.linalg.lstsq,
+                           "seed": SEED, "fit_intercept": True, "driver": TORCH_LSTSQ_DRIVER}
 
     def call(self):
         torch = self.torch

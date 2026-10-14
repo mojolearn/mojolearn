@@ -4868,7 +4868,19 @@ def _build_ann(lane, arm, D):
         else:
             S["ind"] = ivf_flat.search(ivf_flat.SearchParams(n_probes=nprobe), S["i"], dev["queries"], k)[1]
     info["config"] = "cuvs %s nlist=%d nprobe=%d k=%d" % (t, nlist, nprobe, k)
-    rec = dict(__library__="cuvs", n_neighbors=k)
+    # smoke-fixes (2026-10-14; algos/cagra, ivf-pq, ivf-refine, ivf-sq: "missing real library
+    # implementation read-back: cuvs-gpu"; ivf-refine: "refine_ratio missing from cuvs-gpu read-back"):
+    # the record names the cuVS build function fit() really calls (cuvs.neighbors.<algo>.build, cuVS
+    # 26.08 python/cuvs/cuvs/neighbors/*/*.pyx), and ivf-refine records the refine_ratio infer() uses:
+    # ivf_pq.search returns k x refine_ratio candidates, cuvs.neighbors.refine re-ranks them to k
+    # (ours: the same k x refine_ratio search, then mojolearn.refine).
+    if t == "ivf-sq":
+        from cuvs.neighbors import ivf_sq as _built
+    else:
+        _built = {"cagra": cagra, "ivf-pq": ivf_pq, "ivf-refine": ivf_pq}.get(t, ivf_flat)
+    rec = dict(__library__="cuvs", n_neighbors=k, __implementation__=_built.build)
+    if t == "ivf-refine":
+        rec["refine_ratio"] = p["refine_ratio"]
     if t == "cagra":
         rec.update(graph_degree=p["graph_degree"], intermediate_graph_degree=p["intermediate_graph_degree"],
                    itopk_size=p["itopk_size"])
