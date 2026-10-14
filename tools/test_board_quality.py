@@ -40,6 +40,18 @@ class QualityParity(unittest.TestCase):
         self.assertEqual(pair(a, dict(max_rel_err_vs_fp64=.1))["verdict"], "FAIL")
         self.assertEqual(pair(dict(rmse=1, error="scorer crashed"), dict(rmse=1))["verdict"], "FAIL")
 
+    def test_reference_quality_limits_and_missing_optimizer_step(self):
+        for metric, margin in (("rel_diff_vs_sklearn", 1e-4),
+                               ("rel_fro_vs_torch_eager_fp32", .01),
+                               ("optimizer_update_error_vs_torch_fp32", 1e-4)):
+            self.assertEqual(pair({metric: margin}, {metric: 0})["verdict"], "PASS")
+            self.assertEqual(pair({metric: margin * 2}, {metric: 0})["verdict"], "FAIL")
+            self.assertEqual(pair({metric: 0}, {})["verdict"], "INSUFFICIENT")
+        self.assertEqual(pair(dict(rel_fro_vs_torch_eager_fp32=.00001,
+                                   optimizer_update_error_vs_torch_fp32=1),
+                              dict(rel_fro_vs_torch_eager_fp32=0,
+                                   optimizer_update_error_vs_torch_fp32=0))["verdict"], "FAIL")
+
 
 if __name__ == "__main__":
     unittest.main()

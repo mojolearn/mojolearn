@@ -705,6 +705,33 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     decomposition.py, density.py, cluster.py and neighbors.py. Reasons below
     apply only to the named recipe, library and resolved settings.
     """
+    # FAIRNESS FIX (2026-10-13 audit): optimizer defaults exposed by torch
+    # were treated as absent algorithm settings on our narrower optimizer
+    # API. Preserve the raw settings and explicitly distinguish the library's
+    # execution variants from changes to the update equation. Source:
+    # torch.optim.{adam,adamw,sgd,...}, _training_impl.py and
+    # _x_sequence_optim.py. Never waive an unknown or active algorithm option.
+    optimizer = lane.removeprefix("algos/")
+    if library == "torch" and arm.startswith("torch-"):
+        unset = {"avgpool2d": {"divisor_override": "None selects the kernel-area divisor on both AvgPool2d implementations"},
+                 "embedding": {"padding_idx": "None means there is no padding token on either embedding",
+                               "max_norm": "None disables embedding-vector renormalization on both arms"}}
+        if param in unset.get(optimizer, {}) and param in ours and param in theirs and ours[param] is None and theirs[param] is None:
+            return unset[optimizer][param] + "; all active arguments remain compared"
+    if library == "torch" and arm.startswith("torch-") and optimizer in {
+            "sgd", "adam", "adamw", "rmsprop", "adagrad", "adamax", "nadam", "adafactor"}:
+        if param not in ours and param in theirs:
+            value = theirs[param]
+            if param in ("foreach", "fused") and (value is None or isinstance(value, bool)):
+                return "torch's foreach/fused selects its own implementation of the same optimizer update; the raw execution choice remains recorded"
+            if param in ("capturable", "differentiable") and value is False:
+                return "no captured-graph or differentiable optimizer step is requested; our standalone update has neither mode"
+            if param == "maximize" and value is False:
+                return "both standalone optimizers minimize; our sequence optimizer rejects maximize=True"
+            if param == "amsgrad" and value is False and optimizer in ("adam", "adamw"):
+                return "ordinary Adam moments on both arms; AMSGrad is disabled and our API does not implement that variant"
+            if param == "decoupled_weight_decay" and optimizer in ("adam", "adamw") and value is (optimizer == "adamw"):
+                return "Adam uses coupled decay and AdamW uses decoupled decay; our class fixes that choice (_training_impl.py _KIND)"
     if library == "cuvs" and arm == "hipvs-gpu":
         if lane == "kmeans":
             if param == "init" and ours.get(param) == "k-means++" and theirs.get(param) == "KMeansPlusPlus":

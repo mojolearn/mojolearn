@@ -445,7 +445,11 @@ def summarize(samples):
 
 #: a board library name -> the module it imports as
 IMPORT_NAME = {"scikit-learn": "sklearn", "umap-learn": "umap", "hf": "tokenizers", "mamba-ssm": "mamba_ssm",
-               "torch-geometric": "torch_geometric", "faiss-cpu": "faiss", "cuml-cu12": "cuml"}
+               "torch-geometric": "torch_geometric", "faiss-cpu": "faiss", "cuml-cu12": "cuml",
+               # FAIRNESS FIX (2026-10-13 audit): hipVS imports as cuvs. The
+               # exit receipt previously searched for a nonexistent hipvs
+               # module and lost the version witnessed by its timed worker.
+               "hipvs": "cuvs"}
 
 
 def library_version(library):

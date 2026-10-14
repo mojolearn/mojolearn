@@ -297,7 +297,10 @@ def seal(ctx, directory, recipe, rec):
         if p.name != "upload.json":
             members["records/" + p.name] = p.read_bytes()
     started = (directory / "recipe.json").stat().st_mtime
-    for sub in ("logs", "raw"):
+    # FAIRNESS FIX (2026-10-13 audit): drivers save scored arrays under work/,
+    # while receipts previously retained only logs/raw. Keep the actual output
+    # and independent quality-reference bytes in the per-race verified archive.
+    for sub in ("logs", "raw", "work"):
         for p in (Path(ctx["out"]) / sub).rglob("*"):
             if p.is_file() and p.suffix in (".log", ".json", ".npz", ".npy", ".bin", ".safetensors", ".pt") and p.stat().st_mtime >= started:
                 members["run/" + str(p.relative_to(ctx["out"]))] = p.read_bytes()

@@ -133,6 +133,24 @@ def _matched():
     return {"ours": ours, "ours-fast": fast, "catboost-cpu": cat, "xgboost-cpu": xgb}
 
 
+@pytest.mark.parametrize("lane,decoupled", [("adam", False), ("adamw", True)])
+def test_optimizer_implementation_choices_do_not_waive_algorithm_changes(lane, decoupled):
+    own = dict(__library__="mojolearn", lr=.001, betas=(.9, .999), eps=1e-8, weight_decay=.01)
+    lib = dict(own, __library__="torch", foreach=True, fused=None, capturable=False,
+               differentiable=False, amsgrad=False, maximize=False, decoupled_weight_decay=decoupled)
+    arms = {"ours": own, "torch-eager-fp32": lib}
+    result = BP.check("algos/" + lane, arms)
+    assert result["verdict"] == "MATCHED"
+    assert result["arms"]["torch-eager-fp32"]["raw_params"]["foreach"] is True
+    for key, value in (("amsgrad", True), ("maximize", True), ("differentiable", True),
+                       ("decoupled_weight_decay", not decoupled), ("lr", .002), ("unknown", False)):
+        changed = dict(lib, **{key: value})
+        assert BP.check("algos/" + lane, {"ours": own, "torch-eager-fp32": changed})["verdict"] == "REFUSED"
+    assert BP.check("unrelated", arms)["verdict"] == "REFUSED"
+    assert BP.check("algos/" + lane, {"ours": dict(own, amsgrad=True),
+                                     "torch-eager-fp32": lib})["verdict"] == "REFUSED"
+
+
 def test_matched_race_passes_and_maps_names():
     buf = io.StringIO()
     rep = BP.enforce("gbdt-depthwise", _matched(), family="trees", stream=buf)

@@ -16,7 +16,7 @@ Equal iteration caps never prove equal executed work or equal quality. Fixed
 training-step throughput measurements still perform the declared step count;
 they are distinct from time to a quality target.
 
-`tools/board_quality.py` implements `mojolearn.quality-parity.v1`. Its engineering
+`tools/board_quality.py` implements `mojolearn.quality-parity.v2`. Its engineering
 margins are declared by metric, independent of dataset, vendor and timing winner:
 
 | Metric | Admission margin |
@@ -26,6 +26,17 @@ margins are declared by metric, independent of dataset, vendor and timing winner
 | Mean log likelihood, mean predictive log density, mean NLL | Absolute difference ≤ 0.05 nats per observation |
 | GEMM relative error against FP64 | Both errors ≤ 0.01 (permits native fast precision) |
 | Linear algebra relative residual / Gram error | Both errors ≤ 0.0001 |
+| Deterministic transformations against a common scikit-learn reference | Both relative Frobenius errors ≤ 0.0001; nonfinite outputs fail |
+| Neural layer outputs against the same eager FP32 torch reference | Both relative Frobenius errors ≤ 0.01 (permits native fast precision) |
+| Optimizer updates against the same eager FP32 torch reference | Both relative Frobenius update errors ≤ 0.0001; compare final minus initial parameters |
+
+The v2 additions were declared before the resumed GPU campaign on 2026-10-14.
+All v1 limits remain unchanged. The reference arm's zero distance is recorded
+explicitly. Scikit-learn reference work is an untimed test oracle, executed
+after the GPU workers stop; its source, parameters, input hashes and output
+bytes are retained. It is never added as a timed CPU opponent. An optimizer
+must pass both the parameter-vector and update-distance checks; a missing
+update cannot hide behind a large initial parameter vector.
 
 These are reproducible screening margins, **not statistical equivalence tests**.
 One scored run cannot establish stability over random starts or quantify timing

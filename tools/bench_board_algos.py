@@ -5306,7 +5306,12 @@ def _build_layer(lane, arm, D):
         if s["task"] == "dropout2d":
             return {}
         return {"y": S["y"].float().cpu().numpy()}
-    rec = dict(s["params"], __library__="torch", seed=SEED)   # torch.manual_seed(7) before make()
+    # FAIRNESS FIX (2026-10-13 audit): the layer record named torch but lost
+    # the actual constructed library class. For MoE the harness only reshapes
+    # tensors around transformers' block; witness that block, not its wrapper.
+    implementation = type(mod.blk) if s["task"] == "moe" else type(mod)
+    rec = dict(s["params"], __library__="torch", __implementation__=implementation,
+               seed=SEED)   # torch.manual_seed(7) before make()
     if s["task"] in ("gcn", "sage"):
         rec["in_channels"] = x_cpu.shape[1]
     return Runner(info, fit, outputs, infer, record=rec)
@@ -6609,6 +6614,37 @@ def _exact_rfe_support(lane, D):
     return np.asarray(r.support_, dtype=bool)
 
 
+def transform_quality_reference(lane, D, outs, directory):
+    """Untimed independent scorer for GPU-only transformation comparisons."""
+    # FAIRNESS FIX (2026-10-13 audit): GPU-only selections omitted sklearn,
+    # so deterministic transforms reported shapes without numerical quality.
+    # Execute only the independent test oracle here, after all race workers
+    # have stopped. No product work or opponent timing moves out of its clock.
+    if quality_kind(lane) not in ("vs-sklearn", "labels", "multilabel") or "sklearn-cpu" in outs:
+        return None
+    if not outs:
+        return None
+    from pathlib import Path
+    import sklearn
+    root = Path(directory)
+    root.mkdir(parents=True, exist_ok=True)
+    runner = build(lane, "sklearn-cpu", D)
+    runner.fit()
+    runner.infer()
+    reference = runner.outputs()
+    path = root / "reference.npz"
+    _np().savez(path, **reference)
+    receipt = dict(role="untimed independent quality oracle; never a timed race arm",
+                   library="sklearn", version=sklearn.__version__, parameters=runner.record,
+                   output=str(path), output_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                   inputs={k: dict(shape=list(v.shape), dtype=str(v.dtype),
+                                   sha256=hashlib.sha256(v.tobytes()).hexdigest())
+                           for k, v in D.items() if isinstance(v, _np().ndarray)})
+    (root / "receipt.json").write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n")
+    outs["sklearn-cpu"] = reference
+    return receipt
+
+
 def quality(lane, D, outs):
     if LANES[lane]["kind"] == "extra":
         return _EXTRA.quality(lane, D, outs, globals())
@@ -6683,9 +6719,13 @@ def quality(lane, D, outs):
             elif qk in ("vs-sklearn", "labels", "multilabel"):
                 P = o["pred"]
                 e["output_shape"] = "x".join(map(str, P.shape))
-                if ref is not None and arm != "sklearn-cpu" and ref["pred"].shape == P.shape:
-                    e["max_abs_diff_vs_sklearn"] = float(np.nanmax(np.abs(P - ref["pred"])))
-                    e["rel_diff_vs_sklearn"] = _relfro(np.nan_to_num(P), np.nan_to_num(ref["pred"]))
+                if ref is not None:
+                    if ref["pred"].shape != P.shape:
+                        raise ValueError("transform output shape differs from sklearn reference")
+                    if not np.isfinite(P).all() or not np.isfinite(ref["pred"]).all():
+                        raise ValueError("nonfinite transform output or sklearn reference")
+                    e["max_abs_diff_vs_sklearn"] = float(np.max(np.abs(P - ref["pred"])))
+                    e["rel_diff_vs_sklearn"] = _relfro(P, ref["pred"])
             elif qk == "radius":
                 P = o["pred"].reshape(-1)
                 e["neighbors_total"] = int(P.sum())
@@ -6784,14 +6824,24 @@ def quality(lane, D, outs):
                 e["modularity"] = _modularity(D["indptr"], D["indices"], lab)
             elif qk == "layer":
                 r = outs.get("torch-eager-fp32")
-                if "y" in o and r is not None and arm != "torch-eager-fp32" and r["y"].shape == o["y"].shape:
+                if "y" in o and r is not None and r["y"].shape == o["y"].shape:
+                    if not np.isfinite(o["y"]).all() or not np.isfinite(r["y"]).all():
+                        raise ValueError("nonfinite layer output or torch reference")
                     den = np.maximum(np.abs(r["y"].astype(np.float64)), 1e-6)
                     e["max_rel_diff_vs_torch_eager_fp32"] = float(np.max(np.abs(o["y"] - r["y"]) / den))
                     e["rel_fro_vs_torch_eager_fp32"] = _relfro(o["y"], r["y"])
             elif qk == "optim":
                 r = outs.get("torch-eager-fp32")
-                if r is not None and arm != "torch-eager-fp32":
+                if r is not None:
+                    if o["param"].shape != r["param"].shape or not np.isfinite(o["param"]).all() or not np.isfinite(r["param"]).all():
+                        raise ValueError("invalid optimizer output or torch reference")
                     e["rel_fro_vs_torch_eager_fp32"] = _relfro(o["param"], r["param"])
+                    # Compare the update, not just a large initial parameter
+                    # vector that can make a missing optimizer step look close.
+                    initial = np.random.default_rng(SEED).standard_normal(o["param"].size).astype(np.float32).reshape(o["param"].shape)
+                    e["optimizer_update_error_vs_torch_fp32"] = _relfro(
+                        o["param"].astype(np.float64) - initial,
+                        r["param"].astype(np.float64) - initial)
             elif qk == "ann":
                 allowed = (np.arange(D["index"].shape[0]) % 2 == 0) if s["task"] == "ivf-filter" else None
                 e["recall_at_10"] = _recall(D, o["ind"], allowed=allowed)
@@ -7114,6 +7164,8 @@ def race(args):
         if w.alive:
             w.close()
     try:
+        result["quality_reference_receipt"] = transform_quality_reference(
+            lane, D, outs, os.path.join(args.work, tag + "-sklearn-quality"))
         result["quality"] = quality(lane, D, outs)
         hq = _tool("bench_board_host_quality")
         hq_dir = os.path.join(args.work, tag + "-host-quality")

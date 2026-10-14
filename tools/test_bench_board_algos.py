@@ -37,6 +37,37 @@ def test_function_identity_survives_worker_json_transport():
     assert transported["params"]["seed"] == 7
 
 
+def test_gpu_transform_quality_gets_retained_independent_reference(tmp_path):
+    D = dict(X=np.array([[0., 1.], [2., 3.], [4., 5.]], dtype=np.float32),
+             Xq=np.array([[1., 2.], [3., 4.]], dtype=np.float32))
+    outs = {"ours": {"pred": np.array([[.25, .25], [.75, .75]], dtype=np.float32)}}
+    receipt = A.transform_quality_reference("minmax-scaler", D, outs, tmp_path)
+    assert receipt["parameters"]["implementation"]["module"].startswith("sklearn.")
+    assert (tmp_path / "reference.npz").is_file()
+    assert receipt["inputs"]["X"]["shape"] == [3, 2]
+    q = A.quality("minmax-scaler", D, outs)
+    assert q["ours"]["rel_diff_vs_sklearn"] == 0
+    assert q["sklearn-cpu"]["rel_diff_vs_sklearn"] == 0
+    outs["ours"]["pred"][0, 0] = np.nan
+    assert "nonfinite" in A.quality("minmax-scaler", D, outs)["ours"]["error"]
+
+
+def test_optimizer_quality_detects_unchanged_parameter_despite_small_update():
+    initial = np.random.default_rng(A.SEED).standard_normal(128).astype(np.float32)
+    outs = {"ours": {"param": initial.copy()},
+            "torch-eager-fp32": {"param": initial - np.float32(1e-5)}}
+    q = A.quality("adam", {}, outs)
+    assert q["torch-eager-fp32"]["optimizer_update_error_vs_torch_fp32"] == 0
+    assert q["ours"]["rel_fro_vs_torch_eager_fp32"] < .001
+    assert q["ours"]["optimizer_update_error_vs_torch_fp32"] == pytest.approx(1.)
+
+
+def test_hipvs_worker_version_uses_actual_cuvs_module(monkeypatch):
+    probe = _load("bench_board_probe")
+    monkeypatch.setitem(sys.modules, "cuvs", types.SimpleNamespace(__version__="1.0.0"))
+    assert probe.library_version("hipvs") == "1.0.0"
+
+
 def test_cuml_minmax_uses_supported_unclipped_constructor(monkeypatch):
     class MinMaxScaler:
         def __init__(self, feature_range=(0, 1)):
@@ -393,32 +424,32 @@ def test_no_other_lane_has_dataset_params():
 
 @pytest.mark.parametrize('lane', ['gcn', 'graphsage', 'resnet-block'])
 @pytest.mark.parametrize('comparable', [False, True])
-def test_own_layer_retains_outputs_without_false_opponent_comparison(monkeypatch, lane, comparable):
+def test_own_layer_retains_outputs_without_false_opponent_comparison(monkeypatch, tmp_path, lane, comparable):
     """Exercise the real adapter with stub layers; no GPU or Torch installation."""
-    class Tensor:
-        def __init__(self, value): self.value = np.asarray(value, dtype=np.float32)
-        @property
-        def shape(self): return self.value.shape
-        def detach(self): return self
-        def cpu(self): return self
-        def numpy(self): return self.value
-    class Generator:
-        def manual_seed(self, seed): return self
-    torch = types.SimpleNamespace(Generator=Generator,
-                                  randn=lambda shape, generator: Tensor(np.ones(shape)))
-    monkeypatch.setitem(sys.modules, 'torch', torch)
-    ref = types.SimpleNamespace(state_dict=lambda: {'conv.weight': Tensor([3.])})
-    monkeypatch.setattr(A, '_layer_inputs', lambda *args: (lambda: ref, Tensor([[1., 2.]]), ()))
+    # The adapter now reads verified fixture bytes without torch. The old
+    # test stubbed the removed torch initializer and never supplied fixtures.
+    nf = A._tool('neural_fixtures')
+    D = {'X': np.array([[1., 2.]], dtype=np.float32)}
+    spec = A.LANES[lane]
+    entry = nf.write_entry(str(tmp_path), lane, 'fixture', nf.variant(spec['task'], D),
+                           task=spec['task'], params=spec['params'], smoke=False,
+                           x=D['X'], dy=np.ones((1, 2), dtype=np.float32),
+                           state={'conv.weight': np.array([3.], dtype=np.float32)},
+                           extra={'in_channels': 2})
+    nf.write_manifest(str(tmp_path), [entry], torch_version='fixture', seed=A.SEED)
+    monkeypatch.setattr(A, '_NEURAL_FIXTURES', str(tmp_path))
+    monkeypatch.setattr(A, '_DATASET', 'fixture')
+    monkeypatch.setattr(A, '_graph_layer_inputs', lambda D: (D['X'], np.zeros((2, 0), dtype=np.int64)))
     class Layer:
         def __init__(self, random_state=0, **kw): self.seed = random_state
-        def forward(self, x): return x + self.seed
+        def forward(self, x, *extra): return x + self.seed
         def backward(self, dy): return dy
     if comparable:
         Layer.load_state_dict = lambda self, state: None
     monkeypatch.setattr(A, '_ours_class', lambda lane: ('FixtureLayer', Layer))
     monkeypatch.setattr(A, '_ours_info', lambda lane: {})
     import bench_board_host_quality as host
-    gpu, cpu = A._build_layer(lane, 'ours', {}), A._build_layer(lane, 'ours', {})
+    gpu, cpu = A._build_layer(lane, 'ours', D), A._build_layer(lane, 'ours', D)
     for runner in (gpu, cpu):
         runner.fit(); runner.infer()
     actual, reference = gpu.outputs(), cpu.outputs()

@@ -8,7 +8,7 @@ Unknown metrics require review; finite output alone is not equal quality.
 """
 import math
 
-POLICY = "mojolearn.quality-parity.v1"
+POLICY = "mojolearn.quality-parity.v2"
 # Absolute score units (one percentage point for bounded scores).
 ABSOLUTE = dict.fromkeys(("accuracy", "auc", "roc_auc", "r2", "recall_at_k",
     "recall_at_10", "trustworthiness_k15", "explained_variance_ratio_sum",
@@ -23,7 +23,13 @@ RELATIVE = dict.fromkeys(("rmse", "masked_rmse", "forecast_rmse", "logloss",
 # A common reference bound, not a demand that fp32 and bf16 have equal errors.
 # This gate deliberately allows the opponent's native fast precision.
 REFERENCE = {"max_rel_err_vs_fp64": 0.01, "relative_residual": 1e-4,
-             "relative_gram_difference": 1e-4}
+             "relative_gram_difference": 1e-4,
+             # FAIRNESS FIX (2026-10-13 audit): these lanes had recorded
+             # reference distances but no declared admission rule. Limits
+             # precede the repaired run and do not depend on its timing.
+             "rel_diff_vs_sklearn": 1e-4,
+             "rel_fro_vs_torch_eager_fp32": 0.01,
+             "optimizer_update_error_vs_torch_fp32": 1e-4}
 
 
 def number(value):

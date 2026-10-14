@@ -298,7 +298,7 @@ def fairness_rule(race, mode, phase, today, prior=None):
     best = max([c for c in admitted if c.get("device") == "gpu"] or admitted,
                key=lambda c: judged[c["arm"]]["timing_comparison"]["value"]) if admitted else None
     ratio = judged[best["arm"]]["timing_comparison"]["value"] if completed(ours) and best else None
-    entry = {"rule": "race_fairness.fairness_rule (quality-parity.v1, 2026-10-14)", "date": today, "opponent": best.get("arm") if best else None,
+    entry = {"rule": "race_fairness.fairness_rule (%s, 2026-10-14)" % BQ.POLICY, "date": today, "opponent": best.get("arm") if best else None,
              "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
              "pairing": pairing(race, mode, phase), "opponents": judged,
              "admitted_opponents": [c["arm"] for c in admitted]}
@@ -351,7 +351,7 @@ def apply(board, prev=None, today=None, upgrade_legacy=False):
                         if archived not in history:
                             history.append(archived)
                     prior = entry if keep else None
-                    if entry and (not keep or "quality-parity.v1" not in entry.get("rule", "")):
+                    if entry and (not keep or BQ.POLICY not in entry.get("rule", "")):
                         history = rr.setdefault("audit_history", [])
                         if entry not in history:
                             history.append(entry)

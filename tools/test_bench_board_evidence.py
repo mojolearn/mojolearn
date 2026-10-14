@@ -174,9 +174,13 @@ class Evidence(unittest.TestCase):
         self.assertTrue(any("probe failed" in s for s in rep["problems"]))
 
     def sealed_cell(self, receipt_arm="lib-gpu", worker_version="1", worker_hardware=None,
-                    changed_params=False, fitted_params=None):
+                    changed_params=False, fitted_params=None, output_bytes=None):
         d=self.root/"evidence/runs/r1";(d/"workers").mkdir(parents=True)
         E.write(d/"recipe.json", {})
+        if output_bytes is not None:
+            work = self.root/"work/quality-reference"
+            work.mkdir(parents=True)
+            (work/"reference.npz").write_bytes(output_bytes)
         hardware=dict(status="verified", gpu="physical-123", driver="580", os="Linux")
         record=P.check("ridge", {"ours":{"__library__":"library", "alpha":1, "seed":7},
                                 "lib-gpu":{"__library__":"library", "alpha":1, "seed":7}})["arms"]["lib-gpu"]
@@ -198,6 +202,13 @@ class Evidence(unittest.TestCase):
         E.seal(dict(out=str(self.root),measurement_inventory={},measurement_source={"status":"local"},
                     evidence_r2=False), d, dict(source={},dataset={"identity":"abc"},hardware={}),rec)
         return rec, cell
+
+    def test_seal_keeps_scored_and_quality_reference_output_bytes(self):
+        import tarfile
+        payload = b"retained scored array bytes"
+        self.sealed_cell(output_bytes=payload)
+        with tarfile.open(self.root/"evidence/runs/r1/run.tar.gz") as archive:
+            self.assertEqual(archive.extractfile("run/work/quality-reference/reference.npz").read(), payload)
 
     def test_complete_record_retains_call_settings_seed_and_final_receipt(self):
         rec,cell=self.sealed_cell()
