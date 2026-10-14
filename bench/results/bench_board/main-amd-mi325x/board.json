@@ -68,7 +68,7 @@
   "smoke": false,
   "vendor": "amd"
  },
- "created": "2026-10-14T07:50:05Z",
+ "created": "2026-10-14T07:57:25Z",
  "main_board": {
   "backfill": {
    "filled": {
@@ -277,7 +277,7 @@
   },
   "inputs": {
    "branch": "main",
-   "generated": "2026-10-14T07:50:05Z",
+   "generated": "2026-10-14T07:57:25Z",
    "grid_logs": [
     "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
     "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -369,6 +369,8 @@
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.lu-factor.synthetic.rows=full/board.json",
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.lu-solve.synthetic.rows=full/board.json",
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave11/campaign/measured/algos.eigh.synthetic.rows=full/board.json",
+    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave11/campaign/measured/algos.qr.istella.rows=full/board.json",
+    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave11/campaign/measured/algos.qr.taxi.rows=full/board.json",
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.istella.rows=full/board.json",
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.taxi.rows=full/board.json",
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.maxabs-scaler.istella.rows=full/board.json",
@@ -659673,5 +659675,5 @@
   }
  },
  "schema": "mojolearn-bench-board/1",
- "updated": "2026-10-14T07:50:07Z"
+ "updated": "2026-10-14T07:57:28Z"
 }

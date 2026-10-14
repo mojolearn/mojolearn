@@ -1,5 +1,5 @@
 {
-  "date_epoch": 1791964246.12913,
+  "date_epoch": 1791964644.31208,
   "scope": "All original 303 GPU-opponent recipes; newest preflight evidence only, not full timing or admission coverage",
   "vendors": {
     "amd": {
@@ -2343,6 +2343,8 @@
         "algos/nadam/synthetic/rows=full",
         "algos/normalizer/istella/rows=full",
         "algos/normalizer/taxi/rows=full",
+        "algos/qr/istella/rows=full",
+        "algos/qr/taxi/rows=full",
         "algos/rmsprop/synthetic/rows=full",
         "algos/sgd/synthetic/rows=full",
         "classical/dbscan/istella/rows=full",
@@ -2365,10 +2367,10 @@
         "classical2/linearsvc/taxi/rows=full"
       ],
       "latest_preflight_counts": {
-        "MATCHED": 72,
-        "REFUSED": 141
+        "MATCHED": 74,
+        "REFUSED": 139
       },
-      "new_fit_admissions": 47,
+      "new_fit_admissions": 49,
       "recipes": {
         "algos/adafactor/synthetic/rows=full": {
           "audit": {
@@ -4165,32 +4167,22 @@
           "status": "REFUSED"
         },
         "algos/qr/istella/rows=full": {
-          "arms": [
-            "ours",
-            "torch-gpu",
-            "cupy-gpu"
-          ],
-          "family": "algos",
-          "preflight_rc": 1,
-          "problems": [
-            "missing real library implementation read-back: torch-gpu",
-            "missing real library implementation read-back: cupy-gpu"
-          ],
-          "status": "REFUSED"
+          "audit": {
+            "identical/fit": "MATCHED"
+          },
+          "measurement_status": "done",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave11/campaign/measured/algos.qr.istella.rows=full/board.json",
+          "problems": [],
+          "status": "MATCHED"
         },
         "algos/qr/taxi/rows=full": {
-          "arms": [
-            "ours",
-            "torch-gpu",
-            "cupy-gpu"
-          ],
-          "family": "algos",
-          "preflight_rc": 1,
-          "problems": [
-            "missing real library implementation read-back: torch-gpu",
-            "missing real library implementation read-back: cupy-gpu"
-          ],
-          "status": "REFUSED"
+          "audit": {
+            "identical/fit": "MATCHED"
+          },
+          "measurement_status": "done",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave11/campaign/measured/algos.qr.taxi.rows=full/board.json",
+          "problems": [],
+          "status": "MATCHED"
         },
         "algos/quantile-transformer/istella/rows=full": {
           "arms": [
@@ -6652,7 +6644,7 @@
           "status": "REFUSED"
         }
       },
-      "updated_recipes": 49
+      "updated_recipes": 51
     }
   }
 }
