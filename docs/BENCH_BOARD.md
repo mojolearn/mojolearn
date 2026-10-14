@@ -87,6 +87,33 @@ board.json records the override.
 
 ## The opponent store
 
+For a fresh paired GPU run, use `--gpu-opponents-only --retime-opponents`.
+`--preflight-only` constructs and audits the selected arms without warmups or
+scored rounds. The normal runner also audits its complete selection before
+timing, then rechecks each race. Unknown and one-sided work settings refuse the
+comparison; `None` on both sides is not evidence of equal defaults. Failed probes
+retain their parameter records but cannot authorize timing.
+
+Each newly measured cell's `measurement` records the actual worker's library
+version, physical GPU identity, driver, OS, runtime versions, package inventory,
+runtime switches, resource policy, seed, raw and normalized parameters, callable
+identity, command, input identity, timings, and evidence hashes. `invocation`
+contains the observed callable and effective settings; it is not reconstructed
+Python source. The exact harness source and loaded product bytes are retained in
+the linked archive. Neural runs also retain their input and output array bytes.
+R2 retention requires a successful download and matching SHA-256 after upload.
+`tools/bench_board_evidence.py sync <board.json>` retries retention without
+remeasuring. Runtime credentials are excluded from these records.
+
+Matching preflight settings is necessary but does not alone admit a result.
+Changed worker settings, missing evidence, quality failures, and unequal actual
+iterations keep a new comparison out. A maximum iteration setting is not an
+executed iteration count. Unavailable counts remain explicit and unqualified.
+`tools/bench_board_session.py --out RUN --seconds 3600 -- COMMAND...` supervises
+a Linux job and its marked descendants, including separate process sessions.
+Arm the provider's billing deadman separately and copy evidence off the machine
+throughout the run; the process watcher does not terminate a provider machine.
+
 An opponent is measured once per key and reused. Every finished opponent cell
 is appended to `--opponent-store` (JSONL, default `<out>/../opponent-store.jsonl`)
 with its key: box and machine model, vendor, device (and the GPU name its
@@ -97,7 +124,7 @@ read (sha256) and the rounds, plus the measurement time and the commit.
 Before a race runs, each opponent that could match is constructed through its
 driver (`--params-only`: no fit, no timed round) and read back; an opponent
 whose full key, read-back included, is in the store is not run (one that does
-not construct runs normally): its stored cell joins the race and
+not construct is refused before timing): its stored cell joins the race and
 BOARD.md marks it `stored (measured <UTC> on <box>, <device>)`; an opponent
 measured in this run is marked `measured this run`. When every opponent is
 stored, only our arms run. The DEFAULT is our GPU arm(s) only: an opponent
