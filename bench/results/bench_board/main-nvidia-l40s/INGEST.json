@@ -1,27 +1,56 @@
 {
- "generated": "2026-10-14T00:36:40Z",
+ "generated": "2026-10-14T02:18:36Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-14T00:36:40Z",
+  "generated": "2026-10-14T02:18:36Z",
   "grid_logs": [
-   "nv=/dev/null"
+   "nv2=/dev/null"
   ],
   "json_dir": null,
   "paired_boards": [
-   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/fitted-receipts/linearsvr-taxi/board.json",
-   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/fitted-receipts/svr-istella/board.json",
-   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/fitted-receipts/svr-taxi/board.json",
-   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/fitted-receipts/linearsvr-istella/board.json",
-   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/measured/trees.iforest.istella.rows=full/board.json",
-   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/measured/trees.iforest.taxi.rows=full/board.json",
-   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/gemm/board.json",
-   "amd=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/amd/gemm/board.json"
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/trees.iforest.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.poly-features.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.label-binarizer.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.minmax-scaler.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.poly-features.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.maxabs-scaler.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.standard-scaler.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.quantile-transformer.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.label-binarizer.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.maxabs-scaler.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/trees.iforest.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.standard-scaler.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.minmax-scaler.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.power-transformer.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.power-transformer.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/measured/algos.quantile-transformer.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.kde.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.pca.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.pca.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.knn.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.knn.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.kde.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.kmeans.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.kmeans.taxi.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair2/measured/algos.lstsq.istella.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair2/measured/algos.svd.taxi.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair2/measured/algos.randomized-svd.istella.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair2/measured/algos.svd.istella.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair2/measured/algos.lstsq.taxi.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair2/measured/algos.qr.taxi.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair2/measured/algos.qr.istella.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair2/measured/algos.randomized-svd.taxi.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair/measured/neural.gemm-bf16.gaussian.shape=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/recovered/algos.cholesky.synthetic.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/recovered/algos.eigh.synthetic.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/recovered/algos.lu-solve.synthetic.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/recovered/algos.lu-factor.synthetic.rows=full/board.json"
   ],
   "results": [
-   "nv=/dev/null"
+   "nv2=/dev/null"
   ]
  },
  "skip_notes": [],
  "skipped": {},
- "summary": "MAINBOARD column=nvidia-l40s label=main@da2a48fc3 races=254 add=0 change=0 drop=0 failed=0 ledger=0 withheld_opponents=45 identity=MATCH:86,n/a:168"
+ "summary": "MAINBOARD column=nvidia-l40s label=main@0bfbd15c6 races=254 add=0 change=24 drop=0 failed=0 ledger=24 withheld_opponents=43 identity=MATCH:82,n/a:172"
 }
