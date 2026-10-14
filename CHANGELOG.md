@@ -2,6 +2,16 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.45 (published 2026-10-14)
+
+- `TSNE` takes `post_exaggeration_learning_rate_factor` (default 1.0): the step size after the early exaggeration
+  phase is `learning_rate` times this factor. 2.0 runs cuML's schedule. Results at the default are unchanged.
+- `IVFSQIndex` takes `max_train_points_per_cluster` (default None), cuVS's `ivf_sq` setting of the same name: the
+  coarse k-means and the quantization ranges train on `min(n_samples, m * n_lists)` evenly spaced rows. Results at
+  the default are unchanged.
+- `python -m mojolearn identity` runs again. It compares this machine against the identity record taken from the
+  0.8.44 wheels on Apple M4, NVIDIA L40S and AMD MI325X GPUs (454 lanes, 4086 cells, the same bits on all three).
+
 ## 0.8.44 (published 2026-10-13)
 
 - Gradient boosting with `grow_policy="Lossguide"` (and any fit where `max_leaves` is below `2**max_depth`) no longer
