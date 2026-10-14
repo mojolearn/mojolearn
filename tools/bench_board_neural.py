@@ -2757,16 +2757,10 @@ def build_runner(lane, arm, shape, data, ab_config=None):
     return TorchArm(lane, shape, data, arm)
 
 
-def worker(args):
-    # fd 1 is the protocol; everything a library prints goes to the log.
-    proto = os.fdopen(os.dup(1), "w", buffering=1)
-    os.dup2(2, 1)
-    sys.stdout = sys.stderr
-
-    def say(obj):
-        proto.write(json.dumps(obj, sort_keys=True, default=str) + "\n")
-        proto.flush()
-
+def worker_ready(args):
+    """The worker's ready stage: load the inputs, construct the arm, read its record back. Returns
+    (runner, message): the ready message, or an error message with runner None. The worker subprocess and the
+    smoke's in-process probe (probe_ready) both run exactly this."""
     try:
         ab_config = _read_neural_ab_config(getattr(args, "neural_ab_config", None))
         _apply_neural_ab_environment(ab_config)
@@ -2780,8 +2774,7 @@ def worker(args):
     except (Exception, SystemExit) as exc:  # noqa: BLE001  (a twin's refuse() exits)
         import traceback
         traceback.print_exc()
-        say({"event": "error", "stage": "ready", "error": repr(exc)[:2000]})
-        return 1
+        return None, {"event": "error", "stage": "ready", "error": repr(exc)[:2000]}
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_load("bench_board_probe").library_identity(runner.info))
     record = getattr(runner, "record", None)
@@ -2789,9 +2782,30 @@ def worker(args):
         # Resolve callable identity BEFORE JSON transport; default=str would
         # erase the actual library function and leave an unusable repr.
         record = _load("bench_board_params").arm_record(record)
-    say({"event": "ready", "info": runner.info, "pid": os.getpid(),
-         "params_record": record,
-         "neural_ab": _neural_ab_receipt(runner, ab_config)})
+    return runner, {"event": "ready", "info": runner.info, "pid": os.getpid(),
+                    "params_record": record,
+                    "neural_ab": _neural_ab_receipt(runner, ab_config)}
+
+
+def probe_ready(argv):
+    """The smoke's in-process parameter probe (tools/smoke_inproc.py): a worker's argv, its ready message."""
+    return worker_ready(build_parser().parse_args(argv))[1]
+
+
+def worker(args):
+    # fd 1 is the protocol; everything a library prints goes to the log.
+    proto = os.fdopen(os.dup(1), "w", buffering=1)
+    os.dup2(2, 1)
+    sys.stdout = sys.stderr
+
+    def say(obj):
+        proto.write(json.dumps(obj, sort_keys=True, default=str) + "\n")
+        proto.flush()
+
+    runner, msg = worker_ready(args)
+    say(msg)
+    if runner is None:
+        return 1
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
@@ -2962,13 +2976,21 @@ def scorer_preflight(lane, shape, data_path, arms, operation):
         import subprocess
         check = {"check": "own host forward reference (one sequence)"}
         try:
-            done = subprocess.run([sys.executable, os.path.abspath(__file__), "scorer-preflight-child", lane,
-                                   shape, data_path], capture_output=True, text=True, timeout=1800)
-            last = (done.stdout.strip().splitlines() or ["{}"])[-1]
-            got = json.loads(last) if last.startswith("{") else {}
-            if done.returncode or got.get("status") != "ok":
-                tail = (done.stderr.strip().splitlines() or ["no output"])[-1]
-                raise RuntimeError(got.get("error") or tail[:600])
+            if os.environ.get("MOJOLEARN_SMOKE_IN_PROCESS") == str(os.getpid()):
+                # the campaign smoke's worker process already holds every binding and times nothing, so the
+                # child's reason (no binding in a conductor that times workers) does not apply: the same
+                # check, as a function call
+                got = scorer_preflight_reference(lane, shape, data_path)
+                if got.get("status") != "ok":
+                    raise RuntimeError(got.get("error") or "no reference")
+            else:
+                done = subprocess.run([sys.executable, os.path.abspath(__file__), "scorer-preflight-child", lane,
+                                       shape, data_path], capture_output=True, text=True, timeout=1800)
+                last = (done.stdout.strip().splitlines() or ["{}"])[-1]
+                got = json.loads(last) if last.startswith("{") else {}
+                if done.returncode or got.get("status") != "ok":
+                    tail = (done.stderr.strip().splitlines() or ["no output"])[-1]
+                    raise RuntimeError(got.get("error") or tail[:600])
             check.update(status="ok", reference=got.get("reference"), shape=got.get("shape"))
         except Exception as exc:  # noqa: BLE001
             check.update(status="failed", detail=str(exc)[:600])
@@ -2979,8 +3001,9 @@ def scorer_preflight(lane, shape, data_path, arms, operation):
     return receipt
 
 
-def scorer_preflight_child(lane, shape, data_path):
-    """The forward reference on the first sequence of the race's own inputs; one JSON line on stdout."""
+def scorer_preflight_reference(lane, shape, data_path):
+    """The forward reference on the first sequence of the race's own inputs: {"status": "ok", "reference",
+    "shape"} or {"status": "failed", "error"}."""
     import numpy as np
     try:
         with np.load(data_path) as z:
@@ -2989,11 +3012,16 @@ def scorer_preflight_child(lane, shape, data_path):
         cls, ref = _forward_reference(lane, shape, tiny)
         if not ref.size or not np.isfinite(ref).all():
             raise ValueError("the host reference forward of one sequence is empty or nonfinite")
-        print(json.dumps({"status": "ok", "reference": cls.__name__, "shape": list(ref.shape)}), flush=True)
-        return 0
+        return {"status": "ok", "reference": cls.__name__, "shape": list(ref.shape)}
     except Exception as exc:  # noqa: BLE001
-        print(json.dumps({"status": "failed", "error": repr(exc)[:600]}), flush=True)
-        return 1
+        return {"status": "failed", "error": repr(exc)[:600]}
+
+
+def scorer_preflight_child(lane, shape, data_path):
+    """scorer_preflight_reference in a child process; one JSON line on stdout."""
+    got = scorer_preflight_reference(lane, shape, data_path)
+    print(json.dumps(got), flush=True)
+    return 0 if got.get("status") == "ok" else 1
 
 
 def mark_forward_quality_failures(result):
@@ -3171,8 +3199,9 @@ def race(args):
                                  "--lane", lane, "--shape", shape, "--data", data_path]
         if frozen_config is not None:
             cmd += ["--neural-ab-config", frozen_config]
-        workers[arm] = ctd.Worker(arm, cmd, _worker_env(arm),
-                                  os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO)
+        workers[arm] = ctd.start_worker(arm, cmd, _worker_env(arm),
+                                        os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO,
+                                        params_only=getattr(args, "params_only", False))
         result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [], "digests": [],
                                "mem": [], "status": "ok"}
     for arm, w in workers.items():
