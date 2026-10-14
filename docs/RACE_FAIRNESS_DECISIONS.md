@@ -16,7 +16,7 @@ Equal iteration caps never prove equal executed work or equal quality. Fixed
 training-step throughput measurements still perform the declared step count;
 they are distinct from time to a quality target.
 
-`tools/board_quality.py` implements `mojolearn.quality-parity.v5`. Its engineering
+`tools/board_quality.py` implements `mojolearn.quality-parity.v6`. Its engineering
 margins are declared by metric, independent of dataset, vendor and timing winner:
 
 | Metric | Admission margin |
@@ -60,6 +60,14 @@ remains in force. Quality admission does not remove that hold. The generated
 paper and website consume the same per-mode, per-phase admitted opponents.
 
 ## Retention and guarded execution
+
+The v6 correction recognizes classical PCA inference's already recorded
+`transform_max_rel_err_own_fp64`: maximum absolute projection error divided by
+the maximum absolute FP64 projection of the same fitted model and query rows.
+Both arms must satisfy the existing linear-algebra reference bound of `1e-4`.
+This repairs an unrecognized metric name without changing any existing margin.
+Re-audit retained scored outputs and clocks; neither arm needs new timing.
+It does not admit an unsupported inference implementation or an unknown clock.
 
 The v5 addition is declared before the next linear-algebra measurements on
 2026-10-14. QR retains both complete scored factors. Each arm must pass the

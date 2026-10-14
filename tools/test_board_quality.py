@@ -62,6 +62,7 @@ class QualityParity(unittest.TestCase):
 
     def test_reference_quality_limits_and_missing_optimizer_step(self):
         for metric, margin in (("rel_diff_vs_sklearn", 1e-4),
+                               ("transform_max_rel_err_own_fp64", 1e-4),
                                ("rel_fro_vs_torch_eager_fp32", .01),
                                ("optimizer_update_error_vs_torch_fp32", 1e-4)):
             self.assertEqual(pair({metric: margin}, {metric: 0})["verdict"], "PASS")

@@ -8,7 +8,7 @@ Unknown metrics require review; finite output alone is not equal quality.
 """
 import math
 
-POLICY = "mojolearn.quality-parity.v5"
+POLICY = "mojolearn.quality-parity.v6"
 # Absolute score units (one percentage point for bounded scores).
 ABSOLUTE = dict.fromkeys(("accuracy", "auc", "roc_auc", "r2", "recall_at_k",
     "recall_at_10", "trustworthiness_k15", "explained_variance_ratio_sum",
@@ -27,6 +27,11 @@ REFERENCE = {"max_rel_err_vs_fp64": 0.01, "relative_residual": 1e-4,
              # FAIRNESS FIX (2026-10-13 audit): validate the retained Q
              # factor against its defining contract before new QR races.
              "relative_orthogonality_error": 1e-4,
+             # FAIRNESS FIX (2026-10-13 audit): classical PCA inference
+             # already records its projection error against FP64 evaluation
+             # of the same fitted model. Apply the existing linear-algebra
+             # reference bound instead of treating the metric as unknown.
+             "transform_max_rel_err_own_fp64": 1e-4,
              # FAIRNESS FIX (2026-10-13 audit): these lanes had recorded
              # reference distances but no declared admission rule. Limits
              # precede the repaired run and do not depend on its timing.
