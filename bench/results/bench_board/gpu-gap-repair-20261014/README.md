@@ -1,10 +1,10 @@
 # GPU evidence repair continuation — 2026-10-14
 
-Updated 2026-10-14T07:47:20.011824+00:00. Branch `main`; latest implementation commit `2b733fdfa9dac5ae8a7598d68e4889c9c5ce5e28`. This is an incremental repair of the original 303 NVIDIA/AMD GPU-opponent recipes. Full-board timing remains incomplete. No Apple runs, fast-mode reruns, numerical default changes, paper publication or website publication occurred. The faster-than-opponent publication hold remains.
+Updated 2026-10-14T07:50:46.548863+00:00. Branch `main`; latest implementation commit `46070bac3e7cbbed14b19dcd5c993c1f816479e7`. This is an incremental repair of the original 303 NVIDIA/AMD GPU-opponent recipes. Full-board timing remains incomplete. No Apple runs, fast-mode reruns, numerical default changes, paper publication or website publication occurred. The faster-than-opponent publication hold remains.
 
 | Vendor | Original recipes | Latest preflight matched | Latest preflight refused | Newly admitted fit recipes |
 | --- | ---: | ---: | ---: | ---: |
-| nvidia | 213 | 71 | 142 | 46 |
+| nvidia | 213 | 72 | 141 | 47 |
 | amd | 90 | 39 | 51 | 25 |
 
 Preflight counts are parameter checks, not timing completion. Newly admitted fits are complete paired measurements from this continuation, with one excluded warmup and one scored sample. They are not statistical performance equivalence claims. Actual dimensions, parameters, seeds, calls, versions, clocks, quality and retention references remain in the board cells. DBSCAN's saved workload is 1,000,000 rows; HDBSCAN's is the saved 100,000-row block. Dataset caps are explicit recipes, not proof that an entire original source dataset was timed.

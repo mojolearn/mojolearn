@@ -1,5 +1,5 @@
 {
-  "date_epoch": 1791963861.179457,
+  "date_epoch": 1791964246.12913,
   "scope": "All original 303 GPU-opponent recipes; newest preflight evidence only, not full timing or admission coverage",
   "vendors": {
     "amd": {
@@ -2331,6 +2331,7 @@
         "algos/conv1d/synthetic/rows=full",
         "algos/conv2d/synthetic/rows=full",
         "algos/dropout2d/synthetic/rows=full",
+        "algos/eigh/synthetic/rows=full",
         "algos/embedding/synthetic/rows=full",
         "algos/global-avgpool/synthetic/rows=full",
         "algos/global-maxpool/synthetic/rows=full",
@@ -2364,10 +2365,10 @@
         "classical2/linearsvc/taxi/rows=full"
       ],
       "latest_preflight_counts": {
-        "MATCHED": 71,
-        "REFUSED": 142
+        "MATCHED": 72,
+        "REFUSED": 141
       },
-      "new_fit_admissions": 46,
+      "new_fit_admissions": 47,
       "recipes": {
         "algos/adafactor/synthetic/rows=full": {
           "audit": {
@@ -2851,18 +2852,13 @@
           "status": "MATCHED"
         },
         "algos/eigh/synthetic/rows=full": {
-          "arms": [
-            "ours",
-            "torch-gpu",
-            "cupy-gpu"
-          ],
-          "family": "algos",
-          "preflight_rc": 1,
-          "problems": [
-            "missing real library implementation read-back: torch-gpu",
-            "missing real library implementation read-back: cupy-gpu"
-          ],
-          "status": "REFUSED"
+          "audit": {
+            "identical/fit": "MATCHED"
+          },
+          "measurement_status": "done",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave11/campaign/measured/algos.eigh.synthetic.rows=full/board.json",
+          "problems": [],
+          "status": "MATCHED"
         },
         "algos/embedding/synthetic/rows=full": {
           "audit": {
@@ -6656,7 +6652,7 @@
           "status": "REFUSED"
         }
       },
-      "updated_recipes": 48
+      "updated_recipes": 49
     }
   }
 }

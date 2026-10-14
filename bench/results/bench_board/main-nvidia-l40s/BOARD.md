@@ -1,12 +1,12 @@
 # mojolearn benchmark board
 
-Generated 2026-10-14T07:44:23Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-14T07:50:06Z from `board.json` (schema `mojolearn-bench-board/1`).
 
-> MAIN BOARD nvidia-l40s, version label main@dbc9b18c1. Unreleased: not reproducible by pip install; the release boards are the reference.
+> MAIN BOARD nvidia-l40s, version label main@2b733fdfa. Unreleased: not reproducible by pip install; the release boards are the reference.
 
-> Cells: 262 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@dbc9b18c1 (2026-10-14T07:18:30Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).
+> Cells: 262 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@2b733fdfa (2026-10-14T07:43:49Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).
 
-> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 355 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
+> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 353 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
 > Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 85, n/a 177).
 
@@ -38,8 +38,8 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | memory bytes | - |
 | OS | - |
 | Python | - |
-| mojolearn | main@dbc9b18c1 (wheel mixed source/wheel provenance; see each cell's version and measurement record, sha256 -) |
-| script commit | dbc9b18c156d7ebcfbf94bdd7224f3b319eac6ab |
+| mojolearn | main@2b733fdfa (wheel mixed source/wheel provenance; see each cell's version and measurement record, sha256 -) |
+| script commit | 2b733fdfa9dac5ae8a7598d68e4889c9c5ce5e28 |
 | patch sync | - |
 | modes | identical |
 | rounds | 1 timed after 1 warm-up, arms interleaved round by round |
@@ -62,7 +62,7 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 
 ## Coverage
 
-Races: 262 planned, 262 done, 0 failed, 0 unsupported, 0 pending. Cells: 819 (REFUSED 25, ok 794).
+Races: 262 planned, 262 done, 0 failed, 0 unsupported, 0 pending. Cells: 818 (REFUSED 25, ok 793).
 
 Inference cells: 137 (REFUSED 1, ok 136).
 
@@ -131,8 +131,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | dropout2d | synthetic | identifiable_channels | - | 4096 | torch-eager-fp32 4096; torch-compile-fp32 4096; torch-eager-tf32 4096; torch-compile-tf32 4096 |
 | algos | dynamic-optimized-theta | synthetic | forecast_rmse (lower is better) | - | 1.436278 | statsforecast-cpu 1.436045 |
 | algos | dynamic-optimized-theta | taxi-hourly | forecast_rmse (lower is better) | - | 49.086628 | statsforecast-cpu 49.314797 |
-| algos | eigh | synthetic | max_eigenvalue_error | - | 3.692e-07 | torch-gpu 1.044e-06; cupy-gpu 1.044e-06; numpy-cpu 3.49e-08 |
-| algos | eigh | synthetic | relative_residual | - | 6.672e-07 | torch-gpu 1.016e-06; cupy-gpu 1.016e-06; numpy-cpu 2.824e-08 |
+| algos | eigh | synthetic | max_eigenvalue_error | - | 3.692e-07 | torch-gpu 1.044e-06; cupy-gpu 1.044e-06 |
+| algos | eigh | synthetic | relative_residual | - | 6.672e-07 | torch-gpu 1.016e-06; cupy-gpu 1.016e-06 |
 | algos | elliptic-envelope | istella | fraction_flagged | - | 0.092480 | sklearn-cpu - |
 | algos | elliptic-envelope | istella | jaccard_vs_sklearn | - | 0.062240 | sklearn-cpu - |
 | algos | elliptic-envelope | taxi | fraction_flagged | - | 0.102090 | sklearn-cpu 0.102470 |
@@ -4008,28 +4008,30 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### eigh / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-results.txt (nv2/v0051)`, ran on NVIDIA L40S (nv2, RunPod) job v0051
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave11/campaign/measured/algos.eigh.synthetic.rows=full/board.json (nv2/paired-d8bbe033456307d626c02c052dff8cc32105e8eeff1d5af2ae432d33ff16edc7)`, ran on d2fe567d3b88
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | mojolearn 0.8.38 (source build, main@2afa942e3) | identical | 403.3 | 403.3..403.3 | 1 | - | - | 403.3 | - | - (stored whole) | - | - | - | - | max_eigenvalue_error=3.692e-07, relative_residual=6.672e-07 | - | main board, one scored run | - | ok (main@2afa942e3 nv2/v0051 2026-10-11; identity vs the amd columns: n/a) |
-| torch-gpu | torch | gpu | NVIDIA L40S (host cc560ebdaf91) | torch 2.13.0+cu129 | opponent | 81.2 | 81.2..81.2 | 1 | 4.967 | - | - | 81.2 | - (stored kernel) | 4.967 (MIXED ours whole / arm kernel) | - | 937.9 | 450.1 | max_eigenvalue_error=1.044e-06, relative_residual=1.016e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
-| cupy-gpu | cupy | gpu | NVIDIA L40S (host cc560ebdaf91) | cupy 14.2.0 | opponent | 80.4 | 80.4..80.4 | 1 | 5.013 | - | - | 80.4 | - (stored kernel) | 5.013 (MIXED ours whole / arm kernel) | - | 753.9 | 1114.0 | max_eigenvalue_error=1.044e-06, relative_residual=1.016e-06 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
-| numpy-cpu | numpy | cpu | CPU AMD EPYC 9554 64-Core Processor (host f003873fb257, NVIDIA L40S box) | numpy 2.4.6 | opponent | 14605.9 | 14605.9..14605.9 | 1 | 0.028 | - | 14605.9 | 14605.9 | 0.00 (cpu-arm) | 0.028 (whole/whole) | - | 945.8 | - | max_eigenvalue_error=3.49e-08, relative_residual=2.824e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | 0.8.44 | identical | 461.1 | 461.1..461.1 | 1 | - | - | 461.1 | 457.9 | 3.22 (upload_ms_separate) | - | - | 2149.5 | 1420.0 | max_eigenvalue_error=3.692e-07, relative_residual=6.672e-07 | - | main board, one scored run | wheel | ok (main@2b733fdfa nv2/paired-d8bbe033456307d626c02c052dff8cc32105e8eeff1d5af2ae432d33ff16edc7 2026-10-14; identity vs the amd columns: n/a) |
+| torch-gpu | torch | gpu | NVIDIA L40S (host d2fe567d3b88) | torch 2.13.0+cu129 | opponent | 80.9 | 80.9..80.9 | 1 | 5.700 | - | - | 80.9 | - (stored kernel) | 5.660 (kernel/kernel) | - | 1123.5 | 450.1 | max_eigenvalue_error=1.044e-06, relative_residual=1.016e-06 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| cupy-gpu | cupy | gpu | NVIDIA L40S (host d2fe567d3b88) | cupy 14.2.0 | opponent | 80.1 | 80.1..80.1 | 1 | 5.760 | - | 124.8 | 80.1 | 44.73 (upload_ms_untimed) | 3.695 (whole/whole) | - | 915.7 | 1114.0 | max_eigenvalue_error=1.044e-06, relative_residual=1.016e-06 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+memory, ours, cupy-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
 
 memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
-
-memory, cupy-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
-
-memory, numpy-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
 
 settings: {'UPLO': 'L'}. Rows: None. Timed: None.
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | cupy-gpu | ours | torch-gpu |
+|---|---||---|---||---|---|
+| library (source) | cupy (declared) | mojolearn (declared) | torch (declared) |
+| UPLO | "L" | "L" | "L" |
+| input_arrays | [{"dtype": "float32", "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb", "shape": [4096, 4096]}] | [{"dtype": "float32", "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb", "shape": [4096, 4096]}] | [{"dtype": "float32", "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb", "shape": [4096, 4096]}] |
+| seed | 7 | 7 | 7 |
 
 ### elliptic-envelope / istella (rows full, shape X 100000x220; Xq 100000x220; y 100000; yq 100000)
 

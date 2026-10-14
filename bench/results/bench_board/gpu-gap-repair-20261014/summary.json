@@ -310,7 +310,7 @@
       }
     }
   },
-  "code_commit": "2b733fdfa9dac5ae8a7598d68e4889c9c5ce5e28",
+  "code_commit": "46070bac3e7cbbed14b19dcd5c993c1f816479e7",
   "cross_vendor_scored_hashes": {
     "MATCH": 25
   },
@@ -594,7 +594,7 @@
   },
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014",
   "linalg_output_verification": {
-    "checked_at": 1791963667.1795042,
+    "checked_at": 1791964060.2768278,
     "failures": [],
     "recipes": {
       "algos/cholesky/synthetic/rows=full": {
@@ -674,6 +674,96 @@
               "output_digest": "b40089bb769874c1",
               "output_sha256": "a7266739b33bc449ddcef5bccc9202bc09e98813461d12f4622134a27471a49f",
               "sha256": "cf5ebee02c461ab38d01e7606199cec0db8f66f2c4f123826e210cec419e521a"
+            }
+          }
+        ]
+      },
+      "algos/eigh/synthetic/rows=full": {
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave11/campaign/measured/algos.eigh.synthetic.rows=full/board.json",
+        "scored_cells": 3,
+        "verified_outputs": [
+          {
+            "archive": {
+              "bytes": 288149260,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/750b36549dad29974addb6604078476889a2f78e4c300c3170b7120a85438ede.tar.gz",
+              "sha256": "750b36549dad29974addb6604078476889a2f78e4c300c3170b7120a85438ede",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "ours",
+            "full_shapes": {
+              "V": [
+                4096,
+                4096
+              ],
+              "w": [
+                4096
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/750b36549dad29974addb6604078476889a2f78e4c300c3170b7120a85438ede.tar.gz",
+            "proof": {
+              "bytes": 134250986,
+              "member": "run/work/eigh-synthetic-ours.npz",
+              "output_digest": "dbbb891997829a37",
+              "output_sha256": "426d165b97f3a7f355524e09b59b7e016ce37ad84ede9f84f45d2ebe89917283",
+              "sha256": "57b30cdcad7e3f0064d5b69656800b5b17550a0ce8d312eb1a83dc49c6b9348f"
+            }
+          },
+          {
+            "archive": {
+              "bytes": 288149260,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/750b36549dad29974addb6604078476889a2f78e4c300c3170b7120a85438ede.tar.gz",
+              "sha256": "750b36549dad29974addb6604078476889a2f78e4c300c3170b7120a85438ede",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "torch-gpu",
+            "full_shapes": {
+              "V": [
+                4096,
+                4096
+              ],
+              "w": [
+                4096
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/750b36549dad29974addb6604078476889a2f78e4c300c3170b7120a85438ede.tar.gz",
+            "proof": {
+              "bytes": 134250986,
+              "member": "run/work/eigh-synthetic-torch-gpu.npz",
+              "output_digest": "0a7bc49345710c77",
+              "output_sha256": "89e735ae7b607f64c94912f30c09ac36cad913c8eb0614105ee480507258437d",
+              "sha256": "b73abad691f5883dc4989e38bdb747598b7540919ab6266a5be5eb5322c36e67"
+            }
+          },
+          {
+            "archive": {
+              "bytes": 288149260,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/750b36549dad29974addb6604078476889a2f78e4c300c3170b7120a85438ede.tar.gz",
+              "sha256": "750b36549dad29974addb6604078476889a2f78e4c300c3170b7120a85438ede",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "cupy-gpu",
+            "full_shapes": {
+              "V": [
+                4096,
+                4096
+              ],
+              "w": [
+                4096
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/750b36549dad29974addb6604078476889a2f78e4c300c3170b7120a85438ede.tar.gz",
+            "proof": {
+              "bytes": 134250986,
+              "member": "run/work/eigh-synthetic-cupy-gpu.npz",
+              "output_digest": "0a7bc49345710c77",
+              "output_sha256": "89e735ae7b607f64c94912f30c09ac36cad913c8eb0614105ee480507258437d",
+              "sha256": "ece50efba15bef5658807fd4611ba96ed27b2cfdaa4173725191441c0d32be8d"
             }
           }
         ]
@@ -2903,6 +2993,7 @@
         "algos/conv1d/synthetic/rows=full",
         "algos/conv2d/synthetic/rows=full",
         "algos/dropout2d/synthetic/rows=full",
+        "algos/eigh/synthetic/rows=full",
         "algos/embedding/synthetic/rows=full",
         "algos/global-avgpool/synthetic/rows=full",
         "algos/global-maxpool/synthetic/rows=full",
@@ -2940,14 +3031,14 @@
         "REFUSED": 182
       },
       "latest_preflight_counts": {
-        "MATCHED": 71,
-        "REFUSED": 142
+        "MATCHED": 72,
+        "REFUSED": 141
       },
-      "new_fit_admissions": 46,
-      "updated_recipes": 48
+      "new_fit_admissions": 47,
+      "updated_recipes": 49
     }
   },
-  "recorded_epoch": 1791964040.0118241,
+  "recorded_epoch": 1791964246.548863,
   "recorded_launch_freezes": {
     "amd-wave2-launch": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
     "amd-wave3-launch": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
