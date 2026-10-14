@@ -1067,6 +1067,10 @@ def child_env(ctx, extra=None):
         # worker receipts. A successful pip install alone did not prove import.
         prefix = os.path.dirname(os.path.dirname(os.path.abspath(ctx["python"])))
         native = sorted(glob.glob(os.path.join(prefix, "lib", "python*", "site-packages", "*", "lib64")))
+        # entries already on the path are not added again: the campaign smoke's worker starts with this
+        # environment and its drivers' environments must not differ from it (tools/smoke_inproc.py)
+        have = [p for p in (env.get("LD_LIBRARY_PATH") or "").split(os.pathsep) if p]
+        native = [p for p in native if p not in have]
         if native:
             env["LD_LIBRARY_PATH"] = os.pathsep.join(native + ([env["LD_LIBRARY_PATH"]] if env.get("LD_LIBRARY_PATH") else []))
     if ctx.get("measurement_receipts"):
