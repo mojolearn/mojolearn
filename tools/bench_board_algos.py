@@ -6398,6 +6398,9 @@ def _build_shap(lane, arm, D):
 
 # ---- SVGP -----------------------------------------------------------------
 
+#: ours' SVGP math flags fixed by implementation (see _build_svgp)
+OURS_SVGP_SEMANTICS = {"sgpr_diagonal_correction": False}
+
 def _build_svgp(lane, arm, D):
     np = _np()
     s = LANES[lane]
@@ -6416,7 +6419,11 @@ def _build_svgp(lane, arm, D):
 
         def infer():
             S["pred"] = S["e"].predict(Xq)
-        rec = dict(hyp, __library__="mojolearn", n_inducing=int(Z0.shape[0]))
+        # smoke-fixes (2026-10-14; algos/svgp refused with "sgpr_diagonal_correction missing from ours
+        # read-back"): ours' fixed semantics, source-reviewed in python/mojolearn/_expansion_neighbors.py SVGP
+        # (q(u) at its Titsias 2009 optimum; the predictive mean is the VFE/DTC one, with no FITC diagonal
+        # diag(K_ff - Q_ff) added to the train covariance). The gpytorch arm pins the same value explicitly.
+        rec = dict(hyp, __library__="mojolearn", n_inducing=int(Z0.shape[0]), **OURS_SVGP_SEMANTICS)
         return _with_upload(Runner(info, fit, lambda: {"pred": _arr(S["pred"], np.float64).reshape(-1)},
                                    infer, record=rec),
                             [("inducing_points", Z0), ("X", X), ("y", y)], [("Xq", Xq)])
@@ -6481,8 +6488,16 @@ def _build_svgp(lane, arm, D):
         with a, b, c:
             S["pred"] = S["m"](Xqt).mean
         _torch_sync(torch, dev)
+    # smoke-fixes (2026-10-14; algos/svgp refused with "missing real library implementation read-back:
+    # gpytorch-*"): the SGPR math is gpytorch's own InducingPointKernel (the ExactGP subclass above is the
+    # wrapper gpytorch's API requires); the arm names the class it built.
+    # sgpr_diagonal_correction is read back from gpytorch's own flag inside the context both clocks use.
+    a, b, c = _ctx()
+    with c:
+        correction = bool(gpytorch.settings.sgpr_diagonal_correction.on())
     rec = dict(hyp, __library__="gpytorch", n_inducing=int(Z0.shape[0]), seed=SEED,
-               sgpr_diagonal_correction=False)
+               __implementation__=gpytorch.kernels.InducingPointKernel,
+               sgpr_diagonal_correction=correction)
     return Runner(info, fit, lambda: {"pred": _torch_metric_array(S["pred"])}, infer, record=rec)
 
 
