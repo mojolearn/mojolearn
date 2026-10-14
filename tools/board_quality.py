@@ -8,7 +8,7 @@ Unknown metrics require review; finite output alone is not equal quality.
 """
 import math
 
-POLICY = "mojolearn.quality-parity.v2"
+POLICY = "mojolearn.quality-parity.v3"
 # Absolute score units (one percentage point for bounded scores).
 ABSOLUTE = dict.fromkeys(("accuracy", "auc", "roc_auc", "r2", "recall_at_k",
     "recall_at_10", "trustworthiness_k15", "explained_variance_ratio_sum",
@@ -29,7 +29,12 @@ REFERENCE = {"max_rel_err_vs_fp64": 0.01, "relative_residual": 1e-4,
              # precede the repaired run and do not depend on its timing.
              "rel_diff_vs_sklearn": 1e-4,
              "rel_fro_vs_torch_eager_fp32": 0.01,
-             "optimizer_update_error_vs_torch_fp32": 1e-4}
+             "optimizer_update_error_vs_torch_fp32": 1e-4,
+             # Declared before the repaired dropout measurements. Each arm
+             # must implement channel-wise inverted dropout at the requested
+             # probability; their random masks need not be identical.
+             "dropout_contract_relative_error": 1e-6,
+             "dropout_probability_z": 6.0}
 
 
 def number(value):

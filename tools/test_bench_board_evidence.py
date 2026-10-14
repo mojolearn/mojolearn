@@ -1,6 +1,7 @@
 """CPU-only evidence retention and anti-stale-import regressions."""
 import copy
 import importlib.util
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -24,6 +25,30 @@ P = load("bench_board_params")
 
 
 class Evidence(unittest.TestCase):
+    def test_streamed_retention_verifies_existing_bytes_and_repairs_bad_object(self):
+        payload = b"complete scored arrays"
+        path = self.root / "large.tar.gz"
+        path.write_bytes(payload)
+        ref = dict(local_path=str(path), sha256=E.digest(payload), bytes=len(payload))
+        creds = dict(R2_BUCKET="test", R2_ACCOUNT_ID="test", R2_ACCESS_KEY_ID="test", R2_SECRET_ACCESS_KEY="test")
+        stored = [b"wrong bytes"]
+        calls = []
+        class Response(io.BytesIO):
+            status = 200
+        def opener(request, timeout):
+            calls.append(request.method)
+            if request.method == "PUT":
+                self.assertTrue(hasattr(request.data, "read"))
+                stored[0] = request.data.read()
+                return Response(b"")
+            return Response(stored[0])
+        self.assertEqual(E.upload_streamed(ref, creds, opener)["status"], "verified")
+        self.assertEqual(calls, ["GET", "PUT", "GET"])
+        calls.clear()
+        E.upload_streamed(ref, creds, opener)
+        self.assertEqual(calls, ["GET"])
+        self.assertEqual(path.read_bytes(), payload)
+
     def test_upload_retries_readback_without_reuploading_or_changing_bytes(self):
         import urllib.error
         payload = b"retained scored outputs"

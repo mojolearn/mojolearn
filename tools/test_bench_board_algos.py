@@ -442,6 +442,44 @@ def test_embedding_early_return_retains_actual_inputs_and_implementation(monkeyp
     assert runner.record['params']['input_arrays'] == A._input_array_records([('x', ids), ('weight', weight)])
 
 
+def test_dropout_quality_accepts_different_masks_and_rejects_wrong_work():
+    x = np.arange(1, 4001, dtype=np.float32).reshape(100, 10, 2, 2)
+    y = x / np.float32(.9)
+    z = y.copy()
+    y[:, 0] = 0
+    z[:, 1] = 0
+    for output in (y, z):
+        quality = A.dropout_quality(x, output, .1)
+        assert quality['dropout_contract_relative_error'] < 1e-6
+        assert quality['dropout_probability_z'] == 0
+    assert A.dropout_quality(x, y * 2, .1)['dropout_contract_relative_error'] > .1
+    assert A.dropout_quality(x, np.zeros_like(x), .1)['dropout_probability_z'] > 6
+    elementwise = (x / np.float32(.9)).copy()
+    elementwise[:, :, 0, 0] = 0
+    assert A.dropout_quality(x, elementwise, .1)['dropout_contract_relative_error'] > .1
+    with pytest.raises(ValueError):
+        A.dropout_quality(x, y * np.nan, .1)
+    with pytest.raises(ValueError):
+        A.dropout_quality(np.zeros_like(x), np.zeros_like(x), .1)
+
+
+def test_dropout_scorer_loads_verified_inputs_for_each_saved_arm(monkeypatch, tmp_path):
+    nf = A._tool('neural_fixtures')
+    spec = A.LANES['dropout2d']
+    x = np.ones((40, 10, 2, 2), dtype=np.float32)
+    entry = nf.write_entry(str(tmp_path), 'dropout2d', 'synthetic', nf.variant(spec['task'], {}),
+                           task=spec['task'], params=spec['params'], smoke=False,
+                           x=x, dy=x.copy(), state={})
+    nf.write_manifest(str(tmp_path), [entry], torch_version='fixture', seed=A.SEED)
+    monkeypatch.setattr(A, '_NEURAL_FIXTURES', None)
+    monkeypatch.setenv(nf.ENV_DIR, str(tmp_path))
+    a, b = x / np.float32(.9), x / np.float32(.9)
+    a[:, 0] = 0
+    b[:, 1] = 0
+    quality = A.quality('dropout2d', {}, {'ours': {'y': a}, 'torch-eager-fp32': {'y': b}})
+    assert all(q['dropout_probability_z'] == 0 for q in quality.values())
+
+
 @pytest.mark.parametrize('lane', ['gcn', 'graphsage', 'resnet-block'])
 @pytest.mark.parametrize('comparable', [False, True])
 def test_own_layer_retains_outputs_without_false_opponent_comparison(monkeypatch, tmp_path, lane, comparable):

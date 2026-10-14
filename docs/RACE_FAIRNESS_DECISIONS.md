@@ -16,7 +16,7 @@ Equal iteration caps never prove equal executed work or equal quality. Fixed
 training-step throughput measurements still perform the declared step count;
 they are distinct from time to a quality target.
 
-`tools/board_quality.py` implements `mojolearn.quality-parity.v2`. Its engineering
+`tools/board_quality.py` implements `mojolearn.quality-parity.v3`. Its engineering
 margins are declared by metric, independent of dataset, vendor and timing winner:
 
 | Metric | Admission margin |
@@ -60,6 +60,17 @@ remains in force. Quality admission does not remove that hold. The generated
 paper and website consume the same per-mode, per-phase admitted opponents.
 
 ## Retention and guarded execution
+
+The v3 additions, declared before repaired dropout timing on 2026-10-14, retain
+every v2 margin. Dropout2d uses each library's own RNG. Each saved output must
+zero whole channels or scale their input by `1 / (1 - p)`, with relative contract
+error at most `1e-6`. The dropped fraction among identifiable, nonzero input
+channels must lie within six binomial standard deviations of the declared `p`.
+Both arms must pass. This is a single-sample engineering check, not a proof of
+RNG independence or statistical equivalence. It replaces the broken scorer that
+discarded Torch's dropout outputs and then tried to compare random masks.
+Original errors remain recorded; missing opponent output bytes require a new
+measurement. Margins are fixed without using timing ratios.
 
 New paired measurements retain the frozen harness source and actual loaded
 library/binary bytes; device identity, software/driver versions, resource policy;

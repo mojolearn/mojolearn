@@ -1475,8 +1475,8 @@ _add("batchnorm2d", xlane="cnn", ours="BatchNorm2d", kind="layer", task="batchno
      params=dict(num_features=64, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True),
      notes=["x (64, 64, 56, 56), training-mode statistics, " + _CNN])
 _add("dropout2d", xlane="cnn", ours="Dropout2d", kind="layer", task="dropout2d", block="tensor",
-     datasets=("synthetic",), torch=True, params=dict(p=0.1),
-     notes=["x (64, 64, 56, 56); each library's own RNG, so outputs are not compared"])
+     datasets=("synthetic",), torch=True, params=dict(p=0.1), quality="dropout",
+     notes=["x (64, 64, 56, 56); each library's own RNG; score channel-wise inverted dropout and the declared drop probability"])
 _add("global-avgpool", xlane="cnn", ours=("AdaptiveAvgPool2d", "GlobalAvgPool2d"), kind="layer",
      task="gap", block="tensor", datasets=("synthetic",), torch=True, params=dict(output_size=1),
      notes=["x (64, 512, 7, 7)"])
@@ -2049,6 +2049,7 @@ QUALITY_TEXT = {
     "components": "component count; ARI vs networkx's labels",
     "louvain": "modularity of the partition (conductor, float64)",
     "layer": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+    "dropout": "channel-wise inverted-dropout contract error and dropped-channel binomial deviation",
     "optim": "max relative difference of the parameter after 10 steps vs torch eager fp32",
     "ann": "recall@10 against a float64 NumPy brute force",
     "lu": "relative residual ||A x - B|| / ||B||", "lstsq": "relative residual vs numpy's",
@@ -5310,8 +5311,9 @@ def _build_layer(lane, arm, D):
         _torch_sync(torch, dev)
 
     def outputs():
-        if s["task"] == "dropout2d":
-            return {}
+        # FAIRNESS FIX (2026-10-13 audit): dropout outputs were discarded
+        # because RNG masks differ. Retain them for task-quality checks;
+        # random masks are never required to match the other library's bits.
         return {"y": S["y"].float().cpu().numpy()}
     # FAIRNESS FIX (2026-10-13 audit): the layer record named torch but lost
     # the actual constructed library class. For MoE the harness only reshapes
@@ -6665,6 +6667,34 @@ def transform_quality_reference(lane, D, outs, directory):
     return receipt
 
 
+def dropout_quality(x, y, probability):
+    """Score a saved NCHW output without requiring identical random masks."""
+    np = _np()
+    x, y = np.asarray(x), np.asarray(y)
+    if x.ndim != 4 or x.shape != y.shape or not np.isfinite(x).all() or not np.isfinite(y).all():
+        raise ValueError("dropout quality requires aligned finite NCHW arrays")
+    if not 0 <= probability <= 1:
+        raise ValueError("invalid dropout probability")
+    identifiable = np.any(x != 0, axis=(2, 3))
+    count = int(identifiable.sum())
+    if not count:
+        raise ValueError("all-zero inputs cannot identify the dropout mask")
+    dropped = np.all(y == 0, axis=(2, 3))
+    fraction = float(dropped[identifiable].mean())
+    target = np.zeros_like(x, dtype=np.float64)
+    if probability < 1:
+        target = x.astype(np.float64) / (1 - probability)
+        target[dropped] = 0
+    error = float(np.linalg.norm(y.astype(np.float64) - target)
+                  / max(float(np.linalg.norm(target)), float(np.linalg.norm(x)), 1e-30))
+    variance = probability * (1 - probability) / count
+    deviation = (abs(fraction - probability) / variance ** .5 if variance
+                 else 0. if fraction == probability else float("inf"))
+    return dict(dropout_contract_relative_error=error, dropout_probability_z=deviation,
+                dropped_channel_fraction=fraction, expected_dropout_probability=probability,
+                identifiable_channels=count)
+
+
 def quality(lane, D, outs):
     if LANES[lane]["kind"] == "extra":
         return _EXTRA.quality(lane, D, outs, globals())
@@ -6677,6 +6707,7 @@ def quality(lane, D, outs):
     ref_fn = outs.get(ref_arm)
     q = {}
     exact = None                          # select-exact: the exact RFE selection, computed once
+    dropout_input = None
     for arm, o in outs.items():
         e = {}
         try:
@@ -6842,6 +6873,13 @@ def quality(lane, D, outs):
                 e["n_communities"] = int(np.unique(o["labels"]).shape[0])
                 _, lab = np.unique(o["labels"], return_inverse=True)
                 e["modularity"] = _modularity(D["indptr"], D["indices"], lab)
+            elif qk == "dropout":
+                if dropout_input is None:
+                    NF = _tool("neural_fixtures")
+                    fx = NF.load_for_lane(_NEURAL_FIXTURES or os.environ.get(NF.ENV_DIR),
+                                          lane, s, s["datasets"][0], D)
+                    dropout_input = fx["x"]
+                e = dropout_quality(dropout_input, o["y"], s["params"]["p"])
             elif qk == "layer":
                 r = outs.get("torch-eager-fp32")
                 if "y" in o and r is not None and r["y"].shape == o["y"].shape:

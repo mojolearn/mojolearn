@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tarfile
 import urllib.error
+import urllib.request
 
 SCHEMA = "mojolearn.measurement.v1"
 ROOT = Path(__file__).resolve().parents[1]
@@ -132,6 +133,8 @@ def upload(ref, request=None):
         import bincache
         creds = credentials()
         bucket = creds["R2_BUCKET"]
+        if Path(ref["local_path"]).stat().st_size > 128 * 1024 * 1024:
+            return upload_streamed(ref, creds)
         request = lambda method, key, data=None: bincache.r2_request(creds, method, key, data=data, timeout=300)
     body = Path(ref["local_path"]).read_bytes()
     if digest(body) != ref["sha256"]:
@@ -156,6 +159,57 @@ def upload(ref, request=None):
             # URLError can contain a credential-bearing presigned URL.
             continue
     raise ValueError("R2 evidence request failed; local bytes retained") from None
+
+
+def upload_streamed(ref, creds, opener=None):
+    """Retain large archives with bounded memory and an independent GET hash.
+
+    A retry first checks whether the previous PUT completed. Original local
+    bytes survive every failure. This is transfer work, never a rerun.
+    """
+    import bincache
+    opener = opener or urllib.request.urlopen
+    path = Path(ref["local_path"])
+    size = path.stat().st_size
+    if file_hash(path) != ref["sha256"] or size != ref["bytes"]:
+        raise ValueError("local evidence bytes changed")
+    key = "%s/%s.tar.gz" % (PREFIX, ref["sha256"])
+
+    def verified():
+        h, count = hashlib.sha256(), 0
+        url = bincache.presign("GET", key, 900, creds)
+        with opener(urllib.request.Request(url, method="GET"), timeout=300) as response:
+            if response.status != 200:
+                return False
+            while True:
+                block = response.read(8 * 1024 * 1024)
+                if not block:
+                    break
+                count += len(block)
+                h.update(block)
+        return count == size and h.hexdigest() == ref["sha256"]
+
+    for _ in range(3):
+        try:
+            try:
+                present = verified()
+            except OSError:
+                present = False
+            if not present:
+                url = bincache.presign("PUT", key, 900, creds)
+                with path.open("rb") as stream:
+                    request = urllib.request.Request(url, data=stream, method="PUT",
+                                                     headers={"Content-Length": str(size)})
+                    with opener(request, timeout=300) as response:
+                        if response.status not in (200, 201):
+                            raise ValueError("R2 upload failed (HTTP %s)" % response.status)
+                present = verified()
+            if present:
+                return dict(ref, r2_key=key, r2_bucket=creds["R2_BUCKET"],
+                            status="verified", verification="GET sha256")
+        except OSError:
+            continue  # never expose a credential-bearing URL in the error
+    raise ValueError("R2 streamed evidence transfer failed; local bytes retained")
 
 
 def public_ref(ref):
