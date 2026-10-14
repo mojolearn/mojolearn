@@ -1,5 +1,14 @@
 # Measurement decisions
 
+## 2026-10-14 owner decision: parameters decide fairness; quality is always shown
+
+This supersedes "quality before time" below. A race is fair when every work-changing parameter is set
+explicitly and identically on both arms (not each library's default), proven by read-back. Quality never
+decides whether a race is shown: both arms' quality is always recorded and shown beside the time, and it is
+fine for mojolearn to be better. The margins below remain only as annotations
+(`quality_comparison`); no verdict, exclusion or rerace mark rests on them. Quality is how we judge changes
+to our own algorithms: speed is good, but never at the expense of quality.
+
 ## 2026-10-13 owner clarification: quality before time
 
 This supersedes the same-day rule excluding different executed iteration counts.

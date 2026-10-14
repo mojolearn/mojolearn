@@ -1757,7 +1757,8 @@ NOT_SCORED = "not-scored"
 def mark_not_scored(cells):
     """"ok" only if scored (lane harness-evidence, 2026-10-14). A cell timed in every round whose quality scorer
     failed or never ran gets status "not-scored" and `scorer_error`; its times stay exactly as measured. The
-    fairness rule reports it as "quality not scored (scorer failed)", never as a quality failure of the arm.
+    board shows "quality not scored (scorer failed)"; it is a display status, never an exclusion (quality is
+    always shown and never gates a race, Andrew 2026-10-14), and never a quality failure of the arm.
     A context cell (not an opponent) is left alone: it is never judged."""
     for c in cells:
         if c.get("status") != "ok" or c.get("mode") == "context":
@@ -2321,7 +2322,8 @@ def add_ratios(cells):
     An opponent row whose hardware differs from ours (tools/board_hardware.py comparable) gets no ratio:
     `hardware_comparable` False, rendered NOT-COMPARABLE (different hardware)."""
     HW.mark(cells)
-    ok = [c for c in cells if c["status"] == "ok" and c["median_ms"]]
+    # a "not-scored" cell is timed in full; quality is shown, never gated (Andrew, 2026-10-14)
+    ok = [c for c in cells if c["status"] in ("ok", NOT_SCORED) and c["median_ms"]]
     ours_id = ours_of(ok, "identical")
     ours_fast = ours_of(ok, "fast")
     done = {id(c) for c in ok}
