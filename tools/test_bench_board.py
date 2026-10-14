@@ -474,8 +474,10 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # FAIRNESS FIX (2026-10-13 audit, decomposition group): 340 since the classical2 tsvd race on
     # Apple lost its scikit-learn arm (ARPACK, a different algorithm from ours' covariance_eigh;
     # bench_board_more.REFUSED): 1 lane x 2 datasets
-    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 340
-    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 340 + sum(len(r["arms"]) for r in algos)) in text
+    # smoke-fixes (2026-10-14): 331 since gbdt-multiclass, gbdt-categorical, gbdt-rank-pairlogit and gbdt-rank-yetirank
+    # race CatBoost only (the tree driver refuses XGBoost/LightGBM there by name on every device): -9 trees cells
+    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 331
+    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 331 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -833,8 +835,10 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # Apple 342 -> 340 and classical2 130 -> 128, AMD 228 -> 226 and classical2 86 -> 84).
 # FAIRNESS FIX (2026-10-13 audit, neural group): the mamba-ssm arms add 6 NVIDIA and 3 AMD
 # neural cells (NVIDIA 267 -> 273 and neural 88 -> 94, AMD 226 -> 229 and neural 64 -> 67).
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 340, 128, 82),
-                                                      ("nvidia", 273, 88, 94),
+# smoke-fixes (2026-10-14): gbdt-multiclass, -categorical, -rank-pairlogit, -rank-yetirank race CatBoost only (XGBoost and
+# LightGBM are refused there by name on every device): Apple 340 -> 331, NVIDIA 273 -> 264; AMD unchanged at 229.
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 331, 128, 82),
+                                                      ("nvidia", 264, 88, 94),
                                                       ("amd", 229, 84, 67)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
