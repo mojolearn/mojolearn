@@ -312,7 +312,8 @@ def test_smoke_writes_rows_text_and_uploads_after_every_recipe(tmp_path, monkeyp
             return dict(status='done', rc=1, seconds=2.0), None
         if rid == ids[2]:          # the recipe's own alarm fired: STARTED, and the loop went on
             C.Path(log).write_text('bench_board: setup\nbench_board: [1/1] params probe\n')
-            return dict(status='timeout', rc=None, seconds=timeout), None
+            return dict(status='timeout', rc=None, seconds=timeout,
+                        stopped_at=['tools/bench_board.py:2700 params_probe']), None
         if rid == ids[3]:          # the check raised: FAILED with the exception, and the loop went on
             return dict(status='error', rc=None, error="KeyError('lr')", seconds=0.3), None
         # the worker never answered: the watchdog restarted it; the row is STARTED with the restart
@@ -349,6 +350,7 @@ def test_smoke_writes_rows_text_and_uploads_after_every_recipe(tmp_path, monkeyp
     started = text.split('STARTED, NO VERDICT')[1].split('FAILED TO START')[0]
     assert ids[2] in started and ids[4] in started and ids[0] not in started
     assert 'params probe' in started                                # how far it got
+    assert 'stopped in tools/bench_board.py:2700 params_probe' in started
     assert ids[3] in text.split('FAILED TO START')[1]
     assert not (out / 'campaign.json').exists()                     # a smoke never starts a timed campaign
     with pytest.raises(ValueError):

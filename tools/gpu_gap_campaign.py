@@ -330,8 +330,9 @@ def smoke_text(doc):
     lines.append("STARTED, NO VERDICT WITHIN %ss (%d): these need a longer look" % (doc["timeout_s"], len(started)))
     for r in started:
         got = r.get("reached") or {}
-        lines.append("   %s [%s] reached: %s%s" % (r["id"], r["mode"], got.get("last_board_line") or "no board line",
-                                                   "; parameter probe started" if got.get("parameter_probe_started") else ""))
+        lines.append("   %s [%s] reached: %s%s%s" % (r["id"], r["mode"], got.get("last_board_line") or "no board line",
+                                                     "; parameter probe started" if got.get("parameter_probe_started") else "",
+                                                     "; stopped in %s" % got["stopped_at"][-1] if got.get("stopped_at") else ""))
     failed = [r for r in rows if r["status"] == "FAILED"]
     lines.append("")
     lines.append("FAILED TO START (%d)" % len(failed))
@@ -626,6 +627,8 @@ def worker_row(race, mode, reply, restart, directory, log, timeout):
     rc = reply.get("rc") if status == "done" else (None if status == "timeout" else 1)
     row = smoke_row(race, mode, rc, reply.get("seconds"), directory, log, timeout)
     row["worker"] = {k: reply.get(k) for k in ("status", "error", "children_killed", "arm_servers")}
+    if reply.get("stopped_at") and isinstance(row.get("reached"), dict):
+        row["reached"]["stopped_at"] = reply["stopped_at"]     # where the recipe's timer stopped its check
     if status == "error" and row["status"] == "FAILED":
         row["problems"].insert(0, "recipe check raised in the smoke worker: %s" % reply.get("error"))
     return row

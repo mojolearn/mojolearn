@@ -24,6 +24,7 @@ def test_the_alarm_records_a_timeout_and_the_next_recipe_still_runs(tmp_path):
     assert reply['status'] == 'timeout' and reply['rc'] is None
     assert time.time() - t0 < 10
     assert 'TIMER FIRED' in (tmp_path / 'a.log').read_text()
+    assert any('<lambda>' in f for f in reply['stopped_at'])    # how far it got
     reply = SW.run_recipe(lambda argv: 0, [], tmp_path / 'b.log', 5)
     assert reply['status'] == 'done' and reply['rc'] == 0
 

@@ -267,11 +267,14 @@ def run_recipe(fn, argv, log, timeout):
                     reply.update(status="done", rc=code or 0)
                 finally:
                     disarm_alarm()
-            except RecipeTimeout:
+            except RecipeTimeout as exc:
                 if not finished:
-                    reply.update(status="timeout", rc=None)
+                    frames = traceback.extract_tb(exc.__traceback__)
+                    reply.update(status="timeout", rc=None, stopped_at=[
+                        "%s:%d %s" % (os.path.relpath(f.filename, str(ROOT)) if f.filename.startswith(str(ROOT))
+                                      else f.filename, f.lineno, f.name) for f in frames[-6:]])
                     print("=== smoke worker: TIMER FIRED at %ss; stopped here:\n%s" % (
-                        timeout, "".join(traceback.format_stack(limit=12))[-3000:]), flush=True)
+                        timeout, "".join(traceback.format_list(frames[-12:]))[-3000:]), flush=True)
             except Exception as exc:  # noqa: BLE001 - recorded, the worker goes on
                 traceback.print_exc()
                 reply.update(status="error", rc=None, error=repr(exc)[:1200])
