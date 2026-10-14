@@ -1311,10 +1311,10 @@ def list_objects(creds, prefix):
         token = root.findtext(ns + "NextContinuationToken")
 
 
-def r2_request(creds, method, key, headers=None, data=None):
+def r2_request(creds, method, key, headers=None, data=None, timeout=120):
     url = presign(method, key, 600, creds, headers=headers)
     req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=120) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.status, r.read()
 
 

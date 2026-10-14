@@ -24,6 +24,22 @@ P = load("bench_board_params")
 
 
 class Evidence(unittest.TestCase):
+    def test_upload_retries_readback_without_reuploading_or_changing_bytes(self):
+        import urllib.error
+        payload = b"retained scored outputs"
+        path = self.root / "retry.tar.gz"
+        path.write_bytes(payload)
+        calls = []
+        def request(method, key, data=None):
+            calls.append(method)
+            if calls == ["PUT", "GET"]:
+                raise urllib.error.URLError("temporary disconnect")
+            return 200, payload if method == "GET" else b""
+        result = E.upload(dict(local_path=str(path), sha256=E.digest(payload), bytes=len(payload)), request=request)
+        self.assertEqual(calls, ["PUT", "GET", "GET"])
+        self.assertEqual(result["status"], "verified")
+        self.assertEqual(path.read_bytes(), payload)
+
     def test_shape_recovery_uses_original_verified_receipt_and_preserves_observations(self):
         arrays = [dict(shape=[32, 16], dtype="float32", sha256="a" * 64)]
         cell = dict(arm="ours", status="ok", median_ms=12.3, quality={"relative_residual": 1e-6},

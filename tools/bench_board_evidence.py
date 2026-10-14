@@ -132,22 +132,30 @@ def upload(ref, request=None):
         import bincache
         creds = credentials()
         bucket = creds["R2_BUCKET"]
-        request = lambda method, key, data=None: bincache.r2_request(creds, method, key, data=data)
+        request = lambda method, key, data=None: bincache.r2_request(creds, method, key, data=data, timeout=300)
     body = Path(ref["local_path"]).read_bytes()
     if digest(body) != ref["sha256"]:
         raise ValueError("local evidence bytes changed")
     key = "%s/%s.tar.gz" % (PREFIX, ref["sha256"])
-    try:
-        status, _ = request("PUT", key, body)
-        if status not in (200, 201):
-            raise ValueError("R2 upload failed (HTTP %s)" % status)
-        status, back = request("GET", key)
-        if status != 200 or digest(back) != ref["sha256"]:
-            raise ValueError("R2 evidence read-back mismatch")
-    except urllib.error.URLError:
-        # URLError can contain a credential-bearing presigned URL.
-        raise ValueError("R2 evidence request failed; local bytes retained") from None
-    return dict(ref, r2_key=key, r2_bucket=bucket, status="verified", verification="GET sha256")
+    # FAIRNESS FIX (2026-10-13 audit): a transient transfer failure stopped
+    # final retention even when the original upload had completed. Retry the
+    # missing transfer only; never remeasure or reseal a completed race.
+    uploaded = False
+    for _ in range(3):
+        try:
+            if not uploaded:
+                status, _ = request("PUT", key, body)
+                if status not in (200, 201):
+                    raise ValueError("R2 upload failed (HTTP %s)" % status)
+                uploaded = True
+            status, back = request("GET", key)
+            if status != 200 or digest(back) != ref["sha256"]:
+                raise ValueError("R2 evidence read-back mismatch")
+            return dict(ref, r2_key=key, r2_bucket=bucket, status="verified", verification="GET sha256")
+        except OSError:
+            # URLError can contain a credential-bearing presigned URL.
+            continue
+    raise ValueError("R2 evidence request failed; local bytes retained") from None
 
 
 def public_ref(ref):
