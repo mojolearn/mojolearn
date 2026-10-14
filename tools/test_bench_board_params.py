@@ -81,6 +81,8 @@ def test_in_memory_kmeans_does_not_waive_subsampling_or_model_changes():
     assert BP.check("kmeans", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
     b._p["device_buffer_samples"] = 0; b._p["n_clusters"] = 9
     assert BP.check("kmeans", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
+    b._p["n_clusters"] = 8; a._p["init_size"] = 99
+    assert BP.check("kmeans", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
 
 
 def test_brute_knn_tiling_is_not_a_model_parameter_but_k_is():

@@ -713,7 +713,7 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
                 return "both KMeans objectives minimize squared Euclidean distances; hipVS names the squared distance explicitly"
             if param == "init_centroids" and ours.get(param) is None and param not in theirs:
                 return "no supplied initial centroids; hipVS fit(params, X) uses the separately compared init_method"
-            if param in ("hierarchical", "hierarchical_n_iters") and theirs.get("hierarchical") is False:
+            if param in ("hierarchical", "hierarchical_n_iters") and param not in ours and theirs.get("hierarchical") is False:
                 return "hipVS hierarchical=False selects ordinary KMeans; hierarchical_n_iters is inactive"
         if lane == "knn" and param == "query_tile" and ours.get("algorithm") == theirs.get("algorithm") == "brute" and isinstance(ours.get(param), int) and ours[param] >= 0 and param not in theirs:
             return "both brute-force searches cover every index/query pair; query_tile only partitions our complete query work"
@@ -730,13 +730,13 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
         if param == "metric_params" and ours.get(param) is None and theirs.get(param) is None:
             return "None means no metric keyword overrides, p=2 on both implementations (density.py; kernel_density.pyx)"
     if lane == "kmeans":
-        if param in ("device_buffer_samples", "init_size") and theirs.get("device_buffer_samples") == 0:
+        if param in ("device_buffer_samples", "init_size") and param not in ours and theirs.get("device_buffer_samples") == 0:
             return "cuML device_buffer_samples=0 uses the full in-memory dataset; init_size only applies to its out-of-core path (kmeans.pyx)"
         if param == "init_centroids" and ours.get(param) is None and param not in theirs:
             return "no supplied centroids; both use the separately compared init method (cluster.py; kmeans.pyx)"
         if param == "metric" and ours.get(param) == "euclidean" and param not in theirs:
             return "cuML KMeans fixes DistanceType.L2Expanded, matching our squared Euclidean objective (kmeans.pyx set_params)"
-        if param == "max_samples_per_batch" and isinstance(theirs.get(param), int) and theirs[param] > 0:
+        if param == "max_samples_per_batch" and param not in ours and isinstance(theirs.get(param), int) and theirs[param] > 0:
             return "cuML distance-computation batch size partitions all rows without subsampling; library implementation tiling is retained, not a model setting (kmeans.pyx)"
     if lane == "knn" and ours.get("algorithm") == theirs.get("algorithm") == "brute":
         if param in ("algo_params", "metric_params") and theirs.get(param) is None and param not in ours:
