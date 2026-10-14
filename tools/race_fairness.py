@@ -108,6 +108,29 @@ def pairing(race, mode, phase, observations_only=False):
         records = [dict(c, main_board={k: v for k, v in c["main_board"].items()
                                       if k not in ("identity", "newer_failed")})
                    if isinstance(c.get("main_board"), dict) else c for c in records]
+        # FAIRNESS FIX (2026-10-13 audit): rebuilding from the same saved run
+        # changed provenance labels and inserted empty paired-import fields,
+        # discarding supported audits despite unchanged measurement evidence.
+        for c in records:
+            mb = c.get("main_board")
+            if isinstance(mb, dict):
+                ob = mb.get("observation")
+                if isinstance(ob, dict):
+                    mb["observation"] = {k: v for k, v in ob.items()
+                        if not (k in ("paired_race", "paired_box", "measured_cell") and v is None)}
+                settings = c.get("settings")
+                if (isinstance(settings, dict) and re.fullmatch(
+                        r"main board: one scored run of ours \((previous|algos|gridbb|json|paired)\)",
+                        str(settings.get("source", "")))):
+                    c["settings"] = {k: v for k, v in settings.items() if k != "source"}
+                source = c.get("source")
+                if isinstance(source, str) and source.startswith("main@") and "; identity vs " in source:
+                    c["source"] = source.split("; identity vs ", 1)[0]
+            copied = c.get("copied_from")
+            if isinstance(copied, dict) and all(copied.get(k) for k in ("board", "race", "box", "measured")):
+                # Local checkout location is not the measuring source revision;
+                # board/run/worker identity and every cell byte still compare.
+                c["copied_from"] = {k: v for k, v in copied.items() if k != "path"}
     basis = dict(cells=records,
                  params=race.get("params"), params_check=race.get("params_check"),
                  lane=race.get("lane"), dataset=race.get("dataset"),
@@ -326,6 +349,10 @@ def apply(board, prev=None, today=None, upgrade_legacy=False):
             prev_rr = (((prev or {}).get("races") or {}).get(rid)
                        or ((prev or {}).get("extra_races") or {}).get(rid) or {})
             old = prev_rr.get("audit") or {}
+            for entry in prev_rr.get("audit_history") or []:
+                history = rr.setdefault("audit_history", [])
+                if entry not in history:
+                    history.append(entry)
             old_ex = rr.get("opponents_excluded") or prev_rr.get("opponents_excluded")
             basis = exclusion_basis(rr)
             if old_ex and (old_ex.get("basis") == basis or (upgrade_legacy and not old_ex.get("basis"))):
@@ -351,6 +378,22 @@ def apply(board, prev=None, today=None, upgrade_legacy=False):
                         if archived not in history:
                             history.append(archived)
                     prior = entry if keep else None
+                    if (entry and not keep and entry.get("pairing") == pairing(prev_rr, mode, phase)):
+                        # Adding another opponent must not erase an unchanged
+                        # supported per-arm audit. Recheck every arm's quality
+                        # and clocks below; never transfer a row-wide finding.
+                        unchanged = {}
+                        field = "cells" if phase == "fit" else "infer_cells"
+                        for arm, finding in (entry.get("opponents") or {}).items():
+                            if not (finding.get("audit") and finding.get("evidence")
+                                    and finding.get("verdict") in ("FAIR", "TIE", "MATCHED")):
+                                continue
+                            subsets = [dict(r, **{field: [c for c in phase_cells(r, phase)
+                                if c.get("arm") in (our_arm(mode), arm)]}) for r in (rr, prev_rr)]
+                            if pairing(subsets[0], mode, phase, True) == pairing(subsets[1], mode, phase, True):
+                                unchanged[arm] = finding
+                        if unchanged:
+                            prior = {"opponents": unchanged}
                     if entry and (not keep or BQ.POLICY not in entry.get("rule", "")):
                         history = rr.setdefault("audit_history", [])
                         if entry not in history:

@@ -78,6 +78,58 @@ class RaceFairness(unittest.TestCase):
         RF.apply(changed,old,"2026-10-14")
         self.assertEqual(changed["races"]["r"]["rerace"],"x")
 
+    def test_rebuild_bookkeeping_keeps_supported_audit_and_history(self):
+        old = board(r=race("ridge", [("lib", 10, {})], params_check="not checked"))
+        rr = old["races"]["r"]
+        rr["cells"][0].update(main_board={"sha": "frozen", "observation": {"job": "a1"}},
+            settings={"rounds": 1, "source": "main board: one scored run of ours (previous)"},
+            source="main@frozen amd/a1; identity vs the nvidia columns: n/a")
+        rr["cells"][1]["copied_from"] = dict(board="saved", race="ridge/full", box="worker",
+            measured="2026-10-13", path="/old/checkout/board.json")
+        rr["audit"] = {"identical/fit": dict(verdict="FAIR", opponent="lib", audit="human",
+            evidence="retained worker and settings review", reason="same workload",
+            pairing=RF.pairing(rr, "identical", "fit"))}
+        RF.apply(old)
+        old["races"]["r"]["audit_history"] = [{"reason": "original retained finding"}]
+        new = copy.deepcopy(old)
+        nr = new["races"]["r"]
+        nr.pop("audit_history")
+        nr["cells"][0]["settings"]["source"] = "main board: one scored run of ours (algos)"
+        nr["cells"][0]["main_board"]["observation"].update(paired_box=None, paired_race=None, measured_cell=None)
+        nr["cells"][0]["source"] = "main@frozen amd/a1; identity vs nvidia-l40s: MATCH"
+        nr["cells"][1]["copied_from"]["path"] = "/new/checkout/board.json"
+        saved = copy.deepcopy(nr["cells"])
+        RF.apply(new, old)
+        self.assertEqual(nr["audit"]["identical/fit"]["verdict"], "FAIR")
+        self.assertIn({"reason": "original retained finding"}, nr["audit_history"])
+        self.assertEqual(nr["cells"], saved)
+        for kind in ("settings", "worker", "quality", "clock", "source", "paired_evidence"):
+            changed = copy.deepcopy(new)
+            cells = changed["races"]["r"]["cells"]
+            if kind == "settings": cells[0]["settings"]["rounds"] = 2
+            elif kind == "worker": cells[1]["copied_from"]["box"] = "other-worker"
+            elif kind == "quality": cells[1]["quality"]["rmse"] = 8
+            elif kind == "clock": cells[1]["comparability"]["span"]["input_home"] = "device"
+            elif kind == "source": cells[0]["source"] = "main@different amd/a1; identity vs nvidia-l40s: MATCH"
+            else: cells[0]["main_board"]["observation"]["measured_cell"] = {"measurement": {"id": "new"}}
+            RF.apply(changed, old)
+            self.assertEqual(changed["races"]["r"]["rerace"], "x", kind)
+
+    def test_added_opponent_does_not_discard_unchanged_supported_arm(self):
+        old = board(r=race("ridge", [("lib", 10, {})], params_check="not checked"))
+        rr = old["races"]["r"]
+        rr["audit"] = {"identical/fit": dict(verdict="FAIR", opponent="lib", audit="human",
+            evidence="retained worker review", pairing=RF.pairing(rr, "identical", "fit"))}
+        RF.apply(old)
+        new = copy.deepcopy(old)
+        new["races"]["r"]["cells"].append(dict(rr["cells"][1], arm="new-library"))
+        RF.apply(new, old)
+        self.assertEqual(new["races"]["r"]["audit"]["identical/fit"]["admitted_opponents"], ["lib"])
+        changed = copy.deepcopy(new)
+        changed["races"]["r"]["cells"][1]["version"] = "new-version"
+        RF.apply(changed, old)
+        self.assertEqual(changed["races"]["r"]["rerace"], "x")
+
     def test_actual_iterations_are_evidence_not_an_admission_gate(self):
         rr=race("linearsvr",[("lib",10,{})])
         for c in rr["cells"]:
