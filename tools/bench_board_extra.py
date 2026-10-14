@@ -36,9 +36,15 @@ BPE_VOCAB = 4096
 GRAD_TENSORS = 8
 GRAD_SIZE = 2_097_152             # 8 x 2M = 16,777,216 values, the optimizer lanes' size
 CE_ROWS, CE_CLASSES = 8192, 8192
+# smoke-fixes (2026-10-14; algos/qn-reg: "delta, warm_start missing from ours read-back"): both
+# pinned on ours and cuML. delta: the objective-change stop; None meant tol * 0.01 on both (cuML
+# 26.08 python/cuml/cuml/solvers/qn.pyx:113 change_tol = delta if not None else tol * 0.01; ours
+# python/mojolearn/linear_model.py QNRegressor.fit, the same rule), now that value explicitly.
+# warm_start=False: cuML starts from zero unless warm_start and a prior coef_ (qn.pyx:552); ours
+# takes only False (QNRegressor.__init__).
 QN = dict(loss="squared_error", fit_intercept=True, l1_strength=0.0, l2_strength=0.0,
-          max_iter=1000, tol=1e-4, linesearch_max_iter=50, lbfgs_memory=5,
-          penalty_normalized=True)
+          max_iter=1000, tol=1e-4, delta=1e-4 * 0.01, linesearch_max_iter=50, lbfgs_memory=5,
+          warm_start=False, penalty_normalized=True)
 SCHED = {
     "lr-step": ("StepLR", dict(base_lr=0.1, step_size=1000, gamma=0.5)),
     "lr-exponential": ("ExponentialLR", dict(base_lr=0.1, gamma=0.9999)),
