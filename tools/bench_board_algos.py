@@ -5211,7 +5211,9 @@ def _build_layer(lane, arm, D):
         output_key = "y" if comparable else "own_y"
         out = lambda: {output_key: _arr(
             S["y"].numpy() if getattr(S["y"], "_device_tensor", False) else S["y"], np.float32)}
-        rec = dict(kw, __library__="mojolearn")
+        rec = dict(kw, __library__="mojolearn", __implementation__=cls,
+                   input_arrays=_input_array_records([("x", x_cpu)] +
+                       [("extra%d" % i, a) for i, a in enumerate(extra_cpu)] + sorted(state.items())))
         # the host x and extra forward arrays (the probe reads input_home=device and stands down
         # when x went to the device before the clock)
         return _with_upload(Runner(info, fit, out, infer, record=rec),
@@ -5311,7 +5313,8 @@ def _build_layer(lane, arm, D):
     # tensors around transformers' block; witness that block, not its wrapper.
     implementation = type(mod.blk) if s["task"] == "moe" else type(mod)
     rec = dict(s["params"], __library__="torch", __implementation__=implementation,
-               seed=SEED)   # torch.manual_seed(7) before make()
+               seed=SEED, input_arrays=_input_array_records([("x", x_cpu.numpy())] +
+                   [("extra%d" % i, a.numpy()) for i, a in enumerate(extra_cpu)] + sorted(state.items())))
     if s["task"] in ("gcn", "sage"):
         rec["in_channels"] = x_cpu.shape[1]
     return Runner(info, fit, outputs, infer, record=rec)
@@ -5323,6 +5326,16 @@ def _opt_state_snapshot(torch, opt, p):
     import copy
     return {k: (v.detach().clone() if torch.is_tensor(v) else copy.deepcopy(v))
             for k, v in opt.state.get(p, {}).items()}
+
+
+def _input_array_records(arrays):
+    # FAIRNESS FIX (2026-10-13 audit): synthetic workers construct their
+    # real inputs after dataset preparation. Empty prepared metadata was not
+    # a measured shape. Witness the full actual arrays before any clock.
+    np = _np()
+    return [dict(name=name, shape=list(a.shape), dtype=str(a.dtype),
+                 sha256=hashlib.sha256(a.tobytes()).hexdigest())
+            for name, value in arrays for a in [np.ascontiguousarray(value)]]
 
 
 def _opt_state_reset(torch, opt, p, snap):
@@ -5352,6 +5365,7 @@ def _build_optim(lane, arm, D):
     rng = np.random.default_rng(SEED)
     p0 = rng.standard_normal(P).astype(np.float32)
     grads = [rng.standard_normal(P).astype(np.float32) * 0.01 for _ in range(STEPS)]
+    input_arrays = _input_array_records([("p0", p0)] + [("grad%d" % i, g) for i, g in enumerate(grads)])
     S = {}
     hyper = dict(s["params"])
     if arm in OURS_ARMS:
@@ -5419,7 +5433,7 @@ def _build_optim(lane, arm, D):
             if S.get("opt") is not None:
                 S["opt"].params_to_host()          # outside the clock (outputs are read after it)
             return {"param": np.asarray(S["p"], dtype=np.float32)}
-        rec = dict(hyper, __library__="mojolearn")
+        rec = dict(hyper, __library__="mojolearn", __implementation__=cls, input_arrays=input_arrays)
         return _with_upload(Runner(info, fit, outputs, record=rec),
                             [("p0", p0)] + [("grad%d" % i, gr) for i, gr in enumerate(grads)])
     import torch
@@ -5471,6 +5485,7 @@ def _build_optim(lane, arm, D):
     info["build_once"] = "parameter, optimizer and compiled step built once; reset in place per round"
     # read back from the constructed optimizer (its defaults are what every step uses)
     rec = _BP().arm_record(opt)
+    rec["params"]["input_arrays"] = input_arrays
 
     def fit():
         with torch.no_grad():
