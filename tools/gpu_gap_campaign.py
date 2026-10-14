@@ -192,6 +192,36 @@ DRIVERS = ("bench_board", "bench_board_algos", "bench_board_neural", "bench_boar
            "classical_two_datasets", "bench_board_params", "race_scorer_preflight", "neural_fixtures")
 
 
+#: Andrew, 2026-10-14: "keep the default 5 s, and give a longer timer ONLY to the recipes that need it". Per recipe id
+#: (every mode), never global: {recipe id: (seconds, reason)}. A row records the timeout it ran under. Rule for the
+#: value: the smallest that covers the recipe's measured check with margin; where it never finished within its timer
+#: on the box that was slow (no measurement), 30 s. Evidence: apple-smoke-20261014/smoke-b5 and
+#: gpu-rerun-20261014/final-nvidia/smoke-b4 (STARTED rows); the same recipes finish in 1-4.4 s on other boxes.
+_SLOW_UNMEASURED = "STARTED at 5 s with no measurement of its real check time (%s); 30 s rule"
+SMOKE_SLOW = {
+    "neural/lm-train-step/bytes/shape=full": (30.0, _SLOW_UNMEASURED % "Apple fast; ours-fast starts its own-tier arm "
+                                                                      "server inside the check"),
+    "neural/lm-forward/bytes/shape=full": (30.0, _SLOW_UNMEASURED % "Apple fast; ours-fast starts its own-tier arm "
+                                                                    "server inside the check"),
+    "neural/gemm/gaussian/shape=full": (30.0, _SLOW_UNMEASURED % "Apple fast"),
+    "algos/moe/synthetic/rows=full": (30.0, _SLOW_UNMEASURED % "Apple fast+identical, NVIDIA; 4.1-4.4 s where it "
+                                                                "finished: the 69M-parameter twin built twice per arm"),
+    "algos/gcn/taxi/rows=full": (30.0, _SLOW_UNMEASURED % "Apple identical, killed at 7.5 s"),
+    "algos/gcn/istella/rows=full": (30.0, _SLOW_UNMEASURED % "Apple identical, killed at 7.0 s"),
+    "classical/kmeans/istella/rows=full": (30.0, _SLOW_UNMEASURED % "NVIDIA; 1.6 s on AMD"),
+    "classical/pca/istella/rows=full": (30.0, _SLOW_UNMEASURED % "NVIDIA"),
+    "classical/ols/istella/rows=full": (30.0, _SLOW_UNMEASURED % "NVIDIA; 1.3 s on AMD"),
+}
+
+
+def recipe_timeout(args, race):
+    """(seconds, reason) for one recipe's check: --smoke-timeout, or its SMOKE_SLOW entry when that is longer."""
+    slow = SMOKE_SLOW.get(race["id"])
+    if slow and slow[0] > args.smoke_timeout:
+        return slow
+    return args.smoke_timeout, "default --smoke-timeout"
+
+
 def smoke_command(args, race, directory, mode, receipts):
     """One recipe's preflight-only board command: parameter probe plus scorer preflight, nothing timed. The
     smoke worker runs it in process (bench_board.main(cmd[2:])); the stage runs it as a process."""
@@ -332,10 +362,14 @@ def smoke_text(doc):
             lines.append("   %s [%s] %s" % (r["id"], r["mode"], str(text)[:400]))
     started = [r for r in rows if r["status"] == "STARTED"]
     lines.append("")
-    lines.append("STARTED, NO VERDICT WITHIN %ss (%d): these need a longer look" % (doc["timeout_s"], len(started)))
+    lines.append("STARTED, NO VERDICT WITHIN ITS TIMER (default %ss; per-recipe SMOKE_SLOW shown) (%d): these need a "
+                 "longer look" % (doc["timeout_s"], len(started)))
     for r in started:
         got = r.get("reached") or {}
-        lines.append("   %s [%s] reached: %s%s%s" % (r["id"], r["mode"], got.get("last_board_line") or "no board line",
+        own = r.get("timeout_s")
+        lines.append("   %s [%s]%s reached: %s%s%s" % (r["id"], r["mode"],
+                                                     " (timer %ss)" % own if own not in (None, doc["timeout_s"]) else "",
+                                                     got.get("last_board_line") or "no board line",
                                                      "; parameter probe started" if got.get("parameter_probe_started") else "",
                                                      "; stopped in %s" % got["stopped_at"][-1] if got.get("stopped_at") else ""))
     failed = [r for r in rows if r["status"] == "FAILED"]
@@ -779,6 +813,7 @@ def run_smoke(args, plans, out):
                 key = "%s|%s" % (mode, race["id"])
                 name = "%s.%s" % (mode, race["id"].replace("/", "."))
                 directory, log = out / "recipes" / name, out / "logs" / (name + ".log")
+                timeout, timeout_reason = recipe_timeout(args, race)
                 try:
                     log.parent.mkdir(parents=True, exist_ok=True)
                     if not worker.alive():
@@ -787,7 +822,7 @@ def run_smoke(args, plans, out):
                         restart["started"] = worker.alive()
                         worker.report["restarts"].append(restart)
                     if not worker.alive():
-                        row = failed_row(race, mode, args.smoke_timeout, "smoke worker not running: %s" % (
+                        row = failed_row(race, mode, timeout, "smoke worker not running: %s" % (
                             (worker.report.get("starts") or [{}])[-1].get("problem")))
                     else:
                         # the recipe's inputs, loaded once and hashed once, before its own timer starts
@@ -795,12 +830,13 @@ def run_smoke(args, plans, out):
                                                              or {}))
                         staged = worker.stage(request, args.smoke_stage_timeout) if request else None
                         argv = smoke_command(args, race, directory, mode, receipts)[2:]
-                        reply, restart = worker.recipe(key, argv, log, args.smoke_timeout)
-                        row = worker_row(race, mode, reply, restart, directory, log, args.smoke_timeout)
+                        reply, restart = worker.recipe(key, argv, log, timeout)
+                        row = worker_row(race, mode, reply, restart, directory, log, timeout)
                         if staged is not None:
                             row["stage_data"] = staged
                 except Exception as exc:  # noqa: BLE001 - recorded, the loop goes on
-                    row = failed_row(race, mode, args.smoke_timeout, "smoke harness raised: %r" % (exc,))
+                    row = failed_row(race, mode, timeout, "smoke harness raised: %r" % (exc,))
+                row["timeout_s"], row["timeout_reason"] = timeout, timeout_reason
                 doc["rows"][key] = row
                 doc["worker"] = worker.report
                 members.update({name + "/" + k: v for k, v in recipe_members(row, log, directory).items()})

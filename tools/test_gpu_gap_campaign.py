@@ -491,3 +491,16 @@ def test_smoke_worker_stage_restarts_a_worker_that_does_not_answer(tmp_path):
     got = w.stage(dict(op='stage-data', key='algos/adam/synthetic/rows=full', items=[]), 30)
     assert got['status'] == 'failed' and 'no stage-data answer within 30s' in got['problem']
     assert calls == ['kill', 'start'] and w.report['restarts'][0]['after'].startswith('stage-data ')
+
+
+def test_only_the_slow_table_recipes_get_a_longer_timer_and_rows_record_it():
+    # Andrew 2026-10-14: default 5 s; a longer timer only for the recipes in SMOKE_SLOW, never global
+    args = SimpleNamespace(smoke_timeout=5.0)
+    slow = {'id': 'algos/moe/synthetic/rows=full'}
+    plain = {'id': 'algos/adam/synthetic/rows=full'}
+    assert C.recipe_timeout(args, plain) == (5.0, 'default --smoke-timeout')
+    seconds, why = C.recipe_timeout(args, slow)
+    assert seconds == C.SMOKE_SLOW[slow['id']][0] > 5.0 and why
+    assert all(isinstance(v, tuple) and v[0] > 5.0 and v[1] for v in C.SMOKE_SLOW.values())
+    # an explicit longer --smoke-timeout is never shortened by the table
+    assert C.recipe_timeout(SimpleNamespace(smoke_timeout=60.0), slow) == (60.0, 'default --smoke-timeout')
