@@ -1982,6 +1982,32 @@ def _worker_env(arm):
     return env
 
 
+#: the arrays each lane's scorer reads (quality() above); lanes not named read only their outputs
+_SCORER_ARRAYS = {"umap": ("X",), "spectral-embedding": ("X",), "gmm": ("X", "Xq"), "tsvd": ("X",),
+                  "spectral": ("X",), "agglomerative": ("X",), "nystroem": ("Xcheck",),
+                  "rbf-sampler": ("Xcheck",), "arima": ("Yhold", "Yfit"), "ets": ("Yhold", "Yfit"),
+                  "ivf": ("index", "queries"), "gpr": ("yq",)}
+_CLF_LANES = ("logreg", "gpc", "linearsvc", "knn-clf")
+_REG_LANES = ("ridge", "lasso", "elasticnet", "linearsvr", "knn-reg", "svr", "kernel-ridge")
+
+
+def scorer_preflight(RSP, lane, ds, D):
+    """The scorer preflight of one wave-2 race: the arrays its scorer reads are present; on the classifier and
+    regressor lanes the scorer scores the first 1,000 held-out labels as a prediction (a tiny-slice self-test)."""
+    np = _np()
+    pf = RSP.Preflight(lane, ds)
+    keys = _SCORER_ARRAYS.get(lane, ()) + (("yq",) if lane in _CLF_LANES + _REG_LANES else ())
+    pf.check("reference data", lambda: RSP.require_arrays(D, keys))
+    if lane in _CLF_LANES + _REG_LANES:
+        def labels():
+            d = dict(D, yq=np.asarray(D["yq"])[:1000])
+            return RSP.self_test(lambda outs: quality(lane, d, outs),
+                                 {"preflight": {"pred": d["yq"].astype(np.float64)}},
+                                 ("accuracy", "r2", "rmse"))
+        pf.check("scorer self-test", labels)
+    return pf.done()
+
+
 def race(args):
     np = _np()
     ctd = _load("classical_two_datasets")
@@ -2001,6 +2027,14 @@ def race(args):
               "started": now_utc(), "script": "tools/bench_board_more.py",
               "commit": os.environ.get("MOJOLEARN_REPO_COMMIT", "unknown")}
     tag = "%s-%s" % (lane, ds)
+    # THE SCORER PREFLIGHT (lane harness-evidence, 2026-10-14; tools/race_scorer_preflight.py): before any
+    # worker starts, the arrays the scorer reads are present and it scores known data
+    if not getattr(args, "params_only", False):
+        RSP = _load("race_scorer_preflight")
+        try:
+            result["scorer_preflight"] = scorer_preflight(RSP, lane, ds, D)
+        except RSP.ScorerUnavailable as exc:
+            return RSP.refuse(result, arms, str(exc), os.path.join(args.out, "%s.json" % tag), "MORE")
     workers = {}
     for arm in arms:
         py = args.ours_python if arm in ("ours", "ours-fast") else args.theirs_python
