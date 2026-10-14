@@ -37,7 +37,17 @@ TWO CLOCKS PER CELL, NEVER INVENTED
       info there, so an algos inference copy is not separable.
     * an arm on the CPU: no host-to-device copy exists, so both clocks are the
       stored median (copy 0, source `cpu-arm`).
-  A clock the stored fields cannot give stays None and says why.
+    * an arm whose inputs went up before its clock and whose driver records a
+      separate synchronized upload of the same inputs with the arm's own library
+      (`span.upload_ms_separate` on an opponent, tools/bench_board_algos.py
+      `_opponent_upload_probe`, lane harness-evidence 2026-10-14): whole_ms =
+      median + copy.
+    * an inference cell whose driver timed the predict inputs' own copy
+      (`span.predict_upload_ms`, same lane): ours kernel_ms = median - copy;
+      an opponent with its predict inputs on the device, whole_ms = median + copy.
+  A clock the stored fields cannot give stays None and says why. A cell timed
+  in every round whose quality scorer failed (status "not-scored") still has
+  its clocks: the timing is evidence, the quality verdict is separate.
 
 WHAT EACH STORED CLOCK IS (`stored`)
   whole    ours everywhere (the public call uploads inside its clock); every
@@ -83,9 +93,13 @@ def _span(cell):
     return ((cell.get("comparability") or {}).get("span")) or {}
 
 
+#: statuses whose median is a complete timing (a "not-scored" cell timed every round; only its scorer failed)
+TIMED_STATUSES = ("ok", "not-scored")
+
+
 def _ok_median(cell):
     m = _num(cell.get("median_ms"))
-    if cell.get("status") != "ok" or m is None or m <= 0:
+    if cell.get("status") not in TIMED_STATUSES or m is None or m <= 0:
         return None
     return m
 
@@ -149,10 +163,23 @@ def cell_clock(cell):
                 else:
                     out["note"] = ("upload_ms_separate %.3f ms is not below the scored median; "
                                    "kernel clock withheld" % up)
+    if stored == WHOLE and lib == "mojolearn" and infer and out["kernel_ms"] is None:
+        up = _num(span.get("predict_upload_ms"))
+        if up is not None:
+            if 0 <= up < m:
+                out.update(kernel_ms=m - up, copy_ms=up, copy_source="predict_upload_ms")
+            else:
+                out["note"] = ("predict_upload_ms %.3f ms is not below the scored median; "
+                               "kernel clock withheld" % up)
     elif stored == KERNEL:
         out["kernel_ms"] = m
         if not infer:
             up, src = _num(span.get("upload_ms_untimed")), "upload_ms_untimed"
+            if up is None and _num(span.get("upload_ms_separate")) is not None:
+                up, src = _num(span.get("upload_ms_separate")), \
+                    "upload_ms_separate (a separate synchronized upload of the same inputs)"
+        elif _num(span.get("predict_upload_ms")) is not None:
+            up, src = _num(span.get("predict_upload_ms")), "predict_upload_ms (the predict inputs' own copy)"
         elif cell.get("family") == "classical":
             # classical_two_datasets.infer_runner uploads Xq on its own before the
             # inference clock and records that upload in the infer arm's info

@@ -63,6 +63,18 @@ def completed(cell):
     return cell.get("status") == "ok" and isinstance(ms, (int, float)) and ms > 0
 
 
+def timed_not_scored(cell):
+    """Every round timed, but the quality scorer failed or did not run (status "not-scored", lane
+    harness-evidence 2026-10-14; or an older "ok" cell whose recorded quality error is a scorer failure).
+    Such a cell is judged as "quality not scored (scorer failed)", never as a recorded quality failure."""
+    ms = cell.get("median_ms")
+    if not (isinstance(ms, (int, float)) and ms > 0):
+        return False
+    if cell.get("status") == "not-scored":
+        return True
+    return cell.get("status") == "ok" and BQ.scorer_failure(cell.get("quality")) is not None
+
+
 def our_arm(mode):
     return "ours-fast" if mode == "fast" else "ours"
 
@@ -91,8 +103,12 @@ def pairing(race, mode, phase, observations_only=False):
                    key=lambda c: str(c.get("arm")))
     # Computed display ratios are not observations and can change on rebuild.
     ignored = {"ratio_ours_identical_over", "ratio_ours_fast_over", "ratio_ours_identical_clock",
-               "ratio_ours_fast_clock", "clock"}
-    records = [{k: v for k, v in c.items() if k not in ignored} for c in cells]
+               "ratio_ours_fast_clock", "clock", "constructor_call", "call_source"}
+    # The readable call line (lane harness-evidence, 2026-10-14) is derived from the recorded invocation, not an
+    # observation. A fit cell never carried `call` before it; an inference cell's `call` (what its clock ran)
+    # predates it and stays part of the evidence.
+    records = [{k: v for k, v in c.items()
+                if k not in ignored and not (k == "call" and c.get("phase") != "infer")} for c in cells]
     if observations_only:
         # Cross-vendor identity and newer-failure flags are derived annotations,
         # not a change to this race's measured work, device, source or settings.
@@ -193,12 +209,17 @@ def _parameters(race, cell):
 
 def _pair_problems(race, ours, opp):
     bad, missing = [], []
-    if not completed(ours):
+    if timed_not_scored(ours) and ours.get("status") == "not-scored":
+        pass                                   # reported below as "quality not scored (scorer failed)"
+    elif not completed(ours):
         missing.append("our measurement did not complete")
     # FAIRNESS FIX (2026-10-13 audit, superseded owner clarification):
     # Different executed iteration counts are expected for different solvers.
     # Judge measured output quality; retain iteration receipts as provenance.
     quality = BQ.compare(ours, opp)
+    # Only a scored metric outside its margin (or a scored output failure) is a quality failure. A scorer that
+    # failed or never ran leaves the pairing insufficient: "quality not scored (scorer failed)".
+    missing.extend(quality.get("not_scored") or [])
     if quality["verdict"] == "FAIL":
         bad.extend(quality["failures"])
         bad.extend("quality outside declared margin: " + c["metric"]
@@ -247,7 +268,9 @@ def fairness_rule(race, mode, phase, today, prior=None):
     our_cells = [c for c in cells if c.get("arm") == our_arm(mode)]
     ours = next(iter(our_cells), None)
     excluded = set((race.get("opponents_excluded") or {}).get("arms") or [])
-    opps = [c for c in cells if c.get("mode") == "opponent" and completed(c) and c.get("arm") not in excluded]
+    # A timed opponent whose scorer failed is judged (INSUFFICIENT, "quality not scored"), not silently dropped.
+    opps = [c for c in cells if c.get("mode") == "opponent" and (completed(c) or timed_not_scored(c))
+            and c.get("arm") not in excluded]
     if ours is None:
         return None
     judged, admitted = {}, []
@@ -319,7 +342,8 @@ def fairness_rule(race, mode, phase, today, prior=None):
             admitted.append(opp)
     best = max([c for c in admitted if c.get("device") == "gpu"] or admitted,
                key=lambda c: judged[c["arm"]]["timing_comparison"]["value"]) if admitted else None
-    ratio = judged[best["arm"]]["timing_comparison"]["value"] if completed(ours) and best else None
+    ratio = (judged[best["arm"]]["timing_comparison"]["value"]
+             if (completed(ours) or timed_not_scored(ours)) and best else None)
     entry = {"rule": "race_fairness.fairness_rule (%s; %s, 2026-10-14)" % (BQ.POLICY, BC.POLICY), "date": today, "opponent": best.get("arm") if best else None,
              "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
              "pairing": pairing(race, mode, phase), "opponents": judged,

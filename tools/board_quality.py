@@ -49,12 +49,52 @@ def number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+# A scored outcome that is itself a quality failure: the scorer ran and the arm's output broke its contract
+# (nonfinite, a host-reference mismatch, wrong output fields or shape). Every other recorded `error` means the
+# scorer did not produce a metric (it crashed, its reference data or bindings were missing, it never ran): that
+# is "quality not scored", never a quality failure of the arm (lane harness-evidence, 2026-10-14).
+SCORED_FAILURE_ERRORS = ("host reference mismatch", "nonfinite host reference output",
+                         "host reference output shape differs", "host reference output fields differ",
+                         "host reference output is empty", "non-numeric host reference output")
+NOT_SCORED = "quality not scored (scorer failed)"
+
+
+def scorer_failure(quality):
+    """The reason this arm's quality was NOT scored, or None when a scorer produced a result.
+
+    `scorer: "failed"` / `"not-run"` (set by the race drivers since 2026-10-14) names it outright; older cells
+    carry the scorer's exception in `error`. A scored failure (SCORED_FAILURE_ERRORS, `finite: False`,
+    `host_reference_passed: False`) is a result, not a scorer failure."""
+    q = quality or {}
+    if q.get("scorer") in ("failed", "not-run"):
+        return str(q.get("scorer_error") or q.get("error") or "scorer %s" % q["scorer"])
+    if q.get("scorer") == "scored":
+        return None
+    err = q.get("error")
+    if err and not any(k in str(err).lower() for k in SCORED_FAILURE_ERRORS):
+        return str(err)
+    return None
+
+
+def scored_failure(quality):
+    """True when a scorer ran and recorded a quality failure for this arm."""
+    q = quality or {}
+    if scorer_failure(q) is not None:
+        return False
+    return bool(q.get("error") or q.get("finite") is False or q.get("host_reference_passed") is False)
+
+
 def compare(ours, theirs):
     """Return every check and its declared margin, with no timing input."""
     qo, qt = ours.get("quality") or {}, theirs.get("quality") or {}
-    checks, failures = [], []
-    for arm, quality in ((ours.get("arm"), qo), (theirs.get("arm"), qt)):
-        if quality.get("error") or quality.get("finite") is False or quality.get("host_reference_passed") is False:
+    checks, failures, not_scored = [], [], []
+    for arm, quality, cell in ((ours.get("arm"), qo, ours), (theirs.get("arm"), qt, theirs)):
+        why = scorer_failure(quality)
+        if why is None and cell.get("status") == "not-scored":
+            why = str(cell.get("scorer_error") or "scorer did not run")
+        if why is not None:
+            not_scored.append("%s: %s: %s" % (NOT_SCORED, arm, why[:300]))
+        elif scored_failure(quality):
             failures.append("recorded quality failure: " + str(arm))
     for metric in sorted(set(qo) | set(qt)):
         if metric not in ABSOLUTE and metric not in RELATIVE and metric not in REFERENCE:
@@ -92,9 +132,13 @@ def compare(ours, theirs):
             observed=0.0, rows=qo["rows"], verdict="PASS"))
     if failures or any(c["verdict"] == "FAIL" for c in checks):
         verdict = "FAIL"
-    elif not checks or any(c["verdict"] == "INSUFFICIENT" for c in checks):
+    elif not_scored or not checks or any(c["verdict"] == "INSUFFICIENT" for c in checks):
+        # A metric the scorer never produced is insufficient evidence, never a pass or a failure.
         verdict = "INSUFFICIENT"
     else:
         verdict = "PASS"
-    return dict(policy=POLICY, verdict=verdict, checks=checks, failures=failures,
-                interpretation="engineering margin; not a statistical equivalence claim")
+    out = dict(policy=POLICY, verdict=verdict, checks=checks, failures=failures,
+               interpretation="engineering margin; not a statistical equivalence claim")
+    if not_scored:
+        out["not_scored"] = not_scored
+    return out
