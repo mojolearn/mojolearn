@@ -306,7 +306,13 @@ class InProcessWorker:
             return None
         msg = self._ready()
         if isinstance(msg, dict):
-            msg = dict(msg, pid=os.getpid(), probe_environment=self.environment)
+            # the environment this arm's record was taken under rides in its info (the board's probe keeps it
+            # as probe_process); the parameter record itself is untouched
+            msg = dict(msg, pid=os.getpid())
+            if isinstance(msg.get("info"), dict):
+                msg["info"] = dict(msg["info"], probe_process=self.environment)
+            else:
+                msg["probe_process"] = self.environment
         self.msg = msg
         return msg
 

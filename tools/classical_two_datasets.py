@@ -2583,17 +2583,10 @@ def infer_quality(lane, data, infer_outs, fit_outs):
     return q
 
 
-def worker(args):
-    # The protocol gets its own descriptor; fd 1 becomes stderr (the log), so
-    # a library that prints cannot interleave with a protocol line.
-    proto = os.fdopen(os.dup(1), "w", buffering=1)
-    os.dup2(2, 1)
-    sys.stdout = sys.stderr
-
-    def say(obj):
-        proto.write(json.dumps(obj, sort_keys=True) + "\n")
-        proto.flush()
-
+def worker_ready(args):
+    """The worker's ready stage: load the block, construct the arm, read its parameters back.
+    Returns (runner, data, rec, message): the ready message, or an error message with runner None.
+    The worker subprocess and the smoke's in-process probe (probe_ready) both run exactly this."""
     block = os.path.join(args.data, "%s-%s" % (BLOCK_OF[args.lane], args.dataset))
     try:
         with np.load(block + ".npz") as z:
@@ -2606,11 +2599,32 @@ def worker(args):
     except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
-        say({"event": "error", "stage": "ready", "error": repr(exc)})
-        return 1
+        return None, None, None, {"event": "error", "stage": "ready", "error": repr(exc)}
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_probe().library_identity(runner.info))
-    say({"event": "ready", "info": runner.info, "pid": os.getpid(), "params": params})
+    return runner, data, rec, {"event": "ready", "info": runner.info, "pid": os.getpid(), "params": params}
+
+
+def probe_ready(argv):
+    """The smoke's in-process parameter probe (tools/smoke_inproc.py): a worker's argv, its ready message."""
+    return worker_ready(build_parser().parse_args(argv))[3]
+
+
+def worker(args):
+    # The protocol gets its own descriptor; fd 1 becomes stderr (the log), so
+    # a library that prints cannot interleave with a protocol line.
+    proto = os.fdopen(os.dup(1), "w", buffering=1)
+    os.dup2(2, 1)
+    sys.stdout = sys.stderr
+
+    def say(obj):
+        proto.write(json.dumps(obj, sort_keys=True) + "\n")
+        proto.flush()
+
+    runner, data, rec, msg = worker_ready(args)
+    say(msg)
+    if runner is None:
+        return 1
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _probe().MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
@@ -2781,6 +2795,17 @@ class Worker:
         except subprocess.TimeoutExpired:
             self.kill(self.status, self.error)
         self.log.close()
+
+
+def start_worker(arm, cmd, env, log_path, cwd, params_only=False):
+    """A race's worker for `arm`: a subprocess (Worker) as always, or inside the campaign smoke's worker
+    process an in-process stand-in that runs the same ready stage (tools/smoke_inproc.py; --params-only only)."""
+    if os.environ.get("MOJOLEARN_SMOKE_IN_PROCESS") == str(os.getpid()):
+        if HERE not in sys.path:
+            sys.path.insert(0, HERE)
+        import smoke_inproc
+        return smoke_inproc.start_worker(arm, cmd, env, log_path, cwd, params_only, Worker)
+    return Worker(arm, cmd, env, log_path, cwd)
 
 
 def _worker_env(arm, root):
@@ -3192,8 +3217,9 @@ def race(args):
             else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--dataset", ds, "--data", args.data]
-        workers[arm] = Worker(arm, cmd, _worker_env(arm, args.root),
-                              os.path.join(args.out, "%s-%s.log" % (tag, arm)), args.root)
+        workers[arm] = start_worker(arm, cmd, _worker_env(arm, args.root),
+                                    os.path.join(args.out, "%s-%s.log" % (tag, arm)), args.root,
+                                    params_only=getattr(args, "params_only", False))
         result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [],
                                "digests": [], "mem": [], "status": "ok"}
     # Ready, in parallel: each worker loads its data and its library.
@@ -3424,7 +3450,7 @@ def summary(args):
     return 0
 
 
-def main():
+def build_parser():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("prep")
@@ -3471,7 +3497,11 @@ def main():
                         "`infer` record). Off by default: the race is then unchanged")
     s = sub.add_parser("summary")
     s.add_argument("--out", required=True)
-    args = ap.parse_args()
+    return ap
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
     if args.cmd == "prep":
         return prep(args)
     if args.cmd == "worker":
