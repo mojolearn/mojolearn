@@ -247,6 +247,16 @@ for _v, _arms in (("apple", _TASK_APPLE), ("nvidia", _TASK_NVIDIA), ("amd", _TAS
     # so a roster listing them only refused the preflight. CatBoost is the lane's opponent, as
     # on gbdt-symmetric.
     TREE_OPPONENTS[_v]["gbdt-multiclass"] = TREE_OPPONENTS[_v]["gbdt-symmetric"]
+    # smoke-fixes (2026-10-14; AMD trees/gbdt-categorical/taxi, gbdt-rank-pairlogit/istella,
+    # gbdt-rank-yetirank/istella: "missing parameter/version probe: xgboost-gpu"): the same for the
+    # other task lanes. The driver refuses XGBoost and LightGBM by name on every device there
+    # (speed_gbdt_arm.py xgboost_arms / lightgbm_arms CATEGORICAL-ALGORITHM on declared categorical
+    # columns; xgboost_rank_arms / lightgbm_rank_arms DIFFERENT-ALGORITHM, unconditional). On AMD the
+    # GPU-first roster kept only xgboost-gpu, so the race had no opponent that can build. CatBoost is
+    # these lanes' opponent, as on gbdt-symmetric (catboost-gpu on NVIDIA; on AMD, with no AMD GPU
+    # build, catboost-cpu under the CPU-where-no-GPU-path rule, as gbdt-symmetric already races).
+    for _task in ("gbdt-categorical", "gbdt-rank-pairlogit", "gbdt-rank-yetirank"):
+        TREE_OPPONENTS[_v][_task] = TREE_OPPONENTS[_v]["gbdt-symmetric"]
 DATA_FILES["istella-rank"] = "istella/istella_rank.npz"
 R2_KEYS["istella-rank"] = "gbm-bench/istella/istella_rank.npz"
 
