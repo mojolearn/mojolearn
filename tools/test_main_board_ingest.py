@@ -11,6 +11,7 @@ status (never replaces), a board-runner summary of a default main job and one of
 other vendor's digest at the same commit (identity), and stored opponent boards (copied, one of
 them with changed lane settings: withheld).
 """
+import copy
 import importlib.util
 import io
 import json
@@ -240,6 +241,25 @@ class MainBoardIngest(unittest.TestCase):
 
 
 class PairedSessions(unittest.TestCase):
+    def test_verified_quality_recovery_replaces_hash_order_without_retiming(self):
+        old = dict(column="nvidia-l40s", vendor="nvidia", box="nv2", race_id="test", sha=B,
+                   ct=200, job="paired-999", kind="paired", measured="2026-10-14T00:00:00Z",
+                   status="ok", status_raw="ok", median_ms=4., digest="same", infra=False,
+                   measured_cell={"measurement": {"id": "999"}})
+        new = copy.deepcopy(old)
+        new.update(job="paired-111", quality={"error": "outside margin"})
+        new["measured_cell"]["measurement"] = dict(id="111", quality_recovery={
+            "previous_id": "999", **{k: {"status": "verified"} for k in ("artifact", "original_receipt", "source")}})
+        winners, _, ledger = MB.choose([old, new])
+        self.assertIs(winners[("nvidia-l40s", "test")], new)
+        self.assertIn("quality recovery", ledger[0]["reason"])
+        # A timing change or unverified correction never overrides its parent.
+        new["median_ms"] = 3.
+        self.assertIs(MB.choose([old, new])[0][("nvidia-l40s", "test")], old)
+        new["median_ms"] = 4.
+        new["measured_cell"]["measurement"]["quality_recovery"]["artifact"]["status"] = "pending"
+        self.assertIs(MB.choose([old, new])[0][("nvidia-l40s", "test")], old)
+
     def board(self):
         m=dict(id="frozen-worker",completeness="complete",hardware={"gpu":"uuid"},
                source={"status":"verified","commit":B},artifacts={"status":"verified"})

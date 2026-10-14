@@ -663,6 +663,30 @@ def is_ok(ob):
     return ob.get("status") == "ok" and ob.get("median_ms") is not None
 
 
+def recovered_predecessors(group):
+    """Verified evidence corrections replace their own unchanged measurement.
+
+    FAIRNESS FIX (2026-10-13 audit): paired job IDs are content hashes, so
+    sorting their digits could retain a shapes-only record over its recovered
+    quality. A correction is not a new timing and must not compete by hash.
+    Preserve the predecessor in the ledger, including when quality now fails.
+    """
+    superseded = set()
+    for new in group:
+        measurement = (new.get("measured_cell") or {}).get("measurement") or {}
+        recovery = measurement.get("quality_recovery") or {}
+        if not is_ok(new) or any((recovery.get(k) or {}).get("status") != "verified"
+                                 for k in ("artifact", "original_receipt", "source")):
+            continue
+        for old in group:
+            previous = (old.get("measured_cell") or {}).get("measurement") or {}
+            if previous.get("id") != recovery.get("previous_id") or not previous.get("id"):
+                continue
+            if all(new.get(k) == old.get(k) for k in ("sha", "box", "race_id", "median_ms", "digest", "measured")):
+                superseded.add(id(old))
+    return superseded
+
+
 def choose(observations):
     """-> (winners {(column, race_id): newest ok ob}, failures {(column, race_id): [failed obs newer than
     the winner, or all of them when the race has no ok run], newest first}, ledger entries [..])."""
@@ -672,7 +696,8 @@ def choose(observations):
     winners, failures, ledger = {}, {}, []
     for key, group in sorted(groups.items()):
         group.sort(key=order_key, reverse=True)
-        ok = [o for o in group if is_ok(o)]
+        superseded = recovered_predecessors(group)
+        ok = [o for o in group if is_ok(o) and id(o) not in superseded]
         win = ok[0] if ok else None
         if win is not None:
             winners[key] = win
@@ -683,7 +708,9 @@ def choose(observations):
             if o is win:
                 continue
             failed = not is_ok(o)
-            if failed and o["infra"]:
+            if id(o) in superseded:
+                reason = "verified quality recovery supersedes the unchanged measurement evidence"
+            elif failed and o["infra"]:
                 reason = "infrastructure status %s never replaces an ok cell" % o["status_raw"]
             elif failed:
                 reason = "failed run (%s) never replaces an ok cell" % (o.get("reason") or o["status"])
