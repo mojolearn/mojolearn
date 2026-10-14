@@ -252,10 +252,14 @@ def smoke_row(race, mode, rc, seconds, directory, log, timeout):
 
 
 def problem_kind(text):
-    """A problem's kind for grouping: the text before its first ': ' with arm names and numbers folded."""
-    head = str(text).split(": ", 1)[0]
-    head = re.sub(r"\b(torch|cuml|cupy|jax|sklearn|ours|mamba|hf|xgboost|lightgbm|catboost)[-\w.]*", "<arm>", head)
-    return re.sub(r"\d+(\.\d+)?", "<n>", head)[:160]
+    """A problem's kind for grouping: arm names and numbers folded, the leading "<arm>: " dropped, the text up
+    to its first ';' and at most two ': '-separated parts (e.g. "maximize missing from ours read-back",
+    "quality scorer unavailable: reference data")."""
+    t = re.sub(r"\b(torch|cuml|cupy|jax|sklearn|mamba-ssm|hf|xgboost|lightgbm|catboost|hipvs|cuvs)[-\w.]*",
+               "<arm>", str(text))
+    t = re.sub(r"^<arm>( \([^)]*\))?: ", "", t).split(";")[0]
+    t = ": ".join(t.split(": ")[:2])
+    return re.sub(r"\d+(\.\d+)?", "<n>", t).strip()[:160]
 
 
 def smoke_text(doc):

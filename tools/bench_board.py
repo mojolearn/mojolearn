@@ -2695,7 +2695,7 @@ def preflight_check(ctx, race, arms):
                 if race["family"] == "neural" and race["lane"] in NEURAL.REFERENCE_TWIN_LANES
                 and a.startswith("torch-")}
     arms = [a for a in arms if a not in excluded]
-    probes = params_probe(ctx, race, arms, scorer=scorer)
+    probes = params_probe(ctx, race, arms) if scorer is None else params_probe(ctx, race, arms, scorer=scorer)
     missing = [a for a in arms if a not in probes or not probes[a].get("version")]
     records = {a: dict(p["record"], __record__=True) for a, p in probes.items() if p.get("record")}
     lane = ("algos/" if race["family"] == "algos" else "") + race["lane"]
