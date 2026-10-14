@@ -129,6 +129,21 @@ def test_cuml_minmax_fixed_behavior_remains_parameter_checked():
     assert BP.arm_record(theirs)["params"]["clip"] is True
 
 
+@pytest.mark.parametrize("cls,key,value,changed", [("Binarizer", "threshold", 0., 1.),
+                                                  ("Normalizer", "norm", "l2", "l1")])
+def test_cuml_preprocessor_readback_uses_actual_constructor_attributes(cls, key, value, changed):
+    obj = _est("cuml.preprocessing", cls)
+    setattr(obj, key, value)
+    obj.copy = True
+    record = BP.arm_record(obj)
+    assert record["params"][key] == value
+    assert record["params"]["copy"] is True
+    setattr(obj, key, changed)
+    assert BP.arm_record(obj)["params"][key] == changed
+    delattr(obj, key)
+    assert key not in BP.arm_record(obj)["params"]
+
+
 def _matched():
     ours = _est("mojolearn.ensemble", "GradientBoosting", n_estimators=100, max_depth=6,
                 learning_rate=0.1, l2_leaf_reg=1.0, border_count=254, random_state=7,

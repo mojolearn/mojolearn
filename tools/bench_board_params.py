@@ -551,6 +551,16 @@ def read_params(obj):
             kw = got.pop("kwargs", None)
             if isinstance(kw, dict):
                 got.update(kw)
+        # FAIRNESS FIX (2026-10-13 audit): cuML 26.8's Binarizer and
+        # Normalizer constructors store these attributes but inherit a
+        # get_params list that omits them (_thirdparty/sklearn/preprocessing/
+        # _data.py). Read the actual object; an absent attribute stays absent.
+        if lib == "cuml" and type(obj).__name__ in ("Binarizer", "Normalizer"):
+            names = ("threshold", "copy") if type(obj).__name__ == "Binarizer" else ("norm", "copy")
+            got = dict(got)
+            recovered = [name for name in names if name not in got and hasattr(obj, name)]
+            got.update({name: getattr(obj, name) for name in recovered})
+            return lib, "get_params + constructor attributes " + ",".join(recovered), got
         if lib == "cuml" and type(obj).__name__ == "MinMaxScaler" and "clip" not in got:
             # The pinned cuML 26.08 transform only scales and translates. Its
             # documented out-of-range example returns 1.5, not 1.0:
