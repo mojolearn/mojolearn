@@ -579,6 +579,9 @@ CLOCKS = _load_tool("board_clock_audit")
 #: The box table and the per-row hardware / version fields (standard library only).
 # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
 HW = _load_tool("board_hardware")
+# lane harness-evidence (2026-10-14): which recorded quality errors are scorer failures, and the call line per arm
+BQ = _load_tool("board_quality")
+CALLS = _load_tool("race_call_line")
 
 
 def _bb():
@@ -1746,6 +1749,26 @@ def _status(ms, refused, rounds):
     if len(ms) < rounds:
         return "PARTIAL(%d/%d rounds)" % (len(ms), rounds)
     return "ok"
+
+
+NOT_SCORED = "not-scored"
+
+
+def mark_not_scored(cells):
+    """"ok" only if scored (lane harness-evidence, 2026-10-14). A cell timed in every round whose quality scorer
+    failed or never ran gets status "not-scored" and `scorer_error`; its times stay exactly as measured. The
+    fairness rule reports it as "quality not scored (scorer failed)", never as a quality failure of the arm.
+    A context cell (not an opponent) is left alone: it is never judged."""
+    for c in cells:
+        if c.get("status") != "ok" or c.get("mode") == "context":
+            continue
+        q = c.get("quality") or {}
+        why = BQ.scorer_failure(q)
+        if why is None and not any(k not in ("scorer", "reference", "rows") for k in q):
+            why = "the race recorded no quality for this arm (its scorer did not run)"
+        if why is not None:
+            c.update(status=NOT_SCORED, scorer_error=why[:2000])
+    return cells
 
 
 def _from_wheel(path, ctx):
@@ -3086,7 +3109,9 @@ def _run_race(ctx, race):
         # FAIRNESS FIX (2026-10-13 audit): these are the scored output bytes,
         # not disposable quality-pass scratch. Keep them for E.seal and later
         # verified retention; deleting them here left only hashes in R2.
-    rec["cells"] = add_ratios(cells)
+    rec["cells"] = add_ratios(mark_not_scored(cells))
+    if rec.get("infer_cells"):
+        mark_not_scored(rec["infer_cells"])
     rec["finished"] = now_utc()
     rec["status"] = "done" if rc == 0 else "failed"
     rec["host"] = race_host()
@@ -3123,9 +3148,28 @@ def attach_params(ctx, rec):
         arm = rep.get("arms", {}).get(c.get("arm"))
         if arm is not None:
             c["params"] = arm
+            # the readable call line of this arm, stored at measurement time (tools/race_call_line.py)
+            CALLS.set_call(c, overwrite=True)
     if rep.get("verdict") == "REFUSED":
         rec["status"] = "failed"
         rec["failure"] = "PARAMS REFUSED: " + " | ".join(rep.get("problems") or [])
+
+
+def status_text(c):
+    """A cell's status; a "not-scored" cell names its scorer error (its times are shown as measured)."""
+    if c.get("status") == NOT_SCORED:
+        return "not-scored: quality not scored (scorer failed): %s" % str(c.get("scorer_error") or "-")[:200]
+    return str(c.get("status"))
+
+
+def render_calls(cells):
+    """One readable call line per arm (tools/race_call_line.py), under the race's table."""
+    L = []
+    for c in cells:
+        line = CALLS.arm_call_text(c)
+        if line:
+            L.append("- `%s`: `%s`" % (c.get("arm"), clean(line).replace("`", "'")))
+    return (["", "calls:"] + L) if L else []
 
 
 def render_params(rr):
@@ -3281,6 +3325,7 @@ def render_board(result):
         for _b in sorted({str(c.get("batch")) for c in _ic}):
             HW.mark([c for c in _ic if str(c.get("batch")) == _b])
     CLOCKS.annotate_result(result)      # derived `clock` + ratio-clock fields, this copy only
+    CALLS.annotate_board(result)        # the call line of cells stored before it existed, this copy only
     box = result.get("box") or {}
     cfg = result.get("config") or {}
     gpu = box.get("gpu") or {}
@@ -3504,8 +3549,9 @@ def render_board(result):
                              _f(c.get("peak_host_mb")), _f(c.get("peak_gpu_mb")),
                              _q(c.get("quality")), _f(c.get("hash_stable")),
                              clean(c.get("verdict")), clean(c.get("installed_wheel", "-")),
-                             clean(c["status"]) + (" (%s)" % clean(c["source"])
-                                                   if c.get("source") else "")))
+                             clean(status_text(c)) + (" (%s)" % clean(c["source"])
+                                                      if c.get("source") else "")))
+            L.extend(render_calls(rc))
             L.extend(render_memory_methods(rc))
             lc = rr.get("lane_config") or {}
             if lc:

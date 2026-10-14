@@ -239,7 +239,10 @@ def classical_cells(bb, ctx, race, r):
         if inf.get("quality_basis"):
             cell["quality_basis"] = inf["quality_basis"]
         span = ((fit.get(arm) or {}).get("span") or {})
-        span = dict(span, inside_clock=cell["call"], pre_clock_fit=True)
+        # the inference arm's own span fields (lane harness-evidence, 2026-10-14): `predict_upload_ms`, the predict
+        # inputs' own host-to-device copy timed apart, gives this cell its second clock (board_clock_audit)
+        span = dict(span, **(a.get("span") or {}))
+        span.update(inside_clock=cell["call"], pre_clock_fit=True)
         info = a.get("info") or {}
         fitted_info = (fit.get(arm) or {}).get("info") or {}
         cell["library_version"] = info.get("version") or fitted_info.get("version")
@@ -279,11 +282,13 @@ def render_race(bb, rr):
             c["rounds"], bb.ratio_text(c, "ratio_ours_identical_over"),
             bb.ratio_text(c, "ratio_ours_fast_over"), bb.clock_cells(c),
             bb._q(c.get("quality")),
-            bb._f(c.get("hash_stable")), bb.clean(c.get("verdict")), bb.clean(c["status"])))
+            bb._f(c.get("hash_stable")), bb.clean(c.get("verdict")), bb.clean(bb.status_text(c))))
     calls = []
     for c in ic:
-        if c.get("call") and (c["arm"], c["call"]) not in calls:
-            calls.append((c["arm"], c["call"]))
+        # the arm's constructor call line (tools/race_call_line.py), then what the inference clock ran
+        line = bb.CALLS.arm_call_text(c)
+        if line and (c["arm"], line) not in calls:
+            calls.append((c["arm"], line))
     for arm, call in calls:
         L.append("")
         L.append("inference call, %s: %s" % (bb.clean(arm), bb.clean(call)))
