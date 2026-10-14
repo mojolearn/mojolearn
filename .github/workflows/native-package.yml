@@ -1,0 +1,46 @@
+name: Native Mojo package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: false
+      - name: Build and test the installed conda package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-recipe" "$RUNNER_TEMP/native-output"
+          python3 packaging/native/render_recipe.py "$RUNNER_TEMP/native-recipe/recipe.yaml" --local
+          set +e
+          pixi exec --spec 'rattler-build>=0.30,<0.31' rattler-build build \
+            -r "$RUNNER_TEMP/native-recipe/recipe.yaml" \
+            -c https://conda.modular.com/max -c conda-forge \
+            --output-dir "$RUNNER_TEMP/native-output" \
+            > "$RUNNER_TEMP/native-output/build.log" 2>&1
+          native_status=$?
+          set -e
+          echo "Package build/test exit: $native_status"
+          tail -n 20 "$RUNNER_TEMP/native-output/build.log"
+          exit "$native_status"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: native-mojo-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/native-output/**/*.conda
+            ${{ runner.temp }}/native-output/build.log
+            ${{ runner.temp }}/native-recipe/recipe.yaml

@@ -7,6 +7,9 @@
 # "cannot open output file" on a clean clone otherwise.
 build/
 
+# Optional local native Mojo package prefix (packaging/native/README.md).
+/native-install/
+
 # Python bytecode from the bench harness. `bench/` and `tools/` hold scripts
 # that the pixi bench and skgpu environments import, so running them leaves
 # these behind.

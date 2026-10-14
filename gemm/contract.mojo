@@ -18,6 +18,7 @@ cannot drift (cpu-gpu-cleanup lane n-gemm, 2026-10-02: moved out of
 
 from std.memory import bitcast
 from std.sys.compile import is_defined, get_defined_int
+from core.package_profile import identical_mode_enabled
 
 
 #: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
@@ -122,7 +123,7 @@ def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
 #   L40S leaf64 0.304/0.281 ms vs leaf128 0.280/0.255 ms at the same shapes
 #   (overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json).
 comptime _NEURAL_GEMM_PROFILE_ARM = (
-    is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
+    identical_mode_enabled()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime GEMM_LEAF_ARM_NEURAL128 = 1

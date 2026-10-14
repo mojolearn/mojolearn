@@ -4,12 +4,13 @@
 
 from std.sys.compile import is_defined
 from core.six_lane_experiment_guards import SIX_LANE_CONFIGURATION_OK
+from core.package_profile import NATIVE_PACKAGE, identical_mode_enabled
 
 
 
 def _checked_numeric_mode() -> Int:
     comptime assert SIX_LANE_CONFIGURATION_OK, "invalid integrated experiment configuration"
-    comptime if is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]():
+    comptime if identical_mode_enabled():
         return NUMERIC_IDENTICAL
     return NUMERIC_FAST
 
@@ -42,8 +43,8 @@ struct NumericMode(Copyable, Movable):
 
     @staticmethod
     def default() -> Self:
-        """`FAST`."""
-        return Self(NUMERIC_FAST)
+        """Return the distribution's default numeric mode."""
+        return Self(GLOBAL_NUMERIC_MODE if NATIVE_PACKAGE else NUMERIC_FAST)
 
     def deterministic_flush(self) -> Bool:
         """NUMERIC ROW."""

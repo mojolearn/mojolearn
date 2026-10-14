@@ -26,11 +26,11 @@ def norm_profile_forward_kernel[LAYER: Bool](
     means: MutPointer[Float32, MutAnyOrigin], rstds: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin], weight: MutPointer[Float32, MutAnyOrigin],
     bias: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, width_in: Int32,
-    eps: Float32, has_bias: Bool,
+    eps: Float32, has_bias: Int32,
 ):
     var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if row < Int(rows_in):
-        norm_profile_forward_row[NN24_LANES, LAYER](output, sums, means, rstds, x, weight, bias, row, Int(width_in), eps, has_bias)
+        norm_profile_forward_row[NN24_LANES, LAYER](output, sums, means, rstds, x, weight, bias, row, Int(width_in), eps, has_bias != 0)
 
 
 def norm_profile_backward_kernel[LAYER: Bool](
@@ -74,7 +74,9 @@ def enqueue_norm_profile_forward[LAYER: Bool](
     ctx.enqueue_function[norm_profile_forward_kernel[LAYER]](
         output.unsafe_ptr(), sums.unsafe_ptr(), means.unsafe_ptr(), rstds.unsafe_ptr(),
         x.unsafe_ptr(), weight.unsafe_ptr(), bias.unsafe_ptr(),
-        Int32(rows), Int32(width), eps, has_bias,
+        # Bool does not implement DevicePassable in Mojo 1.0. Marshal the
+        # predicate as Int32 at the kernel boundary; its meaning is unchanged.
+        Int32(rows), Int32(width), eps, Int32(has_bias),
         grid_dim=((rows + 63) // 64, 1, 1), block_dim=(64, 1, 1),
     )
 
