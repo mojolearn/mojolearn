@@ -475,7 +475,8 @@ EXCEPTIONS = [
      "value as a float with learning_rate_method='none' (its 'adaptive' rewrites the rate, the "
      "exaggeration and n_neighbors). cuML's non-adaptive schedule doubles the rate after the "
      "exaggeration phase (t_sne.pyx post_learning_rate = 2 x learning_rate), which its Python "
-     "API cannot switch off"),
+     "API cannot switch off; that doubling is compared separately as post_exaggeration_rate_factor "
+     "(read_params) and is never waived"),
     # FAIRNESS FIX (2026-10-13 audit): cuGraph pagerank stopped when the
     # unscaled L1 change fell below tol (1e-6) while ours and networkx stop below
     # n x tol (0.02 at 20,000 nodes), 20,000x tighter on cuGraph. cuGraph now
@@ -568,6 +569,18 @@ def read_params(obj):
             kw = got.pop("kwargs", None)
             if isinstance(kw, dict):
                 got.update(kw)
+        if type(obj).__name__ == "TSNE" and lib in ("mojolearn", "cuml"):
+            # smoke-fixes (2026-10-14; algos/tsne): the step size after the exaggeration phase, as a factor of
+            # learning_rate, compared on both arms. cuML 26.08 under method='exact' always sets
+            # post_learning_rate = 2 x learning_rate (python/cuml/cuml/manifold/t_sne.pyx:201-202; no Python
+            # switch); ours keeps learning_rate for every step (x_ann/tsne_device.mojo, learning_rate_ in
+            # _expansion_ann.py TSNE.fit). This difference changes the work, so it is compared, never waived:
+            # the race refuses cuML until one side can run the other's schedule.
+            got = dict(got)
+            if lib == "mojolearn":
+                got["post_exaggeration_rate_factor"] = 1.0
+            elif str(got.get("method", "")).lower() == "exact":
+                got["post_exaggeration_rate_factor"] = 2.0
         # FAIRNESS FIX (2026-10-13 audit): cuML 26.8's Binarizer and
         # Normalizer constructors store these attributes but inherit a
         # get_params list that omits them (_thirdparty/sklearn/preprocessing/
