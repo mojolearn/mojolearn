@@ -4087,6 +4087,9 @@ def build_parser():
                    help="with --preflight-only: also run each race's quality-scorer preflight in the parameter "
                         "probe (untimed; the heavy algos references are deferred to the timed race) and refuse "
                         "the race when it fails (tools/gpu_gap_campaign.py --smoke)")
+    p.add_argument("--measurement-source", default=None, metavar="JSON",
+                   help="with --preflight-only: reuse this retained source snapshot {source, inventory} "
+                        "(tools/gpu_gap_campaign.py --smoke writes it once)")
     p.add_argument("--race-ids", default=None, metavar="IDS|@FILE",
                    help="keep exactly these planned race ids (comma list or @file); unknown ids are refused")
     p.add_argument("--retime-cpu-opponents", action="store_true", help="fresh CPU opponents for this harness; GPU opponents stay missing-only")
@@ -4482,6 +4485,15 @@ def main(argv=None):
     ctx["box"] = box
     ctx["capture_measurements"] = True
     ctx["scorer_preflight"] = bool(getattr(args, "preflight_scorer", False) and args.preflight_only)
+    if getattr(args, "measurement_source", None):
+        # preflight smoke (2026-10-14): one retained source snapshot for the whole campaign smoke instead of a
+        # fresh archive and upload in every recipe's process (bench_board_evidence.begin reuses it). The
+        # inventory still pins every file's bytes; a changed file is refused at seal time as before.
+        if not args.preflight_only:
+            raise SystemExit("bench_board: --measurement-source is for --preflight-only runs")
+        with open(args.measurement_source) as fh:
+            snap = json.load(fh)
+        ctx["measurement_source"], ctx["measurement_inventory"] = snap["source"], snap["inventory"]
     ctx["evidence_r2"] = not args.evidence_local_only
     ctx["retime"] = args.retime_opponents
     ctx["retime_cpu_opponents"] = args.retime_cpu_opponents
