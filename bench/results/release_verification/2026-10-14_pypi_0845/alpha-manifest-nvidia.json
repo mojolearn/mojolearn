@@ -1,0 +1,13 @@
+{
+  "files": {
+    "mojolearn_nvidia-0.8.45-py3-none-manylinux_2_35_x86_64.whl": "092aed52995873469261169fb7c3f8c0df7b896fc2f356312719be6400db75fe"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "b8b7cf6f608c40f21d0976f2e80f4f49dd9aae9c"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.45"
+}
