@@ -573,6 +573,21 @@ def build_ours(lane, cfg, data, name="ours", extra=None):
         return []
 
 
+def build_prebinned_ours(lane, cfg, data, name, extra):
+    """An own arm of an XGBoost pairing (tools/board_pairing.py `prebinned`; Andrew 2026-10-14,
+    DECISIONS.md decision 1): fitted and scored on the pre-binned block its XGBoost opponents take
+    (speed_gbdt_arm.prebinned_data, once per dataset, outside every clock), its own inputs prepared
+    from that block like `ours`' from the raw rows, and its read-back carrying `input_binning`."""
+    try:
+        pb = spec.prebinned_data(lane, data, cfg)
+        prepare_our_inputs(pb)
+    except Exception as exc:                       # noqa: BLE001
+        spec.emit_refused(lane, name, "%s: %s" % (exc.__class__.__name__, " ".join(str(exc).split())))
+        return []
+    built = build_ours(lane, cfg, pb, name=name, extra=extra)
+    return [spec.attach_input(arm, pb) for arm in built]
+
+
 # --------------------------------------------------------------------------
 # INFERENCE (`--infer`, OFF by default: without it this file's output is
 # unchanged). After the fit rounds, every arm predicts with ITS OWN last model
@@ -864,6 +879,15 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
     has_ours = any(a.name.startswith("ours") for a in arms)
     x_own = data._ours_Xtest if has_ours else data.X_test
     batches = [("test", x_own, data.X_test), ("large", xl, xl)]
+    # smoke-fixes r13: an arm on its own block (speed_gbdt_arm.attach_input, the pre-binned input of
+    # an XGBoost pairing) predicts the same rows of that block, prepared here before any clock
+    own_inputs = {}
+    for arm in arms:
+        d = getattr(arm, "data", None)
+        if d is not None:
+            big = np.ascontiguousarray(d.X_train[:n_large], dtype=np.float32)
+            own_inputs[arm.name] = {"test": d._ours_Xtest if arm.name.startswith("ours") else d.X_test,
+                                    "large": big}
     specs = {}
     # categorical frames (lane gbdt-categorical, criteo): CatBoost and XGBoost
     # predict from the frame kind their fit took.
@@ -899,6 +923,7 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
         live, last = [], {}
         for name, (call, post) in specs.items():
             x = x_ours if name.startswith("ours") else x_them
+            x = own_inputs.get(name, {}).get(batch, x)
             if time.time() > deadline:
                 emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
                            ("reason", "process deadline reached before warm-up")])
@@ -919,6 +944,7 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
             for name in list(live):
                 call, post = specs[name]
                 x = x_ours if name.startswith("ours") else x_them
+                x = own_inputs.get(name, {}).get(batch, x)
                 if time.time() > deadline or spent[name] > budget:
                     emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
                                ("reason", "process deadline or per-arm budget %.0fs reached at "
@@ -1262,7 +1288,10 @@ def main(argv=None):
     arms = [] if args.opponents_only else build_ours(lane, cfg, data, extra=own_settings or None)
     if not args.opponents_only:
         for own in board_pairing.extra_own_arms(lane):
-            built = build_ours(lane, cfg, data, name=own, extra=dict(pairing[own]["settings"]))
+            if pairing[own].get("prebinned"):
+                built = build_prebinned_ours(lane, cfg, data, own, dict(pairing[own]["settings"]))
+            else:
+                built = build_ours(lane, cfg, data, name=own, extra=dict(pairing[own]["settings"]))
             for arm in built:
                 arm.agreement_group = "mojolearn:" + own   # another configuration on purpose
             arms.extend(built)

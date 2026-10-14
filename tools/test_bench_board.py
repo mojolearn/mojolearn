@@ -480,9 +480,10 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # bench_board_more.REFUSED): 1 lane x 2 datasets
     # smoke-fixes (2026-10-14): 331 since gbdt-multiclass, gbdt-categorical, gbdt-rank-pairlogit and gbdt-rank-yetirank
     # race CatBoost only (the tree driver refuses XGBoost/LightGBM there by name on every device): -9 trees cells
-    # smoke-fixes r13 (2026-10-14): 333, gbdt-lossguide races `ours-gain0` beside `ours` (+1 cell x 2 datasets)
-    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 333
-    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 333 + sum(len(r["arms"]) for r in algos)) in text
+    # smoke-fixes r13 (2026-10-14): 333, gbdt-lossguide races `ours-gain0` beside `ours` (+1 cell x 2 datasets);
+    # 335, gbdt-depthwise races `ours-prebinned` beside `ours` (+1 cell x 2 datasets)
+    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 335
+    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 335 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -842,10 +843,11 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # neural cells (NVIDIA 267 -> 273 and neural 88 -> 94, AMD 226 -> 229 and neural 64 -> 67).
 # smoke-fixes (2026-10-14): gbdt-multiclass, -categorical, -rank-pairlogit, -rank-yetirank race CatBoost only (XGBoost and
 # LightGBM are refused there by name on every device): Apple 340 -> 331, NVIDIA 273 -> 264; AMD unchanged at 229.
-# smoke-fixes r13 (2026-10-14): gbdt-lossguide races `ours-gain0` beside `ours` (+2 cells per vendor).
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 333, 128, 82),
-                                                      ("nvidia", 266, 88, 94),
-                                                      ("amd", 231, 84, 67)])
+# smoke-fixes r13 (2026-10-14): gbdt-lossguide races `ours-gain0` beside `ours` (+2 cells per vendor), then
+# gbdt-depthwise `ours-prebinned` beside `ours` (+2 more): Apple 335, NVIDIA 268, AMD 233.
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 335, 128, 82),
+                                                      ("nvidia", 268, 88, 94),
+                                                      ("amd", 233, 84, 67)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
@@ -1673,3 +1675,10 @@ def test_paired_lossguide_plans_two_own_configurations_and_pairs_each_ratio():
     # Apple: ours-ab (FAST) is `ours` with one key changed, so it pairs as `ours`
     apple = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["gbdt-lossguide"], ["taxi"], None)[0]
     assert bb.base_cell({"vendor": "apple", "rounds": 1}, apple, "ours-ab", "fast")["pairs_with"] == ["catboost-gpu"]
+    # decision 1: gbdt-depthwise pairs CatBoost with the raw-input `ours`, XGBoost with `ours-prebinned`
+    dw = bb.plan_races("nvidia", ["identical"], ["trees"], ["gbdt-depthwise"], ["taxi"], None)[0]
+    assert dw["our_arms"] == {"ours": "identical", "ours-prebinned": "identical"}
+    assert dw["our_pairing"] == {"ours": ["catboost-*"], "ours-prebinned": ["xgboost-*"]}
+    assert bb.PAIR.prebinned_arm("gbdt-depthwise", "xgboost-gpu") and bb.PAIR.prebinned_arm("gbdt-lossguide", "ours-gain0")
+    assert not bb.PAIR.prebinned_arm("gbdt-depthwise", "ours") and not bb.PAIR.prebinned_arm("gbdt-lossguide", "catboost-gpu")
+    assert not bb.PAIR.prebinned_arm("gbdt-symmetric", "xgboost-gpu")

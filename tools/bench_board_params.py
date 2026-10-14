@@ -544,7 +544,21 @@ def _scalar(v):
 
 
 def read_params(obj):
-    """(library, source, {name: value}) of what the constructed arm holds."""
+    """(library, source, {name: value}) of what the constructed arm holds.
+
+    smoke-fixes r13 (2026-10-14): an estimator the trees harness gives a pre-binned block
+    (tools/speed_gbdt_arm.py attach_input) carries that block's record, read back as `input_binning`
+    and compared like any setting (both arms of an XGBoost pairing must hold the same bins)."""
+    lib, source, got = _read_params_object(obj)
+    tag = None if isinstance(obj, dict) else getattr(obj, "_board_input_binning", None)
+    if tag is not None:
+        got = dict(got, input_binning=tag)
+        source += " + input_binning (the harness's input block, speed_gbdt_arm.attach_input)"
+    return lib, source, got
+
+
+def _read_params_object(obj):
+    """read_params without the harness's input record."""
     if isinstance(obj, dict) and obj.get("__record__"):
         # read back in another process (a worker) by arm_record()
         return obj["library"], obj["source"], dict(obj.get("raw_params", obj["params"]))
@@ -1112,10 +1126,11 @@ def _semantic_r6(lane, param, arm, ours, theirs, library):
     eval set, no callbacks and no categorical columns on these lanes. Each row fires only for the
     named library, only when the absent side really lacks the field, and only at the values that
     make the knob inactive or equal; any other value still refuses. Sources were read at the box's
-    versions (catboost v1.2.10, dmlc/xgboost v3.2.0 on GitHub). NOT mapped (different work, see
-    the lane's reply): XGBoost's feature_border_type / border_build_max_samples (its hist cuts are
-    a weighted quantile sketch over every row, src/common/hist_util.cu, not GreedyLogSum over a
-    200,000-row sample; no XGBoost setting selects them) and CatBoost's min_split_gain under
+    versions (catboost v1.2.10, dmlc/xgboost v3.2.0 on GitHub). NOT mapped on raw input (different
+    work, see the lane's reply): XGBoost's feature_border_type / border_build_max_samples (its hist
+    cuts are a weighted quantile sketch over every row, src/common/hist_util.cu, not GreedyLogSum
+    over a 200,000-row sample; no XGBoost setting selects them; smoke-fixes r13 maps them only when
+    both arms read back the same pre-binned input, see below) and CatBoost's min_split_gain under
     Lossguide (greedy_search_helper.cpp:297-309, 321-328: the best leaf splits with no sign test,
     where ours' min_split_gain 0 requires a positive gain). smoke-fixes r13 (Andrew 2026-10-14):
     on gbdt-lossguide CatBoost is compared only with the own arm at min_split_gain None (no gain
@@ -1303,6 +1318,25 @@ def _semantic_r6(lane, param, arm, ours, theirs, library):
         # max_delta_step 0 (src/tree/param.h:248-256); lane_config pins NewtonL2 for this reason.
         if param == "score_function" and _r6_is(ours.get(param), "NewtonL2") and plain_leaf:
             return "the Newton L2 gain on both (XGBoost param.h CalcGain, alpha 0, no clip)"
+        # smoke-fixes r13 (Andrew 2026-10-14, DECISIONS.md decision 1; "feature_border_type,
+        # border_build_max_samples missing from xgboost-gpu read-back"): XGBoost has neither (its hist
+        # cuts are a weighted quantile sketch over every row, src/common/hist_util.cu). Mapped ONLY
+        # when both arms read back the same pre-binned input record (tools/speed_gbdt_arm.py
+        # prebinned_data: GreedyLogSum bin ids, the bins' sha256 inside the record): every feature
+        # then holds at most 255 distinct values, each its own bin on both arms (ours 254
+        # GreedyLogSum borders over every row, border_build_max_samples 0; XGBoost max_bin 255,
+        # compared), so both arms see the same split candidates. Raw input still refuses.
+        if param in ("feature_border_type", "border_build_max_samples"):
+            record = ours.get("input_binning")
+            if (isinstance(record, str) and record.startswith("pre-binned input on both arms")
+                    and theirs.get("input_binning") == record
+                    and _r6_is(ours.get("border_build_max_samples"), 0)
+                    and _r6_is(ours.get("feature_border_type"), "GreedyLogSum")
+                    and ours.get("max_bin") is not None and ours.get("max_bin") == theirs.get("max_bin")):
+                return ("the same pre-binned input on both arms (%s): every bin id is its own bin on "
+                        "both (ours GreedyLogSum over every row, max_bin %s on both)"
+                        % (record, ours.get("max_bin")))
+            return None
         # smoke-fixes (2026-10-14; "use_pointwise_searcher missing from xgboost-gpu read-back"): ours
         # False is its greedy depthwise/lossguide searcher (True is refused off SymmetricTree,
         # ensemble.py:673); XGBoost has one hist grower.

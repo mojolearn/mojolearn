@@ -477,3 +477,40 @@ def test_paired_lane_compares_each_opponent_with_its_own_configuration():
     # without the pairing XGBoost meets ours' None (and CatBoost would meet 0.0): refused by name
     rep = BP.check("gbdt-lossguide", arms)
     assert [p for p in rep["problems"] if p.startswith("xgboost-gpu: min_split_gain")], rep["problems"]
+
+
+def _prebinned_pair(record_ours, record_theirs):
+    arms = _matched()
+    ours = _est("mojolearn.ensemble", "GradientBoosting",
+                **dict(arms["ours"]._p, feature_border_type="GreedyLogSum", border_build_max_samples=0))
+    xgb = arms["xgboost-cpu"]
+    for obj, rec in ((ours, record_ours), (xgb, record_theirs)):
+        if rec is not None:
+            obj._board_input_binning = rec
+    return {"ours": arms["ours"], "ours-prebinned": ours, "xgboost-gpu": xgb}
+
+
+def test_prebinned_xgboost_pairing_maps_border_fields_only_on_the_same_bins():
+    # smoke-fixes r13 (Andrew 2026-10-14, DECISIONS.md decision 1): XGBoost has no
+    # feature_border_type / border_build_max_samples; on gbdt-depthwise/-lossguide they are mapped
+    # only when both arms read back the same pre-binned input record (its bins' sha256 inside)
+    pairing = {"ours": ["catboost-*"], "ours-prebinned": ["xgboost-*"]}
+    rec = "pre-binned input on both arms (GreedyLogSum, 254 borders); bins sha256 " + "ab" * 32
+    rep = BP.check("gbdt-depthwise", _prebinned_pair(rec, rec), pairing=pairing)
+    assert rep["references"] == {"xgboost-gpu": "ours-prebinned"}
+    assert rep["arms"]["xgboost-gpu"]["params"]["input_binning"] == rec
+    assert not [p for p in rep["problems"] if "border" in p or "input_binning" in p], rep["problems"]
+    mapped = {r["param"] for r in rep["exceptions"] if r["arm"] == "xgboost-gpu"}
+    assert {"feature_border_type", "border_build_max_samples"} <= mapped
+    row = next(r for r in rep["compared"] if r["param"] == "input_binning")
+    assert row["same"] and row["reference"] == "ours-prebinned"
+    # other bins: the record itself differs and the border fields stay unmapped
+    other = rec.replace("ab" * 32, "cd" * 32)
+    rep = BP.check("gbdt-depthwise", _prebinned_pair(rec, other), pairing=pairing)
+    assert [p for p in rep["problems"] if p.startswith("xgboost-gpu: input_binning")]
+    assert [p for p in rep["problems"] if "feature_border_type missing" in p]
+    # raw input on both: still refused by name
+    rep = BP.check("gbdt-depthwise", _prebinned_pair(None, None), pairing=pairing)
+    assert [p for p in rep["problems"] if "feature_border_type missing" in p]
+    assert [p for p in rep["problems"] if "border_build_max_samples missing" in p]
+

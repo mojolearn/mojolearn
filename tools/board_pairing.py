@@ -27,7 +27,25 @@ PAIRS_FIELD = "pairs_with"
 #: (tools/bench_board.py our_arms) plans a cell for each, and every comparison pairs by this table.
 #: LightGBM is in no list: the driver refuses every boosted LightGBM arm by name
 #: (tools/speed_gbdt_arm.py lightgbm_arms), so it never has a cell to pair.
+#: `prebinned` True: that own arm and its opponents take the same pre-binned input (decision 1
+#: below; tools/speed_gbdt_arm.py prebinned_data), the other arms the raw rows.
+#: Andrew 2026-10-14 (DECISIONS.md decision 1), the bin borders against XGBoost on gbdt-depthwise and
+#: gbdt-lossguide: ours builds GreedyLogSum borders over a 200,000-row sample (ensemble.py:1076,
+#: 1180, 1190; CatBoost's rule), XGBoost 3.2.0 hist a weighted quantile sketch over every row
+#: (src/common/hist_util.cu); neither can be set to the other's cut points. So both arms of the
+#: XGBoost pairing are given the same pre-binned matrix (every feature value replaced by its
+#: GreedyLogSum bin id, once per dataset), where every distinct bin id is its own bin on both: ours
+#: 254 borders over every row (border_build_max_samples 0), XGBoost max_bin 255. Every split
+#: candidate is then the same on both arms. The CatBoost pairings keep the raw input.
 OUR_PAIRINGS = {
+    "gbdt-depthwise": {
+        "ours": {"opponents": ("catboost-*",), "settings": {},
+                 "why": "raw input, ours' and CatBoost's own GreedyLogSum borders"},
+        "ours-prebinned": {"opponents": ("xgboost-*",), "settings": {"border_build_max_samples": 0},
+                           "prebinned": True,
+                           "why": "pre-binned input on both arms (GreedyLogSum bin ids): the same "
+                                  "split candidates as XGBoost hist at max_bin 255"},
+    },
     # Andrew 2026-10-14 (~/mojolearn-evidence/smoke-fixes/DECISIONS.md, decision 2): the split-gain
     # floor. XGBoost 3.2.0 gamma 0 splits only on a strictly positive gain
     # (src/tree/gpu_hist/expand_entry.cuh:34) and has no setting to drop the check; CatBoost 1.2.10
@@ -43,9 +61,12 @@ OUR_PAIRINGS = {
         "ours": {"opponents": ("catboost-gpu",), "settings": {"min_split_gain": None},
                  "why": "min_split_gain None: no gain check, CatBoost Lossguide's growth "
                         "(greedy_search_helper.cpp:297-309, 321-328)"},
-        "ours-gain0": {"opponents": ("xgboost-*",), "settings": {"min_split_gain": 0.0},
+        # decision 1 too: the XGBoost pairing takes the pre-binned input on both arms
+        "ours-gain0": {"opponents": ("xgboost-*",),
+                       "settings": {"min_split_gain": 0.0, "border_build_max_samples": 0},
+                       "prebinned": True,
                        "why": "min_split_gain 0.0: a strictly positive gain, XGBoost gamma 0 "
-                              "(src/tree/gpu_hist/expand_entry.cuh:34)"},
+                              "(src/tree/gpu_hist/expand_entry.cuh:34); pre-binned input on both arms"},
     },
 }
 
@@ -85,3 +106,13 @@ def reference_for(arm, pairing, default="ours"):
         if any(fnmatch.fnmatch(str(arm), g) for g in (globs or ())):
             return own
     return default
+
+
+def prebinned_arm(lane, arm):
+    """True when `arm` (own or opponent) of `lane` races on the pre-binned input."""
+    for own, p in (OUR_PAIRINGS.get(lane) or {}).items():
+        if not p.get("prebinned"):
+            continue
+        if arm == own or any(fnmatch.fnmatch(str(arm), g) for g in p["opponents"]):
+            return True
+    return False
