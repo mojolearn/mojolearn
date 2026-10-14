@@ -1,14 +1,14 @@
 # mojolearn benchmark board
 
-Generated 2026-10-14T05:51:55Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-14T06:04:33Z from `board.json` (schema `mojolearn-bench-board/1`).
 
-> MAIN BOARD amd-mi325x, version label main@0f3f674f2. Unreleased: not reproducible by pip install; the release boards are the reference.
+> MAIN BOARD amd-mi325x, version label main@50be53955. Unreleased: not reproducible by pip install; the release boards are the reference.
 
-> Cells: 230 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@0f3f674f2 (2026-10-14T04:36:54Z). Boxes: AMD Instinct MI325X (amd, DO).
+> Cells: 230 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@50be53955 (2026-10-14T05:52:40Z). Boxes: AMD Instinct MI325X (amd, DO).
 
-> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 305 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
+> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 309 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
-> Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 89, n/a 141).
+> Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 87, n/a 143).
 
 > Opponents: retained from each paired session when present; otherwise retained historical pairs or stored opponent boards (opponents-20261006, release-board-resume-r2). Ingestion runs no measurements. `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 37 races.
 
@@ -18,7 +18,7 @@ Generated 2026-10-14T05:51:55Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Identity
 
-Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 89, n/a 141.
+Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 87, n/a 143.
 
 DIFFER: none.
 
@@ -46,8 +46,8 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | memory bytes | - |
 | OS | - |
 | Python | - |
-| mojolearn | main@0f3f674f2 (wheel mixed source/wheel provenance; see each cell's version and measurement record, sha256 -) |
-| script commit | 0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54 |
+| mojolearn | main@50be53955 (wheel mixed source/wheel provenance; see each cell's version and measurement record, sha256 -) |
+| script commit | 50be53955e44d38634eb7117dfc43a3dc427be01 |
 | patch sync | - |
 | modes | identical |
 | rounds | 1 timed after 1 warm-up, arms interleaved round by round |
@@ -425,10 +425,10 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical | kmeans | istella | inertia_over_ours | - | 1.000000 | hipvs-gpu 0.984774 |
 | classical | kmeans | istella | n_iter | - | 33 | hipvs-gpu 301 |
 | classical | kmeans | istella | n_iter_over_ours | - | 1.000000 | hipvs-gpu 9.121212 |
-| classical | kmeans | taxi | inertia (lower is better) | - | 3.093e+08 | hipvs-gpu 3.129e+08 |
-| classical | kmeans | taxi | inertia_over_ours | - | 1.000000 | hipvs-gpu 1.011536 |
-| classical | kmeans | taxi | n_iter | - | 91 | hipvs-gpu 73 |
-| classical | kmeans | taxi | n_iter_over_ours | - | 1.000000 | hipvs-gpu 0.802198 |
+| classical | kmeans | taxi | inertia (lower is better) | - | 3.093e+08 | hipvs-gpu 3.06e+08 |
+| classical | kmeans | taxi | inertia_over_ours | - | 1.000000 | hipvs-gpu 0.989329 |
+| classical | kmeans | taxi | n_iter | - | 91 | hipvs-gpu 79 |
+| classical | kmeans | taxi | n_iter_over_ours | - | 1.000000 | hipvs-gpu 0.868132 |
 | classical | knn | istella | recall_at_k (higher is better) | - | 0.976250 | hipvs-gpu 0.976133 |
 | classical | knn | istella | rows_with_repeated_ids | - | 0 | hipvs-gpu 0 |
 | classical | knn | taxi | recall_at_k (higher is better) | - | 0.999754 | hipvs-gpu 0.999777 |
@@ -537,8 +537,8 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | algos | layernorm | synthetic | Xq | - | - | 0.1 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 1.826); torch-compile-fp32 0.1 ms (IDENTICAL/arm 1.149); torch-eager-bf16 0.1 ms (IDENTICAL/arm 1.806); torch-compile-bf16 0.1 ms (IDENTICAL/arm 1.081) |
 | algos | maxpool1d | synthetic | Xq | - | - | 0.1 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 0.991); torch-compile-fp32 0.1 ms (IDENTICAL/arm 0.700); torch-eager-bf16 0.1 ms (IDENTICAL/arm 0.926); torch-compile-bf16 0.1 ms (IDENTICAL/arm 0.735) |
 | algos | maxpool2d | synthetic | Xq | - | - | 0.2 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 1.211); torch-compile-fp32 0.2 ms (IDENTICAL/arm 0.986); torch-eager-bf16 0.1 ms (IDENTICAL/arm 1.177); torch-compile-bf16 0.2 ms (IDENTICAL/arm 0.993) |
-| classical | kmeans | istella | Xq | 500000 | - | 18.2 | - | hipvs-gpu - ms (IDENTICAL/arm -) |
-| classical | kmeans | taxi | Xq | 500000 | - | 1.9 | - | hipvs-gpu - ms (IDENTICAL/arm -) |
+| classical | kmeans | istella | Xq | 500000 | - | 18.1 | - | hipvs-gpu - ms (IDENTICAL/arm -) |
+| classical | kmeans | taxi | Xq | 500000 | - | 1.7 | - | hipvs-gpu - ms (IDENTICAL/arm -) |
 
 
 ## Neural headline: ours IDENTICAL against torch bf16
@@ -963,16 +963,16 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### kmeans / istella (rows full, shape 2043304x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.kmeans.istella.rows=full/board.json (amd/paired-2708873b241f963a252aef3563d84caa5849f968f0e42ce3c94cbe8dca4a65f0)`, ran on mojolearn-steward-do-amd
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.istella.rows=full/board.json (amd/paired-578dcfb7f8d25a48cd7af1536281e66d50bb6acb0bcbb9165bbdb58aa4b36ae2)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 293.6 | 293.6..293.6 | 1 | - | - | 293.6 | 261.6 | 32.05 (upload_ms_separate) | - | - | 4536.2 | 234707.5 | inertia=6.051e+17, inertia_over_ours=1.000000, n_iter=33, n_iter_over_ours=1.000000 | yes | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-2708873b241f963a252aef3563d84caa5849f968f0e42ce3c94cbe8dca4a65f0 2026-10-14; identity vs the nvidia columns: n/a) |
-| hipvs-gpu | hipvs | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | hipvs 01.00.00 | opponent | 38468.3 | 38468.3..38468.3 | 1 | 0.008 | - | 38531.8 | 38468.3 | 63.53 (upload_ms_untimed) | 0.008 (whole/whole) | - | 3397.2 | 2884.2 | inertia=5.959e+17, inertia_over_ours=0.984774, n_iter=301, n_iter_over_ours=9.121212 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 293.5 | 293.5..293.5 | 1 | - | - | 293.5 | 261.5 | 32.04 (upload_ms_separate) | - | - | 4537.7 | 234707.5 | inertia=6.051e+17, inertia_over_ours=1.000000, n_iter=33, n_iter_over_ours=1.000000 | yes | main board, one scored run | wheel | ok (main@50be53955 amd/paired-578dcfb7f8d25a48cd7af1536281e66d50bb6acb0bcbb9165bbdb58aa4b36ae2 2026-10-14; identity vs the nvidia columns: n/a) |
+| hipvs-gpu | hipvs | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | hipvs 01.00.00 | opponent | 38671.7 | 38671.7..38671.7 | 1 | 0.008 | - | 38734.2 | 38671.7 | 62.52 (upload_ms_untimed) | 0.008 (whole/whole) | - | 3396.9 | 2884.2 | inertia=5.959e+17, inertia_over_ours=0.984774, n_iter=301, n_iter_over_ours=9.121212 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/150803/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/7391/vram_* bytes for this pid at the round's end (not a peak)
 
-memory, hipvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/150804/vram_* bytes for this pid at the round's end (not a peak)
+memory, hipvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/7392/vram_* bytes for this pid at the round's end (not a peak)
 
 settings: n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic sequential seeding), tol=1e-7 (an absolute squared center shift on every arm; scikit-learn's relative tol rescaled to it), metric='euclidean', Lloyd; seed 7 (ours, scikit-learn and cuML random_state=7). Rows: big block: 4,000,000 taxi rows or the Istella-S train split, raw. Timed: fit (the k-means++ seeding included on every arm).
 
@@ -1019,7 +1019,7 @@ Inference (each arm predicts with its own model from the fit rounds above):
 
 | arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.44 | Xq | 500000 | 18.2 | 18.2..18.2 | 1 | - | - | 18.2 | - | - (stored whole) | - | - | eval_inertia=1.417e+17, label_agreement_own_centers=1.000000 | yes | LIKE-FOR-LIKE-SPAN | ok |
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.44 | Xq | 500000 | 18.1 | 18.1..18.1 | 1 | - | - | 18.1 | - | - (stored whole) | - | - | eval_inertia=1.417e+17, label_agreement_own_centers=1.000000 | yes | LIKE-FOR-LIKE-SPAN | ok |
 | hipvs-gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | hipvs 01.00.00 | Xq | 500000 | - | - | 0 | - | - | - | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "RuntimeError('no inference call wired for HipvsKMeans')", "event": "infer_error", "stage": "infer 0"}) |
 
 inference call, ours: mojolearn KMeans.predict(Xq), host rows in, host result out
@@ -1028,16 +1028,16 @@ inference call, hipvs-gpu: predict(Xq)
 
 ### kmeans / taxi (rows full, shape 4000000x11)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.kmeans.taxi.rows=full/board.json (amd/paired-c66fbce14ee015a5386c150c58f0018b0f5e20ee23e1d33172a724ce32704645)`, ran on mojolearn-steward-do-amd
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.taxi.rows=full/board.json (amd/paired-3c492a6c51e41f72cec4bcfc63591ffa313aef5a9d8508f5b6830211b4af7cc7)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 183.6 | 183.6..183.6 | 1 | - | - | 183.6 | 180.4 | 3.19 (upload_ms_separate) | - | - | 2620.4 | 236099.4 | inertia=3.093e+08, inertia_over_ours=1.000000, n_iter=91, n_iter_over_ours=1.000000 | yes | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-c66fbce14ee015a5386c150c58f0018b0f5e20ee23e1d33172a724ce32704645 2026-10-14; identity vs the nvidia columns: n/a) |
-| hipvs-gpu | hipvs | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | hipvs 01.00.00 | opponent | 13596.9 | 13596.9..13596.9 | 1 | 0.014 | - | 13626.3 | 13596.9 | 29.42 (upload_ms_untimed) | 0.013 (whole/whole) | - | 1481.5 | 1466.2 | inertia=3.129e+08, inertia_over_ours=1.011536, n_iter=73, n_iter_over_ours=0.802198 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 184.0 | 184.0..184.0 | 1 | - | - | 184.0 | 180.9 | 3.18 (upload_ms_separate) | - | - | 2623.0 | 236099.4 | inertia=3.093e+08, inertia_over_ours=1.000000, n_iter=91, n_iter_over_ours=1.000000 | yes | main board, one scored run | wheel | ok (main@50be53955 amd/paired-3c492a6c51e41f72cec4bcfc63591ffa313aef5a9d8508f5b6830211b4af7cc7 2026-10-14; identity vs the nvidia columns: n/a) |
+| hipvs-gpu | hipvs | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | hipvs 01.00.00 | opponent | 14153.2 | 14153.2..14153.2 | 1 | 0.013 | - | 14191.0 | 14153.2 | 37.76 (upload_ms_untimed) | 0.013 (whole/whole) | - | 1481.2 | 1466.2 | inertia=3.06e+08, inertia_over_ours=0.989329, n_iter=79, n_iter_over_ours=0.868132 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/149776/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/6658/vram_* bytes for this pid at the round's end (not a peak)
 
-memory, hipvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/149777/vram_* bytes for this pid at the round's end (not a peak)
+memory, hipvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/6659/vram_* bytes for this pid at the round's end (not a peak)
 
 settings: n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic sequential seeding), tol=1e-7 (an absolute squared center shift on every arm; scikit-learn's relative tol rescaled to it), metric='euclidean', Lloyd; seed 7 (ours, scikit-learn and cuML random_state=7). Rows: big block: 4,000,000 taxi rows or the Istella-S train split, raw. Timed: fit (the k-means++ seeding included on every arm).
 
@@ -1084,7 +1084,7 @@ Inference (each arm predicts with its own model from the fit rounds above):
 
 | arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.44 | Xq | 500000 | 1.9 | 1.9..1.9 | 1 | - | - | 1.9 | - | - (stored whole) | - | - | eval_inertia=4.824e+07, label_agreement_own_centers=0.999998 | yes | LIKE-FOR-LIKE-SPAN | ok |
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.44 | Xq | 500000 | 1.7 | 1.7..1.7 | 1 | - | - | 1.7 | - | - (stored whole) | - | - | eval_inertia=4.824e+07, label_agreement_own_centers=0.999998 | yes | LIKE-FOR-LIKE-SPAN | ok |
 | hipvs-gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | hipvs 01.00.00 | Xq | 500000 | - | - | 0 | - | - | - | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | REFUSED(error: {"error": "RuntimeError('no inference call wired for HipvsKMeans')", "event": "infer_error", "stage": "infer 0"}) |
 
 inference call, ours: mojolearn KMeans.predict(Xq), host rows in, host result out
@@ -1093,16 +1093,16 @@ inference call, hipvs-gpu: predict(Xq)
 
 ### knn / istella (rows full, shape 400000x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.istella.rows=full/board.json (amd/paired-2941536791433e37968d30526ff76c17c566fc74dfe9efed408d807de2505b5c)`, ran on mojolearn-steward-do-amd
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.istella.rows=full/board.json (amd/paired-850b839c06df9b27d80b6305556daf4a1e7ca7f1f28bcae0d06f695c233fc31b)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 30.6 | 30.6..30.6 | 1 | - | - | 30.6 | 23.5 | 7.11 (upload_ms_separate) | - | - | 2717.2 | 236517.3 | recall_at_k=0.976250, rows_with_repeated_ids=0 | yes | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-2941536791433e37968d30526ff76c17c566fc74dfe9efed408d807de2505b5c 2026-10-14; identity vs the nvidia columns: n/a) |
-| hipvs-gpu | hipvs | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | hipvs 01.00.00 | opponent | 42.6 | 42.6..42.6 | 1 | 0.718 | - | 77.4 | 42.6 | 34.78 (upload_ms_untimed) | 0.395 (whole/whole) | - | 1481.4 | 1335.3 | recall_at_k=0.976133, rows_with_repeated_ids=0 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 30.1 | 30.1..30.1 | 1 | - | - | 30.1 | 23.0 | 7.15 (upload_ms_separate) | - | - | 2718.5 | 236517.3 | recall_at_k=0.976250, rows_with_repeated_ids=0 | yes | main board, one scored run | wheel | ok (main@50be53955 amd/paired-850b839c06df9b27d80b6305556daf4a1e7ca7f1f28bcae0d06f695c233fc31b 2026-10-14; identity vs the nvidia columns: n/a) |
+| hipvs-gpu | hipvs | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | hipvs 01.00.00 | opponent | 42.6 | 42.6..42.6 | 1 | 0.707 | - | 76.8 | 42.6 | 34.26 (upload_ms_untimed) | 0.392 (whole/whole) | - | 1478.7 | 1335.3 | recall_at_k=0.976133, rows_with_repeated_ids=0 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/153169/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/8775/vram_* bytes for this pid at the round's end (not a peak)
 
-memory, hipvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/153170/vram_* bytes for this pid at the round's end (not a peak)
+memory, hipvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/8776/vram_* bytes for this pid at the round's end (not a peak)
 
 settings: n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', algorithm='brute' (ours, scikit-learn, cuML). Rows: knn block: 400,000 index rows, 4,000 queries, raw. Timed: kneighbors; the fit (index) is before the clock on every arm.
 
@@ -1130,16 +1130,16 @@ accepted difference: hipvs-gpu query_tile: both brute-force searches cover every
 
 ### knn / taxi (rows full, shape 400000x11)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.taxi.rows=full/board.json (amd/paired-a31366ce27e4144c6bc6c5aa65a6e5e32441becb20aada839dccd13dcee36a71)`, ran on mojolearn-steward-do-amd
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.taxi.rows=full/board.json (amd/paired-3a64fecd056673fd18f0bdc019f3f696ecaf14c9f7e6d000c87891232efa6b21)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 13.1 | 13.1..13.1 | 1 | - | - | 13.1 | 12.8 | 0.39 (upload_ms_separate) | - | - | 2394.8 | 236781.3 | recall_at_k=0.999754, rows_with_repeated_ids=0 | yes | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-a31366ce27e4144c6bc6c5aa65a6e5e32441becb20aada839dccd13dcee36a71 2026-10-14; identity vs the nvidia columns: n/a) |
-| hipvs-gpu | hipvs | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | hipvs 01.00.00 | opponent | 15.5 | 15.5..15.5 | 1 | 0.846 | - | 41.7 | 15.5 | 26.12 (upload_ms_untimed) | 0.316 (whole/whole) | - | 1159.2 | 1043.3 | recall_at_k=0.999777, rows_with_repeated_ids=0 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 13.4 | 13.4..13.4 | 1 | - | - | 13.4 | 13.0 | 0.38 (upload_ms_separate) | - | - | 2396.9 | 236781.3 | recall_at_k=0.999754, rows_with_repeated_ids=0 | yes | main board, one scored run | wheel | ok (main@50be53955 amd/paired-3a64fecd056673fd18f0bdc019f3f696ecaf14c9f7e6d000c87891232efa6b21 2026-10-14; identity vs the nvidia columns: n/a) |
+| hipvs-gpu | hipvs | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | hipvs 01.00.00 | opponent | 15.7 | 15.7..15.7 | 1 | 0.855 | - | 42.3 | 15.7 | 26.68 (upload_ms_untimed) | 0.316 (whole/whole) | - | 1156.8 | 1043.3 | recall_at_k=0.999777, rows_with_repeated_ids=0 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/152315/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/8163/vram_* bytes for this pid at the round's end (not a peak)
 
-memory, hipvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/152316/vram_* bytes for this pid at the round's end (not a peak)
+memory, hipvs-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/8164/vram_* bytes for this pid at the round's end (not a peak)
 
 settings: n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', algorithm='brute' (ours, scikit-learn, cuML). Rows: knn block: 400,000 index rows, 4,000 queries, raw. Timed: kneighbors; the fit (index) is before the clock on every arm.
 

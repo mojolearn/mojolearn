@@ -1,8 +1,8 @@
 {
- "generated": "2026-10-14T05:51:53Z",
+ "generated": "2026-10-14T06:04:31Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-14T05:51:53Z",
+  "generated": "2026-10-14T06:04:31Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -74,6 +74,12 @@
    "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.istella.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.istella.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.taxi.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.istella.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.taxi.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.maxabs-scaler.istella.rows=full/board.json",
@@ -309,5 +315,5 @@
   "GRIDBB: branch gbdt-categorical-oom": 6,
   "GRIDBB: not a bench_board race": 8
  },
- "summary": "MAINBOARD column=nvidia-l40s label=main@4dce9b50a races=262 add=0 change=2 drop=0 failed=1 ledger=352 withheld_opponents=43 identity=MATCH:86,n/a:176"
+ "summary": "MAINBOARD column=nvidia-l40s label=main@50be53955 races=262 add=0 change=1 drop=0 failed=1 ledger=352 withheld_opponents=43 identity=MATCH:86,n/a:176"
 }

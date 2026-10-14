@@ -7896,6 +7896,40 @@
    "reason": "older commit",
    "replaced": {
     "box": "amd",
+    "commit_date": "2026-10-14T04:02:34Z",
+    "digest": "6b0540e8f8723c1e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.kmeans.istella.rows=full/board.json",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "paired-2708873b241f963a252aef3563d84caa5849f968f0e42ce3c94cbe8dca4a65f0",
+    "kind": "paired",
+    "median_ms": 293.615716000204,
+    "reason": null,
+    "sha": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "status": "ok",
+    "version": "0.8.44"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-14T05:52:40Z",
+    "digest": "6b0540e8f8723c1e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.istella.rows=full/board.json",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "paired-578dcfb7f8d25a48cd7af1536281e66d50bb6acb0bcbb9165bbdb58aa4b36ae2",
+    "kind": "paired",
+    "median_ms": 293.530058999977,
+    "reason": null,
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/kmeans/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
     "commit_date": "2026-10-09T20:23:58Z",
     "digest": "6b0540e8f8723c1e",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
@@ -7910,15 +7944,15 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-14T04:02:34Z",
+    "commit_date": "2026-10-14T05:52:40Z",
     "digest": "6b0540e8f8723c1e",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.kmeans.istella.rows=full/board.json",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.istella.rows=full/board.json",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "paired-2708873b241f963a252aef3563d84caa5849f968f0e42ce3c94cbe8dca4a65f0",
+    "job": "paired-578dcfb7f8d25a48cd7af1536281e66d50bb6acb0bcbb9165bbdb58aa4b36ae2",
     "kind": "paired",
-    "median_ms": 293.615716000204,
+    "median_ms": 293.530058999977,
     "reason": null,
-    "sha": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "status": "ok",
     "version": "0.8.44"
    }
@@ -7944,15 +7978,49 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-14T04:02:34Z",
+    "commit_date": "2026-10-14T05:52:40Z",
     "digest": "6b0540e8f8723c1e",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.kmeans.istella.rows=full/board.json",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.istella.rows=full/board.json",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "paired-2708873b241f963a252aef3563d84caa5849f968f0e42ce3c94cbe8dca4a65f0",
+    "job": "paired-578dcfb7f8d25a48cd7af1536281e66d50bb6acb0bcbb9165bbdb58aa4b36ae2",
     "kind": "paired",
-    "median_ms": 293.615716000204,
+    "median_ms": 293.530058999977,
+    "reason": null,
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/kmeans/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-14T04:02:34Z",
+    "digest": "c9250e0922f657c9",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "paired-c66fbce14ee015a5386c150c58f0018b0f5e20ee23e1d33172a724ce32704645",
+    "kind": "paired",
+    "median_ms": 183.63497200016354,
     "reason": null,
     "sha": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "status": "ok",
+    "version": "0.8.44"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-14T05:52:40Z",
+    "digest": "c9250e0922f657c9",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "paired-3c492a6c51e41f72cec4bcfc63591ffa313aef5a9d8508f5b6830211b4af7cc7",
+    "kind": "paired",
+    "median_ms": 184.04207700001507,
+    "reason": null,
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "status": "ok",
     "version": "0.8.44"
    }
@@ -7978,15 +8046,15 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-14T04:02:34Z",
+    "commit_date": "2026-10-14T05:52:40Z",
     "digest": "c9250e0922f657c9",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "paired-c66fbce14ee015a5386c150c58f0018b0f5e20ee23e1d33172a724ce32704645",
+    "job": "paired-3c492a6c51e41f72cec4bcfc63591ffa313aef5a9d8508f5b6830211b4af7cc7",
     "kind": "paired",
-    "median_ms": 183.63497200016354,
+    "median_ms": 184.04207700001507,
     "reason": null,
-    "sha": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "status": "ok",
     "version": "0.8.44"
    }
@@ -8012,15 +8080,49 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-14T04:02:34Z",
+    "commit_date": "2026-10-14T05:52:40Z",
     "digest": "c9250e0922f657c9",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "paired-c66fbce14ee015a5386c150c58f0018b0f5e20ee23e1d33172a724ce32704645",
+    "job": "paired-3c492a6c51e41f72cec4bcfc63591ffa313aef5a9d8508f5b6830211b4af7cc7",
     "kind": "paired",
-    "median_ms": 183.63497200016354,
+    "median_ms": 184.04207700001507,
+    "reason": null,
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/knn/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-14T04:02:34Z",
+    "digest": "842a646a7de728a1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.istella.rows=full/board.json",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "paired-2941536791433e37968d30526ff76c17c566fc74dfe9efed408d807de2505b5c",
+    "kind": "paired",
+    "median_ms": 30.59516999974221,
     "reason": null,
     "sha": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "status": "ok",
+    "version": "0.8.44"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-14T05:52:40Z",
+    "digest": "842a646a7de728a1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.istella.rows=full/board.json",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "paired-850b839c06df9b27d80b6305556daf4a1e7ca7f1f28bcae0d06f695c233fc31b",
+    "kind": "paired",
+    "median_ms": 30.113769999957185,
+    "reason": null,
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "status": "ok",
     "version": "0.8.44"
    }
@@ -8046,15 +8148,15 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-14T04:02:34Z",
+    "commit_date": "2026-10-14T05:52:40Z",
     "digest": "842a646a7de728a1",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.istella.rows=full/board.json",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.istella.rows=full/board.json",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "paired-2941536791433e37968d30526ff76c17c566fc74dfe9efed408d807de2505b5c",
+    "job": "paired-850b839c06df9b27d80b6305556daf4a1e7ca7f1f28bcae0d06f695c233fc31b",
     "kind": "paired",
-    "median_ms": 30.59516999974221,
+    "median_ms": 30.113769999957185,
     "reason": null,
-    "sha": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "status": "ok",
     "version": "0.8.44"
    }
@@ -8080,15 +8182,49 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-14T04:02:34Z",
+    "commit_date": "2026-10-14T05:52:40Z",
     "digest": "842a646a7de728a1",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.istella.rows=full/board.json",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.istella.rows=full/board.json",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "paired-2941536791433e37968d30526ff76c17c566fc74dfe9efed408d807de2505b5c",
+    "job": "paired-850b839c06df9b27d80b6305556daf4a1e7ca7f1f28bcae0d06f695c233fc31b",
     "kind": "paired",
-    "median_ms": 30.59516999974221,
+    "median_ms": 30.113769999957185,
+    "reason": null,
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "amd-mi325x",
+   "failed": false,
+   "race": "classical/knn/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "amd",
+    "commit_date": "2026-10-14T04:02:34Z",
+    "digest": "cd7ff95514f7e589",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.taxi.rows=full/board.json",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "paired-a31366ce27e4144c6bc6c5aa65a6e5e32441becb20aada839dccd13dcee36a71",
+    "kind": "paired",
+    "median_ms": 13.147978999768384,
     "reason": null,
     "sha": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "status": "ok",
+    "version": "0.8.44"
+   },
+   "replaced_by": {
+    "box": "amd",
+    "commit_date": "2026-10-14T05:52:40Z",
+    "digest": "cd7ff95514f7e589",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.taxi.rows=full/board.json",
+    "hardware": "AMD Instinct MI325X (amd, DO)",
+    "job": "paired-3a64fecd056673fd18f0bdc019f3f696ecaf14c9f7e6d000c87891232efa6b21",
+    "kind": "paired",
+    "median_ms": 13.395999000010761,
+    "reason": null,
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "status": "ok",
     "version": "0.8.44"
    }
@@ -8114,15 +8250,15 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-14T04:02:34Z",
+    "commit_date": "2026-10-14T05:52:40Z",
     "digest": "cd7ff95514f7e589",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.taxi.rows=full/board.json",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.taxi.rows=full/board.json",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "paired-a31366ce27e4144c6bc6c5aa65a6e5e32441becb20aada839dccd13dcee36a71",
+    "job": "paired-3a64fecd056673fd18f0bdc019f3f696ecaf14c9f7e6d000c87891232efa6b21",
     "kind": "paired",
-    "median_ms": 13.147978999768384,
+    "median_ms": 13.395999000010761,
     "reason": null,
-    "sha": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "status": "ok",
     "version": "0.8.44"
    }
@@ -8148,15 +8284,15 @@
    },
    "replaced_by": {
     "box": "amd",
-    "commit_date": "2026-10-14T04:02:34Z",
+    "commit_date": "2026-10-14T05:52:40Z",
     "digest": "cd7ff95514f7e589",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.taxi.rows=full/board.json",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.taxi.rows=full/board.json",
     "hardware": "AMD Instinct MI325X (amd, DO)",
-    "job": "paired-a31366ce27e4144c6bc6c5aa65a6e5e32441becb20aada839dccd13dcee36a71",
+    "job": "paired-3a64fecd056673fd18f0bdc019f3f696ecaf14c9f7e6d000c87891232efa6b21",
     "kind": "paired",
-    "median_ms": 13.147978999768384,
+    "median_ms": 13.395999000010761,
     "reason": null,
-    "sha": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "status": "ok",
     "version": "0.8.44"
    }
@@ -14639,5 +14775,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-14T05:51:53Z"
+ "updated": "2026-10-14T06:04:31Z"
 }

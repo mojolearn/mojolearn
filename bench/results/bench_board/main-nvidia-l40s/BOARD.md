@@ -1,10 +1,10 @@
 # mojolearn benchmark board
 
-Generated 2026-10-14T05:51:54Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-14T06:04:32Z from `board.json` (schema `mojolearn-bench-board/1`).
 
-> MAIN BOARD nvidia-l40s, version label main@4dce9b50a. Unreleased: not reproducible by pip install; the release boards are the reference.
+> MAIN BOARD nvidia-l40s, version label main@50be53955. Unreleased: not reproducible by pip install; the release boards are the reference.
 
-> Cells: 262 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@4dce9b50a (2026-10-14T05:15:01Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).
+> Cells: 262 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@50be53955 (2026-10-14T05:52:40Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).
 
 > Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 352 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
@@ -41,8 +41,8 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | memory bytes | - |
 | OS | - |
 | Python | - |
-| mojolearn | main@4dce9b50a (wheel mixed source/wheel provenance; see each cell's version and measurement record, sha256 -) |
-| script commit | 4dce9b50aa68d8561d71cadea49d2bf2c539aad6 |
+| mojolearn | main@50be53955 (wheel mixed source/wheel provenance; see each cell's version and measurement record, sha256 -) |
+| script commit | 50be53955e44d38634eb7117dfc43a3dc427be01 |
 | patch sync | - |
 | modes | identical |
 | rounds | 1 timed after 1 warm-up, arms interleaved round by round |
@@ -427,11 +427,13 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical | hdbscan | istella | n_clusters | - | 47 | cuml-gpu 53 |
 | classical | hdbscan | istella | noise_fraction | - | 0.253810 | cuml-gpu 0.256280 |
 | classical | hdbscan | istella | rows | - | 100000 | cuml-gpu 100000 |
+| classical | hdbscan | istella | silhouette (higher is better) | - | -0.003856 | cuml-gpu -0.018228 |
 | classical | hdbscan | istella | ari_vs_ours (1 is our partition exactly) | - | - | cuml-gpu 0.857120 |
 | classical | hdbscan | istella | noise_agreement_vs_ours | - | - | cuml-gpu 0.940610 |
 | classical | hdbscan | taxi | n_clusters | - | 161 | cuml-gpu 159 |
 | classical | hdbscan | taxi | noise_fraction | - | 0.140550 | cuml-gpu 0.130970 |
 | classical | hdbscan | taxi | rows | - | 100000 | cuml-gpu 100000 |
+| classical | hdbscan | taxi | silhouette (higher is better) | - | 0.001505 | cuml-gpu 0.011960 |
 | classical | hdbscan | taxi | ari_vs_ours (1 is our partition exactly) | - | - | cuml-gpu 0.917885 |
 | classical | hdbscan | taxi | noise_agreement_vs_ours | - | - | cuml-gpu 0.984420 |
 | classical | kde | istella | mean_log_likelihood (higher is better) | - | -222.270583 | cuml-gpu -222.270582 |
@@ -1114,14 +1116,14 @@ config: cuML benchmark (RAPIDS), DBSCAN (https://github.com/rapidsai/cuml/blob/e
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### hdbscan / istella (rows full, shape 1000000x220)
+### hdbscan / istella (rows full, shape 100000x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.istella.rows=full/board.json (nv2/paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9)`, ran on d2fe567d3b88
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.istella.rows=full/board.json (nv2/paired-44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2)`, ran on d2fe567d3b88
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | 0.8.44 | identical | 1162.9 | 1162.9..1162.9 | 1 | - | - | 1162.9 | 1159.2 | 3.75 (upload_ms_separate) | - | - | 2438.2 | 1194.0 | n_clusters=47, noise_fraction=0.253810, rows=100000 | yes | main board, one scored run | wheel | ok (main@4dce9b50a nv2/paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9 2026-10-14; identity vs the amd columns: n/a) |
-| cuml-gpu | cuml | gpu | NVIDIA L40S (host d2fe567d3b88) | cuml 26.08.00 | opponent | 859.2 | 859.2..859.2 | 1 | 1.354 | - | 942.3 | 859.2 | 83.15 (upload_ms_untimed) | 1.234 (whole/whole) | - | 1867.5 | 526.0 | ari_vs_ours=0.857120, n_clusters=53, noise_agreement_vs_ours=0.940610, noise_fraction=0.256280, rows=100000 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | 0.8.44 | identical | 1166.5 | 1166.5..1166.5 | 1 | - | - | 1166.5 | 1162.8 | 3.63 (upload_ms_separate) | - | - | 2438.4 | 1194.0 | n_clusters=47, noise_fraction=0.253810, rows=100000, silhouette=-0.003856, silhouette_library=sklearn.metrics.silhouette_score, silhouette_library_version=1.7.2, silhouette_scope=all consumed rows; noise is a label group; no sampling | yes | main board, one scored run | wheel | ok (main@50be53955 nv2/paired-44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2 2026-10-14; identity vs the amd columns: n/a) |
+| cuml-gpu | cuml | gpu | NVIDIA L40S (host d2fe567d3b88) | cuml 26.08.00 | opponent | 805.7 | 805.7..805.7 | 1 | 1.448 | - | 889.6 | 805.7 | 83.86 (upload_ms_untimed) | 1.311 (whole/whole) | - | 1865.3 | 526.0 | ari_vs_ours=0.857120, n_clusters=53, noise_agreement_vs_ours=0.940610, noise_fraction=0.256280, rows=100000, silhouette=-0.018228, silhouette_library=sklearn.metrics.silhouette_score, silhouette_library_version=1.7.2, silhouette_scope=all consumed rows; noise is a label group; no sampling | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
 memory, ours, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
 
@@ -1168,14 +1170,14 @@ accepted difference: cuml-gpu gen_min_span_tree: both construct the internal MST
 
 accepted difference: cuml-gpu p: p only parameterizes Minkowski distance; both arms explicitly use Euclidean distance
 
-### hdbscan / taxi (rows full, shape 1000000x11)
+### hdbscan / taxi (rows full, shape 100000x11)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.taxi.rows=full/board.json (nv2/paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b)`, ran on d2fe567d3b88
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.taxi.rows=full/board.json (nv2/paired-2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad)`, ran on d2fe567d3b88
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | 0.8.44 | identical | 409.4 | 409.4..409.4 | 1 | - | - | 409.4 | 409.0 | 0.34 (upload_ms_separate) | - | - | 1558.4 | 682.0 | n_clusters=161, noise_fraction=0.140550, rows=100000 | yes | main board, one scored run | wheel | ok (main@4dce9b50a nv2/paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b 2026-10-14; identity vs the amd columns: n/a) |
-| cuml-gpu | cuml | gpu | NVIDIA L40S (host d2fe567d3b88) | cuml 26.08.00 | opponent | 357.6 | 357.6..357.6 | 1 | 1.145 | - | 370.4 | 357.6 | 12.74 (upload_ms_untimed) | 1.105 (whole/whole) | - | 975.7 | 448.0 | ari_vs_ours=0.917885, n_clusters=159, noise_agreement_vs_ours=0.984420, noise_fraction=0.130970, rows=100000 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | 0.8.44 | identical | 407.7 | 407.7..407.7 | 1 | - | - | 407.7 | 407.4 | 0.27 (upload_ms_separate) | - | - | 1550.0 | 682.0 | n_clusters=161, noise_fraction=0.140550, rows=100000, silhouette=0.001505, silhouette_library=sklearn.metrics.silhouette_score, silhouette_library_version=1.7.2, silhouette_scope=all consumed rows; noise is a label group; no sampling | yes | main board, one scored run | wheel | ok (main@50be53955 nv2/paired-2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad 2026-10-14; identity vs the amd columns: n/a) |
+| cuml-gpu | cuml | gpu | NVIDIA L40S (host d2fe567d3b88) | cuml 26.08.00 | opponent | 358.4 | 358.4..358.4 | 1 | 1.138 | - | 366.1 | 358.4 | 7.69 (upload_ms_untimed) | 1.114 (whole/whole) | - | 954.1 | 448.0 | ari_vs_ours=0.917885, n_clusters=159, noise_agreement_vs_ours=0.984420, noise_fraction=0.130970, rows=100000, silhouette=0.011960, silhouette_library=sklearn.metrics.silhouette_score, silhouette_library_version=1.7.2, silhouette_scope=all consumed rows; noise is a label group; no sampling | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
 memory, ours, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
 

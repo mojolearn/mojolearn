@@ -1,7 +1,7 @@
 {
   "board_notes": [
-    "MAIN BOARD nvidia-l40s, version label main@4dce9b50a. Unreleased: not reproducible by pip install; the release boards are the reference.",
-    "Cells: 262 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@4dce9b50a (2026-10-14T05:15:01Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).",
+    "MAIN BOARD nvidia-l40s, version label main@50be53955. Unreleased: not reproducible by pip install; the release boards are the reference.",
+    "Cells: 262 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@50be53955 (2026-10-14T05:52:40Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).",
     "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 352 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
     "Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 86, n/a 176).",
     "Opponents: retained from each paired session when present; otherwise retained historical pairs or stored opponent boards (opponents-default-20261006, opponents-specific-20261006, release-board-resume-r2). Ingestion runs no measurements. `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 43 races.",
@@ -38,14 +38,14 @@
       "hostname": "NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod)"
     },
     "mojolearn": {
-      "version": "main@4dce9b50a",
+      "version": "main@50be53955",
       "wheel": {
         "file": "mixed source/wheel provenance; see each cell's version and measurement record",
         "sha256": "-"
       }
     },
     "repo": {
-      "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6"
+      "commit": "50be53955e44d38634eb7117dfc43a3dc427be01"
     }
   },
   "config": {
@@ -63,7 +63,7 @@
     "smoke": false,
     "vendor": "nvidia"
   },
-  "created": "2026-10-14T05:51:53Z",
+  "created": "2026-10-14T06:04:31Z",
   "main_board": {
     "backfill": {
       "filled": {
@@ -2255,7 +2255,7 @@
     },
     "inputs": {
       "branch": "main",
-      "generated": "2026-10-14T05:51:53Z",
+      "generated": "2026-10-14T06:04:31Z",
       "grid_logs": [
         "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
         "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -2327,6 +2327,12 @@
         "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
         "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
         "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
+        "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
+        "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
+        "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.istella.rows=full/board.json",
+        "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
+        "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.istella.rows=full/board.json",
+        "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.taxi.rows=full/board.json",
         "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.istella.rows=full/board.json",
         "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.taxi.rows=full/board.json",
         "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.maxabs-scaler.istella.rows=full/board.json",
@@ -2349,8 +2355,8 @@
         "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-results.txt"
       ]
     },
-    "label": "main@4dce9b50a",
-    "newest_sha": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+    "label": "main@50be53955",
+    "newest_sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "oldest_sha": "89485bc9624fad07097aa6671c5b162b5221ae99",
     "opponent_boards": [
       {
@@ -889824,23 +889830,33 @@
               "quality_comparison": [
                 {
                   "batch": null,
-                  "checks": [],
+                  "checks": [
+                    {
+                      "comparison": "absolute",
+                      "margin": 0.01,
+                      "metric": "silhouette",
+                      "observed": 0.014371679397299886,
+                      "opponent": -0.018228009343147278,
+                      "ours": -0.003856329945847392,
+                      "verdict": "FAIL"
+                    }
+                  ],
                   "failures": [],
                   "interpretation": "engineering margin; not a statistical equivalence claim",
                   "policy": "mojolearn.quality-parity.v4",
-                  "verdict": "INSUFFICIENT"
+                  "verdict": "FAIL"
                 }
               ],
-              "reason": "scored classical output bytes lack verified archive membership and digest",
+              "reason": "quality outside declared margin: silhouette",
               "rerace": "x",
               "timing_comparison": {
                 "clock": "whole",
                 "kind": "preferred",
                 "label": "whole/whole",
-                "opponent_ms": 942.3346240073442,
-                "ours_ms": 1162.9104688763618,
+                "opponent_ms": 889.5929455757141,
+                "ours_ms": 1166.4632093161345,
                 "preferred": "whole",
-                "value": 1.2340737984676857
+                "value": 1.31123253069553
               },
               "timing_comparisons": [
                 {
@@ -889849,21 +889865,21 @@
                   "clock": "whole",
                   "kind": "preferred",
                   "label": "whole/whole",
-                  "opponent_ms": 942.3346240073442,
-                  "ours_ms": 1162.9104688763618,
+                  "opponent_ms": 889.5929455757141,
+                  "ours_ms": 1166.4632093161345,
                   "preferred": "whole",
-                  "value": 1.2340737984676857
+                  "value": 1.31123253069553
                 }
               ],
-              "verdict": "INSUFFICIENT"
+              "verdict": "UNFAIR"
             }
           },
           "ours_over_theirs": null,
-          "pairing": "v2:e06802d4aed75c09dff845bd35ef6efbe6697cf70cc2244ccf7fd1a9e16269a9",
+          "pairing": "v2:1a43396b1c35cf0b5662af61c62cf65f0900fec818696a342da83931998284f9",
           "reason": "no opponent with sufficient valid comparison evidence",
           "rerace": "x",
           "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v4, 2026-10-14)",
-          "verdict": "INSUFFICIENT"
+          "verdict": "UNFAIR"
         }
       },
       "audit_history": [
@@ -890069,6 +890085,56 @@
           "rerace": "",
           "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v3, 2026-10-14)",
           "verdict": "FAIR"
+        },
+        {
+          "admitted_opponents": [],
+          "date": "2026-10-14",
+          "opponent": null,
+          "opponents": {
+            "cuml-gpu": {
+              "quality_comparison": [
+                {
+                  "batch": null,
+                  "checks": [],
+                  "failures": [],
+                  "interpretation": "engineering margin; not a statistical equivalence claim",
+                  "policy": "mojolearn.quality-parity.v4",
+                  "verdict": "INSUFFICIENT"
+                }
+              ],
+              "reason": "scored classical output bytes lack verified archive membership and digest",
+              "rerace": "x",
+              "timing_comparison": {
+                "clock": "whole",
+                "kind": "preferred",
+                "label": "whole/whole",
+                "opponent_ms": 942.3346240073442,
+                "ours_ms": 1162.9104688763618,
+                "preferred": "whole",
+                "value": 1.2340737984676857
+              },
+              "timing_comparisons": [
+                {
+                  "batch": null,
+                  "batch_rows": null,
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 942.3346240073442,
+                  "ours_ms": 1162.9104688763618,
+                  "preferred": "whole",
+                  "value": 1.2340737984676857
+                }
+              ],
+              "verdict": "INSUFFICIENT"
+            }
+          },
+          "ours_over_theirs": null,
+          "pairing": "v2:e06802d4aed75c09dff845bd35ef6efbe6697cf70cc2244ccf7fd1a9e16269a9",
+          "reason": "no opponent with sufficient valid comparison evidence",
+          "rerace": "x",
+          "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v4, 2026-10-14)",
+          "verdict": "INSUFFICIENT"
         }
       ],
       "cells": [
@@ -890076,7 +890142,7 @@
           "arm": "ours",
           "comparability": {
             "span": {
-              "fit_minus_upload_ms": 1159.1605935245752,
+              "fit_minus_upload_ms": 1162.8334261476994,
               "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
               "fit_ms_untimed": null,
               "input_home": "host",
@@ -890084,7 +890150,7 @@
               "library": "mojolearn",
               "pre_clock_fit": false,
               "pre_clock_fit_source": "declared",
-              "upload_ms_separate": 3.7498753517866135,
+              "upload_ms_separate": 3.6297831684350967,
               "upload_ms_untimed": null
             },
             "span_asymmetry": []
@@ -890106,22 +890172,22 @@
           "library_version": "0.8.44",
           "main_board": {
             "box": "nv2",
-            "commit_date": "2026-10-14T05:15:01Z",
+            "commit_date": "2026-10-14T05:52:40Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9",
-            "measured": "2026-10-14T05:26:52Z",
+            "job": "paired-44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2",
+            "measured": "2026-10-14T06:00:33Z",
             "newer_failed": [],
             "observation": {
               "box": "nv2",
               "column": "nvidia-l40s",
               "comparability": {
                 "span": {
-                  "fit_minus_upload_ms": 1159.1605935245752,
+                  "fit_minus_upload_ms": 1162.8334261476994,
                   "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                   "fit_ms_untimed": null,
                   "input_home": "host",
@@ -890129,28 +890195,28 @@
                   "library": "mojolearn",
                   "pre_clock_fit": false,
                   "pre_clock_fit_source": "declared",
-                  "upload_ms_separate": 3.7498753517866135,
+                  "upload_ms_separate": 3.6297831684350967,
                   "upload_ms_untimed": null
                 },
                 "span_asymmetry": []
               },
-              "ct": 1791954901,
+              "ct": 1791957160,
               "dataset": "istella",
               "digest": "533cb30501725362",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
               "family": "classical",
               "gpu_recorded": "NVIDIA L40S",
               "hardware": "NVIDIA L40S (nv2, RunPod)",
               "infra": false,
-              "job": "paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9",
+              "job": "paired-44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2",
               "kind": "paired",
               "lane": "hdbscan",
-              "measured": "2026-10-14T05:26:52Z",
+              "measured": "2026-10-14T06:00:33Z",
               "measured_cell": {
                 "arm": "ours",
                 "comparability": {
                   "span": {
-                    "fit_minus_upload_ms": 1159.1605935245752,
+                    "fit_minus_upload_ms": 1162.8334261476994,
                     "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                     "fit_ms_untimed": null,
                     "input_home": "host",
@@ -890158,7 +890224,7 @@
                     "library": "mojolearn",
                     "pre_clock_fit": false,
                     "pre_clock_fit_source": "declared",
-                    "upload_ms_separate": 3.7498753517866135,
+                    "upload_ms_separate": 3.6297831684350967,
                     "upload_ms_untimed": null
                   },
                   "span_asymmetry": []
@@ -890179,13 +890245,13 @@
                 "lane": "hdbscan",
                 "library": "mojolearn",
                 "library_version": "0.8.44",
-                "max_ms": 1162.9104688763618,
+                "max_ms": 1166.4632093161345,
                 "measurement": {
                   "artifacts": {
-                    "bytes": 42082627,
+                    "bytes": 42182927,
                     "r2_bucket": "mojolearn-data",
-                    "r2_key": "measurements/records/v1/19126ce18ec96e13f8080bc0793a764a857ebc41c71ed1b46d1ec5c385a2f819.tar.gz",
-                    "sha256": "19126ce18ec96e13f8080bc0793a764a857ebc41c71ed1b46d1ec5c385a2f819",
+                    "r2_key": "measurements/records/v1/4a72ddc0dc75b9c3b3f79922cd742cc4c247c5d26d3f1017e4ddcd5dca0e7e58.tar.gz",
+                    "sha256": "4a72ddc0dc75b9c3b3f79922cd742cc4c247c5d26d3f1017e4ddcd5dca0e7e58",
                     "status": "verified",
                     "verification": "GET sha256"
                   },
@@ -890201,9 +890267,9 @@
                     "--data",
                     "/root/gpu-gap-cache/ctd-data/rows-full",
                     "--out",
-                    "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
+                    "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
                     "--work",
-                    "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
+                    "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
                     "--root",
                     "/root/mojolearn",
                     "--arms",
@@ -890233,7 +890299,7 @@
                       "api": "cuda",
                       "count": 1,
                       "cuda_driver_raw": [
-                        "Wed Oct 14 05:26:16 2026       ",
+                        "Wed Oct 14 05:56:25 2026       ",
                         "+-----------------------------------------------------------------------------------------+",
                         "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                         "+-----------------------------------------+------------------------+----------------------+"
@@ -890438,9 +890504,9 @@
                       "version": "3.11.10 CPython"
                     },
                     "repo": {
-                      "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                      "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                       "script": "tools/bench_board.py",
-                      "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                      "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                       "sync": null
                     }
                   },
@@ -890463,7 +890529,7 @@
                     "status": "verified",
                     "vendor": "nvidia"
                   },
-                  "id": "90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9",
+                  "id": "44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2",
                   "invocation": {
                     "effective_arguments": {
                       "allow_single_cluster": false,
@@ -890521,27 +890587,35 @@
                     "source": "get_params"
                   },
                   "phase": "fit",
+                  "retained_outputs": {
+                    "bytes": 400266,
+                    "member": "run/work/hdbscan-istella-ours.npz",
+                    "output_digest": "533cb30501725362",
+                    "output_sha256": "cb330e15a1b86fce0b3c5daab2878e3e4f9c414781d5ed8db7add620ab69bbd9",
+                    "sha256": "e92275fad14efb36ef3fa982716bbc25011f7dd8bd8386058193144d1587168d",
+                    "status": "verified"
+                  },
                   "schema": "mojolearn.measurement.v1",
                   "seed": "none (deterministic)",
-                  "shape": "1000000x220",
+                  "shape": "100000x220",
                   "software": {
                     "library": "mojolearn",
                     "version": "0.8.44"
                   },
                   "source": {
-                    "bytes": 20282888,
-                    "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
-                    "manifest_sha256": "4c24508c9a1c0e6dce81a0dad3d842c287453bdb1dc1d4aa606f0e5afd275264",
+                    "bytes": 20286511,
+                    "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
+                    "manifest_sha256": "ce5a1fd982a8192b958f2eec547138a84f0f0a219c12724c1bf71edda11ee06b",
                     "r2_bucket": "mojolearn-data",
-                    "r2_key": "measurements/records/v1/f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7.tar.gz",
-                    "sha256": "f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7",
+                    "r2_key": "measurements/records/v1/3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75.tar.gz",
+                    "sha256": "3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75",
                     "status": "verified",
                     "verification": "GET sha256"
                   },
                   "timing": {
                     "rounds": 1,
                     "span": {
-                      "fit_minus_upload_ms": 1159.1605935245752,
+                      "fit_minus_upload_ms": 1162.8334261476994,
                       "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                       "fit_ms_untimed": null,
                       "input_home": "host",
@@ -890549,13 +890623,13 @@
                       "library": "mojolearn",
                       "pre_clock_fit": false,
                       "pre_clock_fit_source": "declared",
-                      "upload_ms_separate": 3.7498753517866135,
+                      "upload_ms_separate": 3.6297831684350967,
                       "upload_ms_untimed": null
                     },
                     "times_ms": [
-                      1162.9104688763618
+                      1166.4632093161345
                     ],
-                    "warmup_ms": 1955.033203586936
+                    "warmup_ms": 1953.5482544451952
                   },
                   "workers": [
                     {
@@ -890713,7 +890787,7 @@
                         "MOJOLEARN_BOARD_VENDOR": "nvidia",
                         "MOJOLEARN_CPU_THREADS": "13",
                         "MOJOLEARN_NUMERIC_MODE": "identical",
-                        "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                        "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                         "NUMEXPR_NUM_THREADS": "13",
                         "OMP_NUM_THREADS": "13",
                         "OPENBLAS_NUM_THREADS": "13",
@@ -891038,7 +891112,7 @@
                         "zict": "3.0.0",
                         "zipp": "4.1.1"
                       },
-                      "pid": 36107,
+                      "pid": 40314,
                       "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
                       "runtime": {},
                       "status": "recorded",
@@ -891060,18 +891134,18 @@
                     }
                   ]
                 },
-                "median_ms": 1162.9104688763618,
+                "median_ms": 1166.4632093161345,
                 "memory": {
                   "children_mb": 0.0,
                   "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
                   "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
                   "peak_gpu_mb": 1194.0,
-                  "peak_host_mb": 2438.2,
+                  "peak_host_mb": 2438.4,
                   "rounds_sampled": 1,
                   "warmup_gpu_mb": 1194.0,
                   "warmup_host_mb": 2418.9
                 },
-                "min_ms": 1162.9104688763618,
+                "min_ms": 1166.4632093161345,
                 "mode": "identical",
                 "mode_witness": "identical",
                 "neural_shape": null,
@@ -891079,8 +891153,8 @@
                   {
                     "dataset_load_included": false,
                     "fresh_process": false,
-                    "ms": 1955.2700985223055,
-                    "preparation_ms": 0.004936009645462036,
+                    "ms": 1953.7926223129034,
+                    "preparation_ms": 0.005038455128669739,
                     "round": 0,
                     "scope": "call-consume",
                     "startup_probe_preparation_excluded": true,
@@ -891089,8 +891163,8 @@
                   {
                     "dataset_load_included": false,
                     "fresh_process": false,
-                    "ms": 1162.9766505211592,
-                    "preparation_ms": 0.005487352609634399,
+                    "ms": 1166.5303520858288,
+                    "preparation_ms": 0.005640089511871338,
                     "round": 1,
                     "scope": "call-consume",
                     "startup_probe_preparation_excluded": true,
@@ -891130,11 +891204,15 @@
                   "source": "get_params"
                 },
                 "peak_gpu_mb": 1194.0,
-                "peak_host_mb": 2438.2,
+                "peak_host_mb": 2438.4,
                 "quality": {
                   "n_clusters": 47,
                   "noise_fraction": 0.25381,
-                  "rows": 100000
+                  "rows": 100000,
+                  "silhouette": -0.003856329945847392,
+                  "silhouette_library": "sklearn.metrics.silhouette_score",
+                  "silhouette_library_version": "1.7.2",
+                  "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
                 },
                 "ratio_ours_fast_over": null,
                 "ratio_ours_identical_over": null,
@@ -891157,7 +891235,7 @@
                   "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
                   "warmup_rounds": 1
                 },
-                "shape": "1000000x220",
+                "shape": "100000x220",
                 "state_receipts": [
                   {
                     "model": {
@@ -891172,14 +891250,14 @@
                 ],
                 "status": "ok",
                 "times_ms": [
-                  1162.9104688763618
+                  1166.4632093161345
                 ],
                 "verdict": "LIKE-FOR-LIKE-SPAN",
-                "version": "mojolearn 0.8.44, scripts @4dce9b50a",
+                "version": "mojolearn 0.8.44, scripts @50be53955",
                 "version_source": "board box",
-                "warmup_ms": 1955.033203586936
+                "warmup_ms": 1953.5482544451952
               },
-              "median_ms": 1162.9104688763618,
+              "median_ms": 1166.4632093161345,
               "paired_box": {
                 "env": {
                   "MKL_NUM_THREADS": null,
@@ -891193,7 +891271,7 @@
                   "api": "cuda",
                   "count": 1,
                   "cuda_driver_raw": [
-                    "Wed Oct 14 05:26:16 2026       ",
+                    "Wed Oct 14 05:56:25 2026       ",
                     "+-----------------------------------------------------------------------------------------+",
                     "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                     "+-----------------------------------------+------------------------+----------------------+"
@@ -891398,9 +891476,9 @@
                   "version": "3.11.10 CPython"
                 },
                 "repo": {
-                  "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                  "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                   "script": "tools/bench_board.py",
-                  "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                  "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                   "sync": null
                 }
               },
@@ -891419,23 +891497,33 @@
                         "quality_comparison": [
                           {
                             "batch": null,
-                            "checks": [],
+                            "checks": [
+                              {
+                                "comparison": "absolute",
+                                "margin": 0.01,
+                                "metric": "silhouette",
+                                "observed": 0.014371679397299886,
+                                "opponent": -0.018228009343147278,
+                                "ours": -0.003856329945847392,
+                                "verdict": "FAIL"
+                              }
+                            ],
                             "failures": [],
                             "interpretation": "engineering margin; not a statistical equivalence claim",
-                            "policy": "mojolearn.quality-parity.v3",
-                            "verdict": "INSUFFICIENT"
+                            "policy": "mojolearn.quality-parity.v4",
+                            "verdict": "FAIL"
                           }
                         ],
-                        "reason": "comparable quantitative quality evidence needs review",
+                        "reason": "quality outside declared margin: silhouette",
                         "rerace": "x",
                         "timing_comparison": {
                           "clock": "whole",
                           "kind": "preferred",
                           "label": "whole/whole",
-                          "opponent_ms": 942.3346240073442,
-                          "ours_ms": 1162.9104688763618,
+                          "opponent_ms": 889.5929455757141,
+                          "ours_ms": 1166.4632093161345,
                           "preferred": "whole",
-                          "value": 1.2340737984676857
+                          "value": 1.31123253069553
                         },
                         "timing_comparisons": [
                           {
@@ -891444,21 +891532,21 @@
                             "clock": "whole",
                             "kind": "preferred",
                             "label": "whole/whole",
-                            "opponent_ms": 942.3346240073442,
-                            "ours_ms": 1162.9104688763618,
+                            "opponent_ms": 889.5929455757141,
+                            "ours_ms": 1166.4632093161345,
                             "preferred": "whole",
-                            "value": 1.2340737984676857
+                            "value": 1.31123253069553
                           }
                         ],
-                        "verdict": "INSUFFICIENT"
+                        "verdict": "UNFAIR"
                       }
                     },
                     "ours_over_theirs": null,
-                    "pairing": "v2:15221518ccbd37d458b29286780a0f0cde397379e7efca5cde4e09cb824f1d05",
+                    "pairing": "v2:2273b3521fcb138f9dd6a0bc70e2ceaef0d754bb1f6f43d910fb19f854e41a09",
                     "reason": "no opponent with sufficient valid comparison evidence",
                     "rerace": "x",
-                    "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v3, 2026-10-14)",
-                    "verdict": "INSUFFICIENT"
+                    "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v4, 2026-10-14)",
+                    "verdict": "UNFAIR"
                   }
                 },
                 "cells": [
@@ -891466,7 +891554,7 @@
                     "arm": "ours",
                     "comparability": {
                       "span": {
-                        "fit_minus_upload_ms": 1159.1605935245752,
+                        "fit_minus_upload_ms": 1162.8334261476994,
                         "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                         "fit_ms_untimed": null,
                         "input_home": "host",
@@ -891474,7 +891562,7 @@
                         "library": "mojolearn",
                         "pre_clock_fit": false,
                         "pre_clock_fit_source": "declared",
-                        "upload_ms_separate": 3.7498753517866135,
+                        "upload_ms_separate": 3.6297831684350967,
                         "upload_ms_untimed": null
                       },
                       "span_asymmetry": []
@@ -891495,13 +891583,13 @@
                     "lane": "hdbscan",
                     "library": "mojolearn",
                     "library_version": "0.8.44",
-                    "max_ms": 1162.9104688763618,
+                    "max_ms": 1166.4632093161345,
                     "measurement": {
                       "artifacts": {
-                        "bytes": 42082627,
+                        "bytes": 42182927,
                         "r2_bucket": "mojolearn-data",
-                        "r2_key": "measurements/records/v1/19126ce18ec96e13f8080bc0793a764a857ebc41c71ed1b46d1ec5c385a2f819.tar.gz",
-                        "sha256": "19126ce18ec96e13f8080bc0793a764a857ebc41c71ed1b46d1ec5c385a2f819",
+                        "r2_key": "measurements/records/v1/4a72ddc0dc75b9c3b3f79922cd742cc4c247c5d26d3f1017e4ddcd5dca0e7e58.tar.gz",
+                        "sha256": "4a72ddc0dc75b9c3b3f79922cd742cc4c247c5d26d3f1017e4ddcd5dca0e7e58",
                         "status": "verified",
                         "verification": "GET sha256"
                       },
@@ -891517,9 +891605,9 @@
                         "--data",
                         "/root/gpu-gap-cache/ctd-data/rows-full",
                         "--out",
-                        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
+                        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
                         "--work",
-                        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
+                        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
                         "--root",
                         "/root/mojolearn",
                         "--arms",
@@ -891549,7 +891637,7 @@
                           "api": "cuda",
                           "count": 1,
                           "cuda_driver_raw": [
-                            "Wed Oct 14 05:26:16 2026       ",
+                            "Wed Oct 14 05:56:25 2026       ",
                             "+-----------------------------------------------------------------------------------------+",
                             "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                             "+-----------------------------------------+------------------------+----------------------+"
@@ -891754,9 +891842,9 @@
                           "version": "3.11.10 CPython"
                         },
                         "repo": {
-                          "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                          "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                           "script": "tools/bench_board.py",
-                          "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                          "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                           "sync": null
                         }
                       },
@@ -891779,7 +891867,7 @@
                         "status": "verified",
                         "vendor": "nvidia"
                       },
-                      "id": "90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9",
+                      "id": "44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2",
                       "invocation": {
                         "effective_arguments": {
                           "allow_single_cluster": false,
@@ -891837,27 +891925,35 @@
                         "source": "get_params"
                       },
                       "phase": "fit",
+                      "retained_outputs": {
+                        "bytes": 400266,
+                        "member": "run/work/hdbscan-istella-ours.npz",
+                        "output_digest": "533cb30501725362",
+                        "output_sha256": "cb330e15a1b86fce0b3c5daab2878e3e4f9c414781d5ed8db7add620ab69bbd9",
+                        "sha256": "e92275fad14efb36ef3fa982716bbc25011f7dd8bd8386058193144d1587168d",
+                        "status": "verified"
+                      },
                       "schema": "mojolearn.measurement.v1",
                       "seed": "none (deterministic)",
-                      "shape": "1000000x220",
+                      "shape": "100000x220",
                       "software": {
                         "library": "mojolearn",
                         "version": "0.8.44"
                       },
                       "source": {
-                        "bytes": 20282888,
-                        "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
-                        "manifest_sha256": "4c24508c9a1c0e6dce81a0dad3d842c287453bdb1dc1d4aa606f0e5afd275264",
+                        "bytes": 20286511,
+                        "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
+                        "manifest_sha256": "ce5a1fd982a8192b958f2eec547138a84f0f0a219c12724c1bf71edda11ee06b",
                         "r2_bucket": "mojolearn-data",
-                        "r2_key": "measurements/records/v1/f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7.tar.gz",
-                        "sha256": "f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7",
+                        "r2_key": "measurements/records/v1/3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75.tar.gz",
+                        "sha256": "3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75",
                         "status": "verified",
                         "verification": "GET sha256"
                       },
                       "timing": {
                         "rounds": 1,
                         "span": {
-                          "fit_minus_upload_ms": 1159.1605935245752,
+                          "fit_minus_upload_ms": 1162.8334261476994,
                           "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                           "fit_ms_untimed": null,
                           "input_home": "host",
@@ -891865,13 +891961,13 @@
                           "library": "mojolearn",
                           "pre_clock_fit": false,
                           "pre_clock_fit_source": "declared",
-                          "upload_ms_separate": 3.7498753517866135,
+                          "upload_ms_separate": 3.6297831684350967,
                           "upload_ms_untimed": null
                         },
                         "times_ms": [
-                          1162.9104688763618
+                          1166.4632093161345
                         ],
-                        "warmup_ms": 1955.033203586936
+                        "warmup_ms": 1953.5482544451952
                       },
                       "workers": [
                         {
@@ -892029,7 +892125,7 @@
                             "MOJOLEARN_BOARD_VENDOR": "nvidia",
                             "MOJOLEARN_CPU_THREADS": "13",
                             "MOJOLEARN_NUMERIC_MODE": "identical",
-                            "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                            "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                             "NUMEXPR_NUM_THREADS": "13",
                             "OMP_NUM_THREADS": "13",
                             "OPENBLAS_NUM_THREADS": "13",
@@ -892354,7 +892450,7 @@
                             "zict": "3.0.0",
                             "zipp": "4.1.1"
                           },
-                          "pid": 36107,
+                          "pid": 40314,
                           "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
                           "runtime": {},
                           "status": "recorded",
@@ -892376,18 +892472,18 @@
                         }
                       ]
                     },
-                    "median_ms": 1162.9104688763618,
+                    "median_ms": 1166.4632093161345,
                     "memory": {
                       "children_mb": 0.0,
                       "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
                       "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
                       "peak_gpu_mb": 1194.0,
-                      "peak_host_mb": 2438.2,
+                      "peak_host_mb": 2438.4,
                       "rounds_sampled": 1,
                       "warmup_gpu_mb": 1194.0,
                       "warmup_host_mb": 2418.9
                     },
-                    "min_ms": 1162.9104688763618,
+                    "min_ms": 1166.4632093161345,
                     "mode": "identical",
                     "mode_witness": "identical",
                     "neural_shape": null,
@@ -892395,8 +892491,8 @@
                       {
                         "dataset_load_included": false,
                         "fresh_process": false,
-                        "ms": 1955.2700985223055,
-                        "preparation_ms": 0.004936009645462036,
+                        "ms": 1953.7926223129034,
+                        "preparation_ms": 0.005038455128669739,
                         "round": 0,
                         "scope": "call-consume",
                         "startup_probe_preparation_excluded": true,
@@ -892405,8 +892501,8 @@
                       {
                         "dataset_load_included": false,
                         "fresh_process": false,
-                        "ms": 1162.9766505211592,
-                        "preparation_ms": 0.005487352609634399,
+                        "ms": 1166.5303520858288,
+                        "preparation_ms": 0.005640089511871338,
                         "round": 1,
                         "scope": "call-consume",
                         "startup_probe_preparation_excluded": true,
@@ -892446,11 +892542,15 @@
                       "source": "get_params"
                     },
                     "peak_gpu_mb": 1194.0,
-                    "peak_host_mb": 2438.2,
+                    "peak_host_mb": 2438.4,
                     "quality": {
                       "n_clusters": 47,
                       "noise_fraction": 0.25381,
-                      "rows": 100000
+                      "rows": 100000,
+                      "silhouette": -0.003856329945847392,
+                      "silhouette_library": "sklearn.metrics.silhouette_score",
+                      "silhouette_library_version": "1.7.2",
+                      "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
                     },
                     "ratio_ours_fast_over": null,
                     "ratio_ours_identical_over": null,
@@ -892473,7 +892573,7 @@
                       "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
                       "warmup_rounds": 1
                     },
-                    "shape": "1000000x220",
+                    "shape": "100000x220",
                     "state_receipts": [
                       {
                         "model": {
@@ -892488,12 +892588,12 @@
                     ],
                     "status": "ok",
                     "times_ms": [
-                      1162.9104688763618
+                      1166.4632093161345
                     ],
                     "verdict": "LIKE-FOR-LIKE-SPAN",
-                    "version": "mojolearn 0.8.44, scripts @4dce9b50a",
+                    "version": "mojolearn 0.8.44, scripts @50be53955",
                     "version_source": "board box",
-                    "warmup_ms": 1955.033203586936
+                    "warmup_ms": 1953.5482544451952
                   },
                   {
                     "arm": "cuml-gpu",
@@ -892508,7 +892608,7 @@
                         "pre_clock_fit": false,
                         "pre_clock_fit_source": "declared",
                         "upload_ms_separate": null,
-                        "upload_ms_untimed": 83.14776793122292
+                        "upload_ms_untimed": 83.85678194463253
                       },
                       "span_asymmetry": [
                         "upload_outside_its_clock"
@@ -892528,13 +892628,13 @@
                     "lane": "hdbscan",
                     "library": "cuml",
                     "library_version": "26.08.00",
-                    "max_ms": 859.1868560761213,
+                    "max_ms": 805.7361636310816,
                     "measurement": {
                       "artifacts": {
-                        "bytes": 42082627,
+                        "bytes": 42182927,
                         "r2_bucket": "mojolearn-data",
-                        "r2_key": "measurements/records/v1/19126ce18ec96e13f8080bc0793a764a857ebc41c71ed1b46d1ec5c385a2f819.tar.gz",
-                        "sha256": "19126ce18ec96e13f8080bc0793a764a857ebc41c71ed1b46d1ec5c385a2f819",
+                        "r2_key": "measurements/records/v1/4a72ddc0dc75b9c3b3f79922cd742cc4c247c5d26d3f1017e4ddcd5dca0e7e58.tar.gz",
+                        "sha256": "4a72ddc0dc75b9c3b3f79922cd742cc4c247c5d26d3f1017e4ddcd5dca0e7e58",
                         "status": "verified",
                         "verification": "GET sha256"
                       },
@@ -892550,9 +892650,9 @@
                         "--data",
                         "/root/gpu-gap-cache/ctd-data/rows-full",
                         "--out",
-                        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
+                        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
                         "--work",
-                        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
+                        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
                         "--root",
                         "/root/mojolearn",
                         "--arms",
@@ -892582,7 +892682,7 @@
                           "api": "cuda",
                           "count": 1,
                           "cuda_driver_raw": [
-                            "Wed Oct 14 05:26:16 2026       ",
+                            "Wed Oct 14 05:56:25 2026       ",
                             "+-----------------------------------------------------------------------------------------+",
                             "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                             "+-----------------------------------------+------------------------+----------------------+"
@@ -892787,9 +892887,9 @@
                           "version": "3.11.10 CPython"
                         },
                         "repo": {
-                          "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                          "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                           "script": "tools/bench_board.py",
-                          "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                          "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                           "sync": null
                         }
                       },
@@ -892812,7 +892912,7 @@
                         "status": "verified",
                         "vendor": "nvidia"
                       },
-                      "id": "2998e814e94e354c2678cfc5ea9c8e052bde22c801c24cfc73757b3f73353aef",
+                      "id": "8dc4bfabab9b95bdc00aa6a8397f536c960ec48b241fed456ad45db562a8f9b5",
                       "invocation": {
                         "effective_arguments": {
                           "allow_single_cluster": false,
@@ -892928,20 +893028,28 @@
                         "source": "get_params"
                       },
                       "phase": "fit",
+                      "retained_outputs": {
+                        "bytes": 400266,
+                        "member": "run/work/hdbscan-istella-cuml-gpu.npz",
+                        "output_digest": "53d70b2685220b45",
+                        "output_sha256": "3468daf4fbbd9e6928d87fa47275cc2c5e5ec7d9084bcc1d1535ed6225417756",
+                        "sha256": "63f836f8ee0d307ae98aa4790a679c415ec07456ed95e8eb6e4c19058f85c2aa",
+                        "status": "verified"
+                      },
                       "schema": "mojolearn.measurement.v1",
                       "seed": "none (deterministic)",
-                      "shape": "1000000x220",
+                      "shape": "100000x220",
                       "software": {
                         "library": "cuml",
                         "version": "26.08.00"
                       },
                       "source": {
-                        "bytes": 20282888,
-                        "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
-                        "manifest_sha256": "4c24508c9a1c0e6dce81a0dad3d842c287453bdb1dc1d4aa606f0e5afd275264",
+                        "bytes": 20286511,
+                        "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
+                        "manifest_sha256": "ce5a1fd982a8192b958f2eec547138a84f0f0a219c12724c1bf71edda11ee06b",
                         "r2_bucket": "mojolearn-data",
-                        "r2_key": "measurements/records/v1/f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7.tar.gz",
-                        "sha256": "f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7",
+                        "r2_key": "measurements/records/v1/3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75.tar.gz",
+                        "sha256": "3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75",
                         "status": "verified",
                         "verification": "GET sha256"
                       },
@@ -892957,12 +893065,12 @@
                           "pre_clock_fit": false,
                           "pre_clock_fit_source": "declared",
                           "upload_ms_separate": null,
-                          "upload_ms_untimed": 83.14776793122292
+                          "upload_ms_untimed": 83.85678194463253
                         },
                         "times_ms": [
-                          859.1868560761213
+                          805.7361636310816
                         ],
-                        "warmup_ms": 959.6300162374973
+                        "warmup_ms": 953.134985640645
                       },
                       "workers": [
                         {
@@ -893119,7 +893227,7 @@
                             "MOJOLEARN_BENCH_INSTALLED": "1",
                             "MOJOLEARN_BOARD_VENDOR": "nvidia",
                             "MOJOLEARN_CPU_THREADS": "13",
-                            "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                            "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                             "NUMEXPR_NUM_THREADS": "13",
                             "OMP_NUM_THREADS": "13",
                             "OPENBLAS_NUM_THREADS": "13",
@@ -893313,7 +893421,7 @@
                             "zict": "3.0.0",
                             "zipp": "4.1.1"
                           },
-                          "pid": 36108,
+                          "pid": 40315,
                           "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
                           "runtime": {
                             "cupy": {
@@ -893325,7 +893433,17 @@
                           "status": "recorded",
                           "thread_pools": [
                             {
-                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/treelite.libs/libgomp-e985bcbb.so.1.0.0",
+                              "architecture": "SkylakeX",
+                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-32a4b2a6.so",
+                              "internal_api": "openblas",
+                              "num_threads": 13,
+                              "prefix": "libscipy_openblas",
+                              "threading_layer": "pthreads",
+                              "user_api": "blas",
+                              "version": "0.3.31.188.0"
+                            },
+                            {
+                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/scikit_learn.libs/libgomp-a34b3233.so.1.0.0",
                               "internal_api": "openmp",
                               "num_threads": 13,
                               "prefix": "libgomp",
@@ -893343,22 +893461,12 @@
                               "version": "0.3.30"
                             },
                             {
-                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/scikit_learn.libs/libgomp-a34b3233.so.1.0.0",
+                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/treelite.libs/libgomp-e985bcbb.so.1.0.0",
                               "internal_api": "openmp",
                               "num_threads": 13,
                               "prefix": "libgomp",
                               "user_api": "openmp",
                               "version": null
-                            },
-                            {
-                              "architecture": "SkylakeX",
-                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-32a4b2a6.so",
-                              "internal_api": "openblas",
-                              "num_threads": 13,
-                              "prefix": "libscipy_openblas",
-                              "threading_layer": "pthreads",
-                              "user_api": "blas",
-                              "version": "0.3.31.188.0"
                             },
                             {
                               "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/libraft_cu12.libs/libgomp-855c301a.so.1.0.0",
@@ -893375,26 +893483,26 @@
                         }
                       ]
                     },
-                    "median_ms": 859.1868560761213,
+                    "median_ms": 805.7361636310816,
                     "memory": {
                       "children_mb": 0.0,
                       "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
                       "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
                       "peak_gpu_mb": 526.0,
-                      "peak_host_mb": 1867.5,
+                      "peak_host_mb": 1865.3,
                       "rounds_sampled": 1,
                       "warmup_gpu_mb": 522.0,
-                      "warmup_host_mb": 1867.3
+                      "warmup_host_mb": 1865.0
                     },
-                    "min_ms": 859.1868560761213,
+                    "min_ms": 805.7361636310816,
                     "mode": "opponent",
                     "neural_shape": null,
                     "operations": [
                       {
                         "dataset_load_included": false,
                         "fresh_process": false,
-                        "ms": 959.8241373896599,
-                        "preparation_ms": 0.0049173831939697266,
+                        "ms": 953.3264525234699,
+                        "preparation_ms": 0.0050477683544158936,
                         "round": 0,
                         "scope": "call-consume",
                         "startup_probe_preparation_excluded": true,
@@ -893403,8 +893511,8 @@
                       {
                         "dataset_load_included": false,
                         "fresh_process": false,
-                        "ms": 859.340775758028,
-                        "preparation_ms": 0.006450340151786804,
+                        "ms": 805.88767118752,
+                        "preparation_ms": 0.005766749382019043,
                         "round": 1,
                         "scope": "call-consume",
                         "startup_probe_preparation_excluded": true,
@@ -893455,16 +893563,20 @@
                       "source": "get_params"
                     },
                     "peak_gpu_mb": 526.0,
-                    "peak_host_mb": 1867.5,
+                    "peak_host_mb": 1865.3,
                     "quality": {
                       "ari_vs_ours": 0.8571196168198708,
                       "n_clusters": 53,
                       "noise_agreement_vs_ours": 0.94061,
                       "noise_fraction": 0.25628,
-                      "rows": 100000
+                      "rows": 100000,
+                      "silhouette": -0.018228009343147278,
+                      "silhouette_library": "sklearn.metrics.silhouette_score",
+                      "silhouette_library_version": "1.7.2",
+                      "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
                     },
                     "ratio_ours_fast_over": null,
-                    "ratio_ours_identical_over": 1.3535012327671496,
+                    "ratio_ours_identical_over": 1.44769871574266,
                     "rounds": 1,
                     "rows": null,
                     "rows_tag": "full",
@@ -893484,7 +893596,7 @@
                       "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
                       "warmup_rounds": 1
                     },
-                    "shape": "1000000x220",
+                    "shape": "100000x220",
                     "source": "measured this run",
                     "state_receipts": [
                       {
@@ -893501,12 +893613,12 @@
                     ],
                     "status": "ok",
                     "times_ms": [
-                      859.1868560761213
+                      805.7361636310816
                     ],
                     "verdict": "SPAN-ASYMMETRIC(upload_outside_its_clock)",
                     "version": "cuml 26.08.00",
                     "version_source": "cell record",
-                    "warmup_ms": 959.6300162374973
+                    "warmup_ms": 953.134985640645
                   }
                 ],
                 "command": [
@@ -893521,9 +893633,9 @@
                   "--data",
                   "/root/gpu-gap-cache/ctd-data/rows-full",
                   "--out",
-                  "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
+                  "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
                   "--work",
-                  "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
+                  "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
                   "--root",
                   "/root/mojolearn",
                   "--arms",
@@ -893541,17 +893653,17 @@
                 ],
                 "dataset": "istella",
                 "env": {},
-                "evidence_directory": "evidence/runs/race-blsee_h4",
+                "evidence_directory": "evidence/runs/race-gig3f89v",
                 "evidence_receipt": {
-                  "bytes": 21060,
+                  "bytes": 22118,
                   "r2_bucket": "mojolearn-data",
-                  "r2_key": "measurements/records/v1/c8c3fdf9717d72535b5825533936fe254bfe182d95d29620408688e081b08992.tar.gz",
-                  "sha256": "c8c3fdf9717d72535b5825533936fe254bfe182d95d29620408688e081b08992",
+                  "r2_key": "measurements/records/v1/c0ade4faa1e35be4e412ef15f13b00e6844931b1f33c089cec6a3f7897dae14d.tar.gz",
+                  "sha256": "c0ade4faa1e35be4e412ef15f13b00e6844931b1f33c089cec6a3f7897dae14d",
                   "status": "verified",
                   "verification": "GET sha256"
                 },
                 "family": "classical",
-                "finished": "2026-10-14T05:26:52Z",
+                "finished": "2026-10-14T06:00:33Z",
                 "host": {
                   "hostname": "d2fe567d3b88",
                   "pod_id": null
@@ -893971,7 +894083,7 @@
                         "MOJOLEARN_BENCH_INSTALLED": "1",
                         "MOJOLEARN_BOARD_VENDOR": "nvidia",
                         "MOJOLEARN_CPU_THREADS": "13",
-                        "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                        "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                         "NUMEXPR_NUM_THREADS": "13",
                         "OMP_NUM_THREADS": "13",
                         "OPENBLAS_NUM_THREADS": "13",
@@ -893998,7 +894110,7 @@
                         "MOJOLEARN_BOARD_VENDOR": "nvidia",
                         "MOJOLEARN_CPU_THREADS": "13",
                         "MOJOLEARN_NUMERIC_MODE": "identical",
-                        "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                        "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                         "NUMEXPR_NUM_THREADS": "13",
                         "OMP_NUM_THREADS": "13",
                         "OPENBLAS_NUM_THREADS": "13",
@@ -894031,35 +894143,39 @@
                 "rerace": "x",
                 "rows": null,
                 "skipped_opponents": [],
-                "started": "2026-10-14T05:26:39Z",
+                "started": "2026-10-14T05:56:44Z",
                 "status": "done",
                 "stored_arms": [],
                 "stored_now": 1,
-                "wall_s": 30.1
+                "wall_s": 247.1
               },
               "quality": {
                 "n_clusters": 47,
                 "noise_fraction": 0.25381,
-                "rows": 100000
+                "rows": 100000,
+                "silhouette": -0.003856329945847392,
+                "silhouette_library": "sklearn.metrics.silhouette_score",
+                "silhouette_library_version": "1.7.2",
+                "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
               },
               "race_id": "classical/hdbscan/istella/rows=full",
               "reason": null,
-              "sha": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+              "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
               "version": "0.8.44"
             },
-            "sha": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6"
+            "sha": "50be53955e44d38634eb7117dfc43a3dc427be01"
           },
-          "max_ms": 1162.9104688763618,
+          "max_ms": 1166.4632093161345,
           "measurement": {
             "artifacts": {
-              "bytes": 42082627,
+              "bytes": 42182927,
               "r2_bucket": "mojolearn-data",
-              "r2_key": "measurements/records/v1/19126ce18ec96e13f8080bc0793a764a857ebc41c71ed1b46d1ec5c385a2f819.tar.gz",
-              "sha256": "19126ce18ec96e13f8080bc0793a764a857ebc41c71ed1b46d1ec5c385a2f819",
+              "r2_key": "measurements/records/v1/4a72ddc0dc75b9c3b3f79922cd742cc4c247c5d26d3f1017e4ddcd5dca0e7e58.tar.gz",
+              "sha256": "4a72ddc0dc75b9c3b3f79922cd742cc4c247c5d26d3f1017e4ddcd5dca0e7e58",
               "status": "verified",
               "verification": "GET sha256"
             },
@@ -894075,9 +894191,9 @@
               "--data",
               "/root/gpu-gap-cache/ctd-data/rows-full",
               "--out",
-              "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
+              "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
               "--work",
-              "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
+              "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
               "--root",
               "/root/mojolearn",
               "--arms",
@@ -894107,7 +894223,7 @@
                 "api": "cuda",
                 "count": 1,
                 "cuda_driver_raw": [
-                  "Wed Oct 14 05:26:16 2026       ",
+                  "Wed Oct 14 05:56:25 2026       ",
                   "+-----------------------------------------------------------------------------------------+",
                   "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                   "+-----------------------------------------+------------------------+----------------------+"
@@ -894312,9 +894428,9 @@
                 "version": "3.11.10 CPython"
               },
               "repo": {
-                "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                 "script": "tools/bench_board.py",
-                "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                 "sync": null
               }
             },
@@ -894337,7 +894453,7 @@
               "status": "verified",
               "vendor": "nvidia"
             },
-            "id": "90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9",
+            "id": "44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2",
             "invocation": {
               "effective_arguments": {
                 "allow_single_cluster": false,
@@ -894395,27 +894511,35 @@
               "source": "get_params"
             },
             "phase": "fit",
+            "retained_outputs": {
+              "bytes": 400266,
+              "member": "run/work/hdbscan-istella-ours.npz",
+              "output_digest": "533cb30501725362",
+              "output_sha256": "cb330e15a1b86fce0b3c5daab2878e3e4f9c414781d5ed8db7add620ab69bbd9",
+              "sha256": "e92275fad14efb36ef3fa982716bbc25011f7dd8bd8386058193144d1587168d",
+              "status": "verified"
+            },
             "schema": "mojolearn.measurement.v1",
             "seed": "none (deterministic)",
-            "shape": "1000000x220",
+            "shape": "100000x220",
             "software": {
               "library": "mojolearn",
               "version": "0.8.44"
             },
             "source": {
-              "bytes": 20282888,
-              "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
-              "manifest_sha256": "4c24508c9a1c0e6dce81a0dad3d842c287453bdb1dc1d4aa606f0e5afd275264",
+              "bytes": 20286511,
+              "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
+              "manifest_sha256": "ce5a1fd982a8192b958f2eec547138a84f0f0a219c12724c1bf71edda11ee06b",
               "r2_bucket": "mojolearn-data",
-              "r2_key": "measurements/records/v1/f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7.tar.gz",
-              "sha256": "f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7",
+              "r2_key": "measurements/records/v1/3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75.tar.gz",
+              "sha256": "3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75",
               "status": "verified",
               "verification": "GET sha256"
             },
             "timing": {
               "rounds": 1,
               "span": {
-                "fit_minus_upload_ms": 1159.1605935245752,
+                "fit_minus_upload_ms": 1162.8334261476994,
                 "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                 "fit_ms_untimed": null,
                 "input_home": "host",
@@ -894423,13 +894547,13 @@
                 "library": "mojolearn",
                 "pre_clock_fit": false,
                 "pre_clock_fit_source": "declared",
-                "upload_ms_separate": 3.7498753517866135,
+                "upload_ms_separate": 3.6297831684350967,
                 "upload_ms_untimed": null
               },
               "times_ms": [
-                1162.9104688763618
+                1166.4632093161345
               ],
-              "warmup_ms": 1955.033203586936
+              "warmup_ms": 1953.5482544451952
             },
             "workers": [
               {
@@ -894587,7 +894711,7 @@
                   "MOJOLEARN_BOARD_VENDOR": "nvidia",
                   "MOJOLEARN_CPU_THREADS": "13",
                   "MOJOLEARN_NUMERIC_MODE": "identical",
-                  "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                  "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                   "NUMEXPR_NUM_THREADS": "13",
                   "OMP_NUM_THREADS": "13",
                   "OPENBLAS_NUM_THREADS": "13",
@@ -894912,7 +895036,7 @@
                   "zict": "3.0.0",
                   "zipp": "4.1.1"
                 },
-                "pid": 36107,
+                "pid": 40314,
                 "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
                 "runtime": {},
                 "status": "recorded",
@@ -894934,26 +895058,26 @@
               }
             ]
           },
-          "median_ms": 1162.9104688763618,
+          "median_ms": 1166.4632093161345,
           "memory": {
             "children_mb": 0.0,
             "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
             "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
             "peak_gpu_mb": 1194.0,
-            "peak_host_mb": 2438.2,
+            "peak_host_mb": 2438.4,
             "rounds_sampled": 1,
             "warmup_gpu_mb": 1194.0,
             "warmup_host_mb": 2418.9
           },
-          "min_ms": 1162.9104688763618,
+          "min_ms": 1166.4632093161345,
           "mode": "identical",
           "neural_shape": null,
           "operations": [
             {
               "dataset_load_included": false,
               "fresh_process": false,
-              "ms": 1955.2700985223055,
-              "preparation_ms": 0.004936009645462036,
+              "ms": 1953.7926223129034,
+              "preparation_ms": 0.005038455128669739,
               "round": 0,
               "scope": "call-consume",
               "startup_probe_preparation_excluded": true,
@@ -894962,8 +895086,8 @@
             {
               "dataset_load_included": false,
               "fresh_process": false,
-              "ms": 1162.9766505211592,
-              "preparation_ms": 0.005487352609634399,
+              "ms": 1166.5303520858288,
+              "preparation_ms": 0.005640089511871338,
               "round": 1,
               "scope": "call-consume",
               "startup_probe_preparation_excluded": true,
@@ -895003,11 +895127,15 @@
             "source": "get_params"
           },
           "peak_gpu_mb": 1194.0,
-          "peak_host_mb": 2438.2,
+          "peak_host_mb": 2438.4,
           "quality": {
             "n_clusters": 47,
             "noise_fraction": 0.25381,
-            "rows": 100000
+            "rows": 100000,
+            "silhouette": -0.003856329945847392,
+            "silhouette_library": "sklearn.metrics.silhouette_score",
+            "silhouette_library_version": "1.7.2",
+            "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -895030,8 +895158,8 @@
             "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
             "warmup_rounds": 1
           },
-          "shape": "1000000x220",
-          "source": "main@4dce9b50a nv2/paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9 2026-10-14; identity vs the amd columns: n/a",
+          "shape": "100000x220",
+          "source": "main@50be53955 nv2/paired-44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2 2026-10-14; identity vs the amd columns: n/a",
           "state_receipts": [
             {
               "model": {
@@ -895046,12 +895174,12 @@
           ],
           "status": "ok",
           "times_ms": [
-            1162.9104688763618
+            1166.4632093161345
           ],
           "verdict": "main board, one scored run",
           "version": "0.8.44",
-          "version_source": "box table (job nv2/paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9)",
-          "warmup_ms": 1955.033203586936
+          "version_source": "box table (job nv2/paired-44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2)",
+          "warmup_ms": 1953.5482544451952
         },
         {
           "arm": "cuml-gpu",
@@ -895066,7 +895194,7 @@
               "pre_clock_fit": false,
               "pre_clock_fit_source": "declared",
               "upload_ms_separate": null,
-              "upload_ms_untimed": 83.14776793122292
+              "upload_ms_untimed": 83.85678194463253
             },
             "span_asymmetry": [
               "upload_outside_its_clock"
@@ -895074,7 +895202,7 @@
           },
           "copied_from": {
             "board": "paired session",
-            "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
+            "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
             "race": "classical/hdbscan/istella/rows=full"
           },
           "dataset": "istella",
@@ -895092,13 +895220,13 @@
           "lane": "hdbscan",
           "library": "cuml",
           "library_version": "26.08.00",
-          "max_ms": 859.1868560761213,
+          "max_ms": 805.7361636310816,
           "measurement": {
             "artifacts": {
-              "bytes": 42082627,
+              "bytes": 42182927,
               "r2_bucket": "mojolearn-data",
-              "r2_key": "measurements/records/v1/19126ce18ec96e13f8080bc0793a764a857ebc41c71ed1b46d1ec5c385a2f819.tar.gz",
-              "sha256": "19126ce18ec96e13f8080bc0793a764a857ebc41c71ed1b46d1ec5c385a2f819",
+              "r2_key": "measurements/records/v1/4a72ddc0dc75b9c3b3f79922cd742cc4c247c5d26d3f1017e4ddcd5dca0e7e58.tar.gz",
+              "sha256": "4a72ddc0dc75b9c3b3f79922cd742cc4c247c5d26d3f1017e4ddcd5dca0e7e58",
               "status": "verified",
               "verification": "GET sha256"
             },
@@ -895114,9 +895242,9 @@
               "--data",
               "/root/gpu-gap-cache/ctd-data/rows-full",
               "--out",
-              "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
+              "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
               "--work",
-              "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
+              "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
               "--root",
               "/root/mojolearn",
               "--arms",
@@ -895146,7 +895274,7 @@
                 "api": "cuda",
                 "count": 1,
                 "cuda_driver_raw": [
-                  "Wed Oct 14 05:26:16 2026       ",
+                  "Wed Oct 14 05:56:25 2026       ",
                   "+-----------------------------------------------------------------------------------------+",
                   "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                   "+-----------------------------------------+------------------------+----------------------+"
@@ -895351,9 +895479,9 @@
                 "version": "3.11.10 CPython"
               },
               "repo": {
-                "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                 "script": "tools/bench_board.py",
-                "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                 "sync": null
               }
             },
@@ -895376,7 +895504,7 @@
               "status": "verified",
               "vendor": "nvidia"
             },
-            "id": "2998e814e94e354c2678cfc5ea9c8e052bde22c801c24cfc73757b3f73353aef",
+            "id": "8dc4bfabab9b95bdc00aa6a8397f536c960ec48b241fed456ad45db562a8f9b5",
             "invocation": {
               "effective_arguments": {
                 "allow_single_cluster": false,
@@ -895492,20 +895620,28 @@
               "source": "get_params"
             },
             "phase": "fit",
+            "retained_outputs": {
+              "bytes": 400266,
+              "member": "run/work/hdbscan-istella-cuml-gpu.npz",
+              "output_digest": "53d70b2685220b45",
+              "output_sha256": "3468daf4fbbd9e6928d87fa47275cc2c5e5ec7d9084bcc1d1535ed6225417756",
+              "sha256": "63f836f8ee0d307ae98aa4790a679c415ec07456ed95e8eb6e4c19058f85c2aa",
+              "status": "verified"
+            },
             "schema": "mojolearn.measurement.v1",
             "seed": "none (deterministic)",
-            "shape": "1000000x220",
+            "shape": "100000x220",
             "software": {
               "library": "cuml",
               "version": "26.08.00"
             },
             "source": {
-              "bytes": 20282888,
-              "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
-              "manifest_sha256": "4c24508c9a1c0e6dce81a0dad3d842c287453bdb1dc1d4aa606f0e5afd275264",
+              "bytes": 20286511,
+              "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
+              "manifest_sha256": "ce5a1fd982a8192b958f2eec547138a84f0f0a219c12724c1bf71edda11ee06b",
               "r2_bucket": "mojolearn-data",
-              "r2_key": "measurements/records/v1/f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7.tar.gz",
-              "sha256": "f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7",
+              "r2_key": "measurements/records/v1/3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75.tar.gz",
+              "sha256": "3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75",
               "status": "verified",
               "verification": "GET sha256"
             },
@@ -895521,12 +895657,12 @@
                 "pre_clock_fit": false,
                 "pre_clock_fit_source": "declared",
                 "upload_ms_separate": null,
-                "upload_ms_untimed": 83.14776793122292
+                "upload_ms_untimed": 83.85678194463253
               },
               "times_ms": [
-                859.1868560761213
+                805.7361636310816
               ],
-              "warmup_ms": 959.6300162374973
+              "warmup_ms": 953.134985640645
             },
             "workers": [
               {
@@ -895683,7 +895819,7 @@
                   "MOJOLEARN_BENCH_INSTALLED": "1",
                   "MOJOLEARN_BOARD_VENDOR": "nvidia",
                   "MOJOLEARN_CPU_THREADS": "13",
-                  "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                  "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                   "NUMEXPR_NUM_THREADS": "13",
                   "OMP_NUM_THREADS": "13",
                   "OPENBLAS_NUM_THREADS": "13",
@@ -895877,7 +896013,7 @@
                   "zict": "3.0.0",
                   "zipp": "4.1.1"
                 },
-                "pid": 36108,
+                "pid": 40315,
                 "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
                 "runtime": {
                   "cupy": {
@@ -895889,7 +896025,17 @@
                 "status": "recorded",
                 "thread_pools": [
                   {
-                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/treelite.libs/libgomp-e985bcbb.so.1.0.0",
+                    "architecture": "SkylakeX",
+                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-32a4b2a6.so",
+                    "internal_api": "openblas",
+                    "num_threads": 13,
+                    "prefix": "libscipy_openblas",
+                    "threading_layer": "pthreads",
+                    "user_api": "blas",
+                    "version": "0.3.31.188.0"
+                  },
+                  {
+                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/scikit_learn.libs/libgomp-a34b3233.so.1.0.0",
                     "internal_api": "openmp",
                     "num_threads": 13,
                     "prefix": "libgomp",
@@ -895907,22 +896053,12 @@
                     "version": "0.3.30"
                   },
                   {
-                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/scikit_learn.libs/libgomp-a34b3233.so.1.0.0",
+                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/treelite.libs/libgomp-e985bcbb.so.1.0.0",
                     "internal_api": "openmp",
                     "num_threads": 13,
                     "prefix": "libgomp",
                     "user_api": "openmp",
                     "version": null
-                  },
-                  {
-                    "architecture": "SkylakeX",
-                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-32a4b2a6.so",
-                    "internal_api": "openblas",
-                    "num_threads": 13,
-                    "prefix": "libscipy_openblas",
-                    "threading_layer": "pthreads",
-                    "user_api": "blas",
-                    "version": "0.3.31.188.0"
                   },
                   {
                     "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/libraft_cu12.libs/libgomp-855c301a.so.1.0.0",
@@ -895939,26 +896075,26 @@
               }
             ]
           },
-          "median_ms": 859.1868560761213,
+          "median_ms": 805.7361636310816,
           "memory": {
             "children_mb": 0.0,
             "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
             "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
             "peak_gpu_mb": 526.0,
-            "peak_host_mb": 1867.5,
+            "peak_host_mb": 1865.3,
             "rounds_sampled": 1,
             "warmup_gpu_mb": 522.0,
-            "warmup_host_mb": 1867.3
+            "warmup_host_mb": 1865.0
           },
-          "min_ms": 859.1868560761213,
+          "min_ms": 805.7361636310816,
           "mode": "opponent",
           "neural_shape": null,
           "operations": [
             {
               "dataset_load_included": false,
               "fresh_process": false,
-              "ms": 959.8241373896599,
-              "preparation_ms": 0.0049173831939697266,
+              "ms": 953.3264525234699,
+              "preparation_ms": 0.0050477683544158936,
               "round": 0,
               "scope": "call-consume",
               "startup_probe_preparation_excluded": true,
@@ -895967,8 +896103,8 @@
             {
               "dataset_load_included": false,
               "fresh_process": false,
-              "ms": 859.340775758028,
-              "preparation_ms": 0.006450340151786804,
+              "ms": 805.88767118752,
+              "preparation_ms": 0.005766749382019043,
               "round": 1,
               "scope": "call-consume",
               "startup_probe_preparation_excluded": true,
@@ -896019,16 +896155,20 @@
             "source": "get_params"
           },
           "peak_gpu_mb": 526.0,
-          "peak_host_mb": 1867.5,
+          "peak_host_mb": 1865.3,
           "quality": {
             "ari_vs_ours": 0.8571196168198708,
             "n_clusters": 53,
             "noise_agreement_vs_ours": 0.94061,
             "noise_fraction": 0.25628,
-            "rows": 100000
+            "rows": 100000,
+            "silhouette": -0.018228009343147278,
+            "silhouette_library": "sklearn.metrics.silhouette_score",
+            "silhouette_library_version": "1.7.2",
+            "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.3535012327671496,
+          "ratio_ours_identical_over": 1.44769871574266,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -896048,7 +896188,7 @@
             "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
             "warmup_rounds": 1
           },
-          "shape": "1000000x220",
+          "shape": "100000x220",
           "source": "measured this run",
           "state_receipts": [
             {
@@ -896065,12 +896205,12 @@
           ],
           "status": "ok",
           "times_ms": [
-            859.1868560761213
+            805.7361636310816
           ],
           "verdict": "SPAN-ASYMMETRIC(upload_outside_its_clock)",
           "version": "cuml 26.08.00",
           "version_source": "cell record",
-          "warmup_ms": 959.6300162374973
+          "warmup_ms": 953.134985640645
         }
       ],
       "command": [
@@ -896085,9 +896225,9 @@
         "--data",
         "/root/gpu-gap-cache/ctd-data/rows-full",
         "--out",
-        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
+        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/raw/classical/rows-full",
         "--work",
-        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
+        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.istella.rows=full/work",
         "--root",
         "/root/mojolearn",
         "--arms",
@@ -896104,17 +896244,17 @@
         "/root/gpu-gap-cache/venv/bin/python"
       ],
       "dataset": "istella",
-      "evidence_directory": "evidence/runs/race-blsee_h4",
+      "evidence_directory": "evidence/runs/race-gig3f89v",
       "evidence_receipt": {
-        "bytes": 21060,
+        "bytes": 22118,
         "r2_bucket": "mojolearn-data",
-        "r2_key": "measurements/records/v1/c8c3fdf9717d72535b5825533936fe254bfe182d95d29620408688e081b08992.tar.gz",
-        "sha256": "c8c3fdf9717d72535b5825533936fe254bfe182d95d29620408688e081b08992",
+        "r2_key": "measurements/records/v1/c0ade4faa1e35be4e412ef15f13b00e6844931b1f33c089cec6a3f7897dae14d.tar.gz",
+        "sha256": "c0ade4faa1e35be4e412ef15f13b00e6844931b1f33c089cec6a3f7897dae14d",
         "status": "verified",
         "verification": "GET sha256"
       },
       "family": "classical",
-      "finished": "2026-10-14T05:26:52Z",
+      "finished": "2026-10-14T06:00:33Z",
       "host": {
         "hostname": "d2fe567d3b88",
         "pod_id": null
@@ -896133,16 +896273,16 @@
         "rows": "the dbscan block's first 100,000 rows",
         "timed": "fit"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.istella.rows=full/board.json (nv2/paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.istella.rows=full/board.json (nv2/paired-44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2)",
       "main_board": {
         "box": "nv2",
         "identity": "n/a",
-        "job": "paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9",
-        "sha": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6"
+        "job": "paired-44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2",
+        "sha": "50be53955e44d38634eb7117dfc43a3dc427be01"
       },
       "opponent_source": {
-        "paired_session": "paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9",
-        "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.istella.rows=full/board.json"
+        "paired_session": "paired-44d04846d956a42f366cbe28267320efdaa0d4dbf6f0efcdc0c7eed23d4dc7b2",
+        "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.istella.rows=full/board.json"
       },
       "params": {
         "arms": {
@@ -896541,7 +896681,7 @@
               "MOJOLEARN_BENCH_INSTALLED": "1",
               "MOJOLEARN_BOARD_VENDOR": "nvidia",
               "MOJOLEARN_CPU_THREADS": "13",
-              "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+              "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
               "NUMEXPR_NUM_THREADS": "13",
               "OMP_NUM_THREADS": "13",
               "OPENBLAS_NUM_THREADS": "13",
@@ -896568,7 +896708,7 @@
               "MOJOLEARN_BOARD_VENDOR": "nvidia",
               "MOJOLEARN_CPU_THREADS": "13",
               "MOJOLEARN_NUMERIC_MODE": "identical",
-              "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+              "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
               "NUMEXPR_NUM_THREADS": "13",
               "OMP_NUM_THREADS": "13",
               "OPENBLAS_NUM_THREADS": "13",
@@ -896600,7 +896740,7 @@
       "rerace": "x",
       "rows": null,
       "shape": null,
-      "started": "2026-10-14T05:26:39Z",
+      "started": "2026-10-14T05:56:44Z",
       "status": "done"
     },
     "classical/hdbscan/taxi/rows=full": {
@@ -896614,23 +896754,33 @@
               "quality_comparison": [
                 {
                   "batch": null,
-                  "checks": [],
+                  "checks": [
+                    {
+                      "comparison": "absolute",
+                      "margin": 0.01,
+                      "metric": "silhouette",
+                      "observed": 0.010454947943799198,
+                      "opponent": 0.011959929019212723,
+                      "ours": 0.001504981075413525,
+                      "verdict": "FAIL"
+                    }
+                  ],
                   "failures": [],
                   "interpretation": "engineering margin; not a statistical equivalence claim",
                   "policy": "mojolearn.quality-parity.v4",
-                  "verdict": "INSUFFICIENT"
+                  "verdict": "FAIL"
                 }
               ],
-              "reason": "scored classical output bytes lack verified archive membership and digest",
+              "reason": "quality outside declared margin: silhouette",
               "rerace": "x",
               "timing_comparison": {
                 "clock": "whole",
                 "kind": "preferred",
                 "label": "whole/whole",
-                "opponent_ms": 370.3584410250187,
-                "ours_ms": 409.364253282547,
+                "opponent_ms": 366.0855945199728,
+                "ours_ms": 407.70767629146576,
                 "preferred": "whole",
-                "value": 1.1053190853422277
+                "value": 1.113694945648079
               },
               "timing_comparisons": [
                 {
@@ -896639,21 +896789,21 @@
                   "clock": "whole",
                   "kind": "preferred",
                   "label": "whole/whole",
-                  "opponent_ms": 370.3584410250187,
-                  "ours_ms": 409.364253282547,
+                  "opponent_ms": 366.0855945199728,
+                  "ours_ms": 407.70767629146576,
                   "preferred": "whole",
-                  "value": 1.1053190853422277
+                  "value": 1.113694945648079
                 }
               ],
-              "verdict": "INSUFFICIENT"
+              "verdict": "UNFAIR"
             }
           },
           "ours_over_theirs": null,
-          "pairing": "v2:641fb87278549f4244b2535d2840049551383fd9a30120db9a147ccb13d564bb",
+          "pairing": "v2:4019000ed7456a5c846d56fde0df12014c804078a36e5b80153d62b92f553ee4",
           "reason": "no opponent with sufficient valid comparison evidence",
           "rerace": "x",
           "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v4, 2026-10-14)",
-          "verdict": "INSUFFICIENT"
+          "verdict": "UNFAIR"
         }
       },
       "audit_history": [
@@ -896716,6 +896866,56 @@
           "rerace": "x",
           "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v3, 2026-10-14)",
           "verdict": "INSUFFICIENT"
+        },
+        {
+          "admitted_opponents": [],
+          "date": "2026-10-14",
+          "opponent": null,
+          "opponents": {
+            "cuml-gpu": {
+              "quality_comparison": [
+                {
+                  "batch": null,
+                  "checks": [],
+                  "failures": [],
+                  "interpretation": "engineering margin; not a statistical equivalence claim",
+                  "policy": "mojolearn.quality-parity.v4",
+                  "verdict": "INSUFFICIENT"
+                }
+              ],
+              "reason": "scored classical output bytes lack verified archive membership and digest",
+              "rerace": "x",
+              "timing_comparison": {
+                "clock": "whole",
+                "kind": "preferred",
+                "label": "whole/whole",
+                "opponent_ms": 370.3584410250187,
+                "ours_ms": 409.364253282547,
+                "preferred": "whole",
+                "value": 1.1053190853422277
+              },
+              "timing_comparisons": [
+                {
+                  "batch": null,
+                  "batch_rows": null,
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 370.3584410250187,
+                  "ours_ms": 409.364253282547,
+                  "preferred": "whole",
+                  "value": 1.1053190853422277
+                }
+              ],
+              "verdict": "INSUFFICIENT"
+            }
+          },
+          "ours_over_theirs": null,
+          "pairing": "v2:641fb87278549f4244b2535d2840049551383fd9a30120db9a147ccb13d564bb",
+          "reason": "no opponent with sufficient valid comparison evidence",
+          "rerace": "x",
+          "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v4, 2026-10-14)",
+          "verdict": "INSUFFICIENT"
         }
       ],
       "cells": [
@@ -896723,7 +896923,7 @@
           "arm": "ours",
           "comparability": {
             "span": {
-              "fit_minus_upload_ms": 409.01958756148815,
+              "fit_minus_upload_ms": 407.4371289461851,
               "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
               "fit_ms_untimed": null,
               "input_home": "host",
@@ -896731,7 +896931,7 @@
               "library": "mojolearn",
               "pre_clock_fit": false,
               "pre_clock_fit_source": "declared",
-              "upload_ms_separate": 0.3446657210588455,
+              "upload_ms_separate": 0.2705473452806473,
               "upload_ms_untimed": null
             },
             "span_asymmetry": []
@@ -896753,22 +896953,22 @@
           "library_version": "0.8.44",
           "main_board": {
             "box": "nv2",
-            "commit_date": "2026-10-14T05:15:01Z",
+            "commit_date": "2026-10-14T05:52:40Z",
             "identity": {
               "other_column": "the amd columns",
               "other_digest": null,
               "other_job": null,
               "status": "n/a"
             },
-            "job": "paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b",
-            "measured": "2026-10-14T05:26:00Z",
+            "job": "paired-2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad",
+            "measured": "2026-10-14T05:56:04Z",
             "newer_failed": [],
             "observation": {
               "box": "nv2",
               "column": "nvidia-l40s",
               "comparability": {
                 "span": {
-                  "fit_minus_upload_ms": 409.01958756148815,
+                  "fit_minus_upload_ms": 407.4371289461851,
                   "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                   "fit_ms_untimed": null,
                   "input_home": "host",
@@ -896776,28 +896976,28 @@
                   "library": "mojolearn",
                   "pre_clock_fit": false,
                   "pre_clock_fit_source": "declared",
-                  "upload_ms_separate": 0.3446657210588455,
+                  "upload_ms_separate": 0.2705473452806473,
                   "upload_ms_untimed": null
                 },
                 "span_asymmetry": []
               },
-              "ct": 1791954901,
+              "ct": 1791957160,
               "dataset": "taxi",
               "digest": "19b2278391dfb347",
-              "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
+              "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
               "family": "classical",
               "gpu_recorded": "NVIDIA L40S",
               "hardware": "NVIDIA L40S (nv2, RunPod)",
               "infra": false,
-              "job": "paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b",
+              "job": "paired-2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad",
               "kind": "paired",
               "lane": "hdbscan",
-              "measured": "2026-10-14T05:26:00Z",
+              "measured": "2026-10-14T05:56:04Z",
               "measured_cell": {
                 "arm": "ours",
                 "comparability": {
                   "span": {
-                    "fit_minus_upload_ms": 409.01958756148815,
+                    "fit_minus_upload_ms": 407.4371289461851,
                     "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                     "fit_ms_untimed": null,
                     "input_home": "host",
@@ -896805,7 +897005,7 @@
                     "library": "mojolearn",
                     "pre_clock_fit": false,
                     "pre_clock_fit_source": "declared",
-                    "upload_ms_separate": 0.3446657210588455,
+                    "upload_ms_separate": 0.2705473452806473,
                     "upload_ms_untimed": null
                   },
                   "span_asymmetry": []
@@ -896826,13 +897026,13 @@
                 "lane": "hdbscan",
                 "library": "mojolearn",
                 "library_version": "0.8.44",
-                "max_ms": 409.364253282547,
+                "max_ms": 407.70767629146576,
                 "measurement": {
                   "artifacts": {
-                    "bytes": 42082617,
+                    "bytes": 42218606,
                     "r2_bucket": "mojolearn-data",
-                    "r2_key": "measurements/records/v1/7baea334aa001247b2b25519e37e6648f2ab399d32cc2fb20ccdba12f1ac35f5.tar.gz",
-                    "sha256": "7baea334aa001247b2b25519e37e6648f2ab399d32cc2fb20ccdba12f1ac35f5",
+                    "r2_key": "measurements/records/v1/882b2a150809758fc94487f5e810d1b1fe3f961e6f738ca48ae38af02dfda7b7.tar.gz",
+                    "sha256": "882b2a150809758fc94487f5e810d1b1fe3f961e6f738ca48ae38af02dfda7b7",
                     "status": "verified",
                     "verification": "GET sha256"
                   },
@@ -896848,9 +897048,9 @@
                     "--data",
                     "/root/gpu-gap-cache/ctd-data/rows-full",
                     "--out",
-                    "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
+                    "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
                     "--work",
-                    "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
+                    "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
                     "--root",
                     "/root/mojolearn",
                     "--arms",
@@ -896880,7 +897080,7 @@
                       "api": "cuda",
                       "count": 1,
                       "cuda_driver_raw": [
-                        "Wed Oct 14 05:25:36 2026       ",
+                        "Wed Oct 14 05:53:11 2026       ",
                         "+-----------------------------------------------------------------------------------------+",
                         "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                         "+-----------------------------------------+------------------------+----------------------+"
@@ -897085,9 +897285,9 @@
                       "version": "3.11.10 CPython"
                     },
                     "repo": {
-                      "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                      "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                       "script": "tools/bench_board.py",
-                      "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                      "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                       "sync": null
                     }
                   },
@@ -897110,7 +897310,7 @@
                     "status": "verified",
                     "vendor": "nvidia"
                   },
-                  "id": "0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b",
+                  "id": "2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad",
                   "invocation": {
                     "effective_arguments": {
                       "allow_single_cluster": false,
@@ -897168,27 +897368,35 @@
                     "source": "get_params"
                   },
                   "phase": "fit",
+                  "retained_outputs": {
+                    "bytes": 400266,
+                    "member": "run/work/hdbscan-taxi-ours.npz",
+                    "output_digest": "19b2278391dfb347",
+                    "output_sha256": "23fd3a1abaac3036dd8eafa682b2c14a150b75ae4442eafaac9e64cd135e697e",
+                    "sha256": "7074953e52aa13acba107085c502a7019b6349a2f8dceeb4f1eebb53d73d4195",
+                    "status": "verified"
+                  },
                   "schema": "mojolearn.measurement.v1",
                   "seed": "none (deterministic)",
-                  "shape": "1000000x11",
+                  "shape": "100000x11",
                   "software": {
                     "library": "mojolearn",
                     "version": "0.8.44"
                   },
                   "source": {
-                    "bytes": 20282888,
-                    "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
-                    "manifest_sha256": "4c24508c9a1c0e6dce81a0dad3d842c287453bdb1dc1d4aa606f0e5afd275264",
+                    "bytes": 20286511,
+                    "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
+                    "manifest_sha256": "ce5a1fd982a8192b958f2eec547138a84f0f0a219c12724c1bf71edda11ee06b",
                     "r2_bucket": "mojolearn-data",
-                    "r2_key": "measurements/records/v1/f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7.tar.gz",
-                    "sha256": "f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7",
+                    "r2_key": "measurements/records/v1/3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75.tar.gz",
+                    "sha256": "3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75",
                     "status": "verified",
                     "verification": "GET sha256"
                   },
                   "timing": {
                     "rounds": 1,
                     "span": {
-                      "fit_minus_upload_ms": 409.01958756148815,
+                      "fit_minus_upload_ms": 407.4371289461851,
                       "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                       "fit_ms_untimed": null,
                       "input_home": "host",
@@ -897196,13 +897404,13 @@
                       "library": "mojolearn",
                       "pre_clock_fit": false,
                       "pre_clock_fit_source": "declared",
-                      "upload_ms_separate": 0.3446657210588455,
+                      "upload_ms_separate": 0.2705473452806473,
                       "upload_ms_untimed": null
                     },
                     "times_ms": [
-                      409.364253282547
+                      407.70767629146576
                     ],
-                    "warmup_ms": 1660.4534443467855
+                    "warmup_ms": 1213.5146241635084
                   },
                   "workers": [
                     {
@@ -897360,7 +897568,7 @@
                         "MOJOLEARN_BOARD_VENDOR": "nvidia",
                         "MOJOLEARN_CPU_THREADS": "13",
                         "MOJOLEARN_NUMERIC_MODE": "identical",
-                        "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                        "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                         "NUMEXPR_NUM_THREADS": "13",
                         "OMP_NUM_THREADS": "13",
                         "OPENBLAS_NUM_THREADS": "13",
@@ -897685,7 +897893,7 @@
                         "zict": "3.0.0",
                         "zipp": "4.1.1"
                       },
-                      "pid": 35673,
+                      "pid": 39588,
                       "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
                       "runtime": {},
                       "status": "recorded",
@@ -897707,18 +897915,18 @@
                     }
                   ]
                 },
-                "median_ms": 409.364253282547,
+                "median_ms": 407.70767629146576,
                 "memory": {
                   "children_mb": 0.0,
                   "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
                   "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
                   "peak_gpu_mb": 682.0,
-                  "peak_host_mb": 1558.4,
+                  "peak_host_mb": 1550.0,
                   "rounds_sampled": 1,
                   "warmup_gpu_mb": 682.0,
-                  "warmup_host_mb": 1548.3
+                  "warmup_host_mb": 1547.6
                 },
-                "min_ms": 409.364253282547,
+                "min_ms": 407.70767629146576,
                 "mode": "identical",
                 "mode_witness": "identical",
                 "neural_shape": null,
@@ -897726,8 +897934,8 @@
                   {
                     "dataset_load_included": false,
                     "fresh_process": false,
-                    "ms": 1660.8538571745157,
-                    "preparation_ms": 0.005908310413360596,
+                    "ms": 1213.7604542076588,
+                    "preparation_ms": 0.002292916178703308,
                     "round": 0,
                     "scope": "call-consume",
                     "startup_probe_preparation_excluded": true,
@@ -897736,8 +897944,8 @@
                   {
                     "dataset_load_included": false,
                     "fresh_process": false,
-                    "ms": 409.9943172186613,
-                    "preparation_ms": 0.006910413503646851,
+                    "ms": 407.7834486961365,
+                    "preparation_ms": 0.005409121513366699,
                     "round": 1,
                     "scope": "call-consume",
                     "startup_probe_preparation_excluded": true,
@@ -897777,11 +897985,15 @@
                   "source": "get_params"
                 },
                 "peak_gpu_mb": 682.0,
-                "peak_host_mb": 1558.4,
+                "peak_host_mb": 1550.0,
                 "quality": {
                   "n_clusters": 161,
                   "noise_fraction": 0.14055,
-                  "rows": 100000
+                  "rows": 100000,
+                  "silhouette": 0.001504981075413525,
+                  "silhouette_library": "sklearn.metrics.silhouette_score",
+                  "silhouette_library_version": "1.7.2",
+                  "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
                 },
                 "ratio_ours_fast_over": null,
                 "ratio_ours_identical_over": null,
@@ -897804,7 +898016,7 @@
                   "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
                   "warmup_rounds": 1
                 },
-                "shape": "1000000x11",
+                "shape": "100000x11",
                 "state_receipts": [
                   {
                     "model": {
@@ -897819,14 +898031,14 @@
                 ],
                 "status": "ok",
                 "times_ms": [
-                  409.364253282547
+                  407.70767629146576
                 ],
                 "verdict": "LIKE-FOR-LIKE-SPAN",
-                "version": "mojolearn 0.8.44, scripts @4dce9b50a",
+                "version": "mojolearn 0.8.44, scripts @50be53955",
                 "version_source": "board box",
-                "warmup_ms": 1660.4534443467855
+                "warmup_ms": 1213.5146241635084
               },
-              "median_ms": 409.364253282547,
+              "median_ms": 407.70767629146576,
               "paired_box": {
                 "env": {
                   "MKL_NUM_THREADS": null,
@@ -897840,7 +898052,7 @@
                   "api": "cuda",
                   "count": 1,
                   "cuda_driver_raw": [
-                    "Wed Oct 14 05:25:36 2026       ",
+                    "Wed Oct 14 05:53:11 2026       ",
                     "+-----------------------------------------------------------------------------------------+",
                     "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                     "+-----------------------------------------+------------------------+----------------------+"
@@ -898045,9 +898257,9 @@
                   "version": "3.11.10 CPython"
                 },
                 "repo": {
-                  "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                  "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                   "script": "tools/bench_board.py",
-                  "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                  "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                   "sync": null
                 }
               },
@@ -898066,23 +898278,33 @@
                         "quality_comparison": [
                           {
                             "batch": null,
-                            "checks": [],
+                            "checks": [
+                              {
+                                "comparison": "absolute",
+                                "margin": 0.01,
+                                "metric": "silhouette",
+                                "observed": 0.010454947943799198,
+                                "opponent": 0.011959929019212723,
+                                "ours": 0.001504981075413525,
+                                "verdict": "FAIL"
+                              }
+                            ],
                             "failures": [],
                             "interpretation": "engineering margin; not a statistical equivalence claim",
-                            "policy": "mojolearn.quality-parity.v3",
-                            "verdict": "INSUFFICIENT"
+                            "policy": "mojolearn.quality-parity.v4",
+                            "verdict": "FAIL"
                           }
                         ],
-                        "reason": "comparable quantitative quality evidence needs review",
+                        "reason": "quality outside declared margin: silhouette",
                         "rerace": "x",
                         "timing_comparison": {
                           "clock": "whole",
                           "kind": "preferred",
                           "label": "whole/whole",
-                          "opponent_ms": 370.3584410250187,
-                          "ours_ms": 409.364253282547,
+                          "opponent_ms": 366.0855945199728,
+                          "ours_ms": 407.70767629146576,
                           "preferred": "whole",
-                          "value": 1.1053190853422277
+                          "value": 1.113694945648079
                         },
                         "timing_comparisons": [
                           {
@@ -898091,21 +898313,21 @@
                             "clock": "whole",
                             "kind": "preferred",
                             "label": "whole/whole",
-                            "opponent_ms": 370.3584410250187,
-                            "ours_ms": 409.364253282547,
+                            "opponent_ms": 366.0855945199728,
+                            "ours_ms": 407.70767629146576,
                             "preferred": "whole",
-                            "value": 1.1053190853422277
+                            "value": 1.113694945648079
                           }
                         ],
-                        "verdict": "INSUFFICIENT"
+                        "verdict": "UNFAIR"
                       }
                     },
                     "ours_over_theirs": null,
-                    "pairing": "v2:af544d656961bc02e4404f6f3542a80b12cf40de1546a7185fb2caef39e20100",
+                    "pairing": "v2:45363dcbc8fa4cbeed08393ef7054ea6a58f8f7bbb0ac66c1c859a482aa3a721",
                     "reason": "no opponent with sufficient valid comparison evidence",
                     "rerace": "x",
-                    "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v3, 2026-10-14)",
-                    "verdict": "INSUFFICIENT"
+                    "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v4, 2026-10-14)",
+                    "verdict": "UNFAIR"
                   }
                 },
                 "cells": [
@@ -898113,7 +898335,7 @@
                     "arm": "ours",
                     "comparability": {
                       "span": {
-                        "fit_minus_upload_ms": 409.01958756148815,
+                        "fit_minus_upload_ms": 407.4371289461851,
                         "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                         "fit_ms_untimed": null,
                         "input_home": "host",
@@ -898121,7 +898343,7 @@
                         "library": "mojolearn",
                         "pre_clock_fit": false,
                         "pre_clock_fit_source": "declared",
-                        "upload_ms_separate": 0.3446657210588455,
+                        "upload_ms_separate": 0.2705473452806473,
                         "upload_ms_untimed": null
                       },
                       "span_asymmetry": []
@@ -898142,13 +898364,13 @@
                     "lane": "hdbscan",
                     "library": "mojolearn",
                     "library_version": "0.8.44",
-                    "max_ms": 409.364253282547,
+                    "max_ms": 407.70767629146576,
                     "measurement": {
                       "artifacts": {
-                        "bytes": 42082617,
+                        "bytes": 42218606,
                         "r2_bucket": "mojolearn-data",
-                        "r2_key": "measurements/records/v1/7baea334aa001247b2b25519e37e6648f2ab399d32cc2fb20ccdba12f1ac35f5.tar.gz",
-                        "sha256": "7baea334aa001247b2b25519e37e6648f2ab399d32cc2fb20ccdba12f1ac35f5",
+                        "r2_key": "measurements/records/v1/882b2a150809758fc94487f5e810d1b1fe3f961e6f738ca48ae38af02dfda7b7.tar.gz",
+                        "sha256": "882b2a150809758fc94487f5e810d1b1fe3f961e6f738ca48ae38af02dfda7b7",
                         "status": "verified",
                         "verification": "GET sha256"
                       },
@@ -898164,9 +898386,9 @@
                         "--data",
                         "/root/gpu-gap-cache/ctd-data/rows-full",
                         "--out",
-                        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
+                        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
                         "--work",
-                        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
+                        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
                         "--root",
                         "/root/mojolearn",
                         "--arms",
@@ -898196,7 +898418,7 @@
                           "api": "cuda",
                           "count": 1,
                           "cuda_driver_raw": [
-                            "Wed Oct 14 05:25:36 2026       ",
+                            "Wed Oct 14 05:53:11 2026       ",
                             "+-----------------------------------------------------------------------------------------+",
                             "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                             "+-----------------------------------------+------------------------+----------------------+"
@@ -898401,9 +898623,9 @@
                           "version": "3.11.10 CPython"
                         },
                         "repo": {
-                          "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                          "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                           "script": "tools/bench_board.py",
-                          "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                          "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                           "sync": null
                         }
                       },
@@ -898426,7 +898648,7 @@
                         "status": "verified",
                         "vendor": "nvidia"
                       },
-                      "id": "0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b",
+                      "id": "2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad",
                       "invocation": {
                         "effective_arguments": {
                           "allow_single_cluster": false,
@@ -898484,27 +898706,35 @@
                         "source": "get_params"
                       },
                       "phase": "fit",
+                      "retained_outputs": {
+                        "bytes": 400266,
+                        "member": "run/work/hdbscan-taxi-ours.npz",
+                        "output_digest": "19b2278391dfb347",
+                        "output_sha256": "23fd3a1abaac3036dd8eafa682b2c14a150b75ae4442eafaac9e64cd135e697e",
+                        "sha256": "7074953e52aa13acba107085c502a7019b6349a2f8dceeb4f1eebb53d73d4195",
+                        "status": "verified"
+                      },
                       "schema": "mojolearn.measurement.v1",
                       "seed": "none (deterministic)",
-                      "shape": "1000000x11",
+                      "shape": "100000x11",
                       "software": {
                         "library": "mojolearn",
                         "version": "0.8.44"
                       },
                       "source": {
-                        "bytes": 20282888,
-                        "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
-                        "manifest_sha256": "4c24508c9a1c0e6dce81a0dad3d842c287453bdb1dc1d4aa606f0e5afd275264",
+                        "bytes": 20286511,
+                        "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
+                        "manifest_sha256": "ce5a1fd982a8192b958f2eec547138a84f0f0a219c12724c1bf71edda11ee06b",
                         "r2_bucket": "mojolearn-data",
-                        "r2_key": "measurements/records/v1/f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7.tar.gz",
-                        "sha256": "f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7",
+                        "r2_key": "measurements/records/v1/3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75.tar.gz",
+                        "sha256": "3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75",
                         "status": "verified",
                         "verification": "GET sha256"
                       },
                       "timing": {
                         "rounds": 1,
                         "span": {
-                          "fit_minus_upload_ms": 409.01958756148815,
+                          "fit_minus_upload_ms": 407.4371289461851,
                           "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                           "fit_ms_untimed": null,
                           "input_home": "host",
@@ -898512,13 +898742,13 @@
                           "library": "mojolearn",
                           "pre_clock_fit": false,
                           "pre_clock_fit_source": "declared",
-                          "upload_ms_separate": 0.3446657210588455,
+                          "upload_ms_separate": 0.2705473452806473,
                           "upload_ms_untimed": null
                         },
                         "times_ms": [
-                          409.364253282547
+                          407.70767629146576
                         ],
-                        "warmup_ms": 1660.4534443467855
+                        "warmup_ms": 1213.5146241635084
                       },
                       "workers": [
                         {
@@ -898676,7 +898906,7 @@
                             "MOJOLEARN_BOARD_VENDOR": "nvidia",
                             "MOJOLEARN_CPU_THREADS": "13",
                             "MOJOLEARN_NUMERIC_MODE": "identical",
-                            "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                            "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                             "NUMEXPR_NUM_THREADS": "13",
                             "OMP_NUM_THREADS": "13",
                             "OPENBLAS_NUM_THREADS": "13",
@@ -899001,7 +899231,7 @@
                             "zict": "3.0.0",
                             "zipp": "4.1.1"
                           },
-                          "pid": 35673,
+                          "pid": 39588,
                           "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
                           "runtime": {},
                           "status": "recorded",
@@ -899023,18 +899253,18 @@
                         }
                       ]
                     },
-                    "median_ms": 409.364253282547,
+                    "median_ms": 407.70767629146576,
                     "memory": {
                       "children_mb": 0.0,
                       "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
                       "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
                       "peak_gpu_mb": 682.0,
-                      "peak_host_mb": 1558.4,
+                      "peak_host_mb": 1550.0,
                       "rounds_sampled": 1,
                       "warmup_gpu_mb": 682.0,
-                      "warmup_host_mb": 1548.3
+                      "warmup_host_mb": 1547.6
                     },
-                    "min_ms": 409.364253282547,
+                    "min_ms": 407.70767629146576,
                     "mode": "identical",
                     "mode_witness": "identical",
                     "neural_shape": null,
@@ -899042,8 +899272,8 @@
                       {
                         "dataset_load_included": false,
                         "fresh_process": false,
-                        "ms": 1660.8538571745157,
-                        "preparation_ms": 0.005908310413360596,
+                        "ms": 1213.7604542076588,
+                        "preparation_ms": 0.002292916178703308,
                         "round": 0,
                         "scope": "call-consume",
                         "startup_probe_preparation_excluded": true,
@@ -899052,8 +899282,8 @@
                       {
                         "dataset_load_included": false,
                         "fresh_process": false,
-                        "ms": 409.9943172186613,
-                        "preparation_ms": 0.006910413503646851,
+                        "ms": 407.7834486961365,
+                        "preparation_ms": 0.005409121513366699,
                         "round": 1,
                         "scope": "call-consume",
                         "startup_probe_preparation_excluded": true,
@@ -899093,11 +899323,15 @@
                       "source": "get_params"
                     },
                     "peak_gpu_mb": 682.0,
-                    "peak_host_mb": 1558.4,
+                    "peak_host_mb": 1550.0,
                     "quality": {
                       "n_clusters": 161,
                       "noise_fraction": 0.14055,
-                      "rows": 100000
+                      "rows": 100000,
+                      "silhouette": 0.001504981075413525,
+                      "silhouette_library": "sklearn.metrics.silhouette_score",
+                      "silhouette_library_version": "1.7.2",
+                      "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
                     },
                     "ratio_ours_fast_over": null,
                     "ratio_ours_identical_over": null,
@@ -899120,7 +899354,7 @@
                       "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
                       "warmup_rounds": 1
                     },
-                    "shape": "1000000x11",
+                    "shape": "100000x11",
                     "state_receipts": [
                       {
                         "model": {
@@ -899135,12 +899369,12 @@
                     ],
                     "status": "ok",
                     "times_ms": [
-                      409.364253282547
+                      407.70767629146576
                     ],
                     "verdict": "LIKE-FOR-LIKE-SPAN",
-                    "version": "mojolearn 0.8.44, scripts @4dce9b50a",
+                    "version": "mojolearn 0.8.44, scripts @50be53955",
                     "version_source": "board box",
-                    "warmup_ms": 1660.4534443467855
+                    "warmup_ms": 1213.5146241635084
                   },
                   {
                     "arm": "cuml-gpu",
@@ -899155,7 +899389,7 @@
                         "pre_clock_fit": false,
                         "pre_clock_fit_source": "declared",
                         "upload_ms_separate": null,
-                        "upload_ms_untimed": 12.742795050144196
+                        "upload_ms_untimed": 7.691927254199982
                       },
                       "span_asymmetry": [
                         "upload_outside_its_clock"
@@ -899175,13 +899409,13 @@
                     "lane": "hdbscan",
                     "library": "cuml",
                     "library_version": "26.08.00",
-                    "max_ms": 357.6156459748745,
+                    "max_ms": 358.3936672657728,
                     "measurement": {
                       "artifacts": {
-                        "bytes": 42082617,
+                        "bytes": 42218606,
                         "r2_bucket": "mojolearn-data",
-                        "r2_key": "measurements/records/v1/7baea334aa001247b2b25519e37e6648f2ab399d32cc2fb20ccdba12f1ac35f5.tar.gz",
-                        "sha256": "7baea334aa001247b2b25519e37e6648f2ab399d32cc2fb20ccdba12f1ac35f5",
+                        "r2_key": "measurements/records/v1/882b2a150809758fc94487f5e810d1b1fe3f961e6f738ca48ae38af02dfda7b7.tar.gz",
+                        "sha256": "882b2a150809758fc94487f5e810d1b1fe3f961e6f738ca48ae38af02dfda7b7",
                         "status": "verified",
                         "verification": "GET sha256"
                       },
@@ -899197,9 +899431,9 @@
                         "--data",
                         "/root/gpu-gap-cache/ctd-data/rows-full",
                         "--out",
-                        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
+                        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
                         "--work",
-                        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
+                        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
                         "--root",
                         "/root/mojolearn",
                         "--arms",
@@ -899229,7 +899463,7 @@
                           "api": "cuda",
                           "count": 1,
                           "cuda_driver_raw": [
-                            "Wed Oct 14 05:25:36 2026       ",
+                            "Wed Oct 14 05:53:11 2026       ",
                             "+-----------------------------------------------------------------------------------------+",
                             "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                             "+-----------------------------------------+------------------------+----------------------+"
@@ -899434,9 +899668,9 @@
                           "version": "3.11.10 CPython"
                         },
                         "repo": {
-                          "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                          "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                           "script": "tools/bench_board.py",
-                          "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                          "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                           "sync": null
                         }
                       },
@@ -899459,7 +899693,7 @@
                         "status": "verified",
                         "vendor": "nvidia"
                       },
-                      "id": "9500a5166ea313348e7a6cc368942925582add531b4d5bcc161a8482eaffe57b",
+                      "id": "cc6d61f17dbfd6a44c4d2e329fb0c23abed9999e47c7064365ecf822f169941d",
                       "invocation": {
                         "effective_arguments": {
                           "allow_single_cluster": false,
@@ -899575,20 +899809,28 @@
                         "source": "get_params"
                       },
                       "phase": "fit",
+                      "retained_outputs": {
+                        "bytes": 400266,
+                        "member": "run/work/hdbscan-taxi-cuml-gpu.npz",
+                        "output_digest": "0e1d5bb909c81129",
+                        "output_sha256": "0a409ffa91cefd71f532efd9858e0ba75a66ffecea39a79ac935f58e1304b3fe",
+                        "sha256": "6d8caaa511666b6f2dc9e344e55e54754a83cd8ea5d425f5aaf0a07b99b84cbd",
+                        "status": "verified"
+                      },
                       "schema": "mojolearn.measurement.v1",
                       "seed": "none (deterministic)",
-                      "shape": "1000000x11",
+                      "shape": "100000x11",
                       "software": {
                         "library": "cuml",
                         "version": "26.08.00"
                       },
                       "source": {
-                        "bytes": 20282888,
-                        "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
-                        "manifest_sha256": "4c24508c9a1c0e6dce81a0dad3d842c287453bdb1dc1d4aa606f0e5afd275264",
+                        "bytes": 20286511,
+                        "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
+                        "manifest_sha256": "ce5a1fd982a8192b958f2eec547138a84f0f0a219c12724c1bf71edda11ee06b",
                         "r2_bucket": "mojolearn-data",
-                        "r2_key": "measurements/records/v1/f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7.tar.gz",
-                        "sha256": "f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7",
+                        "r2_key": "measurements/records/v1/3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75.tar.gz",
+                        "sha256": "3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75",
                         "status": "verified",
                         "verification": "GET sha256"
                       },
@@ -899604,12 +899846,12 @@
                           "pre_clock_fit": false,
                           "pre_clock_fit_source": "declared",
                           "upload_ms_separate": null,
-                          "upload_ms_untimed": 12.742795050144196
+                          "upload_ms_untimed": 7.691927254199982
                         },
                         "times_ms": [
-                          357.6156459748745
+                          358.3936672657728
                         ],
-                        "warmup_ms": 588.2694534957409
+                        "warmup_ms": 522.1074223518372
                       },
                       "workers": [
                         {
@@ -899766,7 +900008,7 @@
                             "MOJOLEARN_BENCH_INSTALLED": "1",
                             "MOJOLEARN_BOARD_VENDOR": "nvidia",
                             "MOJOLEARN_CPU_THREADS": "13",
-                            "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                            "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                             "NUMEXPR_NUM_THREADS": "13",
                             "OMP_NUM_THREADS": "13",
                             "OPENBLAS_NUM_THREADS": "13",
@@ -899960,7 +900202,7 @@
                             "zict": "3.0.0",
                             "zipp": "4.1.1"
                           },
-                          "pid": 35674,
+                          "pid": 39589,
                           "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
                           "runtime": {
                             "cupy": {
@@ -899972,7 +900214,7 @@
                           "status": "recorded",
                           "thread_pools": [
                             {
-                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/treelite.libs/libgomp-e985bcbb.so.1.0.0",
+                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/libraft_cu12.libs/libgomp-855c301a.so.1.0.0",
                               "internal_api": "openmp",
                               "num_threads": 13,
                               "prefix": "libgomp",
@@ -899989,6 +900231,16 @@
                             },
                             {
                               "architecture": "SkylakeX",
+                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/scipy.libs/libscipy_openblas-6cdc3b4a.so",
+                              "internal_api": "openblas",
+                              "num_threads": 13,
+                              "prefix": "libscipy_openblas",
+                              "threading_layer": "pthreads",
+                              "user_api": "blas",
+                              "version": "0.3.30"
+                            },
+                            {
+                              "architecture": "SkylakeX",
                               "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-32a4b2a6.so",
                               "internal_api": "openblas",
                               "num_threads": 13,
@@ -899998,22 +900250,12 @@
                               "version": "0.3.31.188.0"
                             },
                             {
-                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/libraft_cu12.libs/libgomp-855c301a.so.1.0.0",
+                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/treelite.libs/libgomp-e985bcbb.so.1.0.0",
                               "internal_api": "openmp",
                               "num_threads": 13,
                               "prefix": "libgomp",
                               "user_api": "openmp",
                               "version": null
-                            },
-                            {
-                              "architecture": "SkylakeX",
-                              "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/scipy.libs/libscipy_openblas-6cdc3b4a.so",
-                              "internal_api": "openblas",
-                              "num_threads": 13,
-                              "prefix": "libscipy_openblas",
-                              "threading_layer": "pthreads",
-                              "user_api": "blas",
-                              "version": "0.3.30"
                             }
                           ],
                           "versions": {
@@ -900022,26 +900264,26 @@
                         }
                       ]
                     },
-                    "median_ms": 357.6156459748745,
+                    "median_ms": 358.3936672657728,
                     "memory": {
                       "children_mb": 0.0,
                       "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
                       "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
                       "peak_gpu_mb": 448.0,
-                      "peak_host_mb": 975.7,
+                      "peak_host_mb": 954.1,
                       "rounds_sampled": 1,
                       "warmup_gpu_mb": 444.0,
-                      "warmup_host_mb": 975.5
+                      "warmup_host_mb": 953.4
                     },
-                    "min_ms": 357.6156459748745,
+                    "min_ms": 358.3936672657728,
                     "mode": "opponent",
                     "neural_shape": null,
                     "operations": [
                       {
                         "dataset_load_included": false,
                         "fresh_process": false,
-                        "ms": 588.5280799120665,
-                        "preparation_ms": 0.006752088665962219,
+                        "ms": 522.3600789904594,
+                        "preparation_ms": 0.002464279532432556,
                         "round": 0,
                         "scope": "call-consume",
                         "startup_probe_preparation_excluded": true,
@@ -900050,8 +900292,8 @@
                       {
                         "dataset_load_included": false,
                         "fresh_process": false,
-                        "ms": 357.7914107590914,
-                        "preparation_ms": 0.005317851901054382,
+                        "ms": 358.5762269794941,
+                        "preparation_ms": 0.006577000021934509,
                         "round": 1,
                         "scope": "call-consume",
                         "startup_probe_preparation_excluded": true,
@@ -900102,16 +900344,20 @@
                       "source": "get_params"
                     },
                     "peak_gpu_mb": 448.0,
-                    "peak_host_mb": 975.7,
+                    "peak_host_mb": 954.1,
                     "quality": {
                       "ari_vs_ours": 0.9178850076295937,
                       "n_clusters": 159,
                       "noise_agreement_vs_ours": 0.98442,
                       "noise_fraction": 0.13097,
-                      "rows": 100000
+                      "rows": 100000,
+                      "silhouette": 0.011959929019212723,
+                      "silhouette_library": "sklearn.metrics.silhouette_score",
+                      "silhouette_library_version": "1.7.2",
+                      "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
                     },
                     "ratio_ours_fast_over": null,
-                    "ratio_ours_identical_over": 1.1447045393290993,
+                    "ratio_ours_identical_over": 1.137597322525019,
                     "rounds": 1,
                     "rows": null,
                     "rows_tag": "full",
@@ -900131,7 +900377,7 @@
                       "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
                       "warmup_rounds": 1
                     },
-                    "shape": "1000000x11",
+                    "shape": "100000x11",
                     "source": "measured this run",
                     "state_receipts": [
                       {
@@ -900148,12 +900394,12 @@
                     ],
                     "status": "ok",
                     "times_ms": [
-                      357.6156459748745
+                      358.3936672657728
                     ],
                     "verdict": "SPAN-ASYMMETRIC(upload_outside_its_clock)",
                     "version": "cuml 26.08.00",
                     "version_source": "cell record",
-                    "warmup_ms": 588.2694534957409
+                    "warmup_ms": 522.1074223518372
                   }
                 ],
                 "command": [
@@ -900168,9 +900414,9 @@
                   "--data",
                   "/root/gpu-gap-cache/ctd-data/rows-full",
                   "--out",
-                  "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
+                  "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
                   "--work",
-                  "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
+                  "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
                   "--root",
                   "/root/mojolearn",
                   "--arms",
@@ -900188,17 +900434,17 @@
                 ],
                 "dataset": "taxi",
                 "env": {},
-                "evidence_directory": "evidence/runs/race-m9wa04l9",
+                "evidence_directory": "evidence/runs/race-653th083",
                 "evidence_receipt": {
-                  "bytes": 21051,
+                  "bytes": 22109,
                   "r2_bucket": "mojolearn-data",
-                  "r2_key": "measurements/records/v1/636dafa6d09328c46c35fd96f8a75d14484b2e53b473410275d41fbc4d84048d.tar.gz",
-                  "sha256": "636dafa6d09328c46c35fd96f8a75d14484b2e53b473410275d41fbc4d84048d",
+                  "r2_key": "measurements/records/v1/5065f29179f3436d14a6633a24539b2fefda576eae6861acea5c76b218322e01.tar.gz",
+                  "sha256": "5065f29179f3436d14a6633a24539b2fefda576eae6861acea5c76b218322e01",
                   "status": "verified",
                   "verification": "GET sha256"
                 },
                 "family": "classical",
-                "finished": "2026-10-14T05:26:00Z",
+                "finished": "2026-10-14T05:56:04Z",
                 "host": {
                   "hostname": "d2fe567d3b88",
                   "pod_id": null
@@ -900618,7 +900864,7 @@
                         "MOJOLEARN_BENCH_INSTALLED": "1",
                         "MOJOLEARN_BOARD_VENDOR": "nvidia",
                         "MOJOLEARN_CPU_THREADS": "13",
-                        "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                        "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                         "NUMEXPR_NUM_THREADS": "13",
                         "OMP_NUM_THREADS": "13",
                         "OPENBLAS_NUM_THREADS": "13",
@@ -900645,7 +900891,7 @@
                         "MOJOLEARN_BOARD_VENDOR": "nvidia",
                         "MOJOLEARN_CPU_THREADS": "13",
                         "MOJOLEARN_NUMERIC_MODE": "identical",
-                        "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                        "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                         "NUMEXPR_NUM_THREADS": "13",
                         "OMP_NUM_THREADS": "13",
                         "OPENBLAS_NUM_THREADS": "13",
@@ -900678,35 +900924,39 @@
                 "rerace": "x",
                 "rows": null,
                 "skipped_opponents": [],
-                "started": "2026-10-14T05:25:51Z",
+                "started": "2026-10-14T05:53:25Z",
                 "status": "done",
                 "stored_arms": [],
                 "stored_now": 1,
-                "wall_s": 24.9
+                "wall_s": 179.8
               },
               "quality": {
                 "n_clusters": 161,
                 "noise_fraction": 0.14055,
-                "rows": 100000
+                "rows": 100000,
+                "silhouette": 0.001504981075413525,
+                "silhouette_library": "sklearn.metrics.silhouette_score",
+                "silhouette_library_version": "1.7.2",
+                "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
               },
               "race_id": "classical/hdbscan/taxi/rows=full",
               "reason": null,
-              "sha": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+              "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
               "status": "ok",
               "status_raw": "ok",
               "tag": null,
               "vendor": "nvidia",
               "version": "0.8.44"
             },
-            "sha": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6"
+            "sha": "50be53955e44d38634eb7117dfc43a3dc427be01"
           },
-          "max_ms": 409.364253282547,
+          "max_ms": 407.70767629146576,
           "measurement": {
             "artifacts": {
-              "bytes": 42082617,
+              "bytes": 42218606,
               "r2_bucket": "mojolearn-data",
-              "r2_key": "measurements/records/v1/7baea334aa001247b2b25519e37e6648f2ab399d32cc2fb20ccdba12f1ac35f5.tar.gz",
-              "sha256": "7baea334aa001247b2b25519e37e6648f2ab399d32cc2fb20ccdba12f1ac35f5",
+              "r2_key": "measurements/records/v1/882b2a150809758fc94487f5e810d1b1fe3f961e6f738ca48ae38af02dfda7b7.tar.gz",
+              "sha256": "882b2a150809758fc94487f5e810d1b1fe3f961e6f738ca48ae38af02dfda7b7",
               "status": "verified",
               "verification": "GET sha256"
             },
@@ -900722,9 +900972,9 @@
               "--data",
               "/root/gpu-gap-cache/ctd-data/rows-full",
               "--out",
-              "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
+              "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
               "--work",
-              "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
+              "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
               "--root",
               "/root/mojolearn",
               "--arms",
@@ -900754,7 +901004,7 @@
                 "api": "cuda",
                 "count": 1,
                 "cuda_driver_raw": [
-                  "Wed Oct 14 05:25:36 2026       ",
+                  "Wed Oct 14 05:53:11 2026       ",
                   "+-----------------------------------------------------------------------------------------+",
                   "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                   "+-----------------------------------------+------------------------+----------------------+"
@@ -900959,9 +901209,9 @@
                 "version": "3.11.10 CPython"
               },
               "repo": {
-                "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                 "script": "tools/bench_board.py",
-                "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                 "sync": null
               }
             },
@@ -900984,7 +901234,7 @@
               "status": "verified",
               "vendor": "nvidia"
             },
-            "id": "0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b",
+            "id": "2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad",
             "invocation": {
               "effective_arguments": {
                 "allow_single_cluster": false,
@@ -901042,27 +901292,35 @@
               "source": "get_params"
             },
             "phase": "fit",
+            "retained_outputs": {
+              "bytes": 400266,
+              "member": "run/work/hdbscan-taxi-ours.npz",
+              "output_digest": "19b2278391dfb347",
+              "output_sha256": "23fd3a1abaac3036dd8eafa682b2c14a150b75ae4442eafaac9e64cd135e697e",
+              "sha256": "7074953e52aa13acba107085c502a7019b6349a2f8dceeb4f1eebb53d73d4195",
+              "status": "verified"
+            },
             "schema": "mojolearn.measurement.v1",
             "seed": "none (deterministic)",
-            "shape": "1000000x11",
+            "shape": "100000x11",
             "software": {
               "library": "mojolearn",
               "version": "0.8.44"
             },
             "source": {
-              "bytes": 20282888,
-              "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
-              "manifest_sha256": "4c24508c9a1c0e6dce81a0dad3d842c287453bdb1dc1d4aa606f0e5afd275264",
+              "bytes": 20286511,
+              "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
+              "manifest_sha256": "ce5a1fd982a8192b958f2eec547138a84f0f0a219c12724c1bf71edda11ee06b",
               "r2_bucket": "mojolearn-data",
-              "r2_key": "measurements/records/v1/f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7.tar.gz",
-              "sha256": "f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7",
+              "r2_key": "measurements/records/v1/3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75.tar.gz",
+              "sha256": "3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75",
               "status": "verified",
               "verification": "GET sha256"
             },
             "timing": {
               "rounds": 1,
               "span": {
-                "fit_minus_upload_ms": 409.01958756148815,
+                "fit_minus_upload_ms": 407.4371289461851,
                 "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
                 "fit_ms_untimed": null,
                 "input_home": "host",
@@ -901070,13 +901328,13 @@
                 "library": "mojolearn",
                 "pre_clock_fit": false,
                 "pre_clock_fit_source": "declared",
-                "upload_ms_separate": 0.3446657210588455,
+                "upload_ms_separate": 0.2705473452806473,
                 "upload_ms_untimed": null
               },
               "times_ms": [
-                409.364253282547
+                407.70767629146576
               ],
-              "warmup_ms": 1660.4534443467855
+              "warmup_ms": 1213.5146241635084
             },
             "workers": [
               {
@@ -901234,7 +901492,7 @@
                   "MOJOLEARN_BOARD_VENDOR": "nvidia",
                   "MOJOLEARN_CPU_THREADS": "13",
                   "MOJOLEARN_NUMERIC_MODE": "identical",
-                  "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                  "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                   "NUMEXPR_NUM_THREADS": "13",
                   "OMP_NUM_THREADS": "13",
                   "OPENBLAS_NUM_THREADS": "13",
@@ -901559,7 +901817,7 @@
                   "zict": "3.0.0",
                   "zipp": "4.1.1"
                 },
-                "pid": 35673,
+                "pid": 39588,
                 "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
                 "runtime": {},
                 "status": "recorded",
@@ -901581,26 +901839,26 @@
               }
             ]
           },
-          "median_ms": 409.364253282547,
+          "median_ms": 407.70767629146576,
           "memory": {
             "children_mb": 0.0,
             "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
             "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
             "peak_gpu_mb": 682.0,
-            "peak_host_mb": 1558.4,
+            "peak_host_mb": 1550.0,
             "rounds_sampled": 1,
             "warmup_gpu_mb": 682.0,
-            "warmup_host_mb": 1548.3
+            "warmup_host_mb": 1547.6
           },
-          "min_ms": 409.364253282547,
+          "min_ms": 407.70767629146576,
           "mode": "identical",
           "neural_shape": null,
           "operations": [
             {
               "dataset_load_included": false,
               "fresh_process": false,
-              "ms": 1660.8538571745157,
-              "preparation_ms": 0.005908310413360596,
+              "ms": 1213.7604542076588,
+              "preparation_ms": 0.002292916178703308,
               "round": 0,
               "scope": "call-consume",
               "startup_probe_preparation_excluded": true,
@@ -901609,8 +901867,8 @@
             {
               "dataset_load_included": false,
               "fresh_process": false,
-              "ms": 409.9943172186613,
-              "preparation_ms": 0.006910413503646851,
+              "ms": 407.7834486961365,
+              "preparation_ms": 0.005409121513366699,
               "round": 1,
               "scope": "call-consume",
               "startup_probe_preparation_excluded": true,
@@ -901650,11 +901908,15 @@
             "source": "get_params"
           },
           "peak_gpu_mb": 682.0,
-          "peak_host_mb": 1558.4,
+          "peak_host_mb": 1550.0,
           "quality": {
             "n_clusters": 161,
             "noise_fraction": 0.14055,
-            "rows": 100000
+            "rows": 100000,
+            "silhouette": 0.001504981075413525,
+            "silhouette_library": "sklearn.metrics.silhouette_score",
+            "silhouette_library_version": "1.7.2",
+            "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
           },
           "ratio_ours_fast_over": null,
           "ratio_ours_identical_over": null,
@@ -901677,8 +901939,8 @@
             "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
             "warmup_rounds": 1
           },
-          "shape": "1000000x11",
-          "source": "main@4dce9b50a nv2/paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b 2026-10-14; identity vs the amd columns: n/a",
+          "shape": "100000x11",
+          "source": "main@50be53955 nv2/paired-2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad 2026-10-14; identity vs the amd columns: n/a",
           "state_receipts": [
             {
               "model": {
@@ -901693,12 +901955,12 @@
           ],
           "status": "ok",
           "times_ms": [
-            409.364253282547
+            407.70767629146576
           ],
           "verdict": "main board, one scored run",
           "version": "0.8.44",
-          "version_source": "box table (job nv2/paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b)",
-          "warmup_ms": 1660.4534443467855
+          "version_source": "box table (job nv2/paired-2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad)",
+          "warmup_ms": 1213.5146241635084
         },
         {
           "arm": "cuml-gpu",
@@ -901713,7 +901975,7 @@
               "pre_clock_fit": false,
               "pre_clock_fit_source": "declared",
               "upload_ms_separate": null,
-              "upload_ms_untimed": 12.742795050144196
+              "upload_ms_untimed": 7.691927254199982
             },
             "span_asymmetry": [
               "upload_outside_its_clock"
@@ -901721,7 +901983,7 @@
           },
           "copied_from": {
             "board": "paired session",
-            "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
+            "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
             "race": "classical/hdbscan/taxi/rows=full"
           },
           "dataset": "taxi",
@@ -901739,13 +902001,13 @@
           "lane": "hdbscan",
           "library": "cuml",
           "library_version": "26.08.00",
-          "max_ms": 357.6156459748745,
+          "max_ms": 358.3936672657728,
           "measurement": {
             "artifacts": {
-              "bytes": 42082617,
+              "bytes": 42218606,
               "r2_bucket": "mojolearn-data",
-              "r2_key": "measurements/records/v1/7baea334aa001247b2b25519e37e6648f2ab399d32cc2fb20ccdba12f1ac35f5.tar.gz",
-              "sha256": "7baea334aa001247b2b25519e37e6648f2ab399d32cc2fb20ccdba12f1ac35f5",
+              "r2_key": "measurements/records/v1/882b2a150809758fc94487f5e810d1b1fe3f961e6f738ca48ae38af02dfda7b7.tar.gz",
+              "sha256": "882b2a150809758fc94487f5e810d1b1fe3f961e6f738ca48ae38af02dfda7b7",
               "status": "verified",
               "verification": "GET sha256"
             },
@@ -901761,9 +902023,9 @@
               "--data",
               "/root/gpu-gap-cache/ctd-data/rows-full",
               "--out",
-              "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
+              "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
               "--work",
-              "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
+              "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
               "--root",
               "/root/mojolearn",
               "--arms",
@@ -901793,7 +902055,7 @@
                 "api": "cuda",
                 "count": 1,
                 "cuda_driver_raw": [
-                  "Wed Oct 14 05:25:36 2026       ",
+                  "Wed Oct 14 05:53:11 2026       ",
                   "+-----------------------------------------------------------------------------------------+",
                   "| NVIDIA-SMI 580.126.09             Driver Version: 580.126.09     CUDA Version: 13.0     |",
                   "+-----------------------------------------+------------------------+----------------------+"
@@ -901998,9 +902260,9 @@
                 "version": "3.11.10 CPython"
               },
               "repo": {
-                "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
                 "script": "tools/bench_board.py",
-                "script_sha256": "0007339d436d02fd4631e53c741e09f3f5603bca1b81d4628efff7f881983c84",
+                "script_sha256": "9c7a155f8f1b0e97e7f6725459e2f0d414e2389fdc327c39e0379e7679c1e7eb",
                 "sync": null
               }
             },
@@ -902023,7 +902285,7 @@
               "status": "verified",
               "vendor": "nvidia"
             },
-            "id": "9500a5166ea313348e7a6cc368942925582add531b4d5bcc161a8482eaffe57b",
+            "id": "cc6d61f17dbfd6a44c4d2e329fb0c23abed9999e47c7064365ecf822f169941d",
             "invocation": {
               "effective_arguments": {
                 "allow_single_cluster": false,
@@ -902139,20 +902401,28 @@
               "source": "get_params"
             },
             "phase": "fit",
+            "retained_outputs": {
+              "bytes": 400266,
+              "member": "run/work/hdbscan-taxi-cuml-gpu.npz",
+              "output_digest": "0e1d5bb909c81129",
+              "output_sha256": "0a409ffa91cefd71f532efd9858e0ba75a66ffecea39a79ac935f58e1304b3fe",
+              "sha256": "6d8caaa511666b6f2dc9e344e55e54754a83cd8ea5d425f5aaf0a07b99b84cbd",
+              "status": "verified"
+            },
             "schema": "mojolearn.measurement.v1",
             "seed": "none (deterministic)",
-            "shape": "1000000x11",
+            "shape": "100000x11",
             "software": {
               "library": "cuml",
               "version": "26.08.00"
             },
             "source": {
-              "bytes": 20282888,
-              "commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
-              "manifest_sha256": "4c24508c9a1c0e6dce81a0dad3d842c287453bdb1dc1d4aa606f0e5afd275264",
+              "bytes": 20286511,
+              "commit": "50be53955e44d38634eb7117dfc43a3dc427be01",
+              "manifest_sha256": "ce5a1fd982a8192b958f2eec547138a84f0f0a219c12724c1bf71edda11ee06b",
               "r2_bucket": "mojolearn-data",
-              "r2_key": "measurements/records/v1/f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7.tar.gz",
-              "sha256": "f1030a18c61cafacfae7c39ded5615a824b156391a82a2cb9813bc39c8dd0de7",
+              "r2_key": "measurements/records/v1/3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75.tar.gz",
+              "sha256": "3bd931b5c0317c81e17d844c1d6ea8484f044953cc60840e25a92fd6fd39ee75",
               "status": "verified",
               "verification": "GET sha256"
             },
@@ -902168,12 +902438,12 @@
                 "pre_clock_fit": false,
                 "pre_clock_fit_source": "declared",
                 "upload_ms_separate": null,
-                "upload_ms_untimed": 12.742795050144196
+                "upload_ms_untimed": 7.691927254199982
               },
               "times_ms": [
-                357.6156459748745
+                358.3936672657728
               ],
-              "warmup_ms": 588.2694534957409
+              "warmup_ms": 522.1074223518372
             },
             "workers": [
               {
@@ -902330,7 +902600,7 @@
                   "MOJOLEARN_BENCH_INSTALLED": "1",
                   "MOJOLEARN_BOARD_VENDOR": "nvidia",
                   "MOJOLEARN_CPU_THREADS": "13",
-                  "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+                  "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
                   "NUMEXPR_NUM_THREADS": "13",
                   "OMP_NUM_THREADS": "13",
                   "OPENBLAS_NUM_THREADS": "13",
@@ -902524,7 +902794,7 @@
                   "zict": "3.0.0",
                   "zipp": "4.1.1"
                 },
-                "pid": 35674,
+                "pid": 39589,
                 "python": "3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]",
                 "runtime": {
                   "cupy": {
@@ -902536,7 +902806,7 @@
                 "status": "recorded",
                 "thread_pools": [
                   {
-                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/treelite.libs/libgomp-e985bcbb.so.1.0.0",
+                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/libraft_cu12.libs/libgomp-855c301a.so.1.0.0",
                     "internal_api": "openmp",
                     "num_threads": 13,
                     "prefix": "libgomp",
@@ -902553,6 +902823,16 @@
                   },
                   {
                     "architecture": "SkylakeX",
+                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/scipy.libs/libscipy_openblas-6cdc3b4a.so",
+                    "internal_api": "openblas",
+                    "num_threads": 13,
+                    "prefix": "libscipy_openblas",
+                    "threading_layer": "pthreads",
+                    "user_api": "blas",
+                    "version": "0.3.30"
+                  },
+                  {
+                    "architecture": "SkylakeX",
                     "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-32a4b2a6.so",
                     "internal_api": "openblas",
                     "num_threads": 13,
@@ -902562,22 +902842,12 @@
                     "version": "0.3.31.188.0"
                   },
                   {
-                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/libraft_cu12.libs/libgomp-855c301a.so.1.0.0",
+                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/treelite.libs/libgomp-e985bcbb.so.1.0.0",
                     "internal_api": "openmp",
                     "num_threads": 13,
                     "prefix": "libgomp",
                     "user_api": "openmp",
                     "version": null
-                  },
-                  {
-                    "architecture": "SkylakeX",
-                    "filepath": "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/scipy.libs/libscipy_openblas-6cdc3b4a.so",
-                    "internal_api": "openblas",
-                    "num_threads": 13,
-                    "prefix": "libscipy_openblas",
-                    "threading_layer": "pthreads",
-                    "user_api": "blas",
-                    "version": "0.3.30"
                   }
                 ],
                 "versions": {
@@ -902586,26 +902856,26 @@
               }
             ]
           },
-          "median_ms": 357.6156459748745,
+          "median_ms": 358.3936672657728,
           "memory": {
             "children_mb": 0.0,
             "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
             "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
             "peak_gpu_mb": 448.0,
-            "peak_host_mb": 975.7,
+            "peak_host_mb": 954.1,
             "rounds_sampled": 1,
             "warmup_gpu_mb": 444.0,
-            "warmup_host_mb": 975.5
+            "warmup_host_mb": 953.4
           },
-          "min_ms": 357.6156459748745,
+          "min_ms": 358.3936672657728,
           "mode": "opponent",
           "neural_shape": null,
           "operations": [
             {
               "dataset_load_included": false,
               "fresh_process": false,
-              "ms": 588.5280799120665,
-              "preparation_ms": 0.006752088665962219,
+              "ms": 522.3600789904594,
+              "preparation_ms": 0.002464279532432556,
               "round": 0,
               "scope": "call-consume",
               "startup_probe_preparation_excluded": true,
@@ -902614,8 +902884,8 @@
             {
               "dataset_load_included": false,
               "fresh_process": false,
-              "ms": 357.7914107590914,
-              "preparation_ms": 0.005317851901054382,
+              "ms": 358.5762269794941,
+              "preparation_ms": 0.006577000021934509,
               "round": 1,
               "scope": "call-consume",
               "startup_probe_preparation_excluded": true,
@@ -902666,16 +902936,20 @@
             "source": "get_params"
           },
           "peak_gpu_mb": 448.0,
-          "peak_host_mb": 975.7,
+          "peak_host_mb": 954.1,
           "quality": {
             "ari_vs_ours": 0.9178850076295937,
             "n_clusters": 159,
             "noise_agreement_vs_ours": 0.98442,
             "noise_fraction": 0.13097,
-            "rows": 100000
+            "rows": 100000,
+            "silhouette": 0.011959929019212723,
+            "silhouette_library": "sklearn.metrics.silhouette_score",
+            "silhouette_library_version": "1.7.2",
+            "silhouette_scope": "all consumed rows; noise is a label group; no sampling"
           },
           "ratio_ours_fast_over": null,
-          "ratio_ours_identical_over": 1.1447045393290993,
+          "ratio_ours_identical_over": 1.137597322525019,
           "rounds": 1,
           "rows": null,
           "rows_tag": "full",
@@ -902695,7 +902969,7 @@
             "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
             "warmup_rounds": 1
           },
-          "shape": "1000000x11",
+          "shape": "100000x11",
           "source": "measured this run",
           "state_receipts": [
             {
@@ -902712,12 +902986,12 @@
           ],
           "status": "ok",
           "times_ms": [
-            357.6156459748745
+            358.3936672657728
           ],
           "verdict": "SPAN-ASYMMETRIC(upload_outside_its_clock)",
           "version": "cuml 26.08.00",
           "version_source": "cell record",
-          "warmup_ms": 588.2694534957409
+          "warmup_ms": 522.1074223518372
         }
       ],
       "command": [
@@ -902732,9 +903006,9 @@
         "--data",
         "/root/gpu-gap-cache/ctd-data/rows-full",
         "--out",
-        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
+        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/raw/classical/rows-full",
         "--work",
-        "/root/gpu-gap-wave7-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
+        "/root/gpu-gap-wave8-evidence/campaign/measured/classical.hdbscan.taxi.rows=full/work",
         "--root",
         "/root/mojolearn",
         "--arms",
@@ -902751,17 +903025,17 @@
         "/root/gpu-gap-cache/venv/bin/python"
       ],
       "dataset": "taxi",
-      "evidence_directory": "evidence/runs/race-m9wa04l9",
+      "evidence_directory": "evidence/runs/race-653th083",
       "evidence_receipt": {
-        "bytes": 21051,
+        "bytes": 22109,
         "r2_bucket": "mojolearn-data",
-        "r2_key": "measurements/records/v1/636dafa6d09328c46c35fd96f8a75d14484b2e53b473410275d41fbc4d84048d.tar.gz",
-        "sha256": "636dafa6d09328c46c35fd96f8a75d14484b2e53b473410275d41fbc4d84048d",
+        "r2_key": "measurements/records/v1/5065f29179f3436d14a6633a24539b2fefda576eae6861acea5c76b218322e01.tar.gz",
+        "sha256": "5065f29179f3436d14a6633a24539b2fefda576eae6861acea5c76b218322e01",
         "status": "verified",
         "verification": "GET sha256"
       },
       "family": "classical",
-      "finished": "2026-10-14T05:26:00Z",
+      "finished": "2026-10-14T05:56:04Z",
       "host": {
         "hostname": "d2fe567d3b88",
         "pod_id": null
@@ -902780,16 +903054,16 @@
         "rows": "the dbscan block's first 100,000 rows",
         "timed": "fit"
       },
-      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.taxi.rows=full/board.json (nv2/paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b)",
+      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.taxi.rows=full/board.json (nv2/paired-2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad)",
       "main_board": {
         "box": "nv2",
         "identity": "n/a",
-        "job": "paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b",
-        "sha": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6"
+        "job": "paired-2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad",
+        "sha": "50be53955e44d38634eb7117dfc43a3dc427be01"
       },
       "opponent_source": {
-        "paired_session": "paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b",
-        "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.taxi.rows=full/board.json"
+        "paired_session": "paired-2b487df5a61c13ee70661a7f7e7a89376cc4ccff20b465e01743068fe9a2f4ad",
+        "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.taxi.rows=full/board.json"
       },
       "params": {
         "arms": {
@@ -903188,7 +903462,7 @@
               "MOJOLEARN_BENCH_INSTALLED": "1",
               "MOJOLEARN_BOARD_VENDOR": "nvidia",
               "MOJOLEARN_CPU_THREADS": "13",
-              "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+              "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
               "NUMEXPR_NUM_THREADS": "13",
               "OMP_NUM_THREADS": "13",
               "OPENBLAS_NUM_THREADS": "13",
@@ -903215,7 +903489,7 @@
               "MOJOLEARN_BOARD_VENDOR": "nvidia",
               "MOJOLEARN_CPU_THREADS": "13",
               "MOJOLEARN_NUMERIC_MODE": "identical",
-              "MOJOLEARN_REPO_COMMIT": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+              "MOJOLEARN_REPO_COMMIT": "50be53955e44d38634eb7117dfc43a3dc427be01",
               "NUMEXPR_NUM_THREADS": "13",
               "OMP_NUM_THREADS": "13",
               "OPENBLAS_NUM_THREADS": "13",
@@ -903247,7 +903521,7 @@
       "rerace": "x",
       "rows": null,
       "shape": null,
-      "started": "2026-10-14T05:25:51Z",
+      "started": "2026-10-14T05:53:25Z",
       "status": "done"
     },
     "classical/kde/istella/rows=full": {
@@ -1120352,5 +1120626,5 @@
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-14T05:51:54Z"
+  "updated": "2026-10-14T06:04:32Z"
 }

@@ -1,5 +1,5 @@
 {
-  "date_epoch": 1791957116.190049,
+  "date_epoch": 1791957874.3977191,
   "scope": "All original 303 GPU-opponent recipes; newest preflight evidence only, not full timing or admission coverage",
   "vendors": {
     "amd": {
@@ -25,13 +25,17 @@
         "algos/maxpool2d/synthetic/rows=full",
         "algos/nadam/synthetic/rows=full",
         "algos/rmsprop/synthetic/rows=full",
-        "algos/sgd/synthetic/rows=full"
+        "algos/sgd/synthetic/rows=full",
+        "classical/kmeans/istella/rows=full",
+        "classical/kmeans/taxi/rows=full",
+        "classical/knn/istella/rows=full",
+        "classical/knn/taxi/rows=full"
       ],
       "latest_preflight_counts": {
         "MATCHED": 39,
         "REFUSED": 51
       },
-      "new_fit_admissions": 21,
+      "new_fit_admissions": 25,
       "recipes": {
         "algos/adafactor/synthetic/rows=full": {
           "audit": {
@@ -1525,39 +1529,39 @@
         },
         "classical/kmeans/istella/rows=full": {
           "audit": {
-            "identical/fit": "INSUFFICIENT",
+            "identical/fit": "MATCHED",
             "identical/infer": "INSUFFICIENT"
           },
           "measurement_status": "done",
-          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.kmeans.istella.rows=full/board.json",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.istella.rows=full/board.json",
           "problems": [],
           "status": "MATCHED"
         },
         "classical/kmeans/taxi/rows=full": {
           "audit": {
-            "identical/fit": "INSUFFICIENT",
+            "identical/fit": "MATCHED",
             "identical/infer": "INSUFFICIENT"
           },
           "measurement_status": "done",
-          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
           "problems": [],
           "status": "MATCHED"
         },
         "classical/knn/istella/rows=full": {
           "audit": {
-            "identical/fit": "INSUFFICIENT"
+            "identical/fit": "MATCHED"
           },
           "measurement_status": "done",
-          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.istella.rows=full/board.json",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.istella.rows=full/board.json",
           "problems": [],
           "status": "MATCHED"
         },
         "classical/knn/taxi/rows=full": {
           "audit": {
-            "identical/fit": "INSUFFICIENT"
+            "identical/fit": "MATCHED"
           },
           "measurement_status": "done",
-          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.taxi.rows=full/board.json",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.taxi.rows=full/board.json",
           "problems": [],
           "status": "MATCHED"
         },
@@ -4864,19 +4868,19 @@
         },
         "classical/hdbscan/istella/rows=full": {
           "audit": {
-            "identical/fit": "INSUFFICIENT"
+            "identical/fit": "UNFAIR"
           },
           "measurement_status": "done",
-          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
           "problems": [],
           "status": "MATCHED"
         },
         "classical/hdbscan/taxi/rows=full": {
           "audit": {
-            "identical/fit": "INSUFFICIENT"
+            "identical/fit": "UNFAIR"
           },
           "measurement_status": "done",
-          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
           "problems": [],
           "status": "MATCHED"
         },
