@@ -1,8 +1,8 @@
 {
- "generated": "2026-10-14T03:49:37Z",
+ "generated": "2026-10-14T04:04:06Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-14T03:49:37Z",
+  "generated": "2026-10-14T04:04:06Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -16,23 +16,41 @@
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.adam.synthetic.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.adamax.synthetic.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.adamw.synthetic.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.avgpool1d.synthetic.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.avgpool2d.synthetic.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.layernorm.synthetic.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.maxpool1d.synthetic.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.maxpool2d.synthetic.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.nadam.synthetic.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.rmsprop.synthetic.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/campaign/measured/algos.sgd.synthetic.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.adafactor.synthetic.rows=full/board.json",
    "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.adagrad.synthetic.rows=full/board.json",
    "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.adam.synthetic.rows=full/board.json",
    "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.adamax.synthetic.rows=full/board.json",
    "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.adamw.synthetic.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.avgpool1d.synthetic.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.avgpool2d.synthetic.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.layernorm.synthetic.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.maxpool1d.synthetic.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.maxpool2d.synthetic.rows=full/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.nadam.synthetic.rows=full/board.json",
    "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.rmsprop.synthetic.rows=full/board.json",
    "amd=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.sgd.synthetic.rows=full/board.json",
-   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-quality/algos.label-binarizer.istella.rows=full/board.json",
-   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-quality/algos.label-binarizer.taxi.rows=full/board.json",
-   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-quality/algos.maxabs-scaler.istella.rows=full/board.json",
-   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-quality/algos.maxabs-scaler.taxi.rows=full/board.json",
-   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-quality/algos.minmax-scaler.istella.rows=full/board.json",
-   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-quality/algos.minmax-scaler.taxi.rows=full/board.json",
-   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-quality/algos.poly-features.istella.rows=full/board.json",
-   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-quality/algos.poly-features.taxi.rows=full/board.json"
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.maxabs-scaler.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.maxabs-scaler.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.minmax-scaler.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.minmax-scaler.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.poly-features.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.poly-features.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.power-transformer.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.power-transformer.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.quantile-transformer.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.quantile-transformer.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.standard-scaler.istella.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.standard-scaler.taxi.rows=full/board.json"
   ],
   "results": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
@@ -254,5 +272,5 @@
   "GRIDBB: branch gbdt-categorical-oom": 6,
   "GRIDBB: not a bench_board race": 8
  },
- "summary": "MAINBOARD column=nvidia-l40s label=main@79fcd24a5 races=254 add=0 change=2 drop=0 failed=0 ledger=354 withheld_opponents=43 identity=MATCH:77,n/a:177"
+ "summary": "MAINBOARD column=nvidia-l40s label=main@79fcd24a5 races=254 add=0 change=0 drop=0 failed=0 ledger=348 withheld_opponents=43 identity=MATCH:84,n/a:170"
 }
