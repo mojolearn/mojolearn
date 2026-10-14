@@ -1106,9 +1106,11 @@ def build(lane, arm, D, rec):
         # change were wrong for this lane; apply extra scrutiny.
         frac = _ours_ivf_train_rows(D["index"].shape[0], nlist) / float(D["index"].shape[0])
         # cuVS ivf_flat IndexParams takes no seed
+        # smoke-fixes (2026-10-14; classical2/ivf: "missing real library implementation read-back:
+        # cuvs-gpu"): the record names the cuVS build function call() runs (cuvs.neighbors.ivf_flat.build).
         declared = {"__library__": "cuvs", "nlist": nlist, "nprobe": min(IVF_NPROBE, nlist),
                     "n_neighbors": IVF_K, "metric": "sqeuclidean", "kmeans_n_iters": 20,
-                    "kmeans_trainset_fraction": frac}
+                    "kmeans_trainset_fraction": frac, "__implementation__": ivf_flat.build}
 
         def call():
             idx = ivf_flat.build(ivf_flat.IndexParams(n_lists=nlist, metric="sqeuclidean",
@@ -1314,7 +1316,22 @@ def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=
     info = _ours(lane, probe)
     if d is not None:
         info["n_features"] = d
-    return Runner(info, call, out, params=probe, model_for_hash=lambda: S.get("est"))
+    params = probe
+    if lane == "ivf":
+        # smoke-fixes (2026-10-14; classical2/ivf: "kmeans_trainset_fraction missing from ours
+        # read-back"): ours' IVFIndex takes no trainset option; its build fixes the coarse k-means
+        # training rows at every s-th row, s = ivf_trainset_stride(n, n_lists)
+        # (ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo:161-185, cuVS's own strided rule in
+        # integers, :96-101), n_train = n // s of n rows (_ours_ivf_train_rows). cuVS ivf_flat takes
+        # every (n / (fraction x n))-th row (cuVS 26.08 ivf_flat_build.cuh trainset_ratio), the same
+        # rows at fraction = n_train / n. The record keeps ours' get_params read-back and adds that
+        # fixed fraction under cuVS's name, as tools/bench_board_algos.py _ivf_pq_effective does.
+        n_rows = D["index"].shape[0]
+        nlist = min(IVF_NLIST, n_rows // 4)
+        params = _load("bench_board_params").arm_record(probe)
+        params["params"]["kmeans_trainset_fraction"] = _ours_ivf_train_rows(n_rows, nlist) / float(n_rows)
+        params["source"] += " + fixed trainset stride (ivf_trainset_stride)"
+    return Runner(info, call, out, params=params, model_for_hash=lambda: S.get("est"))
 
 
 def _build_sklearn(lane, D, rec, S):
