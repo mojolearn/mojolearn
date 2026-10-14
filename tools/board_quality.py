@@ -8,7 +8,7 @@ Unknown metrics require review; finite output alone is not equal quality.
 """
 import math
 
-POLICY = "mojolearn.quality-parity.v3"
+POLICY = "mojolearn.quality-parity.v4"
 # Absolute score units (one percentage point for bounded scores).
 ABSOLUTE = dict.fromkeys(("accuracy", "auc", "roc_auc", "r2", "recall_at_k",
     "recall_at_10", "trustworthiness_k15", "explained_variance_ratio_sum",
@@ -68,6 +68,19 @@ def compare(ours, theirs):
         checks.append(dict(metric=metric, ours=a, opponent=b, comparison=kind,
                            margin=margin, observed=observed,
                            verdict="PASS" if observed <= margin else "FAIL"))
+    # FAIRNESS FIX (2026-10-13 audit): a one-cluster density result has no
+    # silhouette. Exact partition equivalence with the same noise mask still
+    # proves output-quality parity. Partial label agreement is neither an
+    # admission nor a quality failure; it requires an intrinsic metric.
+    links = [q for q in (qo, qt) if "ari_vs_ours" in q]
+    if (not checks and ours.get("lane") in ("dbscan", "hdbscan")
+            and ours.get("lane") == theirs.get("lane")
+            and type(qo.get("rows")) is int and qo["rows"] > 0 and qo["rows"] == qt.get("rows")
+            and links and all(number(q.get("ari_vs_ours")) and number(q.get("noise_agreement_vs_ours"))
+                              and q["ari_vs_ours"] == 1.0 and q["noise_agreement_vs_ours"] == 1.0 for q in links)):
+        checks.append(dict(metric="partition_equivalence", ours=1.0, opponent=1.0,
+            comparison="same partition and noise mask on every consumed row", margin=0.0,
+            observed=0.0, rows=qo["rows"], verdict="PASS"))
     if failures or any(c["verdict"] == "FAIL" for c in checks):
         verdict = "FAIL"
     elif not checks or any(c["verdict"] == "INSUFFICIENT" for c in checks):

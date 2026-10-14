@@ -2098,13 +2098,27 @@ def classical_json_path(ctx, race):
                         "%s-%s.json" % (race["lane"], race["dataset"]))
 
 
+def classical_measured_shape(r, lane=None):
+    """Actual consumed rows, including declared slices of a staged block."""
+    shapes = (r.get("block") or {}).get("arrays", {})
+    first = shapes.get("X") or shapes.get("index") or {}
+    dimensions = list(first.get("shape") or [])
+    # FAIRNESS FIX (2026-10-13 audit): HDBSCAN consumes the declared prefix,
+    # while its shared DBSCAN staging file can contain more rows. This reads
+    # the recipe's slice, never a benchmark-size dispatch or inferred cap.
+    if (lane or r.get("lane")) == "hdbscan":
+        rows = ((r.get("block") or {}).get("hdbscan") or {}).get("rows")
+        if not dimensions or type(rows) is not int or not 0 < rows <= dimensions[0]:
+            return None
+        dimensions[0] = rows
+    # the neural racer names its shape itself (no classical block)
+    return r.get("shape") or "x".join(str(s) for s in dimensions) or None
+
+
 def classical_cells(ctx, race, r):
     cells = []
     rounds = ctx["rounds"]
-    shapes = (r.get("block") or {}).get("arrays", {})
-    first = shapes.get("X") or shapes.get("index") or {}
-    # the neural racer names its shape itself (no classical block)
-    shape = r.get("shape") or "x".join(str(s) for s in first.get("shape", [])) or None
+    shape = classical_measured_shape(r, race.get("lane"))
     qual = r.get("quality") or {}
     spans = r.get("spans") or {}
     ours_span = (((r.get("arms") or {}).get("ours") or {}).get("span")
@@ -2680,6 +2694,10 @@ def stored_opponents(ctx, race):
         hit = STORE.lookup(store, key)
         if hit is not None:
             cell = hit.get("cell") or {}
+            measurement = cell.get("measurement") or {}
+            if (race.get("family") == "classical" and measurement
+                    and (measurement.get("retained_outputs") or {}).get("status") != "verified"):
+                continue  # hashes/logs alone did not retain classical outputs
             if ctx.get("retime_cpu_opponents") and cell.get("device") == "cpu" and hit.get("commit") != ctx["commit"]:
                 continue
             if ctx.get("opponents_only") and (not successful_opponent_cell(cell)):
@@ -3062,15 +3080,9 @@ def _run_race(ctx, race):
             rec["lane_config"] = r.get("lane_config")
             if ctx.get("infer"):
                 rec["infer_cells"] = INFER.classical_cells(_bb(), ctx, race, r)
-        # the arms' saved outputs are only for the conductor's quality pass
-        work = os.path.join(ctx["out"], "work")
-        if os.path.isdir(work):
-            for f in os.listdir(work):
-                if f.startswith("%s-%s-" % (race["lane"], race["dataset"])):
-                    try:
-                        os.remove(os.path.join(work, f))
-                    except OSError:
-                        pass
+        # FAIRNESS FIX (2026-10-13 audit): these are the scored output bytes,
+        # not disposable quality-pass scratch. Keep them for E.seal and later
+        # verified retention; deleting them here left only hashes in R2.
     rec["cells"] = add_ratios(cells)
     rec["finished"] = now_utc()
     rec["status"] = "done" if rc == 0 else "failed"

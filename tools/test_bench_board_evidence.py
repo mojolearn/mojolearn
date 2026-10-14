@@ -251,6 +251,28 @@ class Evidence(unittest.TestCase):
         with tarfile.open(self.root/"evidence/runs/r1/run.tar.gz") as archive:
             self.assertEqual(archive.extractfile("run/work/quality-reference/reference.npz").read(), payload)
 
+    def test_classical_arrays_must_exist_and_match_scored_digest(self):
+        import hashlib
+        import numpy as np
+        import bench_board_state as state
+        arrays = {"labels": np.array([0, 0, 1, 1], dtype=np.int32)}
+        h = hashlib.sha256(b"labels" + arrays["labels"].tobytes()).hexdigest()[:16]
+        cell = dict(arm="ours", status="ok", hash=h,
+                    state_receipts=[state.scored_receipt(arrays)])
+        rec = dict(lane="hdbscan", dataset="fixture", cells=[cell])
+        payload = io.BytesIO(); np.savez(payload, **arrays)
+        name = "run/work/hdbscan-fixture-ours.npz"
+        refs, missing = E.classical_output_refs(rec, {name: payload.getvalue()})
+        self.assertFalse(missing)
+        self.assertEqual(refs[("fit", "ours")]["output_sha256"], state.canonical_hash(arrays))
+        self.assertIn(("fit", "ours"), E.classical_output_refs(rec, {})[1])
+        rec["cells"].append(dict(cell, arm="library"))
+        refs, missing = E.classical_output_refs(rec, {name: payload.getvalue()})
+        self.assertIn(("fit", "ours"), refs)
+        self.assertEqual(set(missing), {("fit", "library")})
+        cell["hash"] = "changed"
+        self.assertIn(("fit", "ours"), E.classical_output_refs(rec, {name: payload.getvalue()})[1])
+
     def test_complete_record_retains_call_settings_seed_and_final_receipt(self):
         rec,cell=self.sealed_cell()
         m=cell["measurement"]

@@ -1585,3 +1585,32 @@ def test_smoke_explicit_quality_error_never_counts_as_evidence(quality):
     rec = {'status': 'done', 'params_check': 'MATCHED',
            'cells': [{'arm': 'ours', 'status': 'ok', 'median_ms': 1., 'quality': quality}]}
     assert any(reason.startswith('quality error:') for _, reason in bb.smoke_verdict(race, rec, 'amd'))
+
+
+def test_hdbscan_shape_uses_consumed_recipe_slice():
+    raw = dict(lane='hdbscan', block={'arrays': {'X': {'shape': [1000, 11]}}, 'hdbscan': {'rows': 137}})
+    assert bb.classical_measured_shape(raw) == '137x11'
+    assert bb.classical_measured_shape(raw, 'dbscan') == '1000x11'
+    raw['block']['hdbscan']['rows'] = 1001
+    assert bb.classical_measured_shape(raw) is None
+
+
+def test_classical_outputs_survive_until_evidence_seal(tmp_path, monkeypatch):
+    saved = tmp_path / 'work/hdbscan-fixture-ours.npz'
+    raw = tmp_path / 'raw.json'
+    def execute(*args, **kwargs):
+        saved.parent.mkdir(exist_ok=True)
+        saved.write_bytes(b'scored output bytes')
+        raw.write_text('{}')
+        return 0
+    monkeypatch.setattr(bb, 'classical_cmd', lambda *a: (['fixture'], {}, 30))
+    monkeypatch.setattr(bb, 'classical_json_path', lambda *a: str(raw))
+    monkeypatch.setattr(bb, 'child_env', lambda *a: {})
+    monkeypatch.setattr(bb, 'run_logged', execute)
+    monkeypatch.setattr(bb, 'classical_cells', lambda *a: [])
+    monkeypatch.setattr(bb, 'add_ratios', lambda cells: cells)
+    monkeypatch.setattr(bb, 'attach_params', lambda *a: None)
+    race = dict(id='fixture', family='classical', lane='hdbscan', dataset='fixture', rows=None,
+                arms=['ours'], our_arms={'ours': 'identical'})
+    bb._run_race(dict(out=str(tmp_path), nice=0), race)
+    assert saved.read_bytes() == b'scored output bytes'

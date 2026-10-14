@@ -246,6 +246,20 @@ class RaceFairness(unittest.TestCase):
         RF.apply(b)
         self.assertEqual(rr["rerace"],"x")
 
+    def test_new_classical_measurements_require_retained_scored_outputs(self):
+        b = board(r=race("solver", [("lib", 10, {})]))
+        rr = b["races"]["r"]
+        rr["family"] = "classical"
+        for cell in rr["cells"]:
+            cell["measurement"] = dict(completeness="complete", source={"status": "verified"},
+                artifacts={"status": "verified"}, retained_outputs={"status": "verified"})
+        RF.apply(b)
+        self.assertNotEqual(rr.get("rerace"), "x")
+        rr["cells"][0]["measurement"].pop("retained_outputs")
+        RF.apply(b)
+        self.assertEqual(rr["rerace"], "x")
+        self.assertIn("scored classical output bytes", str(rr["audit"]))
+
     def test_inference_batches_must_match_before_comparing(self):
         rr=race("solver",[("lib",10,{})])
         rr["infer_cells"]=copy.deepcopy(rr["cells"])

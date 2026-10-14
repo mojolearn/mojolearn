@@ -349,6 +349,40 @@ def begin(ctx, race, settings, data):
     return directory, recipe
 
 
+def classical_output_refs(rec, members):
+    """Validate retained arrays against the digest from their scored call."""
+    import io
+    import numpy as np
+    import bench_board_state as state
+    refs, missing = {}, {}
+    for field, phase, suffix in (("cells", "fit", ""), ("infer_cells", "infer", "-infer")):
+        for cell in rec.get(field) or []:
+            if cell.get("status") != "ok" or cell.get("stored"):
+                continue
+            name = "run/work/%s-%s-%s%s.npz" % (rec["lane"], rec["dataset"], cell["arm"], suffix)
+            if name not in members:
+                missing[(phase, cell["arm"])] = "scored output bytes missing: " + name
+                continue
+            try:
+                with np.load(io.BytesIO(members[name]), allow_pickle=False) as saved:
+                    arrays = {k: saved[k] for k in saved.files}
+                h = hashlib.sha256()
+                for key in sorted(arrays):
+                    h.update(key.encode()); h.update(np.ascontiguousarray(arrays[key]).data)
+                if not arrays or h.hexdigest()[:16] != cell.get("hash"):
+                    raise ValueError("scored digest differs")
+                output_hash = state.canonical_hash(arrays)
+                receipts = cell.get("state_receipts") or []
+                if receipts and receipts[-1].get("output_sha256") != output_hash:
+                    raise ValueError("scored receipt differs")
+            except (ValueError, OSError, KeyError):
+                missing[(phase, cell["arm"])] = "scored output bytes do not match recorded output: " + name
+                continue
+            refs[(phase, cell["arm"])] = dict(member=name, bytes=len(members[name]),
+                sha256=digest(members[name]), output_sha256=output_hash, output_digest=cell["hash"])
+    return refs, missing
+
+
 def seal(ctx, directory, recipe, rec):
     """Capture measured records and logs, then attach the durable refs per arm."""
     directory = Path(directory)
@@ -367,6 +401,12 @@ def seal(ctx, directory, recipe, rec):
             if p.is_file() and p.suffix in (".log", ".json", ".npz", ".npy", ".bin", ".safetensors", ".pt") and p.stat().st_mtime >= started:
                 members["run/" + str(p.relative_to(ctx["out"]))] = p.read_bytes()
     missing = []
+    output_refs, output_missing = {}, {}
+    if rec.get("family") == "classical":
+        # FAIRNESS FIX (2026-10-13 audit): the classical wrapper used to
+        # delete these arrays before seal(). A verified archive of hashes
+        # and logs alone does not retain the scored outputs.
+        output_refs, output_missing = classical_output_refs(rec, members)
     for field in ("log", "race_json"):
         if rec.get(field):
             p = Path(ctx["out"]) / rec[field]
@@ -413,6 +453,8 @@ def seal(ctx, directory, recipe, rec):
                 continue
             params = cell.get("params") or ((rec.get("params") or {}).get("arms") or {}).get(cell.get("arm"))
             absent = list(missing)
+            if (phase, cell.get("arm")) in output_missing:
+                absent.append(output_missing[(phase, cell["arm"])])
             if not params:
                 absent.append("effective parameters")
             fitted = cell.get("fitted_parameters") or []
@@ -464,6 +506,9 @@ def seal(ctx, directory, recipe, rec):
                                       warmup_ms=cell.get("warmup_ms"), times_ms=cell.get("times_ms")),
                           command=rec.get("command"), workers=witnessed,
                           completeness="complete" if not absent else "incomplete", missing=absent)
+            if (phase, cell.get("arm")) in output_refs:
+                record["retained_outputs"] = dict(output_refs[(phase, cell["arm"])],
+                    status="verified" if ref.get("status") == "verified" else "local")
             record["id"] = digest(encoded(record))
             cell["measurement"] = record
     # A separate receipt avoids a circular hash between the raw archive and

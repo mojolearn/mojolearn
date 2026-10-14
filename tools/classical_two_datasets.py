@@ -2873,6 +2873,26 @@ def quality(lane, data, outs, rec, *, knn_k=None):
             ent = {"rows": int(lab.shape[0]),
                    "n_clusters": int(np.unique(lab[lab >= 0]).shape[0]),
                    "noise_fraction": float((lab < 0).mean())}
+            if lane == "hdbscan":
+                # FAIRNESS FIX (2026-10-13 audit): label agreement alone did
+                # not establish comparable clustering quality. Use the
+                # already-declared silhouette margin on every consumed row.
+                # Noise remains a label group under sklearn's definition;
+                # dropping noise or sampling rows would change this metric.
+                import sklearn
+                from sklearn import config_context
+                from sklearn.metrics import silhouette_score
+                rows = int(rec["hdbscan"]["rows"])
+                if lab.size != rows:
+                    raise ValueError("HDBSCAN output rows differ from its declared input slice")
+                if 1 < np.unique(lab).size < rows:
+                    # A memory ceiling for the validation oracle's distance
+                    # chunks, independent of benchmark dimensions or labels.
+                    with config_context(working_memory=256):
+                        ent["silhouette"] = float(silhouette_score(data["X"][:rows], lab, metric="euclidean"))
+                    ent["silhouette_scope"] = "all consumed rows; noise is a label group; no sampling"
+                    ent["silhouette_library"] = "sklearn.metrics.silhouette_score"
+                    ent["silhouette_library_version"] = sklearn.__version__
             if ref is not None and arm != "ours" and ref["labels"].size == lab.size:
                 from sklearn.metrics import adjusted_rand_score
                 r = ref["labels"].astype(np.int64).reshape(-1)

@@ -8,6 +8,22 @@ def pair(a, b):
 
 
 class QualityParity(unittest.TestCase):
+    def test_density_partition_proof_is_exact_and_does_not_replace_intrinsic_quality(self):
+        a = dict(arm="ours", lane="dbscan", quality={"rows": 12})
+        b = dict(arm="library", lane="dbscan", quality={"rows": 12,
+            "ari_vs_ours": 1.0, "noise_agreement_vs_ours": 1.0})
+        self.assertEqual(Q.compare(a, b)["verdict"], "PASS")
+        self.assertEqual(Q.compare(b, a)["verdict"], "PASS")
+        for field, value in (("ari_vs_ours", .99), ("ari_vs_ours", True),
+                             ("noise_agreement_vs_ours", .99), ("rows", 11)):
+            bad = dict(b, quality=dict(b["quality"], **{field: value}))
+            self.assertEqual(Q.compare(a, bad)["verdict"], "INSUFFICIENT")
+        a["quality"]["silhouette"] = .5
+        b["quality"].update(silhouette=.52, ari_vs_ours=.7)
+        self.assertEqual(Q.compare(a, b)["verdict"], "FAIL")
+        b["quality"]["silhouette"] = .505
+        self.assertEqual(Q.compare(a, b)["verdict"], "PASS")
+
     def test_saved_svr_scores_pass_despite_different_iterations(self):
         result = pair(dict(r2=.31825814626514914, rmse=.6808156927626244, n_iter=10360),
                       dict(r2=.31823207274760623, rmse=.6808287116862013, n_iter=10625))

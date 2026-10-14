@@ -61,6 +61,24 @@ paper and website consume the same per-mode, per-phase admitted opponents.
 
 ## Retention and guarded execution
 
+The v4 additions are declared before the repaired classical reruns on
+2026-10-14. All existing numeric margins remain unchanged. HDBSCAN records
+`sklearn.metrics.silhouette_score` on every consumed row, using Euclidean
+distance and including noise as its own label group under sklearn's label
+convention. No rows are sampled or removed; the existing absolute silhouette
+margin is 0.01. ARI, cluster counts and noise fractions remain diagnostics.
+When a density result has no intrinsic score (for example, one cluster), exact
+partition equivalence and an identical noise mask on the same positive number
+of rows establish output-quality parity. Partial partition agreement alone
+neither passes nor proves a quality failure; it still needs an intrinsic score.
+
+Classical output arrays must survive the quality pass and be retained in the
+verified archive. Their archive member, byte hash and scored-output digest are
+recorded per arm and phase. A logs-only archive cannot satisfy this rule. The
+old classical cleanup deleted these arrays before sealing; affected new
+measurements remain excluded until their output evidence is repaired. HDBSCAN
+shape metadata records the consumed slice, not the larger staged parent block.
+
 The v3 additions, declared before repaired dropout timing on 2026-10-14, retain
 every v2 margin. Dropout2d uses each library's own RNG. Each saved output must
 zero whole channels or scale their input by `1 / (1 - p)`, with relative contract

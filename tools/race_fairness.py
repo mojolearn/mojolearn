@@ -229,6 +229,9 @@ def _pair_problems(race, ours, opp):
                 missing.extend(m.get("missing") or ["incomplete measurement record"])
             if any((m.get(k) or {}).get("status") != "verified" for k in ("source", "artifacts")):
                 missing.append("measurement source/logs not verified in R2")
+            if ((race.get("family") or cell.get("family")) == "classical"
+                    and (m.get("retained_outputs") or {}).get("status") != "verified"):
+                missing.append("scored classical output bytes lack verified archive membership and digest")
     mo, mt = ours.get("measurement") or {}, opp.get("measurement") or {}
     if mo and mt:
         if (mo.get("dataset") or {}).get("identity") != (mt.get("dataset") or {}).get("identity"):
