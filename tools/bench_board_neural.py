@@ -2565,7 +2565,9 @@ class MambaSsmArm:
             "input_home": "host",
             "call": "mamba_ssm Block(%s).forward(x) on %s; h + residual; .cpu()"
                     % (MAMBA_SSM_MIXER[model].rsplit(".", 1)[1], dev)})
-        self.record = {"__library__": "mamba-ssm", "seed": SEED}
+        # preflight-smoke (2026-10-14): the library class constructed (mamba_ssm.modules.block.Block), so the
+        # preflight's real-implementation check reads it back
+        self.record = {"__library__": "mamba-ssm", "seed": SEED, "__implementation__": type(block)}
         self.record.update(readback)
         self.out = None
         sync()

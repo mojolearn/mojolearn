@@ -2687,6 +2687,14 @@ def params_probe(ctx, race, arms, scorer=None):
 def preflight_check(ctx, race, arms):
     """Construct both arms and audit the complete parameter union before timing."""
     scorer = {} if ctx.get("scorer_preflight") else None
+    # preflight-smoke (2026-10-14): an arm the driver refuses by name before any worker starts (the Mamba
+    # lanes' torch-* arms are pure-PyTorch references, bench_board_neural.REFERENCE_TWIN_LANES) is never
+    # constructed or timed. It is recorded as excluded with that reason instead of failing the whole race as
+    # a "missing parameter/version probe"; ours and the real opponents (mamba-ssm-*) are still probed.
+    excluded = {a: NEURAL.REFERENCE_TWIN_LANES[race["lane"]] for a in arms
+                if race["family"] == "neural" and race["lane"] in NEURAL.REFERENCE_TWIN_LANES
+                and a.startswith("torch-")}
+    arms = [a for a in arms if a not in excluded]
     probes = params_probe(ctx, race, arms, scorer=scorer)
     missing = [a for a in arms if a not in probes or not probes[a].get("version")]
     records = {a: dict(p["record"], __record__=True) for a, p in probes.items() if p.get("record")}
@@ -2726,6 +2734,8 @@ def preflight_check(ctx, race, arms):
             report["problems"].append(arm + ": " + exclusions[arm])
     report["probe_workers"] = {a: {k: p.get(k) for k in ("version", "device_name", "hardware", "environment")}
                                for a, p in probes.items()}
+    if excluded:
+        report["excluded_arms"] = excluded
     if scorer is not None:
         # --preflight-scorer (preflight smoke, 2026-10-14): the same scorer preflight the timed race runs
         # first. A refusal there refuses the race here, so it is found before any GPU time is spent.
