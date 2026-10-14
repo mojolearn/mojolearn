@@ -418,5 +418,85 @@
       "version": "mojolearn 0.8.44, scripts @79fcd24a5"
     },
     "status": "MATCH"
+  },
+  "classical/kmeans/istella/rows=full": {
+    "amd": {
+      "hash": "6b0540e8f8723c1e",
+      "output_sha256": "c965e187ef1d9bc29ae3130b82a8a999d68154858634d3b602ec754efdcdb2c0",
+      "product_version": "0.8.44",
+      "source": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.istella.rows=full/board.json",
+      "started_epoch": 1791957554.0,
+      "version": "mojolearn 0.8.44, scripts @50be53955"
+    },
+    "basis": "Full canonical SHA256 of the scored output, with the same product version; current fairness audit applied before selection.",
+    "nvidia": {
+      "hash": "6b0540e8f8723c1e",
+      "output_sha256": "c965e187ef1d9bc29ae3130b82a8a999d68154858634d3b602ec754efdcdb2c0",
+      "product_version": "0.8.44",
+      "source": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.kmeans.istella.rows=full/board.json",
+      "started_epoch": 1791962111.0,
+      "version": "mojolearn 0.8.44, scripts @2b9a0ea93"
+    },
+    "status": "MATCH"
+  },
+  "classical/kmeans/taxi/rows=full": {
+    "amd": {
+      "hash": "c9250e0922f657c9",
+      "output_sha256": "e38dbeb1b77582ad2fc14e3ef55a44aeb45409aa57232c688c847c1dda8bfaff",
+      "product_version": "0.8.44",
+      "source": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
+      "started_epoch": 1791957476.0,
+      "version": "mojolearn 0.8.44, scripts @50be53955"
+    },
+    "basis": "Full canonical SHA256 of the scored output, with the same product version; current fairness audit applied before selection.",
+    "nvidia": {
+      "hash": "c9250e0922f657c9",
+      "output_sha256": "e38dbeb1b77582ad2fc14e3ef55a44aeb45409aa57232c688c847c1dda8bfaff",
+      "product_version": "0.8.44",
+      "source": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.kmeans.taxi.rows=full/board.json",
+      "started_epoch": 1791962037.0,
+      "version": "mojolearn 0.8.44, scripts @2b9a0ea93"
+    },
+    "status": "MATCH"
+  },
+  "classical/knn/istella/rows=full": {
+    "amd": {
+      "hash": "842a646a7de728a1",
+      "output_sha256": "ce690befd87f4aca56858117ea8b1856cbbea33e27a3aefc5f35f686a3186697",
+      "product_version": "0.8.44",
+      "source": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.istella.rows=full/board.json",
+      "started_epoch": 1791957701.0,
+      "version": "mojolearn 0.8.44, scripts @50be53955"
+    },
+    "basis": "Full canonical SHA256 of the scored output, with the same product version; current fairness audit applied before selection.",
+    "nvidia": {
+      "hash": "842a646a7de728a1",
+      "output_sha256": "ce690befd87f4aca56858117ea8b1856cbbea33e27a3aefc5f35f686a3186697",
+      "product_version": "0.8.44",
+      "source": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.knn.istella.rows=full/board.json",
+      "started_epoch": 1791962227.0,
+      "version": "mojolearn 0.8.44, scripts @2b9a0ea93"
+    },
+    "status": "MATCH"
+  },
+  "classical/knn/taxi/rows=full": {
+    "amd": {
+      "hash": "cd7ff95514f7e589",
+      "output_sha256": "bbb73abf92f0644fa5cc84808c9c420a9055c92f3d82cc9e543e3e69e9c92cd4",
+      "product_version": "0.8.44",
+      "source": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave8/campaign/measured/classical.knn.taxi.rows=full/board.json",
+      "started_epoch": 1791957665.0,
+      "version": "mojolearn 0.8.44, scripts @50be53955"
+    },
+    "basis": "Full canonical SHA256 of the scored output, with the same product version; current fairness audit applied before selection.",
+    "nvidia": {
+      "hash": "cd7ff95514f7e589",
+      "output_sha256": "bbb73abf92f0644fa5cc84808c9c420a9055c92f3d82cc9e543e3e69e9c92cd4",
+      "product_version": "0.8.44",
+      "source": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.knn.taxi.rows=full/board.json",
+      "started_epoch": 1791962166.0,
+      "version": "mojolearn 0.8.44, scripts @2b9a0ea93"
+    },
+    "status": "MATCH"
   }
 }

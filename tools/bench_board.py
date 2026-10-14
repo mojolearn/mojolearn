@@ -1638,7 +1638,10 @@ def save_result(path, result):
     HW.annotate_release(result)
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:
-        json.dump(result, fh, indent=2, sort_keys=True, default=str)
+        # Audit history makes these machine-readable boards large. One-space
+        # indentation preserves every value while avoiding needless size;
+        # BOARD.md is the human-facing rendering.
+        json.dump(result, fh, indent=1, sort_keys=True, default=str)
     os.replace(tmp, path)
 
 
