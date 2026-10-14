@@ -2131,6 +2131,7 @@ def classical_cells(ctx, race, r):
                     quality=q, hash=(a.get("digests") or [None])[-1] or a.get("outputs_digest"),
                     hash_stable=a.get("digest_stable"), shape=shape,
                     state_receipts=a.get("state_receipts", []), operations=a.get("operations", []),
+                    iteration_receipts=a.get("iteration_receipts"), fitted_parameters=a.get("fitted_parameters"),
                     device=info.get("device", cell["device"]),
                     device_name=info.get("device_name") or info.get("cpu_model"),
                     library_version=info.get("version"),
@@ -2146,8 +2147,7 @@ def classical_cells(ctx, race, r):
             # recorded beside the timed median. Results raced before this change were wrong for
             # this lane; apply extra scrutiny.
             cell.update(compile_warmup_ms=a["compile_warmup_ms"],
-                        warmup_deadline_s=a.get("warmup_deadline_s"),
-                        iteration_receipts=a.get("iteration_receipts"))
+                        warmup_deadline_s=a.get("warmup_deadline_s"))
         if a.get("not_opponent") and arm_library(arm) != "mojolearn":
             cell.update(mode="context", not_opponent=a["not_opponent"],
                         verdict="NOT-AN-OPPONENT(%s)" % a["not_opponent"])

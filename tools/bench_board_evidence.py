@@ -349,6 +349,11 @@ def seal(ctx, directory, recipe, rec):
             absent = list(missing)
             if not params:
                 absent.append("effective parameters")
+            fitted = cell.get("fitted_parameters") or []
+            for actual in fitted:
+                if actual is not None and (actual.get("params") != (params or {}).get("raw_params")
+                        or actual.get("implementation") != (params or {}).get("implementation")):
+                    absent.append("actual fitted estimator settings changed after preflight")
             if cell.get("mode") == "opponent" and not (params or {}).get("implementation"):
                 absent.append("library implementation read-back")
             if not (cell.get("library_version") or cell.get("version")):
@@ -383,6 +388,7 @@ def seal(ctx, directory, recipe, rec):
                               note="Observed library object/function and effective settings; exact call site is in the retained source archive."),
                           seed=(params or {}).get("params", {}).get("seed"),
                           iteration_receipts=cell.get("iteration_receipts"),
+                          fitted_parameters=fitted,
                           parameter_exceptions=[e for e in (rec.get("params") or {}).get("exceptions", [])
                                                 if e.get("arm") == cell.get("arm")],
                           hardware=witnessed[0].get("hardware") if witnessed else None,

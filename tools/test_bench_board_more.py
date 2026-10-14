@@ -292,3 +292,17 @@ def test_gmm_lane_arrays_with_a_constant_column_describe_their_shape():
     D = bbm.drop_constant_columns({"X": X, "Xq": X[:10]})
     assert D["_dropped_constant_columns"] == 1
     assert bbm.shape_desc(D) == "X 50x3; Xq 10x3; _dropped_constant_columns 1"
+
+
+def test_fitted_readback_uses_the_timed_model_not_the_constructor_probe():
+    class Estimator:
+        def __init__(self, count): self.n_iter_ = [count]
+        def get_params(self, deep=True): return {"max_iter": 1000}
+    probe, fitted = Estimator(999), Estimator(17)
+    runner=bbm.Runner({},lambda:None,lambda:{},params=probe,model_for_hash=lambda:fitted)
+    readback=runner.fitted_readback()
+    assert readback["iterations"]["values"] == [17]
+    assert readback["parameters"]["params"]["max_iter"] == 1000
+    missing=bbm.Runner({},lambda:None,lambda:{},params=probe).fitted_readback()
+    assert missing["iterations"]["status"] == "unavailable"
+    assert missing["parameters"] is None

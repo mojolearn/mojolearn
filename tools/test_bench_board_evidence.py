@@ -148,7 +148,7 @@ class Evidence(unittest.TestCase):
         self.assertTrue(any("probe failed" in s for s in rep["problems"]))
 
     def sealed_cell(self, receipt_arm="lib-gpu", worker_version="1", worker_hardware=None,
-                    changed_params=False):
+                    changed_params=False, fitted_params=None):
         d=self.root/"evidence/runs/r1";(d/"workers").mkdir(parents=True)
         E.write(d/"recipe.json", {})
         hardware=dict(status="verified", gpu="physical-123", driver="580", os="Linux")
@@ -162,6 +162,8 @@ class Evidence(unittest.TestCase):
         cell=dict(arm="lib-gpu",library="library",mode="opponent",device="gpu",status="ok",
                   library_version="1",shape="100x10",times_ms=[2],median_ms=2,
                   comparability={"span":{"input_home":"host"}})
+        if fitted_params is not None:
+            cell["fitted_parameters"] = [dict(params=fitted_params, implementation=record["implementation"])]
         rec=dict(arms=["lib-gpu"],cells=[cell],preflight=pre,
                  params=dict(schema="mojolearn.parameter-parity.v2",arms={"lib-gpu":record}),
                  command=["python", "driver.py", "--seed", "7"])
@@ -200,6 +202,11 @@ class Evidence(unittest.TestCase):
         rec,cell=self.sealed_cell(changed_params=True)
         self.assertIn("evidence_failure",rec)
         self.assertTrue(any("changed after preflight" in s for s in cell["measurement"]["missing"]))
+
+    def test_actual_fitted_parameters_cannot_drift_from_the_probe(self):
+        rec,cell=self.sealed_cell(fitted_params={"alpha":99,"seed":7})
+        self.assertIn("evidence_failure",rec)
+        self.assertIn("actual fitted estimator settings changed after preflight",cell["measurement"]["missing"])
 
     def test_runtime_flags_are_retained_without_credentials_or_receipt_paths(self):
         got=E.runtime_environment(dict(MOJOLEARN_IDN_ALL_OFF="1", CUBLAS_WORKSPACE_CONFIG=":4096:8",

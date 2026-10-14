@@ -922,6 +922,13 @@ class Runner:
     def outputs(self):
         return self._outputs()
 
+    def fitted_readback(self):
+        # The parameter probe is a different, unfitted instance. Read the
+        # estimator whose fit was actually timed, never that probe's counters.
+        model = self.model_for_hash() if callable(self.model_for_hash) else None
+        return dict(parameters=_load("bench_board_params").arm_record(model) if model is not None else None,
+                    iterations=_load("bench_board_probe").iteration_receipt(model))
+
 
 def _np():
     import numpy as np
@@ -1634,7 +1641,7 @@ def _build_cuml(lane, D, rec, S):
         out = lambda: _supervised_out(lane, np, S["est"], dev["Xq"])  # noqa: E731
     probe = make()
     info["config"] = repr(probe)
-    return Runner(info, call, out, sync, params=probe)
+    return Runner(info, call, out, sync, params=probe, model_for_hash=lambda: S.get("est"))
 
 
 def worker(args):
@@ -1702,13 +1709,15 @@ def worker(args):
                 digest = h.hexdigest()[:16]
                 from bench_board_state import scored_receipt
                 state_receipt = scored_receipt(last, runner) if r > 0 else None
+                fitted_readback = runner.fitted_readback()
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
-                 "iterations": _load("bench_board_probe").iteration_receipt(runner.params),
+                 "iterations": fitted_readback["iterations"],
+                 "fitted_parameters": fitted_readback["parameters"],
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -2060,6 +2069,7 @@ def race(args):
                 result["arms"][arm].setdefault("state_receipts", []).append(msg["state_receipt"])
             if r > 0:
                 result["arms"][arm].setdefault("iteration_receipts", []).append(msg.get("iterations"))
+                result["arms"][arm].setdefault("fitted_parameters", []).append(msg.get("fitted_parameters"))
             result["arms"][arm]["mem"].append(msg.get("mem"))
             print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)

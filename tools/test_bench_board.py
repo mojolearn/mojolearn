@@ -1102,6 +1102,18 @@ def test_classical2_command_and_settings():
     assert any("one thread" in m for m in s["lane_config"]["mismatches"])
 
 
+def test_noncompiled_classical_cell_keeps_actual_fit_receipts(monkeypatch):
+    monkeypatch.setattr(bb, "base_cell", lambda *a: {"device":"gpu", "arm":"cuml-gpu"})
+    iterations=[dict(status="recorded",values=[17])]
+    fitted=[dict(params={"max_iter":1000})]
+    race=dict(arms=["cuml-gpu"],our_arms={})
+    raw=dict(arms={"cuml-gpu":dict(ms=[2],status="ok",iteration_receipts=iterations,
+                                 fitted_parameters=fitted)})
+    cell=bb.classical_cells(dict(rounds=1),race,raw)[0]
+    assert cell["iteration_receipts"] == iterations
+    assert cell["fitted_parameters"] == fitted
+
+
 def _run_more(env, *extra):
     return bb.main(["--vendor", "apple", "--families", "classical2", "--lanes", "umap,arima",
                     "--datasets", "taxi"] + env["base"] + list(extra))
