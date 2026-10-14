@@ -5,6 +5,7 @@
     python3 -m unittest discover -s tools -p test_race_fairness.py -v
 """
 import importlib.util
+import json
 import os
 import unittest
 import copy
@@ -292,6 +293,68 @@ class RaceFairness(unittest.TestCase):
         b=board(r=rr);RF.apply(b)
         self.assertEqual(rr["audit"]["identical/infer"]["rerace"],"x")
         self.assertEqual(rr["audit"]["identical/fit"]["rerace"],"")
+
+
+    # ---- lane harness-evidence (2026-10-14): "ok" only if scored; not-scored is shown, never gated ----
+
+    def test_scorer_crash_is_not_scored_not_a_quality_failure(self):
+        crash = {"error": "Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures "
+                          "missing); see host.log", "scorer": "failed"}
+        rr = race("gcn", [("lib", 10, {})], ours_q=crash)
+        RF.apply(board(r=rr))
+        e = rr["audit"]["identical/fit"]
+        self.assertEqual(e["admitted_opponents"], ["lib"])          # never an exclusion
+        q = e["opponents"]["lib"]["quality_comparison"][0]
+        self.assertEqual(q["failures"], [])
+        self.assertTrue(any("quality not scored (scorer failed): ours" in n for n in q["not_scored"]))
+        self.assertIn("quality not scored (scorer failed)", e["opponents"]["lib"]["quality_note"])
+        self.assertNotIn("recorded quality failure", json.dumps(e))
+
+    def test_legacy_scorer_error_on_an_ok_cell_is_not_scored(self):
+        # an older cell: status ok, the scorer's exception in `error` with no `scorer` marker
+        rr = race("gcn", [("lib", 10, {})], ours_q={"error": "Own host reference failed (FixturesMissing)"})
+        self.assertTrue(RF.timed_not_scored(rr["cells"][0]))
+        RF.apply(board(r=rr))
+        q = rr["audit"]["identical/fit"]["opponents"]["lib"]["quality_comparison"][0]
+        self.assertEqual(q["failures"], [])
+        self.assertTrue(q["not_scored"])
+
+    def test_not_scored_status_keeps_its_time_and_its_ratio(self):
+        rr = race("gcn", [("lib", 10, {})], ours_ms=5.0)
+        rr["cells"][0].update(status="not-scored", quality={}, scorer_error="scorer did not run")
+        RF.apply(board(r=rr))
+        e = rr["audit"]["identical/fit"]
+        self.assertEqual(e["admitted_opponents"], ["lib"])
+        self.assertEqual(e["ours_over_theirs"], 0.5)
+        self.assertNotIn("our measurement did not complete", e["opponents"]["lib"]["reason"])
+
+    def test_not_scored_opponent_is_judged_not_dropped(self):
+        rr = race("gcn", [("lib", 10, {"status": "not-scored", "quality": {}, "scorer_error": "no reference"})])
+        RF.apply(board(r=rr))
+        e = rr["audit"]["identical/fit"]
+        self.assertIn("lib", e["opponents"])
+        self.assertIn("quality not scored (scorer failed): lib", e["opponents"]["lib"].get("quality_note", ""))
+
+    def test_scored_output_failure_stays_a_recorded_failure(self):
+        rr = race("gcn", [("lib", 10, {})], ours_q={"error": "Integer host reference mismatch: y", "scorer": "scored"})
+        RF.apply(board(r=rr))
+        q = rr["audit"]["identical/fit"]["opponents"]["lib"]["quality_comparison"][0]
+        self.assertEqual(q["failures"], ["recorded quality failure: ours"])
+        self.assertNotIn("not_scored", q)
+
+    def test_call_line_is_not_an_observation(self):
+        rr = race("solver", [("lib", 10, {})])
+        before = RF.pairing(rr, "identical", "fit")
+        for c in rr["cells"]:
+            c.update(call="lib.Solver(alpha=1)", call_source="params")
+        self.assertEqual(RF.pairing(rr, "identical", "fit"), before)
+        inf = dict(rr["cells"][1], phase="infer", call="predict(Xq)")
+        rr["infer_cells"] = [inf]
+        p = RF.pairing(rr, "identical", "infer")
+        inf["constructor_call"] = "lib.Solver(alpha=1)"
+        self.assertEqual(RF.pairing(rr, "identical", "infer"), p)
+        inf["call"] = "transform(Xq)"         # what an inference clock ran stays evidence
+        self.assertNotEqual(RF.pairing(rr, "identical", "infer"), p)
 
 
 if __name__ == "__main__":
