@@ -195496,7 +195496,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -195539,7 +195539,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -195582,7 +195582,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -273565,9 +273565,12 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
        "quality_comparison": [
@@ -273590,8 +273593,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -273610,7 +273613,7 @@
          "value": 1.7580735100817262
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       },
       "torch-eager-fp32": {
        "quality_comparison": [
@@ -273633,8 +273636,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -273653,15 +273656,15 @@
          "value": 3.0856609929066567
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 3.086,
      "pairing": "v2:76242955702ae1501355444f241c6e670d714707bf50b87295b6996b5339d1df",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -287902,7 +287905,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T04:45:44Z",
@@ -290796,7 +290798,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -290841,7 +290843,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -290886,7 +290888,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -290923,7 +290925,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -292117,7 +292119,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -292162,7 +292164,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -292207,7 +292209,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -292244,7 +292246,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -333972,7 +333974,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -334017,7 +334019,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -334062,7 +334064,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -334099,7 +334101,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -335298,7 +335300,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -335343,7 +335345,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -335388,7 +335390,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -335425,7 +335427,7 @@
         }
        ],
        "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -336629,7 +336631,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -336679,7 +336681,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -336729,7 +336731,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -336779,7 +336781,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -338186,7 +338188,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -338236,7 +338238,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -338286,7 +338288,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -338336,7 +338338,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -339745,7 +339747,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -339797,7 +339799,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -339849,7 +339851,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -339901,7 +339903,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -341344,7 +341346,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -341396,7 +341398,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -341448,7 +341450,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -341500,7 +341502,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -382654,7 +382656,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -382704,7 +382706,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -382754,7 +382756,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -382804,7 +382806,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -384211,7 +384213,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -384261,7 +384263,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -384311,7 +384313,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -384361,7 +384363,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -385770,7 +385772,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -385822,7 +385824,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -385874,7 +385876,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -385926,7 +385928,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -387369,7 +387371,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -387421,7 +387423,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -387473,7 +387475,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -387525,7 +387527,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -529800,7 +529802,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -529850,7 +529852,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -529900,7 +529902,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -529950,7 +529952,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -531362,7 +531364,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -531412,7 +531414,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -531462,7 +531464,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -531512,7 +531514,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -532926,7 +532928,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -532978,7 +532980,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -533030,7 +533032,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -533082,7 +533084,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -534530,7 +534532,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -534582,7 +534584,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -534634,7 +534636,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -534686,7 +534688,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -581839,7 +581841,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",

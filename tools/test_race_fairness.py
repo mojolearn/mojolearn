@@ -37,8 +37,9 @@ class RaceFairness(unittest.TestCase):
             rr = race("solver", [(lib + "-gpu", 30, {"library": lib, "family": "algos",
                 "comparability": {"span": {"input_home": "device"}}})], ours_ms=100)
             rr["cells"][0]["comparability"]["span"]["upload_ms_separate"] = 40
-            RF.apply(board(r=rr))
-            self.assertEqual(rr["audit"]["identical/fit"]["verdict"], "INSUFFICIENT")
+            RF.apply(board(r=rr))   # ours whole vs arm kernel: shown, labelled (it only understates us)
+            self.assertEqual(rr["audit"]["identical/fit"]["verdict"], "MATCHED")
+            self.assertIn("MIXED", rr["audit"]["identical/fit"]["opponents"][lib + "-gpu"]["timing_comparison"]["label"])
             rr["cells"][1]["comparability"]["span"]["upload_ms_untimed"] = 10
             RF.apply(board(r=rr))
             self.assertEqual(rr["audit"]["identical/fit"]["verdict"], "MATCHED")
@@ -77,7 +78,7 @@ class RaceFairness(unittest.TestCase):
 
     def test_quality_and_settings_cannot_approve_mixed_clocks(self):
         rr = race("solver", [("lib", 10, {})])
-        rr["cells"][1]["comparability"]["span"]["input_home"] = "device"
+        rr["cells"][0]["comparability"]["span"]["input_home"] = "device"   # ours kernel vs arm whole: favours us
         RF.apply(board(r=rr))
         self.assertEqual(rr["rerace"], "x")
         self.assertIn("timing boundary", rr["audit"]["identical/fit"]["opponents"]["lib"]["reason"])
@@ -214,6 +215,13 @@ class RaceFairness(unittest.TestCase):
         self.assertEqual(e["opponent"], "good")
         self.assertEqual(e["opponents"]["bad"]["verdict"], "UNFAIR")
         self.assertEqual(e["rerace"], "")
+
+    def test_ours_whole_against_arm_kernel_is_shown_but_not_the_reverse(self):
+        rr = race("cnn", [("torch-eager-fp32", 10, {"library": "torch", "comparability": {"span": {"input_home": "device"}}})])
+        RF.apply(board(r=rr))
+        e = rr["audit"]["identical/fit"]
+        self.assertEqual(e["admitted_opponents"], ["torch-eager-fp32"], e["opponents"])
+        self.assertIn("MIXED ours whole / arm kernel", e["opponents"]["torch-eager-fp32"]["timing_comparison"]["label"])
 
     def test_quality_never_hides_a_race_and_is_always_recorded(self):
         for theirs in (0.5, 2.0):   # we are better, we are worse: both shown, both recorded

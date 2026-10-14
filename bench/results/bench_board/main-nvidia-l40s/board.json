@@ -263627,9 +263627,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -263652,8 +263654,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -263672,15 +263674,15 @@
          "value": 9.337242758111628
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 9.337,
      "pairing": "v2:a16b43b7be916d78b8eb06027c9737375422890021cae18ea524e99f07c92c7c",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -273656,7 +273658,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T04:15:05Z",
@@ -273727,9 +273728,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -273752,8 +273755,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -273772,15 +273775,15 @@
          "value": 2.063085910491532
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 2.063,
      "pairing": "v2:6256b34ef092386eebcc54cb0174ce72bc32208263a537bf5c1f9ead49cece03",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -283756,7 +283759,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T04:14:15Z",
@@ -421733,9 +421735,12 @@
      "verdict": "TIE"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
        "quality_comparison": [
@@ -421758,8 +421763,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -421778,7 +421783,7 @@
          "value": 1.275756131815218
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       },
       "torch-eager-fp32": {
        "quality_comparison": [
@@ -421801,8 +421806,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -421821,15 +421826,15 @@
          "value": 1.4236597959783384
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 1.424,
      "pairing": "v2:438f043895e68393225172d01cb43196f8ce293ee934c150e0e8706d22b6cb06",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -439343,7 +439348,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T04:43:42Z",
@@ -518739,7 +518743,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -518789,7 +518793,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -518839,7 +518843,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -518889,7 +518893,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -518939,7 +518943,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -518989,7 +518993,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -520057,7 +520061,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -520107,7 +520111,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -520157,7 +520161,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -520207,7 +520211,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -520257,7 +520261,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -520307,7 +520311,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -522280,7 +522284,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -522332,7 +522336,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -522384,7 +522388,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -522436,7 +522440,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -522488,7 +522492,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -522540,7 +522544,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -523624,7 +523628,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -523676,7 +523680,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -523728,7 +523732,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -523780,7 +523784,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -523832,7 +523836,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -523884,7 +523888,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -536708,9 +536712,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -536733,8 +536739,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -536753,15 +536759,15 @@
          "value": 0.9922117412295288
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 0.992,
      "pairing": "v2:67d41a2c7811ef66a10da4953fac0eb68caee1c07edc69f7e10ac523bf194d3f",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "TIE"
     }
    },
    "audit_history": [
@@ -547231,7 +547237,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:08:19Z",
@@ -547302,9 +547307,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -547327,8 +547334,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -547347,15 +547354,15 @@
          "value": 2.767887525214511
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 2.768,
      "pairing": "v2:a0cb18acf2dc9ef7733c2345f8381847eae0b4e2824b7ffb83e2798ea5c0a16e",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -557825,7 +557832,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:07:16Z",
@@ -605708,7 +605714,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -605758,7 +605764,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -605808,7 +605814,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -605858,7 +605864,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -605908,7 +605914,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -605958,7 +605964,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -607929,7 +607935,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -607979,7 +607985,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -608029,7 +608035,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -608079,7 +608085,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -608129,7 +608135,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -608179,7 +608185,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -609249,7 +609255,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -609301,7 +609307,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -609353,7 +609359,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -609405,7 +609411,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -609457,7 +609463,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -609509,7 +609515,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -611532,7 +611538,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -611584,7 +611590,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -611636,7 +611642,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -611688,7 +611694,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -611740,7 +611746,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -611792,7 +611798,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -612867,7 +612873,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -614278,7 +614284,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -614368,7 +614374,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -634753,9 +634759,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -634778,8 +634786,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -634798,15 +634806,15 @@
          "value": 26.02123095141959
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 26.021,
      "pairing": "v2:21de2e001f6007e1553030365a09d416883fbd676bc68265532d847ff46e06c4",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -645065,7 +645073,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T01:59:21Z",
@@ -645136,9 +645143,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -645161,8 +645170,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -645181,15 +645190,15 @@
          "value": 5.018429883433416
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 5.018,
      "pairing": "v2:55ed93f1e481316055ec82d9b87e6fc35af73a310df2995404bfa1b966fb82c5",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -655448,7 +655457,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T01:58:37Z",
@@ -728431,9 +728439,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -728456,8 +728466,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -728476,15 +728486,15 @@
          "value": 18.67301688079331
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 18.673,
      "pairing": "v2:3c42b3a1b6e9f5c3a29815e0b393c87b3132aee2cfd840d28412039a0a83e0ad",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -739204,7 +739214,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:05:16Z",
@@ -739275,9 +739284,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -739300,8 +739311,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -739320,15 +739331,15 @@
          "value": 4.268421320572214
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 4.268,
      "pairing": "v2:7b071bdf96cf0b4513d3cef39845f4e24dbbbc2e8d370fcb31326fe5230e395b",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -750048,7 +750059,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:04:31Z",
@@ -773616,9 +773626,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -773641,8 +773653,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -773661,15 +773673,15 @@
          "value": 43.962122435975104
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 43.962,
      "pairing": "v2:4d5b3b97b961d9ba9aed73c021aea20009521b3eccf2c22f4e72a7a582d880ad",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -783645,7 +783657,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T04:11:50Z",
@@ -783716,9 +783727,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -783741,8 +783754,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -783761,15 +783774,15 @@
          "value": 1.0902239889211802
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 1.09,
      "pairing": "v2:1edc5b6d3c0d2c5a96ee8819fdc668450dc14c783b0589a86e351cca1131c22d",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -793745,7 +793758,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T04:10:43Z",
@@ -801407,9 +801419,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -801432,8 +801446,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -801452,15 +801466,15 @@
          "value": 3.380809339542205
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 3.381,
      "pairing": "v2:086b9e49c031f82aa464625b885d4501ada8c5980a5f974fcb453b7e9487f19b",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -812052,7 +812066,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:03:55Z",
@@ -812123,9 +812136,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -812148,8 +812163,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -812168,15 +812183,15 @@
          "value": 6.103690166443291
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 6.104,
      "pairing": "v2:c2a318950fee23a7145a10ad7420deef23d0d34b7dc70c4124bc3fd68b2c7c8b",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -822768,7 +822783,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:03:14Z",
@@ -831015,9 +831029,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -831040,8 +831056,8 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -831060,15 +831076,15 @@
          "value": 0.3507746025187792
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 0.351,
      "pairing": "v2:a4e3c59f454f9aa809b5f482cd38077e07fb11afb4bca4062a0da49a7837a4ca",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -841552,7 +841568,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:01:39Z",
@@ -860116,9 +860131,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -860141,8 +860158,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -860161,15 +860178,15 @@
          "value": 0.31271243516212893
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 0.313,
      "pairing": "v2:289273fa8eedc110a6c0934dff6d6a9c520ad78df8e2baf37bc63b234458f4bb",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -870873,7 +870890,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:00:46Z",
@@ -870944,9 +870960,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -870969,8 +870987,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -870989,15 +871007,15 @@
          "value": 0.14784324568389712
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 0.148,
      "pairing": "v2:a026099be1b62e5da9134018b4c9f56bc5a5e1090c7dd581b471ebcd8f3e2b88",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -881701,7 +881719,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:00:01Z",
@@ -882882,7 +882899,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -905042,7 +905059,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -905092,7 +905109,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -905142,7 +905159,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -905192,7 +905209,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -905242,7 +905259,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -905292,7 +905309,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -906367,7 +906384,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -906417,7 +906434,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -906467,7 +906484,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -906517,7 +906534,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -906567,7 +906584,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -906617,7 +906634,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -908597,7 +908614,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -908649,7 +908666,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -908701,7 +908718,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -908753,7 +908770,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -908805,7 +908822,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -908857,7 +908874,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -909948,7 +909965,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -910000,7 +910017,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -910052,7 +910069,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -910104,7 +910121,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -910156,7 +910173,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -910208,7 +910225,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -950543,9 +950560,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -950568,8 +950587,8 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -950588,15 +950607,15 @@
          "value": 14.720222708911681
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 14.72,
      "pairing": "v2:0f4ae33bc5146cbdbd3d7920e54839eb8ea4651108a0b94527bba5f2d41564aa",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -961046,7 +961065,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:06:38Z",
@@ -961117,9 +961135,11 @@
      "verdict": "MATCHED"
     },
     "identical/infer": {
-     "admitted_opponents": [],
+     "admitted_opponents": [
+      "cuml-gpu"
+     ],
      "date": "2026-10-14",
-     "opponent": null,
+     "opponent": "cuml-gpu",
      "opponents": {
       "cuml-gpu": {
        "quality_comparison": [
@@ -961142,8 +961162,8 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
@@ -961162,15 +961182,15 @@
          "value": 4.917534757058908
         }
        ],
-       "verdict": "INSUFFICIENT"
+       "verdict": "MATCHED"
       }
      },
-     "ours_over_theirs": null,
+     "ours_over_theirs": 4.918,
      "pairing": "v2:0d82aae2f6c19acc2121081aafe9c46d297291c70ac63cfa1b452dde99bc36b9",
-     "reason": "no opponent with sufficient valid comparison evidence",
-     "rerace": "x",
+     "reason": "recorded effective settings match",
+     "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "MATCHED"
     }
    },
    "audit_history": [
@@ -971628,7 +971648,6 @@
     "verdict": "MATCHED"
    },
    "rc": null,
-   "rerace": "x",
    "rows": null,
    "shape": null,
    "started": "2026-10-14T02:05:55Z",
@@ -971662,7 +971681,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -971752,7 +971771,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -973061,7 +973080,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -973151,7 +973170,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -975265,7 +975284,7 @@
          "verdict": "FAIL"
         }
        ],
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",

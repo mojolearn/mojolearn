@@ -248,7 +248,11 @@ def _pair_problems(race, ours, opp):
     # FAIRNESS FIX (2026-10-13 audit): an alternate common clock may be
     # shown diagnostically, but cannot replace the owner's required clock.
     # In particular, missing CuPy copy time cannot admit kernel/kernel.
-    if clock["kind"] != "preferred":
+    # Ours timed WITH the host-to-device copy against an arm timed WITHOUT it charges us extra work only, so the
+    # comparison can only understate us (Andrew, 2026-10-14: show these rows, labelled). The reverse mix stays out.
+    conservative = (clock["kind"] == "mixed" and BC.cell_clock(ours).get("stored") == BC.WHOLE
+                    and BC.cell_clock(opp).get("stored") == BC.KERNEL)
+    if clock["kind"] != "preferred" and not conservative:
         missing.append("required %s/%s timing boundary not derivable: %s" %
                        (clock["preferred"], clock["preferred"], clock["label"]))
     return bad, missing, bool(po and pt and (set(po) & set(pt) - {"seed"}))

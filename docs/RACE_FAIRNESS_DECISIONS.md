@@ -9,6 +9,11 @@ fine for mojolearn to be better. The margins below remain only as annotations
 (`quality_comparison`); no verdict, exclusion or rerace mark rests on them. Quality is how we judge changes
 to our own algorithms: speed is good, but never at the expense of quality.
 
+Clocks (same day): when our arm's time includes the host-to-device copy and the opponent's starts with its
+inputs already on the device, the row is shown, labelled "MIXED ours whole / arm kernel": it charges us
+extra work only. The reverse mix (ours without the copy, the opponent with it) stays out. Every arm now
+records both clocks, so new measurements compare like with like.
+
 ## 2026-10-13 owner clarification: quality before time
 
 This supersedes the same-day rule excluding different executed iteration counts.

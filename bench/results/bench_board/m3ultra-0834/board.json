@@ -48535,14 +48535,14 @@
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 4.074,
      "pairing": "v2:6ebb78b4eb9214a4eb5ff0120b05b4ee870dfdb221256b0f46b037a93d7e5ad4",
      "opponents": {
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -48627,10 +48627,12 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -49568,14 +49570,14 @@
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 1.19,
      "pairing": "v2:2d72009ec66404b767dc89015a84d94a1cdde7b9a83bf4ba63296338afc25134",
      "opponents": {
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -49660,10 +49662,12 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -51746,14 +51750,14 @@
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 1.564,
      "pairing": "v2:b63f089694627c4998f34d6c98b39611224312128e90b43e446182486f82d921",
      "opponents": {
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -51838,10 +51842,12 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -66546,7 +66552,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -66631,7 +66637,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -66672,7 +66678,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -66718,7 +66724,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -66751,7 +66757,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -66820,7 +66826,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -66866,7 +66872,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -66951,7 +66957,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -66992,7 +66998,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -67038,7 +67044,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -67071,7 +67077,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -67140,7 +67146,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69258,7 +69264,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69299,7 +69305,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69340,7 +69346,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69422,7 +69428,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69455,7 +69461,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69488,7 +69494,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69578,7 +69584,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69619,7 +69625,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69660,7 +69666,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69742,7 +69748,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69775,7 +69781,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -69808,7 +69814,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -77394,14 +77400,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-bf16",
+     "ours_over_theirs": 15.393,
      "pairing": "v2:7ce21a3b5830b91f12bdd68357b89b86783be2d12c26d717acacae57e3b6568e",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -77440,9 +77446,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -77525,9 +77531,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -77558,22 +77564,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 22.63,
      "pairing": "v2:be67029b7b97bfe822ec4d2a95255dc93c5d2f6761695b0de720f2f7cde5a376",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -77604,9 +77614,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -77637,9 +77647,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -77706,22 +77716,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-bf16",
+     "ours_over_theirs": 16.782,
      "pairing": "v2:5600dc1252ed6ac902f9a1b05b2e156dd20f640da5f390c361c83690baaf7561",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -77760,9 +77774,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -77845,9 +77859,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -77878,22 +77892,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 23.469,
      "pairing": "v2:7494f4d7e2bcb649eb009c094464b9071eeff7fd38263ed2f58a2b38009a8170",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -77924,9 +77942,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -77957,9 +77975,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -78026,10 +78044,14 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -78837,8 +78859,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/batchnorm2d/synthetic/rows=full": {
    "arms": [
@@ -80092,14 +80113,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-bf16",
+     "ours_over_theirs": 13.17,
      "pairing": "v2:146af5807af3cfc76a806c0de8d3e846ac861ba153f7447fecdea5a77750473d",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -80138,9 +80159,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -80223,9 +80244,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -80256,22 +80277,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 16.625,
      "pairing": "v2:8cf9a40a41b2bb0c6c492a2a6db471c4d72d143554116183fe37a441db9ade52",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -80302,9 +80327,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -80371,9 +80396,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -80404,22 +80429,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-bf16",
+     "ours_over_theirs": 14.765,
      "pairing": "v2:5ad70f98cb467badca47717c757374efa856c601b7268e84b0449de48802aa7e",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -80458,9 +80487,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -80543,9 +80572,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -80576,22 +80605,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 20.452,
      "pairing": "v2:0b0b768543bcf764b9785a2eddba007ef494d5f7bb21acf52cc2b92907a30d07",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -80622,9 +80655,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -80691,9 +80724,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -80724,10 +80757,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -81535,8 +81572,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/bayesian-gmm/istella/rows=full": {
    "arms": [
@@ -114194,8 +114230,8 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 3.755,
      "pairing": "v2:9c09a874ea16675b47de2e132ed5c3211b0e6ab5a5af183a80e52911047b8d97",
      "opponents": {
       "torch-compile-bf16": {
@@ -114245,9 +114281,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -114288,9 +114324,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -114331,9 +114367,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -114374,16 +114410,20 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 15.193,
      "pairing": "v2:27a2b55c3dbc19700663362fdcbfe53dc731759194a96c92b8993a94764da143",
      "opponents": {
       "torch-compile-bf16": {
@@ -114423,9 +114463,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -114456,9 +114496,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -114489,9 +114529,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -114522,16 +114562,20 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 3.83,
      "pairing": "v2:51daf4627ee59bd543121ea7b13ea9123e54f7a6cf0fef483a34b1ae48f03eb0",
      "opponents": {
       "torch-compile-bf16": {
@@ -114581,9 +114625,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -114624,9 +114668,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -114667,9 +114711,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -114710,16 +114754,20 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 18.85,
      "pairing": "v2:8a97365b308940f0f5e8277fc5d3cc59e8fd866b7c34ff568baaca2bcb8059df",
      "opponents": {
       "torch-compile-bf16": {
@@ -114759,9 +114807,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -114792,9 +114840,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -114825,9 +114873,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -114858,10 +114906,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -115749,8 +115801,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/complement-nb/istella/rows=full": {
    "arms": [
@@ -122730,7 +122781,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -122771,7 +122822,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -122812,7 +122863,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -122858,7 +122909,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -122891,7 +122942,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -122960,7 +123011,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -123050,7 +123101,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -123091,7 +123142,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -123132,7 +123183,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -123178,7 +123229,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -123211,7 +123262,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -123280,7 +123331,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125434,7 +125485,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125475,7 +125526,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125516,7 +125567,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125562,7 +125613,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125595,7 +125646,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125664,7 +125715,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125754,7 +125805,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125795,7 +125846,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125836,7 +125887,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125882,7 +125933,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125915,7 +125966,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -125984,7 +126035,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -127378,7 +127429,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -127460,7 +127511,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -152660,8 +152711,8 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 34.84,
      "pairing": "v2:060a663c5dd8e2887ee43cbd2fb0f8bcc05371c91a3e1e2570bbae5adcc3887a",
      "opponents": {
       "torch-compile-fp32": {
@@ -152701,9 +152752,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -152734,16 +152785,18 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 37.153,
      "pairing": "v2:a9fced11cd6432a1c0803d6b42644d19ac24906ef0abb3739622c3f0af0966c4",
      "opponents": {
       "torch-compile-fp32": {
@@ -152783,9 +152836,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -152816,16 +152869,18 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 34.677,
      "pairing": "v2:002eea2b266d83e48d68c9a1aa87ecc27c766d5db9f26621c2756d690040a802",
      "opponents": {
       "torch-compile-fp32": {
@@ -152865,9 +152920,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -152898,16 +152953,18 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 37.39,
      "pairing": "v2:20972264ef2bd71f609cf5b245ccd7496cb9e8148aa28438c332f9bdf755cc7f",
      "opponents": {
       "torch-compile-fp32": {
@@ -152947,9 +153004,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -152980,10 +153037,12 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -153479,8 +153538,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/dynamic-optimized-theta/synthetic/rows=full": {
    "arms": [
@@ -161018,7 +161076,7 @@
      "opponents": {
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -161193,7 +161251,7 @@
      "opponents": {
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181091,7 +181149,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181132,7 +181190,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181173,7 +181231,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181255,7 +181313,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181288,7 +181346,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181321,7 +181379,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181411,7 +181469,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181452,7 +181510,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181493,7 +181551,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181575,7 +181633,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181608,7 +181666,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -181641,7 +181699,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -183650,7 +183708,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -183691,7 +183749,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -183776,7 +183834,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -183822,7 +183880,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -183855,7 +183913,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -183924,7 +183982,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -183970,7 +184028,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -184011,7 +184069,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -184096,7 +184154,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -184142,7 +184200,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -184175,7 +184233,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -184244,7 +184302,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -190391,14 +190449,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.521,
      "pairing": "v2:984a10af8032e70c5eff71a45a09873c07d2764d7f1d206ac9bce3e336ba6aa3",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -190446,9 +190504,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -190496,9 +190554,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -190599,22 +190657,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 2.138,
      "pairing": "v2:c33d303723d429d83f139344533e44cee84070566079ae9ccbd4e8874b302a3b",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -190645,9 +190707,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -190678,9 +190740,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -190747,22 +190809,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.544,
      "pairing": "v2:83b6da1ad0dabdf38908775af8b62edfa3926395f6383c77d32cc99b496b0c91",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -190810,9 +190876,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -190860,9 +190926,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -190963,22 +191029,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 2.363,
      "pairing": "v2:e261d9203caaeefabfd798bd34d196107a809c9fb695f73e2ef35f877986f348",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -191009,9 +191079,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -191042,9 +191112,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -191111,10 +191181,14 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -192058,8 +192132,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/gru-clf/taxi-hourly/rows=full": {
    "arms": [
@@ -194468,14 +194541,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.525,
      "pairing": "v2:0d9e573f7abc65ee2b532fe930761e8112e9ba90a7c195364000294d99798a79",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -194523,9 +194596,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -194573,9 +194646,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -194676,22 +194749,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 2.131,
      "pairing": "v2:2607f500bb8ed6496ba95e3f682ceafbaab36f99d77649feea365ed21bb9f790",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -194722,9 +194799,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -194755,9 +194832,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -194824,22 +194901,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.547,
      "pairing": "v2:509838a2f231b5f790d24b344aaaf7b9bb36ba5a323f670bb19fed1d07e7dde6",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -194887,9 +194968,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -194937,9 +195018,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -195040,22 +195121,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 2.357,
      "pairing": "v2:9f9ef8347f0dd0efce0b011b8f8258b2a266ddb4c74075214d9d03a3b9aeebfb",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -195086,9 +195171,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -195119,9 +195204,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -195188,10 +195273,14 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -196135,8 +196224,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/gru-reg/synthetic/rows=full": {
    "arms": [
@@ -198051,14 +198139,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.524,
      "pairing": "v2:bf5404d1b15182ee5646ed22cd83a5520ee23d3b790b66b9e4ddf993074ce3cf",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -198108,9 +198196,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -198160,9 +198248,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -198267,22 +198355,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 1.132,
      "pairing": "v2:2d77727e8517a09361ed5488cfe154edd5253428b103b0bd132fd1379c4265d9",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -198349,9 +198441,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -198382,9 +198474,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -198415,22 +198507,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.553,
      "pairing": "v2:11f0f9baaaa6f5dc9f69d8340ae89245dad6542ae2bcc7b5a5088971e9eb321b",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -198480,9 +198576,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -198532,9 +198628,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -198639,22 +198735,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 1.254,
      "pairing": "v2:a8dc3c7385789f9214a8db9d6b802694b0d1492b349551a148b643f6d6d1312b",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -198721,9 +198821,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -198754,9 +198854,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -198787,10 +198887,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -199750,8 +199854,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/gru-reg/taxi-hourly/rows=full": {
    "arms": [
@@ -201666,14 +201769,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.527,
      "pairing": "v2:29a9a57f1a69aee99b5369cc5656d2f2fa0e092c7571559ce038e7ec8f032f2d",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -201723,9 +201826,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -201775,9 +201878,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -201882,22 +201985,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 1.12,
      "pairing": "v2:b1571759e07c5d0726e5ef51e9cc7c1b52efcc5604b700a61b9081b2342b5b90",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -201964,9 +202071,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -201997,9 +202104,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -202030,22 +202137,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.559,
      "pairing": "v2:7a46e82bca9cf59a0189144711f91289dce0e1360d3c84a12c04b0c3815fd245",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -202095,9 +202206,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -202147,9 +202258,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -202254,22 +202365,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 1.237,
      "pairing": "v2:a1380d39e6313886df0218486a2d18e3d0f1a3ea2591ea84cbca52f6dcace712",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -202336,9 +202451,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -202369,9 +202484,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -202402,10 +202517,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -203365,8 +203484,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/huber/istella/rows=full": {
    "arms": [
@@ -262075,14 +262193,14 @@
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 18.549,
      "pairing": "v2:1acb0915bbb38f1600febf11eedc46595697f332d0285245fc7f5d005caef6bf",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -262113,9 +262231,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -262182,9 +262300,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -262215,22 +262333,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 1.835,
      "pairing": "v2:96ff396698e44db81474c07975ff5306124113fa1d9435d02b8fca0d522b36ee",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -262269,9 +262391,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -262354,9 +262476,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -262387,22 +262509,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 17.936,
      "pairing": "v2:812961bd1790471959a9617717134b4cb063fa78dd7e1e7ce758ccd7690dcdcb",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -262433,9 +262559,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -262502,9 +262628,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -262535,10 +262661,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -283607,14 +283737,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 2.568,
      "pairing": "v2:755f4e0ca62eaa794b1ef44b3bacd4c7a9865fd1b69dfa9032cfca7094e594d6",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -283662,9 +283792,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -283712,9 +283842,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -283815,16 +283945,20 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 3.781,
      "pairing": "v2:85886e70818e36085a693b63c5158c6ae378c3df368c2d1035b65def576fadc2",
      "opponents": {
       "torch-compile-bf16": {
@@ -283864,9 +283998,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -283897,9 +284031,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -283930,9 +284064,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -283963,22 +284097,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 2.716,
      "pairing": "v2:2bffe560327bc4ec3367a187341d06e0aad47cda6edda76f130e12d35b21007f",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -284026,9 +284164,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -284076,9 +284214,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -284179,16 +284317,20 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 4.185,
      "pairing": "v2:456100b6c56b2463f373cee36092aeed0e64a67717351caf15517ccfd054d691",
      "opponents": {
       "torch-compile-bf16": {
@@ -284228,9 +284370,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -284261,9 +284403,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -284294,9 +284436,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -284327,10 +284469,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -285274,8 +285420,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/lstm-clf/taxi-hourly/rows=full": {
    "arms": [
@@ -287684,14 +287829,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 2.579,
      "pairing": "v2:1d897365be4937d18cb5c9014ad2356f920eabc82ac51215019ff7d5d773c891",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -287792,9 +287937,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -287842,9 +287987,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -287892,22 +288037,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-bf16",
+     "ours_over_theirs": 3.808,
      "pairing": "v2:d939ebcc11d25de4af4e9a53cfb9ce4e71b45df286bd3f1d9cafce61288a4eef",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -287974,9 +288123,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -288007,9 +288156,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -288040,22 +288189,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 2.716,
      "pairing": "v2:882f44620df2e66c4ea30e3deace0b86e0d58301bc36e579b85583aca2bfad4a",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -288156,9 +288309,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -288206,9 +288359,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -288256,22 +288409,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-bf16",
+     "ours_over_theirs": 4.222,
      "pairing": "v2:bd48fbfb407e681bc2601b2d67166f6248aa4775d83b9e9b59a4ffe06e8c6a72",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -288338,9 +288495,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -288371,9 +288528,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -288404,10 +288561,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -289351,8 +289512,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/lstm-reg/synthetic/rows=full": {
    "arms": [
@@ -291771,14 +291931,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 2.664,
      "pairing": "v2:f47c5f68bcedae4c737a16030d2b642f8c2162ad12582a9f3199018a60b6aade",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -291883,9 +292043,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -291935,9 +292095,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -291987,22 +292147,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 1.735,
      "pairing": "v2:64d46ce6c6d11095bb3f4d69fc0c16de29dde44bd0af1de33e9a14c16394f56d",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -292033,9 +292197,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -292102,9 +292266,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -292135,22 +292299,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-fp32",
+     "ours_over_theirs": 2.814,
      "pairing": "v2:ae48bb354a32720a8d1cc7e46b90e245e2ea8d3c18f5cec0de6471169609b788",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -292255,9 +292423,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -292307,9 +292475,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -292359,22 +292527,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 1.909,
      "pairing": "v2:5bc4f83eb65db208a83466365e868e0665d62e15cb9ffecf240518537d0b99f9",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -292405,9 +292577,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -292474,9 +292646,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -292507,10 +292679,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -293470,8 +293646,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/lstm-reg/taxi-hourly/rows=full": {
    "arms": [
@@ -295890,14 +296065,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 2.66,
      "pairing": "v2:24d7abf41bf29cdb01a7316a932b03335cbc9442e28bc0c6b687f16f2165d52f",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -296002,9 +296177,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -296054,9 +296229,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -296106,22 +296281,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 1.908,
      "pairing": "v2:2c9fa4a3d6398bb9f0fc8a9187e3263186b1dbe9e5076181f369447ed4efdb02",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -296188,9 +296367,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -296221,9 +296400,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -296254,22 +296433,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 2.815,
      "pairing": "v2:367ac8d28627ef8dd2a6a95086d077990d72b8ff2b92839240f0f1cd94655e59",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -296374,9 +296557,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -296426,9 +296609,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -296478,22 +296661,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 2.124,
      "pairing": "v2:9add434d7054a88d1ac2b6f6443f1396157a15cfe8f4b7d9840600ce311a4c5f",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -296560,9 +296747,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -296593,9 +296780,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -296626,10 +296813,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -297589,8 +297780,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/lstsq/istella/rows=full": {
    "arms": [
@@ -300010,7 +300200,7 @@
       },
       "torch-gpu": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -300118,7 +300308,7 @@
       },
       "torch-gpu": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305343,7 +305533,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305384,7 +305574,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305425,7 +305615,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305471,7 +305661,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305504,7 +305694,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305573,7 +305763,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305663,7 +305853,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305704,7 +305894,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305745,7 +305935,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305791,7 +305981,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305824,7 +306014,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -305893,7 +306083,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -307954,7 +308144,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -307995,7 +308185,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -308080,7 +308270,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -308162,7 +308352,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -308195,7 +308385,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -308228,7 +308418,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -308274,7 +308464,7 @@
      "opponents": {
       "torch-compile-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -308315,7 +308505,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -308400,7 +308590,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -308482,7 +308672,7 @@
       },
       "torch-compile-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -308515,7 +308705,7 @@
       },
       "torch-eager-bf16": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -308548,7 +308738,7 @@
       },
       "torch-eager-fp32": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -346586,14 +346776,14 @@
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 1.473,
      "pairing": "v2:0df071cbbf01fcea6a9b379cf7d4678cca4454f78a002f67e995ea0eb3d7adc4",
      "opponents": {
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -346678,10 +346868,12 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -426139,14 +426331,14 @@
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 1.203,
      "pairing": "v2:5f465bfec0f84b4ee8e903a3722e9d5bcd1d8ee526a54827770427a6313ed425",
      "opponents": {
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -426231,10 +426423,12 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -428409,14 +428603,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.702,
      "pairing": "v2:1cd8f62dbd4ff076040b6dbad234ee0436e22a69ea22c2db60c36f11469f9c67",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -428464,9 +428658,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -428514,9 +428708,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -428617,16 +428811,20 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 1.962,
      "pairing": "v2:420395ea0818232d3176d75398e81402859c09fa989e7cfa5f2f8144ec6165b7",
      "opponents": {
       "torch-compile-bf16": {
@@ -428666,9 +428864,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -428699,9 +428897,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -428732,9 +428930,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -428765,22 +428963,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.742,
      "pairing": "v2:587e5a8a9e7e869a56d7f4f1c9de3423606e348490e8749079bb5ec1d83a21fe",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -428828,9 +429030,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -428878,9 +429080,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -428981,16 +429183,20 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 2.142,
      "pairing": "v2:48b1771ece702f0e71a283f64a47bf177338a1e02013e7b36fc4a6539991ef15",
      "opponents": {
       "torch-compile-bf16": {
@@ -429030,9 +429236,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -429063,9 +429269,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -429096,9 +429302,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -429129,10 +429335,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -430076,8 +430286,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/rnn-clf/taxi-hourly/rows=full": {
    "arms": [
@@ -431998,14 +432207,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.706,
      "pairing": "v2:859869cd4de4fe66a794eedbbaccf35a5788f7fa6fc8653dcc5fd1716c254939",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -432053,9 +432262,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -432103,9 +432312,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -432206,22 +432415,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-bf16",
+     "ours_over_theirs": 2.08,
      "pairing": "v2:7bba1516dbdafb3ffae230c515832841f36446f55732cea9a7c7e757b00d983f",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -432252,9 +432465,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -432321,9 +432534,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -432354,22 +432567,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.728,
      "pairing": "v2:6e4fedd9d202d4b899102750648b7929cdb0b37e8dde32202cb131755d3e5ef8",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -432417,9 +432634,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -432467,9 +432684,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -432570,22 +432787,26 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-bf16",
+     "ours_over_theirs": 2.288,
      "pairing": "v2:985e3efbe0b97a94e58d2bde02022defeaeeb62922863917cac5b70ac6fce680",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -432616,9 +432837,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -432685,9 +432906,9 @@
        "date": "2026-10-13"
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -432718,10 +432939,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -433665,8 +433890,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/rnn-reg/synthetic/rows=full": {
    "arms": [
@@ -435597,14 +435821,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.757,
      "pairing": "v2:17a3c1709d6e9c6031ef5678629a140eac4d2b5760f90a1f5b76027b70c36d45",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -435654,9 +435878,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -435706,9 +435930,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -435813,16 +436037,20 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 1.054,
      "pairing": "v2:656cbfb915fcce77d5c57cf3e0d2d9b297494bcef1d633124590b992c0b534d1",
      "opponents": {
       "torch-compile-bf16": {
@@ -435862,9 +436090,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -435895,9 +436123,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -435928,9 +436156,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -435961,22 +436189,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.745,
      "pairing": "v2:a2eb62c0b836118deecd0ae1968448345766a10e65b4e663bc170a5e61b3da8f",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -436026,9 +436258,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -436078,9 +436310,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -436185,16 +436417,20 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 1.149,
      "pairing": "v2:513d6478e9c251ac92e3318a641998ed468e736e81e1c913dfb3709a34079e46",
      "opponents": {
       "torch-compile-bf16": {
@@ -436234,9 +436470,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -436267,9 +436503,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -436300,9 +436536,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -436333,10 +436569,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -437296,8 +437536,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/rnn-reg/taxi-hourly/rows=full": {
    "arms": [
@@ -439228,14 +439467,14 @@
     "fast/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.761,
      "pairing": "v2:2b85d2c8acd1edcee8b2cebb3fb507accf68fada3ce4f55f3bc093608406db98",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -439285,9 +439524,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -439337,9 +439576,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -439444,16 +439683,20 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "fast/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 1.055,
      "pairing": "v2:d15bd461e2946177a49468ba60c23dccfb401b58318c3e0c957eeeef5630e2d2",
      "opponents": {
       "torch-compile-bf16": {
@@ -439493,9 +439736,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -439526,9 +439769,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -439559,9 +439802,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -439592,22 +439835,26 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/fit": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-compile-fp32",
+     "ours_over_theirs": 0.766,
      "pairing": "v2:2ec4a467bb9e7a006ef5ea986fb4c6f949a289977de93a2db7d7a86955e15ace",
      "opponents": {
       "torch-compile-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -439657,9 +439904,9 @@
        ]
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -439709,9 +439956,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": null,
@@ -439816,16 +440063,20 @@
        "date": "2026-10-13"
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-bf16",
+      "torch-compile-fp32",
+      "torch-eager-bf16"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     },
     "identical/infer": {
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "date": "2026-10-14",
-     "opponent": null,
-     "ours_over_theirs": null,
+     "opponent": "torch-eager-bf16",
+     "ours_over_theirs": 1.143,
      "pairing": "v2:aee82d64e933755d17d7d58b019fe4ed3a837d005ca58a0c971af919a5b85111",
      "opponents": {
       "torch-compile-bf16": {
@@ -439865,9 +440116,9 @@
        "date": "2026-10-13"
       },
       "torch-compile-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -439898,9 +440149,9 @@
        ]
       },
       "torch-eager-bf16": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -439931,9 +440182,9 @@
        ]
       },
       "torch-eager-fp32": {
-       "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
-       "rerace": "x",
+       "verdict": "MATCHED",
+       "reason": "recorded effective settings match",
+       "rerace": "",
        "quality_comparison": [
         {
          "batch": "Xq",
@@ -439964,10 +440215,14 @@
        ]
       }
      },
-     "admitted_opponents": [],
-     "verdict": "INSUFFICIENT",
-     "rerace": "x",
-     "reason": "no opponent with sufficient valid comparison evidence"
+     "admitted_opponents": [
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-eager-fp32"
+     ],
+     "verdict": "MATCHED",
+     "rerace": "",
+     "reason": "recorded effective settings match"
     }
    },
    "audit_history": [
@@ -440927,8 +441182,7 @@
      "rerace": "x",
      "reason": "no opponent with sufficient valid comparison evidence"
     }
-   ],
-   "rerace": "x"
+   ]
   },
   "algos/robust-scaler/istella/rows=full": {
    "arms": [
@@ -483013,7 +483267,7 @@
       },
       "torch-gpu": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -483116,7 +483370,7 @@
       },
       "torch-gpu": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -484063,7 +484317,7 @@
       },
       "torch-gpu": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -484166,7 +484420,7 @@
       },
       "torch-gpu": {
        "verdict": "INSUFFICIENT",
-       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -487903,7 +488157,7 @@
       },
       "gpytorch-gpu": {
        "verdict": "INSUFFICIENT",
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
@@ -488104,7 +488358,7 @@
       },
       "gpytorch-gpu": {
        "verdict": "INSUFFICIENT",
-       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "no supported audit or matched effective settings for this pairing",
        "rerace": "x",
        "quality_comparison": [
         {
