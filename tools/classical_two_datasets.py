@@ -929,6 +929,43 @@ def _to_host(a):
 
 # ---- ours ----------------------------------------------------------------
 
+def _sibling(name):
+    """A tools/ module by path (tools/ is not a package)."""
+    spec = importlib.util.spec_from_file_location("ctd_" + name, os.path.join(HERE, name + ".py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+#: the block arrays each lane's scorer reads (quality() and infer_quality() below)
+SCORER_ARRAYS = {"kmeans": ("X",), "pca": ("X",), "ols": ("Xq", "yq"), "knn": ("index", "queries"),
+                 "hdbscan": ("X",), "svc": ("Xq", "yq")}
+
+
+def scorer_preflight(RSP, lane, ds, block, rec):
+    """The scorer preflight of one classical race (tools/race_scorer_preflight.py): the block loads and holds
+    the arrays the lane's scorer reads; on the supervised lanes the scorer scores the held-out labels as a
+    prediction (a self-test on a tiny slice: the first 1,000 rows). Raises RSP.ScorerUnavailable."""
+    pf = RSP.Preflight(lane, ds)
+    holder = {}
+
+    def load():
+        with np.load(block + ".npz") as z:
+            holder["data"] = {k: z[k] for k in z.files if k in SCORER_ARRAYS.get(lane, ())}
+            return sorted(z.files)
+    pf.check("reference data loads", load)
+    pf.check("reference data", lambda: RSP.require_arrays(holder["data"], SCORER_ARRAYS.get(lane, ())))
+    if lane in ("ols", "svc"):
+        def labels():
+            d = dict(holder["data"])
+            d["Xq"], d["yq"] = d["Xq"][:1000], d["yq"][:1000]
+            pred = d["yq"].astype(np.float64)
+            return RSP.self_test(lambda outs: infer_quality(lane, d, outs, {}), {"preflight": {"pred": pred}},
+                                 ("accuracy_eval", "r2_eval", "rmse_eval"))
+        pf.check("scorer self-test", labels)
+    return pf.done()
+
+
 def _probe():
     """tools/bench_board_probe.py (memory per round, the our-CPU refusal)."""
     here = os.path.dirname(os.path.abspath(__file__))
@@ -3125,6 +3162,14 @@ def race(args):
     if refused_arms:                      # FAIRNESS FIX (2026-10-13 audit): see REFUSED_ARMS
         result["refused_arms"] = refused_arms
     tag = "%s-%s" % (lane, ds)
+    # THE SCORER PREFLIGHT (lane harness-evidence, 2026-10-14; tools/race_scorer_preflight.py): before any
+    # worker starts, the block the scorer reads loads and holds its arrays, and the scorer scores known data
+    if not getattr(args, "params_only", False):
+        RSP = _sibling("race_scorer_preflight")
+        try:
+            result["scorer_preflight"] = scorer_preflight(RSP, lane, ds, block, rec)
+        except RSP.ScorerUnavailable as exc:
+            return RSP.refuse(result, arms, str(exc), os.path.join(args.out, "%s.json" % tag), "CTD")
     workers = {}
     for arm in arms:
         py = args.ours_python if arm in ("ours", "ours-base", "ours-fast") \
