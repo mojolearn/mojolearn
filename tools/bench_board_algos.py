@@ -1638,6 +1638,8 @@ _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
      params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0, max_iter=1000,
                  learning_rate="auto", init="seeded", random_state=SEED,
                  post_exaggeration_learning_rate_factor=2.0),
+     # scikit-learn's TSNE has no post-exaggeration factor (its arm stays refused on this lane).
+     sk_absent=("post_exaggeration_learning_rate_factor",),
      sk_params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0, max_iter=1000,
                     learning_rate="auto", init="seeded", random_state=SEED, n_jobs=-1,
                     method="barnes_hut", metric="euclidean", n_iter_without_progress=1000,
@@ -1827,6 +1829,9 @@ def _merge_shared():
         if skp is None:
             continue
         for k, v in spec["params"].items():
+            # a parameter scikit-learn does not have is named in the lane's sk_absent (its arm stays refused there)
+            if k in (spec.get("sk_absent") or ()):
+                continue
             if k not in skp or skp[k] != v:
                 raise AssertionError("LANES[%r]: params[%r]=%r but sk_params has %r"
                                      % (lane, k, v, skp.get(k, "<unset>")))
