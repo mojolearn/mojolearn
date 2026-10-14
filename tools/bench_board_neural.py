@@ -3041,6 +3041,12 @@ def race(args):
                 json.dump(result, fh, indent=2, sort_keys=True, default=str)
             os.replace(out_json + ".tmp", out_json)
             return 1
+    elif getattr(args, "scorer_preflight", False):
+        # preflight smoke (2026-10-14): the same check, recorded, and the parameter probe still runs
+        try:
+            result["scorer_preflight"] = scorer_preflight(lane, shape, data_path, arms, operation)
+        except ScorerUnavailable as exc:
+            result["scorer_preflight"] = {"lane": lane, "status": "refused", "reason": SCORER_REFUSED + str(exc)}
     workers = {}
     # FAIRNESS FIX (2026-10-13 audit): a torch arm on a lane whose only torch twin is a
     # pure-PyTorch reference was raced and reported as the opponent. It is now refused by name
@@ -3255,6 +3261,9 @@ def build_parser():
     r.add_argument("--params-only", action="store_true",
                    help="construct every arm, read its parameters back, write <out>/<tag>.params.json "
                         "and stop before the warm-up (the board's opponent-store lookup)")
+    r.add_argument("--scorer-preflight", action="store_true",
+                   help="with --params-only: run the quality-scorer preflight first and record its receipt "
+                        "(a refusal included) in the params JSON (bench_board.py --preflight-scorer)")
     r.add_argument("--warmup-seconds", type=int, default=1800)
     # FAIRNESS FIX (2026-10-13 audit): a compile arm's own warm-up deadline (warmup_deadline).
     # Results raced before this change were wrong for this lane; apply extra scrutiny.

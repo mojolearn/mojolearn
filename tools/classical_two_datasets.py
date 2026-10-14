@@ -648,6 +648,17 @@ def params_record(obj):
     return rec
 
 
+def smoke_scorer_receipt(RSP, run, lane, dataset):
+    """--params-only --scorer-preflight: the scorer preflight's receipt, or a `refused` receipt naming the
+    failed check (with the reason text a timed race would refuse with). Never raises."""
+    try:
+        return run()
+    except RSP.ScorerUnavailable as exc:
+        why = str(exc)
+        why = why if why.startswith(RSP.SCORER_REFUSED) else RSP.SCORER_REFUSED + why
+        return {"lane": lane, "dataset": dataset, "status": "refused", "reason": why}
+
+
 def params_only_exit(result, workers, arms, lane_id, family, path):
     """--params-only: every arm is constructed (its worker is ready) and its
     parameters read back; write the check's report and each arm's info to
@@ -3170,6 +3181,11 @@ def race(args):
             result["scorer_preflight"] = scorer_preflight(RSP, lane, ds, block, rec)
         except RSP.ScorerUnavailable as exc:
             return RSP.refuse(result, arms, str(exc), os.path.join(args.out, "%s.json" % tag), "CTD")
+    elif getattr(args, "scorer_preflight", False):
+        # preflight smoke (2026-10-14): the same check, recorded, and the parameter probe still runs
+        RSP = _sibling("race_scorer_preflight")
+        result["scorer_preflight"] = smoke_scorer_receipt(
+            RSP, lambda: scorer_preflight(RSP, lane, ds, block, rec), lane, ds)
     workers = {}
     for arm in arms:
         py = args.ours_python if arm in ("ours", "ours-base", "ours-fast") \
@@ -3442,6 +3458,9 @@ def main():
     r.add_argument("--params-only", action="store_true",
                    help="construct every arm, read its parameters back, write <out>/<tag>.params.json "
                         "and stop before the warm-up (the board's opponent-store lookup)")
+    r.add_argument("--scorer-preflight", action="store_true",
+                   help="with --params-only: run the quality-scorer preflight first and record its receipt "
+                        "(a refusal included) in the params JSON (bench_board.py --preflight-scorer)")
     r.add_argument("--warmup-seconds", type=float, default=600.0)
     r.add_argument("--round-seconds", type=float, default=300.0)
     r.add_argument("--pause", type=float, default=0.5)

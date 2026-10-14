@@ -7212,7 +7212,7 @@ class ScorerUnavailable(RuntimeError):
     """This race's quality scorer cannot run: the race is refused before any timed work."""
 
 
-def scorer_preflight(lane, ds, arms, D, args, fit_calls):
+def scorer_preflight(lane, ds, arms, D, args, fit_calls, light=False):
     """THE SCORER PREFLIGHT (lane harness-evidence, 2026-10-14). Before any worker starts, prove the quality
     scorer of this race can run: the reference data it reads is present (the layer lanes' neural fixtures, the
     held-out labels), the scorer and its oracle import, and the scorer runs on known data -- the held-out labels
@@ -7273,6 +7273,21 @@ def scorer_preflight(lane, ds, arms, D, args, fit_calls):
                 raise ValueError("the %s scorer did not score the held-out labels: %r" % (qk, got))
             return {k: v for k, v in got.items() if isinstance(v, (int, float))}
         check("scorer self-test", labels_as_prediction)
+
+    if light:
+        # preflight smoke (2026-10-14, --params-only --scorer-preflight): the two references below are full
+        # untimed computations on the race inputs. The smoke proves their modules import and defers the
+        # computation to the timed race's own scorer preflight, which still refuses before any timing.
+        deferred = []
+        if qk in ("vs-sklearn", "labels", "multilabel") and "sklearn-cpu" not in arms and s.get("sk"):
+            deferred.append("scikit-learn oracle")
+            check("scikit-learn oracle imports", lambda: {"sklearn": __import__("sklearn").__version__})
+        if needs_host_reference(lane, arms):
+            deferred.append("own host reference")
+            check("own host reference imports", lambda: {"module": _tool("bench_board_host_quality").__name__})
+        receipt["deferred_to_timed_race"] = deferred
+        receipt["status"] = "ok"
+        return receipt, precomputed
 
     if qk in ("vs-sklearn", "labels", "multilabel") and "sklearn-cpu" not in arms and s.get("sk"):
         def oracle():
@@ -7370,6 +7385,14 @@ def race(args):
                 json.dump(result, fh, indent=2, sort_keys=True, default=str)
             os.replace(out_json + ".tmp", out_json)
             return 1
+    elif getattr(args, "scorer_preflight", False):
+        # preflight smoke (2026-10-14): the same check (light: heavy references deferred), recorded, and the
+        # parameter probe still runs
+        try:
+            result["scorer_preflight"], _ = scorer_preflight(lane, ds, arms, D, args, args.rounds + 1, light=True)
+        except ScorerUnavailable as exc:
+            result["scorer_preflight"] = {"lane": lane, "dataset": ds, "status": "refused",
+                                          "reason": SCORER_REFUSED + str(exc)}
     workers = {}
     env_extra = {}
     if args.smoke_rows:
@@ -7727,6 +7750,9 @@ def build_parser():
     r.add_argument("--params-only", action="store_true",
                    help="construct every arm, read its parameters back, write <out>/<tag>.params.json "
                         "and stop before the warm-up (the board's opponent-store lookup)")
+    r.add_argument("--scorer-preflight", action="store_true",
+                   help="with --params-only: run the light quality-scorer preflight and record its receipt "
+                        "(a refusal included) in the params JSON (bench_board.py --preflight-scorer)")
     r.add_argument("--warmup-seconds", type=float, default=1800)
     # FAIRNESS FIX (2026-10-13 audit): a torch.compile arm's own warm-up deadline. Results raced
     # before this change were wrong for this lane; apply extra scrutiny.

@@ -2035,6 +2035,11 @@ def race(args):
             result["scorer_preflight"] = scorer_preflight(RSP, lane, ds, D)
         except RSP.ScorerUnavailable as exc:
             return RSP.refuse(result, arms, str(exc), os.path.join(args.out, "%s.json" % tag), "MORE")
+    elif getattr(args, "scorer_preflight", False):
+        # preflight smoke (2026-10-14): the same check, recorded, and the parameter probe still runs
+        RSP = _load("race_scorer_preflight")
+        result["scorer_preflight"] = ctd.smoke_scorer_receipt(
+            RSP, lambda: scorer_preflight(RSP, lane, ds, D), lane, ds)
     workers = {}
     for arm in arms:
         py = args.ours_python if arm in ("ours", "ours-fast") else args.theirs_python
@@ -2176,6 +2181,9 @@ def build_parser():
     r.add_argument("--params-only", action="store_true",
                    help="construct every arm, read its parameters back, write <out>/<tag>.params.json "
                         "and stop before the warm-up (the board's opponent-store lookup)")
+    r.add_argument("--scorer-preflight", action="store_true",
+                   help="with --params-only: run the quality-scorer preflight first and record its receipt "
+                        "(a refusal included) in the params JSON (bench_board.py --preflight-scorer)")
     r.add_argument("--warmup-seconds", type=float, default=1800)
     r.add_argument("--round-seconds", type=float, default=1800)
     w = sub.add_parser("worker")
