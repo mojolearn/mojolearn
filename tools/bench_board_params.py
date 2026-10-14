@@ -57,7 +57,12 @@ import fnmatch
 import inspect
 import json
 import math
+import os
 import sys
+
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import board_pairing  # noqa: E402  (smoke-fixes r13: the own-arm pairing table)
 
 SEED = 7
 
@@ -1112,7 +1117,10 @@ def _semantic_r6(lane, param, arm, ours, theirs, library):
     a weighted quantile sketch over every row, src/common/hist_util.cu, not GreedyLogSum over a
     200,000-row sample; no XGBoost setting selects them) and CatBoost's min_split_gain under
     Lossguide (greedy_search_helper.cpp:297-309, 321-328: the best leaf splits with no sign test,
-    where ours' min_split_gain 0 requires a positive gain).
+    where ours' min_split_gain 0 requires a positive gain). smoke-fixes r13 (Andrew 2026-10-14):
+    on gbdt-lossguide CatBoost is compared only with the own arm at min_split_gain None (no gain
+    check, its own growth; tools/board_pairing.py), mapped below; ours at 0.0 (`ours-gain0`) is
+    compared only with XGBoost, so no waiver is needed. 0.0 against CatBoost Lossguide still refuses.
     """
     if not lane.startswith("gbdt-"):
         return None
@@ -1870,11 +1878,16 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
 # The check
 # ---------------------------------------------------------------------------
 
-def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions=()):
+def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions=(), pairing=None):
     """The report for one race. `arms`: {arm name: constructed object or
     declared dict}. `extra_exceptions`: (param, arm glob, reason) the driver
     adds for this race (the same shape as EXCEPTIONS without the lane).
-    `seed`: None is `seed_for(lane)`."""
+    `seed`: None is `seed_for(lane)`.
+    `pairing` (smoke-fixes r13, 2026-10-14): {own arm: [opponent arm globs]} of a lane that races
+    more than one explicit own configuration (tools/board_pairing.py OUR_PAIRINGS). Each opponent
+    is then compared with the own arm it is paired with, never with another; an own arm of the
+    pairing other than `reference` is a separate configuration and is not compared with
+    `reference` (its own settings are read back and recorded under `arms`)."""
     seed = seed_for(lane) if seed is None else seed
     resolved, sources, libs, raw_params, no_seed, draws = {}, {}, {}, {}, set(), set()
     for name, obj in arms.items():
@@ -1885,12 +1898,19 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
         if "seed" not in resolved[name] and has_no_seed_argument(obj, raw):
             no_seed.add(name)
     ref = reference if reference in resolved else next(iter(resolved), None)
+    pairing = {own: list(globs) for own, globs in (pairing or {}).items()}
+    refs = {}
+    for name in resolved:
+        if name in pairing:
+            continue                        # an own configuration of the pairing: not compared
+        own = board_pairing.reference_for(name, pairing, default=ref)
+        refs[name] = own if own in resolved else ref
     problems, compared, applied = [], [], []
     if not resolved:
         problems.append("no parameter records")
 
     def _excused(param, arm):
-        own = {k: v[0] for k, v in resolved.get(ref, {}).items()}
+        own = {k: v[0] for k, v in resolved.get(refs.get(arm, ref), {}).items()}
         theirs = {k: v[0] for k, v in resolved.get(arm, {}).items()}
         why = semantic_exception(lane, param, arm, own, theirs, libs.get(arm))
         if why is None:
@@ -1927,28 +1947,29 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
             else:
                 problems.append("%s (%s): its constructor takes a seed but none was read back"
                                 % (name, libs[name]))
-        if name == ref:
+        if name == ref or name not in refs:
             continue
-        for param in sorted(set(canon) | set(resolved[ref])):
+        rref = refs[name]
+        for param in sorted(set(canon) | set(resolved[rref])):
             if param == "seed":
                 continue
-            if param not in canon or param not in resolved[ref]:
+            if param not in canon or param not in resolved[rref]:
                 # Only a centrally reviewed conditional mapping may explain an
                 # absent API field. A driver-supplied exception cannot waive it.
                 why = semantic_exception(lane, param, name,
-                    {k: v[0] for k, v in resolved[ref].items()},
+                    {k: v[0] for k, v in resolved[rref].items()},
                     {k: v[0] for k, v in canon.items()}, libs[name])
                 if why:
                     applied.append({"arm": name, "param": param,
-                                    "ours": resolved[ref].get(param, (None,))[0],
+                                    "ours": resolved[rref].get(param, (None,))[0],
                                     "theirs": canon.get(param, (None,))[0],
                                     "reason": why, "absent_api_field": True})
                     continue
                 problems.append("%s: %s missing from %s read-back; explicit semantic mapping required"
-                                % (name, param, name if param not in canon else ref))
+                                % (name, param, name if param not in canon else rref))
                 continue
             val, own_name = canon[param]
-            rval, rname = resolved[ref][param]
+            rval, rname = resolved[rref][param]
             same = _equal(val, rval) and not (val is None and rval is None)
             compared.append({"arm": name, "param": param, "ours": rval, "theirs": val, "same": same})
             if same:
@@ -1960,13 +1981,19 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
             if val is None or rval is None:
                 problems.append("%s: %s is %s on %s and %s on %s (a library default is not a "
                                 "matched value; set it explicitly on both)"
-                                % (name, param, "unset" if rval is None else repr(rval), ref,
+                                % (name, param, "unset" if rval is None else repr(rval), rref,
                                    "unset" if val is None else repr(val), name))
             else:
                 problems.append("%s: %s is %r (%s) on %s and %r (%s) on %s"
-                                % (name, param, rval, rname, ref, val, own_name, name))
+                                % (name, param, rval, rname, rref, val, own_name, name))
+    if pairing:
+        # each opponent's own reference arm (the "ours" value of its compared/exceptions rows)
+        for row in compared + applied:
+            if row.get("arm") in refs and row.get("param") != "seed":
+                row["reference"] = refs[row["arm"]]
     return {"schema": "mojolearn.parameter-parity.v2", "comparison": "union of all work settings",
             "lane": lane, "family": family, "reference": ref, "seed": seed,
+            **({"pairing": pairing, "references": dict(sorted(refs.items()))} if pairing else {}),
             "arms": {n: {"library": libs[n], "source": sources[n],
                          "implementation": implementation_of(arms[n]),
                          "raw_params": raw_params[n],
@@ -1989,10 +2016,11 @@ def emit(report, stream=None):
     stream.flush()
 
 
-def enforce(lane, arms, family=None, reference="ours", seed=None, extra_exceptions=(), stream=None):
+def enforce(lane, arms, family=None, reference="ours", seed=None, extra_exceptions=(), stream=None,
+            pairing=None):
     """check + emit; raises ParamsRefused when the arms do not match."""
     report = check(lane, arms, family=family, reference=reference, seed=seed,
-                   extra_exceptions=extra_exceptions)
+                   extra_exceptions=extra_exceptions, pairing=pairing)
     emit(report, stream)
     if report["problems"]:
         raise ParamsRefused("parameters do not match (%d): %s"

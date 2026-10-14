@@ -114,6 +114,7 @@ for _p in _PATHS:
         sys.path.insert(0, _p)
 
 import speed_gbdt_arm as spec           # noqa: E402
+import board_pairing                    # noqa: E402  (tools/: the own-arm pairing table)
 
 
 #: What each lane calls in `python/mojolearn/`, for the report and for the
@@ -636,7 +637,7 @@ def infer_spec(arm_name, lane, task, model, n_features=None, frame=None):
         # the clock; run_inference now prepares it before any clock. Results raced before
         # this change were wrong for this lane; apply extra scrutiny.
         return _categorical_infer_spec(arm_name, model, frame)
-    if arm_name in ("ours", "ours-ab"):
+    if arm_name.startswith("ours"):
         if iforest:
             return (model.score_samples, _vec,
                     "mojolearn IsolationForest.score_samples(X) (the forest is rebuilt "
@@ -722,7 +723,7 @@ def _task_infer_spec(arm_name, task, model, n_features):
     multi = task == "multiclass"
     post = _mat if multi else _vec
     what = "the (rows, n_classes) probability matrix" if multi else "raw ranking scores"
-    if arm_name in ("ours", "ours-ab"):
+    if arm_name.startswith("ours"):
         fn = model.predict_proba if multi else model.predict
         return (fn, post, "mojolearn GradientBoosting.%s(X), %s"
                 % ("predict_proba" if multi else "predict", what))
@@ -769,7 +770,7 @@ def _categorical_infer_spec(arm_name, model, frame):
     """Inference for the categorical lane: P(class 1) from each library's
     own call on its own frame kind (`frame(X)`, prepared before the clock by
     run_inference; FAIRNESS FIX 2026-10-13: it was built inside the clock)."""
-    if arm_name in ("ours", "ours-ab"):
+    if arm_name.startswith("ours"):
         return (model.predict_proba, _p1,
                 "mojolearn GradientBoosting.predict_proba(X) on the float32 codes, column 1")
     if arm_name.startswith("catboost-"):
@@ -860,7 +861,7 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
     _INFER_DATA[0] = data
     n_large = int(min(large_rows, data.X_train.shape[0]))
     xl = np.ascontiguousarray(data.X_train[:n_large], dtype=np.float32)
-    has_ours = any(a.name in ("ours", "ours-ab") for a in arms)
+    has_ours = any(a.name.startswith("ours") for a in arms)
     x_own = data._ours_Xtest if has_ours else data.X_test
     batches = [("test", x_own, data.X_test), ("large", xl, xl)]
     specs = {}
@@ -897,7 +898,7 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
         rows = int(x_ours.shape[0])
         live, last = [], {}
         for name, (call, post) in specs.items():
-            x = x_ours if name in ("ours", "ours-ab") else x_them
+            x = x_ours if name.startswith("ours") else x_them
             if time.time() > deadline:
                 emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
                            ("reason", "process deadline reached before warm-up")])
@@ -917,7 +918,7 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
         for r in range(1, n_rounds + 1):
             for name in list(live):
                 call, post = specs[name]
-                x = x_ours if name in ("ours", "ours-ab") else x_them
+                x = x_ours if name.startswith("ours") else x_them
                 if time.time() > deadline or spent[name] > budget:
                     emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
                                ("reason", "process deadline or per-arm budget %.0fs reached at "
@@ -1253,7 +1254,22 @@ def main(argv=None):
     if not args.ours_only and args.opponents_first:
         print("FSPEED-IMPORT-ORDER lane=%s first=opponents" % lane, flush=True)
         opponents = spec.build_opponents(lane, cfg, data, devices, wanted)
-    arms = [] if args.opponents_only else build_ours(lane, cfg, data)
+    # smoke-fixes r13 (Andrew 2026-10-14): a paired lane (tools/board_pairing.py OUR_PAIRINGS) races
+    # one own arm per pairing, each with its settings passed explicitly (a None included) and read
+    # back; `ours` takes its own pairing's settings, and `ours-ab` is `ours` with one key changed.
+    pairing = board_pairing.OUR_PAIRINGS.get(lane) or {}
+    own_settings = dict((pairing.get("ours") or {}).get("settings") or {})
+    arms = [] if args.opponents_only else build_ours(lane, cfg, data, extra=own_settings or None)
+    if not args.opponents_only:
+        for own in board_pairing.extra_own_arms(lane):
+            built = build_ours(lane, cfg, data, name=own, extra=dict(pairing[own]["settings"]))
+            for arm in built:
+                arm.agreement_group = "mojolearn:" + own   # another configuration on purpose
+            arms.extend(built)
+        for own, p in pairing.items():
+            spec.emit_note(lane, [own], "pairing", float(len(p["opponents"])),
+                           "own arm %s races against %s only: %s"
+                           % (own, ",".join(p["opponents"]), p["why"]))
     if args.ours_ab:
         import ast
         key, _, raw = args.ours_ab.partition("=")
@@ -1261,7 +1277,7 @@ def main(argv=None):
         print("FSPEED-AB lane=%s arm=ours-ab %s=%r (arm ours keeps the "
               "estimator default)" % (lane, key.strip(), value), flush=True)
         arms.extend(build_ours(lane, cfg, data, name="ours-ab",
-                               extra={key.strip(): value}))
+                               extra=dict(own_settings, **{key.strip(): value})))
     if not args.ours_only:
         if not args.opponents_first:
             opponents = spec.build_opponents(lane, cfg, data, devices, wanted)
@@ -1308,7 +1324,7 @@ def main(argv=None):
                 or isinstance(records[arm.name], dict):          # not constructed
             continue
         lib = getattr(arm, "library", None) or "mojolearn"
-        gpu = any(t in arm.name for t in ("gpu", "cuda", "opencl")) or arm.name in ("ours", "ours-ab")
+        gpu = any(t in arm.name for t in ("gpu", "cuda", "opencl")) or arm.name.startswith("ours")
         print("FSPEED-LIBRARY %s" % json.dumps({
             "lane": lane, "arm": arm.name, "library": lib,
             "version": bench_board_probe.library_version(lib),
@@ -1328,7 +1344,7 @@ def main(argv=None):
                   "threadpools": threadpool_info()}, sort_keys=True), flush=True)
     if args.params_only:
         # the board's opponent-store lookup: constructed, read back, stopped
-        BP.emit(BP.check(lane, records, family="trees"))
+        BP.emit(BP.check(lane, records, family="trees", pairing=board_pairing.lane_pairing(lane)))
         print("PARAMS-ONLY lane=%s arms=%s" % (lane, ",".join(sorted(records))), flush=True)
         return 0
     extra = ()
@@ -1336,7 +1352,8 @@ def main(argv=None):
         extra = ((args.ours_ab.partition("=")[0].strip(), "ours-ab",
                   "--ours-ab changes this one key on purpose (the A/B arm)"),)
     try:
-        BP.enforce(lane, records, family="trees", extra_exceptions=extra)
+        BP.enforce(lane, records, family="trees", extra_exceptions=extra,
+                   pairing=board_pairing.lane_pairing(lane))
     except BP.ParamsRefused as exc:
         spec.emit_refused(lane, "all", "PARAMETER CHECK REFUSED: %s" % exc)
         return 1

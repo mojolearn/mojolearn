@@ -287,3 +287,19 @@ def test_board_clock_cells_of_an_unannotated_cell_are_dashes():
     assert bb.clock_cells({}) == " | ".join(["-"] * bb.CLOCK_COLUMNS)
     assert len(bb.CLOCK_HEADER.split(" | ")) == bb.CLOCK_COLUMNS
     assert not re.search(r"\b(faster|slower)\b", bb.CLOCK_HEADER, re.I)
+
+
+def test_paired_race_divides_each_opponent_into_its_own_configuration():
+    # smoke-fixes r13 (tools/board_pairing.py): gbdt-lossguide `ours` pairs with catboost-gpu only,
+    # `ours-gain0` with xgboost-* only
+    own = cell("ours", "mojolearn", 100.0, family="trees", span=OURS_SPAN)
+    own["pairs_with"] = ["catboost-gpu"]
+    gain0 = cell("ours-gain0", "mojolearn", 60.0, family="trees", span=OURS_SPAN)
+    gain0["pairs_with"] = ["xgboost-*"]
+    cs = _race(own, gain0, cell("catboost-gpu", "catboost", 50.0, family="trees", span={"input_home": "host"}),
+               cell("xgboost-gpu", "xgboost", 30.0, family="trees", span={"input_home": "host"}),
+               cell("lightgbm-cuda", "lightgbm", 10.0, family="trees", span={"input_home": "host"}))
+    by = {c["arm"]: c for c in cs}
+    assert by["catboost-gpu"]["ratio_ours_identical_clock"]["value"] == pytest.approx(2.0)
+    assert by["xgboost-gpu"]["ratio_ours_identical_clock"]["value"] == pytest.approx(2.0)
+    assert by["lightgbm-cuda"]["ratio_ours_identical_clock"] is None      # no own arm lists it

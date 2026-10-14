@@ -452,3 +452,28 @@ def test_sklearn_dbscan_min_samples_is_not_transformed():
     """Only scikit-learn's HDBSCAN is keyed: its DBSCAN counts the point, as ours does."""
     assert BP.library_of(_est("sklearn.cluster._dbscan", "DBSCAN", min_samples=2)) == "sklearn"
     assert BP.library_of(_est("sklearn.cluster._hdbscan.hdbscan", "HDBSCAN")) == "sklearn/HDBSCAN"
+
+
+def test_paired_lane_compares_each_opponent_with_its_own_configuration():
+    # smoke-fixes r13 (Andrew 2026-10-14, tools/board_pairing.py): on gbdt-lossguide CatBoost GPU is
+    # checked against `ours` (min_split_gain None, no gain check) and XGBoost against `ours-gain0`
+    # (0.0, a strictly positive gain, its gamma 0); neither against the other configuration.
+    arms = _matched()
+    for obj in arms.values():
+        obj._p["grow_policy"] = "Lossguide"
+    gain0 = _est("mojolearn.ensemble", "GradientBoosting", **dict(arms["ours"]._p, min_split_gain=0.0))
+    arms["ours"]._p["min_split_gain"] = None
+    arms["xgboost-cpu"]._p["gamma"] = 0.0
+    arms = {"ours": arms["ours"], "ours-gain0": gain0, "catboost-gpu": arms["catboost-cpu"],
+            "xgboost-gpu": arms["xgboost-cpu"]}
+    pairing = {"ours": ["catboost-gpu"], "ours-gain0": ["xgboost-*"]}
+    rep = BP.check("gbdt-lossguide", arms, pairing=pairing)
+    assert rep["references"] == {"catboost-gpu": "ours", "xgboost-gpu": "ours-gain0"}
+    assert not [p for p in rep["problems"] if "min_split_gain" in p], rep["problems"]
+    row = next(r for r in rep["compared"] if r["arm"] == "xgboost-gpu" and r["param"] == "min_split_gain")
+    assert (row["ours"], row["theirs"], row["same"], row["reference"]) == (0.0, 0.0, True, "ours-gain0")
+    gap = next(r for r in rep["exceptions"] if r["arm"] == "catboost-gpu" and r["param"] == "min_split_gain")
+    assert gap["ours"] is None and gap["reference"] == "ours"
+    # without the pairing XGBoost meets ours' None (and CatBoost would meet 0.0): refused by name
+    rep = BP.check("gbdt-lossguide", arms)
+    assert [p for p in rep["problems"] if p.startswith("xgboost-gpu: min_split_gain")], rep["problems"]

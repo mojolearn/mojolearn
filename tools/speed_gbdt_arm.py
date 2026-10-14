@@ -154,6 +154,8 @@ import time
 
 import numpy as np
 
+import board_pairing                  # noqa: E402  (tools/; the own-arm pairing table, no numpy)
+
 FAMILY = "forest"
 
 #: Accuracy tolerance between two arms of the SAME library, as a relative
@@ -2030,6 +2032,11 @@ def lane_config(lane, size):
                          None), which grew ours past CatBoost on taxi
                          Lossguide (6239 against 5743). Ours now takes 0.0 on
                          Depthwise and Lossguide.
+                         smoke-fixes r13 (Andrew 2026-10-14): CatBoost GPU
+                         Lossguide has no gain check at all, so gbdt-lossguide
+                         races two own arms (tools/board_pairing.py): `ours`
+                         at None against catboost-gpu, `ours-gain0` at 0.0
+                         against xgboost-*.
       leaf estimation    Newton, ONE iteration on ours and CatBoost: the one
                          Newton step XGBoost and LightGBM take. CatBoost's
                          Logloss default is 10, cut to 1 on taxi by
@@ -2210,6 +2217,15 @@ def lane_config(lane, size):
             # GPU learner accepts for a non-pairwise loss, catboost_options.cpp:638, a check of
             # the VALUE against the default, option.h:68).
             cfg.update(border_build_max_samples=200000, feature_fraction=1.0)
+        if lane in board_pairing.OUR_PAIRINGS:
+            # smoke-fixes r13 (Andrew 2026-10-14, DECISIONS.md decision 2): this lane races more than
+            # one explicit own configuration, each paired with the one opponent library it matches
+            # (tools/board_pairing.py OUR_PAIRINGS). Each arm's settings override the lane values
+            # above on that arm only, are passed explicitly and read back; the parameter check, the
+            # ratios and the fairness rows compare each own arm with its own opponents only.
+            cfg["our_pairings"] = {
+                arm: dict(opponents=list(p["opponents"]), settings=dict(p["settings"]), why=p["why"])
+                for arm, p in board_pairing.OUR_PAIRINGS[lane].items()}
         return cfg
     if lane in ("rf", "et"):
         cfg = dict(common)
@@ -2365,6 +2381,9 @@ class Arm(object):
         self.sync = sync or (lambda: None)
         #: Arms sharing a library are cross-checked for accuracy agreement.
         self.library = library or name.split("-")[0]
+        #: The agreement check's group (default: the library). An own arm of a paired lane
+        #: (tools/board_pairing.py) runs another configuration on purpose and is its own group.
+        self.agreement_group = None
         #: Set by `run` after the last round: what this arm's FITTED MODEL
         #: turned out to be (trees, nodes, leaves, depth), read back through
         #: the library's own API. See FIT EQUIVALENCE below.
@@ -4348,7 +4367,7 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
             final_triples = operation_scores[arm.name] if operation_capture and arm.name in operation_scores else arm.score(model, data)
             for metric, value, _ in final_triples:
                 emit_acc(lane, arm.name, metric, value)
-                scores.setdefault((arm.library, metric), []).append(
+                scores.setdefault((arm.agreement_group or arm.library, metric), []).append(
                     (arm.name, value))
         except Exception as exc:                   # noqa: BLE001
             emit_refused(lane, arm.name, "%s while scoring: %s"
