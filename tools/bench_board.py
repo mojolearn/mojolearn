@@ -2937,8 +2937,12 @@ def audit_plan(ctx, races):
         directory, recipe = E.begin(ctx, race, race_settings(ctx, race), data)
         sub = dict(ctx, measurement_receipts=str(directory / "workers"))
         has_ours = any(a in arms for a in race.get("our_arms", {}))
+        # smoke-fixes (2026-10-14; neural/gemm-bf16 Apple fast: "no supported own arm"): the verdict was
+        # already UNSUPPORTED, but its problem line did not say why; it now names each own arm's capability
+        # reason (unsupported_our_arms: the FAST low-bit API requires IDENTICAL, _lowbit_binding.require_identical).
         entry = (preflight_check(sub, race, arms) if arms and has_ours else
-                 dict(verdict="UNSUPPORTED", problems=["no supported own arm; no opponent-only timing"],
+                 dict(verdict="UNSUPPORTED", problems=["no supported own arm (%s); no opponent-only timing" % (
+                     "; ".join("%s: %s" % kv for kv in sorted(unsupported.items())) or "no own arm planned")],
                       unsupported_arms=unsupported))
         E.write(directory / "preflight.json", entry)
         report["races"][race["id"]] = dict(recipe=recipe, audit=entry)
@@ -4005,6 +4009,17 @@ PLANNED_REFUSALS = [
      "the pinned XGBoost wheel is CUDA; the image carries no ROCm build"),
     ("nvidia", "classical2/spectral*", "cuml-gpu",
      "cuML SpectralClustering / SpectralEmbedding are absent from the pinned cuML 26.8.0"),
+    # smoke-fixes (2026-10-14; neural/samba-forward, samba-train-step on Apple: "code our harness wrote, not a
+    # library's own implementation"): no library implements Samba. The torch arms assemble it from
+    # mamba_ssm's Mamba3 layers and transformers' attention (bench_board_neural.TorchArm._build_samba), and
+    # mamba_ssm's kernels are CUDA or ROCm/HIP only, so on mps every torch arm refuses by name before it
+    # builds (_build_samba: "mamba_ssm's Mamba3 kernels run on CUDA or ROCm/HIP only"); the pure-PyTorch
+    # Mamba-3 reference is never raced in its place (REFERENCE_TWIN_LANES). Recorded as an excluded arm with
+    # this reason, like the Mamba lanes' torch references (637b53946). Not on AMD: mamba_ssm is planned
+    # there (bench_board.mamba_ssm_install_steps), so a missing probe there is an install failure and refuses.
+    ("apple", "neural/samba-*", "torch-*",
+     "no library implements Samba and mamba_ssm's Mamba3 kernels (the torch arms' SSM layers) run on CUDA "
+     "or ROCm/HIP only; the pure-PyTorch reference is not an opponent, so the lane has no opponent on Apple"),
 ]
 #: Race keys whose arms produce no comparable output (a random mask), so a
 #: smoke pass needs a time but no quality value.

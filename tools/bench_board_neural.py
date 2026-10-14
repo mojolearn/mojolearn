@@ -204,6 +204,8 @@ BLOCK_NORM_EPS, BLOCK_ROPE_THETA = 1e-6, 10000.0
 #: SambaStack's final RMSNorm eps and dropout, passed explicitly; the torch
 #: stack twin uses the same eps and has no dropout.
 SAMBA_NORM_EPS, SAMBA_DROPOUT = 1e-5, 0.0
+#: samba-train-step's max_grad_norm on both arms: gradient clipping off (see _lane_params)
+SAMBA_CLIP_OFF = "off"
 
 # ---------------------------------------------------------------------------
 # The tables the board reads (standard library only)
@@ -1038,7 +1040,12 @@ def _lane_params(lane):
     elif model == "samba":
         out.update(eps=SAMBA_NORM_EPS, rope_theta=BLOCK_ROPE_THETA)
     if model == "samba":
-        out.update(dropout=SAMBA_DROPOUT, max_grad_norm=None if lane in TRAIN_LANES else "n/a")
+        # smoke-fixes (2026-10-14; neural/samba-train-step: "max_grad_norm is unset on ours and unset on
+        # torch-*"): clipping is OFF on both arms, pinned as the explicit value "off" (not None, which the
+        # parameter check reads as a library default): ours reads it back from SambaStack.max_norm (None =
+        # clipping off, python/mojolearn/_samba_impl.py SambaStack docstring "None turns clipping off"), the
+        # torch arm's call() runs no clip_grad_norm_ (TorchArm.call: zero_grad, backward, opt.step).
+        out.update(dropout=SAMBA_DROPOUT, max_grad_norm=SAMBA_CLIP_OFF if lane in TRAIN_LANES else "n/a")
     return out
 
 
@@ -1088,9 +1095,14 @@ def arch_readback(model, values):
 
 
 def ours_lm_arch(config, profile):
-    """Ours' LM architecture from LanguageModelTrainer.run_metadata()['config'] (ByteLanguageModelConfig
-    fields) and its native profile name. Ours' parameter registry holds a separate lm_head (untied;
-    python/mojolearn/_byte_lm_config.py parameter_names) and the profile names its parameter precision."""
+    """Ours' LM architecture from the ByteLanguageModelConfig fields the trainer holds (`config`, a
+    ByteLanguageModelConfig.to_dict()) and its native profile name. Ours' parameter registry holds a separate
+    lm_head (untied; python/mojolearn/_byte_lm_config.py parameter_names) and the profile names its parameter
+    precision."""
+    # smoke-fixes (2026-10-14; neural/lm-forward, lm-train-step: "config_readback is '{"d_model": null, ...}'"):
+    # run_metadata()['config'] is the OPTIMIZER configuration (kind, lr, beta1, ...; _byte_lm_impl.py
+    # _configuration), never the architecture, so every dimension read back None. The architecture is the
+    # trainer's held model shape (see ours_lm_held_shape).
     c = config or {}
     prof = str(profile or "")
     return arch_readback("lm", dict(layers=c.get("n_layers"), d_model=c.get("d_model"), n_heads=c.get("n_heads"),
@@ -1098,6 +1110,16 @@ def ours_lm_arch(config, profile):
                                     intermediate=c.get("intermediate"), vocab=c.get("vocab_size"),
                                     tied_head=False,
                                     param_dtype="float32" if ".fp32." in prof else (prof or None)))
+
+
+def ours_lm_held_shape(trainer):
+    """The model dimensions a LanguageModelTrainer actually holds, decoded by the library's own
+    `state_shape` (python/mojolearn/_byte_lm_config.py state_shape: the state's 'model_shape', or the
+    default ByteLanguageModelConfig when the state carries none; the same decoder its state validation
+    uses, _byte_lm_impl.py _validate_state). Reads host metadata only: no device download."""
+    import importlib
+    mod = importlib.import_module(type(trainer).__module__.rsplit(".", 1)[0] + "._byte_lm_config")
+    return mod.state_shape(trainer._state).to_dict()
 
 
 def ours_samba_arch(config):
@@ -1275,7 +1297,7 @@ class OursLM(Ours):
         self.ids = np.ascontiguousarray(self.batches[0][:, :-1])
         self.record = _ours_record(lane)
         # the canonical architecture read-back (ARCH_FIELDS); the raw config stays in info["config"]
-        self.record["config_readback"] = ours_lm_arch(meta.get("config"), meta.get("native_profile"))
+        self.record["config_readback"] = ours_lm_arch(ours_lm_held_shape(self.trainer), meta.get("native_profile"))
 
     def call(self):
         np = self.np
@@ -1517,7 +1539,11 @@ class OursSamba(Ours):
         # the canonical architecture read-back (ARCH_FIELDS); the raw config stays in info["config"]
         self.record["config_readback"] = ours_samba_arch(cfg.to_dict())
         if lane == "samba-train-step":
-            self.record.update(max_grad_norm=max_norm, accumulation_steps=accumulation_steps)
+            # read back from the stack it built (None there = clipping off, recorded as SAMBA_CLIP_OFF)
+            held = getattr(self.model, "max_norm", "missing")
+            self.record.update(max_grad_norm=(SAMBA_CLIP_OFF if held is None else
+                                              None if held == "missing" else float(held)),
+                               accumulation_steps=accumulation_steps)
         self.batches = data["batches"]
         self.ids = np.ascontiguousarray(self.batches[0][:, :-1])
         self.k = 0
@@ -1835,7 +1861,8 @@ class TorchArm:
         if MODEL_OF[lane] == "gemm":
             rec = _gemm_record(lane, "torch", self.library_call, data)
         if MODEL_OF[lane] == "samba":
-            rec.update(dropout=SAMBA_DROPOUT, max_grad_norm=None if self.train else "n/a")
+            # this arm's call() never clips (no clip_grad_norm_): clipping off, the same explicit value as ours
+            rec.update(dropout=SAMBA_DROPOUT, max_grad_norm=SAMBA_CLIP_OFF if self.train else "n/a")
             if lane == "samba-train-step":
                 # smoke-fixes (2026-10-14; samba-train-step refused with "accumulation_steps missing from
                 # torch-* read-back"): this arm's call() runs zero_grad, ONE backward and opt.step per
@@ -1932,14 +1959,23 @@ class TorchArm:
         torch.manual_seed(SEED)
         model = LlamaForCausalLM(cfg)
         model.model.norm = torch.nn.Identity()       # ours' LM has no final norm before the head
-        state, off = {}, 0
-        for name, shp in shapes:
-            n = 1
-            for v in shp:
-                n *= int(v)
-            state[hf_lm_state_name(name)] = flat[off:off + n].reshape(shp).clone()
-            off += n
-        hf_load_exact(torch, model, state, self.arm)
+        # smoke-fixes (2026-10-14; AMD neural/lm-forward, lm-train-step STARTED: the parameter probe was cut off
+        # inside the weight copy (state[...] = flat[...].clone()) and hf_load_exact's bit-for-bit torch.equal
+        # read-back of every weight). The parameter read-back (config_readback, the optimizer record, the
+        # library class) does not depend on the weight values, so the smoke's parameter probe (PARAMS_PROBE)
+        # builds the model and skips the weight copy and its equality check; every timed run (a worker
+        # subprocess, never PARAMS_PROBE) still loads ours' weights and checks them bit for bit.
+        if PARAMS_PROBE:
+            self.info["weights"] = "not loaded: parameter probe only (timed runs load and check them)"
+        else:
+            state, off = {}, 0
+            for name, shp in shapes:
+                n = 1
+                for v in shp:
+                    n *= int(v)
+                state[hf_lm_state_name(name)] = flat[off:off + n].reshape(shp).clone()
+                off += n
+            hf_load_exact(torch, model, state, self.arm)
         model = model.to(self.dev)
         theta = hf_check_rotary(torch, model.model.rotary_emb, hd, twin.ROPE_THETA, self.arm)
         self.library_impl = LlamaForCausalLM
@@ -2787,9 +2823,19 @@ def worker_ready(args):
                     "neural_ab": _neural_ab_receipt(runner, ab_config)}
 
 
+#: True only inside probe_ready (the smoke's parameter probe, in process or in its arm server): the arm is
+#: built for its parameter read-back only and is never warmed up or timed (tools/smoke_inproc.py).
+PARAMS_PROBE = False
+
+
 def probe_ready(argv):
     """The smoke's in-process parameter probe (tools/smoke_inproc.py): a worker's argv, its ready message."""
-    return worker_ready(build_parser().parse_args(argv))[1]
+    global PARAMS_PROBE
+    previous, PARAMS_PROBE = PARAMS_PROBE, True
+    try:
+        return worker_ready(build_parser().parse_args(argv))[1]
+    finally:
+        PARAMS_PROBE = previous
 
 
 def worker(args):
