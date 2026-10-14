@@ -346,7 +346,7 @@ class InProcessWorker:
 # long-lived processes for arms that need another environment
 # ---------------------------------------------------------------------------
 
-def _read_json_line(proc, buf, deadline):
+def read_json_line(proc, buf, deadline):
     """(object or None, rest) from proc.stdout before `deadline` (monotonic)."""
     fd = proc.stdout.fileno()
     while b"\n" not in buf:
@@ -395,7 +395,7 @@ class ArmServer:
         start = dict(interpreter=" ".join(self.interp), pid=self.proc.pid, started=t0)
         deadline = time.monotonic() + self.load_timeout
         while True:
-            msg, self.buf = _read_json_line(self.proc, self.buf, deadline)
+            msg, self.buf = read_json_line(self.proc, self.buf, deadline)
             if msg is None or msg.get("event") == "ready":
                 break
         start["wall_seconds"] = round(time.time() - t0, 2)
@@ -435,7 +435,7 @@ class ArmServer:
         self.proc.stdin.flush()
         deadline = time.monotonic() + timeout
         while True:
-            msg, self.buf = _read_json_line(self.proc, self.buf, deadline)
+            msg, self.buf = read_json_line(self.proc, self.buf, deadline)
             if msg is None or msg.get("event") != "noise":
                 break
         self.busy = False
