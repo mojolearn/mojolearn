@@ -5,7 +5,7 @@ name: No host routes
 # --tree scans every file a GPU install runs at the checked commit and fails on
 # CPU work in GPU code that is not in tools/hooks/host_routes_baseline.tsv, or
 # on a baseline row that no longer matches (the baseline only shrinks). Python
-# only, no build, seconds. The main ruleset requires the `no-host-routes`
+# only, no build. The main ruleset requires the `no-host-routes`
 # check before a PR merges; a push to main that skipped the local hook turns
 # red here. The debt per class and per owner goes to the job summary.
 # `gh workflow run no-host-routes.yml -f pr=N` checks an open PR that has had
@@ -34,7 +34,9 @@ jobs:
   no-host-routes:
     name: no-host-routes
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The regression suite checks many scratch commits against the full tree.
+    # Five minutes cancelled it after the production checker had passed.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -74,5 +76,5 @@ jobs:
           GIT_COMMITTER_EMAIL: ci@localhost
         run: |
           if [ -f tools/hooks/test_no_host_routes.py ]; then
-            python3 tools/hooks/test_no_host_routes.py
+            python3 -u tools/hooks/test_no_host_routes.py
           fi
