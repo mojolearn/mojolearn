@@ -38,7 +38,7 @@ def command(args, race, directory):
            "--vendor", args.vendor, "--python-env", args.python_env, "--skip-install",
            "--cache", args.cache, "--rows", "full", "--rounds", "1", "--modes", "identical",
            "--gpu-opponents-only", "--retime-opponents", "--verify-data", "--no-smoke-gate",
-           "--round-seconds", "240", "--arm-budget-s", "300", "--race-deadline-s", "600",
+           "--round-seconds", str(getattr(args, "round_seconds", 0)),
            "--families", race["family"], "--lanes", race["lane"], "--out", str(directory)]
     if race["dataset"] in B.DATASETS:
         cmd += ["--datasets", race["dataset"]]
@@ -87,10 +87,20 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--cache", required=True)
     ap.add_argument("--python-env", default=sys.executable)
+    # FAIRNESS FIX (2026-10-13 audit): a fixed 240-second override truncated
+    # legitimate full clustering workloads. Reuse the board's established
+    # workload budgets unless the caller explicitly supplies another ceiling.
+    # These are wall-time safeguards; they never cap estimator iterations.
+    ap.add_argument("--round-seconds", type=int, default=0,
+                    help="per-round wall-time ceiling; 0 uses the board's workload defaults")
+    ap.add_argument("--minimum-start-seconds", type=int, default=600,
+                    help="required remaining worker time before starting a recipe; size this for the selected workload")
     ap.add_argument("--stop-at", type=float, required=True,
                     help="epoch after which no new recipe starts; leave retention time before provider deadline")
     ap.add_argument("--plan-only", action="store_true")
     args = ap.parse_args(argv)
+    if args.round_seconds < 0 or args.minimum_start_seconds < 1:
+        ap.error("round-seconds must be nonnegative and minimum-start-seconds positive")
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     plan = selected_plan(args.vendor, json.loads(Path(args.manifest).read_text()))
@@ -108,7 +118,7 @@ def main(argv=None):
     state["fixture_artifacts"] = prepare_fixtures(args, plan, out)
     E.write(path, state)
     for race in plan:
-        if time.time() + 600 >= args.stop_at:
+        if time.time() + args.minimum_start_seconds >= args.stop_at:
             state["stop_reason"] = "insufficient time for another recipe and retention"
             break
         directory = out / "measured" / race["id"].replace("/", ".")

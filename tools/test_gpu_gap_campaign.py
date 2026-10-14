@@ -23,3 +23,14 @@ def test_synthetic_recipe_is_not_passed_to_tabular_dataset_selector(tmp_path):
         assert ("--datasets" in cmd) == (dataset in ("taxi", "istella"))
         assert cmd[cmd.index("--rows") + 1] == "full"
         assert cmd[cmd.index("--rounds") + 1] == "1"
+        assert cmd[cmd.index("--round-seconds") + 1] == "0"
+        assert "--arm-budget-s" not in cmd
+        assert "--race-deadline-s" not in cmd
+
+
+def test_explicit_wall_time_ceiling_does_not_change_workload(tmp_path):
+    args = SimpleNamespace(python_env="python", vendor="nvidia", cache=str(tmp_path), round_seconds=1800)
+    cmd = C.command(args, dict(family="classical", lane="dbscan", dataset="taxi"), tmp_path)
+    assert cmd[cmd.index("--round-seconds") + 1] == "1800"
+    assert cmd[cmd.index("--rows") + 1] == "full"
+    assert cmd[cmd.index("--rounds") + 1] == "1"
