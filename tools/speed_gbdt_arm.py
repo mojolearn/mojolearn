@@ -2586,6 +2586,17 @@ def xgboost_arms(lane, cfg, data, devices):
             "DIFFERENT-GROWER: ours and CatBoost fit this loss on oblivious (symmetric) trees; "
             "XGBoost has no symmetric grower and would race depthwise trees, one per class, "
             "a different algorithm")
+    # smoke-fixes (2026-10-14; gbdt-depthwise/lossguide: "nan_mode missing from xgboost-gpu
+    # read-back", "missing missing from ours read-back"): tools/bench_board_params.py _semantic_r6
+    # maps ours' nan_mode 'Min' and XGBoost's missing=NaN as unread only because the data holds no
+    # NaN. With a NaN the two rules differ (XGBoost learns a default direction per split,
+    # src/tree/gpu_hist/evaluate_splits.cu:18-33; ours and CatBoost sort a NaN below every border),
+    # so the arm is refused by name where that premise fails. Checked once, before any clock.
+    if np.isnan(data.X_train).any() or np.isnan(data.X_test).any():
+        raise RuntimeError(
+            "NAN-INPUT: the data holds NaN; XGBoost learns a default direction for missing values "
+            "per split where ours and CatBoost sort NaN below every border (nan_mode 'Min'), "
+            "a different split rule")
     import xgboost as xgb
 
     policy = cfg.get("xgboost_grow_policy") or {

@@ -1047,6 +1047,275 @@ def _semantic_r5(lane, param, arm, ours, theirs, library):
             if param == "output_metric" and ours[param] in ("euclidean", "l2"):
                 return "euclidean embedding space on both: ours output_metric='euclidean'; cuML's is fixed"
         return None
+
+
+def _r6_is(v, want):
+    """`v` equals `want` (strings case-insensitively, as _equal compares them)."""
+    if isinstance(v, str) and isinstance(want, str):
+        return v.lower() == want.lower()
+    if isinstance(v, bool) or isinstance(want, bool) or v is None or want is None:
+        return v is want
+    return isinstance(v, (int, float)) and v == want
+
+
+def _semantic_r6(lane, param, arm, ours, theirs, library):
+    """smoke-fixes (2026-10-14, batch 3, r6; trees/gbdt-depthwise/taxi and trees/gbdt-lossguide/taxi
+    on NVIDIA: "<knob> missing from catboost-gpu read-back", "<knob> missing from xgboost-gpu
+    read-back", "<knob> missing from ours read-back").
+
+    Ours is python/mojolearn/ensemble.py GradientBoosting (get_params lists every constructor
+    argument); CatBoost 1.2.10's get_params lists only what the driver set (read_params above), and
+    XGBoost 3.2.0's lists its scikit-learn names, None for "native default" (core.py:2357
+    Booster.set_param drops None, so the native default runs). The driver (tools/speed_gbdt_arm.py
+    catboost_arms / xgboost_arms, bench/speed/forest_speed_arm.py) fits every arm on (X, y) with no
+    eval set, no callbacks and no categorical columns on these lanes. Each row fires only for the
+    named library, only when the absent side really lacks the field, and only at the values that
+    make the knob inactive or equal; any other value still refuses. Sources were read at the box's
+    versions (catboost v1.2.10, dmlc/xgboost v3.2.0 on GitHub). NOT mapped (different work, see
+    the lane's reply): XGBoost's feature_border_type / border_build_max_samples (its hist cuts are
+    a weighted quantile sketch over every row, src/common/hist_util.cu, not GreedyLogSum over a
+    200,000-row sample; no XGBoost setting selects them) and CatBoost's min_split_gain under
+    Lossguide (greedy_search_helper.cpp:297-309, 321-328: the best leaf splits with no sign test,
+    where ours' min_split_gain 0 requires a positive gain).
+    """
+    if not lane.startswith("gbdt-"):
+        return None
+    cb = library == "catboost" and arm.startswith("catboost-")
+    xg = library == "xgboost" and arm.startswith("xgboost-")
+    if not (cb or xg):
+        return None
+    lacks_theirs = param in ours and param not in theirs
+    lacks_ours = param in theirs and param not in ours
+    if not (lacks_theirs or lacks_ours):
+        return None
+    policy = str(ours.get("grow_policy") or "")
+    nonsym = policy.lower() in ("depthwise", "lossguide") and _r6_is(theirs.get("grow_policy"), policy)
+    plain = _r6_is(ours.get("boosting_type"), "Plain")
+    no_cats = (ours.get("cat_features") is None and ours.get("one_hot_features") is None
+               and theirs.get("cat_features") is None)
+    no_od = all(ours.get(k) is None for k in ("use_best_model", "od_type", "od_pvalue", "od_wait"))
+    logloss = _r6_is(ours.get("loss"), "Logloss")
+    if cb:
+        cb_plain = plain and _r6_is(theirs.get("boosting_type"), "Plain")
+        if not lacks_theirs:
+            return None
+        # smoke-fixes (2026-10-14; gbdt-depthwise/lossguide: "bagging_temperature missing from
+        # catboost-gpu read-back"): CatBoost refuses bagging_temperature unless the bootstrap is
+        # Bayesian (bootstrap_options.cpp:21-24, "you shoudn't provide bootstrap options if bootstrap
+        # is disabled"); ours reads it under Bayesian only (ensemble.py:1243-1247).
+        if (param == "bagging_temperature" and _r6_is(ours.get("bootstrap_type"), "No")
+                and _r6_is(theirs.get("bootstrap_type"), "No")):
+            return ("bootstrap_type 'No' on both: bagging_temperature is read by the Bayesian bootstrap "
+                    "only, and CatBoost refuses it with bootstrap 'No' (bootstrap_options.cpp:21-24)")
+        # smoke-fixes (2026-10-14; "best_model_min_trees, use_best_model, od_type, od_pvalue, od_wait
+        # missing from catboost-gpu read-back"): with no eval set CatBoost's overfitting detector
+        # and best-model truncation are off (core.py:2672-2673 refuses use_best_model without an
+        # eval_set; options_helper.cpp:106-108 defaults it on only with a test set;
+        # overfitting_detector_options.cpp:24-32); ours raises for either without an eval_set
+        # (ensemble.py docs od_type / use_best_model). best_model_min_trees bounds that truncation only.
+        if param in ("best_model_min_trees", "use_best_model", "od_type", "od_pvalue", "od_wait") and no_od \
+                and not any(k in theirs for k in ("use_best_model", "od_type", "od_pval", "od_wait")):
+            return ("no eval set on either arm (tools/speed_gbdt_arm.py catboost_arms _fit, "
+                    "forest_speed_arm.py fit): no overfitting detector and no best-model truncation; "
+                    "ours' od_*/use_best_model unset and CatBoost's absent")
+        # smoke-fixes (2026-10-14; "border_build_max_samples missing from catboost-gpu read-back"):
+        # CatBoost's border search subsamples MaxSubsetSizeForBuildBorders = 200000 rows
+        # (data_processing_options.cpp:13-19, binarization_options.cpp:22); CatBoostClassifier's
+        # constructor has no argument for it (core.py: only Pool.quantize takes
+        # dev_max_subset_size_for_build_borders, :1313), so it is fixed at ours' value.
+        if param == "border_build_max_samples" and _r6_is(ours.get(param), 200000):
+            return ("CatBoost samples 200000 rows for its border search, fixed "
+                    "(data_processing_options.cpp:18, no constructor argument); ours 200000")
+        # smoke-fixes (2026-10-14; "cat_features, one_hot_features, ctr_estimation_permutation_id
+        # missing from catboost-gpu read-back"): no categorical column on either arm; the CTR
+        # estimation permutation is read by the categorical path only (ours ensemble.py:1480-1484).
+        if param in ("cat_features", "one_hot_features", "ctr_estimation_permutation_id") \
+                and no_cats and ours.get(param) is None:
+            return "no categorical columns on either arm; the CTR and one-hot options are inactive"
+        # smoke-fixes (2026-10-14; "feature_fraction missing from catboost-gpu read-back"): CatBoost's
+        # rsm defaults to 1.0 (oblivious_tree_options.cpp:20) and its GPU learner refuses any other
+        # value outside pairwise modes (catboost_options.cpp:638); ours 1.0 samples no features.
+        if param == "feature_fraction" and _r6_is(ours.get(param), 1.0) and "rsm" not in theirs:
+            return "no feature sampling on either arm: ours feature_fraction 1.0, CatBoost rsm 1.0 (default)"
+        # smoke-fixes (2026-10-14; "fold_len_multiplier, fold_permutation_block, permutation_count
+        # missing from catboost-gpu read-back"): Plain boosting with no CTR features runs ONE
+        # permutation on CatBoost's GPU (cuda/train_lib/train.cpp:102-107), so the Ordered fold
+        # knobs are unread; ours resolves permutation_count 1 for that fit and reads the fold knobs
+        # under Ordered only (ensemble.py docs permutation_count, fold_len_multiplier).
+        if param in ("fold_len_multiplier", "fold_permutation_block", "permutation_count") \
+                and cb_plain and no_cats and _r6_is(ours.get("permutation_count"), None):
+            return ("boosting_type 'Plain' with no categorical columns on both: one permutation, "
+                    "no Ordered folds (CatBoost cuda/train_lib/train.cpp:102-107)")
+        # smoke-fixes (2026-10-14; "loss_alpha, loss_border, loss_delta, loss_q, loss_variance_power
+        # missing from catboost-gpu read-back"): Logloss reads only `border`, whose default 0.5 is
+        # CatBoost's (loss_description.cpp:90-92) and ours (ensemble.py docs loss_border); the
+        # others belong to Quantile/Expectile, Lq, Huber and Tweedie.
+        if param in ("loss_alpha", "loss_border", "loss_delta", "loss_q", "loss_variance_power") \
+                and logloss and _r6_is(theirs.get("loss"), "Logloss") and ours.get(param) is None:
+            return ("loss Logloss on both: its target border is the shared default 0.5; the other "
+                    "loss parameters belong to other losses")
+        # smoke-fixes (2026-10-14; "min_child_weight missing from catboost-gpu read-back"): CatBoost
+        # has no hessian floor (oblivious_tree_options.cpp:12-41 lists min_data_in_leaf only); ours'
+        # min_child_hessian 0.0 admits every child (equality allowed), the same as none.
+        if param == "min_child_weight" and ours.get(param) in (None, 0.0):
+            return "no hessian floor on either arm: ours min_child_hessian %r, CatBoost has none" % (
+                ours.get(param),)
+        # smoke-fixes (2026-10-14; "min_split_gain missing from catboost-gpu read-back"): CatBoost has
+        # no gain threshold. Depthwise splits exactly the leaves whose best split improves (Score < 0,
+        # greedy_search_helper.cpp:356-359), ours' min_split_gain 0.0 (a strictly positive gain);
+        # ours' None is CatBoost's own growth on any policy. Lossguide at 0.0 is NOT this case.
+        if param == "min_split_gain" and (
+                ours.get(param) is None
+                or (_r6_is(ours.get(param), 0.0) and policy.lower() == "depthwise" and nonsym)):
+            return ("CatBoost has no gain threshold; ours %r is its growth here (Depthwise splits "
+                    "only improving leaves, greedy_search_helper.cpp:356-359)" % (ours.get(param),))
+        # smoke-fixes (2026-10-14; "use_pointwise_searcher missing from catboost-gpu read-back"):
+        # off the symmetric grower CatBoost's GPU grows with TGreedySubsetsSearcher
+        # (pointwise_non_symmetric.cpp), the searcher ours runs at False; ours refuses True there
+        # (ensemble.py:673).
+        if param == "use_pointwise_searcher" and ours.get(param) is False and nonsym:
+            return "Depthwise/Lossguide: the greedy subsets searcher on both arms"
+        return None
+    # ---- XGBoost (sklearn.py XGBClassifier, src/tree/param.h, src/tree/gpu_hist/*)
+    if lane not in ("gbdt-depthwise", "gbdt-lossguide") or not nonsym:
+        return None
+    no_sampling = _r6_is(theirs.get("subsample"), 1.0) and theirs.get("sampling_method") in (None, "uniform")
+    no_col = (_r6_is(ours.get("feature_fraction"), 1.0)
+              and all(_r6_is(theirs.get(k), 1.0) for k in ("feature_fraction", "colsample_bylevel",
+                                                            "feature_fraction_bynode")))
+    plain_leaf = _r6_is(theirs.get("reg_alpha"), 0.0) and _r6_is(theirs.get("max_delta_step"), 0.0)
+    binary = logloss and _r6_is(theirs.get("objective"), "binary:logistic")
+    xg_no_cats = (no_cats and theirs.get("enable_categorical") is False
+                  and theirs.get("feature_types") is None)
+    xg_no_es = all(theirs.get(k) is None for k in ("early_stopping_rounds", "callbacks", "eval_metric"))
+    if lacks_theirs:
+        # smoke-fixes (2026-10-14; "bagging_temperature, bootstrap_type missing from xgboost-gpu
+        # read-back"): no row sampling on either arm: ours bootstrap 'No' (bagging_temperature is
+        # read by Bayesian only, ensemble.py:1243-1247); XGBoost subsample 1.0 builds no sampler
+        # (src/tree/gpu_hist/sampler.cu:348-354).
+        if param in ("bagging_temperature", "bootstrap_type") and _r6_is(ours.get("bootstrap_type"), "No") \
+                and no_sampling:
+            return "no row sampling on either arm: ours bootstrap_type 'No', XGBoost subsample 1.0"
+        # smoke-fixes (2026-10-14; "best_model_min_trees, use_best_model, od_* missing from
+        # xgboost-gpu read-back"): no eval set, no early stopping and no callbacks on either arm.
+        if param in ("best_model_min_trees", "use_best_model", "od_type", "od_pvalue", "od_wait") \
+                and no_od and xg_no_es:
+            return "no eval set and no early stopping on either arm; ours' od_*/use_best_model unset"
+        # smoke-fixes (2026-10-14; "boost_from_average missing from xgboost-gpu read-back"): both
+        # start every row at margin 0: ours boost_from_average False; XGBoost's explicit base_score
+        # disables its intercept fit (src/learner.cc:104-107, 172-173) and 0.5 is logit 0 under
+        # binary:logistic (src/objective/regression_loss.h:74-77).
+        if param == "boost_from_average" and ours.get(param) is False and binary \
+                and _r6_is(theirs.get("base_score"), 0.5):
+            return "margin 0 on both: ours boost_from_average False, XGBoost base_score 0.5 (logit 0)"
+        # smoke-fixes (2026-10-14; "cat_features, one_hot_features, ctr_estimation_permutation_id
+        # missing from xgboost-gpu read-back"): no categorical columns on either arm.
+        if param in ("cat_features", "one_hot_features", "ctr_estimation_permutation_id") \
+                and xg_no_cats and ours.get(param) is None:
+            return "no categorical columns on either arm (XGBoost enable_categorical False)"
+        # smoke-fixes (2026-10-14; "fold_len_multiplier, fold_permutation_block, permutation_count
+        # missing from xgboost-gpu read-back"): Ordered-boosting knobs, unread by ours' Plain fit
+        # without categorical columns (ensemble.py docs permutation_count, fold_len_multiplier).
+        if param in ("fold_len_multiplier", "fold_permutation_block", "permutation_count") \
+                and plain and xg_no_cats and ours.get("permutation_count") is None:
+            return "ours boosting_type 'Plain' with no categorical columns: no Ordered folds to match"
+        # smoke-fixes (2026-10-14; "leaf_estimation_method, leaf_estimation_iterations missing from
+        # xgboost-gpu read-back"): one Newton step per leaf on both: ours Newton x 1; XGBoost's leaf
+        # weight is -G / (H + lambda) (src/tree/param.h:234-246) with reg_alpha 0 and
+        # max_delta_step 0 (no soft threshold, no clip).
+        if param in ("leaf_estimation_method", "leaf_estimation_iterations") and plain_leaf \
+                and _r6_is(ours.get("leaf_estimation_method"), "Newton") \
+                and _r6_is(ours.get("leaf_estimation_iterations"), 1):
+            return "one Newton step per leaf on both (XGBoost param.h CalcWeight, alpha 0, no clip)"
+        # smoke-fixes (2026-10-14; "loss missing from xgboost-gpu read-back"): Logloss is XGBoost's
+        # binary:logistic (src/objective/regression_loss.h LogisticClassification).
+        if param == "loss" and binary:
+            return "binary log loss on both: ours loss 'Logloss', XGBoost objective 'binary:logistic'"
+        if param in ("loss_alpha", "loss_border", "loss_delta", "loss_q", "loss_variance_power") \
+                and binary and ours.get(param) is None:
+            return ("binary log loss on both; ours' other-loss parameters unset and its Logloss border "
+                    "the default 0.5 (0/1 labels)")
+        # smoke-fixes (2026-10-14; "min_samples_leaf missing from xgboost-gpu read-back"): ours
+        # min_data_in_leaf 1 only stops a one-row leaf; XGBoost refuses any split with an empty
+        # child (src/tree/gpu_hist/expand_entry.cuh:37-39), so a one-row node never splits there
+        # either, at min_child_weight 0 on both.
+        if param == "min_samples_leaf" and _r6_is(ours.get(param), 1) \
+                and _r6_is(theirs.get("min_child_weight"), 0.0) and _r6_is(ours.get("min_child_weight"), 0.0):
+            return ("no row-count floor beyond a non-empty child on either arm (XGBoost "
+                    "expand_entry.cuh:37-39; ours min_data_in_leaf 1)")
+        # smoke-fixes (2026-10-14; "nan_mode missing from xgboost-gpu read-back"): with no NaN in the
+        # data neither missing-value rule is read; XGBoost's dense matrix carries no missing gradient
+        # (src/tree/gpu_hist/evaluate_splits.cu:90-91). xgboost_arms refuses the arm by name when
+        # the data holds a NaN (tools/speed_gbdt_arm.py, NAN-INPUT).
+        if param == "nan_mode" and _r6_is(ours.get(param), "Min") and isinstance(theirs.get("missing"), float) \
+                and math.isnan(theirs["missing"]):
+            return "no NaN in the data (the driver refuses XGBoost otherwise): neither missing-value rule is read"
+        # smoke-fixes (2026-10-14; "random_strength missing from xgboost-gpu read-back"): ours 0.0
+        # adds no score noise; XGBoost has none (src/tree/param.h).
+        if param == "random_strength" and _r6_is(ours.get(param), 0.0):
+            return "no split-score noise on either arm (ours random_strength 0.0)"
+        # smoke-fixes (2026-10-14; "score_function missing from xgboost-gpu read-back"): NewtonL2 is
+        # sum G^2 / (H + lambda) over the children, XGBoost's CalcGain at reg_alpha 0 and
+        # max_delta_step 0 (src/tree/param.h:248-256); lane_config pins NewtonL2 for this reason.
+        if param == "score_function" and _r6_is(ours.get(param), "NewtonL2") and plain_leaf:
+            return "the Newton L2 gain on both (XGBoost param.h CalcGain, alpha 0, no clip)"
+        # smoke-fixes (2026-10-14; "use_pointwise_searcher missing from xgboost-gpu read-back"): ours
+        # False is its greedy depthwise/lossguide searcher (True is refused off SymmetricTree,
+        # ensemble.py:673); XGBoost has one hist grower.
+        if param == "use_pointwise_searcher" and ours.get(param) is False:
+            return "ours' greedy Depthwise/Lossguide searcher (the only one off SymmetricTree)"
+        return None
+    # lacks_ours: XGBoost scikit-learn fields ours has no name for
+    # smoke-fixes (2026-10-14; "base_score missing from ours read-back"): see boost_from_average.
+    if param == "base_score" and binary and _r6_is(theirs.get(param), 0.5) and ours.get("boost_from_average") is False:
+        return "margin 0 on both: XGBoost base_score 0.5 (logit 0, learner.cc:172-173), ours boost_from_average False"
+    # smoke-fixes (2026-10-14; "objective missing from ours read-back"): see loss.
+    if param == "objective" and binary:
+        return "binary log loss on both: XGBoost 'binary:logistic', ours 'Logloss'"
+    # smoke-fixes (2026-10-14; "callbacks, early_stopping_rounds, eval_metric missing from ours
+    # read-back"): no eval set; eval_metric is only evaluated on one (sklearn.py:447-503).
+    if param in ("callbacks", "early_stopping_rounds", "eval_metric") and theirs.get(param) is None and no_od:
+        return "no eval set, early stopping or callback on either arm"
+    # smoke-fixes (2026-10-14; "colsample_bylevel, feature_fraction_bynode, feature_weights missing
+    # from ours read-back"): no column sampling anywhere (ours feature_fraction 1.0, XGBoost every
+    # colsample 1.0); feature_weights is read by column sampling only (sklearn.py:404-408).
+    if param in ("colsample_bylevel", "feature_fraction_bynode") and no_col:
+        return "no column sampling on either arm (ours feature_fraction 1.0, XGBoost colsample_* 1.0)"
+    if param == "feature_weights" and theirs.get(param) is None and no_col:
+        return "feature_weights unset and unread: no column sampling on either arm"
+    # smoke-fixes (2026-10-14; "enable_categorical, feature_types, max_cat_threshold,
+    # max_cat_to_onehot missing from ours read-back"): no categorical columns on either arm; the
+    # max_cat_* knobs need enable_categorical (sklearn.py:410-432).
+    if param in ("enable_categorical", "feature_types", "max_cat_threshold", "max_cat_to_onehot") \
+            and xg_no_cats and theirs.get(param) in (None, False):
+        return "no categorical columns on either arm (XGBoost enable_categorical False, ours cat_features None)"
+    # smoke-fixes (2026-10-14; "interaction_constraints, monotone_constraints missing from ours
+    # read-back"): unset, so XGBoost applies no constraint; ours has none.
+    if param in ("interaction_constraints", "monotone_constraints") and theirs.get(param) is None:
+        return "no split constraints on either arm"
+    # smoke-fixes (2026-10-14; "max_delta_step, reg_alpha missing from ours read-back"): 0 disables
+    # XGBoost's leaf clip and L1 soft threshold (src/tree/param.h:216-264); ours has neither.
+    if param in ("max_delta_step", "reg_alpha") and _r6_is(theirs.get(param), 0.0):
+        return "%s 0: XGBoost's leaf weight and gain are -G/(H+lambda) and G^2/(H+lambda), as ours" % param
+    # smoke-fixes (2026-10-14; "missing missing from ours read-back"): see nan_mode.
+    if param == "missing" and isinstance(theirs.get(param), float) and math.isnan(theirs[param]) \
+            and _r6_is(ours.get("nan_mode"), "Min"):
+        return "NaN marks a missing value, and the data has none (the driver refuses XGBoost otherwise)"
+    # smoke-fixes (2026-10-14; "multi_strategy, num_parallel_tree missing from ours read-back"):
+    # None reaches XGBoost as its defaults (core.py:2357): one output per tree
+    # (learner.cc:309) for the one binary output, and one tree per round (gbm/gbtree_model.h:46).
+    if param == "multi_strategy" and theirs.get(param) is None and binary:
+        return "one binary output: XGBoost's default one_output_per_tree, one tree per round as ours"
+    if param == "num_parallel_tree" and theirs.get(param) in (None, 1):
+        return "one tree per boosting round on both (XGBoost num_parallel_tree default 1)"
+    # smoke-fixes (2026-10-14; "sampling_method missing from ours read-back"): subsample 1.0 builds
+    # no sampler whatever the method (src/tree/gpu_hist/sampler.cu:348-354).
+    if param == "sampling_method" and no_sampling and _r6_is(ours.get("bootstrap_type"), "No"):
+        return "no row sampling on either arm (XGBoost subsample 1.0, ours bootstrap_type 'No')"
+    # smoke-fixes (2026-10-14; "tree_method missing from ours read-back"): 'hist' is XGBoost's
+    # quantized-histogram grower, ours' only one; the bin count is compared as max_bin.
+    if param == "tree_method" and _r6_is(theirs.get(param), "hist"):
+        return "histogram growth on quantized features on both (bin count compared as max_bin)"
     return None
 
 
@@ -1065,6 +1334,8 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     why = _semantic_r5(lane, param, arm, ours, theirs, library)
     if why:
         return why
+    why = _semantic_r6(lane, param, arm, ours, theirs, library)
+    if why: return why
     # FAIRNESS FIX (2026-10-13 audit): optimizer defaults exposed by torch
     # were treated as absent algorithm settings on our narrower optimizer
     # API. Preserve the raw settings and explicitly distinguish the library's
