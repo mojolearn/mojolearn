@@ -225,6 +225,16 @@ def same_interpreter(words):
     return len(words) == 1 and os.path.abspath(words[0]) == os.path.abspath(sys.executable)
 
 
+def can_run_here(cmd, env):
+    """True when `cmd` under `env` can run as a function call in this process: the same interpreter and no
+    difference in the settings a process reads only at its start."""
+    try:
+        interp = split_command(cmd)[0]
+    except ValueError:
+        return False
+    return same_interpreter(interp) and not env_difference(env)["process_start"]
+
+
 def run_driver(cmd, env, log, cwd=ROOT):
     """The board's driver subprocess, as a function call: the driver's main(argv) under `env`, its output
     appended to `log`. Returns (returncode, environment record). A driver that needs another interpreter

@@ -3616,6 +3616,14 @@ OURS_INIT_KINDS = ("seqmodel", "cnnclf")
 NEURAL_KINDS = ("layer", "seqmodel", "cnnclf")
 
 
+def _smoke_inproc():
+    """tools/smoke_inproc.py, the campaign smoke's in-process seams (one module per process)."""
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import smoke_inproc
+    return smoke_inproc
+
+
 def _export_ours_init(args, lane, ds, tag, env_extra):
     """Run `ours-init` under OUR interpreter (untimed, before any worker): (npz path, None), or
     (None, the refusal reason)."""
@@ -3627,9 +3635,16 @@ def _export_ours_init(args, lane, ds, tag, env_extra):
     env = _worker_env("ours")
     env.update(env_extra)
     try:
-        with open(log, "w") as fh:
-            rc = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, env=env, cwd=REPO,
-                                timeout=args.ready_seconds).returncode
+        SI = _smoke_inproc() if getattr(args, "params_only", False) else None
+        if SI is not None and SI.in_process() and SI.can_run_here(cmd, env):
+            # the campaign smoke's worker process (tools/smoke_inproc.py): the same `ours-init` main, as a
+            # function call under ours' worker environment, its output in the same log
+            open(log, "w").close()
+            rc, _ = SI.run_driver(cmd, env, log, cwd=REPO)
+        else:
+            with open(log, "w") as fh:
+                rc = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, env=env, cwd=REPO,
+                                    timeout=args.ready_seconds).returncode
     except (OSError, subprocess.TimeoutExpired) as exc:
         rc = "%s: %s" % (type(exc).__name__, exc)
     if rc == 0 and os.path.isfile(path):
@@ -6591,21 +6606,15 @@ def _aft_capture_worker(args, B, D, rec, runner):
     }
 
 
-def worker(args):
+def worker_ready(args):
+    """The worker's ready stage: load the block, construct the arm, read its record back. Returns
+    (runner, B, rec, D, ab_config, message): the ready (or skipped/error) message; runner None unless ready. The worker
+    subprocess and the smoke's in-process probe (probe_ready) both run exactly this."""
     global _NEURAL_FIXTURES, _OURS_INIT
     # FAIRNESS FIX (2026-10-13 audit): the torch twins of the RNN/LSTM/GRU and CNN lanes read
     # ours' exported initial weights and row orders from here (_read_ours_init). Results raced
     # before this change were wrong for this lane; apply extra scrutiny.
     _OURS_INIT = getattr(args, "ours_init", None)
-    proto = os.fdopen(os.dup(1), "w", buffering=1)
-    os.dup2(2, 1)
-    sys.stdout = sys.stderr
-
-    def say(obj):
-        proto.write(json.dumps(obj, sort_keys=True, default=str) + "\n")
-        proto.flush()
-
-    np = _np()
     try:
         ab_config = _configure_neural_ab(getattr(args, "neural_ab_config", None), args.lane)
         if ab_config is not None and args.arm == "ours-fast":
@@ -6621,25 +6630,43 @@ def worker(args):
         D = lane_arrays(args.lane, B)
         runner = build(args.lane, args.arm, D)
     except Skipped as exc:
-        say({"event": "skipped", "reason": str(exc)})
-        return 0
-    except BaseException as exc:  # noqa: BLE001
+        return None, None, None, None, None, {"event": "skipped", "reason": str(exc)}
+    except (Exception, SystemExit) as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
         if getattr(exc, "infrastructure", False):   # e.g. neural fixtures missing on this box
-            say({"event": "error", "stage": "ready", "class": "infrastructure",
-                 "status": "not_ready", "error": str(exc)})
-            return 1
-        say({"event": "error", "stage": "ready", "error": repr(exc)})
-        return 1
+            return None, None, None, None, None, {"event": "error", "stage": "ready", "class": "infrastructure",
+                                                  "status": "not_ready", "error": str(exc)}
+        return None, None, None, None, None, {"event": "error", "stage": "ready", "error": repr(exc)}
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_tool("bench_board_probe").library_identity(runner.info))
         if ab_config is not None:
             runner.info["neural_ab_config"] = ab_config
             runner.info["neural_ab_lane_config"] = lane_config(args.lane)
             runner.info["neural_ab_binary_admission"] = "requested source flags only; not established by this config"
-    say({"event": "ready", "info": runner.info, "pid": os.getpid(),
-         "params_record": getattr(runner, "record", None)})
+    return runner, B, rec, D, ab_config, {"event": "ready", "info": runner.info, "pid": os.getpid(),
+                                          "params_record": getattr(runner, "record", None)}
+
+
+def probe_ready(argv):
+    """The smoke's in-process parameter probe (tools/smoke_inproc.py): a worker's argv, its ready message."""
+    return worker_ready(build_parser().parse_args(argv))[-1]
+
+
+def worker(args):
+    proto = os.fdopen(os.dup(1), "w", buffering=1)
+    os.dup2(2, 1)
+    sys.stdout = sys.stderr
+
+    def say(obj):
+        proto.write(json.dumps(obj, sort_keys=True, default=str) + "\n")
+        proto.flush()
+
+    np = _np()
+    runner, B, rec, D, ab_config, msg = worker_ready(args)
+    say(msg)
+    if runner is None:
+        return 0 if msg.get("event") == "skipped" else 1
     mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
     last = None
@@ -7489,7 +7516,8 @@ def race(args):
             cmd.append("--full-tree-workload")
         env = _worker_env(arm)
         env.update(env_extra)
-        workers[arm] = ctd.Worker(arm, cmd, env, os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO)
+        workers[arm] = ctd.start_worker(arm, cmd, env, os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO,
+                                        params_only=getattr(args, "params_only", False))
         result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [], "infer_ms": [],
                                "infer_warmup_ms": None, "digests": [], "mem": [], "status": "ok"}
     for arm, w in workers.items():
