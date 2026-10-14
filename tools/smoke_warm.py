@@ -591,7 +591,10 @@ def run_main(kind, target):
 def serve_main(args):
     report = dict(schema="mojolearn-smoke-warm/1", pid=os.getpid(), python=sys.executable,
                   launcher=args.launcher, started=time.time(), preloads={}, gpu_initialized_by=None)
-    preload(report, mojolearn_arch=args.mojolearn_arch)
+    if args.no_preload:
+        report["preloads"] = {}
+    else:
+        preload(report, mojolearn_arch=args.mojolearn_arch)
     report["import_seconds"] = round(time.time() - report["started"], 3)
     report["threads_after_preload"] = __import__("threading").active_count()
     if sys.platform.startswith("linux"):
@@ -620,6 +623,7 @@ def main(argv=None):
     s.add_argument("--sock", required=True)
     s.add_argument("--launcher", required=True)
     s.add_argument("--mojolearn-arch", help="name mojolearn's GPU arch for the server's own import (no cuInit)")
+    s.add_argument("--no-preload", action="store_true", help="serve without importing anything (tests)")
     args = ap.parse_args(argv)
     return serve_main(args)
 
