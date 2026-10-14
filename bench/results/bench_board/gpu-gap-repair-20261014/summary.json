@@ -310,7 +310,7 @@
       }
     }
   },
-  "code_commit": "dbc9b18c156d7ebcfbf94bdd7224f3b319eac6ab",
+  "code_commit": "f5a9d0fd4a5a5eed74eaa8ca341a6b3e66057f67",
   "cross_vendor_scored_hashes": {
     "MATCH": 25
   },
@@ -600,6 +600,244 @@
     "original_teardown_receipt": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-retired-first-rental.json",
     "repaired_by": "Four new AMD wave8 measurements with independently downloaded and verified scored output arrays",
     "required_outputs_missing_after_original_delete": true
+  },
+  "pca_inference_recovery": {
+    "checked_at": 1791963065.904364,
+    "results": [
+      {
+        "after": {
+          "admitted_opponents": [
+            "cuml-gpu"
+          ],
+          "date": "2026-10-14",
+          "opponent": "cuml-gpu",
+          "opponents": {
+            "cuml-gpu": {
+              "quality_comparison": [
+                {
+                  "batch": "Xq",
+                  "checks": [
+                    {
+                      "comparison": "both-reference-errors-at-most",
+                      "margin": 0.0001,
+                      "metric": "transform_max_rel_err_own_fp64",
+                      "observed": 1.0665570306895663e-07,
+                      "opponent": 1.0665570306895663e-07,
+                      "ours": 9.856602811496048e-08,
+                      "verdict": "PASS"
+                    }
+                  ],
+                  "failures": [],
+                  "interpretation": "engineering margin; not a statistical equivalence claim",
+                  "policy": "mojolearn.quality-parity.v6",
+                  "verdict": "PASS"
+                }
+              ],
+              "reason": "recorded effective settings and quality within declared margins",
+              "rerace": "",
+              "timing_comparison": {
+                "clock": "whole",
+                "kind": "preferred",
+                "label": "whole/whole",
+                "opponent_ms": 22.175054997205734,
+                "ours_ms": 18.270356580615044,
+                "preferred": "whole",
+                "value": 0.8239148260474339
+              },
+              "timing_comparisons": [
+                {
+                  "batch": "Xq",
+                  "batch_rows": 500000,
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 22.175054997205734,
+                  "ours_ms": 18.270356580615044,
+                  "preferred": "whole",
+                  "value": 0.8239148260474339
+                }
+              ],
+              "verdict": "MATCHED"
+            }
+          },
+          "ours_over_theirs": 0.824,
+          "pairing": "v2:41bd02a505a129101ac48a7b749533625bc42750442303a58f3016aa1b8ba3a7",
+          "reason": "recorded effective settings and quality within declared margins",
+          "rerace": "",
+          "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+          "verdict": "MATCHED"
+        },
+        "before": {
+          "admitted_opponents": [],
+          "date": "2026-10-14",
+          "opponent": null,
+          "opponents": {
+            "cuml-gpu": {
+              "quality_comparison": [
+                {
+                  "batch": "Xq",
+                  "checks": [],
+                  "failures": [],
+                  "interpretation": "engineering margin; not a statistical equivalence claim",
+                  "policy": "mojolearn.quality-parity.v4",
+                  "verdict": "INSUFFICIENT"
+                }
+              ],
+              "reason": "comparable quantitative quality evidence needs review",
+              "rerace": "x",
+              "timing_comparison": {
+                "clock": "whole",
+                "kind": "preferred",
+                "label": "whole/whole",
+                "opponent_ms": 22.175054997205734,
+                "ours_ms": 18.270356580615044,
+                "preferred": "whole",
+                "value": 0.8239148260474339
+              },
+              "timing_comparisons": [
+                {
+                  "batch": "Xq",
+                  "batch_rows": 500000,
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 22.175054997205734,
+                  "ours_ms": 18.270356580615044,
+                  "preferred": "whole",
+                  "value": 0.8239148260474339
+                }
+              ],
+              "verdict": "INSUFFICIENT"
+            }
+          },
+          "ours_over_theirs": null,
+          "pairing": "v2:829c8d3179a6a5ed77c5be98a290f9751287f41b26e8c27a6e299694c9e9a8dd",
+          "reason": "no opponent with sufficient valid comparison evidence",
+          "rerace": "x",
+          "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v4, 2026-10-14)",
+          "verdict": "INSUFFICIENT"
+        },
+        "recipe": "classical/pca/taxi/rows=full",
+        "source": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.taxi.rows=full/board.json"
+      },
+      {
+        "after": {
+          "admitted_opponents": [
+            "cuml-gpu"
+          ],
+          "date": "2026-10-14",
+          "opponent": "cuml-gpu",
+          "opponents": {
+            "cuml-gpu": {
+              "quality_comparison": [
+                {
+                  "batch": "Xq",
+                  "checks": [
+                    {
+                      "comparison": "both-reference-errors-at-most",
+                      "margin": 0.0001,
+                      "metric": "transform_max_rel_err_own_fp64",
+                      "observed": 3.694189775972141e-07,
+                      "opponent": 3.694189775972141e-07,
+                      "ours": 3.6901523558001156e-07,
+                      "verdict": "PASS"
+                    }
+                  ],
+                  "failures": [],
+                  "interpretation": "engineering margin; not a statistical equivalence claim",
+                  "policy": "mojolearn.quality-parity.v6",
+                  "verdict": "PASS"
+                }
+              ],
+              "reason": "recorded effective settings and quality within declared margins",
+              "rerace": "",
+              "timing_comparison": {
+                "clock": "whole",
+                "kind": "preferred",
+                "label": "whole/whole",
+                "opponent_ms": 281.5477531403303,
+                "ours_ms": 34.80738401412964,
+                "preferred": "whole",
+                "value": 0.12362870463676115
+              },
+              "timing_comparisons": [
+                {
+                  "batch": "Xq",
+                  "batch_rows": 500000,
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 281.5477531403303,
+                  "ours_ms": 34.80738401412964,
+                  "preferred": "whole",
+                  "value": 0.12362870463676115
+                }
+              ],
+              "verdict": "MATCHED"
+            }
+          },
+          "ours_over_theirs": 0.124,
+          "pairing": "v2:b2937264f06390f926598e92e6390717cfc37ccbeee55d5a6e50d9249fadae01",
+          "reason": "recorded effective settings and quality within declared margins",
+          "rerace": "",
+          "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+          "verdict": "MATCHED"
+        },
+        "before": {
+          "admitted_opponents": [],
+          "date": "2026-10-14",
+          "opponent": null,
+          "opponents": {
+            "cuml-gpu": {
+              "quality_comparison": [
+                {
+                  "batch": "Xq",
+                  "checks": [],
+                  "failures": [],
+                  "interpretation": "engineering margin; not a statistical equivalence claim",
+                  "policy": "mojolearn.quality-parity.v4",
+                  "verdict": "INSUFFICIENT"
+                }
+              ],
+              "reason": "comparable quantitative quality evidence needs review",
+              "rerace": "x",
+              "timing_comparison": {
+                "clock": "whole",
+                "kind": "preferred",
+                "label": "whole/whole",
+                "opponent_ms": 281.5477531403303,
+                "ours_ms": 34.80738401412964,
+                "preferred": "whole",
+                "value": 0.12362870463676115
+              },
+              "timing_comparisons": [
+                {
+                  "batch": "Xq",
+                  "batch_rows": 500000,
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 281.5477531403303,
+                  "ours_ms": 34.80738401412964,
+                  "preferred": "whole",
+                  "value": 0.12362870463676115
+                }
+              ],
+              "verdict": "INSUFFICIENT"
+            }
+          },
+          "ours_over_theirs": null,
+          "pairing": "v2:4ea5e906c8446b0d648c11112ab74a8817ffaba099fec8d0b2c1048dd055054a",
+          "reason": "no opponent with sufficient valid comparison evidence",
+          "rerace": "x",
+          "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v4, 2026-10-14)",
+          "verdict": "INSUFFICIENT"
+        },
+        "recipe": "classical/pca/istella/rows=full",
+        "source": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.istella.rows=full/board.json"
+      }
+    ],
+    "timings_changed": false
   },
   "providers": {
     "amd": {
@@ -2450,7 +2688,7 @@
       "updated_recipes": 45
     }
   },
-  "recorded_epoch": 1791962592.567271,
+  "recorded_epoch": 1791963144.7849321,
   "recorded_launch_freezes": {
     "amd-wave2-launch": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
     "amd-wave3-launch": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
@@ -2475,7 +2713,7 @@
   ],
   "retention": {
     "archive_transfer_closure_complete": false,
-    "checked_at": 1791962592.52541,
+    "checked_at": 1791963144.740049,
     "complete": false,
     "historical_missing_outputs_recoverable": false,
     "known_missing_required_outputs": {
@@ -3101,13 +3339,48 @@
         "session_finished_epoch": 1791961832.5285118
       },
       "nvidia-wave9": {
-        "archives": [],
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/ctd-data",
+              "/root/gpu-gap-cache/more-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_nvidia-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 3288391955,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/7b1cee5c003e287d891841484ee31ed09d674524c00d8ce92072a94a134c99eb.tar.gz",
+              "sha256": "7b1cee5c003e287d891841484ee31ed09d674524c00d8ce92072a94a134c99eb",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave9-evidence"
+            ],
+            "reference": {
+              "bytes": 84151650,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/7afb572ec822fe8e3c459561c23d4ffe0706eb9c14b4e7f54419a0870fd3a2f3.tar.gz",
+              "sha256": "7afb572ec822fe8e3c459561c23d4ffe0706eb9c14b4e7f54419a0870fd3a2f3",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
         "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/retention-closure.json",
-        "complete": false,
-        "per_run_verified_references": 0,
+        "complete": true,
+        "per_run_verified_references": 16,
         "process_returncode": 0,
         "remaining_workers": [],
-        "retention_finished_epoch": null,
+        "retention_finished_epoch": 1791962868.8979766,
         "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/session/session.json",
         "session_finished_epoch": 1791962472.1997952
       }
@@ -3135,6 +3408,7 @@
     "nvidia-l40s": 6
   },
   "validation": {
+    "board_format_verification": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/board-format-verification.json",
     "fairness_check_log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/board-audit-wave8.log",
     "focused_tests": {
       "exit_status": 0,
@@ -3147,6 +3421,11 @@
       "exit_status": 0,
       "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/no-host-routes-checker-tests.log",
       "passed_functions": 14
+    },
+    "inference_quality_alias_tests": {
+      "exit_status": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/inference-quality-alias-tests.log",
+      "passed": 138
     },
     "linalg_retention_quality_tests": {
       "exit_status": 0,

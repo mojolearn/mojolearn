@@ -9490,74 +9490,6 @@
   {
    "column": "nvidia-l40s",
    "failed": false,
-   "race": "classical/kde/istella/rows=full",
-   "reason": "older commit",
-   "replaced": {
-    "box": "nv2",
-    "commit_date": "2026-10-14T02:09:05Z",
-    "digest": "8b1a5abf1be6ebf0",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.kde.istella.rows=full/board.json",
-    "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "paired-b3755a268623d4a7c5c509dc226c965a57dfe6eb3c82d8157979c6ad05d9b861",
-    "kind": "paired",
-    "median_ms": 34.103088080883026,
-    "reason": null,
-    "sha": "0bfbd15c697e86d631a0cae9f6142d98d13bb96e",
-    "status": "ok",
-    "version": "0.8.44"
-   },
-   "replaced_by": {
-    "box": "nv2",
-    "commit_date": "2026-10-14T06:38:25Z",
-    "digest": "8b1a5abf1be6ebf0",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.kde.istella.rows=full/board.json",
-    "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "paired-74874a6f69764526d0f26e0d552b482006b953eb6802a3a01065f9c1fdec872b",
-    "kind": "paired",
-    "median_ms": 33.880291506648064,
-    "reason": null,
-    "sha": "2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0",
-    "status": "ok",
-    "version": "0.8.44"
-   }
-  },
-  {
-   "column": "nvidia-l40s",
-   "failed": false,
-   "race": "classical/kde/taxi/rows=full",
-   "reason": "older commit",
-   "replaced": {
-    "box": "nv2",
-    "commit_date": "2026-10-14T02:09:05Z",
-    "digest": "e50ed8b1ec7113e6",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.kde.taxi.rows=full/board.json",
-    "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "paired-d8b0da12bb492bc0a0abca8f1e9533e5ea0e7320a948449915c7277474014b35",
-    "kind": "paired",
-    "median_ms": 5.927514284849167,
-    "reason": null,
-    "sha": "0bfbd15c697e86d631a0cae9f6142d98d13bb96e",
-    "status": "ok",
-    "version": "0.8.44"
-   },
-   "replaced_by": {
-    "box": "nv2",
-    "commit_date": "2026-10-14T06:38:25Z",
-    "digest": "e50ed8b1ec7113e6",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.kde.taxi.rows=full/board.json",
-    "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "paired-dd01d8d9c31ecfbd85294b1ca8cdc4220444b69efd5aee3d3009af8c2786509a",
-    "kind": "paired",
-    "median_ms": 5.7208724319934845,
-    "reason": null,
-    "sha": "2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0",
-    "status": "ok",
-    "version": "0.8.44"
-   }
-  },
-  {
-   "column": "nvidia-l40s",
-   "failed": false,
    "race": "classical/kmeans/istella/rows=full",
    "reason": "older commit",
    "replaced": {
@@ -10106,40 +10038,6 @@
    "reason": "older commit",
    "replaced": {
     "box": "nv2",
-    "commit_date": "2026-10-14T02:09:05Z",
-    "digest": "3cc2b456a642ff2d",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.pca.istella.rows=full/board.json",
-    "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "paired-a509fd55f8a10eb7da40cc227edf4b4f7d155774b9f8bc851a24cadbf6ee910b",
-    "kind": "paired",
-    "median_ms": 101.31791979074478,
-    "reason": null,
-    "sha": "0bfbd15c697e86d631a0cae9f6142d98d13bb96e",
-    "status": "ok",
-    "version": "0.8.44"
-   },
-   "replaced_by": {
-    "box": "nv2",
-    "commit_date": "2026-10-14T06:38:25Z",
-    "digest": "3cc2b456a642ff2d",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.istella.rows=full/board.json",
-    "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "paired-1f349fba0c806514a7a72729720af0ab8c10f4f9c8e06afaca1dbdaa82cff05b",
-    "kind": "paired",
-    "median_ms": 104.56017963588238,
-    "reason": null,
-    "sha": "2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0",
-    "status": "ok",
-    "version": "0.8.44"
-   }
-  },
-  {
-   "column": "nvidia-l40s",
-   "failed": false,
-   "race": "classical/pca/istella/rows=full",
-   "reason": "older commit",
-   "replaced": {
-    "box": "nv2",
     "commit_date": "2026-10-10T19:03:04Z",
     "digest": "3cc2b456a642ff2d",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -10263,40 +10161,6 @@
     "job": "paired-1f349fba0c806514a7a72729720af0ab8c10f4f9c8e06afaca1dbdaa82cff05b",
     "kind": "paired",
     "median_ms": 104.56017963588238,
-    "reason": null,
-    "sha": "2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0",
-    "status": "ok",
-    "version": "0.8.44"
-   }
-  },
-  {
-   "column": "nvidia-l40s",
-   "failed": false,
-   "race": "classical/pca/taxi/rows=full",
-   "reason": "older commit",
-   "replaced": {
-    "box": "nv2",
-    "commit_date": "2026-10-14T02:09:05Z",
-    "digest": "187a68d332ae640a",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.pca.taxi.rows=full/board.json",
-    "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "paired-5e061dd8fd306f6ff1a2accc9b520ffbde821ebb02a52b5d92624d53f934d367",
-    "kind": "paired",
-    "median_ms": 9.769227355718613,
-    "reason": null,
-    "sha": "0bfbd15c697e86d631a0cae9f6142d98d13bb96e",
-    "status": "ok",
-    "version": "0.8.44"
-   },
-   "replaced_by": {
-    "box": "nv2",
-    "commit_date": "2026-10-14T06:38:25Z",
-    "digest": "187a68d332ae640a",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.taxi.rows=full/board.json",
-    "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "paired-2e3591f4c1a55a93dab37866200e52e883e6247f78886dd10771d8ec705510f6",
-    "kind": "paired",
-    "median_ms": 9.73854772746563,
     "reason": null,
     "sha": "2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0",
     "status": "ok",
@@ -12103,6 +11967,142 @@
     "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da",
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@444f0b96e)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "classical/kde/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T02:09:05Z",
+    "digest": "8b1a5abf1be6ebf0",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.kde.istella.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-b3755a268623d4a7c5c509dc226c965a57dfe6eb3c82d8157979c6ad05d9b861",
+    "kind": "paired",
+    "median_ms": 34.103088080883026,
+    "reason": null,
+    "sha": "0bfbd15c697e86d631a0cae9f6142d98d13bb96e",
+    "status": "ok",
+    "version": "0.8.44"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T06:38:25Z",
+    "digest": "8b1a5abf1be6ebf0",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.kde.istella.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-74874a6f69764526d0f26e0d552b482006b953eb6802a3a01065f9c1fdec872b",
+    "kind": "paired",
+    "median_ms": 33.880291506648064,
+    "reason": null,
+    "sha": "2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "classical/kde/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T02:09:05Z",
+    "digest": "e50ed8b1ec7113e6",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.kde.taxi.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-d8b0da12bb492bc0a0abca8f1e9533e5ea0e7320a948449915c7277474014b35",
+    "kind": "paired",
+    "median_ms": 5.927514284849167,
+    "reason": null,
+    "sha": "0bfbd15c697e86d631a0cae9f6142d98d13bb96e",
+    "status": "ok",
+    "version": "0.8.44"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T06:38:25Z",
+    "digest": "e50ed8b1ec7113e6",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.kde.taxi.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-dd01d8d9c31ecfbd85294b1ca8cdc4220444b69efd5aee3d3009af8c2786509a",
+    "kind": "paired",
+    "median_ms": 5.7208724319934845,
+    "reason": null,
+    "sha": "2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "classical/pca/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T02:09:05Z",
+    "digest": "3cc2b456a642ff2d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.pca.istella.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-a509fd55f8a10eb7da40cc227edf4b4f7d155774b9f8bc851a24cadbf6ee910b",
+    "kind": "paired",
+    "median_ms": 101.31791979074478,
+    "reason": null,
+    "sha": "0bfbd15c697e86d631a0cae9f6142d98d13bb96e",
+    "status": "ok",
+    "version": "0.8.44"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T06:38:25Z",
+    "digest": "3cc2b456a642ff2d",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.istella.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-1f349fba0c806514a7a72729720af0ab8c10f4f9c8e06afaca1dbdaa82cff05b",
+    "kind": "paired",
+    "median_ms": 104.56017963588238,
+    "reason": null,
+    "sha": "2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "classical/pca/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T02:09:05Z",
+    "digest": "187a68d332ae640a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/nvidia/repair3/measured/classical.pca.taxi.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-5e061dd8fd306f6ff1a2accc9b520ffbde821ebb02a52b5d92624d53f934d367",
+    "kind": "paired",
+    "median_ms": 9.769227355718613,
+    "reason": null,
+    "sha": "0bfbd15c697e86d631a0cae9f6142d98d13bb96e",
+    "status": "ok",
+    "version": "0.8.44"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T06:38:25Z",
+    "digest": "187a68d332ae640a",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.taxi.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-2e3591f4c1a55a93dab37866200e52e883e6247f78886dd10771d8ec705510f6",
+    "kind": "paired",
+    "median_ms": 9.73854772746563,
+    "reason": null,
+    "sha": "2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0",
+    "status": "ok",
+    "version": "0.8.44"
    }
   },
   {
@@ -20929,5 +20929,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-14T07:22:45Z"
+ "updated": "2026-10-14T07:31:49Z"
 }

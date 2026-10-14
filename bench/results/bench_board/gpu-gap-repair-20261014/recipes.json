@@ -1,5 +1,5 @@
 {
-  "date_epoch": 1791962487.2774951,
+  "date_epoch": 1791963144.346636,
   "scope": "All original 303 GPU-opponent recipes; newest preflight evidence only, not full timing or admission coverage",
   "vendors": {
     "amd": {
@@ -4979,7 +4979,7 @@
         "classical/pca/istella/rows=full": {
           "audit": {
             "identical/fit": "MATCHED",
-            "identical/infer": "INSUFFICIENT"
+            "identical/infer": "MATCHED"
           },
           "measurement_status": "done",
           "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.istella.rows=full/board.json",
@@ -4989,7 +4989,7 @@
         "classical/pca/taxi/rows=full": {
           "audit": {
             "identical/fit": "MATCHED",
-            "identical/infer": "INSUFFICIENT"
+            "identical/infer": "MATCHED"
           },
           "measurement_status": "done",
           "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.taxi.rows=full/board.json",
