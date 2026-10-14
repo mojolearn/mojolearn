@@ -1644,15 +1644,10 @@ def _build_cuml(lane, D, rec, S):
     return Runner(info, call, out, sync, params=probe, model_for_hash=lambda: S.get("est"))
 
 
-def worker(args):
-    proto = os.fdopen(os.dup(1), "w", buffering=1)
-    os.dup2(2, 1)
-    sys.stdout = sys.stderr
-
-    def say(obj):
-        proto.write(json.dumps(obj, sort_keys=True, default=str) + "\n")
-        proto.flush()
-
+def worker_ready(args):
+    """The worker's ready stage: load the block, construct the arm, read its parameters back. Returns
+    (runner, B, rec, message): the ready message, or an error message with runner None. The worker subprocess
+    and the smoke's in-process probe (probe_ready) both run exactly this."""
     np = _np()
     block = os.path.join(args.data, "%s-%s" % (block_of(args.lane), args.dataset))
     try:
@@ -1663,14 +1658,38 @@ def worker(args):
         runner = build(args.lane, args.arm, lane_arrays(args.lane, B, rec), rec)
         # the parameters this arm really got, read back from what it constructed
         params = _load("classical_two_datasets").params_record(runner.params)
-    except BaseException as exc:  # noqa: BLE001 (SystemExit from a missing arm too)
+    except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
-        say({"event": "error", "stage": "ready", "error": repr(exc)})
-        return 1
+        return None, None, None, {"event": "error", "stage": "ready", "error": repr(exc)}
+    except SystemExit as exc:  # a missing arm refuses by SystemExit
+        import traceback
+        traceback.print_exc()
+        return None, None, None, {"event": "error", "stage": "ready", "error": repr(exc)}
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_load("bench_board_probe").library_identity(runner.info))
-    say({"event": "ready", "info": runner.info, "pid": os.getpid(), "params": params})
+    return runner, B, rec, {"event": "ready", "info": runner.info, "pid": os.getpid(), "params": params}
+
+
+def probe_ready(argv):
+    """The smoke's in-process parameter probe (tools/smoke_inproc.py): a worker's argv, its ready message."""
+    return worker_ready(build_parser().parse_args(argv))[3]
+
+
+def worker(args):
+    proto = os.fdopen(os.dup(1), "w", buffering=1)
+    os.dup2(2, 1)
+    sys.stdout = sys.stderr
+
+    def say(obj):
+        proto.write(json.dumps(obj, sort_keys=True, default=str) + "\n")
+        proto.flush()
+
+    np = _np()
+    runner, B, rec, msg = worker_ready(args)
+    say(msg)
+    if runner is None:
+        return 1
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
@@ -2045,8 +2064,9 @@ def race(args):
         py = args.ours_python if arm in ("ours", "ours-fast") else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm, "--lane", lane,
                                  "--dataset", ds, "--data", args.data]
-        workers[arm] = ctd.Worker(arm, cmd, _worker_env(arm),
-                                  os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO)
+        workers[arm] = ctd.start_worker(arm, cmd, _worker_env(arm),
+                                        os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO,
+                                        params_only=getattr(args, "params_only", False))
         result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [], "digests": [],
                                "mem": [], "status": "ok"}
     for arm, w in workers.items():
