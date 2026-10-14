@@ -102,9 +102,11 @@ def test_warm_box_starts_each_other_modes_arm_server_under_the_key_the_conflicti
     assert started == []
 
 
-def test_the_campaign_asks_warm_box_for_every_planned_mode():
+def test_each_mode_worker_warms_only_its_own_mode():
+    # smoke-fixes 2026-10-14 (Apple b7): one worker per numeric mode, so each warm-box asks for its own mode only
+    # (no own-tier arm server for another mode); test_gpu_gap_campaign covers the per-mode workers
     src = open(os.path.join(HERE, "gpu_gap_campaign.py")).read()
-    assert "numeric_modes=sorted(plans)" in src
+    assert "numeric_modes=[mode]" in src and "numeric_modes=sorted(plans)" not in src
 
 
 # ---------------------------------------------------------------------------
