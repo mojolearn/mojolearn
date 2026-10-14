@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import numpy as np
+import json
 
 
 def load(name):
@@ -16,7 +17,8 @@ def test_gemm_input_bytes_shapes_seed_and_real_callable_are_compared():
     data=dict(a=np.ones((2,3),np.float32),b=np.ones((3,4),np.float32))
     a=N._gemm_record("gemm","mojolearn",own,data)
     b=N._gemm_record("gemm","torch",other,data)
-    report=P.check("gemm",dict(ours=a,opponent=b))
+    transported=json.loads(json.dumps({"ours":P.arm_record(a),"opponent":P.arm_record(b)}))
+    report=P.check("gemm",transported)
     assert report["verdict"]=="MATCHED"
     assert report["arms"]["opponent"]["implementation"]["module"]=="torch"
     assert report["arms"]["ours"]["params"]["seed"]==7

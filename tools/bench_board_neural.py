@@ -2680,8 +2680,13 @@ def worker(args):
         return 1
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_load("bench_board_probe").library_identity(runner.info))
+    record = getattr(runner, "record", None)
+    if record is not None:
+        # Resolve callable identity BEFORE JSON transport; default=str would
+        # erase the actual library function and leave an unusable repr.
+        record = _load("bench_board_params").arm_record(record)
     say({"event": "ready", "info": runner.info, "pid": os.getpid(),
-         "params_record": getattr(runner, "record", None),
+         "params_record": record,
          "neural_ab": _neural_ab_receipt(runner, ab_config)})
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
@@ -3085,7 +3090,7 @@ def race(args):
         result["quality"] = {"error": repr(exc)}
     mark_forward_quality_failures(result)
     try:
-        if lane in FORWARD_REFERENCE_LANES:
+        if getattr(args, "keep_outputs", False) or lane in FORWARD_REFERENCE_LANES:
             keep = os.path.join(args.out, "%s.inputs.npz" % tag)
             os.replace(data_path, keep)
             result["inputs_npz"] = keep

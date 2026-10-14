@@ -2054,7 +2054,7 @@ def neural_cmd(ctx, race):
            "--ours-python", shlex.quote(ctx["python"]),
            "--theirs-python", shlex.quote(ctx["python"]),
            "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
-           "--round-seconds", str(rsec)]
+           "--round-seconds", str(rsec), "--keep-outputs"]
     n = len(race["arms"])
     ceiling = 600 + rsec * n * 2 + rsec * ctx["rounds"] * n + 900
     cmd, ceiling = _compile_warmup(cmd, ceiling, race["arms"], rsec)

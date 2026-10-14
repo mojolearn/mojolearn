@@ -298,7 +298,7 @@ def seal(ctx, directory, recipe, rec):
     started = (directory / "recipe.json").stat().st_mtime
     for sub in ("logs", "raw"):
         for p in (Path(ctx["out"]) / sub).rglob("*"):
-            if p.is_file() and p.suffix in (".log", ".json") and p.stat().st_mtime >= started:
+            if p.is_file() and p.suffix in (".log", ".json", ".npz", ".npy", ".bin", ".safetensors", ".pt") and p.stat().st_mtime >= started:
                 members["run/" + str(p.relative_to(ctx["out"]))] = p.read_bytes()
     missing = []
     for field in ("log", "race_json"):
