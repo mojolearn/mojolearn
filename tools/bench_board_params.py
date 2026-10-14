@@ -1636,6 +1636,20 @@ def _semantic_r11(lane, param, arm, ours, theirs, library):
     return None
 
 
+def _semantic_r15(lane, param, arm, ours, theirs, library):
+    """smoke-fixes (2026-10-14; algos/als/taxi-zones: "use_gpu missing from ours read-back"): implicit's use_gpu
+    picks its CUDA or CPU class (implicit/als.py factory); the math either class runs is its least-squares solver,
+    now compared on every arm as use_cg and cg_steps (bench_board_algos.py als lane). Ours has no device argument
+    (the race places it). Fires only when both arms read back the same use_cg and cg_steps."""
+    if lane != "algos/als" or library != "implicit" or param != "use_gpu" or param in ours:
+        return None
+    if isinstance(theirs.get("use_gpu"), bool) and ours.get("use_cg") is not None \
+            and ours.get("use_cg") == theirs.get("use_cg") and ours.get("cg_steps") == theirs.get("cg_steps"):
+        return ("use_gpu only selects implicit's CUDA or CPU class; the solver both run is compared (use_cg=%s, "
+                "cg_steps=%s)" % (ours.get("use_cg"), ours.get("cg_steps")))
+    return None
+
+
 def semantic_exception(lane, param, arm, ours, theirs, library):
     """Source-reviewed inactive/fixed API settings, conditional on actual values.
 
@@ -1647,7 +1661,7 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     apply only to the named recipe, library and resolved settings.
     """
     # smoke-fixes (2026-10-14): the per-sub-lane source-reviewed mappings, each value-conditional and lane-named
-    for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_r7, _semantic_r8, _semantic_r11):
+    for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_r7, _semantic_r8, _semantic_r11, _semantic_r15):
         why = _mapping(lane, param, arm, ours, theirs, library)
         if why:
             return why

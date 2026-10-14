@@ -852,11 +852,18 @@ _add("min-cov-det", xlane="decomp", ours="MinCovDet", task="covariance", block="
      sub={"X": SUB["mid"]}, sk="sklearn.covariance:MinCovDet", params=dict(random_state=SEED))
 _add("als", xlane="decomp", ours=("ImplicitALS", "AlternatingLeastSquares", "ALS"), kind="als",
      task="als", block="counts", datasets=("taxi-zones", "text"),
-     params=dict(factors=64, regularization=0.01, alpha=1.0, iterations=15, use_cg=False, cg_steps=3,
+     # smoke-fixes (2026-10-14; algos/als/taxi-zones: "cg_steps, use_cg missing from implicit-gpu read-back"):
+     # implicit 0.7.x's GPU model has ONLY its conjugate-gradient solver, 3 steps per row (implicit/gpu/als.py
+     # __init__ self.cg_steps = 3; fit() passes it to solver.least_squares), while ours raced its exact
+     # solve (use_cg=False): different work. Every arm now runs the CG solver with 3 steps, set explicitly:
+     # ours use_cg=True, cg_steps=3 (_expansion_decomp.py AlternatingLeastSquares, implicit's
+     # _least_squares_cg; DEVIATION 5321), implicit-cpu use_cg=True (its cg_steps is the same fixed 3),
+     # implicit-gpu by construction; cg_steps is read back from each implicit model. BIT CHANGE for ours.
+     params=dict(factors=64, regularization=0.01, alpha=1.0, iterations=15, use_cg=True, cg_steps=3,
                  calculate_training_loss=False, random_state=SEED),
      other={"implicit-cpu": "implicit", "implicit-gpu": "implicit"},
-     mism=["implicit-gpu has only the conjugate-gradient solver (use_cg ignored there); ours and "
-           "implicit-cpu solve each least-squares step exactly (use_cg=False)",
+     mism=["every arm runs implicit's conjugate-gradient least squares, 3 steps per row (implicit-gpu has "
+           "only that solver; ours and implicit-cpu set use_cg=True, cg_steps=3)",
            "each library draws its own initial factors from random_state=7"],
      notes=["users x items = taxi (day, hour, pickup zone) x dropoff zone trip counts, and text "
             "documents x byte-bigram bins; one held-out interaction per user row for recall@10"])
@@ -6286,9 +6293,6 @@ def _build_als(lane, arm, D):
                iterations=p["iterations"], random_state=p["random_state"], use_gpu=gpu,
                calculate_training_loss=p["calculate_training_loss"])
     if not gpu:                        # implicit's GPU model has only its CG solver
-        # implicit 0.7.3 takes no cg_steps (its CG runs its own fixed steps);
-        # with use_cg=False on both sides no CG step runs, so ours' cg_steps
-        # has no effect either
         akw.update(use_cg=p["use_cg"])
     # smoke-fixes (2026-10-14; algos/als/taxi-zones: "missing real library implementation read-back:
     # implicit-gpu"): implicit.als.AlternatingLeastSquares is a factory that returns
@@ -6299,6 +6303,13 @@ def _build_als(lane, arm, D):
     else:
         import implicit.cpu.als as impl_mod
     rec = dict(akw, __library__="implicit", __implementation__=impl_mod.AlternatingLeastSquares)
+    # read back the solver the model really runs: implicit's cg_steps attribute (fixed 3, no argument; v0.7.x
+    # gpu/als.py and cpu/als.py __init__), and use_cg (the GPU model's only solver is CG; the CPU model's
+    # use_cg as passed). Constructing the model allocates nothing on the device.
+    probe = AlternatingLeastSquares(**akw)
+    rec.update(cg_steps=getattr(probe, "cg_steps", None),
+               use_cg=True if gpu else bool(getattr(probe, "use_cg", akw.get("use_cg"))))
+    del probe
 
     def fit():
         m = AlternatingLeastSquares(**akw)
