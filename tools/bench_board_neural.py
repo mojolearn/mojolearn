@@ -1047,6 +1047,19 @@ def _ours_record(lane, config_readback=None):
     return rec
 
 
+def _gemm_record(lane, library, implementation, data):
+    """Witness the actual library callable and the shared input values, untimed."""
+    # FAIRNESS FIX (2026-10-13 audit): GEMM previously reported no work
+    # parameters and no function identity, so an empty comparison could pass.
+    import numpy as np
+    arrays = {k: np.ascontiguousarray(data[k]) for k in ("a", "b")}
+    return dict(__library__=library, __implementation__=implementation, seed=SEED,
+                operation="matmul", transpose_b=lane == "gemm-int8",
+                operand_value_type={"gemm":"float32", "gemm-bf16":"bfloat16", "gemm-int8":"int8"}[lane],
+                input_arrays={k: dict(shape=list(a.shape), dtype=str(a.dtype), sha256=_sha(a.tobytes()))
+                              for k, a in arrays.items()})
+
+
 def _read_neural_ab_config(path):
     """Read selected source-arm metadata; this never builds or admits a binary."""
     if not path:
@@ -1242,11 +1255,12 @@ class OursGEMM(Ours):
         self.identical = mode == "identical"
         self.info = _ours_info(ml, getattr(linalg, "__file__", None), mode)
         self.info.update(profile=linalg.PROFILE, call=LANE_TEXT[lane][0])
-        self.record = _ours_record(lane)
+        self.library_call = {"gemm": linalg.matmul, "gemm-bf16": linalg.matmul_bf16,
+                             "gemm-int8": linalg.matmul_int8}[lane]
+        self.record = _gemm_record(lane, "mojolearn", self.library_call, data)
 
     def call(self):
-        fn = {"gemm": self.linalg.matmul, "gemm-bf16": self.linalg.matmul_bf16,
-              "gemm-int8": self.linalg.matmul_int8}[self.lane]
+        fn = self.library_call
         if self.lane == "gemm":
             # matmul's default identical=True refuses a FAST binary (require_identical);
             # the ours-fast arm asks for the FAST route explicitly, ours keeps the default.
@@ -1738,6 +1752,8 @@ class TorchArm:
                 rec["betas"] = list(rec["betas"])
         else:
             rec.update(self.block_consts)
+        if MODEL_OF[lane] == "gemm":
+            rec = _gemm_record(lane, "torch", self.library_call, data)
         if MODEL_OF[lane] == "samba":
             rec.update(dropout=SAMBA_DROPOUT, max_grad_norm=None if self.train else "n/a")
         self.record = rec
@@ -1793,9 +1809,11 @@ class TorchArm:
         if self.lane == "gemm-int8":
             if self.kind != "cuda" or getattr(torch.version, "hip", None):
                 raise RuntimeError("REFUSED: torch._int_mm is a CUDA kernel; not on %s" % self.kind)
-            self.module = self._module({}, lambda p, a, b: torch._int_mm(a, b.t()))
+            self.library_call = torch._int_mm
+            self.module = self._module({}, lambda p, a, b: self.library_call(a, b.t()))
             return
-        self.module = self._module({}, lambda p, a, b: a @ b)
+        self.library_call = torch.matmul
+        self.module = self._module({}, lambda p, a, b: self.library_call(a, b))
 
     def _build_lm(self):
         # FAIRNESS FIX (2026-10-13 audit): this arm ran tools/torch_lm_step_opponent.py's
