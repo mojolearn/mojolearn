@@ -382,6 +382,7 @@ def seal(ctx, directory, recipe, rec):
                               readback_source=(params or {}).get("source"),
                               note="Observed library object/function and effective settings; exact call site is in the retained source archive."),
                           seed=(params or {}).get("params", {}).get("seed"),
+                          iteration_receipts=cell.get("iteration_receipts"),
                           parameter_exceptions=[e for e in (rec.get("params") or {}).get("exceptions", [])
                                                 if e.get("arm") == cell.get("arm")],
                           hardware=witnessed[0].get("hardware") if witnessed else None,

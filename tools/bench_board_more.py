@@ -1708,6 +1708,7 @@ def worker(args):
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "iterations": _load("bench_board_probe").iteration_receipt(runner.params),
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -2057,6 +2058,8 @@ def race(args):
                 result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
             if msg.get("state_receipt") is not None:
                 result["arms"][arm].setdefault("state_receipts", []).append(msg["state_receipt"])
+            if r > 0:
+                result["arms"][arm].setdefault("iteration_receipts", []).append(msg.get("iterations"))
             result["arms"][arm]["mem"].append(msg.get("mem"))
             print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)

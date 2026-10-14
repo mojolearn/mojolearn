@@ -24,6 +24,13 @@ P = load("bench_board_params")
 
 
 class Evidence(unittest.TestCase):
+    def test_actual_iterations_are_not_inferred_from_a_limit(self):
+        from types import SimpleNamespace
+        probe=load("bench_board_probe")
+        self.assertEqual(probe.iteration_receipt(SimpleNamespace(max_iter=1000))["status"],"unavailable")
+        self.assertEqual(probe.iteration_receipt(SimpleNamespace(n_iter_=[17]))["values"],[17])
+        self.assertEqual(probe.iteration_receipt(SimpleNamespace(n_iter_=[1.5]))["status"],"unavailable")
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)

@@ -138,6 +138,22 @@ class _RusageV4(object):
 TORCH_LIBRARIES = ("torch", "gpytorch", "torch_geometric", "torch-geometric", "mamba-ssm", "mamba_ssm")
 
 
+def iteration_receipt(model):
+    """Read actual fitted iterations after the clock; never substitute the cap."""
+    try:
+        value = getattr(model, "n_iter_")
+        if hasattr(value, "get"):
+            value = value.get()
+        import numpy as np
+        array = np.asarray(value).reshape(-1)
+        values = [int(x) for x in array]
+        if not values or any(x < 0 or x != y for x, y in zip(values, array)):
+            raise ValueError("invalid iteration count")
+        return dict(status="recorded", attribute="n_iter_", values=values)
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return dict(status="unavailable", reason="actual fitted iterations not exposed")
+
+
 class MemProbe(object):
     """Per-round peak memory of this process, sampled around the timed call.
 

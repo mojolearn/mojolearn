@@ -174,6 +174,23 @@ def _pair_problems(race, ours, opp):
     if a is not None and b is not None and a != b:
         bad.append("iterations differ: ours %s, %s %s" % (a, opp.get("arm"), b))
     po, pt = _parameters(race, ours), _parameters(race, opp)
+    # New paired runs must witness executed iterations, not infer them from
+    # matching caps/tolerances. Historical accepted evidence is not rerun.
+    if any(c.get("measurement") for c in (ours, opp)) and any(
+            k in po or k in pt for k in ("max_iter", "maxiter", "n_iter", "n_iters")):
+        actual = []
+        for cell in (ours, opp):
+            receipts = cell.get("iteration_receipts") or []
+            if receipts and len(receipts) == cell.get("rounds") and all(
+                    r and r.get("status") == "recorded" and r.get("values") for r in receipts):
+                actual.append([r["values"] for r in receipts])
+            elif n_iter(cell) is not None:
+                actual.append(n_iter(cell))
+            else:
+                actual.append(None)
+                missing.append("actual executed iterations not recorded: " + str(cell.get("arm")))
+        if all(v is not None for v in actual) and actual[0] != actual[1]:
+            bad.append("executed iteration receipts differ: %r vs %r" % tuple(actual))
     exceptions = list((race.get("params") or {}).get("exceptions") or [])
     exceptions.extend((opp.get("measurement") or {}).get("parameter_exceptions") or [])
     allowed = {e.get("param") for e in exceptions if e.get("arm") == opp.get("arm") and e.get("reason")}

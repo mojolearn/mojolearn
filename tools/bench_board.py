@@ -2146,7 +2146,8 @@ def classical_cells(ctx, race, r):
             # recorded beside the timed median. Results raced before this change were wrong for
             # this lane; apply extra scrutiny.
             cell.update(compile_warmup_ms=a["compile_warmup_ms"],
-                        warmup_deadline_s=a.get("warmup_deadline_s"))
+                        warmup_deadline_s=a.get("warmup_deadline_s"),
+                        iteration_receipts=a.get("iteration_receipts"))
         if a.get("not_opponent") and arm_library(arm) != "mojolearn":
             cell.update(mode="context", not_opponent=a["not_opponent"],
                         verdict="NOT-AN-OPPONENT(%s)" % a["not_opponent"])

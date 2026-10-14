@@ -146,8 +146,9 @@ STUB_NEURAL = textwrap.dedent(r'''
               # FAIRNESS FIX (2026-10-13 audit): a compile arm's own warm-up deadline
               "--compile-warmup-seconds"):
         p.add_argument(f)
+    p.add_argument("--keep-outputs", action="store_true")
     a = p.parse_args()
-    assert a.cmd == "race" and a.ours_python and a.theirs_python
+    assert a.cmd == "race" and a.ours_python and a.theirs_python and a.keep_outputs
     with open(os.environ["STUB_CALLS"], "a") as fh:
         fh.write("neural %s %s %s\n" % (a.lane, a.shape, a.arms))
     if os.environ.get("STUB_FAIL") == a.lane:

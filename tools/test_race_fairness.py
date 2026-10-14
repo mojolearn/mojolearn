@@ -29,6 +29,21 @@ def board(**races):
 
 
 class RaceFairness(unittest.TestCase):
+    def test_new_iterative_measurements_need_executed_counts(self):
+        rr=race("linearsvr",[("lib",10,{})])
+        for c in rr["cells"]:
+            c.update(rounds=1,params={"params":{"max_iter":1000}},
+                     measurement={"completeness":"complete","source":{"status":"verified"},
+                                  "artifacts":{"status":"verified"}})
+        bad,missing,_=RF._pair_problems(rr,*rr["cells"])
+        self.assertFalse(bad)
+        self.assertTrue(any("iterations not recorded" in s for s in missing))
+        for c in rr["cells"]:
+            c["iteration_receipts"]=[dict(status="recorded",values=[17])]
+        self.assertEqual(RF._pair_problems(rr,*rr["cells"])[:2],([],[]))
+        rr["cells"][1]["iteration_receipts"][0]["values"]=[18]
+        self.assertTrue(any("iteration receipts differ" in s for s in RF._pair_problems(rr,*rr["cells"])[0]))
+
     def test_harness_arm_is_excluded_and_the_race_judged_on_the_rest(self):
         b = board(r=race("pca", [("torch-gpu", 1.0, {"library": "torch"}), ("cuml-gpu", 10.0, {"library": "cuml"})]))
         RF.apply(b, None, "2026-10-13")
