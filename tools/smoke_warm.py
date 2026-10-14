@@ -241,7 +241,11 @@ def preload(report, mojolearn_arch=None):
                     mod = importlib.import_module(name)
                     rec.update(status="ok", version=_version(mod), file=getattr(mod, "__file__", None))
                 except ImportError as exc:
-                    rec.update(status="absent" if kind == "library" else "failed", error=repr(exc)[:400])
+                    # absent = the package is not installed; an installed package that fails to import (a
+                    # missing system library such as hipVS's libopenblas.so.0) is a failure
+                    absent = isinstance(exc, ModuleNotFoundError) and (exc.name or "") == name.split(".")[0]
+                    rec.update(status="absent" if kind == "library" and absent else "failed",
+                               error=repr(exc)[:400])
                 except BaseException as exc:  # noqa: BLE001 - recorded; a library may raise anything
                     rec.update(status="failed", error=repr(exc)[:400])
                 finally:
