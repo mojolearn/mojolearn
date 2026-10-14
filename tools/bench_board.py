@@ -4087,6 +4087,9 @@ def build_parser():
                    help="with --preflight-only: also run each race's quality-scorer preflight in the parameter "
                         "probe (untimed; the heavy algos references are deferred to the timed race) and refuse "
                         "the race when it fails (tools/gpu_gap_campaign.py --smoke)")
+    p.add_argument("--box-checked", default=None, metavar="RECEIPT",
+                   help="with --preflight-only: the wheel and GPU-set checks already passed once on this box "
+                        "(tools/gpu_gap_campaign.py --smoke names its smoke.json); skip repeating them")
     p.add_argument("--measurement-source", default=None, metavar="JSON",
                    help="with --preflight-only: reuse this retained source snapshot {source, inventory} "
                         "(tools/gpu_gap_campaign.py --smoke writes it once)")
@@ -4432,12 +4435,18 @@ def main(argv=None):
 
     python, wheel = setup_python(args, vendor, out, os.path.join(out, "logs", "setup.log"))
     arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
-    pypi_wheel, why = pypi_wheel_guard(args, python, vendor)
+    box_checked = bool(getattr(args, "box_checked", None)) and args.preflight_only
+    if getattr(args, "box_checked", None) and not args.preflight_only:
+        raise SystemExit("bench_board: --box-checked is for --preflight-only runs")
+    # preflight smoke (2026-10-14): the campaign smoke checks the PyPI wheel and our GPU set ONCE per box and
+    # names its receipt here; each recipe's preflight-only process then reaches its parameter probe sooner.
+    # Timed runs always check both themselves.
+    pypi_wheel, why = (None, None) if box_checked else pypi_wheel_guard(args, python, vendor)
     if why:
         raise SystemExit("bench_board: REFUSING to time ours: " + why)
     if pypi_wheel:
         wheel = pypi_wheel        # with the fresh loaded-from receipt
-    why = None if getattr(args, "opponents_only", False) else gpu_set_refusal(python, vendor)
+    why = None if getattr(args, "opponents_only", False) or box_checked else gpu_set_refusal(python, vendor)
     if why:
         raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "
                          "so every race would refuse our arm:\n%s" % (vendor, why))
@@ -4533,6 +4542,7 @@ def main(argv=None):
                         "retime_opponents": ctx["retime"],
                         "gpu_opponents_only": args.gpu_opponents_only,
                         "preflight_only": args.preflight_only,
+                        "box_checked": getattr(args, "box_checked", None),
                         "opponents_only": args.opponents_only,
                         "retime_cpu_opponents": args.retime_cpu_opponents,
                         "smoke_check": bool(args.smoke), "shard": args.shard,
