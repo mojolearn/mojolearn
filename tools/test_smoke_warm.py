@@ -92,8 +92,8 @@ def test_timeout_kills_the_recipe_and_end_reaps_what_it_left(server, tmp_path):
     sock, launcher = server
     marker = tmp_path / "late"
     code = ("import subprocess, sys, time; "
-            "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(3); open(%r, \"w\").close()'], "
-            "start_new_session=True); time.sleep(30)" % str(marker))
+            "subprocess.Popen([sys.executable, '-c', %r], start_new_session=True); time.sleep(30)"
+            % ("import time; time.sleep(3); open(%r, 'w').close()" % str(marker)))
     rc, seconds = C.run_bounded([str(launcher), "-c", code], tmp_path / "log", 1.0)
     assert rc is None and seconds < 10
     stats = W.control(sock, "end")
