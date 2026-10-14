@@ -452,3 +452,65 @@ def test_sklearn_dbscan_min_samples_is_not_transformed():
     """Only scikit-learn's HDBSCAN is keyed: its DBSCAN counts the point, as ours does."""
     assert BP.library_of(_est("sklearn.cluster._dbscan", "DBSCAN", min_samples=2)) == "sklearn"
     assert BP.library_of(_est("sklearn.cluster._hdbscan.hdbscan", "HDBSCAN")) == "sklearn/HDBSCAN"
+
+
+def test_paired_lane_compares_each_opponent_with_its_own_configuration():
+    # smoke-fixes r13 (Andrew 2026-10-14, tools/board_pairing.py): on gbdt-lossguide CatBoost GPU is
+    # checked against `ours` (min_split_gain None, no gain check) and XGBoost against `ours-gain0`
+    # (0.0, a strictly positive gain, its gamma 0); neither against the other configuration.
+    arms = _matched()
+    for obj in arms.values():
+        obj._p["grow_policy"] = "Lossguide"
+    gain0 = _est("mojolearn.ensemble", "GradientBoosting", **dict(arms["ours"]._p, min_split_gain=0.0))
+    arms["ours"]._p["min_split_gain"] = None
+    arms["xgboost-cpu"]._p["gamma"] = 0.0
+    arms = {"ours": arms["ours"], "ours-gain0": gain0, "catboost-gpu": arms["catboost-cpu"],
+            "xgboost-gpu": arms["xgboost-cpu"]}
+    pairing = {"ours": ["catboost-gpu"], "ours-gain0": ["xgboost-*"]}
+    rep = BP.check("gbdt-lossguide", arms, pairing=pairing)
+    assert rep["references"] == {"catboost-gpu": "ours", "xgboost-gpu": "ours-gain0"}
+    assert not [p for p in rep["problems"] if "min_split_gain" in p], rep["problems"]
+    row = next(r for r in rep["compared"] if r["arm"] == "xgboost-gpu" and r["param"] == "min_split_gain")
+    assert (row["ours"], row["theirs"], row["same"], row["reference"]) == (0.0, 0.0, True, "ours-gain0")
+    gap = next(r for r in rep["exceptions"] if r["arm"] == "catboost-gpu" and r["param"] == "min_split_gain")
+    assert gap["ours"] is None and gap["reference"] == "ours"
+    # without the pairing XGBoost meets ours' None (and CatBoost would meet 0.0): refused by name
+    rep = BP.check("gbdt-lossguide", arms)
+    assert [p for p in rep["problems"] if p.startswith("xgboost-gpu: min_split_gain")], rep["problems"]
+
+
+def _prebinned_pair(record_ours, record_theirs):
+    arms = _matched()
+    ours = _est("mojolearn.ensemble", "GradientBoosting",
+                **dict(arms["ours"]._p, feature_border_type="GreedyLogSum", border_build_max_samples=0))
+    xgb = arms["xgboost-cpu"]
+    for obj, rec in ((ours, record_ours), (xgb, record_theirs)):
+        if rec is not None:
+            obj._board_input_binning = rec
+    return {"ours": arms["ours"], "ours-prebinned": ours, "xgboost-gpu": xgb}
+
+
+def test_prebinned_xgboost_pairing_maps_border_fields_only_on_the_same_bins():
+    # smoke-fixes r13 (Andrew 2026-10-14, DECISIONS.md decision 1): XGBoost has no
+    # feature_border_type / border_build_max_samples; on gbdt-depthwise/-lossguide they are mapped
+    # only when both arms read back the same pre-binned input record (its bins' sha256 inside)
+    pairing = {"ours": ["catboost-*"], "ours-prebinned": ["xgboost-*"]}
+    rec = "pre-binned input on both arms (GreedyLogSum, 254 borders); bins sha256 " + "ab" * 32
+    rep = BP.check("gbdt-depthwise", _prebinned_pair(rec, rec), pairing=pairing)
+    assert rep["references"] == {"xgboost-gpu": "ours-prebinned"}
+    assert rep["arms"]["xgboost-gpu"]["params"]["input_binning"] == rec
+    assert not [p for p in rep["problems"] if "border" in p or "input_binning" in p], rep["problems"]
+    mapped = {r["param"] for r in rep["exceptions"] if r["arm"] == "xgboost-gpu"}
+    assert {"feature_border_type", "border_build_max_samples"} <= mapped
+    row = next(r for r in rep["compared"] if r["param"] == "input_binning")
+    assert row["same"] and row["reference"] == "ours-prebinned"
+    # other bins: the record itself differs and the border fields stay unmapped
+    other = rec.replace("ab" * 32, "cd" * 32)
+    rep = BP.check("gbdt-depthwise", _prebinned_pair(rec, other), pairing=pairing)
+    assert [p for p in rep["problems"] if p.startswith("xgboost-gpu: input_binning")]
+    assert [p for p in rep["problems"] if "feature_border_type missing" in p]
+    # raw input on both: still refused by name
+    rep = BP.check("gbdt-depthwise", _prebinned_pair(None, None), pairing=pairing)
+    assert [p for p in rep["problems"] if "feature_border_type missing" in p]
+    assert [p for p in rep["problems"] if "border_build_max_samples missing" in p]
+

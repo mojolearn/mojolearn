@@ -76,6 +76,10 @@ import json
 import os
 import sys
 
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import board_pairing as PAIR  # noqa: E402  (smoke-fixes r13: which own cell an opponent pairs with)
+
 #: Opponent libraries whose GPU column is compared on the kernel-only clock
 #: (AGENTS.md item 6: "torch ratios use the kernel-only clock"). A library
 #: using torch internally does not inherit the torch-column exception.
@@ -230,12 +234,14 @@ def pair_ratio(ours_clock, opp_clock, opp_cell):
     return {"value": None, "clock": None, "kind": "none", "preferred": pref, "label": "-"}
 
 
-def _ours(cells, mode):
-    for c in cells:
-        if c.get("library") == "mojolearn" and c.get("mode") == mode and _ok_median(c) is not None \
-                and c.get("device") != "cpu":
-            return c
-    return None
+def _ours(cells, mode, opponent=None):
+    """Our completed GPU cell of `mode`; with `opponent`, the one paired with it
+    (tools/board_pairing.py: a paired race compares each opponent with its own configuration only)."""
+    mine = [c for c in cells if c.get("library") == "mojolearn" and c.get("mode") == mode
+            and _ok_median(c) is not None and c.get("device") != "cpu"]
+    if opponent is not None:
+        return PAIR.paired_ours(mine, opponent)
+    return mine[0] if mine else None
 
 
 def annotate_cells(cells):
@@ -248,11 +254,10 @@ def annotate_cells(cells):
     for c in cells:
         groups.setdefault(c.get("batch") if _phase(c) == "infer" else None, []).append(c)
     for g in groups.values():
-        ours = {m: _ours(g, m) for m in ("identical", "fast")}
         for c in g:
             for m in ("identical", "fast"):
                 c["ratio_ours_%s_clock" % m] = None
-                o = ours[m]
+                o = None if c.get("library") == "mojolearn" else _ours(g, m, c)
                 # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a
                 # column (tools/board_hardware.py sets hardware_comparable False on a row of other hardware).
                 if c.get("library") == "mojolearn" or o is None or _ok_median(c) is None \
@@ -313,7 +318,7 @@ def audit_board(name, result):
                         r = c.get("ratio_ours_%s_clock" % mode)
                         if not r:
                             continue
-                        ours = _ours([x for x in cells if x.get("batch") == c.get("batch")], mode)
+                        ours = _ours([x for x in cells if x.get("batch") == c.get("batch")], mode, c)
                         pairs.append({"race": rid, "phase": row["phase"], "batch": c.get("batch"),
                                       "arm": c.get("arm"), "library": c.get("library"), "ours_mode": mode,
                                       "preferred": r["preferred"], "kind": r["kind"], "label": r["label"],

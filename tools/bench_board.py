@@ -667,6 +667,11 @@ HW = _load_tool("board_hardware")
 # lane harness-evidence (2026-10-14): which recorded quality errors are scorer failures, and the call line per arm
 BQ = _load_tool("board_quality")
 CALLS = _load_tool("race_call_line")
+# smoke-fixes r13 (Andrew 2026-10-14): lanes racing more than one explicit own configuration, each
+# paired with the opponents it matches (standard library only)
+PAIR = _load_tool("board_pairing")
+#: every own arm a paired lane adds beside `ours` (an own arm: library mojolearn)
+PAIRED_OWN_ARMS = frozenset(a for t in PAIR.OUR_PAIRINGS.values() for a in t if a != "ours")
 
 
 def _bb():
@@ -741,8 +746,14 @@ def our_arms(family, modes, lane=None):
         return {"ours": "identical"} if "identical" in modes else {}
     if family == "trees":
         if modes == ["fast", "identical"]:
-            return {"ours": "identical", "ours-ab": "fast"}
-        return {"ours": modes[0]}
+            out = {"ours": "identical", "ours-ab": "fast"}
+        else:
+            out = {"ours": modes[0]}
+        # smoke-fixes r13: a paired lane's other own configurations (tools/board_pairing.py), in
+        # the primary arm's mode; the driver builds each of them beside `ours`
+        for arm in PAIR.extra_own_arms(lane):
+            out[arm] = out["ours"]
+        return out
     out = {}
     if "identical" in modes:
         out["ours"] = "identical"
@@ -871,6 +882,9 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                     "opponents": list(opp),
                     "arms": list(ours) + list(opp),
                 })
+                if fam == "trees" and PAIR.lane_pairing(lane):
+                    # {own arm: [opponent arm globs]}: each opponent is compared with its own arm only
+                    races[-1]["our_pairing"] = PAIR.lane_pairing(lane)
     for race in races:
         unsupported = unsupported_our_arms(race)
         if unsupported:
@@ -906,7 +920,7 @@ def plan_summary(races):
 # ---------------------------------------------------------------------------
 
 def arm_library(arm):
-    if arm in ("ours", "ours-ab", "ours-fast", "ours-base", CPU_ARM):
+    if arm in ("ours", "ours-ab", "ours-fast", "ours-base", CPU_ARM) or arm in PAIRED_OWN_ARMS:
         return "mojolearn"
     head = arm.split("-", 1)[0]
     # FAIRNESS FIX (2026-10-13 audit): the mamba-ssm-* arms (mamba_ssm's own kernels) are
@@ -2483,7 +2497,18 @@ def base_cell(ctx, race, arm, mode):
         "comparability": {},
         # peak memory over the timed rounds; the method is in `memory`
         "peak_host_mb": None, "peak_gpu_mb": None, "memory": {},
+        **_pairs_with(race, arm, lib),
     }
+
+
+def _pairs_with(race, arm, lib):
+    """{"pairs_with": [opponent arm globs]} for an own cell of a paired race (smoke-fixes r13,
+    tools/board_pairing.py), else {}. `ours-ab` is `ours` with one key changed, so it pairs as `ours`."""
+    pairing = race.get("our_pairing") or {}
+    if lib != "mojolearn" or not pairing:
+        return {}
+    globs = pairing.get("ours" if arm == "ours-ab" else arm)
+    return {PAIR.PAIRS_FIELD: list(globs)} if globs is not None else {}
 
 
 _SETTINGS_CACHE = {}
@@ -2565,8 +2590,10 @@ def add_ratios(cells):
     # a "not-scored" cell is timed in full; quality is shown, never gated (Andrew, 2026-10-14)
     # a "recompiled-in-clock" cell too: shown with its ratio, flagged (Andrew, 2026-10-14)
     ok = [c for c in cells if c["status"] in TIMED_STATUSES and c["median_ms"]]
-    ours_id = ours_of(ok, "identical")
-    ours_fast = ours_of(ok, "fast")
+    # smoke-fixes r13: on a paired race (own cells carrying `pairs_with`, tools/board_pairing.py) each
+    # opponent is divided into its own paired cell only; elsewhere the first own cell of the mode
+    mine = {m: [c for c in ok if c["library"] == "mojolearn" and not is_our_cpu_cell(c) and c["mode"] == m]
+            for m in ("identical", "fast")}
     done = {id(c) for c in ok}
     for c in cells:
         c["ratio_ours_identical_over"] = None
@@ -2581,10 +2608,16 @@ def add_ratios(cells):
         # before this change were wrong for this lane; apply extra scrutiny.
         if c.get("mode") == "context":
             continue
+        ours_id = PAIR.paired_ours(mine["identical"], c)
+        ours_fast = PAIR.paired_ours(mine["fast"], c)
         if ours_id and c is not ours_id:
             c["ratio_ours_identical_over"] = ours_id["median_ms"] / c["median_ms"]
         if ours_fast and c is not ours_fast:
             c["ratio_ours_fast_over"] = ours_fast["median_ms"] / c["median_ms"]
+        if (ours_id or ours_fast) and any(PAIR.PAIRS_FIELD in o for o in (ours_id, ours_fast) if o):
+            c["ratio_ours_arm"] = {m: o["arm"] for m, o in (("identical", ours_id), ("fast", ours_fast)) if o}
+        else:
+            c.pop("ratio_ours_arm", None)
     return cells
 
 
@@ -2879,7 +2912,7 @@ def preflight_check(ctx, race, arms):
     try:
         # Only the source-reviewed central exceptions apply. A probe cannot
         # grant itself an exception by emitting a reason string.
-        report = P.check(lane, records, family=race["family"])
+        report = P.check(lane, records, family=race["family"], pairing=race.get("our_pairing"))
     except P.ParamsRefused as exc:
         report = dict(verdict="REFUSED", arms=records, problems=[str(exc)], exceptions=[])
     report["problems"].extend("missing parameter/version probe: " + a for a in missing)
@@ -3563,6 +3596,10 @@ def _q(q):
 
 def _arm_label(c):
     if c["library"] == "mojolearn":
+        if c.get(PAIR.PAIRS_FIELD) is not None:
+            # smoke-fixes r13: a paired own configuration names itself and the opponents it is compared with
+            return "mojolearn %s (%s, vs %s)" % ((c["mode"] or "?").upper(), c["arm"],
+                                                  ", ".join(c[PAIR.PAIRS_FIELD]))
         return "mojolearn %s" % (c["mode"] or "?").upper()
     return c["arm"]
 
@@ -3808,12 +3845,15 @@ def render_board(result):
             fast = ours_of(rc, "fast")
             ident = ours_of(rc, "identical")
             opps = [c for c in rc if c["library"] != "mojolearn"]
+            # smoke-fixes r13: a paired race's other own configurations, by name, beside the opponents
+            others = [c for c in rc if c["library"] == "mojolearn" and c is not fast and c is not ident
+                      and not is_our_cpu_cell(c)]
             q = lambda c: _f((c.get("quality") or {}).get(m), 6) if c else "-"   # noqa: E731
             L.append("| %s | %s | %s | %s%s | %s | %s | %s |" % (
                 races[rid]["family"], races[rid]["lane"], races[rid]["dataset"], m,
                 (" (%s)" % QUALITY_NOTE[m]) if m in QUALITY_NOTE else "",
                 q(fast), q(ident),
-                "; ".join("%s %s" % (c["arm"], q(c)) for c in opps) or "-"))
+                "; ".join("%s %s" % (c["arm"], q(c)) for c in others + opps) or "-"))
     L.append("")
     L.extend(INFER.render_glance(_bb(), races))
     L.extend(render_neural_headline(races))
@@ -4003,7 +4043,7 @@ SMOKE_SCHEMA = "mojolearn-bench-board-smoke/1"
 SMOKE_STEP_S = 300
 SMOKE_ROWS = 2000
 #: The board and driver files a smoke result vouches for (with the vendor).
-SMOKE_FILE_GLOBS = ("tools/bench_board*.py", "tools/speed_gbdt_arm.py",
+SMOKE_FILE_GLOBS = ("tools/bench_board*.py", "tools/speed_gbdt_arm.py", "tools/board_pairing.py",
                     "tools/classical_two_datasets.py", "bench/speed/forest_speed_arm.py")
 #: Arms the plan races although they refuse by name on that vendor. A smoke
 #: race passes with such an arm only when its cell is a named REFUSED(...).

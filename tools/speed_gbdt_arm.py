@@ -154,6 +154,8 @@ import time
 
 import numpy as np
 
+import board_pairing                  # noqa: E402  (tools/; the own-arm pairing table, no numpy)
+
 FAMILY = "forest"
 
 #: Accuracy tolerance between two arms of the SAME library, as a relative
@@ -2030,6 +2032,11 @@ def lane_config(lane, size):
                          None), which grew ours past CatBoost on taxi
                          Lossguide (6239 against 5743). Ours now takes 0.0 on
                          Depthwise and Lossguide.
+                         smoke-fixes r13 (Andrew 2026-10-14): CatBoost GPU
+                         Lossguide has no gain check at all, so gbdt-lossguide
+                         races two own arms (tools/board_pairing.py): `ours`
+                         at None against catboost-gpu, `ours-gain0` at 0.0
+                         against xgboost-*.
       leaf estimation    Newton, ONE iteration on ours and CatBoost: the one
                          Newton step XGBoost and LightGBM take. CatBoost's
                          Logloss default is 10, cut to 1 on taxi by
@@ -2210,6 +2217,17 @@ def lane_config(lane, size):
             # GPU learner accepts for a non-pairwise loss, catboost_options.cpp:638, a check of
             # the VALUE against the default, option.h:68).
             cfg.update(border_build_max_samples=200000, feature_fraction=1.0)
+        if lane in board_pairing.OUR_PAIRINGS:
+            # smoke-fixes r13 (Andrew 2026-10-14, DECISIONS.md decisions 1 and 2): this lane races
+            # more than one explicit own configuration, each paired with the one opponent library it matches
+            # (tools/board_pairing.py OUR_PAIRINGS). Each arm's settings override the lane values
+            # above on that arm only, are passed explicitly and read back; the parameter check, the
+            # ratios and the fairness rows compare each own arm with its own opponents only.
+            cfg["our_pairings"] = {
+                arm: dict(opponents=list(p["opponents"]), settings=dict(p["settings"]), why=p["why"],
+                          input_binning=(PREBIN_RECORD % cfg["borders"]) if p.get("prebinned")
+                          else "raw input (each arm bins it with its own border rule)")
+                for arm, p in board_pairing.OUR_PAIRINGS[lane].items()}
         return cfg
     if lane in ("rf", "et"):
         cfg = dict(common)
@@ -2365,6 +2383,12 @@ class Arm(object):
         self.sync = sync or (lambda: None)
         #: Arms sharing a library are cross-checked for accuracy agreement.
         self.library = library or name.split("-")[0]
+        #: The agreement check's group (default: the library). An own arm of a paired lane
+        #: (tools/board_pairing.py) runs another configuration on purpose and is its own group.
+        self.agreement_group = None
+        #: The block this arm fits and is scored on, when it is not the race's (attach_input:
+        #: the pre-binned input of an XGBoost pairing). None: the race's data.
+        self.data = None
         #: Set by `run` after the last round: what this arm's FITTED MODEL
         #: turned out to be (trees, nodes, leaves, depth), read back through
         #: the library's own API. See FIT EQUIVALENCE below.
@@ -2389,6 +2413,111 @@ def _blocking(name):
     tells you which arms were checked and which were assumed."""
     del name
     return None
+
+
+# ---- Pre-binned input (smoke-fixes r13) --------------------------------------
+
+#: ours' border-search sample, its GradientBoosting default (python/mojolearn/ensemble.py:1180,
+#: CatBoost's MaxSubsetSizeForBuildBorders, data_processing_options.cpp:37)
+BORDER_SAMPLE_ROWS = 200000
+#: the input_binning record both arms of an XGBoost pairing read back (tools/board_pairing.py)
+PREBIN_RECORD = "pre-binned input on both arms (GreedyLogSum, %d borders)"
+
+
+def prebinned_data(lane, data, cfg):
+    """`data` with every feature value replaced by its GreedyLogSum bin id (train AND test rows),
+    computed once per dataset and process (Andrew 2026-10-14, DECISIONS.md decision 1), outside
+    every clock. Both arms of the XGBoost pairing on gbdt-depthwise / gbdt-lossguide
+    (tools/board_pairing.py `prebinned`) fit and are scored on it; the CatBoost pairings keep the
+    raw rows.
+
+    The borders are ours' rule, CatBoost's GreedyLogSum (ours matches CatBoost 1.2.10's borders bit
+    for bit, checks/border_types_check.mojo), built by CatBoost's own Pool.quantize as the harness's
+    border oracles do (tools/greedylogsum_oracle.py, tools/border_types_oracle.py): this file
+    imports nothing from mojolearn, so the opponent-only process computes the same matrix. Same
+    settings as ours' fit: cfg's border count (254) and border type, nan_mode, a 200,000-row
+    border sample drawn with the lane's seed. A value's bin id is the number of borders below it
+    (ours' and CatBoost's `value > border` rule). Every feature then holds at most 255 distinct
+    values, each its own bin on both arms: ours at 254 borders over every row
+    (border_build_max_samples 0), XGBoost at max_bin 255 (>= the distinct values, checked here).
+
+    Returns a shallow copy of `data` carrying `input_binning` (the read-back record, with the
+    sha256 of the borders and both binned blocks) and `bins_sha256`. Raises by name on
+    categorical columns or NaN (neither arm's binning of them is the other's)."""
+    cached = getattr(data, "_prebinned", None)
+    if cached is not None:
+        return cached
+    import copy
+    import tempfile
+    if data.cat_idx:
+        raise RuntimeError("PREBIN: declared categorical columns are not pre-binned")
+    if np.isnan(data.X_train).any() or np.isnan(data.X_test).any():
+        raise RuntimeError("PREBIN NAN-INPUT: the data holds NaN; a missing value has no bin id "
+                           "both arms read the same way")
+    import catboost
+    n_borders = int(cfg["borders"])
+    pool = catboost.Pool(np.ascontiguousarray(data.X_train, dtype=np.float32))
+    pool.quantize(border_count=n_borders, feature_border_type=cfg["feature_border_type"],
+                  nan_mode=cfg["nan_mode"], random_seed=int(cfg["seed"]),
+                  dev_max_subset_size_for_build_borders=BORDER_SAMPLE_ROWS)
+    n_feat = data.X_train.shape[1]
+    borders = [[] for _ in range(n_feat)]
+    with tempfile.TemporaryDirectory() as td:
+        path = os.path.join(td, "borders.tsv")
+        pool.save_quantization_borders(path)
+        with open(path) as fh:
+            for line in fh:
+                fields = line.split("\t")
+                if len(fields) >= 2 and fields[0].strip():
+                    borders[int(fields[0])].append(float(fields[1]))
+    del pool
+    borders = [np.unique(np.asarray(b, dtype=np.float32)) for b in borders]
+
+    def binned(x):
+        out = np.empty(x.shape, dtype=np.float32)
+        for f in range(n_feat):
+            out[:, f] = np.searchsorted(borders[f], np.asarray(x[:, f], dtype=np.float32), side="left")
+        return out
+
+    x_train, x_test = binned(data.X_train), binned(data.X_test)
+    widest = max((len(b) + 1 for b in borders), default=1)
+    if widest > n_borders + 1:
+        raise RuntimeError("PREBIN: %d bins on one feature, more than XGBoost's max_bin %d"
+                           % (widest, n_borders + 1))
+    h = hashlib.sha256()
+    for b in borders:
+        h.update(np.int64(len(b)).tobytes())
+        h.update(b.tobytes())
+    h.update(np.ascontiguousarray(x_train).tobytes())
+    h.update(np.ascontiguousarray(x_test).tobytes())
+    sha = h.hexdigest()
+    pb = copy.copy(data)
+    for k in ("_ours_X", "_ours_Xtest", "_ours_y", "_prebinned"):
+        pb.__dict__.pop(k, None)
+    pb.X_train, pb.X_test = x_train, x_test
+    pb.bins_sha256 = sha
+    pb.input_binning = "%s; bins sha256 %s" % (PREBIN_RECORD % n_borders, sha)
+    data._prebinned = pb
+    emit_note(lane, ["*"], "input_binning", float(widest),
+              "%s for the XGBoost pairing (CatBoost %s Pool.quantize, %d-row border sample, seed %d; "
+              "at most %d bins per feature; the CatBoost pairings take the raw rows)"
+              % (pb.input_binning, catboost.__version__, BORDER_SAMPLE_ROWS, int(cfg["seed"]), widest))
+    return pb
+
+
+def attach_input(arm, pb):
+    """Give `arm` the pre-binned block `pb`: the runner fits and scores it on `arm.data`, and every
+    constructed estimator carries the read-back field `input_binning` (tools/bench_board_params.py
+    read_params) so the parameter check compares the two arms' records."""
+    arm.data = pb
+    make = arm.make
+
+    def tagged():
+        model = make()
+        model._board_input_binning = pb.input_binning
+        return model
+    arm.make = tagged
+    return arm
 
 
 # ---- CatBoost -------------------------------------------------------------
@@ -2797,14 +2926,21 @@ def xgboost_arms(lane, cfg, data, devices):
         if why:
             emit_refused(lane, "xgboost-" + dev, why)
             continue
-        out.append(Arm(
+        arm = Arm(
             "xgboost-" + dev,
             (lambda dv: (lambda: make(dv)))(device),
             _fit,
             _score,
             sync=_cuda_sync,
             library="xgboost",
-        ))
+        )
+        if board_pairing.prebinned_arm(lane, arm.name):
+            # smoke-fixes r13 (Andrew 2026-10-14, DECISIONS.md decision 1): the XGBoost pairing of
+            # gbdt-depthwise / gbdt-lossguide fits and is scored on the same pre-binned block as its
+            # own arm (prebinned_data, once per dataset, before any clock); max_bin 255 >= the at
+            # most 255 bin ids per feature, so every bin id is its own bin.
+            attach_input(arm, prebinned_data(lane, data, cfg))
+        out.append(arm)
     return out
 
 
@@ -4260,7 +4396,7 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
                     operation_prepare(arm, data)
                 t0 = time.perf_counter()
                 model = arm.make()
-                arm.fit(model, data)
+                arm.fit(model, arm.data or data)
                 arm.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
         except Exception as exc:                   # noqa: BLE001
@@ -4301,7 +4437,7 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
                         operation_prepare(arm, data)
                     t0 = time.perf_counter()
                     model = arm.make()
-                    arm.fit(model, data)
+                    arm.fit(model, arm.data or data)
                     arm.sync()
                     ms = (time.perf_counter() - t0) * 1000.0
             except Exception as exc:               # noqa: BLE001
@@ -4314,7 +4450,7 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
             last_model[arm.name] = model
             digest = None
             try:
-                triples = arm.score(model, data)
+                triples = arm.score(model, arm.data or data)
                 if operation_capture:
                     # AFT source-only integration: consume every requested
                     # scored output, while keeping the historical fit clock.
@@ -4345,10 +4481,10 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
         if model is None:
             continue
         try:
-            final_triples = operation_scores[arm.name] if operation_capture and arm.name in operation_scores else arm.score(model, data)
+            final_triples = operation_scores[arm.name] if operation_capture and arm.name in operation_scores else arm.score(model, arm.data or data)
             for metric, value, _ in final_triples:
                 emit_acc(lane, arm.name, metric, value)
-                scores.setdefault((arm.library, metric), []).append(
+                scores.setdefault((arm.agreement_group or arm.library, metric), []).append(
                     (arm.name, value))
         except Exception as exc:                   # noqa: BLE001
             emit_refused(lane, arm.name, "%s while scoring: %s"

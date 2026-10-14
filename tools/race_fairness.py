@@ -32,6 +32,7 @@ if os.path.dirname(__file__) not in sys.path:
     sys.path.insert(0, os.path.dirname(__file__))
 import board_quality as BQ
 import board_clock_audit as BC
+import board_pairing as PAIR
 
 TIE_BAND = (0.95, 1.05)
 
@@ -81,6 +82,20 @@ def our_arm(mode):
     return "ours-fast" if mode == "fast" else "ours"
 
 
+def is_own(cell, mode):
+    """Our cell of one row: `our_arm(mode)`, or (smoke-fixes r13, tools/board_pairing.py) any own
+    configuration of a paired race in that mode, each compared with its own opponents only."""
+    if cell.get("arm") == our_arm(mode):
+        return True
+    return (cell.get(PAIR.PAIRS_FIELD) is not None and cell.get("library") == "mojolearn"
+            and cell.get("mode") == mode)
+
+
+def own_cells_for(our_cells, arm):
+    """The own cells an opponent `arm` is compared with (all of them on an unpaired race)."""
+    return [c for c in our_cells if PAIR.pairs(c, arm)]
+
+
 def n_iter(cell):
     q = (cell or {}).get("quality") or {}
     for k in ("n_iter", "n_iter_", "iterations", "n_steps"):
@@ -94,18 +109,18 @@ def legacy_pairing(race, mode, phase):
     rows = sorted((str(c.get("arm")), str(c.get("status")),
                    round(c["median_ms"], 6) if isinstance(c.get("median_ms"), (int, float)) else None)
                   for c in phase_cells(race, phase)
-                  if c.get("arm") == our_arm(mode) or c.get("mode") == "opponent")
+                  if is_own(c, mode) or c.get("mode") == "opponent")
     return hashlib.sha256(json.dumps(rows).encode()).hexdigest()[:16]
 
 
 def pairing(race, mode, phase, observations_only=False):
     """Bind approval to actual evidence, never just unchanged median times."""
     cells = sorted((c for c in phase_cells(race, phase)
-                    if c.get("arm") == our_arm(mode) or c.get("mode") == "opponent"),
+                    if is_own(c, mode) or c.get("mode") == "opponent"),
                    key=lambda c: str(c.get("arm")))
     # Computed display ratios are not observations and can change on rebuild.
     ignored = {"ratio_ours_identical_over", "ratio_ours_fast_over", "ratio_ours_identical_clock",
-               "ratio_ours_fast_clock", "clock", "constructor_call", "call_source"}
+               "ratio_ours_fast_clock", "clock", "constructor_call", "call_source", "ratio_ours_arm"}
     # The readable call line (lane harness-evidence, 2026-10-14) is derived from the recorded invocation, not an
     # observation. A fit cell never carried `call` before it; an inference cell's `call` (what its clock ran)
     # predates it and stays part of the evidence.
@@ -269,24 +284,30 @@ def fairness_rule(race, mode, phase, today, prior=None):
     """The entry for a row no audit covers, or None when there is no row (no our cell, or no completed opponent that
     is not excluded)."""
     cells = phase_cells(race, phase)
-    our_cells = [c for c in cells if c.get("arm") == our_arm(mode)]
-    ours = next(iter(our_cells), None)
+    all_own = [c for c in cells if is_own(c, mode)]
+    ours = next(iter(all_own), None)
     excluded = set((race.get("opponents_excluded") or {}).get("arms") or [])
     # A timed opponent whose scorer failed is judged (INSUFFICIENT, "quality not scored"), not silently dropped.
     opps = [c for c in cells if c.get("mode") == "opponent" and (completed(c) or timed_not_scored(c))
             and c.get("arm") not in excluded]
     if ours is None:
         return None
-    judged, admitted = {}, []
+    judged, admitted, paired_own = {}, [], {}
     def batch(c):
         return c.get("batch"), c.get("batch_rows")
     for arm in sorted({c["arm"] for c in opps}):
         group = [c for c in opps if c["arm"] == arm]
-        opp = next((c for c in group if batch(c) == batch(ours)), group[0])
+        # smoke-fixes r13: on a paired race only the own configuration paired with this opponent
+        our_cells = own_cells_for(all_own, arm)
+        mine = next(iter(our_cells), ours)
+        opp = next((c for c in group if batch(c) == batch(mine)), group[0])
         arm = opp["arm"]
         bad, missing, readback = [], [], True
         quality_checks, timing_checks = [], []
-        for candidate in group:
+        if not our_cells:
+            missing.append("no own configuration is paired with this opponent (tools/board_pairing.py)")
+            readback = False
+        for candidate in (group if our_cells else ()):
             own = next((c for c in our_cells if batch(c) == batch(candidate)), None)
             if own is None:
                 missing.append("no matching inference batch")
@@ -341,7 +362,14 @@ def fairness_rule(race, mode, phase, today, prior=None):
         not_scored = sorted({n for q in quality_checks for n in q.get("not_scored") or []})
         if not_scored:
             row["quality_note"] = "; ".join(not_scored)
-        row["timing_comparison"] = BC.pair_ratio(BC.cell_clock(ours), BC.cell_clock(opp), opp)
+        own_main = next((c for c in our_cells if batch(c) == batch(opp)), our_cells[0]) if our_cells else None
+        paired_own[arm] = own_main
+        row["timing_comparison"] = (BC.pair_ratio(BC.cell_clock(own_main), BC.cell_clock(opp), opp)
+                                    if own_main is not None else
+                                    dict(value=None, kind="unpaired", preferred=None,
+                                         label="no own configuration is paired with this opponent"))
+        if own_main is not None and own_main.get(PAIR.PAIRS_FIELD) is not None:
+            row["ours_arm"] = own_main.get("arm")
         row["timing_comparisons"] = timing_checks
         if superseded:
             row["superseded_iteration_audit"] = superseded
@@ -352,8 +380,9 @@ def fairness_rule(race, mode, phase, today, prior=None):
             admitted.append(opp)
     best = max([c for c in admitted if c.get("device") == "gpu"] or admitted,
                key=lambda c: judged[c["arm"]]["timing_comparison"]["value"]) if admitted else None
+    best_own = paired_own.get(best["arm"]) if best else None
     ratio = (judged[best["arm"]]["timing_comparison"]["value"]
-             if (completed(ours) or timed_not_scored(ours)) and best else None)
+             if best and best_own is not None and (completed(best_own) or timed_not_scored(best_own)) else None)
     entry = {"rule": "race_fairness.fairness_rule (%s, shown not gated; %s, 2026-10-14)" % (BQ.POLICY, BC.POLICY), "date": today, "opponent": best.get("arm") if best else None,
              "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
              "pairing": pairing(race, mode, phase), "opponents": judged,
@@ -422,7 +451,8 @@ def apply(board, prev=None, today=None, upgrade_legacy=False):
                                     and finding.get("verdict") in ("FAIR", "TIE", "MATCHED")):
                                 continue
                             subsets = [dict(r, **{field: [c for c in phase_cells(r, phase)
-                                if c.get("arm") in (our_arm(mode), arm)]}) for r in (rr, prev_rr)]
+                                if c.get("arm") == arm or (is_own(c, mode) and PAIR.pairs(c, arm))]})
+                                for r in (rr, prev_rr)]
                             if pairing(subsets[0], mode, phase, True) == pairing(subsets[1], mode, phase, True):
                                 unchanged[arm] = finding
                         if unchanged:
@@ -457,8 +487,9 @@ def review(board):
                     continue
                 mode, phase = key.split("/")
                 cells = phase_cells(rr, phase)
-                ours = next((c for c in cells if c.get("arm") == our_arm(mode)), None)
                 opp = next((c for c in cells if c.get("arm") == e.get("opponent")), None)
+                ours = next(iter(own_cells_for([c for c in cells if is_own(c, mode)],
+                                               e.get("opponent"))), None)
                 if ours is None or opp is None or opp.get("arm") in excluded:
                     continue
                 signs = []

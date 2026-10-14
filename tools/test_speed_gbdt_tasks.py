@@ -396,3 +396,30 @@ def test_xgboost_gpu_refuses_without_the_vendor_backend(monkeypatch, capsys, ven
     # (depthwise trees with LambdaMART or sampled pairs against oblivious YetiRank/PairLogit).
     with pytest.raises(RuntimeError, match="DIFFERENT-ALGORITHM"):
         spec.xgboost_rank_arms("gbdt-rank-yetirank", {}, None, ["cpu", "gpu"])
+
+
+def test_prebinned_input_is_one_block_for_both_arms_of_the_xgboost_pairing():
+    # smoke-fixes r13 (Andrew 2026-10-14, DECISIONS.md decision 1): gbdt-depthwise/-lossguide give
+    # the XGBoost pairing (ours-prebinned / ours-gain0 and xgboost-*) the same GreedyLogSum bin ids,
+    # once per dataset, with the bins' sha256 in the read-back record; CatBoost keeps the raw rows
+    pytest.importorskip("catboost")
+    rng = np.random.default_rng(0)
+    x = np.round(rng.normal(size=(4000, 3)) * 50).astype(np.float32)
+    x[:, 2] = 1.0
+    xt = np.round(rng.normal(size=(500, 3)) * 50).astype(np.float32)
+    y = (rng.random(4000) > .5).astype(np.float32)
+    d = spec.Data("toy", x, xt, y, (rng.random(500) > .5).astype(np.float32), "binary")
+    cfg = spec.lane_config("gbdt-lossguide", "shipped")
+    pb = spec.prebinned_data("gbdt-lossguide", d, cfg)
+    assert spec.prebinned_data("gbdt-lossguide", d, cfg) is pb              # once per dataset
+    assert d.X_train is x and pb.X_train is not x and pb.y_train is y
+    assert pb.input_binning.startswith(spec.PREBIN_RECORD % 254) and pb.bins_sha256 in pb.input_binning
+    assert all(len(np.unique(pb.X_train[:, f])) <= 255 for f in range(3)) and set(np.unique(pb.X_train[:, 2])) == {0.0}
+    again = spec.prebinned_data("gbdt-lossguide", spec.Data("toy", x.copy(), xt.copy(), y, d.y_test, "binary"), cfg)
+    assert again.bins_sha256 == pb.bins_sha256
+    arm = spec.attach_input(spec.Arm("xgboost-gpu", lambda: types.SimpleNamespace(), None, None), pb)
+    assert arm.data is pb and arm.make()._board_input_binning == pb.input_binning
+    with pytest.raises(RuntimeError, match="NAN-INPUT"):
+        xn = x.copy()
+        xn[0, 0] = np.nan
+        spec.prebinned_data("gbdt-lossguide", spec.Data("toy", xn, xt, y, d.y_test, "binary"), cfg)

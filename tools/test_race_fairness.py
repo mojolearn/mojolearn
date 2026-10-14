@@ -365,5 +365,29 @@ class RaceFairness(unittest.TestCase):
         self.assertNotEqual(RF.pairing(rr, "identical", "infer"), p)
 
 
+    def test_paired_race_judges_each_opponent_against_its_own_configuration(self):
+        # smoke-fixes r13 (tools/board_pairing.py): gbdt-lossguide `ours` (no gain check) pairs with
+        # catboost-gpu only, `ours-gain0` (gain > 0) with xgboost-* only
+        rr = race("gbdt-lossguide", [("catboost-gpu", 50, {"library": "catboost"}),
+                                     ("xgboost-gpu", 30, {"library": "xgboost"})], ours_ms=100)
+        rr["cells"][0].update(library="mojolearn", pairs_with=["catboost-gpu"])
+        rr["cells"].insert(1, dict(copy.deepcopy(rr["cells"][0]), arm="ours-gain0", median_ms=60.0,
+                                   pairs_with=["xgboost-*"]))
+        RF.apply(board(r=rr))
+        a = rr["audit"]["identical/fit"]
+        self.assertEqual(a["opponents"]["catboost-gpu"]["timing_comparison"]["value"], 2.0)
+        self.assertEqual(a["opponents"]["xgboost-gpu"]["timing_comparison"]["value"], 2.0)
+        self.assertEqual(a["opponents"]["xgboost-gpu"]["ours_arm"], "ours-gain0")
+        self.assertEqual(a["opponents"]["catboost-gpu"]["ours_arm"], "ours")
+        self.assertEqual(a["ours_over_theirs"], 2.0)
+        # an opponent no own configuration lists is judged INSUFFICIENT, never paired with another
+        rr = race("gbdt-lossguide", [("lightgbm-cuda", 10, {"library": "lightgbm"})], ours_ms=100)
+        rr["cells"][0].update(library="mojolearn", pairs_with=["catboost-gpu"])
+        RF.apply(board(r=rr))
+        row = rr["audit"]["identical/fit"]["opponents"]["lightgbm-cuda"]
+        self.assertEqual(row["verdict"], "INSUFFICIENT")
+        self.assertIn("no own configuration is paired", row["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()
