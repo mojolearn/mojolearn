@@ -251,6 +251,7 @@ def test_smoke_writes_rows_text_and_uploads_after_every_recipe(tmp_path, monkeyp
     ids = ['algos/adam/synthetic/rows=full', 'algos/adamw/synthetic/rows=full', 'algos/sgd/synthetic/rows=full']
     manifest = tmp_path / 'manifest.json'
     manifest.write_text(json.dumps({'amd': ids}))
+    monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
     monkeypatch.setattr(C, 'smoke_checks', lambda args, plans, out, warm=None: (
         {'wheel': {'status': 'ok', 'problems': []}, 'data': {'status': 'failed', 'problems': ['dataset taxi missing']}},
         {}))
@@ -294,7 +295,9 @@ def test_smoke_writes_rows_text_and_uploads_after_every_recipe(tmp_path, monkeyp
 def test_smoke_timeout_flag(tmp_path, monkeypatch):
     manifest = tmp_path / 'manifest.json'
     manifest.write_text(json.dumps({'amd': ['algos/adam/synthetic/rows=full']}))
+    monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
     monkeypatch.setattr(C, 'smoke_checks', lambda args, plans, out, warm=None: ({}, {}))
+    monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
     seen = []
     monkeypatch.setattr(C, 'run_bounded', lambda cmd, log, timeout, env=None: seen.append(timeout) or (None, timeout))
     monkeypatch.setattr(C, 'retain', lambda archive, members: {'sha256': 'x'})
@@ -310,3 +313,20 @@ def test_problem_kinds_group_by_problem_not_by_arm():
         'missing parameter/version probe: <arm>'
     assert C.problem_kind('quality scorer unavailable: reference data: the block holds no yq') == \
         'quality scorer unavailable: reference data'
+
+
+def test_smoke_stages_every_recipes_block_prep_once_before_the_loop(tmp_path, monkeypatch):
+    ids = ['algos/adam/synthetic/rows=full', 'classical/knn/taxi/rows=full']
+    plans = {'identical': [r for r in C.selected_plan('amd', {'amd': ids}, smoke=True)]}
+    args = SimpleNamespace(python_env='py', vendor='amd', cache=str(tmp_path), wheel_manifest=None,
+                           smoke_stage_timeout=99.0)
+    seen = []
+    monkeypatch.setattr(C, 'run_bounded', lambda cmd, log, timeout, env=None: seen.append((cmd, timeout)) or (0, 1.0))
+    chk = C.smoke_stage(args, plans, tmp_path, {}, python='/warm/bin/python')
+    assert chk['status'] == 'ok' and len(seen) == 1
+    cmd, timeout = seen[0]
+    assert timeout == 99.0 and cmd[0] == '/warm/bin/python' and '--prep-only' in cmd and '--preflight-only' in cmd
+    assert cmd[cmd.index('--families') + 1] == 'algos,classical'
+    assert cmd[cmd.index('--race-ids') + 1].startswith('@')
+    assert sorted((tmp_path / 'stage-race-ids.identical.txt').read_text().split()) == sorted(ids)
+    assert '--datasets' not in cmd

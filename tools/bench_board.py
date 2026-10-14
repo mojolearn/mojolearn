@@ -4124,6 +4124,9 @@ def build_parser():
                         "implies --with-opponents")
     p.add_argument("--gpu-opponents-only", action="store_true",
                    help="remove all CPU opponents, including fallback opponents where no GPU library exists")
+    p.add_argument("--prep-only", action="store_true",
+                   help="with --preflight-only: run the selected races' untimed block prep and stop (the campaign "
+                        "smoke stages all data once)")
     p.add_argument("--preflight-only", action="store_true",
                    help="construct and audit the selected arms and retain the report; no warmups, fits or scored rounds")
     p.add_argument("--preflight-scorer", action="store_true",
@@ -4478,6 +4481,8 @@ def main(argv=None):
 
     python, wheel = setup_python(args, vendor, out, os.path.join(out, "logs", "setup.log"))
     arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
+    if getattr(args, "prep_only", False) and not args.preflight_only:
+        raise SystemExit("bench_board: --prep-only is for --preflight-only runs")
     box_checked = bool(getattr(args, "box_checked", None)) and args.preflight_only
     if getattr(args, "box_checked", None) and not args.preflight_only:
         raise SystemExit("bench_board: --box-checked is for --preflight-only runs")
@@ -4624,6 +4629,11 @@ def main(argv=None):
         ensure_algos_prep(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
+    if getattr(args, "prep_only", False):
+        # smoke-fixes (2026-10-14): the campaign smoke stages every recipe's untimed block prep ONCE before its
+        # per-recipe loop, so no recipe's 5 s check is spent preparing data
+        print("bench_board: prep only (%d races); stopping before the parameter probes" % len(todo), flush=True)
+        return 0
     if ctx.get("capture_measurements") and todo:
         # Audit all selected recipes before the first warm-up, not after
         # spending money on the first several hundred rows of a bad plan.

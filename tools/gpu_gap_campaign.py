@@ -523,6 +523,37 @@ def warm_check(report):
                 import_seconds=start.get("import_seconds"))
 
 
+def smoke_stage(args, plans, out, receipts, python=None):
+    """Every recipe's untimed block prep (algos, classical, classical2 blocks under --cache), ONCE, before the
+    per-recipe loop: one --preflight-only --prep-only board process per mode over that mode's whole plan. A
+    recipe's own check then finds its blocks prepared. Returns the stage check."""
+    probs, runs = [], {}
+    for mode, plan in sorted(plans.items()):
+        races = {r["id"]: r for r in plan if r["family"] in ("algos", "classical", "classical2")}
+        if not races:
+            continue
+        ids = out / ("stage-race-ids.%s.txt" % mode)
+        ids.write_text("\n".join(sorted(races)) + "\n")
+        cmd = smoke_command(args, next(iter(races.values())), out / "stage" / mode, mode, receipts, python)
+        cmd[cmd.index("--families") + 1] = ",".join(sorted({r["family"] for r in races.values()}))
+        cmd[cmd.index("--lanes") + 1] = ",".join(sorted({r["lane"] for r in races.values()}))
+        cmd[cmd.index("--race-ids") + 1] = "@" + str(ids)
+        if "--datasets" in cmd:
+            i = cmd.index("--datasets")
+            del cmd[i:i + 2]
+        cmd.append("--prep-only")
+        log = out / "logs" / ("stage.%s.log" % mode)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        rc, seconds = run_bounded(cmd, log, args.smoke_stage_timeout)
+        runs[mode] = dict(returncode=rc, seconds=seconds, log=str(log), races=len(races))
+        if rc != 0:
+            probs.append("data stage (%s) %s: %s" % (mode, "timed out at %ss" % args.smoke_stage_timeout
+                                                     if rc is None else "rc %s" % rc, "; ".join(_tail(log, 2))))
+    if not runs:
+        return dict(status="ok", problems=[], skipped="no recipe prepares blocks")
+    return dict(status="ok" if not probs else "failed", problems=probs, runs=runs)
+
+
 def write_smoke(out, doc):
     E.write(out / "smoke.json", doc)
     (out / "smoke.txt").write_text(smoke_text(doc))
@@ -558,6 +589,11 @@ def run_smoke(args, plans, out):
         doc["checks"], receipts = smoke_checks(args, plans, out, warm)
     except Exception as exc:  # noqa: BLE001 - never stop early
         doc["checks"], receipts = dict(box=dict(status="failed", problems=["box checks raised: %r" % (exc,)])), {}
+    write_smoke(out, doc)
+    try:
+        doc["checks"]["stage"] = smoke_stage(args, plans, out, receipts, warm.python() if warm is not None else None)
+    except Exception as exc:  # noqa: BLE001 - never stop early
+        doc["checks"]["stage"] = dict(status="failed", problems=["data stage raised: %r" % (exc,)])
     write_smoke(out, doc)
     members = {}
     try:
@@ -647,6 +683,8 @@ def main(argv=None):
                          "processes from it (auto: Linux on, macOS off)")
     ap.add_argument("--smoke-warm-timeout", type=float, default=1800.0,
                     help="seconds the warm process may take to import everything (once per box, recorded)")
+    ap.add_argument("--smoke-stage-timeout", type=float, default=6 * 3600.0,
+                    help="seconds for the one-time block prep of every recipe before the per-recipe loop")
     ap.add_argument("--smoke-verify-data", action="store_true",
                     help="also sha256 the datasets in the smoke (default: presence and pinned size)")
     ap.add_argument("--data-root", default=os.environ.get(

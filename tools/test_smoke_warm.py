@@ -161,6 +161,7 @@ def test_campaign_records_the_warm_report_and_each_recipe_launch_counts(tmp_path
             pass
     monkeypatch.setattr(C, 'Warm', FakeWarm)
     monkeypatch.setattr(C, 'smoke_checks', lambda args, plans, out, warm=None: ({}, {}))
+    monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
     cmds = []
 
     def bounded(cmd, log, timeout, env=None):
