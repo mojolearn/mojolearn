@@ -423,7 +423,7 @@ def seal(ctx, directory, recipe, rec):
 
 
 def measured_shape(cell, rec):
-    shape = cell.get("shape") or rec.get("inputs")
+    shape = cell.get("shape")
     if shape:
         return shape
     params = ((cell.get("measurement") or {}).get("parameters")) or cell.get("params") or {}
@@ -434,7 +434,7 @@ def measured_shape(cell, rec):
             and a.get("dtype") and isinstance(a.get("sha256"), str) and len(a["sha256"]) == 64
             for a in arrays):
         return {"input_arrays": arrays}
-    return None
+    return rec.get("inputs")
 
 
 def recover_shapes(board_path):

@@ -46,6 +46,7 @@ class Evidence(unittest.TestCase):
         self.assertEqual(got["measurement"]["shape"], {"input_arrays": arrays})
         self.assertEqual(got["measurement"]["completeness"], "complete")
         self.assertEqual(got["measurement"]["metadata_recovery"]["previous_id"], "old-id")
+        self.assertEqual(E.measured_shape(cell, {"inputs": {"prepared_rows": 99}}), {"input_arrays": arrays})
         cell["params"]["raw_params"]["input_arrays"][0].pop("sha256")
         self.assertIsNone(E.measured_shape(cell, {}))
 
