@@ -8,9 +8,10 @@ records each import's seconds and status, initializes each GPU runtime ONCE (tor
 mojolearn) and records that cost separately, then serves requests one at a time as JSON lines (stdin in,
 a private copy of fd 1 out; everything a library prints goes to the recipe's log):
 
-- {"op": "warm-box", "argv": [...], "paths": [...]}: the box facts every recipe's check reads (the box
-  fingerprint, the repo commit, the harness hash, the driver version, each data file's sha256), once,
-  before the per-recipe loop, outside any recipe's timer.
+- {"op": "warm-box", "argv": [...], "paths": [...], "arm_pythons": [...], "numeric_modes": [...]}: the box
+  facts every recipe's check reads (the box fingerprint, the repo commit, the harness hash, the driver
+  version, each data file's sha256) and the arm servers (each arm venv's, and this interpreter's in every
+  numeric mode but its own), once, before the per-recipe loop, outside any recipe's timer.
 - {"op": "recipe", "key", "argv", "log", "timeout"}: tools/bench_board.py main(argv) (a --preflight-only
   --preflight-scorer check of one race) IN THIS PROCESS: the board's parameter probe calls each family
   driver and constructs ours and every opponent arm as function calls (tools/smoke_inproc.py), audits the
@@ -332,9 +333,10 @@ def run_recipe(fn, argv, log, timeout):
     return reply
 
 
-def warm_box(argv, paths, arm_pythons=()):
+def warm_box(argv, paths, arm_pythons=(), numeric_modes=()):
     """The box facts every recipe's check reads, once, outside any recipe's timer, and the arm servers of the
-    arms that run under their own interpreter (an arm venv). Returns per-fact seconds."""
+    arms that run under their own interpreter (an arm venv) or their own numeric mode. Returns per-fact
+    seconds."""
     import bench_board as B
     import smoke_inproc
     got = {}
@@ -371,6 +373,20 @@ def warm_box(argv, paths, arm_pythons=()):
         start = smoke_inproc.ARM_SERVERS.prestart([py], dict(os.environ))
         got["arm-server " + py] = dict(status="failed" if start.get("problem") else "ok",
                                        seconds=start.get("wall_seconds"), problem=start.get("problem"))
+    # smoke-fixes r16 (2026-10-14; Apple fast neural/lm-train-step, lm-forward, gemm STARTED at 5 s, and 7.6 s
+    # under a 30 s timer: the first ours-fast arm found the identical tier of a type-registering binding loaded
+    # in this process (smoke_inproc.single_tier_conflict) and started its own-tier arm server, 4.1-4.7 s of
+    # imports, inside that recipe's timer): the arm server of every other numeric mode the smoke runs is
+    # started here, before the per-recipe loop, under this interpreter (the board's --python-env, the
+    # interpreter the drivers start ours under) and this environment with that mode, the key ArmServers
+    # looks the conflicting arm up by (interpreter, process-start settings, numeric mode).
+    own = smoke_inproc._wanted_mode(os.environ)
+    for mode in sorted({str(m).strip().lower() for m in numeric_modes or ()} - {own}):
+        start = smoke_inproc.ARM_SERVERS.prestart([args.python_env or sys.executable],
+                                                  dict(os.environ, MOJOLEARN_NUMERIC_MODE=mode))
+        got["arm-server numeric_mode=" + mode] = dict(status="failed" if start.get("problem") else "ok",
+                                                      seconds=start.get("wall_seconds"),
+                                                      problem=start.get("problem"))
     return got
 
 
@@ -433,7 +449,8 @@ def serve(vendor, out):
             return 0
         if op == "warm-box":
             say({"event": "warm-box", "key": req.get("key"),
-                 "facts": warm_box(req.get("argv") or [], req.get("paths") or [], req.get("arm_pythons") or [])})
+                 "facts": warm_box(req.get("argv") or [], req.get("paths") or [], req.get("arm_pythons") or [],
+                                   req.get("numeric_modes") or [])})
             continue
         if op == "stage-data":
             t0 = time.time()

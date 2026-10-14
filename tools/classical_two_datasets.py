@@ -1478,9 +1478,15 @@ class SkSVC:
 
 # ---- torch ---------------------------------------------------------------------
 
-def _torch_setup(arrays):
+def _torch_setup(arrays, probe_defers=False):
     """Upload `arrays` (name -> host array) to the GPU before any clock.
-    Returns (torch, device, tensors, info)."""
+    Returns (torch, device, tensors, info).
+
+    probe_defers (smoke-fixes r16, 2026-10-14; classical kmeans/pca/ols on istella STARTED at 5 s on NVIDIA):
+    an arm whose constructor reads nothing from the uploaded tensors but their shapes passes True, and inside
+    the smoke's parameter probe (smoke_staging(): the smoke worker or its arm servers, which never run a
+    round) its arrays are not copied to the device: the tensors are CPU views of the same host arrays (the
+    same shapes and dtypes) and upload_ms_untimed is None. A timed worker uploads them exactly as before."""
     import torch
     global _TORCH_KIND
     # Apple silicon: torch's GPU is MPS (tools/bench_board.py, the Apple
@@ -1500,11 +1506,15 @@ def _torch_setup(arrays):
     # The board's seed through torch's own argument (no torch arm here draws a
     # random number; it is set so every arm carries the same seed).
     torch.manual_seed(SEED)
-    _torch_sync()
-    t0 = time.perf_counter()
-    tensors = {k: torch.from_numpy(np.ascontiguousarray(v)).to(dev) for k, v in arrays.items()}
-    _torch_sync()
-    upload_ms = (time.perf_counter() - t0) * 1000.0
+    if probe_defers and smoke_staging() is not None:
+        tensors = {k: torch.from_numpy(np.ascontiguousarray(v)) for k, v in arrays.items()}
+        upload_ms = None
+    else:
+        _torch_sync()
+        t0 = time.perf_counter()
+        tensors = {k: torch.from_numpy(np.ascontiguousarray(v)).to(dev) for k, v in arrays.items()}
+        _torch_sync()
+        upload_ms = (time.perf_counter() - t0) * 1000.0
     info = {"library": "torch", "version": torch.__version__,
             "torch_version_hip": getattr(torch.version, "hip", None),
             "torch_version_cuda": torch.version.cuda,
@@ -1519,7 +1529,8 @@ def _torch_setup(arrays):
 
 class TorchKMeans:
     def __init__(self, data, rec):
-        self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"], "init": data["init"]})
+        self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"], "init": data["init"]},
+                                                          probe_defers=True)
         self.x, self.init = t["X"], t["init"]
         self.ones = self.torch.ones(self.x.shape[0], device=self.dev, dtype=self.torch.float32)
         self.info["config"] = ("greedy k-means++ (scikit-learn's rule, 2 + log k candidates, a "
@@ -1642,7 +1653,7 @@ class TorchOLS:
             # (aten::linalg_lstsq is not implemented for MPS); it now refuses by name.
             raise RuntimeError("REFUSED: torch.linalg.lstsq has no MPS implementation "
                                "(aten::linalg_lstsq); no torch GPU least-squares routine here")
-        self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"], "y": data["y"]})
+        self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"], "y": data["y"]}, probe_defers=True)
         self.x, self.y = t["X"], t["y"]
         self.info["config"] = ("xc = x - mean, yc = y - mean; torch.linalg.lstsq(xc, yc[:, None], "
                                "driver=%r); intercept = ymean - xmean @ coef" % TORCH_LSTSQ_DRIVER)
@@ -1675,7 +1686,7 @@ class TorchOLS:
 
 class TorchOLSEigh:
     def __init__(self, data, rec):
-        self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"], "y": data["y"]})
+        self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"], "y": data["y"]}, probe_defers=True)
         self.x, self.y = t["X"], t["y"]
         self.info["config"] = ("centered normal equations: G = xc.T @ xc, b = xc.T @ yc, "
                                "torch.linalg.eigh(G), pseudo-inverse cutoff d * eps32 * max|eig|")
@@ -1743,22 +1754,31 @@ def _cupy_sync():
     cp.cuda.runtime.deviceSynchronize()
 
 
-def _cuml_setup(arrays, library="cuml"):
+def _cuml_setup(arrays, library="cuml", probe_defers=False):
     """Upload `arrays` to the GPU as cupy arrays before any clock. Returns
     (tensors, info). `library` is the arm's library: "cuml" records cuML's
     version; "cuvs" (cuVS on NVIDIA, hipVS on AMD) records cuvs' and imports
     no cuML (FAIRNESS FIX 2026-10-13 audit: hipVS arms on AMD, which has no
-    cuML)."""
+    cuML).
+
+    probe_defers (smoke-fixes r16, 2026-10-14; classical kmeans/pca/ols on istella STARTED at 5 s on NVIDIA,
+    the cuML arms' upload 1.2 s each in the earlier smoke): as _torch_setup's. Inside the smoke's parameter
+    probe the arrays an arm's constructor never reads stay the host arrays and upload_ms_untimed is None; a
+    timed worker uploads them exactly as before."""
     import cupy as cp
     if library == "cuml":
         import cuml
     else:
         import cuvs as cuml   # noqa: F811 -- only its __version__ is read below
-    cp.cuda.runtime.deviceSynchronize()
-    t0 = time.perf_counter()
-    dev = {k: cp.asarray(np.ascontiguousarray(v)) for k, v in arrays.items()}
-    cp.cuda.runtime.deviceSynchronize()
-    upload_ms = (time.perf_counter() - t0) * 1000.0
+    if probe_defers and smoke_staging() is not None:
+        dev = {k: np.ascontiguousarray(v) for k, v in arrays.items()}
+        upload_ms = None
+    else:
+        cp.cuda.runtime.deviceSynchronize()
+        t0 = time.perf_counter()
+        dev = {k: cp.asarray(np.ascontiguousarray(v)) for k, v in arrays.items()}
+        cp.cuda.runtime.deviceSynchronize()
+        upload_ms = (time.perf_counter() - t0) * 1000.0
     try:
         name = cp.cuda.runtime.getDeviceProperties(0)["name"]
         name = name.decode() if isinstance(name, bytes) else str(name)
@@ -1783,7 +1803,7 @@ def _scalar(v):
 class CumlKMeans:
     def __init__(self, data, rec):
         from cuml.cluster import KMeans
-        t, self.info = _cuml_setup({"X": data["X"], "init": data["init"]})
+        t, self.info = _cuml_setup({"X": data["X"], "init": data["init"]}, probe_defers=True)
         self.x, self.init = t["X"], t["init"]
         # cuVS refuses tol <= 0 ("RAFT failure ... invalid parameter (tol<=0)",
         # H100 pod 22up9vbhj3tbeg, 2026-09-11), exactly as our binding does, so
@@ -1816,7 +1836,7 @@ class CumlPCA:
     def __init__(self, data, rec):
         from cuml.decomposition import PCA
         self.PCA = PCA
-        t, self.info = _cuml_setup({"X": data["X"]})
+        t, self.info = _cuml_setup({"X": data["X"]}, probe_defers=True)
         self.x = t["X"]
         self.params_obj, self.kw = construct_tolerant(
             PCA, dict(n_components=PCA_COMPONENTS, svd_solver="full", whiten=False,
@@ -1843,7 +1863,7 @@ class CumlOLS:
     def __init__(self, data, rec):
         from cuml.linear_model import LinearRegression
         self.LR = LinearRegression
-        t, self.info = _cuml_setup({"X": data["X"], "y": data["y"]})
+        t, self.info = _cuml_setup({"X": data["X"], "y": data["y"]}, probe_defers=True)
         self.x, self.y = t["X"], t["y"]
         # copy_X=True where the build takes it: fit_intercept centers the
         # design matrix, and a centered device X would change every later round.
@@ -1926,7 +1946,7 @@ class HipvsKMeans:
     def __init__(self, data, rec):
         from cuvs.cluster import kmeans
         self.kmeans = kmeans
-        t, self.info = _cuml_setup({"X": data["X"]}, library="cuvs")
+        t, self.info = _cuml_setup({"X": data["X"]}, library="cuvs", probe_defers=True)
         self.info["library"] = "hipvs"
         self.x = t["X"]
         self.kw = dict(metric="sqeuclidean", n_clusters=KMEANS_K, init_method="KMeansPlusPlus",

@@ -215,25 +215,26 @@ DRIVERS = ("bench_board", "bench_board_algos", "bench_board_neural", "bench_boar
 #: value: the smallest that covers the recipe's measured check with margin; where it never finished within its timer
 #: on the box that was slow (no measurement), 30 s. Evidence: apple-smoke-20261014/smoke-b5 and
 #: gpu-rerun-20261014/final-nvidia/smoke-b4 (STARTED rows); the same recipes finish in 1-4.4 s on other boxes.
-_SLOW_UNMEASURED = "STARTED at 5 s with no measurement of its real check time (%s); 30 s rule"
-SMOKE_SLOW = {
-    "neural/lm-train-step/bytes/shape=full": (30.0, _SLOW_UNMEASURED % "Apple fast; ours-fast starts its own-tier arm "
-                                                                      "server inside the check"),
-    "neural/lm-forward/bytes/shape=full": (30.0, _SLOW_UNMEASURED % "Apple fast; ours-fast starts its own-tier arm "
-                                                                    "server inside the check"),
-    "neural/gemm/gaussian/shape=full": (30.0, _SLOW_UNMEASURED % "Apple fast"),
-    "algos/moe/synthetic/rows=full": (30.0, _SLOW_UNMEASURED % "Apple fast+identical, NVIDIA; 4.1-4.4 s where it "
-                                                                "finished: the 69M-parameter twin built twice per arm"),
-    "algos/gcn/taxi/rows=full": (30.0, _SLOW_UNMEASURED % "Apple identical, killed at 7.5 s"),
-    "algos/gcn/istella/rows=full": (30.0, _SLOW_UNMEASURED % "Apple identical, killed at 7.0 s"),
-    "classical/kmeans/istella/rows=full": (30.0, _SLOW_UNMEASURED % "NVIDIA; 1.6 s on AMD"),
-    "classical/pca/istella/rows=full": (30.0, _SLOW_UNMEASURED % "NVIDIA"),
-    "classical/ols/istella/rows=full": (30.0, _SLOW_UNMEASURED % "NVIDIA; 1.3 s on AMD"),
-    "algos/conv1d/synthetic/rows=full": (30.0, _SLOW_UNMEASURED % "Apple fast, killed at 5 s; passed under 5 s "
-                                                                    "on the run before"),
-    "algos/maxpool2d/synthetic/rows=full": (30.0, _SLOW_UNMEASURED % "Apple fast, killed at 5 s; passed under 5 s "
-                                                                       "on the run before"),
-}
+#:
+#: smoke-fixes r16 (2026-10-14; Andrew: "slow" = broken until proven otherwise): every entry the table held was a
+#: probe doing work its parameter read-back never used, and each is fixed in the probe path (timed runs unchanged),
+#: so the table is empty and every recipe runs under the default 5 s again:
+#: - neural lm-train-step / lm-forward / gemm (Apple fast): the own-tier arm server ours-fast needs
+#:   (smoke_inproc.single_tier_conflict) started inside the first such recipe's check (4.1-4.7 s of imports); it is
+#:   now started before the per-recipe loop (smoke_worker.warm_box numeric_modes). The LM torch arms build their
+#:   LlamaForCausalLM on the meta device in the probe (bench_board_neural.TorchArm._build_lm).
+#: - algos moe (Apple fast+identical, NVIDIA): transformers' 69M-parameter MixtralSparseMoeBlock is built on the meta
+#:   device with no weight stacking, load or compare in the probe (bench_board_algos._hf_moe_block), ours' 277 MB
+#:   load_state_dict is skipped there (_build_layer), and the reference module is staged once (r14).
+#: - algos gcn taxi/istella (Apple identical): the torch arms' module move, x/edge upload and the GCN cache-filling
+#:   forward (where both stopped, in its MPS synchronize) are skipped in the probe (_build_layer).
+#: - algos conv1d / maxpool2d (Apple fast): their torch inputs are staged once (r14) and the per-arm device copy of x
+#:   (maxpool2d: 205 MB per arm) is skipped in the probe (_build_layer).
+#: - classical kmeans/pca/ols on istella (NVIDIA): the block is staged once (r14) and the torch/cuML/hipVS arms'
+#:   device uploads (cuML 1.2 s per arm in smokewarm-nvidia) are skipped in the probe
+#:   (classical_two_datasets._torch_setup/_cuml_setup probe_defers).
+#: A recipe that again needs a longer timer gets an entry here with its measured check time and reason.
+SMOKE_SLOW = {}
 
 
 def recipe_timeout(args, race):
@@ -860,7 +861,9 @@ def run_smoke(args, plans, out, suspects=None):
                                                                    receipts)[2:],
                                  paths=plan_data_files(args, plans),
                                  arm_pythons=sorted(set(((doc["checks"].get("arm-venvs") or {}).get("arms")
-                                                         or {}).values()))), args.smoke_stage_timeout)
+                                                         or {}).values())),
+                                 # smoke-fixes r16: each mode's own-tier arm server, started before the loop
+                                 numeric_modes=sorted(plans)), args.smoke_stage_timeout)
         doc["worker"]["box_facts"] = facts or dict(status="failed", problem="no answer (worker killed)")
         write_smoke(out, doc)
     members = {}

@@ -1957,7 +1957,19 @@ class TorchArm:
                                             eps=twin.RMS_EPS, theta=twin.ROPE_THETA)
         from transformers import LlamaForCausalLM
         torch.manual_seed(SEED)
-        model = LlamaForCausalLM(cfg)
+        if PARAMS_PROBE:
+            # smoke-fixes r16 (2026-10-14; neural lm-forward / lm-train-step: each torch arm of the parameter
+            # probe built and randomly initialized the whole LlamaForCausalLM (21M parameters) on the CPU and
+            # copied it to the GPU, for a read-back of its config, class and structure): the probe builds it on
+            # torch's meta device, the same class from the same config, so the same modules, shapes, dtype and
+            # head tying (transformers allocates every parameter from the config alone), and is never moved.
+            # The rotary read-back below then reads a CPU instance of the model's own rotary class built from
+            # the model's own config (LlamaModel.__init__ builds model.rotary_emb exactly so). Every timed
+            # worker builds, loads and moves the model exactly as before.
+            with torch.device("meta"):
+                model = LlamaForCausalLM(cfg)
+        else:
+            model = LlamaForCausalLM(cfg)
         model.model.norm = torch.nn.Identity()       # ours' LM has no final norm before the head
         # smoke-fixes (2026-10-14; AMD neural/lm-forward, lm-train-step STARTED: the parameter probe was cut off
         # inside the weight copy (state[...] = flat[...].clone()) and hf_load_exact's bit-for-bit torch.equal
@@ -1976,8 +1988,12 @@ class TorchArm:
                 state[hf_lm_state_name(name)] = flat[off:off + n].reshape(shp).clone()
                 off += n
             hf_load_exact(torch, model, state, self.arm)
-        model = model.to(self.dev)
-        theta = hf_check_rotary(torch, model.model.rotary_emb, hd, twin.ROPE_THETA, self.arm)
+        if PARAMS_PROBE:
+            rotary = type(model.model.rotary_emb)(config=model.config)
+        else:
+            model = model.to(self.dev)
+            rotary = model.model.rotary_emb
+        theta = hf_check_rotary(torch, rotary, hd, twin.ROPE_THETA, self.arm)
         self.library_impl = LlamaForCausalLM
         mc = model.config
         self.config_readback = arch_readback("lm", dict(

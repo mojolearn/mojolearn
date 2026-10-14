@@ -5228,20 +5228,34 @@ def _hf_moe_block(torch, p, state, arm):
                         num_experts_per_tok=K, hidden_act="silu", router_jitter_noise=0.0,
                         num_hidden_layers=1, num_attention_heads=8, num_key_value_heads=8,
                         vocab_size=8)
+    # smoke-fixes r16 (2026-10-14; algos/moe STARTED at 5 s on NVIDIA and Apple, 4.1-4.4 s where it finished:
+    # every torch arm built and initialized this 69M-parameter block on the CPU, stacked and loaded the
+    # fixture's 277 MB into it and compared it back bit for bit, only for the parameter probe to read the class
+    # and the lane's settings). Inside the smoke's parameter probe (_params_probe_only) the block is built on
+    # torch's meta device: the same class from the same config, so the same state-dict keys and shapes
+    # (transformers' MixtralSparseMoeBlock.__init__ allocates its parameters from the config alone), and the
+    # layout mapping below refuses by the same shape checks; the weights are not stacked, loaded or compared
+    # (the probe never runs the block, and the record holds no weight value). Every timed worker builds,
+    # loads and checks them exactly as before.
+    probe = _params_probe_only()
     torch.manual_seed(SEED)
-    blk = MixtralSparseMoeBlock(cfg)
+    if probe:
+        with torch.device("meta"):
+            blk = MixtralSparseMoeBlock(cfg)
+    else:
+        blk = MixtralSparseMoeBlock(cfg)
     blk.eval()
     have = {k: tuple(v.shape) for k, v in blk.state_dict().items()}
     t = lambda a: torch.from_numpy(np.ascontiguousarray(a, dtype=np.float32))  # noqa: E731
     w1 = [state["experts.%d.w1.weight" % e] for e in range(E)]
     w2 = [state["experts.%d.w2.weight" % e] for e in range(E)]
     w3 = [state["experts.%d.w3.weight" % e] for e in range(E)]
-    sd = {}
+    plan = {}                                            # key -> (shape, builder of its float32 tensor)
     if "experts.0.w1.weight" in have:                    # the per-expert layout
-        sd["gate.weight"] = t(state["gate.weight"])
+        plan["gate.weight"] = (tuple(np.shape(state["gate.weight"])), lambda: t(state["gate.weight"]))
         for e in range(E):
             for k, w in (("w1", w1), ("w2", w2), ("w3", w3)):
-                sd["experts.%d.%s.weight" % (e, k)] = t(w[e])
+                plan["experts.%d.%s.weight" % (e, k)] = (tuple(np.shape(w[e])), lambda a=w[e]: t(a))
     else:                                                # the fused experts layout
         router = [k for k, s_ in have.items() if not k.startswith("experts.") and s_ == (E, D)]
         gu = [k for k in have if k.startswith("experts.") and "gate_up" in k]
@@ -5249,22 +5263,37 @@ def _hf_moe_block(torch, p, state, arm):
         if len(router) != 1 or len(gu) != 1 or len(dn) != 1 or len(have) != 3:
             raise RuntimeError("REFUSED: %s: transformers %s MixtralSparseMoeBlock state %r is not a "
                                "layout this harness maps" % (arm, transformers.__version__, have))
-        gate_up = np.stack([np.concatenate([w1[e], w3[e]]) for e in range(E)])   # (E, 2F, D)
-        down = np.stack(w2)                                                      # (E, D, F)
-        if have[gu[0]] == (E, D, 2 * F):
-            gate_up = np.ascontiguousarray(gate_up.transpose(0, 2, 1))
-        if have[dn[0]] == (E, F, D):
-            down = np.ascontiguousarray(down.transpose(0, 2, 1))
-        sd = {router[0]: t(state["gate.weight"]), gu[0]: t(gate_up), dn[0]: t(down)}
-    for k, v in sd.items():
-        if have.get(k) != tuple(v.shape):
+        gu_t = have[gu[0]] == (E, D, 2 * F)
+        dn_t = have[dn[0]] == (E, F, D)
+
+        def gate_up():
+            a = np.stack([np.concatenate([w1[e], w3[e]]) for e in range(E)])        # (E, 2F, D)
+            return t(np.ascontiguousarray(a.transpose(0, 2, 1)) if gu_t else a)
+
+        def down():
+            a = np.stack(w2)                                                         # (E, D, F)
+            return t(np.ascontiguousarray(a.transpose(0, 2, 1)) if dn_t else a)
+        s1, s3, s2 = np.shape(w1[0]), np.shape(w3[0]), np.shape(w2[0])
+        gu_shape = (E, s1[0] + s3[0]) + tuple(s1[1:])
+        dn_shape = (E,) + tuple(s2)
+        plan = {router[0]: (tuple(np.shape(state["gate.weight"])), lambda: t(state["gate.weight"])),
+                gu[0]: ((gu_shape[0], gu_shape[2], gu_shape[1]) if gu_t else gu_shape, gate_up),
+                dn[0]: ((dn_shape[0], dn_shape[2], dn_shape[1]) if dn_t else dn_shape, down)}
+    if probe:
+        shapes = {k: shp for k, (shp, _) in plan.items()}
+    else:
+        sd = {k: build() for k, (_, build) in plan.items()}
+        shapes = {k: tuple(v.shape) for k, v in sd.items()}
+    for k, shp in shapes.items():
+        if have.get(k) != shp:
             raise RuntimeError("REFUSED: %s: %s is %s in transformers, the fixture maps %s"
-                               % (arm, k, have.get(k), tuple(v.shape)))
-    blk.load_state_dict(sd, strict=True)
-    got = blk.state_dict()
-    for k, v in sd.items():
-        if not torch.equal(got[k].detach().cpu(), v):
-            raise RuntimeError("REFUSED: %s: %s did not load the fixture's float32 bits" % (arm, k))
+                               % (arm, k, have.get(k), shp))
+    if not probe:
+        blk.load_state_dict(sd, strict=True)
+        got = blk.state_dict()
+        for k, v in sd.items():
+            if not torch.equal(got[k].detach().cpu(), v):
+                raise RuntimeError("REFUSED: %s: %s did not load the fixture's float32 bits" % (arm, k))
     nn = torch.nn
 
     class MoE(nn.Module):
@@ -5473,7 +5502,15 @@ def _build_layer(lane, arm, D):
         _neural_ab_layer_mode(layer, s)
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
         info["weights_loaded"] = False
-        if s["task"] == "moe":                # HF's fused layout from the per-expert transcription
+        if s["task"] == "moe" and _params_probe_only():
+            # smoke-fixes r16 (2026-10-14; algos/moe STARTED at 5 s on NVIDIA inside this load: MoEBlock's
+            # __setattr__ copies each of the 277 MB it is handed, after np.stack built them): the smoke's
+            # parameter probe never runs the block and the record (the lane's params, the class, the fixture
+            # arrays' digests) holds no weight value, so the fixture is not stacked or loaded there; a timed
+            # worker loads it below exactly as before. weights_loaded states what the arm does when it runs.
+            info["weights_loaded"] = True
+            info["weights"] = "not loaded: parameter probe only (timed runs load the fixture's weights)"
+        elif s["task"] == "moe":              # HF's fused layout from the per-expert transcription
             E = kw["num_experts"]
             layer.load_state_dict({
                 "router": state["gate.weight"],
@@ -5602,21 +5639,35 @@ def _build_layer(lane, arm, D):
         mod.load_state_dict({k: torch.from_numpy(v) for k, v in state.items()})
     if getattr(mod, "library", None):
         info["twin"] = mod.library
-    mod = mod.to(dev)
-    # x and the extra forward arrays: the pre-clock copy the kernel clock leaves out, timed apart (lane
-    # harness-evidence, 2026-10-14). The inference call reads the same device x, so its copy is the same arrays.
-    (x, *extra_dev), layer_upload_ms = _torch_timed_upload(torch, dev, [x_cpu] + list(extra_cpu))
-    info.update(upload_ms_untimed=layer_upload_ms, predict_upload_ms=layer_upload_ms)
+    # smoke-fixes r16 (2026-10-14; algos/gcn taxi and istella STARTED at 7-7.5 s on Apple in the cache-filling
+    # forward's MPS synchronize below, conv1d and maxpool2d at 5 s on Apple fast, moe at 5 s): the smoke's
+    # parameter probe (_params_probe_only) runs no round, and the record (the lane's params, the class, the
+    # host input arrays' digests) reads nothing on the device, so the module is not moved, x is not copied
+    # (maxpool2d: 205 MB per arm), x is not marked for grad and GCN's cache is not filled there. Every timed
+    # worker does all of it exactly as before.
+    probe = _params_probe_only()
+    if probe:
+        x, extra_dev = x_cpu, list(extra_cpu)
+        info.update(upload_ms_untimed=None, predict_upload_ms=None)
+    else:
+        mod = mod.to(dev)
+        # x and the extra forward arrays: the pre-clock copy the kernel clock leaves out, timed apart (lane
+        # harness-evidence, 2026-10-14). The inference call reads the same device x, so its copy is the same
+        # arrays.
+        (x, *extra_dev), layer_upload_ms = _torch_timed_upload(torch, dev, [x_cpu] + list(extra_cpu))
+        info.update(upload_ms_untimed=layer_upload_ms, predict_upload_ms=layer_upload_ms)
     # FAIRNESS FIX (2026-10-13 audit): gcn and sage were excluded here, so torch's backward
     # computed only the weight gradients while ours' GCNConv/SAGEConv.backward also computes
     # grad_x (GCN: one more GEMM; SAGE: a GEMM, two SpMMs and an add), ours doing more work.
     # x now requires grad on gcn and sage too, so both arms compute dx. Results raced before
     # this change were wrong for this lane; apply extra scrutiny.
-    if s["task"] != "embedding" and not s.get("forward_only"):
+    if s["task"] != "embedding" and not s.get("forward_only") and not probe:
         x.requires_grad_(True)             # backward computes dx, as ours' backward returns it
                                            # (embedding: integer ids, the gradient is the table's)
     extra = tuple(extra_dev)
-    if s["task"] == "gcn" and GCN_TORCH_KW.get("cached"):
+    if s["task"] == "gcn" and GCN_TORCH_KW.get("cached") and probe:
+        info["gcn_cache"] = "PyG GCNConv(cached=True); not filled in the parameter probe (no forward runs there)"
+    elif s["task"] == "gcn" and GCN_TORCH_KW.get("cached"):
         # FAIRNESS FIX (2026-10-13 audit): GCNConv(cached=True) fills its cache on the first
         # call; filled inside a compiled forward, the next call would fail dynamo's guard on
         # `_cached_edge_index` and recompile inside a timed round. One untimed eager forward

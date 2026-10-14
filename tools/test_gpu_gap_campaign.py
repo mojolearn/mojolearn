@@ -512,8 +512,10 @@ def test_smoke_worker_stage_restarts_a_worker_that_does_not_answer(tmp_path):
     assert calls == ['kill', 'start'] and w.report['restarts'][0]['after'].startswith('stage-data ')
 
 
-def test_only_the_slow_table_recipes_get_a_longer_timer_and_rows_record_it():
-    # Andrew 2026-10-14: default 5 s; a longer timer only for the recipes in SMOKE_SLOW, never global
+def test_only_the_slow_table_recipes_get_a_longer_timer_and_rows_record_it(monkeypatch):
+    # Andrew 2026-10-14: default 5 s; a longer timer only for the recipes in SMOKE_SLOW, never global.
+    # smoke-fixes r16: the table is empty (every former entry fixed in the probe); the rule is checked on one entry.
+    monkeypatch.setitem(C.SMOKE_SLOW, 'algos/moe/synthetic/rows=full', (30.0, 'test entry'))
     args = SimpleNamespace(smoke_timeout=5.0)
     slow = {'id': 'algos/moe/synthetic/rows=full'}
     plain = {'id': 'algos/adam/synthetic/rows=full'}
@@ -523,6 +525,11 @@ def test_only_the_slow_table_recipes_get_a_longer_timer_and_rows_record_it():
     assert all(isinstance(v, tuple) and v[0] > 5.0 and v[1] for v in C.SMOKE_SLOW.values())
     # an explicit longer --smoke-timeout is never shortened by the table
     assert C.recipe_timeout(SimpleNamespace(smoke_timeout=60.0), slow) == (60.0, 'default --smoke-timeout')
+
+
+def test_the_slow_table_is_empty_after_r16():
+    # smoke-fixes r16 (2026-10-14): "slow" = broken until proven otherwise; an entry needs a measured reason
+    assert C.SMOKE_SLOW == {}
 
 
 def test_mamba_ssm_is_prepared_once_per_box_only_when_a_planned_arm_needs_it(tmp_path, monkeypatch):
