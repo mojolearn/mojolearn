@@ -93,7 +93,7 @@ FAKE_WORKER = textwrap.dedent('''
         if req["op"] == "quit":
             break
         if req["op"] == "warm-box":
-            proto.write(json.dumps({"event": "warm-box", "facts": {"status": "done"}}) + "\n")
+            proto.write(json.dumps({"event": "warm-box", "facts": {"status": "done"}}) + "\\n")
             continue
         if "hang" in req.get("argv", []):
             time.sleep(600)       # a C call that never returns to Python

@@ -155,20 +155,26 @@ def redirect_output(path, mode="a"):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     fh = open(path, mode + "b", buffering=0)
     saved = [os.dup(1), os.dup(2)]
+    # sys.stdout/sys.stderr too: they need not write to fds 1 and 2 (a replaced stream, e.g. under pytest)
+    text = open(os.dup(fh.fileno()), "w", buffering=1, encoding="utf-8", errors="replace")
+    streams = (sys.stdout, sys.stderr)
     try:
         os.dup2(fh.fileno(), 1)
         os.dup2(fh.fileno(), 2)
+        sys.stdout = sys.stderr = text
         yield path
     finally:
-        for s in (sys.stdout, sys.stderr):
+        for s in (text,) + streams:
             try:
                 s.flush()
             except Exception:  # noqa: BLE001
                 pass
+        sys.stdout, sys.stderr = streams
         os.dup2(saved[0], 1)
         os.dup2(saved[1], 2)
         for fd in saved:
             os.close(fd)
+        text.close()
         fh.close()
 
 
