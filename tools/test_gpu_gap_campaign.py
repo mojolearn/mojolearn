@@ -291,6 +291,7 @@ def _fake_smoke(monkeypatch, behave):
     monkeypatch.setattr(C, 'SmokeWorker', FakeWorker)
     monkeypatch.setattr(C, 'worker_env', lambda args: {})
     monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
+    monkeypatch.setattr(C, 'smoke_fixtures', lambda *a, **k: {'status': 'ok', 'problems': []})
 
 
 def test_smoke_writes_rows_text_and_uploads_after_every_recipe(tmp_path, monkeypatch):
@@ -417,3 +418,39 @@ def test_smoke_stages_every_recipes_block_prep_once_before_the_loop(tmp_path, mo
     assert cmd[cmd.index('--race-ids') + 1].startswith('@')
     assert sorted((tmp_path / 'stage-race-ids.identical.txt').read_text().split()) == sorted(ids)
     assert '--datasets' not in cmd
+
+
+def test_smoke_generates_missing_neural_fixtures_once_then_verifies(tmp_path, monkeypatch):
+    # smoke-fixes (2026-10-14): the Apple smoke had no fixture set, so every layer recipe refused; the smoke
+    # now stages the set itself (the timed campaign's fixture_commands), outside every recipe's timer
+    monkeypatch.delenv('MOJOLEARN_NEURAL_FIXTURES', raising=False)
+    races = [dict(family='algos', lane='layernorm', dataset='synthetic'),
+             dict(family='algos', lane='gcn', dataset='taxi'),
+             dict(family='algos', lane='adam', dataset='synthetic')]
+    args = SimpleNamespace(python_env='py', cache=str(tmp_path), smoke_stage_timeout=99.0)
+    fixdir = tmp_path / 'algos-data' / 'neural-fixtures'
+    ran, verified = [], []
+
+    def run(cmd, log, timeout, env=None):
+        ran.append((cmd[1].rsplit('/', 1)[-1], cmd[2], timeout))
+        if cmd[2] == 'generate':
+            fixdir.mkdir(parents=True, exist_ok=True)
+            (fixdir / 'manifest.json').write_text(json.dumps({'torch_version': 't', 'entries': {
+                'layernorm/synthetic/nb64': {'lane': 'layernorm', 'dataset': 'synthetic'},
+                'gcn/taxi/n9': {'lane': 'gcn', 'dataset': 'taxi'}}}))
+        return 0, 1.0
+    monkeypatch.setattr(C, 'run_bounded', run)
+    monkeypatch.setattr(C, 'bounded_check', lambda cmd, timeout=120: verified.append(cmd) or (True, 'NF-VERIFY ok'))
+    chk = C.smoke_fixtures(args, {'identical': races, 'fast': races}, tmp_path)
+    assert chk['status'] == 'ok' and chk['generated'] and chk['entries'] == 2, chk
+    assert ran == [('bench_board_algos.py', 'prep', 99.0), ('neural_fixtures.py', 'generate', 99.0)]
+    gen = [c for c in C.fixture_commands(args, chk['generated_lanes'], fixdir) if c[2] == 'generate'][0]
+    assert gen[gen.index('--lanes') + 1] == 'gcn,layernorm'
+    assert verified and verified[-1][2] == 'verify' and verified[-1][-1] == str(fixdir)
+    ran.clear()
+    chk = C.smoke_fixtures(args, {'identical': races}, tmp_path)   # present and complete: verify only
+    assert chk['status'] == 'ok' and not chk['generated'] and ran == []
+    chk = C.smoke_fixtures(args, {'identical': races + [dict(family='algos', lane='conv1d', dataset='synthetic')]},
+                           tmp_path)                                # an entry missing: generate again (refuses: the
+    assert chk['generated'] and chk['status'] == 'failed'          # fake generate cannot write conv1d)
+    assert any('conv1d/synthetic' in p for p in chk['problems'])

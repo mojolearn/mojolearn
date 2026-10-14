@@ -148,6 +148,19 @@ def prepare_arm_venvs(args, plan, out):
     return dict(status="ok" if not problems else "failed", problems=sorted(problems.values()), arms=got)
 
 
+def fixture_commands(args, lanes, fixtures):
+    """The layer lanes' fixture preparation: the graph lanes' data blocks, generate, verify (the timed
+    campaign's prepare_fixtures and the smoke's smoke_fixtures run the same three commands)."""
+    data = Path(args.cache) / "algos-data/rows-full"
+    return [
+        [args.python_env, str(ROOT / "tools/bench_board_algos.py"), "prep",
+         "--data", str(data), "--lanes", ",".join(lanes), "--datasets", "taxi,istella"],
+        [args.python_env, str(ROOT / "tools/neural_fixtures.py"), "generate",
+         "--out", str(fixtures), "--data", str(data), "--lanes", ",".join(lanes)],
+        [args.python_env, str(ROOT / "tools/neural_fixtures.py"), "verify", "--dir", str(fixtures)],
+    ]
+
+
 def prepare_fixtures(args, plan, out):
     # FAIRNESS FIX (2026-10-13 audit): earlier full-plan audits staged tabular
     # data but no layer fixtures. Generate test inputs with the pinned worker
@@ -157,16 +170,8 @@ def prepare_fixtures(args, plan, out):
                     and A.LANES[r["lane"]]["kind"] == "layer"})
     if not lanes:
         return None
-    data = Path(args.cache) / "algos-data/rows-full"
     fixtures = Path(args.cache) / "algos-data/neural-fixtures"
-    commands = [
-        [args.python_env, str(ROOT / "tools/bench_board_algos.py"), "prep",
-         "--data", str(data), "--lanes", ",".join(lanes), "--datasets", "taxi,istella"],
-        [args.python_env, str(ROOT / "tools/neural_fixtures.py"), "generate",
-         "--out", str(fixtures), "--data", str(data), "--lanes", ",".join(lanes)],
-        [args.python_env, str(ROOT / "tools/neural_fixtures.py"), "verify", "--dir", str(fixtures)],
-    ]
-    for cmd in commands:
+    for cmd in fixture_commands(args, lanes, fixtures):
         if logged(cmd, out / "fixture-preparation.log"):
             raise RuntimeError("fixture preparation failed; no measurements started")
     archive = out / "prepared-fixtures.tar.gz"
@@ -352,12 +357,11 @@ def bounded_check(cmd, timeout=120):
 
 
 def smoke_checks(args, plans, out, worker=None):
-    """The box-level checks, once: driver imports, data, neural fixtures, the PyPI wheel, our GPU set and the
+    """The box-level checks, once: driver imports, data, the PyPI wheel, our GPU set and the
     retained source snapshot every recipe's check reuses. Returns ({name: check}, receipts for the commands).
     With the smoke worker loaded, its load report is the drivers-and-libraries check."""
     checks, receipts = {}, {}
     races = [r for plan in plans.values() for r in plan]
-    python = args.python_env
     if worker is not None and worker.alive():
         checks["drivers-import"] = worker_check(worker.report)
     else:
@@ -380,17 +384,8 @@ def smoke_checks(args, plans, out, worker=None):
     probs += ["corpus key %s missing" % k for k in corpus_missing]
     checks["data"] = dict(status="ok" if not probs else "failed", problems=probs, datasets=data,
                           sha256_verified=bool(args.smoke_verify_data))
-    layer = sorted({r["lane"] for r in races if r["family"] == "algos" and B.ALGOS.LANES[r["lane"]]["kind"] == "layer"})
-    if layer:
-        fixdir = os.environ.get("MOJOLEARN_NEURAL_FIXTURES") or str(Path(args.cache) / "algos-data/neural-fixtures")
-        if not Path(fixdir).is_dir():
-            checks["neural-fixtures"] = dict(status="failed", lanes=layer, problems=[
-                "no neural fixtures at %s (the timed campaign generates them before its first recipe)" % fixdir])
-        else:
-            ok, detail = bounded_check([python, str(ROOT / "tools/neural_fixtures.py"), "verify",
-                                        "--dir", fixdir], timeout=600)
-            checks["neural-fixtures"] = dict(status="ok" if ok else "failed", lanes=layer, dir=fixdir,
-                                             problems=[] if ok else ["fixture verify failed: " + detail])
+    # the neural fixtures are staged (generated when missing) and verified by smoke_fixtures, after the data
+    # stage (smoke-fixes 2026-10-14)
     if not args.wheel_manifest:
         checks["wheel"] = dict(status="failed", problems=["no --wheel-manifest: ours has no PyPI wheel provenance"])
     else:
@@ -606,6 +601,70 @@ def smoke_stage(args, plans, out, receipts):
     return dict(status="ok" if not probs else "failed", problems=probs, runs=runs)
 
 
+def smoke_fixtures(args, plans, out):
+    """The layer lanes' neural fixtures, ONCE, before the per-recipe loop, like the data.
+
+    smoke-fixes (2026-10-14; Apple smoke, 26 layer recipes x 2 modes: "quality scorer unavailable: neural
+    fixtures: neural fixtures missing: run tools/neural_fixtures.py generate", and from the same refusal
+    "missing parameter/version probe: ours|ours-fast" + "missing worker GPU/driver/OS evidence" on every
+    layer lane, "no parameter records" on gcn). The smoke only CHECKED for the fixture set (the timed
+    campaign's prepare_fixtures generates it before its first recipe), so on a box that had never run the
+    timed campaign (the Apple M2 Pro) every ours/ours-fast layer arm refused at construction
+    (tools/neural_fixtures.py load_for_lane -> FixturesMissing). Now the smoke stages them itself: when the
+    manifest is missing, or lacks a (lane, dataset) a planned layer recipe needs, it runs the timed campaign's
+    own commands (fixture_commands: the graph lanes' data blocks, generate, verify) under
+    --smoke-stage-timeout each, outside every recipe's timer; then it verifies every file's sha256 against
+    the manifest and records the result as the "neural-fixtures" check in smoke.json (dir, manifest sha256,
+    entries, torch version, whether it generated, seconds). The recipes read the same directory
+    ($MOJOLEARN_NEURAL_FIXTURES, else <cache>/algos-data/neural-fixtures, i.e. <dirname(--data)>/
+    neural-fixtures: tools/neural_fixtures.py default_dir)."""
+    races = [r for plan in plans.values() for r in plan
+             if r["family"] == "algos" and B.ALGOS.LANES[r["lane"]]["kind"] == "layer"]
+    if not races:
+        return dict(status="ok", problems=[], skipped="no layer recipe")
+    need = sorted({(r["lane"], r["dataset"]) for r in races})
+    fixdir = Path(os.environ.get("MOJOLEARN_NEURAL_FIXTURES") or Path(args.cache) / "algos-data/neural-fixtures")
+    manifest = fixdir / "manifest.json"
+
+    def held():
+        try:
+            man = json.loads(manifest.read_text())
+        except (OSError, ValueError):
+            return None, set()
+        return man, {(e.get("lane"), e.get("dataset")) for e in (man.get("entries") or {}).values()}
+
+    man, have = held()
+    missing = [x for x in need if x not in have]
+    rec = dict(dir=str(fixdir), lanes=sorted({l for l, _ in need}), generated=False, problems=[])
+    if man is None or missing:
+        # generate covers every lane the set already held too: generate rewrites the manifest whole
+        lanes = sorted({l for l, _ in need} | {l for l, _ in have})
+        log = out / "logs" / "neural-fixtures.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        rec.update(generated=True, generated_lanes=lanes, log=str(log), runs=[],
+                   reason="no manifest" if man is None else "missing %s" % ", ".join("/".join(x) for x in missing))
+        for cmd in fixture_commands(args, lanes, fixdir)[:2]:          # prep, generate (verify: below)
+            rc, seconds = run_bounded(cmd, log, args.smoke_stage_timeout)
+            rec["runs"].append(dict(command=Path(cmd[1]).name + " " + cmd[2], returncode=rc, seconds=seconds))
+            if rc != 0:
+                rec["problems"].append("fixture %s %s: %s" % (cmd[2], "timed out at %ss" % args.smoke_stage_timeout
+                                                              if rc is None else "rc %s" % rc,
+                                                              "; ".join(_tail(log, 2))))
+                break
+        man, have = held()
+    ok, detail = bounded_check(fixture_commands(args, [], fixdir)[2], timeout=max(600, args.smoke_stage_timeout))
+    if not ok:
+        rec["problems"].append("fixture verify failed: " + detail)
+    missing = [x for x in need if x not in have]
+    if missing:
+        rec["problems"].append("no fixture entry for %s in %s" % (", ".join("/".join(x) for x in missing), manifest))
+    if man is not None:
+        rec.update(entries=len(man.get("entries") or {}), torch_version=man.get("torch_version"),
+                   torch_geometric_version=man.get("torch_geometric_version"), manifest_sha256=E.file_hash(manifest))
+    rec["status"] = "ok" if not rec["problems"] else "failed"
+    return rec
+
+
 def write_smoke(out, doc):
     E.write(out / "smoke.json", doc)
     (out / "smoke.txt").write_text(smoke_text(doc))
@@ -626,7 +685,8 @@ def worker_row(race, mode, reply, restart, directory, log, timeout):
     status = reply.get("status")
     rc = reply.get("rc") if status == "done" else (None if status == "timeout" else 1)
     row = smoke_row(race, mode, rc, reply.get("seconds"), directory, log, timeout)
-    row["worker"] = {k: reply.get(k) for k in ("status", "error", "children_killed", "arm_servers")}
+    row["worker"] = {k: reply.get(k) for k in ("status", "error", "children_killed", "arm_servers",
+                                                "torch_switches_restored")}
     if reply.get("stopped_at") and isinstance(row.get("reached"), dict):
         row["reached"]["stopped_at"] = reply["stopped_at"]     # where the recipe's timer stopped its check
     if status == "error" and row["status"] == "FAILED":
@@ -664,6 +724,11 @@ def run_smoke(args, plans, out):
         doc["checks"]["stage"] = smoke_stage(args, plans, out, receipts)
     except Exception as exc:  # noqa: BLE001 - never stop early
         doc["checks"]["stage"] = dict(status="failed", problems=["data stage raised: %r" % (exc,)])
+    write_smoke(out, doc)
+    try:
+        doc["checks"]["neural-fixtures"] = smoke_fixtures(args, plans, out)
+    except Exception as exc:  # noqa: BLE001 - never stop early; the layer recipes then refuse by name
+        doc["checks"]["neural-fixtures"] = dict(status="failed", problems=["neural fixtures raised: %r" % (exc,)])
     write_smoke(out, doc)
     first = next((r for p in plans.values() for r in p), None)
     if first is not None and worker.alive():
