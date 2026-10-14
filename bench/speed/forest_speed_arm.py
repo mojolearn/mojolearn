@@ -241,6 +241,11 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
     for k in ("permutation_count", "fold_len_multiplier", "fold_permutation_block"):
         if cfg.get(k) is not None:
             params[k] = cfg[k]      # the Ordered lane's knobs, as CatBoost's arm
+    if cfg.get("ctr_estimation_permutation_id") is not None:
+        # smoke-fixes (2026-10-14; gbdt-categorical: "ctr_estimation_permutation_id missing from
+        # catboost-gpu read-back"): with permutation_count 1 above, the identity order CatBoost's
+        # has_time=True runs (speed_gbdt_arm.TASK_LANES gbdt-categorical ctr_permutations)
+        params["ctr_estimation_permutation_id"] = cfg["ctr_estimation_permutation_id"]
     # smoke-fixes (2026-10-14; gbdt-symmetric/-1000, gbdt-multiclass, gbdt-ordered): the
     # searcher, border-search subsample and feature fraction the lane pins on both arms
     # (speed_gbdt_arm.R7_SEARCHER_LANES and lane_config; CatBoost data_partition,

@@ -1944,12 +1944,29 @@ TASK_LANES = {
             "pandas frame with the declared columns int64 (it refuses float categorical "
             "columns) and the others float32; each library builds its own pool inside its "
             "fit clock",
-            "CTR row order: CatBoost has_time True, so it computes its target statistics "
-            "over the rows in the order given, as ours does, instead of shuffling them first",
+            "CTR row order: one permutation, the rows in the order given, on both arms: "
+            "CatBoost has_time True (no shuffle, one identity permutation), ours one "
+            "permutation with the identity as its CTR estimation order, set explicitly",
             "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense "
             "categorical column); a test value unseen in training shares one unknown bucket "
             "k per column",
-        )),
+        ),
+        # smoke-fixes (2026-10-14; gbdt-categorical/taxi: "ctr_estimation_permutation_id missing
+        # from catboost-gpu read-back", "has_time missing from ours read-back"): the CTR
+        # permutations, pinned on ours to the ones CatBoost's has_time=True runs. CatBoost 1.2.10:
+        # has_time sets PermutationCount = 1 (catboost_options.cpp:1042-1044, an assignment), the
+        # estimation permutation is PermutationsCount() - 1 = 0 (doc_parallel_boosting.h:101-103),
+        # and permutation 0 is the identity order (permutation.cpp:14-17, permutation.h
+        # IdentityPermutationId 0); has_time also skips the load-time pool shuffle
+        # (private/libs/algo/preprocess.cpp:161-199). Ours unset ran CatBoost's has_time=False
+        # GPU default instead: 4 permutations (gbdt/train.mojo perm_count) with the CTRs of the
+        # exported model estimated on permutation 3, a keyed shuffle of the rows
+        # (gbdt/ctrs/ctr_order.mojo), so the lane note "ours computes them over the rows in the
+        # order given" was not what ours ran. Ours now runs one permutation, the identity
+        # (train.mojo est_perm; doc_parallel_boosting.mojo learn_perm_count fallback 1, as theirs
+        # :317). Ours' bits on this lane change. Results raced before this change were wrong for
+        # this lane; apply extra scrutiny.
+        ctr_permutations=dict(permutation_count=1, ctr_estimation_permutation_id=0)),
 }
 
 
@@ -2287,6 +2304,8 @@ def lane_config(lane, size):
                 cfg["boosting_type"] = task["boosting_type"]
             if task.get("ordered"):
                 cfg.update(task["ordered"])
+            if task.get("ctr_permutations"):
+                cfg.update(task["ctr_permutations"])    # ours only (catboost_tree_params skips them)
             if task["grow_policy"] == "SymmetricTree" and lane != "gbdt-ordered":
                 # the opponents without an oblivious grower race their own
                 # at the same depth (TASK_LANES, "grower")
@@ -2393,10 +2412,19 @@ def boost_from_average_for(data):
     for RMSE (ours and CatBoost's default, LightGBM's, XGBoost's fitted
     intercept), margin 0 for Logloss (ours and CatBoost's default; XGBoost
     and LightGBM default to the class prior and are pinned to 0). None for
-    multiclass and ranking, whose losses no arm starts from an average."""
+    multiclass, whose loss no arm starts from an average.
+
+    smoke-fixes (2026-10-14; gbdt-rank-pairlogit/-yetirank: "boost_from_average missing from
+    catboost-gpu read-back"): False for ranking, set explicitly on ours and CatBoost's ranker
+    (catboost_rank_arms) and read back on both. It is the value both resolve unset: CatBoost's
+    default false (boosting_options.cpp:17), True refused for PairLogit and YetiRank
+    (catboost_options.cpp:703-709); ours' unset is True only for RMSE, MAE, Quantile and MAPE
+    (gbdt/train.mojo boost_from_average -1), True refused for the ranking losses (:2805-2822).
+    No bit change. XGBoost's and LightGBM's ranking arms are refused by name on these lanes
+    and do not call this."""
     if data.task == "regression":
         return True
-    if data.task == "binary":
+    if data.task in ("binary", "ranking"):
         return False
     return None
 
@@ -3339,6 +3367,9 @@ def catboost_rank_arms(lane, cfg, data, devices):
     def make(task_type):
         p = catboost_tree_params(cfg, task_type)
         p["loss_function"] = cfg["objectives"]["catboost"]
+        bfa = boost_from_average_for(data)
+        if bfa is not None:
+            p["boost_from_average"] = bfa       # False, as ours (boost_from_average_for)
         return catboost.CatBoostRanker(**p)
 
     def fit(m, d):
