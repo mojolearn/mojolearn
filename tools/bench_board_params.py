@@ -797,6 +797,29 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     if lane == "kernel-ridge" and param == "kernel_params" and param not in ours and theirs.get(param) is None:
         if ours.get("kernel") == theirs.get("kernel") and ours.get("kernel") in ("linear", "rbf", "poly", "polynomial", "sigmoid", "cosine"):
             return "cuML's named kernel uses gamma/degree/coef0; kernel_params=None supplies no callable-kernel overrides"
+    # FAIRNESS FIX (2026-10-13 audit): fixed-point completion and default
+    # output/cache controls were missing from one of these APIs. These are
+    # value-conditional mappings, not permission to ignore active settings.
+    # Sources: density.py; cuML 26.8 cluster/dbscan.pyx; hdbscan.py and
+    # hdbscan/impl/runner.mojo; cuML cluster/hdbscan/hdbscan.pyx.
+    if lane == "dbscan":
+        if param == "max_iterations" and param in ours and ours[param] is None and param not in theirs:
+            return "both propagate labels to the fixed point; cuML exposes no iteration cap, and our None requests completion"
+        if param == "prediction_data" and ours.get(param) is False and param not in theirs:
+            return "no additional prediction cache is requested; cuML DBSCAN exposes no prediction-data option"
+        if param == "calc_core_sample_indices" and param not in ours and theirs.get(param) is True:
+            return "our DBSCAN always produces core_sample_indices_ and components_; cuML is explicitly set to retain both"
+        if param == "max_mbytes_per_batch" and param in ours and param in theirs and ours[param] is None and theirs[param] is None:
+            return "both libraries choose distance-batch memory automatically; neither setting subsamples the input"
+    if lane == "hdbscan" and theirs.get("build_algo") == "brute_force":
+        if param == "build_algo" and param not in ours:
+            return "our HDBSCAN fixes exhaustive neighbors; cuML explicitly selects the same exact brute-force graph construction"
+        if param in ("build_kwds", "device_ids") and param not in ours and theirs.get(param) is None:
+            return "cuML's exact graph uses the default unpartitioned single-device path; no approximate or multi-device overrides are requested"
+        if param == "gen_min_span_tree" and param not in ours and theirs.get(param) is False:
+            return "both construct the internal MST for clustering; neither requests an additional exported minimum-spanning-tree object"
+        if param == "p" and param not in ours and theirs.get(param) is None and ours.get("metric") == theirs.get("metric") == "euclidean":
+            return "p only parameterizes Minkowski distance; both arms explicitly use Euclidean distance"
     return None
 
 

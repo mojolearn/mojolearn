@@ -111,6 +111,24 @@ def test_cuml_scheduling_and_inactive_kernel_options_preserve_work_checks():
     assert BP.check("kernel-ridge", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
 
 
+def test_clustering_fixed_controls_do_not_allow_caps_caches_or_approximation():
+    ours = dict(__library__="mojolearn", eps=.5, max_iterations=None,
+                prediction_data=False, max_mbytes_per_batch=None)
+    other = dict(__library__="cuml", eps=.5, calc_core_sample_indices=True,
+                 max_mbytes_per_batch=None)
+    assert BP.check("dbscan", {"ours": ours, "cuml-gpu": other})["verdict"] == "MATCHED"
+    for key, value in [("max_iterations", 100), ("prediction_data", True), ("eps", .7)]:
+        assert BP.check("dbscan", {"ours": dict(ours, **{key: value}), "cuml-gpu": other})["verdict"] == "REFUSED"
+    assert BP.check("dbscan", {"ours": ours, "cuml-gpu": dict(other, calc_core_sample_indices=False)})["verdict"] == "REFUSED"
+    ours = dict(__library__="mojolearn", metric="euclidean", min_cluster_size=5)
+    other = dict(__library__="cuml", metric="euclidean", min_cluster_size=5,
+                 build_algo="brute_force", build_kwds=None, device_ids=None, gen_min_span_tree=False, p=None)
+    assert BP.check("hdbscan", {"ours": ours, "cuml-gpu": other})["verdict"] == "MATCHED"
+    for key, value in [("build_algo", "nn_descent"), ("build_kwds", {"knn_n_clusters": 2}),
+                       ("device_ids", "all"), ("gen_min_span_tree", True), ("min_cluster_size", 6)]:
+        assert BP.check("hdbscan", {"ours": ours, "cuml-gpu": dict(other, **{key: value})})["verdict"] == "REFUSED"
+
+
 def test_cuml_minmax_fixed_behavior_remains_parameter_checked():
     ours = _est("mojolearn.preprocessing", "MinMaxScaler", feature_range=(0, 1), clip=False)
     theirs = _est("cuml.preprocessing", "MinMaxScaler", feature_range=(0, 1))
