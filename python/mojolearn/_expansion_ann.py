@@ -1007,6 +1007,13 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         k-means iterations for the coarse quantizer.
     random_state : int, default 0
         Seed for the k-means initialization.
+    max_train_points_per_cluster : int or None, default None
+        Size of the training sample, as cuVS's ``ivf_sq`` parameter of the
+        same name. With an int ``m``, the coarse k-means and the quantization
+        ranges are both trained on ``min(n_samples, m * n_lists)`` evenly
+        spaced rows, and every row is still indexed. None keeps the default:
+        the k-means trains on an evenly spaced subset of the rows and the
+        quantization ranges on every row. Must be positive.
     numeric_mode : str or None, default None
         Numeric mode for this estimator; None uses the package default set
         with `mojolearn.set_numeric_mode`.
@@ -1039,7 +1046,8 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     TypeError
         If an integer parameter is not an int.
     ValueError
-        If `n_lists` is out of range.
+        If `n_lists` is out of range or `max_train_points_per_cluster` is not
+        positive.
 
     Examples
     --------
@@ -1049,6 +1057,11 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     >>> distances, indices = index.search(X[:10])
     >>> indices.shape
     (10, 5)
+
+    Training on at most 32 rows per list:
+
+    >>> index = mojolearn.IVFSQIndex(n_lists=16, n_probes=4, n_neighbors=5,
+    ...                              max_train_points_per_cluster=32).fit(X)
     """
 
     _BINDING = "_mojolearn_x_ann"
@@ -1058,12 +1071,17 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
                     ("sq_vmin_", "<f4"), ("sq_delta_", "<f4"), ("codes_", "<i4"))
 
-    def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0):
+    def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0,
+                 max_train_points_per_cluster=None):
         self.n_lists = n_lists
         self.n_probes = n_probes
         self.n_neighbors = n_neighbors
         self.kmeans_n_iters = kmeans_n_iters
         self.random_state = random_state
+        # release-0845: cuVS ivf_sq's training-sample size (ivf_sq_build.cuh:461-470); the
+        # binding's train_rows_per_list (x_ann/ivf_pq_device.mojo ivf_sq_build_device). Not in
+        # _SAVE_PARAMS: it shapes only the build, and files saved before it still load.
+        self.max_train_points_per_cluster = max_train_points_per_cluster
 
     _KIND = 1
 
@@ -1099,6 +1117,12 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         n_lists = self._p("n_lists")
         if not 1 <= n_lists <= n:
             raise ValueError(f"mojolearn IVFSQIndex: n_lists must be in [1, {n}], got {n_lists}")
+        train_per_list = 0          # 0: the binding's default training rows
+        if self.max_train_points_per_cluster is not None:
+            train_per_list = self._p("max_train_points_per_cluster")
+            if train_per_list < 1:
+                raise ValueError("mojolearn IVFSQIndex: max_train_points_per_cluster must be positive or None, "
+                                 f"got {train_per_list}")
         centers = empty((n_lists * dim,), "<f4")
         offsets = empty((n_lists + 1,), "<i4")
         indices = empty((n,), "<i4")
@@ -1110,8 +1134,8 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
             [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(offsets, name="list_offsets_"),
              addr(indices, name="list_indices_"), addr(vmin, name="sq_vmin_"), addr(delta, name="sq_delta_"),
              addr(codes, name="codes_")],
-            # n, dim, n_lists, kmeans_n_iters, seed
-            [n, dim, n_lists, self._p("kmeans_n_iters"), self._p("random_state")],
+            # n, dim, n_lists, kmeans_n_iters, seed, train_rows_per_list
+            [n, dim, n_lists, self._p("kmeans_n_iters"), self._p("random_state"), train_per_list],
         )
         self.centers_ = centers.reshape((n_lists, dim))
         self.list_offsets_, self.list_indices_ = offsets, indices

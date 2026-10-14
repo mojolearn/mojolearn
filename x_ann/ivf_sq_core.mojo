@@ -48,11 +48,14 @@ def sq_range_finish(c: Int, lo: Float32, hi: Float32, vmin: F32P, delta: F32P):
 
 
 @always_inline
-def sq_range_cell(c: Int, r: F32P, n: Int, dim: Int, vmin: F32P, delta: F32P):
+def sq_range_cell(c: Int, r: F32P, n: Int, dim: Int, vmin: F32P, delta: F32P, row_stride: Int = 1):
+    """Column c's range over rows 0, s, ..., (n - 1) s of `r` (s = `row_stride`;
+    release-0845: s > 1 is IVFSQIndex's max_train_points_per_cluster training rows,
+    cuVS ivf_sq_build.cuh:483-525 trains the range on its training subset)."""
     var lo = ftz(r.unsafe_load(c))
     var hi = lo
     for i in range(1, n):
-        var v = ftz(r.unsafe_load(i * dim + c))
+        var v = ftz(r.unsafe_load(i * row_stride * dim + c))
         if sq_lo_takes(v, lo):
             lo = v
         if sq_hi_takes(v, hi):

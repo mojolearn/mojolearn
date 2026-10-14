@@ -86,6 +86,8 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IVF_IDN_STRIDED_INIT,
     IVF_MAGNITUDE_BOUND,
     IVF_TRAINSET_STRIDE,
+    ivf_explicit_train_rows,
+    ivf_explicit_train_stride,
     ivf_trainset_stride,
     IvfFlatIndex,
     IvfFlatIndexParams,
@@ -679,8 +681,19 @@ def _ivf_flat_build_impl[resident: Bool](
     comptime if IVF_TRAINSET_STRIDE:
         train_stride = ivf_trainset_stride(n_rows, n_lists)
         n_train = n_rows // train_stride
+    # release-0845: a caller-set training-row count (IVFSQIndex
+    # max_train_points_per_cluster) replaces the rule above in every mode:
+    # rows 0, s, ..., (n_train - 1) s, gathered as the stride path does.
+    # `strided` is `train_stride > 1` whenever the option is unset (the
+    # default rule gives n_train < n_rows exactly when s > 1), so default
+    # bits do not change.
+    var strided = train_stride > 1
+    if params.train_rows_per_list > 0:
+        n_train = ivf_explicit_train_rows(n_rows, n_lists, params.train_rows_per_list)
+        train_stride = ivf_explicit_train_stride(n_rows, n_lists, params.train_rows_per_list)
+        strided = n_train < n_rows
     var xt = List[Float32]()
-    if n_train < n_rows and train_stride == 1:
+    if n_train < n_rows and not strided:
         var rows = ivf_trainset_rows(n_rows, n_train, UInt64(params.seed))
         comptime if ANN3_TRAINSET_COPY:
             # lane ann-apple3, OPT-IN: one memcpy per sampled row
@@ -696,7 +709,7 @@ def _ivf_flat_build_impl[resident: Bool](
 
     var sum_scale = Float64(0.0)
     comptime if not IVF_IDN_DEVICE_SCALE:
-        if train_stride > 1:
+        if strided:
             sum_scale = plan_quantizer_scale(x, n_train, dim, train_stride)
         elif n_train < n_rows:
             sum_scale = plan_quantizer_scale(xt, n_train, dim)
@@ -739,7 +752,7 @@ def _ivf_flat_build_impl[resident: Bool](
         _ = dflag^
         st.host("device_validate")
     var dxt: DeviceBuffer[DType.float32]
-    if train_stride > 1:
+    if strided:
         # the strided trainset, gathered from the rows already on the device
         dxt = ctx.enqueue_create_buffer[DType.float32](n_train * dim)
         ctx.enqueue_function[ivf_stride_rows_kernel](

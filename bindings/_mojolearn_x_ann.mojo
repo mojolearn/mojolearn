@@ -245,12 +245,14 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
 
 def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, centers, offsets, list_indices, vmin, delta, codes.
-    params: n, dim, n_lists, kmeans_n_iters, seed."""
+    params: n, dim, n_lists, kmeans_n_iters, seed[, train_rows_per_list] (release-0845:
+    IVFSQIndex max_train_points_per_cluster; 0 or absent keeps the default training rows)."""
     var n = p_int(params, 0)
     var dim = p_int(params, 1)
     var n_lists = p_int(params, 2)
     var iters = p_int(params, 3)
     var seed = p_int(params, 4)
+    var train_rows_per_list = p_int(params, 5) if len(params) > 5 else 0
     var bst = AnnStages("ivf_sq_binding")
     var x = in_f32(addrs, 0, n * dim)
     bst.host("copy_in")
@@ -265,7 +267,7 @@ def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
         codes_addr = a_int(addrs, 6)
     with GILReleased(Python()):
         ivf_sq_build_device(x, n, dim, n_lists, iters, seed, centers, offsets, list_indices, vmin, delta, codes,
-                            codes_addr)
+                            codes_addr, train_rows_per_list=train_rows_per_list)
     bst.host("build")
     out_f32(centers, addrs, 1)
     out_i32(offsets, addrs, 2)

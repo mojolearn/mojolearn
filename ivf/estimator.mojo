@@ -99,9 +99,13 @@ def ivf_flat_build_host(
     metric: Int = METRIC_L2_EXPANDED,
     seed: UInt64 = 0,
     with_list_data: Bool = True,
+    train_rows_per_list: Int = 0,
 ) raises -> IvfFlatIndex:
     """`ivf_flat::build`, host list in, index out. `with_list_data = False`
     leaves `list_data` empty (`ivf_flat_build`; the x_ann indexes).
+    `train_rows_per_list > 0` sets the quantizer's training-row count
+    (`IvfFlatIndexParams.train_rows_per_list`; release-0845, IVFSQIndex
+    max_train_points_per_cluster); 0 keeps the build's rule.
 
     **WITH `MOJOLEARN_IDENTITY_TRACE` SET, PREFER
     `ivf_flat_build_and_search_host`.** This entry constructs its own
@@ -115,6 +119,7 @@ def ivf_flat_build_host(
     params.kmeans_trainset_fraction = Float64(1.0)
     params.metric = metric
     params.seed = seed
+    params.train_rows_per_list = train_rows_per_list
     var trace = IdentityTrace()
     return ivf_flat_build(ctx, trace, params, x, n_rows, dim, with_list_data)
 
