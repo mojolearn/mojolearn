@@ -27,6 +27,16 @@ A = _load("bench_board_algos")
 bb = _load("bench_board")
 
 
+def test_function_identity_survives_worker_json_transport():
+    import math
+    runner = A.Runner({}, lambda: None, lambda: {}, record={
+        "__library__": "math", "__implementation__": math.sqrt, "seed": 7})
+    transported = json.loads(json.dumps(runner.record))
+    assert transported["implementation"] == {"module": "math", "name": "sqrt"}
+    assert A._BP().arm_record(transported)["implementation"] == transported["implementation"]
+    assert transported["params"]["seed"] == 7
+
+
 def test_cuml_minmax_uses_supported_unclipped_constructor(monkeypatch):
     class MinMaxScaler:
         def __init__(self, feature_range=(0, 1)):

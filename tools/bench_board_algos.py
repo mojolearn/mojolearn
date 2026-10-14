@@ -2799,7 +2799,9 @@ class Runner:
         #: what this arm was constructed with, for tools/bench_board_params.py:
         #: BP.arm_record(constructed object), or a declared {"__library__": ...}
         #: dict of the values really passed (a function-call arm)
-        self.record = record
+        # FAIRNESS FIX (2026-10-13 audit): resolve a real library callable
+        # before the worker's JSON transport turns it into a string repr.
+        self.record = _BP().arm_record(record) if record is not None else None
 
     def sync_for_receipt(self):
         if self._sync:
