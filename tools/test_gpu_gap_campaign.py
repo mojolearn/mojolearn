@@ -247,46 +247,107 @@ def test_smoke_rows_matched_refused_started_failed(tmp_path):
     assert row['status'] == 'FAILED' and 'ImportError' in row['problems'][0]
 
 
+class FakeWorker:
+    """Stands in for C.SmokeWorker: `behave(argv, log, timeout)` -> (reply or None, restart or None)."""
+    behave = None
+    instances = []
+
+    def __init__(self, args, out, env, worker_cmd=None):
+        self.report = dict(status='serving', import_seconds=12.5, gpu_init_seconds=1.5, restarts=[],
+                           starts=[{'import_seconds': 12.5, 'gpu_init_seconds': 1.5, 'report': {'imports': {}}}])
+        self.recipes, self.asked = [], []
+        FakeWorker.instances.append(self)
+
+    def start(self):
+        return self.report
+
+    def alive(self):
+        return True
+
+    def ask(self, request, timeout):
+        self.asked.append(request['op'])
+        return {'event': request['op'], 'facts': {'box_fingerprint': {'status': 'ok', 'seconds': 2.0}}}
+
+    def recipe(self, key, argv, log, timeout):
+        self.recipes.append((key, argv, timeout))
+        reply, restart = FakeWorker.behave(argv, log, timeout)
+        if restart:
+            self.report['restarts'].append(restart)
+        return reply, restart
+
+    def kill(self):
+        pass
+
+    def stop(self):
+        pass
+
+
+def _fake_smoke(monkeypatch, behave):
+    FakeWorker.behave = staticmethod(behave)
+    FakeWorker.instances = []
+    monkeypatch.setattr(C, 'SmokeWorker', FakeWorker)
+    monkeypatch.setattr(C, 'worker_env', lambda args: {})
+    monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
+
+
 def test_smoke_writes_rows_text_and_uploads_after_every_recipe(tmp_path, monkeypatch):
-    ids = ['algos/adam/synthetic/rows=full', 'algos/adamw/synthetic/rows=full', 'algos/sgd/synthetic/rows=full']
+    ids = ['algos/adam/synthetic/rows=full', 'algos/adamw/synthetic/rows=full', 'algos/sgd/synthetic/rows=full',
+           'algos/rmsprop/synthetic/rows=full', 'algos/adagrad/synthetic/rows=full']
     manifest = tmp_path / 'manifest.json'
     manifest.write_text(json.dumps({'amd': ids}))
-    monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
-    monkeypatch.setattr(C, 'smoke_checks', lambda args, plans, out, warm=None: (
-        {'wheel': {'status': 'ok', 'problems': []}, 'data': {'status': 'failed', 'problems': ['dataset taxi missing']}},
-        {}))
-    seen = []
 
-    def bounded(cmd, log, timeout, env=None):
-        rid = cmd[cmd.index('--race-ids') + 1]
-        seen.append((rid, timeout))
+    def behave(argv, log, timeout):
+        rid = argv[argv.index('--race-ids') + 1]
+        out = argv[argv.index('--out') + 1]
         C.Path(log).write_text('bench_board: setup\n')
         if rid == ids[0]:
-            _write_board(cmd[cmd.index('--out') + 1], rid, {'verdict': 'MATCHED', 'problems': []})
-            return 0, 1.0
+            _write_board(out, rid, {'verdict': 'MATCHED', 'problems': []})
+            return dict(status='done', rc=0, seconds=1.0), None
         if rid == ids[1]:
-            _write_board(cmd[cmd.index('--out') + 1], rid, {'verdict': 'REFUSED', 'problems': [
+            _write_board(out, rid, {'verdict': 'REFUSED', 'problems': [
                 'torch-eager-fp32: maximize missing from ours read-back; explicit semantic mapping required']})
-            return 1, 2.0
-        return None, timeout
-    monkeypatch.setattr(C, 'run_bounded', bounded)
+            return dict(status='done', rc=1, seconds=2.0), None
+        if rid == ids[2]:          # the recipe's own alarm fired: STARTED, and the loop went on
+            C.Path(log).write_text('bench_board: setup\nbench_board: [1/1] params probe\n')
+            return dict(status='timeout', rc=None, seconds=timeout), None
+        if rid == ids[3]:          # the check raised: FAILED with the exception, and the loop went on
+            return dict(status='error', rc=None, error="KeyError('lr')", seconds=0.3), None
+        # the worker never answered: the watchdog restarted it; the row is STARTED with the restart
+        return None, dict(after='identical|' + rid, reason='no answer within 35.0s', started=True)
+    _fake_smoke(monkeypatch, behave)
+    monkeypatch.setattr(C, 'smoke_checks', lambda args, plans, out, worker=None: (
+        {'wheel': {'status': 'ok', 'problems': []}, 'data': {'status': 'failed', 'problems': ['dataset taxi missing']}},
+        {}))
     uploads = []
     monkeypatch.setattr(C, 'retain', lambda archive, members: uploads.append(sorted(members)) or {'sha256': 'x'})
     out = tmp_path / 'campaign'
     rc = C.main(['--vendor', 'amd', '--manifest', str(manifest), '--out', str(out), '--cache', str(tmp_path),
-                 '--smoke', '--smoke-warm', 'off'])
+                 '--smoke'])
     assert rc == 0
-    assert [t for _, t in seen] == [5.0, 5.0, 5.0]            # the default per-recipe timeout
-    assert len(uploads) == 4 and 'smoke.json' in uploads[0]   # after every recipe, then the final report
+    worker = FakeWorker.instances[-1]
+    assert [t for _, _, t in worker.recipes] == [5.0] * 5           # the default per-recipe timer
+    assert all(argv[0] == '--vendor' for _, argv, _ in worker.recipes)  # bench_board argv, no interpreter
+    assert worker.asked == ['warm-box']                            # box facts once, before the loop
+    assert len(uploads) == 6 and 'smoke.json' in uploads[0]        # after every recipe, then the final report
     doc = json.loads((out / 'smoke' / 'smoke.json').read_text())
     status = {r['id']: r['status'] for r in doc['rows'].values()}
-    assert status == {ids[0]: 'MATCHED', ids[1]: 'REFUSED', ids[2]: 'STARTED'}
+    assert status == {ids[0]: 'MATCHED', ids[1]: 'REFUSED', ids[2]: 'STARTED', ids[3]: 'FAILED', ids[4]: 'STARTED'}
+    failed = next(r for r in doc['rows'].values() if r['id'] == ids[3])
+    assert "KeyError('lr')" in failed['problems'][0]
+    hung = next(r for r in doc['rows'].values() if r['id'] == ids[4])
+    assert hung['worker']['answered'] is False and hung['worker']['restart']['started']
+    assert doc['worker']['import_seconds'] == 12.5 and doc['worker']['gpu_init_seconds'] == 1.5
+    assert len(doc['worker']['restarts']) == 1
     text = (out / 'smoke' / 'smoke.txt').read_text()
+    assert 'WORKER serving import_s=12.5 gpu_init_s=1.5 starts=1 restarts=1' in text
+    assert 'restarted after identical|' + ids[4] in text
     assert 'CHECK data failed: dataset taxi missing' in text
     assert '== maximize missing from ours read-back (1)' in text and ids[1] in text
-    started = text.split('STARTED, NO VERDICT')[1]
-    assert ids[2] in started and ids[0] not in started
-    assert not (out / 'campaign.json').exists()                # a smoke never starts a timed campaign
+    started = text.split('STARTED, NO VERDICT')[1].split('FAILED TO START')[0]
+    assert ids[2] in started and ids[4] in started and ids[0] not in started
+    assert 'params probe' in started                                # how far it got
+    assert ids[3] in text.split('FAILED TO START')[1]
+    assert not (out / 'campaign.json').exists()                     # a smoke never starts a timed campaign
     with pytest.raises(ValueError):
         C.main(['--vendor', 'amd', '--manifest', str(manifest), '--out', str(out), '--cache', str(tmp_path),
                 '--smoke'])
@@ -295,15 +356,36 @@ def test_smoke_writes_rows_text_and_uploads_after_every_recipe(tmp_path, monkeyp
 def test_smoke_timeout_flag(tmp_path, monkeypatch):
     manifest = tmp_path / 'manifest.json'
     manifest.write_text(json.dumps({'amd': ['algos/adam/synthetic/rows=full']}))
-    monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
-    monkeypatch.setattr(C, 'smoke_checks', lambda args, plans, out, warm=None: ({}, {}))
-    monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
-    seen = []
-    monkeypatch.setattr(C, 'run_bounded', lambda cmd, log, timeout, env=None: seen.append(timeout) or (None, timeout))
+    _fake_smoke(monkeypatch, lambda argv, log, timeout: (dict(status='timeout', rc=None, seconds=timeout), None))
+    monkeypatch.setattr(C, 'smoke_checks', lambda args, plans, out, worker=None: ({}, {}))
     monkeypatch.setattr(C, 'retain', lambda archive, members: {'sha256': 'x'})
     C.main(['--vendor', 'amd', '--manifest', str(manifest), '--out', str(tmp_path / 'o'), '--cache', str(tmp_path),
-            '--smoke', '--smoke-timeout', '12', '--smoke-warm', 'off'])
-    assert seen == [12.0]
+            '--smoke', '--smoke-timeout', '12'])
+    assert [t for _, _, t in FakeWorker.instances[-1].recipes] == [12.0]
+
+
+def test_smoke_row_reads_the_preflight_checkpoint_when_the_board_json_is_not_written(tmp_path):
+    race = dict(id='algos/adam/synthetic/rows=full', family='algos', lane='adam', dataset='synthetic')
+    d = tmp_path / 'r'
+    C.E.write(d / 'evidence' / 'preflight.json', {'races': {race['id']: {'audit': {'verdict': 'MATCHED',
+                                                                                      'problems': []}}}})
+    row = C.smoke_row(race, 'identical', None, 5.0, d, tmp_path / 'none.log', 5)
+    assert row['status'] == 'MATCHED'
+
+
+def test_worker_check_classifies_the_load_report():
+    report = {'starts': [{'import_seconds': 30.0, 'gpu_init_seconds': 2.0, 'report': {
+        'imports': {'torch': {'status': 'ok'}, 'cuml': {'status': 'absent', 'error': "No module named 'cuml'"},
+                    'cuvs': {'status': 'failed', 'error': 'libopenblas.so.0: cannot open'},
+                    'bench_board_algos.py': {'status': 'ok', 'kind': 'driver'}},
+        'gpu_init': {'torch': {'status': 'ok'}, 'cupy': {'status': 'failed', 'error': 'no device'}}}}]}
+    chk = C.worker_check(report)
+    assert chk['status'] == 'failed' and chk['absent'] == ['cuml']
+    assert any(p.startswith('cuvs does not import') for p in chk['problems'])
+    assert any('cupy did not initialize' in p for p in chk['problems'])
+    assert not any('cuml' in p for p in chk['problems'])
+    ok = C.worker_check({'starts': [{'report': {'imports': {'torch': {'status': 'ok'}}, 'gpu_init': {}}}]})
+    assert ok['status'] == 'ok' and ok['problems'] == []
 
 
 def test_problem_kinds_group_by_problem_not_by_arm():
@@ -322,10 +404,10 @@ def test_smoke_stages_every_recipes_block_prep_once_before_the_loop(tmp_path, mo
                            smoke_stage_timeout=99.0)
     seen = []
     monkeypatch.setattr(C, 'run_bounded', lambda cmd, log, timeout, env=None: seen.append((cmd, timeout)) or (0, 1.0))
-    chk = C.smoke_stage(args, plans, tmp_path, {}, python='/warm/bin/python')
+    chk = C.smoke_stage(args, plans, tmp_path, {})
     assert chk['status'] == 'ok' and len(seen) == 1
     cmd, timeout = seen[0]
-    assert timeout == 99.0 and cmd[0] == '/warm/bin/python' and '--prep-only' in cmd and '--preflight-only' in cmd
+    assert timeout == 99.0 and cmd[0] == 'py' and '--prep-only' in cmd and '--preflight-only' in cmd
     assert cmd[cmd.index('--families') + 1] == 'algos,classical'
     assert cmd[cmd.index('--race-ids') + 1].startswith('@')
     assert sorted((tmp_path / 'stage-race-ids.identical.txt').read_text().split()) == sorted(ids)
