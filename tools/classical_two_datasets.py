@@ -3451,7 +3451,8 @@ def main():
                         "arm only ('ours'); opponents are scored once and stored")
     r.add_argument("--with-opponents", action="store_true",
                    help="with no --arms: race every arm of the lane (ours and its opponents)")
-    r.add_argument("--rounds", type=int, default=5)
+    # One seed, one scored run per arm by default (Andrew 2026-10-14): alpha, no noise fighting; just get measurements.
+    r.add_argument("--rounds", type=int, default=1)
     r.add_argument("--ours-python", default="pixi run python3")
     r.add_argument("--theirs-python", default=sys.executable)
     r.add_argument("--ready-seconds", type=float, default=600.0)

@@ -124,6 +124,7 @@ SCHEMA = "mojolearn-bench-board/1"
 #: `peak_gpu_mb` and `memory`. An old record's `ours-cpu` cells and
 #: `ratio_ours_cpu_over` are dropped on load (strip_our_cpu).
 SEED = 7                 # the drivers' own seed (lane_config seed=7); one seed only
+# One seed, one scored run per arm by default (Andrew 2026-10-14): alpha, no noise fighting; just get measurements.
 DEFAULT_ROUNDS = 1
 TREE_ROW_FLOOR = 1_000_000
 

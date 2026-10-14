@@ -2172,7 +2172,8 @@ def build_parser():
     r.add_argument("--dataset", required=True)
     r.add_argument("--data", required=True)
     r.add_argument("--arms", required=True)
-    r.add_argument("--rounds", type=int, default=5)
+    # One seed, one scored run per arm by default (Andrew 2026-10-14): alpha, no noise fighting; just get measurements.
+    r.add_argument("--rounds", type=int, default=1)
     r.add_argument("--out", required=True)
     r.add_argument("--work", required=True)
     r.add_argument("--ours-python", default=sys.executable)

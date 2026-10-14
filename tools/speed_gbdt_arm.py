@@ -214,10 +214,9 @@ def size_tag():
 
 
 def rounds():
-    """Timed rounds after the one untimed warm-up. Three by default for this
-    slice rather than the larger counts the kernel lanes use, because a fit
-    is seconds to minutes and the lease is an hour."""
-    return max(1, int(os.environ.get("MOJOLEARN_SPEED_ROUNDS", "3")))
+    """Timed rounds after the one untimed warm-up (MOJOLEARN_SPEED_ROUNDS overrides)."""
+    # One seed, one scored run per arm by default (Andrew 2026-10-14): alpha, no noise fighting; just get measurements.
+    return max(1, int(os.environ.get("MOJOLEARN_SPEED_ROUNDS", "1")))
 
 
 def per_arm_budget_s():
