@@ -133,6 +133,21 @@ def retain_recipe(out, rid, row, log, directory, state, path):
         return str(exc)[:600]
 
 
+def prepare_arm_venvs(args, plan, out):
+    """smoke-fixes (2026-10-14; algos/als/taxi-zones: "missing parameter/version probe: implicit-gpu"): every
+    recipe runs with --python-env and --skip-install, so the board never created an arm's own venv
+    (tools/bench_board_algos.py ARM_VENVS: implicit-gpu needs CUDA 13 libraries the board venv lacks) and the
+    arm refused in the board venv. Prepare each planned arm venv once per box under --cache; each recipe's
+    board process then finds it (bench_board.setup_arm_venvs, marker-checked). Returns a check record."""
+    arms = {a for r in plan if r["family"] == "algos" for a in list(r.get("arms") or ()) + list(r.get("opponents") or ())}
+    wanted = arms & set(B.ALGOS.ARM_VENVS.get(args.vendor, {}))
+    if not wanted:
+        return dict(status="ok", problems=[], arms={})
+    got, problems = B.prepare_arm_venvs(os.path.abspath(os.path.expanduser(args.cache)), args.python_env,
+                                        args.vendor, wanted, str(out / "arm-venvs.log"))
+    return dict(status="ok" if not problems else "failed", problems=sorted(problems.values()), arms=got)
+
+
 def prepare_fixtures(args, plan, out):
     # FAIRNESS FIX (2026-10-13 audit): earlier full-plan audits staged tabular
     # data but no layer fixtures. Generate test inputs with the pinned worker
@@ -386,6 +401,10 @@ def smoke_checks(args, plans, out, worker=None):
             why = "wheel manifest is for %s" % manifest.get("vendor")
         checks["wheel"] = dict(status="ok" if not why else "failed", problems=[why] if why else [],
                                version=manifest.get("version"), files=[f.get("file") for f in manifest.get("files") or []])
+    try:
+        checks["arm-venvs"] = prepare_arm_venvs(args, races, out)
+    except Exception as exc:  # noqa: BLE001 - recorded; the arm then refuses by name in its recipe
+        checks["arm-venvs"] = dict(status="failed", problems=["arm venvs raised: %r" % (exc,)])
     why = B.gpu_set_refusal(args.python_env, args.vendor)
     checks["gpu-set"] = dict(status="ok" if not why else "failed", problems=[str(why)[:1500]] if why else [])
     try:
@@ -782,6 +801,8 @@ def main(argv=None):
         state["stop_reason"] = "refused before timing: " + why
         E.write(path, state)
         return 1
+    E.write(path, state)
+    state["arm_venvs"] = prepare_arm_venvs(args, plan, out)
     E.write(path, state)
     state["fixture_artifacts"] = prepare_fixtures(args, plan, out)
     E.write(path, state)

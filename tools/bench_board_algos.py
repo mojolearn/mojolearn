@@ -937,8 +937,14 @@ _add("target-encoder", xlane="prep", ours="TargetEncoder", task="transform", blo
      cuml="cuml.preprocessing:TargetEncoder",
      cuml_params=dict(n_folds=4, smooth=0.0, seed=42, split_method="interleaved",
                       multi_feature_mode="independent"),
-     mism=["fold assignment: cuML 'interleaved' (row i in fold i mod 4, the cuML benchmark's "
-           "cuml_args); scikit-learn and ours a KFold shuffled by seed 42 (its cpu_args)"])
+     # smoke-fixes (2026-10-14; target-encoder): the race times fit() then transform(Xq); no arm
+     # cross-fits in fit() (ours _expansion_prep.py:2099, scikit-learn TargetEncoder.fit, cuML
+     # 26.08 _target_encoder.py _fit_transform_independent ignores its fold column), so the fold
+     # settings (cv/n_folds, shuffle, seed, split_method) do not reach the work. A timed_op of
+     # fit_transform here is refused for cuML (_est_factory).
+     mism=["fold settings: cuML 'interleaved' (row i in fold i mod 4, the cuML benchmark's "
+           "cuml_args); scikit-learn and ours a KFold shuffled by seed 42 (its cpu_args). "
+           "Inactive here: fit() cross-fits on no arm"])
 _add("simple-imputer", xlane="prep", ours="SimpleImputer", task="impute", block="raw",
      sk="sklearn.impute:SimpleImputer", params=dict(strategy="median"),
      cuml="cuml.preprocessing:SimpleImputer",
@@ -1265,7 +1271,14 @@ _add("decision-tree-clf", xlane="trees", ours="DecisionTreeClassifier", task="cl
      sk="sklearn.tree:DecisionTreeClassifier", params=dict(max_depth=16, max_features=1.0, random_state=SEED),
      cuml="cuml.ensemble:RandomForestClassifier",
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
-                      random_state=SEED),
+                      random_state=SEED, n_streams=1),
+     # smoke-fixes (2026-10-14; decision-tree-clf: "n_streams missing from ours read-back"): ours'
+     # DecisionTree* fixes n_streams=1 (python/mojolearn/_expansion_trees.py DecisionTreeClassifier
+     # __init__), now read back (bench_board_params.read_params); cuML is pinned to 1, the count its
+     # builder uses anyway for one tree (cuML 26.08 cpp/src/randomforest/randomforest.cuh:329 caps
+     # n_streams at n_trees). n_bins=128 is passed explicitly to ours (its default) so no arm runs on
+     # a library default.
+     ours_extra=dict(n_bins=128),
      mism=["cuml-gpu is cuML's forest with one tree, no bootstrap, every feature (no GPU "
            "single-tree class exists), n_bins=128 as ours",
            "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
@@ -1273,7 +1286,15 @@ _add("decision-tree-reg", xlane="trees", ours="DecisionTreeRegressor", task="reg
      sk="sklearn.tree:DecisionTreeRegressor", params=dict(max_depth=16, max_features=1.0, random_state=SEED),
      cuml="cuml.ensemble:RandomForestRegressor",
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
-                      random_state=SEED),
+                      random_state=SEED, n_streams=1),
+     # smoke-fixes (2026-10-14; decision-tree-reg: "max_bin is unset on ours and 128 on cuml-gpu"):
+     # ours' DecisionTreeRegressor n_bins=None resolves at fit to the tier default (128 in
+     # IDENTICAL, 256 in an Apple FAST build: _expansion_trees.py _dt_tier_bins), so the race read
+     # back None. Both arms run the same split search, a histogram over per-feature quantile bins
+     # (ours _expansion_trees.py DecisionTreeRegressor docstring "cuML's rule"; cuML 26.08
+     # randomforest_common.pyx n_bins -> max_n_bins), so ours now gets n_bins=128 explicitly, cuML's
+     # value, in every mode. n_streams: as decision-tree-clf.
+     ours_extra=dict(n_bins=128),
      mism=["cuml-gpu is cuML's forest with one tree (see decision-tree-clf)", "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("bagging-clf", xlane="trees", ours="BaggingClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:BaggingClassifier",
@@ -3342,7 +3363,39 @@ def _est_factory(lane, arm, D):
     if arm == "cuml-gpu":
         cls = _imp(s["cuml"])
         params = _derived_params(lane, D, s.get("cuml_params", s["params"]))
-        params.pop("min_categories", None)        # cuML CategoricalNB has no such option
+        mc = params.pop("min_categories", None)   # cuML CategoricalNB has no such option
+        if lane == "categorical-nb":
+            # smoke-fixes (2026-10-14; categorical-nb: "min_categories missing from cuml-gpu
+            # read-back"): cuML 26.08 CategoricalNB sizes each feature's smoothing by the highest
+            # code counted in the FIT rows (naive_bayes.py _update_feature_log_prob, lines
+            # 1380-1388: highest_feature = max nonzero category index + 1), while ours and
+            # scikit-learn take max(fit codes + 1, min_categories) with min_categories from X and
+            # Xq (_derived_params). The two are the same work only when no query code exceeds
+            # the fit rows' maximum; otherwise the cuML arm is refused, so the value-conditional
+            # mapping in bench_board_params.semantic_exception holds for every race that runs.
+            np = _np()
+            fit_counts = (np.asarray(D["X"]).max(axis=0).astype(np.int64) + 1).tolist()
+            if mc is not None and list(mc) != fit_counts:
+                raise RuntimeError("REFUSED: cuml-gpu is not raced on categorical-nb here: a query "
+                                   "category exceeds the fit rows' maximum (ours/scikit-learn "
+                                   "min_categories %s, cuML's fit-derived counts %s), so cuML "
+                                   "smooths over fewer categories" % (list(mc), fit_counts))
+        if lane == "target-encoder":
+            # smoke-fixes (2026-10-14; target-encoder: "stat/target_type/split_method/shuffle
+            # missing from read-back"): the mappings in bench_board_params.semantic_exception hold
+            # only for fit() then transform() (cuML 26.08 preprocessing/_target_encoder.py
+            # _fit_transform_independent, lines 421-470, never reads the fold column; ours'
+            # fit, python/mojolearn/_expansion_prep.py:2099, builds no folds) and for a 0/1
+            # target (cuML's stat='mean' of y is then ours' binary positive-class rate). Refuse
+            # the cuML arm otherwise.
+            np = _np()
+            if s.get("timed_op"):
+                raise RuntimeError("REFUSED: cuml-gpu on target-encoder is matched for fit() + "
+                                   "transform() only; %s cross-fits on ours and not on cuML's "
+                                   "independent mode" % s["timed_op"])
+            if not np.isin(np.unique(np.asarray(D["y"])), (0, 1)).all():
+                raise RuntimeError("REFUSED: cuml-gpu on target-encoder needs a 0/1 target: cuML "
+                                   "encodes mean(y), ours' target_type='binary' the positive-class rate")
         return (lambda: cls(**params)), s["cuml"], params
     raise SystemExit("no arm %r for lane %r" % (arm, lane))
 
@@ -6106,7 +6159,15 @@ def _build_als(lane, arm, D):
         # with use_cg=False on both sides no CG step runs, so ours' cg_steps
         # has no effect either
         akw.update(use_cg=p["use_cg"])
-    rec = dict(akw, __library__="implicit")
+    # smoke-fixes (2026-10-14; algos/als/taxi-zones: "missing real library implementation read-back:
+    # implicit-gpu"): implicit.als.AlternatingLeastSquares is a factory that returns
+    # implicit.gpu.als.AlternatingLeastSquares (use_gpu=True) or implicit.cpu.als.AlternatingLeastSquares
+    # (implicit/als.py, github.com/benfred/implicit v0.7.x); record the class that really runs.
+    if gpu:
+        import implicit.gpu.als as impl_mod
+    else:
+        import implicit.cpu.als as impl_mod
+    rec = dict(akw, __library__="implicit", __implementation__=impl_mod.AlternatingLeastSquares)
 
     def fit():
         m = AlternatingLeastSquares(**akw)
@@ -6337,6 +6398,8 @@ def _build_shap(lane, arm, D):
                          "coefficients (_shared_ridge_f32)")
         info["config"] = "mojolearn.%s(mojolearn.RidgeCV(alphas=[1.0]).predict, background 100)" % name
 
+        impl = cls
+
         def fit():
             ex = (cls(ridge, bg, link=p["link"], random_state=SEED) if t == "kernel-shap"
                   else cls(ridge, bg, random_state=SEED))
@@ -6345,6 +6408,7 @@ def _build_shap(lane, arm, D):
     elif arm == "shap-cpu":
         import shap
         b_f32 = np.float32(b32)
+        impl = shap.KernelExplainer if t == "kernel-shap" else shap.PermutationExplainer
 
         def predict(Z):
             return np.asarray(_host(Z), dtype=np.float32) @ w32 + b_f32
@@ -6367,6 +6431,11 @@ def _build_shap(lane, arm, D):
                 S["phi"] = ex(Xq, max_evals=2 * p["npermutations"] * (X.shape[1] + 1)).values
     else:
         from cuml.explainer import KernelExplainer, PermutationExplainer
+        # smoke-fixes (2026-10-14; algos/permutation-shap/taxi: "missing real library implementation
+        # read-back: cuml-gpu"): the record names the cuML explainer class this arm really runs
+        # (cuml.explainer.permutation_shap.PermutationExplainer / kernel_shap.KernelExplainer; cuml v26.08.00
+        # python/cuml/cuml/explainer/__init__.py imports them from there).
+        impl = KernelExplainer if t == "kernel-shap" else PermutationExplainer
         # float32 background and rows (the upload is untimed), so cuML generates float32
         # synthetic rows, the precision of the model
         dev, info, sync = _cuml_up({"bg": np.ascontiguousarray(bg, dtype=np.float32),
@@ -6406,7 +6475,7 @@ def _build_shap(lane, arm, D):
     def outputs():
         return {"phi": _arr(S["phi"], np.float64).reshape(exact.shape), "exact": exact}
     rec = dict(__library__="mojolearn" if arm in OURS_ARMS else arm.rsplit("-", 1)[0], seed=SEED,
-               n_background=p["n_background"])
+               n_background=p["n_background"], __implementation__=impl)
     rec.update({k: p[k] for k in ("nsamples", "link", "l1_reg", "npermutations") if k in p})
     return Runner(info, fit, outputs, record=rec)
 

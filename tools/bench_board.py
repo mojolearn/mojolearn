@@ -1566,28 +1566,77 @@ def gpu_set_refusal(python, vendor):
     return ((p.stdout or "") + (p.stderr or "")).strip()[-2000:] or "rc %d" % p.returncode
 
 
-def setup_arm_venvs(args, vendor, out, log):
-    """{arm: interpreter} for the arms whose library needs its own clean venv
-    (tools/bench_board_algos.py ARM_VENVS), created and installed under the
-    cache. A failed install is not fatal: the arm then refuses by name in its
-    race, in the board's venv."""
-    if args.skip_install or args.python_env or "algos" not in (args.families or ""):
-        return {}
-    got = {}
+#: written into an arm venv after its pinned install succeeded: the pins it holds, one per line
+ARM_VENV_MARKER = ".mojolearn-arm-pins"
+
+
+def arm_venv_dir(cache, arm):
+    return os.path.join(cache, "venv-" + arm)
+
+
+def arm_venv_ready(cache, arm, reqs):
+    """The arm venv's interpreter when it was installed with exactly `reqs`, else None."""
+    vdir = arm_venv_dir(cache, arm)
+    py = os.path.join(vdir, "bin", "python")
+    try:
+        with open(os.path.join(vdir, ARM_VENV_MARKER)) as fh:
+            held = fh.read()
+    except OSError:
+        return None
+    return py if os.path.exists(py) and held == "\n".join(reqs) + "\n" else None
+
+
+def prepare_arm_venvs(cache, base_python, vendor, arms, log):
+    """Create and install the clean venv of each arm in `arms` that tools/bench_board_algos.py ARM_VENVS
+    names for `vendor`, once per pin set (the marker keeps a prepared venv from being reinstalled).
+    Returns ({arm: interpreter}, {arm: problem}); a failed arm refuses by name in its race."""
+    got, problems = {}, {}
     for arm, reqs in sorted(ALGOS.ARM_VENVS.get(vendor, {}).items()):
-        vdir = os.path.join(cache_dir(args, out), "venv-" + arm)
+        if arm not in arms:
+            continue
+        py = arm_venv_ready(cache, arm, reqs)
+        if py:
+            got[arm] = py
+            continue
+        vdir = arm_venv_dir(cache, arm)
         py = os.path.join(vdir, "bin", "python")
-        if not os.path.exists(py) and run_logged([args.base_python, "-m", "venv", vdir], None,
-                                                 log, 1800) != 0:
-            print("bench_board: venv for %s failed (it refuses by name)" % arm, flush=True)
+        if not os.path.exists(py) and run_logged([base_python, "-m", "venv", vdir], None, log, 1800) != 0:
+            problems[arm] = "venv for %s failed (it refuses by name)" % arm
             continue
         cmd = [py, "-m", "pip", "install", "--no-input", "--disable-pip-version-check",
                "--extra-index-url", ALGOS.ARM_VENV_INDEX] + list(reqs)
         if run_logged(cmd, None, log, 3600) != 0:
-            print("bench_board: %s install failed for %s (it refuses by name)"
-                  % (" ".join(reqs), arm), flush=True)
+            problems[arm] = "%s install failed for %s (it refuses by name)" % (" ".join(reqs), arm)
             continue
+        os.makedirs(vdir, exist_ok=True)
+        with open(os.path.join(vdir, ARM_VENV_MARKER), "w") as fh:
+            fh.write("\n".join(reqs) + "\n")
         got[arm] = py
+    return got, problems
+
+
+def setup_arm_venvs(args, vendor, out, log, arms=None):
+    """{arm: interpreter} for the arms whose library needs its own clean venv
+    (tools/bench_board_algos.py ARM_VENVS), created and installed under the
+    cache. A failed install is not fatal: the arm then refuses by name in its
+    race, in the board's venv."""
+    if "algos" not in (args.families or ""):
+        return {}
+    cache = cache_dir(args, out)
+    wanted = set(ALGOS.ARM_VENVS.get(vendor, {})) if arms is None else set(arms)
+    if args.skip_install or args.python_env:
+        # smoke-fixes (2026-10-14; algos/als/taxi-zones: "missing parameter/version probe: implicit-gpu",
+        # "missing worker GPU/driver/OS evidence: implicit-gpu"): tools/gpu_gap_campaign.py runs every recipe
+        # with --python-env and --skip-install, and this returned {} for them, so implicit-gpu ran in the
+        # board venv, whose implicit 0.7.3 GPU extension found no libcublas.so.13 (implicit/gpu/__init__.py
+        # disabled CUDA; the worker refused "implicit.gpu.HAS_CUDA is False"). The arm venv is not the
+        # board's interpreter: install nothing here, but use the one the campaign prepared once per box
+        # (prepare_arm_venvs, marker-checked against the current pins).
+        return {arm: py for arm, reqs in sorted(ALGOS.ARM_VENVS.get(vendor, {}).items())
+                if arm in wanted for py in [arm_venv_ready(cache, arm, reqs)] if py}
+    got, problems = prepare_arm_venvs(cache, args.base_python, vendor, wanted, log)
+    for why in problems.values():
+        print("bench_board: " + why, flush=True)
     return got
 
 

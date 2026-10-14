@@ -1212,6 +1212,29 @@ def test_nvidia_installs_the_cu129_torch_first_from_its_extra_index(tmp_path, mo
     assert any("gpytorch" in c for c in flat[t + 1:])
 
 
+def test_skip_install_reuses_only_a_prepared_arm_venv(tmp_path, monkeypatch):
+    # smoke-fixes (2026-10-14; algos/als/taxi-zones): the campaign passes --python-env and --skip-install
+    cmds = []
+    monkeypatch.setattr(bb, "run_logged", lambda cmd, *a, **k: cmds.append(list(cmd)) or 0)
+    cache = tmp_path / "c"
+    args = bb.build_parser().parse_args(["--python-env", "py", "--skip-install", "--families", "algos",
+                                         "--cache", str(cache)])
+    assert bb.setup_arm_venvs(args, "nvidia", str(tmp_path), str(tmp_path / "log")) == {}
+    assert cmds == []
+    got, problems = bb.prepare_arm_venvs(str(cache), "py", "nvidia", {"implicit-gpu"}, str(tmp_path / "log"))
+    assert problems == {} and set(got) == {"implicit-gpu"}
+    py = cache / "venv-implicit-gpu" / "bin" / "python"
+    py.parent.mkdir(parents=True, exist_ok=True)
+    py.write_text("")
+    n = len(cmds)
+    assert bb.setup_arm_venvs(args, "nvidia", str(tmp_path), str(tmp_path / "log")) == {"implicit-gpu": str(py)}
+    assert bb.prepare_arm_venvs(str(cache), "py", "nvidia", {"implicit-gpu"}, str(tmp_path / "log"))[0] \
+        == {"implicit-gpu": str(py)}
+    assert len(cmds) == n          # prepared once: nothing reinstalled
+    (cache / "venv-implicit-gpu" / bb.ARM_VENV_MARKER).write_text("implicit==0.7.2\n")
+    assert bb.setup_arm_venvs(args, "nvidia", str(tmp_path), str(tmp_path / "log")) == {}
+
+
 def test_implicit_gpu_gets_its_own_venv_and_the_algos_race_passes_it(tmp_path, monkeypatch):
     cmds = []
     monkeypatch.setattr(bb, "run_logged", lambda cmd, *a, **k: cmds.append(list(cmd)) or 0)
