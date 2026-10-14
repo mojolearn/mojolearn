@@ -1877,9 +1877,13 @@ class HipvsKMeans:
                        oversampling_factor=KMEANS_OVERSAMPLING)
         self.params = kmeans.KMeansParams(**self.kw)
         # Declared (a function call, not an estimator): the values `call` passes.
-        self.params_obj = {"__library__": "cuvs", "n_clusters": KMEANS_K, "init": KMEANS_INIT,
-                           "n_init": 1, "max_iter": KMEANS_ITER, "tol": KMEANS_TOL,
-                           "oversampling_factor": KMEANS_OVERSAMPLING}
+        # FAIRNESS FIX (2026-10-13 audit): read the constructed parameter
+        # object's values, including its inactive hierarchy defaults, and
+        # preserve the actual library routine before JSON transport.
+        self.params_obj = {"__library__": "cuvs", "__implementation__": kmeans.fit,
+            **{key: getattr(self.params, key) for key in (
+                "n_clusters", "n_init", "max_iter", "tol", "oversampling_factor", "metric",
+                "init_method", "hierarchical", "hierarchical_n_iters")}}
         self.info["config"] = ("cuvs.cluster.kmeans.fit(KMeansParams(%s), X) (hipVS); fit timed, "
                                "labels by kmeans.predict after the clock"
                                % ", ".join("%s=%r" % kv for kv in sorted(self.kw.items())))
@@ -1922,7 +1926,8 @@ class HipvsKNN:
         self.info["pre_clock_fit"] = True
         self.info["config"] = ("cuvs.neighbors.brute_force.build(index, metric='euclidean') "
                                "(hipVS) before the clock; search(index, queries, k=%d) timed" % KNN_K)
-        self.params_obj = {"__library__": "cuvs", "n_neighbors": KNN_K, "algorithm": "brute",
+        self.params_obj = {"__library__": "cuvs", "__implementation__": brute_force.search,
+                           "n_neighbors": KNN_K, "algorithm": "brute",
                            "metric": "euclidean", "p": 2}
         self.out = None
 

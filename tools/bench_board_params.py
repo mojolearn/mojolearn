@@ -240,6 +240,7 @@ ALIASES = {
                   "n_bins": "max_bin",
                   # GradientBoosting's class weights as the positive-class weight
                   "class_weights": ("scale_pos_weight", _pos_over_neg)},
+    "cuvs": {"init_method": "init"},
     "cuml": {"n_bins": "max_bin", "n_folds": "cv",
              "svd_solver": ("svd_solver", _cuml_pca_solver),
              "seasonal": ("seasonal", _hw_component)},
@@ -704,6 +705,19 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     decomposition.py, density.py, cluster.py and neighbors.py. Reasons below
     apply only to the named recipe, library and resolved settings.
     """
+    if library == "cuvs" and arm == "hipvs-gpu":
+        if lane == "kmeans":
+            if param == "init" and ours.get(param) == "k-means++" and theirs.get(param) == "KMeansPlusPlus":
+                return "same k-means++ initializer, spelled KMeansPlusPlus by hipVS KMeansParams; oversampling is compared separately"
+            if param == "metric" and ours.get(param) == "euclidean" and theirs.get(param) == "sqeuclidean":
+                return "both KMeans objectives minimize squared Euclidean distances; hipVS names the squared distance explicitly"
+            if param == "init_centroids" and ours.get(param) is None and param not in theirs:
+                return "no supplied initial centroids; hipVS fit(params, X) uses the separately compared init_method"
+            if param in ("hierarchical", "hierarchical_n_iters") and theirs.get("hierarchical") is False:
+                return "hipVS hierarchical=False selects ordinary KMeans; hierarchical_n_iters is inactive"
+        if lane == "knn" and param == "query_tile" and ours.get("algorithm") == theirs.get("algorithm") == "brute" and isinstance(ours.get(param), int) and ours[param] >= 0 and param not in theirs:
+            return "both brute-force searches cover every index/query pair; query_tile only partitions our complete query work"
+        return None
     if library != "cuml" or arm != "cuml-gpu":
         return None
     if lane == "pca" and ours.get("svd_solver") == theirs.get("svd_solver") == "covariance_eigh":

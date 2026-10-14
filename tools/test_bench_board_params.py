@@ -48,6 +48,19 @@ def test_covariance_pca_inactive_controls_are_conditional_and_retained():
     assert BP.check("pca", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
 
 
+def test_hipvs_kmeans_reads_native_names_without_waiving_hierarchy():
+    a = _est("mojolearn.cluster", "KMeans", n_clusters=8, init="k-means++",
+             metric="euclidean", init_centroids=None, oversampling_factor=0.)
+    b = {"__library__": "cuvs", "n_clusters": 8, "init_method": "KMeansPlusPlus",
+         "metric": "sqeuclidean", "hierarchical": False, "hierarchical_n_iters": 20,
+         "oversampling_factor": 0.}
+    assert BP.check("kmeans", {"ours": a, "hipvs-gpu": b})["verdict"] == "MATCHED"
+    b["hierarchical"] = True
+    assert BP.check("kmeans", {"ours": a, "hipvs-gpu": b})["verdict"] == "REFUSED"
+    b["hierarchical"] = False; b["oversampling_factor"] = 2.
+    assert BP.check("kmeans", {"ours": a, "hipvs-gpu": b})["verdict"] == "REFUSED"
+
+
 def test_fixed_brute_kde_controls_do_not_waive_active_parameters():
     a = _est("mojolearn.density", "KernelDensity", bandwidth=1.0, metric="euclidean",
              algorithm="auto", atol=0., rtol=0., breadth_first=True, leaf_size=40, metric_params=None)
