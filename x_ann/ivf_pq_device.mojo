@@ -27,6 +27,7 @@ from cluster.estimator import kmeans_fit_rows
 from cluster.impl.kmeans_params import INIT_ARRAY, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host, ivf_flat_build_resident_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice, ivf_trainset_rows
+from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_explicit_train_rows, ivf_explicit_train_stride
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add, identical_sqrt
 from std.sys.compile import is_defined
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
@@ -177,11 +178,12 @@ def _grid(count: Int) -> Int:
 def _coarse(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
-    mut labels: List[Int32],
+    mut labels: List[Int32], train_rows_per_list: Int = 0,
 ) raises:
     """The coarse quantizer IS IVF-Flat's build (`ivf/estimator.mojo::
     ivf_flat_build_host`: cluster/'s k-means, L2Expanded, its CSR lists);
-    the host twin is `ivf/host/ivf_host.mojo::host_ivf_build`."""
+    the host twin is `ivf/host/ivf_host.mojo::host_ivf_build`.
+    `train_rows_per_list > 0`: the caller-set training rows (release-0845)."""
     var cst = AnnStages("ivf_coarse")
     var ctx = x_ann_ctx()
     # lane ann-apple3, behind `ANN3_HOST_PASSES`: the build without the
@@ -190,7 +192,8 @@ def _coarse(
     # the labels are the build's own assignment, the one its lists were laid
     # out from, so `pq_labels_from_lists` over those lists returns these words
     var flat = ivf_flat_build_host(
-        ctx, x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed), with_list_data=False
+        ctx, x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed), with_list_data=False,
+        train_rows_per_list=train_rows_per_list,
     )
     ctx.synchronize()
     cst.host("flat_build")
@@ -580,10 +583,14 @@ def _is_nan(v: Float32) -> Bool:
     return (b & UInt32(0x7F800000)) == UInt32(0x7F800000) and (b & UInt32(0x007FFFFF)) != UInt32(0)
 
 
-def sq_range_part_kernel(count: Int32, r: F32P, n: Int32, dim: Int32, lo_p: F32P, hi_p: F32P, has_p: I32P):
+def sq_range_part_kernel(
+    count: Int32, r: F32P, n: Int32, dim: Int32, lo_p: F32P, hi_p: F32P, has_p: I32P, row_stride: Int32
+):
     """One thread per (row chunk g, column c), e = g * dim + c: the chunk's
     minimum and maximum over its non-NaN values under `sq_lo_takes` /
-    `sq_hi_takes` in row order (the first of equal values kept)."""
+    `sq_hi_takes` in row order (the first of equal values kept). Row i is
+    row i * row_stride of `r` (release-0845: 1 unless IVFSQIndex sets
+    max_train_points_per_cluster)."""
     var e = _tid()
     if e < Int(count):
         var d = Int(dim)
@@ -597,7 +604,7 @@ def sq_range_part_kernel(count: Int32, r: F32P, n: Int32, dim: Int32, lo_p: F32P
         var lo = Float32(0.0)
         var hi = Float32(0.0)
         for i in range(i0, i1):
-            var v = ftz(r.unsafe_load(i * d + c))
+            var v = ftz(r.unsafe_load(i * Int(row_stride) * d + c))
             if _is_nan(v):
                 continue
             if not have:
@@ -641,16 +648,18 @@ def sq_range_join_kernel(
 
 def _sq_range_enqueue(
     ctx: DeviceContext, mut dr: DeviceBuffer[DType.float32], n: Int, dim: Int,
-    mut dvmin: DeviceBuffer[DType.float32], mut ddelta: DeviceBuffer[DType.float32],
+    mut dvmin: DeviceBuffer[DType.float32], mut ddelta: DeviceBuffer[DType.float32], row_stride: Int = 1,
 ) raises:
-    """`sq_range_cell` for every column as chunk partials, then the join."""
+    """`sq_range_cell` for every column as chunk partials, then the join, over
+    rows 0, s, ..., (n - 1) s of `dr` (s = `row_stride`; the join reads row 0,
+    which is always one of them)."""
     var parts = (n + SQ_RANGE_ROWS - 1) // SQ_RANGE_ROWS
     var lo_p = ctx.enqueue_create_buffer[DType.float32](parts * dim)
     var hi_p = ctx.enqueue_create_buffer[DType.float32](parts * dim)
     var has_p = ctx.enqueue_create_buffer[DType.int32](parts * dim)
     ctx.enqueue_function[sq_range_part_kernel](
         Int32(parts * dim), dr.unsafe_ptr(), Int32(n), Int32(dim), lo_p.unsafe_ptr(), hi_p.unsafe_ptr(),
-        has_p.unsafe_ptr(), grid_dim=_grid(parts * dim), block_dim=TPB,
+        has_p.unsafe_ptr(), Int32(row_stride), grid_dim=_grid(parts * dim), block_dim=TPB,
     )
     ctx.enqueue_function[sq_range_join_kernel](
         Int32(dim), dr.unsafe_ptr(), Int32(parts), lo_p.unsafe_ptr(), hi_p.unsafe_ptr(), has_p.unsafe_ptr(),
@@ -682,13 +691,21 @@ def ivf_sq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
     mut vmin: List[Float32], mut delta: List[Float32], mut codes: List[Int32], codes_addr: Int = 0,
+    train_rows_per_list: Int = 0,
 ) raises:
     """`codes_addr`: `ivf_pq_build_device`'s, for the n x dim int32 codes
-    (`codes` is then left EMPTY)."""
+    (`codes` is then left EMPTY).
+
+    `train_rows_per_list` (release-0845; IVFSQIndex max_train_points_per_cluster,
+    cuVS ivf_sq's): 0 trains the coarse k-means on the IVF rule's rows and the
+    SQ range on every residual (the default, unchanged); `m > 0` trains both on
+    the same `ivf_explicit_train_rows(n, n_lists, m)` strided rows, as cuVS
+    trains both on its training subset (ivf_sq_build.cuh:457-525). Every row
+    is still assigned and encoded."""
     pq_validate(n, dim, n_lists, 1, 1, 1)
     var labels = List[Int32]()
     var st = AnnStages("ivf_sq_build")
-    _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
+    _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels, train_rows_per_list)
     st.host("coarse")
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
@@ -700,7 +717,13 @@ def ivf_sq_build_device(
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * dim)
     _enqueue_residual(ctx, n, dim, dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
     st.mark(ctx, "upload_residuals")
-    _sq_range_enqueue(ctx, dr, n, dim, dvmin, ddelta)
+    if train_rows_per_list > 0:
+        _sq_range_enqueue(
+            ctx, dr, ivf_explicit_train_rows(n, n_lists, train_rows_per_list), dim, dvmin, ddelta,
+            ivf_explicit_train_stride(n, n_lists, train_rows_per_list),
+        )
+    else:
+        _sq_range_enqueue(ctx, dr, n, dim, dvmin, ddelta)
     st.mark(ctx, "range")
     comptime if ANN3_ROW_THREADS:
         ctx.enqueue_function[sq_encode_rows_kernel](Int32(n), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),

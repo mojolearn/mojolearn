@@ -118,6 +118,8 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IVF_IDN_STRIDED_INIT,
     ivf_strided_init_row,
     IVF_TRAINSET_STRIDE,
+    ivf_explicit_train_rows,
+    ivf_explicit_train_stride,
     ivf_trainset_stride,
     METRIC_COSINE_EXPANDED,
     IvfFlatIndexParams,
@@ -274,9 +276,12 @@ def host_ivf_build(
     kmeans_n_iters: Int,
     metric: Int,
     seed: UInt64,
+    train_rows_per_list: Int = 0,
 ) raises -> IvfHostIndex:
     """`ivf_flat_build_host` on the host (module docstring): the quantizer,
-    the squared centre norms, the fresh assignment and the CSR layout."""
+    the squared centre norms, the fresh assignment and the CSR layout.
+    `train_rows_per_list > 0`: the device build's caller-set training rows
+    (release-0845, `IvfFlatIndexParams.train_rows_per_list`)."""
     ivf_refuse_algorithm(String("ivf_flat"))
     var params = IvfFlatIndexParams.default()
     params.n_lists = n_lists
@@ -295,8 +300,15 @@ def host_ivf_build(
     comptime if IVF_TRAINSET_STRIDE:
         train_stride = ivf_trainset_stride(n_rows, n_lists)
     var n_train = n_rows // train_stride
+    # release-0845: the device build's caller-set count (ivf_flat_build.mojo):
+    # rows 0, s, ..., (n_train - 1) s; `strided` is `train_stride > 1` when unset
+    var strided = train_stride > 1
+    if train_rows_per_list > 0:
+        n_train = ivf_explicit_train_rows(n_rows, n_lists, train_rows_per_list)
+        train_stride = ivf_explicit_train_stride(n_rows, n_lists, train_rows_per_list)
+        strided = n_train < n_rows
     var xt = List[Float32]()
-    if train_stride > 1:
+    if strided:
         xt = List[Float32](length=n_train * dim, fill=Float32(0.0))
         for j in range(n_train):
             var src = j * train_stride * dim
@@ -304,7 +316,7 @@ def host_ivf_build(
             for c in range(dim):
                 xt[dst + c] = x[src + c]
     var sum_scale: Float64
-    if train_stride > 1:
+    if strided:
         sum_scale = host_plan_sum_scale(xt, n_train, dim)
     else:
         sum_scale = host_plan_sum_scale(x, n_rows, dim)
@@ -325,13 +337,13 @@ def host_ivf_build(
             for c in range(n_lists):
                 var row = ivf_strided_init_row(c, n_train, n_lists)
                 for f in range(dim):
-                    if train_stride > 1:
+                    if strided:
                         centers[c * dim + f] = xt[row * dim + f]
                     else:
                         centers[c * dim + f] = x[row * dim + f]
             init_kind = INIT_ARRAY
     # lazy_shift=True: the device build's `kp.lazy_shift = True`
-    if train_stride > 1:
+    if strided:
         _ = host_fit_main(
             xt, n_train, dim, weights, n_lists, centers, train_labels,
             init_kind, seed, 1, kmeans_n_iters, DEFAULT_TOL, metric,

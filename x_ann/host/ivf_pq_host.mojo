@@ -9,6 +9,7 @@ from std.sys.compile import is_defined
 from cluster.host.kmeans_oracle import host_kmeans_fit
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.host.ivf_host import host_ivf_build
+from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_explicit_train_rows, ivf_explicit_train_stride
 from x_ann.refine_core import refine_cell
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 from x_ann.host.ann_host_cells import ann_span, ann_task_count, ann_tasks, ftz_v, mul_add_v
@@ -35,11 +36,13 @@ def ip(mut l: List[Int32]) -> I32P:
 def _coarse_host(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
-    mut labels: List[Int32],
+    mut labels: List[Int32], train_rows_per_list: Int = 0,
 ) raises:
     """`ivf/host/ivf_host.mojo::host_ivf_build`, the host twin of the device
-    driver's IVF-Flat coarse build."""
-    var flat = host_ivf_build(x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed))
+    driver's IVF-Flat coarse build (`train_rows_per_list`: release-0845)."""
+    var flat = host_ivf_build(
+        x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed), train_rows_per_list
+    )
     centers = flat.centers.copy()
     offsets = flat.offsets.copy()
     list_indices = List[Int32](capacity=n)
@@ -502,11 +505,20 @@ def ivf_sq_build_host(
     x_in: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
     mut vmin: List[Float32], mut delta: List[Float32], mut codes: List[Int32],
+    train_rows_per_list: Int = 0,
 ) raises:
+    """The host twin of `x_ann/ivf_pq_device.mojo::ivf_sq_build_device`, the
+    same `train_rows_per_list` rule (release-0845)."""
     pq_validate(n, dim, n_lists, 1, 1, 1)
     var x = x_in.copy()
     var labels = List[Int32]()
-    _coarse_host(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
+    _coarse_host(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels, train_rows_per_list)
+    # the SQ range's rows: every row, or the caller-set training rows
+    var range_rows = n
+    var range_stride = 1
+    if train_rows_per_list > 0:
+        range_rows = ivf_explicit_train_rows(n, n_lists, train_rows_per_list)
+        range_stride = ivf_explicit_train_stride(n, n_lists, train_rows_per_list)
     var r = List[Float32](length=n * dim, fill=Float32(0.0))
     vmin = List[Float32](length=dim, fill=Float32(0.0))
     delta = List[Float32](length=dim, fill=Float32(0.0))
@@ -531,7 +543,7 @@ def ivf_sq_build_host(
     def range_cols(c: Int) {imm}:
         var span = ann_span(c, col_tasks, dim)
         for col in range(span[0], span[1]):
-            sq_range_cell(col, rp, n, dim, vp, dp)
+            sq_range_cell(col, rp, range_rows, dim, vp, dp, range_stride)
 
     ann_tasks(range_cols, col_tasks)
 

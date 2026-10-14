@@ -110,7 +110,7 @@ def main() raises:
         var x = ties.copy() if f == 0 else wide.copy()
         var yd = List[Float32]()
         var kd = Float32(0.0)
-        tsne_fit_device(x, n, d, y0, perp, Float32(12.0), Float32(50.0), 30, 10, yd, kd)
+        tsne_fit_device(x, n, d, y0, perp, Float32(12.0), Float32(50.0), Float32(1.0), 30, 10, yd, kd)
         var ko = Float32(0.0)
         var yo = to_fit(x, n, d, y0, perp, Float32(12.0), Float32(50.0), 30, 10, ko)
         trace.record_list_f32(String("tsne.") + name + ".embedding", yd)

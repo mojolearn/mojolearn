@@ -182,6 +182,27 @@ def ivf_trainset_stride(n_rows: Int, n_lists: Int) -> Int:
     return max(1, n_rows // target)
 
 
+def ivf_explicit_train_rows(n_rows: Int, n_lists: Int, rows_per_list: Int) -> Int:
+    """The training-row count a caller sets with `rows_per_list` (release-0845;
+    cuVS ivf_sq `max_train_points_per_cluster`, ivf_sq_build.cuh:461-470):
+    `min(n_rows, rows_per_list * n_lists)`. The rows are `0, s, ..., (count - 1) s`
+    with `s = ivf_explicit_train_stride(...)` (cuVS draws them at random; ours keeps
+    the integer stride, the same on every vendor and the host column). Only
+    called with `rows_per_list > 0`; 0 means the default rule above."""
+    if n_rows <= 0:
+        return n_rows
+    return min(n_rows, max(1, rows_per_list) * max(1, n_lists))
+
+
+def ivf_explicit_train_stride(n_rows: Int, n_lists: Int, rows_per_list: Int) -> Int:
+    """The stride of `ivf_explicit_train_rows`' rows: `max(1, n_rows // count)`,
+    so `count * s <= n_rows` and every strided row exists."""
+    var count = ivf_explicit_train_rows(n_rows, n_lists, rows_per_list)
+    if count <= 0:
+        return 1
+    return max(1, n_rows // count)
+
+
 @fieldwise_init
 struct IvfFlatIndexParams(Copyable, ImplicitlyCopyable, Movable):
     """`ivf_flat::index_params`, `ivf_flat.hpp:28-66`.
@@ -203,6 +224,11 @@ struct IvfFlatIndexParams(Copyable, ImplicitlyCopyable, Movable):
     seed reaches their quantizer through `kmeans::balanced_params`. Ours
     reaches `KMeansParams.seed`, and it is surfaced because k-means++ draws
     from it and a reproducible index needs the number written down."""
+    var train_rows_per_list: Int
+    """release-0845: cuVS ivf_sq's `max_train_points_per_cluster` (theirs at
+    ivf_sq, not ivf_flat). 0 (the default) keeps the training-row rule of the
+    build (`ivf_trainset_stride`, or FAST's sample); `m > 0` trains on
+    `ivf_explicit_train_rows(n_rows, n_lists, m)` strided rows in every mode."""
 
     @staticmethod
     def default() -> Self:
@@ -215,6 +241,7 @@ struct IvfFlatIndexParams(Copyable, ImplicitlyCopyable, Movable):
             True,
             METRIC_L2_EXPANDED,
             UInt64(0),
+            0,
         )
 
 

@@ -547,6 +547,12 @@ class TSNE(NumericModeMixin):
     learning_rate : float or 'auto', default 'auto'
         Optimizer step size. 'auto' is scikit-learn's
         ``max(n_samples / early_exaggeration / 4, 50)``.
+    post_exaggeration_learning_rate_factor : float, default 1.0
+        Multiplies the step size for the iterations after the early
+        exaggeration phase, which then use
+        ``learning_rate * post_exaggeration_learning_rate_factor``. The default
+        1.0 keeps one step size throughout, as scikit-learn does; 2.0 doubles
+        it after the early phase, as cuML's ``TSNE`` does. Must be positive.
     max_iter : int, default 1000
         Number of optimization iterations, all of which run.
     init : {'pca', 'random'} or array-like of shape (n_samples, 2), default 'pca'
@@ -582,17 +588,28 @@ class TSNE(NumericModeMixin):
     >>> embedding = mojolearn.TSNE(perplexity=30.0).fit_transform(X)
     >>> embedding.shape
     (1000, 2)
+
+    Doubling the step size after the early exaggeration phase:
+
+    >>> tsne = mojolearn.TSNE(post_exaggeration_learning_rate_factor=2.0)
+    >>> tsne.fit_transform(X).shape
+    (1000, 2)
     """
 
     _BINDING = "_mojolearn_x_ann"
     _EXPLORATION_MAX_ITER = 250
 
     def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate="auto",
-                 max_iter=1000, init="pca", random_state=0):
+                 max_iter=1000, init="pca", random_state=0, post_exaggeration_learning_rate_factor=1.0):
         self.n_components = n_components
         self.perplexity = perplexity
         self.early_exaggeration = early_exaggeration
         self.learning_rate = learning_rate
+        # release-0845: cuML's exact/barnes-hut schedule multiplies the rate by 2.0 after early
+        # exaggeration (t_sne.pyx post_learning_rate); the kernels apply this factor there
+        # (x_ann/tsne_device.mojo, x_ann/host/tsne_host.mojo tsne_fit_*). Last in the signature
+        # so positional callers are unchanged.
+        self.post_exaggeration_learning_rate_factor = post_exaggeration_learning_rate_factor
         self.max_iter = max_iter
         self.init = init
         self.random_state = random_state
@@ -628,7 +645,8 @@ class TSNE(NumericModeMixin):
         Raises
         ------
         ValueError
-            If `n_components` is not 2, `perplexity` is out of range, `init`
+            If `n_components` is not 2, `perplexity` is out of range,
+            `post_exaggeration_learning_rate_factor` is not positive, `init`
             is an unknown string, or an `init` array has the wrong shape.
         TypeError
             If `max_iter` or `random_state` is not an int.
@@ -649,6 +667,10 @@ class TSNE(NumericModeMixin):
             lr = max(n / exag / 4.0, 50.0)
         else:
             lr = float(self.learning_rate)
+        post_factor = float(self.post_exaggeration_learning_rate_factor)
+        if not 0.0 < post_factor < float("inf"):
+            raise ValueError("mojolearn TSNE: post_exaggeration_learning_rate_factor must be positive and finite, "
+                             f"got {self.post_exaggeration_learning_rate_factor!r}")
         exploration = min(self._EXPLORATION_MAX_ITER, max_iter)
         native = self._bind()
         tail = []
@@ -676,9 +698,10 @@ class TSNE(NumericModeMixin):
         native.x_ann_tsne_fit(
             # x, y0, y_out, kl_out
             [addr_ro(x, name="X"), addr_ro(y0, name="init"), addr(emb, name="embedding_"), addr(kl, name="kl")],
-            # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate
+            # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate,
+            # post_exaggeration_learning_rate_factor (the binding forms the product)
             # (+ init mode, random_state low, high: the binding builds y0)
-            [n, d, max_iter, exploration, perplexity, exag, lr] + tail,
+            [n, d, max_iter, exploration, perplexity, exag, lr, post_factor] + tail,
         )
         self.embedding_ = emb.reshape((n, 2))
         self.kl_divergence_ = float(np.asarray(kl)[0])
@@ -984,6 +1007,13 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         k-means iterations for the coarse quantizer.
     random_state : int, default 0
         Seed for the k-means initialization.
+    max_train_points_per_cluster : int or None, default None
+        Size of the training sample, as cuVS's ``ivf_sq`` parameter of the
+        same name. With an int ``m``, the coarse k-means and the quantization
+        ranges are both trained on ``min(n_samples, m * n_lists)`` evenly
+        spaced rows, and every row is still indexed. None keeps the default:
+        the k-means trains on an evenly spaced subset of the rows and the
+        quantization ranges on every row. Must be positive.
     numeric_mode : str or None, default None
         Numeric mode for this estimator; None uses the package default set
         with `mojolearn.set_numeric_mode`.
@@ -1016,7 +1046,8 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     TypeError
         If an integer parameter is not an int.
     ValueError
-        If `n_lists` is out of range.
+        If `n_lists` is out of range or `max_train_points_per_cluster` is not
+        positive.
 
     Examples
     --------
@@ -1026,6 +1057,11 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     >>> distances, indices = index.search(X[:10])
     >>> indices.shape
     (10, 5)
+
+    Training on at most 32 rows per list:
+
+    >>> index = mojolearn.IVFSQIndex(n_lists=16, n_probes=4, n_neighbors=5,
+    ...                              max_train_points_per_cluster=32).fit(X)
     """
 
     _BINDING = "_mojolearn_x_ann"
@@ -1035,12 +1071,17 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
                     ("sq_vmin_", "<f4"), ("sq_delta_", "<f4"), ("codes_", "<i4"))
 
-    def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0):
+    def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0,
+                 max_train_points_per_cluster=None):
         self.n_lists = n_lists
         self.n_probes = n_probes
         self.n_neighbors = n_neighbors
         self.kmeans_n_iters = kmeans_n_iters
         self.random_state = random_state
+        # release-0845: cuVS ivf_sq's training-sample size (ivf_sq_build.cuh:461-470); the
+        # binding's train_rows_per_list (x_ann/ivf_pq_device.mojo ivf_sq_build_device). Not in
+        # _SAVE_PARAMS: it shapes only the build, and files saved before it still load.
+        self.max_train_points_per_cluster = max_train_points_per_cluster
 
     _KIND = 1
 
@@ -1076,6 +1117,12 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         n_lists = self._p("n_lists")
         if not 1 <= n_lists <= n:
             raise ValueError(f"mojolearn IVFSQIndex: n_lists must be in [1, {n}], got {n_lists}")
+        train_per_list = 0          # 0: the binding's default training rows
+        if self.max_train_points_per_cluster is not None:
+            train_per_list = self._p("max_train_points_per_cluster")
+            if train_per_list < 1:
+                raise ValueError("mojolearn IVFSQIndex: max_train_points_per_cluster must be positive or None, "
+                                 f"got {train_per_list}")
         centers = empty((n_lists * dim,), "<f4")
         offsets = empty((n_lists + 1,), "<i4")
         indices = empty((n,), "<i4")
@@ -1087,8 +1134,8 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
             [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(offsets, name="list_offsets_"),
              addr(indices, name="list_indices_"), addr(vmin, name="sq_vmin_"), addr(delta, name="sq_delta_"),
              addr(codes, name="codes_")],
-            # n, dim, n_lists, kmeans_n_iters, seed
-            [n, dim, n_lists, self._p("kmeans_n_iters"), self._p("random_state")],
+            # n, dim, n_lists, kmeans_n_iters, seed, train_rows_per_list
+            [n, dim, n_lists, self._p("kmeans_n_iters"), self._p("random_state"), train_per_list],
         )
         self.centers_ = centers.reshape((n_lists, dim))
         self.list_offsets_, self.list_indices_ = offsets, indices

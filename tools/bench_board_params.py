@@ -175,6 +175,9 @@ ALIASES = {
         "bandwidth": "bandwidth", "linkage": "linkage", "affinity": "affinity",
         "covariance_type": "covariance_type", "reg_covar": "reg_covar",
         "n_iter": "n_iter", "perplexity": "perplexity", "early_exaggeration": "early_exaggeration",
+        # release-0845: ours' TSNE option (python/mojolearn/_expansion_ann.py TSNE) is the factor
+        # compared as post_exaggeration_rate_factor (cuML's is derived in _read_params_object)
+        "post_exaggeration_learning_rate_factor": "post_exaggeration_rate_factor",
         "betas": "betas", "weight_decay": "weight_decay", "momentum": "momentum",
         "dampening": "dampening", "nesterov": "nesterov", "amsgrad": "amsgrad",
         "hidden_size": "hidden_size", "num_layers": "num_layers", "dropout": "dropout",
@@ -488,7 +491,7 @@ EXCEPTIONS = [
      "exaggeration and n_neighbors). cuML's non-adaptive schedule doubles the rate after the "
      "exaggeration phase (t_sne.pyx post_learning_rate = 2 x learning_rate), which its Python "
      "API cannot switch off; that doubling is compared separately as post_exaggeration_rate_factor "
-     "(read_params) and is never waived"),
+     "(_read_params_object), and ours runs it too (post_exaggeration_learning_rate_factor=2.0)"),
     # FAIRNESS FIX (2026-10-13 audit): cuGraph pagerank stopped when the
     # unscaled L1 change fell below tol (1e-6) while ours and networkx stop below
     # n x tol (0.02 at 20,000 nodes), 20,000x tighter on cuGraph. cuGraph now
@@ -599,12 +602,15 @@ def _read_params_object(obj):
             # smoke-fixes (2026-10-14; algos/tsne): the step size after the exaggeration phase, as a factor of
             # learning_rate, compared on both arms. cuML 26.08 under method='exact' always sets
             # post_learning_rate = 2 x learning_rate (python/cuml/cuml/manifold/t_sne.pyx:201-202; no Python
-            # switch); ours keeps learning_rate for every step (x_ann/tsne_device.mojo, learning_rate_ in
-            # _expansion_ann.py TSNE.fit). This difference changes the work, so it is compared, never waived:
-            # the race refuses cuML until one side can run the other's schedule.
+            # switch). This difference changes the work, so it is compared, never waived.
+            # release-0845: ours has the option, post_exaggeration_learning_rate_factor (get_params, aliased
+            # to post_exaggeration_rate_factor in ALIASES; x_ann/tsne_device.mojo tsne_fit_device applies it),
+            # and the algos/tsne race pins it to cuML's 2.0 (tools/bench_board_algos.py). A wheel without the
+            # option keeps learning_rate for every step: factor 1.0.
             got = dict(got)
             if lib == "mojolearn":
-                got["post_exaggeration_rate_factor"] = 1.0
+                if "post_exaggeration_learning_rate_factor" not in got:
+                    got["post_exaggeration_rate_factor"] = 1.0
             elif str(got.get("method", "")).lower() == "exact":
                 got["post_exaggeration_rate_factor"] = 2.0
         # FAIRNESS FIX (2026-10-13 audit): cuML 26.8's Binarizer and

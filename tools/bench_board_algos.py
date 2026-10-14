@@ -1603,8 +1603,10 @@ _ANN_TRAIN = ("coarse k-means training rows: ours' count on every arm (ours ever
               "ivf_trainset_stride: 200,000 of 400,000; cuVS kmeans_trainset_fraction = that "
               "count / n (ivf_pq), max_train_points_per_cluster = count // n_lists (ivf_sq, "
               "199,680 rows); FAISS max_points_per_centroid = count // n_lists, its seeded "
-              "sample); 20 k-means iterations on every arm. cuVS ivf_sq trains its "
-              "scalar-quantizer ranges on that sample, ours over every row")
+              "sample); 20 k-means iterations on every arm. On ivf-sq ours and cuVS both set "
+              "max_train_points_per_cluster = count // n_lists and train the coarse k-means and "
+              "the scalar-quantizer ranges on those 199,680 rows (ours evenly spaced, cuVS a "
+              "random draw)")
 # FAIRNESS FIX (2026-10-13 audit): AMD raced faiss on the CPU though hipVS, AMD's port of cuVS
 # with the same ivf_pq API, is a library IVF-PQ for the AMD GPU; hipvs-gpu is its arm (AMD only,
 # the cuvs-gpu code path with the same pinned settings). Results raced before this change were
@@ -1628,8 +1630,14 @@ _add("cagra", xlane="ann", ours=("CAGRAIndex", "CagraIndex"), kind="ann", task="
      notes=[_ANN], mism=["cuvs-gpu (NVIDIA) and hipvs-gpu (AMD, hipVS) are CAGRA itself"])
 _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
      sk="sklearn.manifold:TSNE",
+     # release-0845: ours runs cuML's schedule after early exaggeration, learning_rate x 2.0
+     # (cuML 26.08 t_sne.pyx:201-202 post_learning_rate, no Python switch; ours'
+     # post_exaggeration_learning_rate_factor, x_ann/tsne_device.mojo tsne_fit_device). Both arms
+     # read back 2.0 as post_exaggeration_rate_factor (tools/bench_board_params.py _read_params_object).
+     # scikit-learn (factor 1.0) is refused on this lane below.
      params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0, max_iter=1000,
-                 learning_rate="auto", init="seeded", random_state=SEED),
+                 learning_rate="auto", init="seeded", random_state=SEED,
+                 post_exaggeration_learning_rate_factor=2.0),
      sk_params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0, max_iter=1000,
                     learning_rate="auto", init="seeded", random_state=SEED, n_jobs=-1,
                     method="barnes_hut", metric="euclidean", n_iter_without_progress=1000,
@@ -1670,7 +1678,8 @@ _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
            "learning rate: ours and scikit-learn 'auto' = max(n / early_exaggeration / 4, 50); "
            "cuML that value with learning_rate_method='none', which doubles it after the 250 "
            "exaggeration steps (t_sne.pyx post_learning_rate = 2 x learning_rate; no Python "
-           "switch). Every arm runs the same number of steps",
+           "switch); ours doubles it there too (post_exaggeration_learning_rate_factor=2.0). "
+           "Every arm runs the same number of steps",
            "k-NN: 91 = min(n - 1, floor(3 x perplexity) + 1) neighbours on ours and "
            "scikit-learn (its rule), cuML n_neighbors=91 by its own exact k-NN",
            "init: ours and scikit-learn start from the SAME array, ours' 'random' rule "
@@ -4776,6 +4785,12 @@ def _build_ann(lane, arm, D):
             kw.update(n_lists=nlist, n_probes=nprobe)
         if t in ("ivf-pq", "ivf-refine", "ivf-filter"):
             kw["pq_dim"] = _pq_dim(d)
+        if t == "ivf-sq":
+            # release-0845: ours' max_train_points_per_cluster (python/mojolearn/_expansion_ann.py
+            # IVFSQIndex; x_ann/ivf_pq_device.mojo ivf_sq_build_device) pinned to cuVS's value below
+            # (n_train // nlist): both train the coarse k-means and the SQ ranges on
+            # min(n, per_list x nlist) rows (ours evenly spaced, cuVS a random draw)
+            kw["max_train_points_per_cluster"] = max(1, n_train // nlist)
         # the refine step and the sample filter are options of an index that
         # may already exist: until the option does, the race is not built yet
         import inspect

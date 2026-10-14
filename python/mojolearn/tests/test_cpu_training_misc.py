@@ -10,10 +10,10 @@ path.
 
 What the source checks hold: the manifest declares the three k-means lanes
 on the core family and cross-val on the gbdt family, and names each for the
-docs; kmeans-sqrt is the one lane the gate diffs against the fix record
-(TRAINING_FIX_COLUMNS), because the 166-lane record carries its pre-fix
-cells on every column, and the fix record's three columns carry the lane
-STABLE and equal on every fixture; the covered lanes split into the record
+docs; no lane is diffed against a fix record since release-0845 (the
+2026-10-14 training record carries kmeans-sqrt after its fix), and any fix
+record's three columns would carry its lane STABLE and equal on every
+fixture; the covered lanes split into the record
 set and the fix set with nothing lost; the CPU identity gate reads both sets
 and the fix columns from the manifest and diffs each against its own columns
 in the covered step and in the sabotage step; `python -m mojolearn identity`
@@ -94,9 +94,9 @@ def test_fix_lanes_split_the_covered_lanes():
     covered = host_surface.covered_lanes()
     record = host_surface.record_covered_lanes()
     fixed = host_surface.fix_covered_lanes()
-    # kmeans-sqrt predates its fix on the record; the embedding and ivf lanes
-    # (lane/cpu-training-embedding-ivf) are not in the record at all.
-    assert fixed == ["kmeans-sqrt", "embedding", "embedding-sort", "ivf", "ivf-euclidean"], fixed
+    # release-0845: the 2026-10-14 record carries kmeans-sqrt after its fix and
+    # the embedding and ivf lanes, so no lane is diffed against a fix record.
+    assert fixed == [], fixed
     assert not set(record) & set(fixed)
     assert sorted(record + fixed) == sorted(covered)
     assert [l for l in covered if l in record] == record, "the record set lost the gate's order"
