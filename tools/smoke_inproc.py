@@ -71,6 +71,156 @@ def clear_once():
 
 
 # ---------------------------------------------------------------------------
+# staged inputs: each dataset block and generated synthetic input once per process
+# ---------------------------------------------------------------------------
+# smoke-fixes r12 (2026-10-14; the STARTED recipes: optimizer lanes regenerating 11 x 2^24 float32 seed-7 arrays
+# and sha256-hashing them once PER ARM; istella/text lanes re-reading a ~1 GB npz (zip crc32) once for the
+# conductor and once PER ARM; cholesky rebuilding its 8192 x 8192 system per arm). Andrew's design: everything
+# is loaded ONCE up front and each recipe's 5 s is for its own check. The drivers' params-only paths ask this
+# cache for the very values their builders make (same builder functions, same seeds, same bytes), so the
+# parameter records are the ones the timed path reads back; a timed worker never reaches it (in_process() is
+# true only in the smoke worker and its arm servers, which serve the parameter probe only).
+# The cached arrays are SHARED between the arms of a recipe and across recipes: the builders treat their
+# inputs as read-only (the timed worker already rebuilds every arm from the same D each round, so a builder
+# that wrote into its inputs would change its own later rounds).
+
+#: the staged-input budget of one process, in GiB (least recently used entries go first)
+STAGE_BUDGET_ENV = "MOJOLEARN_SMOKE_STAGE_GB"
+STAGE_BUDGET_GB = 8.0
+
+
+def nbytes_of(value, seen=None):
+    """The bytes of the NumPy arrays held by `value` (dicts, lists, tuples), each array once."""
+    seen = set() if seen is None else seen
+    if id(value) in seen:
+        return 0
+    seen.add(id(value))
+    if hasattr(value, "nbytes") and hasattr(value, "dtype"):
+        return int(value.nbytes)
+    if isinstance(value, dict):
+        return sum(nbytes_of(v, seen) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return sum(nbytes_of(v, seen) for v in value)
+    return 0
+
+
+class StagedInputs:
+    """An in-process LRU of staged inputs under a byte budget, with hit/miss/eviction counts."""
+
+    def __init__(self, budget_bytes=None):
+        import collections
+        if budget_bytes is None:
+            try:
+                budget_bytes = float(os.environ.get(STAGE_BUDGET_ENV) or STAGE_BUDGET_GB) * (1 << 30)
+            except ValueError:
+                budget_bytes = STAGE_BUDGET_GB * (1 << 30)
+        self.budget = int(budget_bytes)
+        self.entries = collections.OrderedDict()     # key -> (value, nbytes)
+        self.bytes = 0
+        self.hits = self.misses = self.evictions = 0
+        self.build_seconds = 0.0
+
+    def get(self, key, build, nbytes=None):
+        if key in self.entries:
+            self.entries.move_to_end(key)
+            self.hits += 1
+            return self.entries[key][0]
+        self.misses += 1
+        t0 = time.time()
+        value = build()
+        self.build_seconds += time.time() - t0
+        size = nbytes_of(value) if nbytes is None else int(nbytes)
+        self.entries[key] = (value, size)
+        self.bytes += size
+        while self.bytes > self.budget and len(self.entries) > 1:
+            old_key = next(iter(self.entries))
+            if old_key == key:
+                break
+            self.bytes -= self.entries.pop(old_key)[1]
+            self.evictions += 1
+        return value
+
+    def clear(self):
+        self.entries.clear()
+        self.bytes = 0
+
+    def report(self):
+        return dict(entries=len(self.entries), bytes=self.bytes, budget=self.budget, hits=self.hits,
+                    misses=self.misses, evictions=self.evictions, build_seconds=round(self.build_seconds, 2))
+
+
+STAGED = StagedInputs()
+
+
+def staged(key, build, nbytes=None):
+    """build() once per smoke-worker process for `key` (a tuple naming the exact file stamp or seed and size);
+    outside the smoke worker it is simply build()."""
+    if not in_process():
+        return build()
+    return STAGED.get(key, build, nbytes=nbytes)
+
+
+class _HashMemo:
+    """sha256 of an array's C-order bytes, once per live array object (weak references: an entry goes with
+    its array). The same bytes as hashlib.sha256(np.ascontiguousarray(a).tobytes())."""
+
+    def __init__(self):
+        self.memo = {}
+        self.hits = self.misses = 0
+
+    def _drop(self, key):
+        self.memo.pop(key, None)
+
+    def sha256(self, a, compute):
+        import weakref
+        key = id(a)
+        got = self.memo.get(key)
+        if got is not None:
+            ref, stamp, digest = got
+            if ref() is a and stamp == _array_stamp(a):
+                self.hits += 1
+                return digest
+        self.misses += 1
+        digest = compute(a)
+        try:
+            ref = weakref.ref(a, lambda _r, k=key: self._drop(k))
+        except TypeError:             # not weak-referenceable: not memoized
+            return digest
+        self.memo[key] = (ref, _array_stamp(a), digest)
+        return digest
+
+    def report(self):
+        return dict(live=len(self.memo), hits=self.hits, misses=self.misses)
+
+
+def _array_stamp(a):
+    iface = getattr(a, "__array_interface__", None) or {}
+    return (str(getattr(a, "dtype", "")), tuple(getattr(a, "shape", ()) or ()), (iface.get("data") or (None,))[0],
+            iface.get("strides"))
+
+
+HASHES = _HashMemo()
+
+
+def _sha256_bytes(a):
+    import hashlib
+    import numpy as np
+    return hashlib.sha256(np.ascontiguousarray(a).tobytes()).hexdigest()
+
+
+def sha256_array(a):
+    """hashlib.sha256(np.ascontiguousarray(a).tobytes()).hexdigest(), memoized per live array object inside the
+    smoke worker (an array staged once is hashed once, however many arms and recipes record it)."""
+    if not in_process():
+        return _sha256_bytes(a)
+    return HASHES.sha256(a, _sha256_bytes)
+
+
+def staging_report():
+    return dict(staged=STAGED.report(), hashes=HASHES.report())
+
+
+# ---------------------------------------------------------------------------
 # environment and output of one call
 # ---------------------------------------------------------------------------
 
@@ -490,6 +640,50 @@ class ArmServer:
             return {"event": "error", "stage": "ready", "error": "arm server gave no answer within %ss" % timeout}
         return msg.get("msg") or {"event": "error", "stage": "ready", "error": "arm server reply without msg"}
 
+    def stage(self, items, timeout):
+        """Stage the next recipe's inputs in this arm server (stage_items), outside every recipe's timer.
+        Returns its reply, or a failure record (the server is then restarted on its next use)."""
+        if self.busy:
+            self.stop()
+        if not self.alive() and not self.start():
+            return dict(status="failed", problem="arm server did not load: %s" % self.starts[-1].get("problem"))
+        self.busy = True
+        self.proc.stdin.write((json.dumps(dict(op="stage", items=list(items))) + "\n").encode())
+        self.proc.stdin.flush()
+        deadline = time.monotonic() + timeout
+        while True:
+            msg, self.buf = read_json_line(self.proc, self.buf, deadline)
+            if msg is None or msg.get("event") != "noise":
+                break
+        self.busy = False
+        if msg is None:
+            self.stop()
+            return dict(status="failed", problem="arm server gave no staging answer within %ss" % timeout)
+        return msg.get("staged") or dict(status="failed", problem="arm server reply without staged")
+
+
+def stage_items(items):
+    """Stage each item's inputs in this process ({"driver": path, "lane", "dataset", "data"}: the driver's
+    stage_inputs(lane, dataset, data)), outside every recipe's timer. Returns per-item status and seconds plus
+    the cache report. An item that fails is recorded; the recipe then builds its inputs inside its own check."""
+    out = []
+    for item in items or []:
+        t0 = time.time()
+        rec = {k: item.get(k) for k in ("lane", "dataset")}
+        try:
+            mod = driver_module(item["driver"])
+            fn = getattr(mod, "stage_inputs", None)
+            if fn is None:
+                rec.update(status="absent", detail="driver has no stage_inputs")
+            else:
+                with redirect_output(item["log"]) if item.get("log") else contextlib.nullcontext():
+                    rec.update(status="ok", staged=fn(item["lane"], item["dataset"], item["data"]))
+        except Exception as exc:  # noqa: BLE001 - recorded; the recipe pays it inside its own check
+            rec.update(status="failed", error=repr(exc)[:400])
+        rec["seconds"] = round(time.time() - t0, 2)
+        out.append(rec)
+    return dict(items=out, report=staging_report())
+
 
 class _ArmServers:
     def __init__(self):
@@ -542,6 +736,13 @@ def arm_serve(stdin=None, stdout=None):
         try:
             req = json.loads(line)
         except ValueError:
+            continue
+        if req.get("op") == "stage":
+            # smoke-fixes r12 (2026-10-14): the next recipe's inputs, staged in this arm server too, outside
+            # every recipe's timer (stage_items)
+            proto.write(json.dumps({"staged": stage_items(req.get("items") or [])}, sort_keys=True,
+                                   default=str) + "\n")
+            proto.flush()
             continue
         record = {"process": "arm server pid %d" % os.getpid()}
         try:

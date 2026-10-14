@@ -255,7 +255,7 @@ class FakeWorker:
     def __init__(self, args, out, env, worker_cmd=None):
         self.report = dict(status='serving', import_seconds=12.5, gpu_init_seconds=1.5, restarts=[],
                            starts=[{'import_seconds': 12.5, 'gpu_init_seconds': 1.5, 'report': {'imports': {}}}])
-        self.recipes, self.asked = [], []
+        self.recipes, self.asked, self.staged = [], [], []
         FakeWorker.instances.append(self)
 
     def start(self):
@@ -270,6 +270,11 @@ class FakeWorker:
 
     def warm(self, request, timeout):
         return self.ask(request, timeout)['facts']
+
+    def stage(self, request, timeout):
+        # the next recipe's inputs staged before its timer (smoke-fixes r12): order recorded with the recipes
+        self.staged.append((request['key'], len(self.recipes)))
+        return {'items': [{'lane': i['lane'], 'status': 'ok', 'seconds': 0.1} for i in request['items']]}
 
     def recipe(self, key, argv, log, timeout):
         self.recipes.append((key, argv, timeout))
@@ -333,6 +338,8 @@ def test_smoke_writes_rows_text_and_uploads_after_every_recipe(tmp_path, monkeyp
     assert [t for _, _, t in worker.recipes] == [5.0] * 5           # the default per-recipe timer
     assert all(argv[0] == '--vendor' for _, argv, _ in worker.recipes)  # bench_board argv, no interpreter
     assert worker.asked == ['warm-box']                            # box facts once, before the loop
+    # every algos recipe's inputs staged right before its own timer starts (smoke-fixes r12)
+    assert worker.staged == [(rid, i) for i, rid in enumerate(ids)]
     assert len(uploads) == 6 and 'smoke.json' in uploads[0]        # after every recipe, then the final report
     doc = json.loads((out / 'smoke' / 'smoke.json').read_text())
     status = {r['id']: r['status'] for r in doc['rows'].values()}
@@ -454,3 +461,33 @@ def test_smoke_generates_missing_neural_fixtures_once_then_verifies(tmp_path, mo
                            tmp_path)                                # an entry missing: generate again (refuses: the
     assert chk['generated'] and chk['status'] == 'failed'          # fake generate cannot write conv1d)
     assert any('conv1d/synthetic' in p for p in chk['problems'])
+
+
+def test_stage_request_names_the_algos_block_dir_and_the_race_arm_interpreters(tmp_path):
+    """smoke-fixes r12: an algos recipe's stage-data request (its block dir under --cache, rows=full, and the arm
+    servers of its own arms only); other families stage nothing."""
+    args = SimpleNamespace(cache=str(tmp_path / "cache"))
+    race = dict(id='algos/als/text/rows=full', family='algos', lane='als', dataset='text',
+                arms=['ours', 'implicit-gpu'])
+    req = C.stage_request(args, race, {'implicit-gpu': '/v/implicit/bin/python', 'cuml-gpu': '/v/cuml/bin/python'})
+    assert req['op'] == 'stage-data' and req['key'] == race['id']
+    assert req['arm_pythons'] == ['/v/implicit/bin/python']
+    item, = req['items']
+    assert item['lane'] == 'als' and item['dataset'] == 'text'
+    assert item['data'] == str(tmp_path / 'cache' / 'algos-data' / 'rows-full')
+    assert item['driver'].endswith('tools/bench_board_algos.py')
+    assert C.stage_request(args, dict(race, family='neural'), {}) is None
+
+
+def test_smoke_worker_stage_restarts_a_worker_that_does_not_answer(tmp_path):
+    """A stage-data request with no answer kills and restarts the worker (recorded), and the recipe goes on."""
+    args = SimpleNamespace(smoke_load_timeout=5, smoke_grace=1)
+    w = C.SmokeWorker(args, tmp_path, {}, worker_cmd=['true'])
+    calls = []
+    w.ask = lambda request, timeout: None
+    w.kill = lambda: calls.append('kill')
+    w.start = lambda: calls.append('start')
+    w.alive = lambda: True
+    got = w.stage(dict(op='stage-data', key='algos/adam/synthetic/rows=full', items=[]), 30)
+    assert got['status'] == 'failed' and 'no stage-data answer within 30s' in got['problem']
+    assert calls == ['kill', 'start'] and w.report['restarts'][0]['after'].startswith('stage-data ')

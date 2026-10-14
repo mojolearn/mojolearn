@@ -19,6 +19,11 @@ a private copy of fd 1 out; everything a library prints goes to the recipe's log
   and the reply says "timeout" (the campaign records STARTED with how far it got); an exception is recorded
   as "error"; either way the worker goes on to the next request. A C call that never returns to Python is
   the campaign's outer watchdog's to handle (it kills and restarts this worker).
+- {"op": "stage-data", "key", "items": [{"driver", "lane", "dataset", "data"}], "arm_pythons": [...]}: the NEXT
+  recipe's inputs (each dataset block, the generated synthetic inputs and their sha256), loaded into this
+  process's staged-input cache (tools/smoke_inproc.py staged/sha256_array) and into the arm servers of that
+  recipe's arm interpreters, outside every recipe's timer. The recipe's check then reads them from the cache
+  (the same builder functions, the same bytes) and its 5 s is for its own check.
 - {"op": "quit"}.
 
 `arm-serve` is the second kind of long-lived process: an arm whose worker needs another interpreter or
@@ -369,6 +374,25 @@ def warm_box(argv, paths, arm_pythons=()):
     return got
 
 
+def stage_data(items, arm_pythons=()):
+    """The stage-data op: stage `items` here and in the arm server of each interpreter in `arm_pythons` (started
+    if not running, as warm_box starts them). Returns {"items", "report", "arm_servers"}, each item with its
+    status and seconds; a failure is recorded and the recipe builds that input inside its own check."""
+    import smoke_inproc
+    got = smoke_inproc.stage_items(items)
+    servers = {}
+    for py in arm_pythons or ():
+        matched = [s for s in smoke_inproc.ARM_SERVERS.servers.values() if list(s.interp) == [py]]
+        if not matched:
+            smoke_inproc.ARM_SERVERS.prestart([py], dict(os.environ))
+            matched = [s for s in smoke_inproc.ARM_SERVERS.servers.values() if list(s.interp) == [py]]
+        for i, server in enumerate(matched):
+            servers["%s#%d" % (py, i)] = server.stage([dict(item, log=None) for item in items or []],
+                                                      smoke_inproc.ARM_SERVERS.load_timeout)
+    got["arm_servers"] = servers
+    return got
+
+
 def serve(vendor, out):
     """The worker loop (see the module docstring)."""
     for p in (str(SPEED), str(TOOLS)):
@@ -411,6 +435,12 @@ def serve(vendor, out):
             say({"event": "warm-box", "key": req.get("key"),
                  "facts": warm_box(req.get("argv") or [], req.get("paths") or [], req.get("arm_pythons") or [])})
             continue
+        if op == "stage-data":
+            t0 = time.time()
+            staged = stage_data(req.get("items") or [], req.get("arm_pythons") or [])
+            staged["seconds"] = round(time.time() - t0, 2)
+            say({"event": "stage-data", "key": req.get("key"), "staged": staged})
+            continue
         if op == "recipe":
             try:
                 restored = restore_torch_switches(start_switches)
@@ -419,7 +449,8 @@ def serve(vendor, out):
             reply = run_recipe(B.main, list(req["argv"]), req["log"], float(req["timeout"]))
             if restored:
                 reply["torch_switches_restored"] = restored
-            reply.update(event="recipe", key=req.get("key"), arm_servers=smoke_inproc.ARM_SERVERS.report())
+            reply.update(event="recipe", key=req.get("key"), arm_servers=smoke_inproc.ARM_SERVERS.report(),
+                         staging=smoke_inproc.staging_report())
             say(reply)
             continue
         say({"event": "error", "error": "unknown op %r" % (op,)})

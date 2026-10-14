@@ -508,6 +508,22 @@ class SmokeWorker:
         self.report["restarts"].append(restart)
         return None, restart
 
+    def stage(self, request, timeout):
+        """The next recipe's inputs staged in the worker (and its arm servers), outside every recipe's timer
+        (smoke-fixes r12, 2026-10-14). Returns the worker's staging record; a worker that does not answer
+        within `timeout` is killed and restarted (recorded), and the recipe then builds its inputs inside
+        its own check."""
+        reply = self.ask(request, timeout)
+        if reply is not None:
+            return reply.get("staged") or dict(status="failed", problem="stage-data reply without a record")
+        why = "no stage-data answer within %ss: killed" % timeout
+        self.kill()
+        restart = dict(after="stage-data " + str(request.get("key")), reason=why, at=time.time())
+        self.start()
+        restart["started"] = self.alive()
+        self.report["restarts"].append(restart)
+        return dict(status="failed", problem=why)
+
     def kill(self):
         if self.proc is not None and self.proc.poll() is None:
             try:
@@ -568,6 +584,22 @@ def plan_data_files(args, plans):
             except Exception:  # noqa: BLE001 - that recipe reads it inside its own check instead
                 pass
     return sorted(paths)
+
+
+def stage_request(args, race, arm_python=None):
+    """The stage-data request for one recipe (smoke-fixes r12, 2026-10-14): an algos recipe's dataset block,
+    lane arrays and generated synthetic inputs (with their sha256), staged in the smoke worker and in the arm
+    servers of the race's arm interpreters before the recipe's timer starts. None for the other families
+    (their drivers read their inputs once per process already)."""
+    if race.get("family") != "algos":
+        return None
+    data = B.algos_data_dir(dict(algos_data=os.path.join(
+        os.path.abspath(os.path.expanduser(args.cache)), "algos-data")), None)      # the smoke runs --rows full
+    arms = set(race.get("arms") or ())
+    pythons = sorted({py for arm, py in (arm_python or {}).items() if arm in arms and py})
+    return dict(op="stage-data", key=race["id"], arm_pythons=pythons,
+                items=[dict(driver=str(ROOT / "tools/bench_board_algos.py"), lane=race["lane"],
+                            dataset=race["dataset"], data=data)])
 
 
 def smoke_stage(args, plans, out, receipts):
@@ -686,7 +718,7 @@ def worker_row(race, mode, reply, restart, directory, log, timeout):
     rc = reply.get("rc") if status == "done" else (None if status == "timeout" else 1)
     row = smoke_row(race, mode, rc, reply.get("seconds"), directory, log, timeout)
     row["worker"] = {k: reply.get(k) for k in ("status", "error", "children_killed", "arm_servers",
-                                                "torch_switches_restored")}
+                                                "torch_switches_restored", "staging")}
     if reply.get("stopped_at") and isinstance(row.get("reached"), dict):
         row["reached"]["stopped_at"] = reply["stopped_at"]     # where the recipe's timer stopped its check
     if status == "error" and row["status"] == "FAILED":
@@ -758,9 +790,15 @@ def run_smoke(args, plans, out):
                         row = failed_row(race, mode, args.smoke_timeout, "smoke worker not running: %s" % (
                             (worker.report.get("starts") or [{}])[-1].get("problem")))
                     else:
+                        # the recipe's inputs, loaded once and hashed once, before its own timer starts
+                        request = stage_request(args, race, ((doc["checks"].get("arm-venvs") or {}).get("arms")
+                                                             or {}))
+                        staged = worker.stage(request, args.smoke_stage_timeout) if request else None
                         argv = smoke_command(args, race, directory, mode, receipts)[2:]
                         reply, restart = worker.recipe(key, argv, log, args.smoke_timeout)
                         row = worker_row(race, mode, reply, restart, directory, log, args.smoke_timeout)
+                        if staged is not None:
+                            row["stage_data"] = staged
                 except Exception as exc:  # noqa: BLE001 - recorded, the loop goes on
                     row = failed_row(race, mode, args.smoke_timeout, "smoke harness raised: %r" % (exc,))
                 doc["rows"][key] = row

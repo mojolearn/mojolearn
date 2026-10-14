@@ -3688,6 +3688,43 @@ def _smoke_inproc():
     return smoke_inproc
 
 
+def _staging():
+    """tools/smoke_inproc.py when this process is the campaign smoke's worker or one of its arm servers (they
+    serve the --params-only parameter probe only), else None: every timed worker returns None here without
+    importing anything, so its inputs are built exactly as before.
+
+    smoke-fixes r12 (2026-10-14; the in-process smoke's STARTED recipes: optimizer lanes regenerating and
+    sha256-hashing 11 x 2^24 float32 arrays per arm, istella/text lanes re-reading a ~1 GB npz per arm, cholesky
+    rebuilding its 8192 x 8192 system per arm): inside the smoke worker each dataset block, lane array set and
+    generated synthetic input is built ONCE per process by the same builder functions and shared by every arm
+    and recipe (smoke_inproc.staged, keyed by the exact file stamp or seed and size), and each array is hashed
+    once (smoke_inproc.sha256_array), so the parameter records are byte-identical to the timed path's."""
+    if os.environ.get("MOJOLEARN_SMOKE_IN_PROCESS") != str(os.getpid()):
+        return None
+    SI = _smoke_inproc()
+    return SI if SI.in_process() else None
+
+
+def _params_probe_only():
+    """True only in the smoke worker and its arm servers: the arm is constructed for its parameter read-back and
+    no round ever runs (smoke_inproc.InProcessWorker refuses any request but the ready stage)."""
+    return _staging() is not None
+
+
+def _file_stamp(path):
+    st = os.stat(path)
+    return (os.path.abspath(path), st.st_size, st.st_mtime_ns)
+
+
+def _array_sha256(a):
+    """hashlib.sha256(np.ascontiguousarray(a).tobytes()).hexdigest(): the input-array record's digest. Inside the
+    smoke worker it is memoized per live array object (smoke_inproc.sha256_array; the same bytes hashed)."""
+    SI = _staging()
+    if SI is None:
+        return hashlib.sha256(_np().ascontiguousarray(a).tobytes()).hexdigest()
+    return SI.sha256_array(a)
+
+
 def _export_ours_init(args, lane, ds, tag, env_extra):
     """Run `ours-init` under OUR interpreter (untimed, before any worker): (npz path, None), or
     (None, the refusal reason)."""
@@ -5600,8 +5637,9 @@ def _input_array_records(arrays):
     # real inputs after dataset preparation. Empty prepared metadata was not
     # a measured shape. Witness the full actual arrays before any clock.
     np = _np()
+    # smoke-fixes r12: the same digest, hashed once per staged array inside the smoke worker (_array_sha256)
     return [dict(name=name, shape=list(a.shape), dtype=str(a.dtype),
-                 sha256=hashlib.sha256(a.tobytes()).hexdigest())
+                 sha256=_array_sha256(a))
             for name, value in arrays for a in [np.ascontiguousarray(value)]]
 
 
@@ -5625,14 +5663,39 @@ def _opt_state_reset(torch, opt, p, snap):
                 st[k] = v.clone() if torch.is_tensor(v) else copy.deepcopy(v)
 
 
-def _build_optim(lane, arm, D):
+def _optim_size(D):
+    """(P, STEPS): the parameter length and the step count of the optimizer lanes."""
+    return (1 << 16 if D.get("_cap") else 1 << 24), 10
+
+
+def _make_optim_inputs(P, STEPS):
+    """(p0, grads, input-array records): seed 7, p0 then the STEPS gradients, from one generator."""
     np = _np()
-    s = LANES[lane]
-    P, STEPS = (1 << 16 if D.get("_cap") else 1 << 24), 10
     rng = np.random.default_rng(SEED)
     p0 = rng.standard_normal(P).astype(np.float32)
     grads = [rng.standard_normal(P).astype(np.float32) * 0.01 for _ in range(STEPS)]
     input_arrays = _input_array_records([("p0", p0)] + [("grad%d" % i, g) for i, g in enumerate(grads)])
+    return p0, grads, input_arrays
+
+
+def _optim_inputs(P, STEPS):
+    """_make_optim_inputs(P, STEPS); inside the smoke worker once per process (smoke-fixes r12, 2026-10-14: every
+    optimizer lane STARTED in this generation or its sha256 per arm), shared by every arm and every optimizer
+    lane (the same seed, size and steps; the arrays are inputs, never written by a constructor)."""
+    SI = _staging()
+    if SI is None:
+        return _make_optim_inputs(P, STEPS)
+    import copy
+    p0, grads, input_arrays = SI.staged(("algos-optim-inputs", SEED, P, STEPS),
+                                        lambda: _make_optim_inputs(P, STEPS))
+    return p0, list(grads), copy.deepcopy(input_arrays)
+
+
+def _build_optim(lane, arm, D):
+    np = _np()
+    s = LANES[lane]
+    P, STEPS = _optim_size(D)
+    p0, grads, input_arrays = _optim_inputs(P, STEPS)
     S = {}
     hyper = dict(s["params"])
     # the math-changing flags ours fixes (_OURS_OPT_SEMANTICS), keyed by ours' class name
@@ -5654,7 +5717,9 @@ def _build_optim(lane, arm, D):
             from mojolearn._x_sequence_device import to_device as to_dev
             g0 = to_dev(grads[0])
             if getattr(g0, "_device_tensor", False):
-                grads_run = [g0] + [to_dev(gr) for gr in grads[1:]]
+                # smoke-fixes r12 (2026-10-14): the parameter probe (no round ever runs) copies the first
+                # gradient only, the copy that decides input_home; a timed worker copies all of them
+                grads_run = [g0] + ([] if _params_probe_only() else [to_dev(gr) for gr in grads[1:]])
                 info["input_home"] = "device"
             else:
                 to_dev = None
@@ -5673,7 +5738,9 @@ def _build_optim(lane, arm, D):
                 ok = bool(cls([p0[:1].copy()], **hyper).params_resident_available())
                 if ok:
                     from mojolearn._training_impl import train_to_device
-                    grads_run = [train_to_device(gr) for gr in grads]
+                    # smoke-fixes r12 (2026-10-14): the parameter probe (no round ever runs) copies the first
+                    # gradient only (its failure still selects the host path); a timed worker copies all
+                    grads_run = [train_to_device(gr) for gr in (grads[:1] if _params_probe_only() else grads)]
             except Exception as exc:  # noqa: BLE001  (a CPU host twin: no device arrays)
                 ok, grads_run = False, grads
                 info["resident_error"] = repr(exc)[:300]
@@ -5747,7 +5814,13 @@ def _build_optim(lane, arm, D):
         impl = {"foreach": True}
     # the gradients' pre-clock copy, timed apart (lane harness-evidence, 2026-10-14); the parameter's copy from
     # the host stays inside the clock (fit() below), so whole = the stored median + this copy
-    g_dev, info["upload_ms_untimed"] = _torch_timed_upload(torch, dev, grads)
+    if _params_probe_only():
+        # smoke-fixes r12 (2026-10-14; Apple adamax STARTED in this copy's MPS synchronize): the parameter probe
+        # runs no round, so the 10 x 64 MB gradient copy is not made there; the read-back below needs only the
+        # constructed optimizer. A timed worker copies them as always.
+        g_dev, info["upload_ms_untimed"] = None, None
+    else:
+        g_dev, info["upload_ms_untimed"] = _torch_timed_upload(torch, dev, grads)
     info["upload_scope"] = "gradients before the clock; the parameter's host copy is inside the clock"
     p0_host = torch.from_numpy(p0)
     # FAIRNESS FIX (2026-10-13 audit): every fit built a new optimizer and a new
@@ -5817,20 +5890,29 @@ def _sym_n(lane, D):
     return full if not D.get("_cap") else min(full, max(256, int(D["_cap"])))
 
 
+def _linalg_args(lane, D):
+    """The linalg lane's input arrays. Inside the smoke worker the seeded systems are built once per process
+    (smoke-fixes r12, 2026-10-14; cholesky STARTED rebuilding its 8192 x 8192 system per arm)."""
+    np = _np()
+    t = LANES[lane]["task"]
+    SI = _staging()
+    if t in ("lu", "lufac"):
+        n = 8192 if not D.get("_cap") else min(8192, max(256, int(D["_cap"])))
+        return lu_system(n) if SI is None else SI.staged(("algos-lu-system", SEED, n), lambda: lu_system(n))
+    if t in ("chol", "eigh"):
+        n = _sym_n(lane, D)
+        return (sym_system(n) if SI is None else SI.staged(("algos-sym-system", SEED, n), lambda: sym_system(n)),)
+    if t == "lstsq":
+        return (D["X"], D["y"])
+    return (np.ascontiguousarray(D["X"], dtype=np.float32),)
+
+
 def _build_linalg(lane, arm, D):
     np = _np()
     s = LANES[lane]
     t = s["task"]
     S = {}
-    if t in ("lu", "lufac"):
-        n = 8192 if not D.get("_cap") else min(8192, max(256, int(D["_cap"])))
-        args = lu_system(n)
-    elif t in ("chol", "eigh"):
-        args = (sym_system(_sym_n(lane, D)),)
-    elif t == "lstsq":
-        args = (D["X"], D["y"])
-    else:
-        args = (np.ascontiguousarray(D["X"], dtype=np.float32),)
+    args = _linalg_args(lane, D)
     p = s["params"]
     if arm in OURS_ARMS:
         name, fn = _ours_class(lane)
@@ -5903,7 +5985,12 @@ def _build_linalg(lane, arm, D):
             info = {"library": "torch", "version": torch.__version__, "device": "gpu",
                     "pre_clock_fit": False, "input_home": "device"}
             # the synchronized pre-clock copy, timed apart as the cupy arm's (lane harness-evidence)
-            targs, info["upload_ms_untimed"] = _torch_timed_upload(torch, dev, args)
+            if _params_probe_only():
+                # smoke-fixes r12 (2026-10-14; Apple lstsq/svd STARTED in this copy): the parameter probe runs
+                # no round and the record reads the host arrays, so the device copy is not made there
+                targs, info["upload_ms_untimed"] = None, None
+            else:
+                targs, info["upload_ms_untimed"] = _torch_timed_upload(torch, dev, args)
 
             def fit():
                 if t == "lu":
@@ -5936,11 +6023,16 @@ def _build_linalg(lane, arm, D):
             # Retain the actual synchronized upload separately so new
             # measurements can derive a whole/whole comparison. Never
             # backfill an older cell with this later copy measurement.
-            cp.cuda.runtime.deviceSynchronize()
-            upload_start = time.perf_counter()
-            cargs = [cp.asarray(a) for a in args]
-            cp.cuda.runtime.deviceSynchronize()
-            info["upload_ms_untimed"] = (time.perf_counter() - upload_start) * 1000.0
+            if _params_probe_only():
+                # smoke-fixes r12 (2026-10-14): the parameter probe runs no round and the record reads the host
+                # arrays, so the device copy is not made there; a timed worker makes it as always
+                cargs, info["upload_ms_untimed"] = None, None
+            else:
+                cp.cuda.runtime.deviceSynchronize()
+                upload_start = time.perf_counter()
+                cargs = [cp.asarray(a) for a in args]
+                cp.cuda.runtime.deviceSynchronize()
+                info["upload_ms_untimed"] = (time.perf_counter() - upload_start) * 1000.0
 
             def fit():
                 if t == "lu":
@@ -5995,8 +6087,9 @@ def _build_linalg(lane, arm, D):
             rec["__implementation__"] = getattr(cp.linalg,
                 {"lu":"solve", "lstsq":"lstsq", "chol":"cholesky", "qr":"qr",
                  "eigh":"eigh", "svd":"svd"}[t])
+    # smoke-fixes r12: the same digest, hashed once per staged array inside the smoke worker (_array_sha256)
     rec.update(seed=SEED, input_arrays=[dict(shape=list(a.shape), dtype=str(a.dtype),
-        sha256=hashlib.sha256(np.ascontiguousarray(a).tobytes()).hexdigest()) for a in args])
+        sha256=_array_sha256(a)) for a in args])
 
     def outputs():
         r = S["r"]
@@ -6223,6 +6316,20 @@ def _build_als(lane, arm, D):
 
 # ---- SHAP -----------------------------------------------------------------
 
+def _staged_shared_ridge(X, y):
+    """_shared_ridge_f32(X, y). Inside the smoke worker once per (X, y) object pair (smoke-fixes r12,
+    2026-10-14; permutation-shap/istella STARTED in this row-by-row solve, run once per arm): the staged lane
+    arrays are the same objects for every arm, so the solve runs once and each arm gets its own copy."""
+    SI = _staging()
+    if SI is None:
+        return _shared_ridge_f32(X, y)
+    key = ("algos-shared-ridge", id(X), id(y)) + tuple(SI._array_stamp(a) for a in (X, y))
+    # the entry holds X and y themselves, so their ids cannot be reused while it lives (their bytes are the
+    # staged lane arrays' and are not counted again)
+    got = SI.staged(key, lambda: (X, y) + tuple(_shared_ridge_f32(X, y)), nbytes=0)
+    return got[2].copy(), got[3]
+
+
 def _shared_ridge_f32(X, y, alpha=1.0):
     """(w32, b32): THE linear model every kernel- and permutation-SHAP arm explains.
 
@@ -6409,7 +6516,7 @@ def _build_shap(lane, arm, D):
     # w32 and b32 from _shared_ridge_f32 (a fixed-order solve, the same bits on every box and in
     # every worker), each through its own library's device or host evaluation of that model.
     # Results raced before this change were wrong for this lane; apply extra scrutiny.
-    w32, b32 = _shared_ridge_f32(X, y)
+    w32, b32 = _staged_shared_ridge(X, y)
     w = w32.astype(np.float64)              # the model's coefficients, exactly, for `exact`
     if arm in OURS_ARMS:
         # Lane shap-xvendor-identity (2026-10-08). OUR arm explains this library's own device
@@ -6644,16 +6751,77 @@ def _load_block(lane, dataset, data):
             B["_cap"] = int(os.environ["MOJOLEARN_ALGOS_SMOKE_ROWS"])
         return B, rec
     base = os.path.join(data, name)
-    with np.load(base + ".npz") as z:
-        B = {k: np.ascontiguousarray(z[k]) for k in z.files}
-    with open(base + ".json") as fh:
-        rec = json.load(fh)
+    SI = _staging()
+    if SI is None:
+        B, rec = _read_block(base)
+    else:
+        # smoke-fixes r12 (2026-10-14; istella/text recipes STARTED in zipfile crc32 / read_array): the block is
+        # read once per smoke-worker process, keyed by both files' path, size and mtime, and handed to the
+        # conductor and every arm (a new dict over the same arrays; the record a deep copy)
+        import copy
+        B, rec = SI.staged(("algos-block",) + _file_stamp(base + ".npz") + _file_stamp(base + ".json"),
+                           lambda: _read_block(base))
+        B, rec = dict(B), copy.deepcopy(rec)
     if _aft_full_tree_workload(lane):
         actual = {"train": list(B["X"].shape), "test": list(B["Xq"].shape)}
         if (rec.get("full_tree_workload") is not True or rec.get("smoke_max_rows")
                 or rec.get("dataset") != dataset or rec.get("source_dimensions") != actual):
             raise ValueError("full tree input must retain uncapped loader shapes and provenance")
     return B, rec
+
+
+def _read_block(base):
+    """(arrays, record) of one prepared block: <base>.npz and <base>.json."""
+    np = _np()
+    with np.load(base + ".npz") as z:
+        B = {k: np.ascontiguousarray(z[k]) for k in z.files}
+    with open(base + ".json") as fh:
+        rec = json.load(fh)
+    return B, rec
+
+
+def _lane_inputs(lane, dataset, data):
+    """(B, rec, D): _load_block then lane_arrays, as the worker and the conductor always built them. Inside the
+    smoke worker (smoke-fixes r12; simple-imputer/istella STARTED in lane_arrays' seeded NaN mask) the lane's
+    arrays are built once per process and every arm gets a new dict over the same arrays."""
+    B, rec = _load_block(lane, dataset, data)
+    SI = _staging()
+    if SI is None:
+        return B, rec, lane_arrays(lane, B)
+    name = block_file(lane, dataset)
+    stamp = _file_stamp(os.path.join(data, name) + ".npz") if name is not None else (None,)
+    key = ("algos-lane-arrays", lane, dataset, os.path.abspath(data)) + stamp + (
+        os.environ.get("MOJOLEARN_ALGOS_SMOKE_ROWS"), os.environ.get("MOJOLEARN_AFT_FULL_TREE_WORKLOAD"))
+    D = SI.staged(key, lambda: lane_arrays(lane, B))
+    return B, rec, dict(D)
+
+
+def stage_inputs(lane, dataset, data):
+    """The smoke worker's stage-data step for one algos recipe (tools/smoke_worker.py), outside every recipe's
+    timer: the block, the lane arrays, the generated synthetic inputs and the input-array digests the arms'
+    records carry, each built by the builders' own functions into the process's staged-input cache. Returns a
+    short record. A no-op outside the smoke worker."""
+    if _staging() is None:
+        return {"status": "not in the smoke worker"}
+    global _DATASET
+    saved = _DATASET
+    try:
+        B, rec, D = _lane_inputs(lane, dataset, data)
+        s = LANES[lane]
+        staged = ["block", "lane_arrays"]
+        if s["kind"] == "optim":
+            _optim_inputs(*_optim_size(D))
+            staged.append("optim inputs + digests")
+        elif s["kind"] == "linalg":
+            for a in _linalg_args(lane, D):
+                _array_sha256(a)
+            staged.append("linalg inputs + digests")
+        elif s["kind"] == "shap" and s["task"] in ("kernel-shap", "permutation-shap"):
+            _staged_shared_ridge(D["X"], D["y"])
+            staged.append("shared ridge")
+    finally:
+        _DATASET = saved
+    return {"status": "ok", "staged": staged, "arrays": sorted(k for k in D if not k.startswith("_"))}
 
 
 def _aft_capture_worker(args, B, D, rec, runner):
@@ -6733,8 +6901,7 @@ def worker_ready(args):
         # missing" on a box that had them (2026-10-11, nv2 v0065 / amd a1647 conv2d + resnet-block)
         if _NEURAL_FIXTURES:
             os.environ[_tool("neural_fixtures").ENV_DIR] = _NEURAL_FIXTURES
-        B, rec = _load_block(args.lane, args.dataset, args.data)
-        D = lane_arrays(args.lane, B)
+        B, rec, D = _lane_inputs(args.lane, args.dataset, args.data)
         runner = build(args.lane, args.arm, D)
     except Skipped as exc:
         return None, None, None, None, None, {"event": "skipped", "reason": str(exc)}
@@ -7527,8 +7694,7 @@ def race(args):
             json.dump(ab_config, fh, indent=2, sort_keys=True)
     if args.smoke_rows:           # the conductor builds the same seeded arrays as its workers
         os.environ["MOJOLEARN_ALGOS_SMOKE_ROWS"] = str(args.smoke_rows)
-    B, rec = _load_block(lane, ds, args.data)
-    D = lane_arrays(lane, B)
+    B, rec, D = _lane_inputs(lane, ds, args.data)
     shape = "; ".join("%s %s" % (k, "x".join(str(s) for s in np.shape(v)))
                       for k, v in sorted(D.items()) if hasattr(v, "shape"))
     result = {"lane": lane, "dataset": ds, "block": rec, "shape": shape, "arms": {},
