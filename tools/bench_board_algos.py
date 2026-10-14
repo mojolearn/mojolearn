@@ -2240,6 +2240,10 @@ def _tool(name):
     return _MODS[name]
 
 
+#: COMPILE-IN-CLOCK (Andrew 2026-10-14): torch.compile counters around the scored calls (standard library)
+COMPILE = _tool("bench_board_compile_guard")
+
+
 def _np():
     import numpy as np
     return np
@@ -6608,12 +6612,27 @@ def worker(args):
                     runner = build(args.lane, args.arm, D)
                     runner.sync_for_receipt()
                 preparation_ms = (time.perf_counter() - whole_start) * 1000.0
+                # COMPILE-IN-CLOCK (Andrew 2026-10-14): torch.compile counters read around each
+                # scored call, outside its clock (tools/bench_board_compile_guard.py)
+                c0 = COMPILE.read()
                 t0 = time.perf_counter()
                 runner.fit()
                 ms = (time.perf_counter() - t0) * 1000.0
+                c1 = COMPILE.read()
                 t1 = time.perf_counter()
                 did = runner.infer()
                 ims = (time.perf_counter() - t1) * 1000.0 if did else None
+                c2 = COMPILE.read()
+                compile_rec = {"recompiles_in_timed_run": COMPILE.compiles(c0, c1),
+                               "recompiles_in_timed_infer": COMPILE.compiles(c1, c2) if did else None,
+                               "warmup_compiles": None, "warmup_settle": None}
+                if r == 0:
+                    compile_rec["warmup_compiles"] = COMPILE.compiles(c0, c2)
+                    if COMPILE.is_compile_arm(args.arm):
+                        # the warm-up repeats the exact timed call (every algos call resets its
+                        # optimizer, reloads its weights or reruns a stateless layer, so a repeat
+                        # is the same work from the same state) until one call compiles nothing
+                        compile_rec["warmup_settle"] = COMPILE.settle(lambda: (runner.fit(), runner.infer()))
                 last = runner.outputs()
                 runner.sync_for_receipt()
                 operation_ms = (time.perf_counter() - whole_start) * 1000.0
@@ -6643,7 +6662,7 @@ def worker(args):
                 return 1
             say({"event": "round", "round": r, "ms": ms, "infer_ms": ims, "digest": digest, "mem": m, "state_receipt": state_receipt,
                  "aft_capture": aft_capture, "upload_separate": upload_sep,
-                 "upload_separate_infer": upload_sep_infer,
+                 "upload_separate_infer": upload_sep_infer, "compile": compile_rec,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -7489,14 +7508,23 @@ def race(args):
                       % (lane, ds, arm, r, json.dumps(msg)), flush=True)
                 continue
             a = result["arms"][arm]
+            comp = msg.get("compile") or {}
             if r == 0:
                 a["warmup_ms"], a["infer_warmup_ms"] = msg["ms"], msg.get("infer_ms")
                 if "-compile-" in arm:
                     a["compile_warmup_ms"], a["warmup_deadline_s"] = msg["ms"], deadline
+                a["warmup_compiles"], a["warmup_settle"] = comp.get("warmup_compiles"), comp.get("warmup_settle")
             else:
                 a["ms"].append(msg["ms"])
                 if msg.get("infer_ms") is not None:
                     a["infer_ms"].append(msg["infer_ms"])
+                # COMPILE-IN-CLOCK (Andrew 2026-10-14): compiles inside the scored calls, summed over the
+                # scored rounds (None when torch is not loaded in this arm's worker)
+                a.setdefault("compile_rounds", []).append(comp)
+                a["recompiles_in_timed_run"] = COMPILE.summarize(
+                    [c.get("recompiles_in_timed_run") for c in a["compile_rounds"]])
+                a["recompiles_in_timed_infer"] = COMPILE.summarize(
+                    [c.get("recompiles_in_timed_infer") for c in a["compile_rounds"]])
             a["digests"].append(msg["digest"])
             if msg.get("operation") is not None:
                 a.setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))

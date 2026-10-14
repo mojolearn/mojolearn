@@ -1811,6 +1811,19 @@ def _status(ms, refused, rounds):
 
 
 NOT_SCORED = "not-scored"
+#: COMPILE-IN-CLOCK (Andrew 2026-10-14): a cell timed with a torch.compile (re)compile inside a scored
+#: call; shown as measured and flagged, never hidden (tools/bench_board_compile_guard.py).
+COMPILE = _load_tool("bench_board_compile_guard")
+RECOMPILED = COMPILE.STATUS
+#: statuses whose median is a complete timing, shown with a ratio
+TIMED_STATUSES = ("ok", NOT_SCORED, RECOMPILED)
+
+
+def flag_recompiles(cells):
+    """Relabel each cell whose scored calls compiled ("recompiled-in-clock"); its times stay as measured."""
+    for c in cells:
+        COMPILE.flag_cell(c, c.get("recompiles_in_timed_run"))
+    return cells
 
 
 def mark_not_scored(cells):
@@ -2263,6 +2276,12 @@ def classical_cells(ctx, race, r):
             # this lane; apply extra scrutiny.
             cell.update(compile_warmup_ms=a["compile_warmup_ms"],
                         warmup_deadline_s=a.get("warmup_deadline_s"))
+        # COMPILE-IN-CLOCK (Andrew 2026-10-14): torch.compile counters around the scored calls
+        # (tools/bench_board_compile_guard.py); flag_recompiles relabels a cell that compiled in its clock
+        if a.get("recompiles_in_timed_run") is not None:
+            cell["recompiles_in_timed_run"] = a["recompiles_in_timed_run"]
+        if a.get("warmup_settle") is not None:
+            cell["warmup_settle"] = a["warmup_settle"]
         if a.get("not_opponent") and arm_library(arm) != "mojolearn":
             cell.update(mode="context", not_opponent=a["not_opponent"],
                         verdict="NOT-AN-OPPONENT(%s)" % a["not_opponent"])
@@ -2382,7 +2401,8 @@ def add_ratios(cells):
     `hardware_comparable` False, rendered NOT-COMPARABLE (different hardware)."""
     HW.mark(cells)
     # a "not-scored" cell is timed in full; quality is shown, never gated (Andrew, 2026-10-14)
-    ok = [c for c in cells if c["status"] in ("ok", NOT_SCORED) and c["median_ms"]]
+    # a "recompiled-in-clock" cell too: shown with its ratio, flagged (Andrew, 2026-10-14)
+    ok = [c for c in cells if c["status"] in TIMED_STATUSES and c["median_ms"]]
     ours_id = ours_of(ok, "identical")
     ours_fast = ours_of(ok, "fast")
     done = {id(c) for c in ok}
@@ -3134,6 +3154,10 @@ def _run_race(ctx, race):
             cells = algos_skips(classical_cells(ctx, race, r), r)
             if ctx.get("infer"):
                 rec["infer_cells"] = algos_skips(INFER.classical_cells(_bb(), ctx, race, r), r)
+                for c in rec["infer_cells"]:
+                    n = ((r.get("arms") or {}).get(c.get("arm")) or {}).get("recompiles_in_timed_infer")
+                    if n is not None:
+                        c["recompiles_in_timed_run"] = n
     elif race["family"] == "classical2":
         cmd, extra, ceiling = more_cmd(ctx, race)
         log = os.path.join(ctx["out"], "logs", "classical2." + tag + ".log")
@@ -3172,9 +3196,9 @@ def _run_race(ctx, race):
         # FAIRNESS FIX (2026-10-13 audit): these are the scored output bytes,
         # not disposable quality-pass scratch. Keep them for E.seal and later
         # verified retention; deleting them here left only hashes in R2.
-    rec["cells"] = add_ratios(mark_not_scored(cells))
+    rec["cells"] = add_ratios(flag_recompiles(mark_not_scored(cells)))
     if rec.get("infer_cells"):
-        mark_not_scored(rec["infer_cells"])
+        flag_recompiles(mark_not_scored(rec["infer_cells"]))
     rec["finished"] = now_utc()
     rec["status"] = "done" if rc == 0 else "failed"
     rec["host"] = race_host()
@@ -3222,6 +3246,9 @@ def status_text(c):
     """A cell's status; a "not-scored" cell names its scorer error (its times are shown as measured)."""
     if c.get("status") == NOT_SCORED:
         return "not-scored: quality not scored (scorer failed): %s" % str(c.get("scorer_error") or "-")[:200]
+    if c.get("status") == RECOMPILED:
+        return "recompiled-in-clock: %s torch.compile compile(s) inside the timed run%s" % (
+            c.get("recompiles_in_timed_run"), "; quality not scored" if c.get("also_not_scored") else "")
     return str(c.get("status"))
 
 

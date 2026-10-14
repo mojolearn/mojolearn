@@ -334,7 +334,7 @@ def board_status(raw, median_ms):
     raw = str(raw)
     if raw == "ok":
         return "ok" if median_ms is not None else "REFUSED(ok without a median)"
-    if raw == "not-scored" and median_ms is not None:
+    if raw in ("not-scored", "recompiled-in-clock") and median_ms is not None:
         # timed in every round, quality scorer failed or did not run (lane harness-evidence, 2026-10-14):
         # shown as measured with "quality not scored"; a display status, never an exclusion
         return raw
@@ -665,7 +665,8 @@ def is_ok(ob):
     """Only an ok run with a median becomes a numeric board cell (orchestrator, 2026-10-09): error,
     refused, timeout, not_ready, NO-RECORD and NO-OURS-CELL never do, and never replace an ok cell."""
     # "not-scored" (timed in full, scorer failed) is a display status, never an exclusion (Andrew, 2026-10-14)
-    return ob.get("status") in ("ok", "not-scored") and ob.get("median_ms") is not None
+    # "recompiled-in-clock" (a compile inside the timed run) is shown flagged, never excluded (Andrew, 2026-10-14)
+    return ob.get("status") in ("ok", "not-scored", "recompiled-in-clock") and ob.get("median_ms") is not None
 
 
 def recovered_predecessors(group):
@@ -876,7 +877,7 @@ def failed_flag(o):
 
 
 def our_cell(BB, ob, ident, newer_failed=()):
-    ms = ob.get("median_ms") if ob["status"] in ("ok", "not-scored") else None
+    ms = ob.get("median_ms") if ob["status"] in ("ok", "not-scored", "recompiled-in-clock") else None
     tail = "main@%s %s/%s %s; identity vs %s: %s" % (
         ob["sha"][:9], ob["box"], ob["job"], (iso(ob.get("ct")) or "?")[:10], ident["other_column"], ident["status"])
     flags = [failed_flag(o) for o in newer_failed]
@@ -990,7 +991,7 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
             lane_config["mismatches"] = list(lane_config.get("mismatches") or []) + [why]
         rr = {"id": rid, "family": ob["family"], "lane": ob["lane"], "dataset": ob["dataset"], "rows": None,
               "shape": "full" if ob["family"] == "neural" else None,
-              "status": "done" if ob["status"] in ("ok", "not-scored") else "failed", "rc": None,
+              "status": "done" if ob["status"] in ("ok", "not-scored", "recompiled-in-clock") else "failed", "rc": None,
               "log": "%s (%s/%s)" % (ob.get("evidence"), ob["box"], ob["job"]),
               "host": {"hostname": BOX_TEXT.get(ob["box"], ob["box"]) + " job " + str(ob["job"])},
               "cells": cells, "infer_cells": [],

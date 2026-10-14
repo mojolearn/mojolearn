@@ -59,8 +59,10 @@ def phase_cells(race, phase):
 
 
 def completed(cell):
+    # "recompiled-in-clock" (Andrew 2026-10-14): timed in full with a torch.compile compile inside the
+    # clock; shown with its ratio and flagged on the cell, never excluded
     ms = cell.get("median_ms")
-    return cell.get("status") == "ok" and isinstance(ms, (int, float)) and ms > 0
+    return cell.get("status") in ("ok", "recompiled-in-clock") and isinstance(ms, (int, float)) and ms > 0
 
 
 def timed_not_scored(cell):

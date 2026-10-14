@@ -94,7 +94,7 @@ def _span(cell):
 
 
 #: statuses whose median is a complete timing (a "not-scored" cell timed every round; only its scorer failed)
-TIMED_STATUSES = ("ok", "not-scored")
+TIMED_STATUSES = ("ok", "not-scored", "recompiled-in-clock")   # the last: a compile in the clock, shown flagged
 
 
 def _ok_median(cell):

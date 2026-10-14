@@ -2699,10 +2699,17 @@ def worker(args):
             r = int(parts[1])
             try:
                 mem.start()
+                # COMPILE-IN-CLOCK (Andrew 2026-10-14): torch.compile counters around the scored
+                # call, read outside its clock. No extra warm-up call here: a neural round consumes
+                # the next input and advances the trained state, so the warm-up stays the one
+                # identical round-0 step and a compile in a scored step is recorded and flagged.
+                guard = _load("bench_board_compile_guard")
+                c0 = guard.read()
                 t0 = time.perf_counter()
                 runner.call()
                 runner.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                compiles_now = guard.compiles(c0, guard.read())
                 outputs = runner.outputs()
                 runner.sync()
                 operation_ms = (time.perf_counter() - t0) * 1000.0
@@ -2720,6 +2727,7 @@ def worker(args):
                          if r == 0 and "compile" in args.arm else "", repr(exc)[:2000])})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "compiles": compiles_now,
                  "neural_ab": _neural_ab_receipt(runner, ab_config, executed=True),
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms if r == 0 else 0.0,
                                "scope": (_neural_ab_operation(ab_config) if ab_config else "training-step-or-forward-consume"), "dataset_load_included": False,
@@ -3118,6 +3126,7 @@ def race(args):
                 continue
             if r == 0:
                 result["arms"][arm]["warmup_ms"] = msg["ms"]
+                result["arms"][arm]["warmup_compiles"] = msg.get("compiles")
                 if is_compile_arm(arm):
                     # FAIRNESS FIX (2026-10-13 audit): the compile (torch.compile's first call)
                     # is this untimed warm-up round; its time is recorded on its own. Results
@@ -3126,6 +3135,10 @@ def race(args):
                     result["arms"][arm]["warmup_deadline_s"] = warmup_deadline(arm, args)
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
+                # COMPILE-IN-CLOCK (Andrew 2026-10-14): compiles inside the scored rounds, summed
+                rounds_c = result["arms"][arm].setdefault("compile_rounds", [])
+                rounds_c.append(msg.get("compiles"))
+                result["arms"][arm]["recompiles_in_timed_run"] = _load("bench_board_compile_guard").summarize(rounds_c)
             result["arms"][arm]["digests"].append(msg["digest"])
             if msg.get("neural_ab") is not None:
                 result["arms"][arm].setdefault("neural_ab_rounds", []).append(dict(msg["neural_ab"], round=r, warmup=r == 0))
