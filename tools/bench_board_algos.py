@@ -5498,7 +5498,19 @@ def _build_layer(lane, arm, D):
                 kw["random_state"] = SEED
         except (TypeError, ValueError):
             pass
-        layer = cls(**kw)
+        probe_light = s["task"] == "moe" and _params_probe_only()
+        if probe_light:
+            # smoke-fixes (2026-10-14; Apple b8: algos/moe [fast] STARTED at 5 s): MoEBlock's constructor draws
+            # its whole N(0, 0.02^2) weight set in Mojo and copies it (python/mojolearn/_x_sequence_moe.py
+            # __init__ + __setattr__: E x (D + 3FD) floats, 277 MB at the lane's shape). The parameter probe
+            # reads back `kw` and the class, never the instance's weights, so the probe constructs the class with
+            # the same arguments at a tiny D and F (every argument check still runs: hidden_act, top_k bounds,
+            # numeric_mode); the record below holds the lane's real kw. A timed worker constructs it as before.
+            layer = cls(**dict(kw, hidden_size=min(8, int(kw.get("hidden_size", 8))),
+                               intermediate_size=min(8, int(kw.get("intermediate_size", 8)))))
+            info["constructed"] = "parameter probe: the lane's arguments at D=F=8; the record holds the real ones"
+        else:
+            layer = cls(**kw)
         _neural_ab_layer_mode(layer, s)
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
         info["weights_loaded"] = False
@@ -5551,7 +5563,12 @@ def _build_layer(lane, arm, D):
         # the lane races what a user who puts x on the device gets (the `layer_norm_dev` entry);
         # MOJOLEARN_LN_CLASS_DEVICE_IO_OFF=1 (or MOJOLEARN_SEQ_DEVICE_IO_OFF=1) is its before arm.
         to_dev = None
-        if getattr(layer, "_seq_device_io", False):
+        if getattr(layer, "_seq_device_io", False) and probe_light:
+            # smoke-fixes (2026-10-14): the probe never runs the block, so x is not uploaded (the timed worker
+            # uploads it before its clock, as below)
+            to_dev = layer.to_device
+            info["input_upload"] = "not uploaded: parameter probe only (the timed worker uploads x before its clock)"
+        elif getattr(layer, "_seq_device_io", False):
             # lane neural-io-2: a sequence-binding layer (MoEBlock) takes x as a resident
             # SequenceDeviceTensor and returns y as one (read back in outputs(), outside the
             # clock). MOJOLEARN_SEQ_DEVICE_IO_OFF=1, or a binding built with

@@ -254,7 +254,7 @@ def test_moe_block_is_built_on_meta_and_never_loaded_in_the_probe(monkeypatch, t
 def test_ours_moe_skips_the_weight_load_only_in_the_probe_and_records_the_same(monkeypatch, tmp_path):
     A = _load("bench_board_algos")
     NF = A._tool("neural_fixtures")
-    E, D_, F = 4, 8, 6
+    E, D_, F = 4, 32, 24
     rng = np.random.default_rng(2)
     state = {"gate.weight": rng.standard_normal((E, D_)).astype(np.float32)}
     for e in range(E):
@@ -263,11 +263,18 @@ def test_ours_moe_skips_the_weight_load_only_in_the_probe_and_records_the_same(m
         state["experts.%d.w2.weight" % e] = rng.standard_normal((D_, F)).astype(np.float32)
     fx = {"state": state, "x": rng.standard_normal((16, D_)).astype(np.float32), "dy": None,
           "entry": {"lane": "moe", "dataset": "synthetic", "variant": "full"}}
-    loads = []
+    loads, built = [], []
 
     class MoEBlock:
+        _seq_device_io = True
+
         def __init__(self, **kw):
             self.kw = kw
+            built.append(kw)
+
+        def to_device(self, a):
+            loads.append("upload")
+            return a
 
         def load_state_dict(self, sd):
             loads.append(sorted(sd))
@@ -285,11 +292,16 @@ def test_ours_moe_skips_the_weight_load_only_in_the_probe_and_records_the_same(m
     for how in ("timed", "probe"):
         (_timed if how == "timed" else _probe)(monkeypatch)
         loads.clear()
+        built.clear()
         runner = A._build_layer("moe", "ours", {"_cap": 1})
         recs[how] = P.arm_record(runner.record)
         assert runner.info["weights_loaded"] is True and runner.info["output_comparable"] is True
-        assert loads == ([["down_proj", "gate_up_proj", "router"]] if how == "timed" else [])
-    assert recs["timed"] == recs["probe"]
+        assert loads == ([["down_proj", "gate_up_proj", "router"], "upload"] if how == "timed" else [])
+        # the probe constructs the class with the lane's arguments at D=F=8 (no 277 MB weight draw); the timed
+        # worker at the lane's shape; the record holds the lane's arguments either way
+        assert (built[0]["hidden_size"], built[0]["intermediate_size"]) == ((D_, F) if how == "timed" else (8, 8))
+        assert ("input_upload" in runner.info) == (how == "probe")
+    assert recs["timed"] == recs["probe"] and recs["probe"]["params"]["hidden_size"] == D_
 
 
 # ---------------------------------------------------------------------------
