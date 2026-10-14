@@ -1561,7 +1561,10 @@ def _build_cuml(lane, D, rec, S):
     if lane == "umap":
         from cuml.manifold import UMAP
         kw = _umap_kw()
-        kw.update(random_state=SEED, build_algo="brute_force_knn", **out_type)
+        # smoke-fixes (2026-10-14; umap: "force_serial_epochs missing from ours read-back"): pinned to True,
+        # cuML 26.08's own choice for a spectral fit (manifold/umap/umap.pyx:562-582, the per-vertex serial
+        # kernel), so the record reads back a value, not None; bench_board_params._semantic_r5 maps it.
+        kw.update(random_state=SEED, build_algo="brute_force_knn", force_serial_epochs=True, **out_type)
         make = tolerant(UMAP, **kw)
         call = lambda: S.update(e=make().fit_transform(X))  # noqa: E731
         out = lambda: {"embedding": np.asarray(_host(S["e"]), dtype=np.float32)}  # noqa: E731
@@ -1605,11 +1608,28 @@ def _build_cuml(lane, D, rec, S):
         nb = D["Yfit"].shape[0]
         make = tolerant(ARIMA, endog=dev["Yt"], order=ARIMA_ORDER, seasonal_order=ARIMA_SEASONAL,
                         fit_intercept=True, output_type="numpy")
+        arima_fit_kw = dict(method="ml", maxiter=1000)
 
         def call():
             est = make()
-            est.fit(method="ml", maxiter=1000)
+            est.fit(**arima_fit_kw)
             S["est"] = est
+
+        def read_back(est):
+            # smoke-fixes (2026-10-14; arima: "max_iter, method, order, seasonal_order, trend missing from
+            # cuml-gpu read-back", "missing real library implementation read-back: cuml-gpu"): cuML 26.08
+            # ARIMA.get_params raises NotImplementedError (tsa/arima.pyx:596-603). Record what the
+            # constructed object holds, its ARIMAOrder (p, d, q, P, D, Q, s, k = fit_intercept, n_exog;
+            # arima.pyx:365-372, a dict on the Python object) and simple_differencing (arima.pyx:374), plus
+            # the fit keywords call() passes (arima.pyx:860-866), and name the ARIMA class.
+            o = est.order
+            get = (lambda name: o[name]) if isinstance(o, dict) else (lambda name: getattr(o, name))
+            return dict(arima_fit_kw, __library__="cuml", __implementation__=type(est),
+                        order=[int(get(n)) for n in ("p", "d", "q")],
+                        seasonal_order=[int(get(n)) for n in ("P", "D", "Q", "s")],
+                        fit_intercept=bool(get("k")), n_exog=int(get("n_exog")),
+                        simple_differencing=bool(est.simple_differencing),
+                        output_type=getattr(est, "output_type", None), verbose=getattr(est, "verbose", None))
 
         def out():
             e = S["est"]
@@ -1658,6 +1678,10 @@ def _build_cuml(lane, D, rec, S):
         out = lambda: _supervised_out(lane, np, S["est"], dev["Xq"])  # noqa: E731
     probe = make()
     info["config"] = repr(probe)
+    if lane == "arima":
+        # the ARIMA record (read_back above): cuML's get_params cannot read this object
+        info["config"] = "ARIMA(%r).fit(%r)" % (read_back(probe), arima_fit_kw)
+        return Runner(info, call, out, sync, params=read_back(probe), model_for_hash=lambda: S.get("est"))
     return Runner(info, call, out, sync, params=probe, model_for_hash=lambda: S.get("est"))
 
 

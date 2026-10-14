@@ -619,6 +619,17 @@ def read_params(obj):
             # get_params does not list it; read the object's own constant.
             return lib, "get_params + class constant _EXPLORATION_MAX_ITER", dict(
                 got, exaggeration_iter=obj._EXPLORATION_MAX_ITER)
+        if lib == "mojolearn" and type(obj).__name__ == "LogisticRegression":
+            # smoke-fixes (2026-10-14; logreg: "lbfgs_memory, penalty_normalized missing from ours
+            # read-back"): ours' LogisticRegression fixes both in __init__ (python/mojolearn/
+            # linear_model.py:1445-1447, lbfgs_memory=5, penalty_normalized=True) and hands them to
+            # the QN binding on every fit (linear_model.py:1530-1531), but get_params does not list
+            # them. Read the object's values; an absent attribute stays absent.
+            names = ("lbfgs_memory", "penalty_normalized")
+            got = dict(got)
+            recovered = [name for name in names if name not in got and hasattr(obj, name)]
+            got.update({name: getattr(obj, name) for name in recovered})
+            return lib, "get_params + fixed QN fields " + ",".join(recovered), got
         if lib == "cuml" and type(obj).__name__ == "MinMaxScaler" and "clip" not in got:
             # The pinned cuML 26.08 transform only scales and translates. Its
             # documented out-of-range example returns 1.5, not 1.0:
@@ -838,6 +849,204 @@ def _semantic_r4(lane, param, arm, ours, theirs, library):
     if param == "precomputed_knn" and v is None:
         return ("no supplied k-NN graph: cuML computes its own exact brute-force k-NN "
                 "(distances.cuh get_distances, cuvs brute_force), ours its own exact k-NN")
+
+
+# smoke-fixes (2026-10-14; batch 3 sub-lane r5): NVIDIA classical ols, svc and classical2 agglomerative, arima,
+# ets, spectral-embedding, spectral, tsvd, umap. Every mapping names its lane (bare, as the classical drivers
+# pass it), arm and library, and fires only on the values that prove the same work. Sources: cuML v26.08.00
+# (python/cuml/cuml/..., cpp/src/...; cuVS v26.08.00 for the spectral eigensolver) and python/mojolearn/.
+def _semantic_r5(lane, param, arm, ours, theirs, library):
+    """Source-reviewed, value-conditional mappings for the r5 recipes (see the comment above)."""
+    # smoke-fixes (2026-10-14; ols: "torch-gpu: driver missing from ours read-back"): the torch arm
+    # runs torch.linalg.lstsq(driver='gels'), QR without pivoting of the centered design
+    # (tools/classical_two_datasets.py TorchOLS); ours' tall-design fit is the blocked TSQR of the
+    # centered [X | y] (python/mojolearn/linear_model.py:474-478 _ols_tsqr_on, :527-551 _ols_tsqr;
+    # FAST-only normal equations at :719-722 never run in identical mode). Both factor X = QR.
+    if lane == "ols" and arm == "torch-gpu" and library == "torch":
+        if param == "driver" and param not in ours and theirs.get(param) == "gels" \
+                and ours.get("fit_intercept") is True and theirs.get("fit_intercept") is True:
+            return ("QR least squares on both: torch driver='gels' (QR, no pivoting) and ours' TSQR of the "
+                    "centered design; fit_intercept is compared")
+        return None
+    if library != "cuml" or arm != "cuml-gpu":
+        return None
+    # smoke-fixes (2026-10-14; ols: "algorithm, copy_X missing from ours read-back"). cuML 26.08
+    # linear_model/linear_regression.pyx: algorithm='qr' "uses QR decomposition and solves
+    # Rx = Q^T y" (lines 104-105) on the dense single-target path (lines 352-385); copy_X=True means
+    # "X will never be mutated" (lines 113-115, may_mutate_X at 383). Ours (linear_model.py:474-551)
+    # solves the same least squares by the TSQR of the centered design and never writes the
+    # caller's X (as_f32_c copies or reads it; the centering runs on the device copy).
+    if lane == "ols" and param not in ours:
+        if param == "algorithm" and theirs.get(param) == "qr":
+            return "QR least squares on both: cuML algorithm='qr' (Rx = Q^T y) and ours' TSQR of the centered design"
+        if param == "copy_X" and theirs.get(param) is True:
+            return "neither arm mutates the caller's X: cuML copy_X=True; ours centers a device copy"
+        return None
+    # smoke-fixes (2026-10-14; svc: "break_ties, probability missing from cuml-gpu read-back").
+    # cuML 26.08 svm/svc.py has neither option: no Platt scaling (_params_from_cpu refuses
+    # probability=True, lines 169-170; _get_param_names lines 157-163) and multiclass through
+    # sklearn's OneVsOne/OneVsRest wrappers chosen by decision_function_shape (lines 291-310). Ours
+    # python/mojolearn/_svm_impl.py: probability=False skips _fit_probability (line 1041);
+    # break_ties is refused with 'ovo' (lines 910-915), so False is the only 'ovo' value.
+    if lane == "svc" and param not in theirs:
+        if param == "probability" and ours.get(param) is False:
+            return "no Platt-scaling cross-validation fits: ours probability=False; cuML SVC has no probability option"
+        if param == "break_ties" and ours.get(param) is False \
+                and ours.get("decision_function_shape") == theirs.get("decision_function_shape") == "ovo":
+            return "break_ties is inactive under the compared decision_function_shape='ovo' (ours refuses True there)"
+        return None
+    # smoke-fixes (2026-10-14; agglomerative: "compute_distances, compute_full_tree, distance_threshold,
+    # memory, prediction_data missing from cuml-gpu read-back"). cuML 26.08 cluster/agglomerative.pyx:
+    # only n_clusters, metric, linkage, connectivity and c (lines 108-135); single_linkage builds the
+    # whole dendrogram, children_ of shape (n_samples - 1, 2) (line 100), and cuts it at n_clusters
+    # (lines 168-195); no merge distances, cache or predict. Ours python/mojolearn/_hierarchy_impl.py:
+    # with a string connectivity the full tree is always built (lines 485-492), cut at n_clusters when
+    # distance_threshold is None (lines 499-500, 522-523); distances_ only with compute_distances or a
+    # threshold (lines 518-521); memory must be None (lines 262-266); prediction_data keeps a row copy
+    # for predict only (lines 528-529).
+    if lane == "agglomerative" and param not in theirs \
+            and ours.get("linkage") == theirs.get("linkage") == "single" \
+            and ours.get("connectivity") == theirs.get("connectivity") == "pairwise":
+        if param == "compute_full_tree" and ours.get(param) in ("auto", True):
+            return "the full single-linkage tree on both (ours always without a connectivity matrix; cuML children_ n-1 merges)"
+        if param == "distance_threshold" and param in ours and ours[param] is None \
+                and ours.get("n_clusters") == theirs.get("n_clusters"):
+            return "both cut the tree at the compared n_clusters; ours distance_threshold=None, cuML has no threshold cut"
+        if param == "compute_distances" and ours.get(param) is False:
+            return "no merge-distance output on either arm: ours compute_distances=False; cuML returns none"
+        if param == "memory" and param in ours and ours[param] is None:
+            return "no tree cache on either arm: ours memory=None; cuML has no memory option"
+        if param == "prediction_data" and ours.get(param) is False:
+            return "no stored training copy for predict: ours prediction_data=False; cuML has no predict"
+        return None
+    # smoke-fixes (2026-10-14; arima: "max_iter, method, order, seasonal_order, trend missing from cuml-gpu
+    # read-back"; "missing real library implementation read-back: cuml-gpu"): cuML 26.08 tsa/arima.pyx
+    # get_params raises NotImplementedError (lines 596-603); the driver now records the constructed
+    # object's order struct (p, d, q, P, D, Q, s, k, n_exog, lines 365-372), simple_differencing (line
+    # 374) and the fit keywords it passes (method, maxiter, lines 860-866) (tools/bench_board_more.py,
+    # arima cuml-gpu). Ours python/mojolearn/_arima_impl.py: trend is cuML's fit_intercept (DEVIATION
+    # 993, lines 371-384: 'c' -> k = 1, 'n' -> k = 0); simple_differencing only the True arm (lines
+    # 345-348); fit(y) takes exog only when given (the driver passes none).
+    if lane == "arima":
+        k_ours = {"c": True, "n": False}.get(str(ours.get("trend")).lower())
+        if param == "trend" and param not in theirs and k_ours is not None \
+                and theirs.get("fit_intercept") is k_ours:
+            return "ours trend=%r is cuML fit_intercept=%s (the same k in the ARIMA order)" % (ours["trend"], k_ours)
+        if param == "fit_intercept" and param not in ours and k_ours is not None \
+                and theirs.get(param) is k_ours:
+            return "cuML fit_intercept=%s is ours trend=%r (the same k in the ARIMA order)" % (k_ours, ours["trend"])
+        if param == "simple_differencing" and param not in ours and theirs.get(param) is True:
+            return "both difference the series before the fit: cuML simple_differencing=True, the only arm ours implements"
+        if param == "n_exog" and param not in ours and theirs.get(param) == 0:
+            return "no exogenous regressors on either arm (cuML n_exog=0; ours' fit receives none)"
+        return None
+    # smoke-fixes (2026-10-14; ets: "initialization_method missing from cuml-gpu read-back"). cuML 26.08
+    # tsa/holtwinters.pyx has one initialization: the moving-average decomposition of the first
+    # start_periods seasons, then the optimizer over alpha/beta/gamma only (lines 137-140, 265-300).
+    # Ours python/mojolearn/_tsa_impl.py: 'heuristic' (alias 'cuml') is that fit (lines 113-116,
+    # 421-440); 'estimated' also estimates the initial states (different work), so it never maps.
+    if lane == "ets":
+        if param == "initialization_method" and param not in theirs and ours.get(param) in ("heuristic", "cuml") \
+                and ours.get("start_periods") == theirs.get("start_periods"):
+            return "cuML's only initialization is ours 'heuristic': start_periods-season decomposition, then smoothing parameters only"
+        return None
+    # smoke-fixes (2026-10-14; spectral-embedding: "eigen_solver, eigen_tol, gamma missing from cuml-gpu
+    # read-back"). cuML 26.08 manifold/spectral_embedding.pyx passes only n_components, n_neighbors,
+    # norm_laplacian, drop_first and seed (lines 31-35, cpp/src/spectral/spectral_embedding.hpp:14-25),
+    # so cuVS v26.08.00 runs RAFT's Lanczos (src/preprocessing/spectral/detail/spectral_embedding.cuh:
+    # 62-77) at its default tolerance 1e-5 (include/cuvs/preprocessing/spectral_embedding.hpp:59) on the
+    # kNN affinity. Ours python/mojolearn/_spectral_impl.py SpectralEmbedding: eigen_solver None is the
+    # only value, RAFT's thick-restart Lanczos (lines 1164-1168); gamma only for affinity='rbf'
+    # (lines 1157-1162).
+    if lane == "spectral-embedding" and param not in theirs:
+        if param == "eigen_tol" and isinstance(ours.get(param), float) and ours[param] == 1e-5:
+            return "Lanczos tolerance 1e-5 on both (ours eigen_tol=1e-05; cuVS spectral_embedding params.tolerance default)"
+        if param == "eigen_solver" and param in ours and ours[param] is None:
+            return "RAFT Lanczos on both: ours eigen_solver=None (its only solver); cuML/cuVS has no other"
+        if param == "gamma" and param in ours and ours[param] is None \
+                and ours.get("affinity") == theirs.get("affinity") == "nearest_neighbors":
+            return "gamma parameterizes only the RBF affinity; both use the compared nearest_neighbors affinity"
+        return None
+    # smoke-fixes (2026-10-14; spectral: "assign_labels, gamma, prediction_data missing from cuml-gpu
+    # read-back"). cuML 26.08 cluster/spectral_clustering.pyx: "Kmeans is used for assigning labels"
+    # (line 137; _params_to_cpu reports assign_labels='kmeans', line 188; other values refused, lines
+    # 165-168); affinity only nearest_neighbors/precomputed (lines 161-164); no predict. Ours
+    # python/mojolearn/_spectral_impl.py SpectralClustering: assign_labels (lines 359-363), gamma read
+    # only for affinity='rbf' (lines 375-378, 461), prediction_data keeps Nystrom data for predict only.
+    if lane == "spectral" and param not in theirs:
+        if param == "assign_labels" and ours.get(param) == "kmeans":
+            return "k-means label assignment on both (ours assign_labels='kmeans'; cuML's only assignment); n_init compared"
+        if param == "gamma" and param in ours and ours[param] is None \
+                and ours.get("affinity") == theirs.get("affinity") == "nearest_neighbors":
+            return "gamma parameterizes only the RBF affinity; both use the compared nearest_neighbors affinity"
+        if param == "prediction_data" and ours.get(param) is False:
+            return "no prediction data kept: ours prediction_data=False; cuML SpectralClustering has no predict"
+        return None
+    # smoke-fixes (2026-10-14; tsvd: "n_oversamples, power_iteration_normalizer missing from cuml-gpu
+    # read-back"). Ours python/mojolearn/decomposition.py:785-796 reads both only when
+    # algorithm='randomized'; cuML 26.08 decomposition/tsvd.pyx 'full' is a full eigendecomposition
+    # (lines 80-81) and has no randomized solver (lines 141-156).
+    if lane == "tsvd" and param in ("n_oversamples", "power_iteration_normalizer") and param not in theirs \
+            and ours.get("algorithm") == "covariance_eigh" and theirs.get("algorithm") == "full":
+        return "randomized-solver controls are inactive: ours covariance_eigh and cuML 'full' are eigendecompositions"
+    # smoke-fixes (2026-10-14; umap). cuML 26.08 manifold/umap/umap.pyx against
+    # python/mojolearn/_umap_impl.py and umap/.
+    if lane == "umap":
+        # "a, b unset on ours and unset on cuml-gpu": None fits umap-learn's curve 1/(1 + a x^(2b)) to
+        # the offset exponential on the same 300-point grid of [0, 3 spread] from the compared spread and
+        # min_dist on both: cuML find_ab_params (lines 62-94, used at 482-483); ours a = b = None sends 0
+        # (_umap_impl.py:256-259) and umap/curve.mojo fit_umap_curve fits it (umap/params.mojo:113-119,
+        # checked against scipy within 2e-4 in umap/checks/curve_check.mojo).
+        if param in ("a", "b") and param in ours and param in theirs and ours[param] is None \
+                and theirs[param] is None and ours.get("a") is None and ours.get("b") is None \
+                and isinstance(ours.get("spread"), float) and isinstance(ours.get("min_dist"), float) \
+                and ours.get("spread") == theirs.get("spread") and ours.get("min_dist") == theirs.get("min_dist"):
+            return ("a/b None: both fit umap-learn's curve from the compared spread=%r, min_dist=%r"
+                    % (ours["spread"], ours["min_dist"]))
+        # "metric_kwds unset on both": no keyword overrides for the compared euclidean metric
+        # (ours _umap_impl.py:247-254 reads only minkowski 'p'; cuML passes none for euclidean).
+        if param == "metric_kwds" and param in ours and param in theirs and ours[param] is None \
+                and theirs[param] is None and ours.get("metric") == theirs.get("metric") == "euclidean":
+            return "no metric keyword overrides for the compared euclidean metric on either arm"
+        if param in theirs and param not in ours:
+            value = theirs[param]
+            # cuML build_algo='brute_force_knn' (lines 627-628) is the exact kNN ours always builds
+            # (umap/estimator.mojo:22, 68: exact k-NN); build_kwds None keeps knn_n_clusters=1, one
+            # unpartitioned exact search (lines 597-599); device_ids is read only with nn_descent and
+            # knn_n_clusters > 1 (lines 898-902).
+            if param == "build_algo" and value == "brute_force_knn":
+                return "exact brute-force kNN graph on both (cuML build_algo='brute_force_knn'; ours always exact)"
+            if param == "build_kwds" and value is None and theirs.get("build_algo") == "brute_force_knn":
+                return "no kNN build overrides: knn_n_clusters=1, one unpartitioned exact search"
+            if param == "device_ids" and value is None:
+                return "single-device fit; cuML reads device_ids only for partitioned nn_descent"
+            if param == "callback" and value is None:
+                return "no per-epoch callback on cuML (lines 592-595); ours has none"
+            if param == "precomputed_knn" and value is None:
+                return "both build the kNN graph from X; no precomputed graph"
+            # hash_input only lets a later transform(X) return the fit embedding (lines 776-785) and
+            # transform_queue_size only steers transform's neighbor search (lines 746-750); the race
+            # times fit_transform on both arms (tools/bench_board_more.py).
+            if param == "hash_input" and value is False:
+                return "no input hashing; read only by a later transform, and the race times fit_transform"
+            if param == "transform_queue_size" and isinstance(value, float):
+                return "read only by transform's neighbor search; the race times fit_transform"
+            # force_serial_epochs: the driver pins True, cuML's own choice for a spectral fit (lines
+            # 562-582: per-vertex serial kernel). Ours has no switch: its identical optimizer is a
+            # per-vertex fold of the epoch snapshot (umap/optimizer_identical_device.mojo:1-40), the same
+            # attractive/repulsive update, learning rate schedule, epochs and negative sampling (compared).
+            # The fold order is each library's parallel schedule of that update; quality is scored.
+            if param == "force_serial_epochs" and value is True and ours.get("init") == theirs.get("init") == "spectral":
+                return ("cuML's per-vertex serial epoch kernel (its spectral-fit choice, pinned) and ours' per-vertex "
+                        "snapshot fold schedule the same SGD update; epochs, learning rate and negative sampling compared")
+        if param in ours and param not in theirs:
+            # ours refuses densmap=True and any output_metric but euclidean (_umap_impl.py:234-241);
+            # cuML has neither (plain UMAP objective, euclidean embedding space).
+            if param == "densmap" and ours[param] is False:
+                return "plain UMAP objective on both: ours densmap=False; cuML has no densMAP"
+            if param == "output_metric" and ours[param] in ("euclidean", "l2"):
+                return "euclidean embedding space on both: ours output_metric='euclidean'; cuML's is fixed"
+        return None
     return None
 
 
@@ -853,6 +1062,9 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     """
     why = _semantic_r4(lane, param, arm, ours, theirs, library)
     if why: return why
+    why = _semantic_r5(lane, param, arm, ours, theirs, library)
+    if why:
+        return why
     # FAIRNESS FIX (2026-10-13 audit): optimizer defaults exposed by torch
     # were treated as absent algorithm settings on our narrower optimizer
     # API. Preserve the raw settings and explicitly distinguish the library's
