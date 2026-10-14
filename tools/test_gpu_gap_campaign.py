@@ -252,7 +252,8 @@ class FakeWorker:
     behave = None
     instances = []
 
-    def __init__(self, args, out, env, worker_cmd=None):
+    def __init__(self, args, out, env, worker_cmd=None, name='worker'):
+        self.env, self.name = env, name
         self.report = dict(status='serving', import_seconds=12.5, gpu_init_seconds=1.5, restarts=[],
                            starts=[{'import_seconds': 12.5, 'gpu_init_seconds': 1.5, 'report': {'imports': {}}}])
         self.recipes, self.asked, self.staged = [], [], []
@@ -552,3 +553,24 @@ def test_install_mamba_ssm_does_nothing_when_both_import(monkeypatch, tmp_path):
     monkeypatch.setattr(M, 'imports', lambda python: (True, '2.3.0'))
     monkeypatch.setattr(M.B, 'run_logged', lambda *a, **k: (_ for _ in ()).throw(AssertionError('no build')))
     assert M.install('py', 'amd', str(tmp_path / 'log'))['installed'] is False
+
+
+
+def test_apple_runs_each_numeric_mode_in_its_own_worker(tmp_path, monkeypatch):
+    # smoke-fixes 2026-10-14 (Apple b7): our bindings load one tier per process, so each mode has its own worker
+    monkeypatch.setattr(C, 'SmokeWorker', FakeWorker)
+    monkeypatch.setattr(C, 'smoke_checks', lambda args, plans, out, worker=None: ({}, {}))
+    monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
+    monkeypatch.setattr(C, 'smoke_fixtures', lambda *a, **k: {'status': 'ok', 'problems': []})
+    monkeypatch.setattr(C, 'retain', lambda archive, members: {'sha256': 'x'})
+    FakeWorker.instances = []
+    FakeWorker.behave = staticmethod(lambda argv, log, timeout: ({'status': 'timeout', 'rc': None}, None))
+    rid = 'algos/adam/synthetic/rows=full'
+    manifest = tmp_path / 'm.json'
+    manifest.write_text(json.dumps({'apple': [rid]}))
+    C.main(['--vendor', 'apple', '--manifest', str(manifest), '--out', str(tmp_path / 'o'), '--cache', str(tmp_path),
+            '--smoke'])
+    modes = [w.env.get('MOJOLEARN_NUMERIC_MODE') for w in FakeWorker.instances]
+    assert modes == ['fast', 'identical'] and [w.name for w in FakeWorker.instances] == ['worker-fast', 'worker']
+    doc = json.loads((tmp_path / 'o' / 'smoke' / 'smoke.json').read_text())
+    assert set(doc['workers']) == {'fast', 'identical'}
