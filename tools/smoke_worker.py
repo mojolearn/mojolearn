@@ -178,6 +178,42 @@ def gpu_init(report, vendor):
 # one recipe under its own alarm
 # ---------------------------------------------------------------------------
 
+# smoke-fixes (2026-10-14; algos/gcn taxi+istella, Apple, both modes: "missing parameter/version probe:
+# torch-eager-fp32" and the other torch arms): each torch arm's construction raised "scatter_reduce_mps does
+# not have a deterministic implementation, but you set 'torch.use_deterministic_algorithms(True)'" in PyG's
+# gcn_norm. The gcn recipe sets no such switch. The neural mamba recipes, checked earlier in this same
+# process, import mamba/corpus/gen_corpus.py (tools/bench_board_neural.py _load_mamba_corpus), and that file
+# calls torch.set_num_threads(1) and torch.use_deterministic_algorithms(True) AT IMPORT
+# (mamba/corpus/gen_corpus.py:86-87; transformer/corpus/gen_corpus.py:98-99 does the same). In the timed
+# campaign every recipe is its own process, so no later recipe sees those switches; in this worker they
+# leaked into every later recipe. torch's process-global switches are recorded once after the load and put
+# back before every recipe, so each recipe starts with the switches a fresh process starts with. The reply
+# records each switch that had to be put back.
+def torch_switches():
+    """torch's process-global switches a module can flip at import ({} without torch)."""
+    torch = sys.modules.get("torch")
+    if torch is None:
+        return {}
+    return dict(deterministic_algorithms=bool(torch.are_deterministic_algorithms_enabled()),
+                deterministic_warn_only=bool(torch.is_deterministic_algorithms_warn_only_enabled()),
+                num_threads=int(torch.get_num_threads()))
+
+
+def restore_torch_switches(saved):
+    """Put torch's switches back to `saved` (torch_switches() after the load); {switch: [found, restored]}."""
+    torch = sys.modules.get("torch")
+    if torch is None or not saved:
+        return {}
+    now = torch_switches()
+    changed = {k: [now.get(k), v] for k, v in saved.items() if now.get(k) != v}
+    if "deterministic_algorithms" in changed or "deterministic_warn_only" in changed:
+        torch.use_deterministic_algorithms(saved["deterministic_algorithms"],
+                                           warn_only=saved["deterministic_warn_only"])
+    if "num_threads" in changed:
+        torch.set_num_threads(saved["num_threads"])
+    return changed
+
+
 class RecipeTimeout(BaseException):
     """The recipe's own timer fired (BaseException, so a driver's `except Exception` cannot swallow it)."""
 
@@ -354,6 +390,7 @@ def serve(vendor, out):
     preload(report)
     gpu_init(report, vendor)
     report["wall_seconds"] = round(time.time() - t0, 2)
+    report["torch_switches"] = start_switches = torch_switches()   # restored before every recipe (above)
     say({"event": "ready", "report": report})
     import bench_board as B
     for line in sys.stdin:
@@ -375,7 +412,13 @@ def serve(vendor, out):
                  "facts": warm_box(req.get("argv") or [], req.get("paths") or [], req.get("arm_pythons") or [])})
             continue
         if op == "recipe":
+            try:
+                restored = restore_torch_switches(start_switches)
+            except Exception as exc:  # noqa: BLE001 - recorded; the recipe then runs with what it finds
+                restored = dict(error=repr(exc)[:400])
             reply = run_recipe(B.main, list(req["argv"]), req["log"], float(req["timeout"]))
+            if restored:
+                reply["torch_switches_restored"] = restored
             reply.update(event="recipe", key=req.get("key"), arm_servers=smoke_inproc.ARM_SERVERS.report())
             say(reply)
             continue

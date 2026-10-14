@@ -333,3 +333,24 @@ def test_box_facts_are_read_once_per_worker(monkeypatch):
     assert SI.once(('k',), lambda: n.append(1) or 6) == 5
     assert n == [1]
     SI.clear_once()
+
+
+def test_torch_switches_a_recipe_flipped_are_put_back(monkeypatch):
+    # smoke-fixes (2026-10-14): a neural recipe imports mamba/corpus/gen_corpus.py, which turns on
+    # torch.use_deterministic_algorithms(True) and one thread at import; in the one worker process that
+    # leaked into the gcn torch arms on MPS (scatter_reduce_mps refuses deterministic mode)
+    state = dict(det=False, warn=False, threads=8)
+
+    def use(on, warn_only=False):
+        state.update(det=on, warn=warn_only)
+    torch = SimpleNamespace(are_deterministic_algorithms_enabled=lambda: state['det'],
+                            is_deterministic_algorithms_warn_only_enabled=lambda: state['warn'],
+                            get_num_threads=lambda: state['threads'], use_deterministic_algorithms=use,
+                            set_num_threads=lambda n: state.update(threads=n))
+    monkeypatch.setitem(sys.modules, 'torch', torch)
+    saved = SW.torch_switches()
+    assert SW.restore_torch_switches(saved) == {}
+    use(True)
+    state['threads'] = 1                                       # what gen_corpus.py does at import
+    assert SW.restore_torch_switches(saved) == {'deterministic_algorithms': [True, False], 'num_threads': [1, 8]}
+    assert state == dict(det=False, warn=False, threads=8)
