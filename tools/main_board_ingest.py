@@ -334,6 +334,10 @@ def board_status(raw, median_ms):
     raw = str(raw)
     if raw == "ok":
         return "ok" if median_ms is not None else "REFUSED(ok without a median)"
+    if raw == "not-scored" and median_ms is not None:
+        # timed in every round, quality scorer failed or did not run (lane harness-evidence, 2026-10-14):
+        # shown as measured, judged "quality not scored (scorer failed)", never a numeric ok cell (is_ok)
+        return raw
     if raw.startswith(("REFUSED", "QUALITY", "HOST-MEMORY", "MODE-MISMATCH", "PARTIAL", "UNKNOWN")):
         return raw          # bench_board's own status text (GRIDBB writes its spaces as '_')
     return "REFUSED(%s)" % raw
@@ -1207,6 +1211,16 @@ def _load_race_fairness():
 
 
 RF = _load_race_fairness()
+
+
+def _load_call_lines():
+    spec = importlib.util.spec_from_file_location("race_call_line", os.path.join(HERE, "race_call_line.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+CALLS = _load_call_lines()
 TIE_BAND = RF.TIE_BAND
 pairing = RF.pairing
 fairness_rule = RF.fairness_rule
@@ -1281,6 +1295,9 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
         archive = HW.archive_index(os.path.join(args.opponent_archive or "", column, "opponent-cells-all.jsonl.gz"))
         backfill = {}
         result = assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failures, archive, backfill)
+        # the readable call line of every arm, derived from its recorded invocation (display only; ignored by
+        # race_fairness.pairing, so no audit moves)
+        CALLS.annotate_board(result)
         apply_fairness(result, prev, generated[:10])
         # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
         unknown, notcmp = [], 0

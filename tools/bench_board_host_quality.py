@@ -94,16 +94,11 @@ def missing_host_bindings(log_path):
     return out
 
 
-def enrich(lane, inputs, outputs, quality, python, directory, timeout, *, fit_calls=1):
-    """Only replace explicitly empty quality, never an existing quality error."""
-    import numpy as np
-    missing = [arm for arm in outputs if arm.startswith('ours') and quality.get(arm) == {}]
-    if not missing:
-        return None
-    root = Path(directory)
-    root.mkdir(parents=True, exist_ok=True)
-    data, ref, receipt = root / 'inputs.npz', root / 'host.npz', root / 'receipt.json'
-    np.savez(data, **inputs)
+class ScorerUnavailable(RuntimeError):
+    """The own-host reference (this lane's quality scorer) cannot run: the race is refused before any timing."""
+
+
+def _child_env():
     env = dict(os.environ, MOJOLEARN_VENDOR='cpu', MOJOLEARN_NUMERIC_MODE='identical')
     for key in ('PYTHONPATH',
                 'MOJOLEARN_GPU_ARCH', 'MOJOLEARN_BOARD_ARTIFACT_MANIFEST', 'MOJOLEARN_BOARD_RECEIPTS'):
@@ -114,28 +109,63 @@ def enrich(lane, inputs, outputs, quality, python, directory, timeout, *, fit_ca
     spec = importlib.util.find_spec('mojolearn')
     if spec is not None and spec.origin:
         env['PYTHONPATH'] = str(Path(spec.origin).resolve().parent.parent)
+    return env
+
+
+def reference(lane, inputs, python, directory, timeout, *, fit_calls=1):
+    """Run the untimed own-host reference on the race's inputs: (reference outputs, receipt path).
+
+    The reference depends on the inputs only, never on a timed arm's outputs, so the race driver runs it BEFORE
+    its first timed round (the scorer preflight, lane harness-evidence 2026-10-14): a reference that cannot run
+    (missing neural fixtures, a missing host binding, an import error) refuses the race up front instead of
+    leaving a timed cell unscored. Raises ScorerUnavailable with the child's own failure line."""
+    import numpy as np
+    root = Path(directory)
+    root.mkdir(parents=True, exist_ok=True)
+    data, ref, receipt = root / 'inputs.npz', root / 'host.npz', root / 'receipt.json'
     try:
+        np.savez(data, **inputs)
         with (root / 'host.log').open('w') as log:
             result = subprocess.run([python, str(Path(__file__).resolve()), lane,
                                      str(data), str(ref), str(receipt), str(fit_calls)],
-                                    env=env, stdout=log, stderr=subprocess.STDOUT, timeout=timeout)
-        if result.returncode:
-            raise ValueError('Own host reference failed (%s); see %s'
-                             % (failure_line(root / 'host.log'), root / 'host.log'))
+                                    env=_child_env(), stdout=log, stderr=subprocess.STDOUT, timeout=timeout)
+    except Exception as error:  # noqa: BLE001  (a timeout or an unwritable work dir: the scorer did not run)
+        raise ScorerUnavailable('Own host reference failed (%r); see %s' % (error, root / 'host.log'))
+    if result.returncode:
+        raise ScorerUnavailable('Own host reference failed (%s); see %s'
+                                % (failure_line(root / 'host.log'), root / 'host.log'))
+    try:
         proof = json.loads(receipt.read_text())
-        if proof.get('vendor') != 'cpu' or proof.get('numeric_mode') != 'identical' or not proof.get('bindings'):
-            raise ValueError('Missing own host reference provenance')
-        with np.load(ref, allow_pickle=False) as saved:
-            reference = {key: saved[key] for key in saved.files}
+    except (OSError, ValueError) as error:
+        raise ScorerUnavailable('Missing own host reference provenance (%r)' % (error,))
+    if proof.get('vendor') != 'cpu' or proof.get('numeric_mode') != 'identical' or not proof.get('bindings'):
+        raise ScorerUnavailable('Missing own host reference provenance')
+    with np.load(ref, allow_pickle=False) as saved:
+        return {key: saved[key] for key in saved.files}, str(receipt)
+
+
+def enrich(lane, inputs, outputs, quality, python, directory, timeout, *, fit_calls=1, precomputed=None):
+    """Only replace explicitly empty quality, never an existing quality error.
+
+    `precomputed`: (reference outputs, receipt path) from `reference()` run before the timed rounds; without it
+    the reference runs now. Each arm's entry says whether the scorer ran: `scorer: "scored"` (a distance, or a
+    scored output failure such as a mismatch) or `scorer: "failed"` (the reference itself could not run)."""
+    missing = [arm for arm in outputs if arm.startswith('ours') and quality.get(arm) == {}]
+    if not missing:
+        return None
+    try:
+        ref_outputs, receipt = precomputed or reference(lane, inputs, python, directory, timeout,
+                                                        fit_calls=fit_calls)
         for arm in missing:
             try:
-                quality[arm] = compare(outputs[arm], reference)
+                quality[arm] = dict(compare(outputs[arm], ref_outputs), scorer='scored')
             except Exception as error:
-                quality[arm] = {'error': str(error)}
+                quality[arm] = {'error': str(error), 'scorer': 'scored'}
     except Exception as error:
+        receipt = str(Path(directory) / 'receipt.json')
         for arm in missing:
-            quality[arm] = {'error': str(error)}
-    return str(receipt)
+            quality[arm] = {'error': str(error), 'scorer': 'failed', 'scorer_error': str(error)}
+    return receipt
 
 
 def host_binding_artifacts(modules=None):

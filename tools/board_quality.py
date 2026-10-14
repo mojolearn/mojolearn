@@ -55,7 +55,9 @@ def number(value):
 # is "quality not scored", never a quality failure of the arm (lane harness-evidence, 2026-10-14).
 SCORED_FAILURE_ERRORS = ("host reference mismatch", "nonfinite host reference output",
                          "host reference output shape differs", "host reference output fields differ",
-                         "host reference output is empty", "non-numeric host reference output")
+                         "host reference output is empty", "non-numeric host reference output",
+                         # tools/bench_board_algos.py quality(): the scorer ran and rejected the arm's output
+                         "nonfinite", "invalid optimizer output")
 NOT_SCORED = "quality not scored (scorer failed)"
 
 
@@ -73,6 +75,8 @@ def scorer_failure(quality):
     err = q.get("error")
     if err and not any(k in str(err).lower() for k in SCORED_FAILURE_ERRORS):
         return str(err)
+    if q.get("quality_error"):              # tools/bench_board_extra.py: the per-arm scorer raised
+        return str(q["quality_error"])
     return None
 
 

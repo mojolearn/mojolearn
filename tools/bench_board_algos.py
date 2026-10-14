@@ -3012,8 +3012,9 @@ def host_reference_preflight(lane, ds, arms, work):
             continue
         marker = os.path.join(work, "host-preflight-%s.asked" % basename)
         if os.path.exists(marker):
-            print("ALGOS-HOST-REFERENCE lane=%s dataset=%s %s still missing after one ask; racing without it"
-                  % (lane, ds, basename), flush=True)
+            # the scorer preflight (scorer_preflight, own host reference) refuses the race when it cannot load
+            print("ALGOS-HOST-REFERENCE lane=%s dataset=%s %s still missing after one ask; the scorer preflight "
+                  "decides" % (lane, ds, basename), flush=True)
             continue
         with open(marker, "w") as fh:
             fh.write(now_utc() + "\n")
@@ -7039,6 +7040,108 @@ def _none_on_both(BP, records, ref="ours"):
     return []
 
 
+SCORER_REFUSED = "quality scorer unavailable: "
+#: the label arrays each conductor-scored quality kind reads from the lane's block
+_SCORER_DATA = {"clf": ("yq",), "semi": ("yq",), "reg": ("yq",), "multiclf": ("Yq",), "multireg": ("Yq",),
+                "gmm": ("Xq",)}
+
+
+class ScorerUnavailable(RuntimeError):
+    """This race's quality scorer cannot run: the race is refused before any timed work."""
+
+
+def scorer_preflight(lane, ds, arms, D, args, fit_calls):
+    """THE SCORER PREFLIGHT (lane harness-evidence, 2026-10-14). Before any worker starts, prove the quality
+    scorer of this race can run: the reference data it reads is present (the layer lanes' neural fixtures, the
+    held-out labels), the scorer and its oracle import, and the scorer runs on known data -- the held-out labels
+    scored as a prediction (clf/semi/reg), the untimed scikit-learn oracle scored against itself (vs-sklearn), the
+    own-host reference (layer/optim, the scorer of every ours-only race) run in full on the race's inputs and
+    compared with itself. The two references depend on the inputs only, never on a timed output, so they are
+    computed here, once, and reused after the timed rounds: nothing runs twice and no clock moves.
+
+    Returns (receipt, precomputed): `precomputed` holds {"host": (outputs, receipt path)} and/or
+    {"sklearn": (outputs, receipt)}. Raises ScorerUnavailable naming the failed check. Motivating case: AMD
+    gcn/graphsage istella+taxi on main-amd-mi325x were timed, then the own-host reference crashed with
+    FixturesMissing and the cells still said "ok"."""
+    np = _np()
+    s = LANES[lane]
+    kind, qk = s["kind"], quality_kind(lane)
+    receipt = {"lane": lane, "dataset": ds, "quality_kind": qk, "checks": []}
+    precomputed = {}
+
+    def check(name, fn):
+        try:
+            detail = fn()
+        except Exception as exc:  # noqa: BLE001
+            receipt["checks"].append({"check": name, "status": "failed", "detail": repr(exc)[:600]})
+            receipt["status"] = "refused"
+            raise ScorerUnavailable("%s: %s" % (name, str(exc)[:600] or repr(exc)))
+        receipt["checks"].append({"check": name, "status": "ok", "detail": detail})
+        return detail
+
+    def imports():
+        if kind == "extra":
+            return {"scorer": "tools/bench_board_extra.py quality", "numpy": np.__version__}
+        _tool("bench_board_more")
+        return {"scorer": "tools/bench_board_algos.py quality", "numpy": np.__version__}
+    check("scorer imports", imports)
+
+    def labels():
+        need = _SCORER_DATA.get(qk, ()) if kind != "extra" else ()
+        absent = [k for k in need if D.get(k) is None or not np.size(D[k])]
+        if absent:
+            raise ValueError("the block holds no %s for the %s scorer" % (", ".join(absent), qk))
+        return {k: list(np.shape(D[k])) for k in need}
+    check("reference data", labels)
+
+    ours_racing = any(a in OURS_ARMS for a in arms)
+    if kind == "layer" and (ours_racing or needs_host_reference(lane, arms)):
+        def fixtures():
+            NF = _tool("neural_fixtures")
+            fixdir = (getattr(args, "neural_fixtures", None) or os.environ.get(NF.ENV_DIR)
+                      or NF.default_dir(args.data))
+            return NF.provenance(NF.load_for_lane(fixdir, lane, s, ds, D))
+        check("neural fixtures", fixtures)
+
+    if qk in ("clf", "semi", "reg") and kind != "extra":
+        def labels_as_prediction():
+            yq = np.asarray(D["yq"])
+            got = quality(lane, D, {"preflight": {"pred": yq.astype(np.float64)}}).get("preflight") or {}
+            if got.get("error") or not any(k in got for k in ("accuracy", "r2", "rmse")):
+                raise ValueError("the %s scorer did not score the held-out labels: %r" % (qk, got))
+            return {k: v for k, v in got.items() if isinstance(v, (int, float))}
+        check("scorer self-test", labels_as_prediction)
+
+    if qk in ("vs-sklearn", "labels", "multilabel") and "sklearn-cpu" not in arms and s.get("sk"):
+        def oracle():
+            outs = {"preflight": None}
+            got = transform_quality_reference(lane, D, outs, os.path.join(args.work, "%s-%s-sklearn-quality"
+                                                                          % (lane, ds)))
+            if got is None or outs.get("sklearn-cpu") is None:
+                raise ValueError("the scikit-learn oracle produced no reference")
+            ref = outs["sklearn-cpu"]
+            scored = quality(lane, D, {"sklearn-cpu": ref, "preflight": ref}).get("preflight") or {}
+            if scored.get("error"):
+                raise ValueError("the scorer failed on the oracle's own output: %s" % scored["error"])
+            precomputed["sklearn"] = (ref, got)
+            return {"oracle": got.get("library"), "version": got.get("version"),
+                    "self_score": {k: v for k, v in scored.items() if isinstance(v, (int, float))}}
+        check("scikit-learn oracle", oracle)
+
+    if needs_host_reference(lane, arms):
+        def host():
+            hq = _tool("bench_board_host_quality")
+            outputs, path = hq.reference(lane, D, args.ours_python,
+                                         os.path.join(args.work, "%s-%s-host-quality" % (lane, ds)),
+                                         args.round_seconds, fit_calls=fit_calls)
+            self_score = hq.compare(outputs, outputs)
+            precomputed["host"] = (outputs, path)
+            return {"receipt": path, "fit_calls": fit_calls, "self_score": self_score}
+        check("own host reference", host)
+    receipt["status"] = "ok"
+    return receipt, precomputed
+
+
 def race(args):
     ab_config = _configure_neural_ab(getattr(args, "neural_ab_config", None), args.lane)
     if ab_config is not None and args.smoke_rows:
@@ -7075,6 +7178,36 @@ def race(args):
         result["neural_ab_config"] = ab_config
         result["neural_ab_binary_admission"] = "requested source flags only; identity/quality/timing acceptance separate"
     tag = "%s-%s" % (lane, ds)
+    # THE SCORER PREFLIGHT (lane harness-evidence, 2026-10-14): before any worker starts. The layer lanes' fixture
+    # dir and the dataset reach the untimed references through the environment, as below for the workers.
+    os.environ["MOJOLEARN_BOARD_DATASET"] = ds
+    if LANES[lane]["kind"] == "layer":
+        os.environ[_tool("neural_fixtures").ENV_DIR] = os.path.abspath(
+            getattr(args, "neural_fixtures", None) or _tool("neural_fixtures").default_dir(args.data))
+    external_warmup_planned = (os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1"
+                               and os.environ.get("MOJOLEARN_AFT_EXTERNAL_WARMUP") == "1"
+                               and _aft_full_tree_workload(lane))
+    scorer_pre = {}
+    if not getattr(args, "params_only", False):
+        try:
+            result["scorer_preflight"], scorer_pre = scorer_preflight(
+                lane, ds, arms, D, args, args.rounds + (0 if external_warmup_planned else 1))
+        except ScorerUnavailable as exc:
+            why = SCORER_REFUSED + str(exc)
+            result["scorer_preflight"] = {"lane": lane, "dataset": ds, "status": "refused", "reason": why}
+            for arm in arms:
+                result["arms"][arm] = {"command": None, "warmup_ms": None, "ms": [], "infer_ms": [],
+                                       "infer_warmup_ms": None, "digests": [], "mem": [],
+                                       "status": "REFUSED", "error": why}
+                print("ALGOS-REFUSED lane=%s dataset=%s arm=%s stage=scorer-preflight detail=%s"
+                      % (lane, ds, arm, json.dumps(why)), flush=True)
+            result["quality"] = {"error": why, "scorer": "failed"}
+            result["finished"] = now_utc()
+            out_json = os.path.join(args.out, "%s.json" % tag)
+            with open(out_json + ".tmp", "w") as fh:
+                json.dump(result, fh, indent=2, sort_keys=True, default=str)
+            os.replace(out_json + ".tmp", out_json)
+            return 1
     workers = {}
     env_extra = {}
     if args.smoke_rows:
@@ -7245,8 +7378,12 @@ def race(args):
         if w.alive:
             w.close()
     try:
-        result["quality_reference_receipt"] = transform_quality_reference(
-            lane, D, outs, os.path.join(args.work, tag + "-sklearn-quality"))
+        if "sklearn" in scorer_pre and outs and "sklearn-cpu" not in outs:
+            # the scorer preflight's oracle, computed before the timed rounds from the same inputs
+            outs["sklearn-cpu"], result["quality_reference_receipt"] = scorer_pre["sklearn"]
+        else:
+            result["quality_reference_receipt"] = transform_quality_reference(
+                lane, D, outs, os.path.join(args.work, tag + "-sklearn-quality"))
         result["quality"] = quality(lane, D, outs)
         hq = _tool("bench_board_host_quality")
         hq_dir = os.path.join(args.work, tag + "-host-quality")
@@ -7255,7 +7392,7 @@ def race(args):
         os.environ["MOJOLEARN_BOARD_DATASET"] = ds
         result["host_quality_receipt"] = hq.enrich(
             lane, D, outs, result["quality"], args.ours_python, hq_dir, args.round_seconds,
-            fit_calls=args.rounds + (0 if external_warmup else 1))
+            fit_calls=args.rounds + (0 if external_warmup else 1), precomputed=scorer_pre.get("host"))
         # a host twin the reference could not load (one beyond the preflight's, e.g. a second binding the
         # lane's class imports): name it so the box job builds it and races again
         if any("Own host reference failed" in str((result["quality"].get(a) or {}).get("error", ""))
@@ -7265,7 +7402,8 @@ def race(args):
     except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
-        result["quality"] = {"error": repr(exc)}
+        # the scorer itself crashed: every arm's quality is "not scored", never a quality failure of an arm
+        result["quality"] = {"error": repr(exc), "scorer": "failed"}
     # FAIRNESS FIX (2026-10-13 audit): worker() saves outputs AFTER the scored
     # runner.infer() and quality() reads those exact bytes. The inference board
     # used to drop this already measured quality and publish an empty dict.
