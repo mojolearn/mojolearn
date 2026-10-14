@@ -2866,6 +2866,8 @@ def lightgbm_arms(lane, cfg, data, devices):
             p["boost_from_average"] = bfa
         spw = scale_pos_weight_for(cfg, data)
         if spw is not None:
+            # read back by the parameter check as every other arm's value; the fit
+            # passes it as per-row weights instead (_lgb_fit, below)
             p["scale_pos_weight"] = spw
         # At min_child_weight 0 LightGBM 4.7.0 aborts a boosted tree ("Check
         # failed: (best_split_info.left_count) > (0)"): the first multiclass
@@ -2901,12 +2903,48 @@ def lightgbm_arms(lane, cfg, data, devices):
                   "MOJOLEARN_SPEED_LGBM_PARAMS overrides the harness LightGBM "
                   "params: %s" % ", ".join("%s=%r" % kv for kv in sorted(over.items())))
 
+    # FAIRNESS FIX (opponent-quality lane, 2026-10-14): every binary lightgbm-cuda cell on the
+    # NVIDIA board (gbdt-lossguide istella and taxi, gbdt-categorical taxi; opponents-default-
+    # 20261006) fitted ONE tree with ONE leaf (fit "trees=1 leaves=1 depth=0", AUC 0.500): its
+    # first tree found no split, so LightGBM stopped and predicted the prior. The multiclass and
+    # ranking lightgbm-cuda cells on the same data, device and build trained (istella multiclass
+    # 640,000 leaves, rank 6,400). The binary arms alone carry scale_pos_weight (gbm-bench's
+    # positive-class weight), which LightGBM's CUDA binary objective applies through its own
+    # device label-weight table (CUDABinaryLogloss), a path no other cell uses. The weight now
+    # reaches LightGBM as per-row sample weights (spw on the positive rows, 1 elsewhere), built
+    # once outside the clock: the same gradient and hessian on every row (LightGBM multiplies
+    # both by the label weight and by the sample weight alike), and BoostFromScore, the one other
+    # reader of sample weights, is off on Logloss (boost_from_average False). CPU and CUDA run
+    # this one data path. A fit that still ends with a single leaf is refused by name, so a model
+    # that learned nothing is never scored as a quality cell.
+    pos_weights = None
+    if p.get("scale_pos_weight") is not None and data.task == "binary":
+        y_bin = np.asarray(data.y_train)
+        pos_weights = np.where(y_bin != 0, float(p["scale_pos_weight"]), 1.0).astype(np.float64)
+
     def _lgb_fit(m, d):
+        kw = {}
+        if pos_weights is not None and d.y_train is data.y_train:
+            m.set_params(scale_pos_weight=1.0)
+            kw["sample_weight"] = pos_weights
         # lane gbdt-categorical (and criteo): the declared columns go to
         # LightGBM's own categorical split, as every other arm's do
         if d.cat_idx:
-            return m.fit(d.X_train, d.y_train, categorical_feature=list(d.cat_idx))
-        return m.fit(d.X_train, d.y_train)
+            kw["categorical_feature"] = list(d.cat_idx)
+        try:
+            m.fit(d.X_train, d.y_train, **kw)
+        finally:
+            if "sample_weight" in kw:
+                m.set_params(scale_pos_weight=p["scale_pos_weight"])   # the read-back value
+        bst = m.booster_
+        if p["n_estimators"] > 1 and bst.current_iteration() <= 1:
+            first = bst.dump_model(num_iteration=1).get("tree_info") or []
+            if all(int(t.get("num_leaves", 0)) <= 1 for t in first):
+                raise RuntimeError(
+                    "DEGENERATE-FIT: LightGBM stopped after its first iteration with a single "
+                    "leaf (no split met its split requirements), a model of the prior; it is "
+                    "not scored as a quality cell")
+        return m
 
     def make(device_type):
         q = dict(p)
