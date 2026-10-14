@@ -507,14 +507,14 @@ _add("kernel-pca", xlane="neighbors", ours="KernelPCA", task="transform", block=
      sk_params=dict(n_components=8, kernel="rbf", random_state=SEED, n_jobs=-1),
      notes=["eigen_solver='auto' picks a randomized/ARPACK solver at this size: random_state=7 "
             "on every arm"])
-_add("poly-count-sketch", xlane="neighbors", ours="PolynomialCountSketch", task="transform",
+_add("poly-count-sketch", xlane="neighbors", timed_op="fit_transform", ours="PolynomialCountSketch", task="transform",
      block="reg", sub={"X": SUB["mid"], "Xq": 1000}, gamma=True, quality="kernel-poly",
      sk="sklearn.kernel_approximation:PolynomialCountSketch",
      params=dict(degree=2, coef0=0, n_components=256, random_state=SEED))
-_add("additive-chi2", xlane="neighbors", ours="AdditiveChi2Sampler", task="transform",
+_add("additive-chi2", xlane="neighbors", timed_op="fit_transform", ours="AdditiveChi2Sampler", task="transform",
      block="nonneg", sub={"X": SUB["mid"], "Xq": 1000}, quality="kernel-achi2",
      sk="sklearn.kernel_approximation:AdditiveChi2Sampler", params=dict(sample_steps=2))
-_add("skewed-chi2", xlane="neighbors", ours="SkewedChi2Sampler", task="transform",
+_add("skewed-chi2", xlane="neighbors", timed_op="fit_transform", ours="SkewedChi2Sampler", task="transform",
      block="nonneg", sub={"X": SUB["mid"], "Xq": 1000}, quality="kernel-schi2",
      sk="sklearn.kernel_approximation:SkewedChi2Sampler",
      params=dict(skewedness=1.0, n_components=256, random_state=SEED))
@@ -632,14 +632,14 @@ _add("incremental-pca", xlane="decomp", ours="IncrementalPCA", task="transform",
 # L40S), unlike every other cuML lane. The flag is removed: cuML gets its input on the device before
 # its clock, as in every other cuML lane (ours includes its upload: the disclosed clock asymmetry).
 # Results raced before this change were wrong for this lane; apply extra scrutiny.
-_add("gaussian-rp", xlane="decomp", ours="GaussianRandomProjection", task="transform",
+_add("gaussian-rp", xlane="decomp", timed_op="fit_transform", ours="GaussianRandomProjection", task="transform",
      block="tsvd", quality="distortion", sk="sklearn.random_projection:GaussianRandomProjection",
      params=dict(n_components=10, random_state=SEED),   # cuML benchmark GaussianRandomProjection
      cuml="cuml.random_projection:GaussianRandomProjection",
      notes=["n_components = 10, the cuML benchmark's",
             "cuML's X and Xq are on the device before its clock, as in every cuML lane"],
      mism=["the random matrix: each library draws its own from its own generator seeded 7"])
-_add("sparse-rp", xlane="decomp", ours="SparseRandomProjection", task="transform", block="tsvd",
+_add("sparse-rp", xlane="decomp", timed_op="fit_transform", ours="SparseRandomProjection", task="transform", block="tsvd",
      quality="distortion", sk="sklearn.random_projection:SparseRandomProjection",
      params=dict(n_components=10, density="auto", random_state=SEED),  # cuML benchmark
      cuml="cuml.random_projection:SparseRandomProjection",
@@ -859,6 +859,13 @@ _add("als", xlane="decomp", ours=("ImplicitALS", "AlternatingLeastSquares", "ALS
 
 # ---- lane prep (preprocessing, naive Bayes, discriminant analysis) --------
 _CUP = "cuml.preprocessing:"
+# TIMED-WORK FIX (Andrew 2026-10-14): a transformer whose fit reads only X's shape timed a no-op
+# `fit(X)` (ours ~0.2 ms on istella, under the time to copy X to the GPU, against cuML's whole
+# clock: ratios 0.000-0.04 on the L40S). Those lanes now time `fit_transform(X)` on every arm (the
+# same call, the transform work done, the output synchronized); the lanes whose fit computes
+# statistics (scalers, quantile, power, kbins, encoders, variance) keep `fit(X)` with the fitted
+# statistics synchronized inside the clock. Chosen by what fit computes, never by size.
+_STATELESS_FIT = ("Normalizer", "Binarizer", "PolynomialFeatures")
 for _slug, _cls, _kw, _blk, _cu in (
         ("robust-scaler", "RobustScaler", {}, "raw", True),
         ("maxabs-scaler", "MaxAbsScaler", {}, "raw", True),
@@ -896,6 +903,7 @@ for _slug, _cls, _kw, _blk, _cu in (
         # this fixed behavior in bench_board_params' estimator read-back.
         _cukw.pop("clip")
     _add(_slug, xlane="prep", ours=_cls, task="transform", block=_blk, quality="vs-sklearn",
+         timed_op="fit_transform" if _cls in _STATELESS_FIT else "fit",
          sk=("sklearn.feature_selection:" if _cls == "VarianceThreshold" else "sklearn.preprocessing:")
          + _cls, params=_kw, cuml=(_CUP + _cls) if _cu else None, cuml_params=_cukw,
          notes=(["the first 16 columns (PolynomialFeatures of Istella's 220 would be 24,000+ "
@@ -1943,6 +1951,8 @@ def lane_config(lane):
            "timed_infer": infer_call(lane) if has_infer(lane) else None,
            "quality": quality_text(lane), "notes": list(s.get("notes", [])),
            "mismatches": list(s["mism"])}
+    if s.get("timed_op"):                 # TIMED-WORK FIX (2026-10-14): the transformer lanes' timed call
+        cfg["timed_op"] = s["timed_op"]
     if s.get("sk"):
         cfg["sklearn"] = s["sk"]
     if s.get("cuml"):
@@ -2001,10 +2011,22 @@ def fit_text(lane):
                 "cv": "cross_val_score(LinearRegression(), X, y, cv=5): 5 fits and scores"}[t]
     if s.get("fit_predict"):
         return "fit_predict(X)"
+    if s.get("timed_op") == "fit_transform":
+        return TIMED_FIT_TRANSFORM_TEXT
+    if s.get("timed_op") == "fit":
+        return TIMED_FIT_STATS_TEXT
     if t in ("embed",):
         return "fit_transform(X)"
     return "fit(X%s)" % (", y" if t in ("clf", "reg", "semi", "select", "multiclf", "multireg")
                          or s.get("supervised") else "")
+
+
+#: The timed operation of the transformer lanes (`timed_op`, TIMED-WORK FIX 2026-10-14 above).
+TIMED_FIT_TRANSFORM_TEXT = ("fit_transform(X), output synchronized (ours takes a host array: the copy of X "
+                            "to the device and the output back are inside the call; cuML's output on the "
+                            "device, synchronized)")
+TIMED_FIT_STATS_TEXT = ("fit(X), fitted statistics synchronized (ours takes a host array: the copy of X to "
+                        "the device is inside the call; cuML synchronized on the device)")
 
 
 QUALITY_TEXT = {
@@ -2927,6 +2949,18 @@ def _ours_upload_probe(runner, inputs=None):
             "scope": "host_to_device_upload_separate", "outside_scored_clock": True}
 
 
+def _materialize_fitted(est, out=None):
+    """OUR transformer arm, inside its clock: the output and every fitted array attribute
+    (`name_`) as a host array, so no deferred work can fall outside the clock. A conversion, no
+    arithmetic on data."""
+    np = _np()
+    if out is not None:
+        np.asarray(out)
+    for name, v in list(vars(est).items()):
+        if name.endswith("_") and not name.startswith("_") and hasattr(v, "__array__"):
+            np.asarray(v)
+
+
 def _ours_class(lane):
     import mojolearn as ml
     s = LANES[lane]
@@ -3361,6 +3395,7 @@ def _build_est(lane, arm, D):
         h = D["X"].shape[1] // 2
         Xa, Ya, Xqa, Yqa = X[:, :h], X[:, h:], Xq[:, :h], Xq[:, h:]
 
+    timed_op = s.get("timed_op")
     lars_float64 = lane in ("lars", "lars-stable", "lars-direct") and arm == "sklearn-cpu"
     if lars_float64:
         # sklearn Lars explicitly retains consistent input precision for its
@@ -3387,6 +3422,10 @@ def _build_est(lane, arm, D):
             est.fit(Xa, Ya)
         elif s.get("fit_predict"):
             S["out"] = est.fit_predict(X)
+        elif timed_op == "fit_transform":
+            # held until the clock's synchronize (`timed_sync`), then released: the work is timed,
+            # the output is not retained (quality reads transform(Xq))
+            S["fit_out"] = est.fit_transform(X)
         elif t == "embed":
             S["out"] = est.fit_transform(X)
         elif t in ("clf", "reg", "semi", "select", "multiclf", "multireg") or s.get("supervised"):
@@ -3394,6 +3433,9 @@ def _build_est(lane, arm, D):
         else:
             est.fit(X)
         S["est"] = est
+        if timed_op and arm in OURS_ARMS:
+            # inside the clock: the fitted statistics and the output as host arrays
+            _materialize_fitted(est, S.get("fit_out"))
 
     def infer():
         est = S["est"]
@@ -3484,6 +3526,18 @@ def _build_est(lane, arm, D):
             o["pred"] = o.pop("out")
         return o
 
+    if timed_op:
+        device_sync = sync
+
+        def timed_sync():
+            if device_sync:
+                device_sync()
+            S.pop("fit_out", None)
+        sync = timed_sync
+        info["timed_op"] = timed_op
+        if arm in OURS_ARMS:
+            info["input_copy"] = ("inside the timed call: ours takes host arrays and copies X to the "
+                                  "device inside %s" % timed_op)
     runner = Runner(info, fit, outputs, infer if has_infer(lane) else None, sync,
                     record=_BP().arm_record(make()), model_for_hash=lambda: S.get("est"))
     if arm in OURS_ARMS:
@@ -7558,6 +7612,10 @@ def arm_span(lane, arm, a, ok):
     span = {"input_home": home, "pre_clock_fit": bool(info.get("pre_clock_fit")),
             "upload_ms_untimed": info.get("upload_ms_untimed"),
             "inside_clock": fit_text(lane)}
+    if info.get("timed_op"):
+        span["timed_op"] = info["timed_op"]
+    if info.get("input_copy"):
+        span["input_copy"] = info["input_copy"]
     if arm in OURS_ARMS:
         span.update(upload_span(a, ok))
     return span

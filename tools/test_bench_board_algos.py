@@ -591,3 +591,94 @@ def test_fairness_fix_20261013_shared_ridge_is_the_centered_ridge_and_bit_stable
     assert w2.tobytes() == w32.tobytes() and b2 == b32
     for lane in ("kernel-shap", "permutation-shap", "tree-shap"):
         assert A.lane_config(lane)["params"].get("explained_model"), lane
+
+
+# ---- TIMED-WORK FIX (2026-10-14): transformer lanes time real work -----------------------------
+
+_STATELESS_LANES = ("normalizer", "binarizer", "poly-features", "poly-count-sketch", "additive-chi2",
+                    "skewed-chi2", "gaussian-rp", "sparse-rp")
+_STATS_LANES = ("robust-scaler", "maxabs-scaler", "minmax-scaler", "standard-scaler",
+                "quantile-transformer", "power-transformer")
+
+
+def test_transformer_lanes_name_their_timed_call_in_lane_config():
+    for lane in _STATELESS_LANES:
+        cfg = A.lane_config(lane)
+        assert cfg["timed_op"] == "fit_transform"
+        assert cfg["timed_fit"].startswith("fit_transform(X)")
+        assert cfg["timed_infer"] == "transform(Xq)"
+    for lane in _STATS_LANES:
+        cfg = A.lane_config(lane)
+        assert cfg["timed_op"] == "fit"
+        assert cfg["timed_fit"].startswith("fit(X), fitted statistics synchronized")
+
+
+class _FakeOut:
+    def __init__(self):
+        self.read = 0
+
+    def __array__(self, dtype=None, copy=None):
+        self.read += 1
+        return np.zeros((2, 2), dtype=np.float32)
+
+
+def _fake_transformer(calls):
+    class T:
+        def fit(self, X, y=None):
+            calls.append("fit")
+            self.scale_ = _FakeOut()
+            return self
+
+        def fit_transform(self, X, y=None):
+            calls.append("fit_transform")
+            self.scale_ = _FakeOut()
+            self.out = _FakeOut()
+            return self.out
+
+        def transform(self, X):
+            calls.append("transform")
+            return np.asarray(X)
+    return T
+
+
+@pytest.mark.parametrize("lane,arm,want", [
+    ("normalizer", "ours", "fit_transform"), ("normalizer", "cuml-gpu", "fit_transform"),
+    ("binarizer", "ours", "fit_transform"), ("gaussian-rp", "cuml-gpu", "fit_transform"),
+    ("standard-scaler", "ours", "fit"), ("quantile-transformer", "cuml-gpu", "fit"),
+])
+def test_both_arms_run_the_same_timed_call_and_synchronize(monkeypatch, lane, arm, want):
+    calls, synced = [], []
+    T = _fake_transformer(calls)
+    monkeypatch.setattr(A, "_est_factory", lambda l, a, D: (T, "lib.T", {}))
+    monkeypatch.setattr(A, "_ours_info", lambda name: {"input_home": "host"})
+    monkeypatch.setattr(A, "_cuml_up", lambda arrays: (dict(arrays), {"upload_ms_untimed": 1.0},
+                                                       lambda: synced.append(1)))
+    monkeypatch.setattr(A, "_BP", lambda: types.SimpleNamespace(arm_record=lambda o: None))
+    X = np.ones((8, 3), dtype=np.float32)
+    runner = A._build_est(lane, arm, {"X": X, "Xq": X})
+    runner.fit()
+    assert calls == [want]
+    assert runner.info["timed_op"] == want
+    if arm == "cuml-gpu":
+        assert synced == [1]                  # the device output / statistics synchronized in the clock
+        assert "input_copy" not in runner.info
+    else:
+        model = runner.model_for_hash()
+        assert model.scale_.read == 1          # fitted statistics read back inside the clock
+        if want == "fit_transform":
+            assert model.out.read == 1         # the output materialized inside the clock
+        assert "inside the timed call" in runner.info["input_copy"]
+        assert [k for k, _ in runner.upload_inputs] == ["X"]   # the copy probe sizes X
+    runner.infer()
+    assert calls[-1] == "transform"
+
+
+def test_span_names_the_timed_call_and_our_input_copy():
+    a = {"info": {"input_home": "host", "timed_op": "fit_transform",
+                  "input_copy": "inside the timed call: ours takes host arrays"},
+         "upload_separate": [{"ms": 2.0, "bytes": 96, "inputs": ["X"]}], "median_ms": 5.0}
+    span = A.arm_span("normalizer", "ours", a, True)
+    assert span["timed_op"] == "fit_transform"
+    assert span["inside_clock"].startswith("fit_transform(X)")
+    assert span["input_copy"].startswith("inside the timed call")
+    assert span["upload_ms_separate"] == 2.0 and span["upload_bytes_separate"] == 96
