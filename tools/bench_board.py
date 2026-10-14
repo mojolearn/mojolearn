@@ -2207,6 +2207,8 @@ def classical_cells(ctx, race, r):
             cell.update(mode="context", not_opponent=a["not_opponent"],
                         verdict="NOT-AN-OPPONENT(%s)" % a["not_opponent"])
         cell.update(memory_fields(a.get("mem")))
+        if a.get("call"):
+            cell["call"] = a["call"]           # the driver's call line (attach_params refines it from BOARD-PARAMS)
         if mode:
             cell["mode_witness"] = info.get("numeric_mode_used")
             cell["installed_wheel"] = _from_wheel(info.get("module_path"), ctx)

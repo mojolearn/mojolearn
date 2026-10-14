@@ -2764,11 +2764,9 @@ FORWARD_REFERENCE_ATOL = 1e-6
 FORWARD_REFERENCE_RTOL = 1e-5
 
 
-def forward_host_quality(lane, shape, data, outs):
+def _forward_reference(lane, shape, data):
+    """(host inference class, the reference forward of data["x"] as float64): the untimed own-host reference."""
     import numpy as np
-    own = {arm: out for arm, out in outs.items() if arm in ("ours", "ours-fast")}
-    if not own:
-        return {}
     ml = _ours_module()
     weights = {k: np.ascontiguousarray(v) for k, v in _weights(data).items()}
     model = MODEL_OF[lane]
@@ -2784,7 +2782,15 @@ def forward_host_quality(lane, shape, data, outs):
     block = cls(weights, **kwargs)
     # The public inference classes dispatch only to the shipped Mojo CPU host
     # binding. Their fresh forward uses exactly the race's weights and inputs.
-    ref = np.asarray(block.forward(np.ascontiguousarray(data["x"])), dtype=np.float64)
+    return cls, np.asarray(block.forward(np.ascontiguousarray(data["x"])), dtype=np.float64)
+
+
+def forward_host_quality(lane, shape, data, outs):
+    import numpy as np
+    own = {arm: out for arm, out in outs.items() if arm in ("ours", "ours-fast")}
+    if not own:
+        return {}
+    cls, ref = _forward_reference(lane, shape, data)
     result = {}
     for arm, out in own.items():
         got = np.asarray(out["y"], dtype=np.float64)
@@ -2804,6 +2810,78 @@ def forward_host_quality(lane, shape, data, outs):
                      host_reference_passed=bool(np.all(error <= bound)))
         result[arm] = q
     return result
+
+
+SCORER_REFUSED = "quality scorer unavailable: "
+#: the input arrays each scorer reads (quality() below)
+_NLL_LANES = ("lm-forward", "lm-infer", "samba-forward", "samba-infer", "samba-decode")
+
+
+class ScorerUnavailable(RuntimeError):
+    """This race's quality scorer cannot run: the race is refused before any timed work."""
+
+
+def scorer_preflight(lane, shape, data_path, arms, operation):
+    """THE SCORER PREFLIGHT (lane harness-evidence, 2026-10-14), before any worker starts: the input arrays the
+    scorer reads are in the race's input file, and the own-host forward reference (FORWARD_REFERENCE_LANES, the
+    scorer of ours' forward) imports and runs on a tiny slice (the first sequence of the race's own x and weights).
+    Returns its receipt; raises ScorerUnavailable naming the failed check."""
+    import numpy as np
+    receipt = {"lane": lane, "shape": shape, "checks": []}
+    if operation != "model_default":
+        receipt["status"] = "not-applicable (experimental operation: its quality is pending by design)"
+        return receipt
+    with np.load(data_path) as z:
+        keys = set(z.files)
+        need = []
+        if lane in FORWARD_REFERENCE_LANES:
+            need.append("x")
+        if lane in _NLL_LANES:
+            need.append("batches")
+        if MODEL_OF.get(lane) == "gemm":
+            need += ["a", "b"]
+        absent = [k for k in need if k not in keys]
+        receipt["checks"].append({"check": "reference data", "need": need, "absent": absent,
+                                  "status": "failed" if absent else "ok"})
+        if absent:
+            raise ScorerUnavailable("reference data: the race inputs hold no %s" % ", ".join(absent))
+    if lane in FORWARD_REFERENCE_LANES and any(a in OUR_ARMS for a in arms):
+        # in a child process, so this conductor loads no mojolearn binding while the workers are timed
+        import subprocess
+        check = {"check": "own host forward reference (one sequence)"}
+        try:
+            done = subprocess.run([sys.executable, os.path.abspath(__file__), "scorer-preflight-child", lane,
+                                   shape, data_path], capture_output=True, text=True, timeout=1800)
+            last = (done.stdout.strip().splitlines() or ["{}"])[-1]
+            got = json.loads(last) if last.startswith("{") else {}
+            if done.returncode or got.get("status") != "ok":
+                tail = (done.stderr.strip().splitlines() or ["no output"])[-1]
+                raise RuntimeError(got.get("error") or tail[:600])
+            check.update(status="ok", reference=got.get("reference"), shape=got.get("shape"))
+        except Exception as exc:  # noqa: BLE001
+            check.update(status="failed", detail=str(exc)[:600])
+            receipt["checks"].append(check)
+            raise ScorerUnavailable("own host forward reference: %s" % str(exc)[:600])
+        receipt["checks"].append(check)
+    receipt["status"] = "ok"
+    return receipt
+
+
+def scorer_preflight_child(lane, shape, data_path):
+    """The forward reference on the first sequence of the race's own inputs; one JSON line on stdout."""
+    import numpy as np
+    try:
+        with np.load(data_path) as z:
+            tiny = {k: z[k] for k in z.files if k.startswith("w:")}
+            tiny["x"] = np.ascontiguousarray(z["x"][:1])
+        cls, ref = _forward_reference(lane, shape, tiny)
+        if not ref.size or not np.isfinite(ref).all():
+            raise ValueError("the host reference forward of one sequence is empty or nonfinite")
+        print(json.dumps({"status": "ok", "reference": cls.__name__, "shape": list(ref.shape)}), flush=True)
+        return 0
+    except Exception as exc:  # noqa: BLE001
+        print(json.dumps({"status": "failed", "error": repr(exc)[:600]}), flush=True)
+        return 1
 
 
 def mark_forward_quality_failures(result):
@@ -2935,6 +3013,26 @@ def race(args):
     result["operation"] = operation
     result["comparison_scope"] = ("declared public experimental operation; not the ordinary lane boundary"
                                   if operation != "model_default" else "ordinary lane boundary")
+    # THE SCORER PREFLIGHT (lane harness-evidence, 2026-10-14): refuse before any timed work when the quality
+    # scorer cannot run
+    if not getattr(args, "params_only", False):
+        try:
+            result["scorer_preflight"] = scorer_preflight(lane, shape, data_path, arms, operation)
+        except ScorerUnavailable as exc:
+            why = SCORER_REFUSED + str(exc)
+            result["scorer_preflight"] = {"lane": lane, "status": "refused", "reason": why}
+            result["quality"] = {"error": why, "scorer": "failed"}
+            for arm in arms:
+                result["arms"][arm] = {"command": None, "warmup_ms": None, "ms": [], "digests": [],
+                                       "mem": [], "status": "REFUSED", "error": why, "median_ms": None}
+                print("NEURAL-REFUSED lane=%s arm=%s stage=scorer-preflight detail=%s"
+                      % (lane, arm, json.dumps(why)), flush=True)
+            result["finished"] = now_utc()
+            out_json = os.path.join(args.out, "%s.json" % tag)
+            with open(out_json + ".tmp", "w") as fh:
+                json.dump(result, fh, indent=2, sort_keys=True, default=str)
+            os.replace(out_json + ".tmp", out_json)
+            return 1
     workers = {}
     # FAIRNESS FIX (2026-10-13 audit): a torch arm on a lane whose only torch twin is a
     # pure-PyTorch reference was raced and reported as the opponent. It is now refused by name
@@ -3087,7 +3185,8 @@ def race(args):
                 "vjp": "not_qualified_by_forward_quality",
                 "full_model_training": "not_measured_by_block_forward_vjp"}
     except Exception as exc:  # noqa: BLE001
-        result["quality"] = {"error": repr(exc)}
+        # the scorer itself crashed: "quality not scored", never a quality failure of an arm
+        result["quality"] = {"error": repr(exc), "scorer": "failed"}
     mark_forward_quality_failures(result)
     try:
         if getattr(args, "keep_outputs", False) or lane in FORWARD_REFERENCE_LANES:
@@ -3164,6 +3263,9 @@ def build_parser():
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["scorer-preflight-child"]:      # scorer_preflight's child (lane, shape, inputs npz)
+        return scorer_preflight_child(*argv[1:4])
     args = build_parser().parse_args(argv)
     if args.cmd == "worker":
         return worker(args)

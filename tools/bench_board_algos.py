@@ -7334,6 +7334,11 @@ def race(args):
         w.info = msg["info"]
         result["arms"][arm]["info"] = msg["info"]
         result["arms"][arm]["params_record"] = msg.get("params_record")
+        # the arm's readable call line, from what its worker constructed (tools/race_call_line.py)
+        rec_ = msg.get("params_record") or {}
+        if isinstance(rec_, dict) and rec_.get("implementation"):
+            result["arms"][arm]["call"] = _tool("race_call_line").call_line(
+                rec_["implementation"], rec_.get("params"), rec_.get("library"))
     # THE PARAMETER CHECK (tools/bench_board_params.py), before the first timed
     # round: same seed, same tuning parameters, read back from what each worker
     # constructed. A refusal fails the race by name (exit 3, params_refused in
