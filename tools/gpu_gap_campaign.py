@@ -229,6 +229,10 @@ SMOKE_SLOW = {
     "classical/kmeans/istella/rows=full": (30.0, _SLOW_UNMEASURED % "NVIDIA; 1.6 s on AMD"),
     "classical/pca/istella/rows=full": (30.0, _SLOW_UNMEASURED % "NVIDIA"),
     "classical/ols/istella/rows=full": (30.0, _SLOW_UNMEASURED % "NVIDIA; 1.3 s on AMD"),
+    "algos/conv1d/synthetic/rows=full": (30.0, _SLOW_UNMEASURED % "Apple fast, killed at 5 s; passed under 5 s "
+                                                                    "on the run before"),
+    "algos/maxpool2d/synthetic/rows=full": (30.0, _SLOW_UNMEASURED % "Apple fast, killed at 5 s; passed under 5 s "
+                                                                       "on the run before"),
 }
 
 
