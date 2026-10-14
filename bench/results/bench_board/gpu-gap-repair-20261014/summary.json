@@ -1,0 +1,2323 @@
+{
+  "branch": "main",
+  "code_commit": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6",
+  "cross_vendor_scored_hashes": {
+    "MATCH": 21
+  },
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014",
+  "providers": {
+    "amd": {
+      "absent_from_listing": true,
+      "before_teardown": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-before-teardown.json",
+      "delete_http": 204,
+      "deleted_at": 1791954301.469451,
+      "get_http": 404,
+      "list_http": 200,
+      "provider": "DigitalOcean",
+      "provider_id": "608893406",
+      "retention_verified_before_delete": true,
+      "status": "deleted",
+      "teardown_log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/teardown-amd.log"
+    },
+    "nvidia": {
+      "status": "live",
+      "teardown_pending": true
+    }
+  },
+  "quality_recovery": {
+    "fit_admitted": 11,
+    "original_timing_unchanged": true,
+    "recipes_recovered": 14,
+    "results": [
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 44.4343127310276,
+                  "ours_ms": 53.73875051736832,
+                  "preferred": "whole",
+                  "value": 1.2093975852099454
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 44.4343127310276,
+                    "ours_ms": 53.73875051736832,
+                    "preferred": "whole",
+                    "value": 1.2093975852099454
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 1.209,
+            "pairing": "v2:aee623f23bd26051a5a0fd5b6dab8f6d28494a274b50c55068acca9ddae1ab6b",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 0.9922117412295288
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 0.9922117412295288
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:4957d5c7a21ce2b9d80b020367455478d150d53ad2ef2e019d65f29c4b24c5bb",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.istella.rows=full/board.json",
+        "id": "algos/label-binarizer/istella/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.0,
+          "output_shape": "100000x16",
+          "rel_diff_vs_sklearn": 0.0
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 91.48114547133446,
+                  "ours_ms": 780.9838317334652,
+                  "preferred": "whole",
+                  "value": 8.53710158207612
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 91.48114547133446,
+                    "ours_ms": 780.9838317334652,
+                    "preferred": "whole",
+                    "value": 8.53710158207612
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 8.537,
+            "pairing": "v2:65d210cfe5f676f9f793b59f26b54b77686770327144cf152dae2dbb541c0593",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 2.767887525214511
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 2.767887525214511
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:ca75cc2d52ac9ef0b196270bd01acc937721e1124f9931eddfccef5a11842fe5",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.taxi.rows=full/board.json",
+        "id": "algos/label-binarizer/taxi/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.0,
+          "output_shape": "100000x259",
+          "rel_diff_vs_sklearn": 0.0
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 653.9433039724827,
+                  "ours_ms": 37.39355131983757,
+                  "preferred": "whole",
+                  "value": 0.05718164111886228
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 653.9433039724827,
+                    "ours_ms": 37.39355131983757,
+                    "preferred": "whole",
+                    "value": 0.05718164111886228
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 0.057,
+            "pairing": "v2:ace9f187f2b7cee820b78d0323ff61c8093894fc39265149e8c665081fb44d63",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 26.02123095141959
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 26.02123095141959
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:8445c3d956ad8ac281b6e5b80d69d85069b26480ba7f713fa397b0d172d444f1",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.maxabs-scaler.istella.rows=full/board.json",
+        "id": "algos/maxabs-scaler/istella/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.0,
+          "output_shape": "100000x220",
+          "rel_diff_vs_sklearn": 0.0
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 61.74053251743317,
+                  "ours_ms": 2.664860337972641,
+                  "preferred": "whole",
+                  "value": 0.04316225062069535
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 61.74053251743317,
+                    "ours_ms": 2.664860337972641,
+                    "preferred": "whole",
+                    "value": 0.04316225062069535
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 0.043,
+            "pairing": "v2:ba72d60d55183a5f41cae45d93bc8c72e9c883399aefcad66ccdf89e0b0a5aa8",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 5.018429883433416
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 5.018429883433416
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:9902c73ccaaa0b7e214ae10e6128cd200c450fd5105586db01c04beab2fa0afa",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.maxabs-scaler.taxi.rows=full/board.json",
+        "id": "algos/maxabs-scaler/taxi/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.0,
+          "output_shape": "100000x11",
+          "rel_diff_vs_sklearn": 0.0
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 718.6580896377563,
+                  "ours_ms": 40.92662036418915,
+                  "preferred": "whole",
+                  "value": 0.05694866718166137
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 718.6580896377563,
+                    "ours_ms": 40.92662036418915,
+                    "preferred": "whole",
+                    "value": 0.05694866718166137
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 0.057,
+            "pairing": "v2:a0b60ce26a5c40b782755ac68efe1ac249c1968f0cb68113e0afe636d51c982d",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 18.67301688079331
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 18.67301688079331
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:b9da6c715c9f0792d70d7ff6472a7010c2a0100f750c5ef26b7ced1ca3f35a3e",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.minmax-scaler.istella.rows=full/board.json",
+        "id": "algos/minmax-scaler/istella/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.0,
+          "output_shape": "100000x220",
+          "rel_diff_vs_sklearn": 0.0
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 58.693692088127136,
+                  "ours_ms": 3.250397741794586,
+                  "preferred": "whole",
+                  "value": 0.055378996041247394
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 58.693692088127136,
+                    "ours_ms": 3.250397741794586,
+                    "preferred": "whole",
+                    "value": 0.055378996041247394
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 0.055,
+            "pairing": "v2:d8b35e301cbb4eb95716d19fcc9f4f6098ce2201b26f3d9d8c3e13b07453ab92",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 4.268421320572214
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 4.268421320572214
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:244f4e90a03e6e05acc392149d7ffe7d0e3771c1d45cf64b0c5777606f821c8a",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.minmax-scaler.taxi.rows=full/board.json",
+        "id": "algos/minmax-scaler/taxi/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.0,
+          "output_shape": "100000x11",
+          "rel_diff_vs_sklearn": 0.0
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 53.09159681200981,
+                  "ours_ms": 0.5698241293430328,
+                  "preferred": "whole",
+                  "value": 0.010732849708037662
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 53.09159681200981,
+                    "ours_ms": 0.5698241293430328,
+                    "preferred": "whole",
+                    "value": 0.010732849708037662
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 0.011,
+            "pairing": "v2:1375f872400acd7d47656afec491acaf55313525d37c1801273b11c98220be69",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 3.380809339542205
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 3.380809339542205
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:daab0dbc9543b33812f4e111094610500399b1bba4e4b8c3e2990675c8686797",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.poly-features.istella.rows=full/board.json",
+        "id": "algos/poly-features/istella/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.0,
+          "output_shape": "100000x152",
+          "rel_diff_vs_sklearn": 0.0
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 50.557345151901245,
+                  "ours_ms": 0.24699047207832336,
+                  "preferred": "whole",
+                  "value": 0.004885352886632638
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 50.557345151901245,
+                    "ours_ms": 0.24699047207832336,
+                    "preferred": "whole",
+                    "value": 0.004885352886632638
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 0.005,
+            "pairing": "v2:8eddea5a9b6036254e9572550924537b7faa90a5dfc7ac4fc645151ed17515bb",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0,
+                        "opponent": 0.0,
+                        "ours": 0.0,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 6.103690166443291
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 6.103690166443291
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:a600dc38f338bcf4c620bc6ecced1928847fcb7cf32ad9f4d01e1c3a9f6f795a",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.poly-features.taxi.rows=full/board.json",
+        "id": "algos/poly-features/taxi/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.0,
+          "output_shape": "100000x77",
+          "rel_diff_vs_sklearn": 0.0
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {},
+            "ours_over_theirs": null,
+            "pairing": "v2:d2cafc5d34480b4930b369f474a5860a150a91564cd323bf16d44f7f5367a1ef",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {},
+            "ours_over_theirs": null,
+            "pairing": "v2:f673636a090a1c158583d75b82a119e8c0d940bd700501c7ecdfd249ff8dd662",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.power-transformer.istella.rows=full/board.json",
+        "id": "algos/power-transformer/istella/rows=full",
+        "inference_cells_recovered": 1,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 5.5750226974487305,
+          "output_shape": "100000x220",
+          "rel_diff_vs_sklearn": 0.10505440539971608
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0008076171420700661,
+                        "opponent": 0.0003244207095061222,
+                        "ours": 0.0008076171420700661,
+                        "verdict": "FAIL"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "FAIL"
+                  }
+                ],
+                "reason": "quality outside declared margin: rel_diff_vs_sklearn",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 2857.795901596546,
+                  "ours_ms": 103.37086766958237,
+                  "preferred": "whole",
+                  "value": 0.036171536116988916
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 2857.795901596546,
+                    "ours_ms": 103.37086766958237,
+                    "preferred": "whole",
+                    "value": 0.036171536116988916
+                  }
+                ],
+                "verdict": "UNFAIR"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:c035f25a5aadbb74ba55b8de8252b3e9173b08dbbd6203a1a663eda2103cfbcb",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "UNFAIR"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0008076171420700661,
+                        "opponent": 0.0003244207095061222,
+                        "ours": 0.0008076171420700661,
+                        "verdict": "FAIL"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "FAIL"
+                  }
+                ],
+                "reason": "quality outside declared margin: rel_diff_vs_sklearn",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 0.3507746025187792
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 0.3507746025187792
+                  }
+                ],
+                "verdict": "UNFAIR"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:b520da8576e5e262cf6ebd2c8ae64e2a0d846c40f35280cfa999db94764cf4b5",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "UNFAIR"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.power-transformer.taxi.rows=full/board.json",
+        "id": "algos/power-transformer/taxi/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.06457001343369484,
+          "output_shape": "100000x11",
+          "rel_diff_vs_sklearn": 0.0008076171420700661
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 2.764108332420115e-08,
+                        "opponent": 0.0,
+                        "ours": 2.764108332420115e-08,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 6642.343506217003,
+                  "ours_ms": 278.39959040284157,
+                  "preferred": "whole",
+                  "value": 0.04191285653057076
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 6642.343506217003,
+                    "ours_ms": 278.39959040284157,
+                    "preferred": "whole",
+                    "value": 0.04191285653057076
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 0.042,
+            "pairing": "v2:dfa1e4f2edab532a2b3681450966afac0999ffa87658d3e518f434de30f135fc",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 2.764108332420115e-08,
+                        "opponent": 0.0,
+                        "ours": 2.764108332420115e-08,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 0.31271243516212893
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 0.31271243516212893
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:983059db364f6fdbaf4019e79c71a7687a39be384644135eca85ac860ba08ab5",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.quantile-transformer.istella.rows=full/board.json",
+        "id": "algos/quantile-transformer/istella/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 5.960464477539063e-08,
+          "output_shape": "100000x220",
+          "rel_diff_vs_sklearn": 2.764108332420115e-08
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 2.2935605757196118e-08,
+                        "opponent": 0.0,
+                        "ours": 2.2935605757196118e-08,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 284.16256979107857,
+                  "ours_ms": 10.028000921010971,
+                  "preferred": "whole",
+                  "value": 0.035289661577820534
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 284.16256979107857,
+                    "ours_ms": 10.028000921010971,
+                    "preferred": "whole",
+                    "value": 0.035289661577820534
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 0.035,
+            "pairing": "v2:c3909cb8b2c8b0035ef1e62f3ebdd37adb469f422497268a13560823482d6721",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 2.2935605757196118e-08,
+                        "opponent": 0.0,
+                        "ours": 2.2935605757196118e-08,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 0.14784324568389712
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 0.14784324568389712
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:b7b7de60d6aad521e4e343d4939c88ab2f02d0c4e96400e9ce6392e3be342401",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.quantile-transformer.taxi.rows=full/board.json",
+        "id": "algos/quantile-transformer/taxi/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 5.960464477539063e-08,
+          "output_shape": "100000x11",
+          "rel_diff_vs_sklearn": 2.2935605757196118e-08
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0001522692947879029,
+                        "opponent": 0.0001522692947879029,
+                        "ours": 3.6023171851274223e-06,
+                        "verdict": "FAIL"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "FAIL"
+                  }
+                ],
+                "reason": "quality outside declared margin: rel_diff_vs_sklearn",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 1050.7031381130219,
+                  "ours_ms": 45.64376175403595,
+                  "preferred": "whole",
+                  "value": 0.04344115868541943
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 1050.7031381130219,
+                    "ours_ms": 45.64376175403595,
+                    "preferred": "whole",
+                    "value": 0.04344115868541943
+                  }
+                ],
+                "verdict": "UNFAIR"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:7e52945aaa5296fcf90588b878cf937920e42c41614551d93141328011d86bf1",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "UNFAIR"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 0.0001522692947879029,
+                        "opponent": 0.0001522692947879029,
+                        "ours": 3.6023171851274223e-06,
+                        "verdict": "FAIL"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "FAIL"
+                  }
+                ],
+                "reason": "quality outside declared margin: rel_diff_vs_sklearn",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 14.720222708911681
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 14.720222708911681
+                  }
+                ],
+                "verdict": "UNFAIR"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:821b7374773a8e614deb638adbfb154219c8c3c9e61863079feb361512a45d14",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "UNFAIR"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.standard-scaler.istella.rows=full/board.json",
+        "id": "algos/standard-scaler/istella/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.0024261474609375,
+          "output_shape": "100000x220",
+          "rel_diff_vs_sklearn": 3.6023171851274223e-06
+        }
+      },
+      {
+        "audit": {
+          "identical/fit": {
+            "admitted_opponents": [
+              "cuml-gpu"
+            ],
+            "date": "2026-10-14",
+            "opponent": "cuml-gpu",
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": null,
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 3.215562709572526e-05,
+                        "opponent": 3.215562709572526e-05,
+                        "ours": 3.853614082599306e-06,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "recorded effective settings and quality within declared margins",
+                "rerace": "",
+                "timing_comparison": {
+                  "clock": "whole",
+                  "kind": "preferred",
+                  "label": "whole/whole",
+                  "opponent_ms": 107.27977007627487,
+                  "ours_ms": 3.2958723604679108,
+                  "preferred": "whole",
+                  "value": 0.03072221685528015
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": null,
+                    "batch_rows": null,
+                    "clock": "whole",
+                    "kind": "preferred",
+                    "label": "whole/whole",
+                    "opponent_ms": 107.27977007627487,
+                    "ours_ms": 3.2958723604679108,
+                    "preferred": "whole",
+                    "value": 0.03072221685528015
+                  }
+                ],
+                "verdict": "MATCHED"
+              }
+            },
+            "ours_over_theirs": 0.031,
+            "pairing": "v2:c65479d992c086f55f1d42f15af79477a8e30707ead3e98af6983c762c37a798",
+            "reason": "recorded effective settings and quality within declared margins",
+            "rerace": "",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "MATCHED"
+          },
+          "identical/infer": {
+            "admitted_opponents": [],
+            "date": "2026-10-14",
+            "opponent": null,
+            "opponents": {
+              "cuml-gpu": {
+                "quality_comparison": [
+                  {
+                    "batch": "Xq",
+                    "checks": [
+                      {
+                        "comparison": "both-reference-errors-at-most",
+                        "margin": 0.0001,
+                        "metric": "rel_diff_vs_sklearn",
+                        "observed": 3.215562709572526e-05,
+                        "opponent": 3.215562709572526e-05,
+                        "ours": 3.853614082599306e-06,
+                        "verdict": "PASS"
+                      }
+                    ],
+                    "failures": [],
+                    "interpretation": "engineering margin; not a statistical equivalence claim",
+                    "policy": "mojolearn.quality-parity.v2",
+                    "verdict": "PASS"
+                  }
+                ],
+                "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+                "rerace": "x",
+                "timing_comparison": {
+                  "clock": "mixed",
+                  "kind": "mixed",
+                  "label": "MIXED ours whole / arm kernel",
+                  "preferred": "whole",
+                  "value": 4.917534757058908
+                },
+                "timing_comparisons": [
+                  {
+                    "batch": "Xq",
+                    "batch_rows": null,
+                    "clock": "mixed",
+                    "kind": "mixed",
+                    "label": "MIXED ours whole / arm kernel",
+                    "preferred": "whole",
+                    "value": 4.917534757058908
+                  }
+                ],
+                "verdict": "INSUFFICIENT"
+              }
+            },
+            "ours_over_theirs": null,
+            "pairing": "v2:41bc58a1bf34ff2b7ba54d222c5e7c4ec3e206c033d96f574d7cbf48c288d2ce",
+            "reason": "no opponent with sufficient valid comparison evidence",
+            "rerace": "x",
+            "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v2, 2026-10-14)",
+            "verdict": "INSUFFICIENT"
+          }
+        },
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.standard-scaler.taxi.rows=full/board.json",
+        "id": "algos/standard-scaler/taxi/rows=full",
+        "inference_cells_recovered": 2,
+        "quality": {
+          "max_abs_diff_vs_sklearn": 0.000102996826171875,
+          "output_shape": "100000x11",
+          "rel_diff_vs_sklearn": 3.853614082599306e-06
+        }
+      }
+    ]
+  },
+  "recipe_inventory": {
+    "amd": {
+      "expected": 90,
+      "fit_admitted_recipe_ids": [
+        "algos/adafactor/synthetic/rows=full",
+        "algos/adagrad/synthetic/rows=full",
+        "algos/adam/synthetic/rows=full",
+        "algos/adamax/synthetic/rows=full",
+        "algos/adamw/synthetic/rows=full",
+        "algos/avgpool1d/synthetic/rows=full",
+        "algos/avgpool2d/synthetic/rows=full",
+        "algos/batchnorm1d/synthetic/rows=full",
+        "algos/batchnorm2d/synthetic/rows=full",
+        "algos/conv1d/synthetic/rows=full",
+        "algos/conv2d/synthetic/rows=full",
+        "algos/dropout2d/synthetic/rows=full",
+        "algos/embedding/synthetic/rows=full",
+        "algos/global-avgpool/synthetic/rows=full",
+        "algos/global-maxpool/synthetic/rows=full",
+        "algos/layernorm/synthetic/rows=full",
+        "algos/maxpool1d/synthetic/rows=full",
+        "algos/maxpool2d/synthetic/rows=full",
+        "algos/nadam/synthetic/rows=full",
+        "algos/rmsprop/synthetic/rows=full",
+        "algos/sgd/synthetic/rows=full",
+        "classical/kmeans/istella/rows=full",
+        "classical/kmeans/taxi/rows=full",
+        "classical/knn/istella/rows=full",
+        "classical/knn/taxi/rows=full"
+      ],
+      "initial_preflight_counts": {
+        "MATCHED": 18,
+        "REFUSED": 72
+      },
+      "latest_preflight_counts": {
+        "MATCHED": 39,
+        "REFUSED": 51
+      },
+      "new_fit_admissions": 25,
+      "updated_recipes": 25
+    },
+    "nvidia": {
+      "expected": 213,
+      "fit_admitted_recipe_ids": [
+        "algos/adafactor/synthetic/rows=full",
+        "algos/adagrad/synthetic/rows=full",
+        "algos/adam/synthetic/rows=full",
+        "algos/adamax/synthetic/rows=full",
+        "algos/adamw/synthetic/rows=full",
+        "algos/avgpool1d/synthetic/rows=full",
+        "algos/avgpool2d/synthetic/rows=full",
+        "algos/batchnorm1d/synthetic/rows=full",
+        "algos/batchnorm2d/synthetic/rows=full",
+        "algos/binarizer/istella/rows=full",
+        "algos/binarizer/taxi/rows=full",
+        "algos/conv1d/synthetic/rows=full",
+        "algos/conv2d/synthetic/rows=full",
+        "algos/dropout2d/synthetic/rows=full",
+        "algos/embedding/synthetic/rows=full",
+        "algos/global-avgpool/synthetic/rows=full",
+        "algos/global-maxpool/synthetic/rows=full",
+        "algos/layernorm/synthetic/rows=full",
+        "algos/maxpool1d/synthetic/rows=full",
+        "algos/maxpool2d/synthetic/rows=full",
+        "algos/nadam/synthetic/rows=full",
+        "algos/normalizer/istella/rows=full",
+        "algos/normalizer/taxi/rows=full",
+        "algos/rmsprop/synthetic/rows=full",
+        "algos/sgd/synthetic/rows=full",
+        "classical2/kernel-ridge/istella/rows=full",
+        "classical2/kernel-ridge/taxi/rows=full",
+        "classical2/knn-clf/istella/rows=full",
+        "classical2/knn-clf/taxi/rows=full",
+        "classical2/knn-reg/istella/rows=full",
+        "classical2/knn-reg/taxi/rows=full",
+        "classical2/linearsvc/istella/rows=full",
+        "classical2/linearsvc/taxi/rows=full"
+      ],
+      "initial_preflight_counts": {
+        "MATCHED": 31,
+        "REFUSED": 182
+      },
+      "latest_preflight_counts": {
+        "MATCHED": 64,
+        "REFUSED": 149
+      },
+      "new_fit_admissions": 33,
+      "updated_recipes": 33
+    }
+  },
+  "recorded_epoch": 1791955241.2474072,
+  "recorded_launch_freezes": {
+    "amd-wave2-launch": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
+    "amd-wave3-launch": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "amd-wave4-launch": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "amd-wave5-launch": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "amd-wave6-launch": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
+    "nvidia-wave2-launch": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
+    "nvidia-wave3-launch": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
+    "nvidia-wave5-launch": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "nvidia-wave6-launch": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
+    "nvidia-wave7-launch": "4dce9b50aa68d8561d71cadea49d2bf2c539aad6"
+  },
+  "remaining_work": [
+    "Resolve remaining refused parameter/implementation read-backs before timing only the affected recipes.",
+    "Repair genuine transform-quality failures in a separate numerical source freeze; do not relax margins or replace real library opponents.",
+    "Measure missing separate upload clocks where inference comparisons remain mixed or insufficient.",
+    "Retain pending, refused, failed and unsupported recipes separately; no full-board timing completion claim."
+  ],
+  "retention": {
+    "checked_at": 1791955221.131476,
+    "complete": false,
+    "phases": {
+      "amd": {
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/ctd-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_nvidia-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 1687030240,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/15fc02c1fcd695e469bb3bc95339b75c62e708d2e3795787d9df8dc373b3836f.tar.gz",
+              "sha256": "15fc02c1fcd695e469bb3bc95339b75c62e708d2e3795787d9df8dc373b3836f",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave1-evidence"
+            ],
+            "reference": {
+              "bytes": 2766615502,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/f9d4ce484f2b78b4f1f2aa7bbee9fdc0f12995b0c81bd38a73b0f5b9432e0518.tar.gz",
+              "sha256": "f9d4ce484f2b78b4f1f2aa7bbee9fdc0f12995b0c81bd38a73b0f5b9432e0518",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/retention-closure.json",
+        "complete": true,
+        "per_run_verified_references": 26,
+        "process_returncode": 0,
+        "remaining_workers": [],
+        "retention_finished_epoch": 1791950620.4351497,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/session/session.json",
+        "session_finished_epoch": 1791950244.4537094
+      },
+      "amd-wave2": {
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/ctd-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_nvidia-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 1687030240,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/15fc02c1fcd695e469bb3bc95339b75c62e708d2e3795787d9df8dc373b3836f.tar.gz",
+              "sha256": "15fc02c1fcd695e469bb3bc95339b75c62e708d2e3795787d9df8dc373b3836f",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave2-evidence"
+            ],
+            "reference": {
+              "bytes": 5319,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/96f5c9f8908def9d12ae9de9fb28d43135568e1766bc72954707c5885dc91997.tar.gz",
+              "sha256": "96f5c9f8908def9d12ae9de9fb28d43135568e1766bc72954707c5885dc91997",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave2/retention-closure.json",
+        "complete": true,
+        "per_run_verified_references": 0,
+        "process_returncode": 1,
+        "remaining_workers": [],
+        "retention_finished_epoch": 1791950835.5479887,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave2/session/session.json",
+        "session_finished_epoch": 1791950675.9496143
+      },
+      "amd-wave3": {
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/ctd-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_nvidia-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 1687030240,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/15fc02c1fcd695e469bb3bc95339b75c62e708d2e3795787d9df8dc373b3836f.tar.gz",
+              "sha256": "15fc02c1fcd695e469bb3bc95339b75c62e708d2e3795787d9df8dc373b3836f",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave3-evidence"
+            ],
+            "reference": {
+              "bytes": 4787,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/c6fe0e0ee1eb63c7bc12c70e03c43083df8c32ca9f8f4f649fbb8164c055c53c.tar.gz",
+              "sha256": "c6fe0e0ee1eb63c7bc12c70e03c43083df8c32ca9f8f4f649fbb8164c055c53c",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave3/retention-closure.json",
+        "complete": true,
+        "per_run_verified_references": 0,
+        "process_returncode": 1,
+        "remaining_workers": [],
+        "retention_finished_epoch": 1791951046.0547879,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave3/session/session.json",
+        "session_finished_epoch": 1791950868.6562934
+      },
+      "amd-wave4": {
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/ctd-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_nvidia-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 2399535194,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/4769cf891ece1348e15a1de76c167ef2543e5b6efdb6a732d412d49319a5f56c.tar.gz",
+              "sha256": "4769cf891ece1348e15a1de76c167ef2543e5b6efdb6a732d412d49319a5f56c",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave4-evidence"
+            ],
+            "reference": {
+              "bytes": 1281443265,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/221c67bd47e829c97385fd0487cc40a7c4fad10ffec334efda962e9bf00bb24a.tar.gz",
+              "sha256": "221c67bd47e829c97385fd0487cc40a7c4fad10ffec334efda962e9bf00bb24a",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/retention-closure.json",
+        "complete": true,
+        "per_run_verified_references": 18,
+        "process_returncode": 0,
+        "remaining_workers": [],
+        "retention_finished_epoch": 1791952973.2062972,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/session/session.json",
+        "session_finished_epoch": 1791952030.568462
+      },
+      "amd-wave5": {
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/ctd-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_nvidia-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 2399538793,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/9b379f32ce4552a4d8e07229cac10610f29c52be3f77719c26f73d55e58bdf05.tar.gz",
+              "sha256": "9b379f32ce4552a4d8e07229cac10610f29c52be3f77719c26f73d55e58bdf05",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave5-evidence"
+            ],
+            "reference": {
+              "bytes": 374011352,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/9529bf5a475ae72cf9b432f785d8f2a739c6a6951e54d243d4b2a84baacff1db.tar.gz",
+              "sha256": "9529bf5a475ae72cf9b432f785d8f2a739c6a6951e54d243d4b2a84baacff1db",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave5/retention-closure.json",
+        "complete": true,
+        "per_run_verified_references": 6,
+        "process_returncode": 0,
+        "remaining_workers": [],
+        "retention_finished_epoch": 1791953549.5353322,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave5/session/session.json",
+        "session_finished_epoch": 1791953306.795667
+      },
+      "amd-wave6": {
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/ctd-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.12/site-packages/mojolearn_nvidia-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 2399533491,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/e8c2730f1b7dc341f6887ea0545f2de1ee7c4a1aff924125fce4875bb866cf8a.tar.gz",
+              "sha256": "e8c2730f1b7dc341f6887ea0545f2de1ee7c4a1aff924125fce4875bb866cf8a",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave6-evidence"
+            ],
+            "reference": {
+              "bytes": 130254445,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/fdbaefb2726dd394aa4bc6e3cae9412a971c9d6441f49c6d900819dfba6f0b21.tar.gz",
+              "sha256": "fdbaefb2726dd394aa4bc6e3cae9412a971c9d6441f49c6d900819dfba6f0b21",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave6/retention-closure.json",
+        "complete": true,
+        "per_run_verified_references": 2,
+        "process_returncode": 0,
+        "remaining_workers": [],
+        "retention_finished_epoch": 1791954164.5117247,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave6/session/session.json",
+        "session_finished_epoch": 1791953831.0969932
+      },
+      "nvidia": {
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_nvidia-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 1360838720,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/68b0c7343c8c9578f849aed4d85a5f4ead93823d69979f7a192a68649804c4a1.tar.gz",
+              "sha256": "68b0c7343c8c9578f849aed4d85a5f4ead93823d69979f7a192a68649804c4a1",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave1-evidence"
+            ],
+            "reference": {
+              "bytes": 3202431451,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/1693e714b97066ab071e0687f33090b02bc7a26424389458c32d245295feae4c.tar.gz",
+              "sha256": "1693e714b97066ab071e0687f33090b02bc7a26424389458c32d245295feae4c",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/retention-closure.json",
+        "complete": true,
+        "per_run_verified_references": 26,
+        "process_returncode": 0,
+        "remaining_workers": [],
+        "retention_finished_epoch": 1791951006.391301,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia/session/session.json",
+        "session_finished_epoch": 1791950137.0978165
+      },
+      "nvidia-wave2": {
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/more-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_nvidia-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 2064352566,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/7e8e240ed1985aa2cc9bcd077230563e5b61554305773eb59e832a2d8827520b.tar.gz",
+              "sha256": "7e8e240ed1985aa2cc9bcd077230563e5b61554305773eb59e832a2d8827520b",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave2-evidence"
+            ],
+            "reference": {
+              "bytes": 93498685,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/5861235d279ac62ce8c8d6715adf17ecb39bfe2e4e99a9845d6ca949d0d9e18d.tar.gz",
+              "sha256": "5861235d279ac62ce8c8d6715adf17ecb39bfe2e4e99a9845d6ca949d0d9e18d",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave2/retention-closure.json",
+        "complete": true,
+        "per_run_verified_references": 24,
+        "process_returncode": 0,
+        "remaining_workers": [],
+        "retention_finished_epoch": 1791951979.8776608,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave2/session/session.json",
+        "session_finished_epoch": 1791951713.2190132
+      },
+      "nvidia-wave5": {
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/more-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_nvidia-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 2776856845,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/40a850c3bc16556400b1095e5e64998f26332f591abfd4a1c7efbf3d17ff9baf.tar.gz",
+              "sha256": "40a850c3bc16556400b1095e5e64998f26332f591abfd4a1c7efbf3d17ff9baf",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave5-evidence"
+            ],
+            "reference": {
+              "bytes": 2219934186,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/718f86274e14a44b505aefb114e8ba26eb5f5535f030ea79355096318352a98b.tar.gz",
+              "sha256": "718f86274e14a44b505aefb114e8ba26eb5f5535f030ea79355096318352a98b",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/retention-closure.json",
+        "complete": true,
+        "per_run_verified_references": 16,
+        "process_returncode": 0,
+        "remaining_workers": [],
+        "retention_finished_epoch": 1791953701.040229,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/session/session.json",
+        "session_finished_epoch": 1791953086.1255314
+      },
+      "nvidia-wave6": {
+        "archives": [],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/retention-closure.json",
+        "complete": false,
+        "per_run_verified_references": 0,
+        "process_returncode": null,
+        "remaining_workers": null,
+        "retention_finished_epoch": null,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/session/session.json",
+        "session_finished_epoch": null
+      },
+      "nvidia-wave7": {
+        "archives": [],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/retention-closure.json",
+        "complete": false,
+        "per_run_verified_references": 0,
+        "process_returncode": null,
+        "remaining_workers": null,
+        "retention_finished_epoch": null,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/session/session.json",
+        "session_finished_epoch": null
+      }
+    }
+  },
+  "schema": "mojolearn.gpu-gap-repair.v1",
+  "scope": {
+    "apple_runs": 0,
+    "fast_reruns": 0,
+    "full_board_timing_complete": false,
+    "publication_hold": "faster-than-opponent hold remains; no website or paper publication",
+    "scored_samples": 1,
+    "vendors": [
+      "nvidia",
+      "amd"
+    ],
+    "warmups_excluded": 1
+  },
+  "start_commit": "8ebb2743a",
+  "supported_historical_audits_restored": {
+    "amd-mi325x": 15,
+    "nvidia-l40s": 6
+  },
+  "validation": {
+    "fairness_check_log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/board-audit-interim.log",
+    "focused_tests": {
+      "exit_status": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/final-focused-tests-03.log",
+      "passed": 235
+    }
+  }
+}

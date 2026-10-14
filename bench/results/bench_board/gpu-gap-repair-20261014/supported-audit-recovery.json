@@ -1,0 +1,240 @@
+{
+  "amd-mi325x": {
+    "baseline": "8ebb2743a",
+    "current_measurements_changed": false,
+    "restored": [
+      {
+        "phase": "identical/fit",
+        "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+        "recipe": "algos/bernoulli-nb/taxi/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+        "recipe": "algos/categorical-nb/istella/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+        "recipe": "algos/categorical-nb/taxi/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+        "recipe": "algos/complement-nb/text/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+        "recipe": "algos/gaussian-nb/istella/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+        "recipe": "algos/gaussian-nb/taxi/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "same settings (MATCHED read-back), same algorithm, comparable quality",
+        "recipe": "algos/lda-clf/taxi/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+        "recipe": "algos/multinomial-nb/text/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "alpha 0.85, max_iter 100 and the same stopping rule (L1 change below n x tol) on ours and networkx; scores sum to 1 on both",
+        "recipe": "algos/pagerank/istella/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "alpha 0.85, max_iter 100 and the same stopping rule (L1 change below n x tol) on ours and networkx; scores sum to 1 on both",
+        "recipe": "algos/pagerank/taxi/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
+        "recipe": "algos/ridge-cv/taxi/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "same pinned settings read back (symmetric trees, Cosine, random_strength 1, Newton x1, 254 borders, no bootstrap, Ordered with fold_permutation_block 64); CatBoost has no AMD or Apple GPU path; leaves and quality equal to 3-4 digits",
+        "recipe": "trees/gbdt-ordered/istella/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "same pinned settings read back (symmetric trees, Cosine, random_strength 1, Newton x1, 254 borders, no bootstrap, Ordered with fold_permutation_block 64); CatBoost has no AMD or Apple GPU path; leaves and quality equal to 3-4 digits",
+        "recipe": "trees/gbdt-ordered/taxi/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "same pinned settings read back (symmetric trees, Cosine, random_strength 1, Newton x1, 254 borders, no bootstrap); CatBoost has no AMD or Apple GPU path; leaves and quality equal to 3-4 digits",
+        "recipe": "trees/gbdt-symmetric/istella/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "same pinned settings read back (symmetric trees, Cosine, random_strength 1, Newton x1, 254 borders, no bootstrap); CatBoost has no AMD or Apple GPU path; leaves and quality equal to 3-4 digits",
+        "recipe": "trees/gbdt-symmetric/taxi/rows=full",
+        "verdict": "FAIR"
+      }
+    ],
+    "still_excluded": [
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/connected-components/istella/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/connected-components/taxi/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/louvain/istella/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/louvain/taxi/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "trees/gbdt-depthwise/istella/rows=full",
+        "verdict": "INSUFFICIENT"
+      }
+    ]
+  },
+  "nvidia-l40s": {
+    "baseline": "8ebb2743a",
+    "current_measurements_changed": false,
+    "restored": [
+      {
+        "phase": "identical/fit",
+        "reason": "same settings (MATCHED read-back), same algorithm, comparable quality",
+        "recipe": "algos/lda-clf/taxi/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "good under Andrew's rule (both arms start from host input; no setting differs); audit note: cuML was given host input only in the random-projection lanes, putting its upload inside its clock; with device input (09-30, same session) cuML is faster than ours",
+        "recipe": "algos/sparse-rp/istella/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.00): a tie (1.00), one run each on different hosts and dates; mamba-ssm bf16 not raced",
+        "recipe": "neural/mamba3-forward/gaussian/shape=full",
+        "verdict": "TIE"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "same algorithm on both (a uniform random threshold per candidate feature, sqrt features per node, depth 16, 100 trees, every row); scikit-learn has no GPU path and runs n_jobs -1; leaf counts within 3%",
+        "recipe": "trees/et/istella/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "same algorithm on both (a uniform random threshold per candidate feature, sqrt features per node, depth 16, 100 trees, every row); scikit-learn has no GPU path and runs n_jobs -1; leaf counts within 3%",
+        "recipe": "trees/et/taxi/rows=full",
+        "verdict": "FAIR"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "a same-session race gives 0.45; AUC equal to 6 digits",
+        "recipe": "trees/rf/taxi/rows=full",
+        "verdict": "FAIR"
+      }
+    ],
+    "still_excluded": [
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/bernoulli-nb/taxi/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/categorical-nb/taxi/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/complement-nb/text/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/gaussian-nb/taxi/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/ivf-pq/taxi/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/ivf-refine/taxi/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/louvain/istella/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/sgd-reg/taxi/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "algos/simple-imputer/istella/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "classical2/logreg/istella/rows=full",
+        "verdict": "INSUFFICIENT"
+      },
+      {
+        "phase": "identical/fit",
+        "reason": "no opponent with sufficient valid comparison evidence",
+        "recipe": "trees/gbdt-ordered/taxi/rows=full",
+        "verdict": "INSUFFICIENT"
+      }
+    ]
+  }
+}

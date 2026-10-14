@@ -633,18 +633,18 @@
     "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "9c44320d439bdd7e",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 1.244300976395607,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm1d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-b334e834c14ef661f4c0930df16dbf266750a5cc32f6e43a4aba239f3a102f27",
+    "kind": "paired",
+    "median_ms": 1.5949830412864685,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -667,18 +667,18 @@
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "9c44320d439bdd7e",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 1.244300976395607,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm1d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-b334e834c14ef661f4c0930df16dbf266750a5cc32f6e43a4aba239f3a102f27",
+    "kind": "paired",
+    "median_ms": 1.5949830412864685,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -701,18 +701,18 @@
     "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "3da2082b8e470fc7",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.9064860641956329,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-70ab80420ebc83b9c9c63544d4328ea8cc8b42742652f4baec3e64cbc1d07ae5",
+    "kind": "paired",
+    "median_ms": 1.5896447002887726,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -735,18 +735,18 @@
     "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "3da2082b8e470fc7",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.9064860641956329,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-70ab80420ebc83b9c9c63544d4328ea8cc8b42742652f4baec3e64cbc1d07ae5",
+    "kind": "paired",
+    "median_ms": 1.5896447002887726,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -769,18 +769,18 @@
     "version": "mojolearn 0.8.37 (source build, main@9440ea75b)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "3da2082b8e470fc7",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.9064860641956329,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-70ab80420ebc83b9c9c63544d4328ea8cc8b42742652f4baec3e64cbc1d07ae5",
+    "kind": "paired",
+    "median_ms": 1.5896447002887726,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -803,18 +803,18 @@
     "version": "mojolearn 0.8.37 (source build, main@432d6e8ff)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "3da2082b8e470fc7",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.9064860641956329,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-70ab80420ebc83b9c9c63544d4328ea8cc8b42742652f4baec3e64cbc1d07ae5",
+    "kind": "paired",
+    "median_ms": 1.5896447002887726,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -837,18 +837,18 @@
     "version": "mojolearn 0.8.37 (source build, main@483b0db6d)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "3da2082b8e470fc7",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.9064860641956329,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-70ab80420ebc83b9c9c63544d4328ea8cc8b42742652f4baec3e64cbc1d07ae5",
+    "kind": "paired",
+    "median_ms": 1.5896447002887726,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -871,18 +871,18 @@
     "version": "mojolearn 0.8.37 (source build, main@42d1e42c6)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "3da2082b8e470fc7",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.9064860641956329,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-70ab80420ebc83b9c9c63544d4328ea8cc8b42742652f4baec3e64cbc1d07ae5",
+    "kind": "paired",
+    "median_ms": 1.5896447002887726,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -905,18 +905,18 @@
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "3da2082b8e470fc7",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.9064860641956329,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-70ab80420ebc83b9c9c63544d4328ea8cc8b42742652f4baec3e64cbc1d07ae5",
+    "kind": "paired",
+    "median_ms": 1.5896447002887726,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -939,18 +939,18 @@
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "3da2082b8e470fc7",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.9064860641956329,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-70ab80420ebc83b9c9c63544d4328ea8cc8b42742652f4baec3e64cbc1d07ae5",
+    "kind": "paired",
+    "median_ms": 1.5896447002887726,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1041,18 +1041,18 @@
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-12T22:02:26Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T03:51:10Z",
     "digest": "8c2c7037eb44d5c4",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc2.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0001",
-    "kind": "algos",
-    "median_ms": 0.7437430322170258,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave2/campaign/measured/algos.binarizer.istella.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-603f66102ae1d3de379e5b5704cb17e2bda911358ead73c1d74b6fca794273ef",
+    "kind": "paired",
+    "median_ms": 0.2076420933008194,
     "reason": null,
-    "sha": "9c7ad74132aa636a722c126ccc5b22689be25964",
+    "sha": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@9c7ad7413)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1075,18 +1075,18 @@
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-12T22:02:26Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T03:51:10Z",
     "digest": "2c7c25943424d016",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc2.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0001",
-    "kind": "algos",
-    "median_ms": 0.09923055768013,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave2/campaign/measured/algos.binarizer.taxi.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-5cc93a8b6016ca88157c94ac4bf3748b987a46a0728f836d3a89aac22b06841c",
+    "kind": "paired",
+    "median_ms": 0.17507188022136688,
     "reason": null,
-    "sha": "9c7ad74132aa636a722c126ccc5b22689be25964",
+    "sha": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@9c7ad7413)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1619,18 +1619,18 @@
     "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "720ffaacdfcf76a5",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 9.809331968426704,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv1d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bae6c90886c366a7aa0d150fa240f2938db6bb763ac4d2880196b521eeb9f5a2",
+    "kind": "paired",
+    "median_ms": 9.866142645478249,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1653,18 +1653,18 @@
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "720ffaacdfcf76a5",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 9.809331968426704,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv1d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bae6c90886c366a7aa0d150fa240f2938db6bb763ac4d2880196b521eeb9f5a2",
+    "kind": "paired",
+    "median_ms": 9.866142645478249,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1687,18 +1687,18 @@
     "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "9782257b7436241b",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 6.436836905777454,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-62c8f15cc9a300656258cd5d0e0b6e0daaa445440e5a1eea5799fa39d56d4307",
+    "kind": "paired",
+    "median_ms": 6.290966644883156,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1721,18 +1721,18 @@
     "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "9782257b7436241b",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 6.436836905777454,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-62c8f15cc9a300656258cd5d0e0b6e0daaa445440e5a1eea5799fa39d56d4307",
+    "kind": "paired",
+    "median_ms": 6.290966644883156,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1755,18 +1755,18 @@
     "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "9782257b7436241b",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 6.436836905777454,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-62c8f15cc9a300656258cd5d0e0b6e0daaa445440e5a1eea5799fa39d56d4307",
+    "kind": "paired",
+    "median_ms": 6.290966644883156,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1789,18 +1789,18 @@
     "version": "mojolearn 0.8.37 (source build, main@9440ea75b)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "9782257b7436241b",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 6.436836905777454,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-62c8f15cc9a300656258cd5d0e0b6e0daaa445440e5a1eea5799fa39d56d4307",
+    "kind": "paired",
+    "median_ms": 6.290966644883156,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1823,18 +1823,18 @@
     "version": "mojolearn 0.8.37 (source build, main@444f0b96e)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "9782257b7436241b",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 6.436836905777454,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-62c8f15cc9a300656258cd5d0e0b6e0daaa445440e5a1eea5799fa39d56d4307",
+    "kind": "paired",
+    "median_ms": 6.290966644883156,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1857,18 +1857,18 @@
     "version": "mojolearn 0.8.37 (source build, main@432d6e8ff)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "9782257b7436241b",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 6.436836905777454,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-62c8f15cc9a300656258cd5d0e0b6e0daaa445440e5a1eea5799fa39d56d4307",
+    "kind": "paired",
+    "median_ms": 6.290966644883156,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1891,18 +1891,18 @@
     "version": "mojolearn 0.8.37 (source build, main@42d1e42c6)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "9782257b7436241b",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 6.436836905777454,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-62c8f15cc9a300656258cd5d0e0b6e0daaa445440e5a1eea5799fa39d56d4307",
+    "kind": "paired",
+    "median_ms": 6.290966644883156,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -1925,18 +1925,18 @@
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "9782257b7436241b",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 6.436836905777454,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-62c8f15cc9a300656258cd5d0e0b6e0daaa445440e5a1eea5799fa39d56d4307",
+    "kind": "paired",
+    "median_ms": 6.290966644883156,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2014,6 +2014,40 @@
    "reason": "older commit",
    "replaced": {
     "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
+    "digest": "aba032a7864261be",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-610f767b09e37a85fb418c7ce0cdb391a80736bdcb89631509f191eaef492304",
+    "kind": "paired",
+    "median_ms": 0.9940788149833679,
+    "reason": null,
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "status": "ok",
+    "version": "0.8.44"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:36:54Z",
+    "digest": "aba032a7864261be",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-455bb276f248951866a3598362da9b6e3c9eff23bb2fa0beda5ac3309e53a939",
+    "kind": "paired",
+    "median_ms": 1.300642266869545,
+    "reason": null,
+    "sha": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/dropout2d/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
     "commit_date": "2026-10-10T02:40:03Z",
     "digest": null,
     "evidence": "/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
@@ -2027,18 +2061,18 @@
     "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 1.0030297562479973,
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:36:54Z",
+    "digest": "aba032a7864261be",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-455bb276f248951866a3598362da9b6e3c9eff23bb2fa0beda5ac3309e53a939",
+    "kind": "paired",
+    "median_ms": 1.300642266869545,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2061,18 +2095,18 @@
     "version": "mojolearn 0.8.37 (source build, main@9440ea75b)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 1.0030297562479973,
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:36:54Z",
+    "digest": "aba032a7864261be",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-455bb276f248951866a3598362da9b6e3c9eff23bb2fa0beda5ac3309e53a939",
+    "kind": "paired",
+    "median_ms": 1.300642266869545,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2095,18 +2129,18 @@
     "version": "mojolearn 0.8.37 (source build, main@432d6e8ff)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 1.0030297562479973,
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:36:54Z",
+    "digest": "aba032a7864261be",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-455bb276f248951866a3598362da9b6e3c9eff23bb2fa0beda5ac3309e53a939",
+    "kind": "paired",
+    "median_ms": 1.300642266869545,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2129,18 +2163,18 @@
     "version": "mojolearn 0.8.37 (source build, main@483b0db6d)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 1.0030297562479973,
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:36:54Z",
+    "digest": "aba032a7864261be",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-455bb276f248951866a3598362da9b6e3c9eff23bb2fa0beda5ac3309e53a939",
+    "kind": "paired",
+    "median_ms": 1.300642266869545,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2163,18 +2197,18 @@
     "version": "mojolearn 0.8.37 (source build, main@42d1e42c6)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 1.0030297562479973,
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:36:54Z",
+    "digest": "aba032a7864261be",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-455bb276f248951866a3598362da9b6e3c9eff23bb2fa0beda5ac3309e53a939",
+    "kind": "paired",
+    "median_ms": 1.300642266869545,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2197,18 +2231,18 @@
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 1.0030297562479973,
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:36:54Z",
+    "digest": "aba032a7864261be",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-455bb276f248951866a3598362da9b6e3c9eff23bb2fa0beda5ac3309e53a939",
+    "kind": "paired",
+    "median_ms": 1.300642266869545,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2231,18 +2265,18 @@
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 1.0030297562479973,
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:36:54Z",
+    "digest": "aba032a7864261be",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-455bb276f248951866a3598362da9b6e3c9eff23bb2fa0beda5ac3309e53a939",
+    "kind": "paired",
+    "median_ms": 1.300642266869545,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2367,18 +2401,18 @@
     "version": "mojolearn 0.8.37 (source build, main@ca8ea1f8d)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "2753e61a6dde36e3",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 2.208532765507698,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.embedding.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bdd40e3c4e91a64b4d5cfb30b592b743a59d021bbb95302e4d97ce67a500253f",
+    "kind": "paired",
+    "median_ms": 2.4649370461702347,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2401,18 +2435,18 @@
     "version": "mojolearn 0.8.37 (source build, main@9f83ea479)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "2753e61a6dde36e3",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 2.208532765507698,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.embedding.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bdd40e3c4e91a64b4d5cfb30b592b743a59d021bbb95302e4d97ce67a500253f",
+    "kind": "paired",
+    "median_ms": 2.4649370461702347,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2435,18 +2469,18 @@
     "version": "mojolearn 0.8.37 (source build, main@9440ea75b)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "2753e61a6dde36e3",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 2.208532765507698,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.embedding.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bdd40e3c4e91a64b4d5cfb30b592b743a59d021bbb95302e4d97ce67a500253f",
+    "kind": "paired",
+    "median_ms": 2.4649370461702347,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2469,18 +2503,18 @@
     "version": "mojolearn 0.8.37 (source build, main@432d6e8ff)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "2753e61a6dde36e3",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 2.208532765507698,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.embedding.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bdd40e3c4e91a64b4d5cfb30b592b743a59d021bbb95302e4d97ce67a500253f",
+    "kind": "paired",
+    "median_ms": 2.4649370461702347,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2503,18 +2537,18 @@
     "version": "mojolearn 0.8.37 (source build, main@483b0db6d)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "2753e61a6dde36e3",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 2.208532765507698,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.embedding.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bdd40e3c4e91a64b4d5cfb30b592b743a59d021bbb95302e4d97ce67a500253f",
+    "kind": "paired",
+    "median_ms": 2.4649370461702347,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2537,18 +2571,18 @@
     "version": "mojolearn 0.8.37 (source build, main@42d1e42c6)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "2753e61a6dde36e3",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 2.208532765507698,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.embedding.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bdd40e3c4e91a64b4d5cfb30b592b743a59d021bbb95302e4d97ce67a500253f",
+    "kind": "paired",
+    "median_ms": 2.4649370461702347,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2571,18 +2605,18 @@
     "version": "mojolearn 0.8.37 (source build, main@4303e1bfb)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "2753e61a6dde36e3",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 2.208532765507698,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.embedding.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bdd40e3c4e91a64b4d5cfb30b592b743a59d021bbb95302e4d97ce67a500253f",
+    "kind": "paired",
+    "median_ms": 2.4649370461702347,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -2605,18 +2639,18 @@
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "2753e61a6dde36e3",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 2.208532765507698,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.embedding.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bdd40e3c4e91a64b4d5cfb30b592b743a59d021bbb95302e4d97ce67a500253f",
+    "kind": "paired",
+    "median_ms": 2.4649370461702347,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -3115,18 +3149,18 @@
     "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "b50e06fc713744d1",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.13655424118041992,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.global-avgpool.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-632e4f96f147f2844d710d6fb85796bdb791c543034ead7fe8e50b017a6f08e9",
+    "kind": "paired",
+    "median_ms": 0.2808421850204468,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -3149,18 +3183,18 @@
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "b50e06fc713744d1",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.13655424118041992,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.global-avgpool.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-632e4f96f147f2844d710d6fb85796bdb791c543034ead7fe8e50b017a6f08e9",
+    "kind": "paired",
+    "median_ms": 0.2808421850204468,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -3183,18 +3217,18 @@
     "version": "mojolearn 0.8.37 (source build, main@1665b5626)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "3578657416f43a55",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.12492761015892029,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.global-maxpool.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-81f7e55aaf889874211dee38ad616b0ba6473a2407d5447e983d34dc58d5ca33",
+    "kind": "paired",
+    "median_ms": 0.38991495966911316,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -3217,18 +3251,18 @@
     "version": "mojolearn 0.8.37 (source build, main@de2b2b739)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-13T00:09:47Z",
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
     "digest": "3578657416f43a55",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0006",
-    "kind": "algos",
-    "median_ms": 0.12492761015892029,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.global-maxpool.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-81f7e55aaf889874211dee38ad616b0ba6473a2407d5447e983d34dc58d5ca33",
+    "kind": "paired",
+    "median_ms": 0.38991495966911316,
     "reason": null,
-    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+    "version": "0.8.44"
    }
   },
   {
@@ -6447,18 +6481,18 @@
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-12T22:02:26Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc2.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0001",
-    "kind": "algos",
-    "median_ms": 0.1862458884716034,
+    "box": "nv2",
+    "commit_date": "2026-10-14T03:51:10Z",
+    "digest": "52c90d74251fa6de",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave2/campaign/measured/algos.normalizer.istella.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-48558cd4f0e060d7976bc41f2685104e65090151ab2e556e6557d018a92134c9",
+    "kind": "paired",
+    "median_ms": 0.10727159678936005,
     "reason": null,
-    "sha": "9c7ad74132aa636a722c126ccc5b22689be25964",
+    "sha": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@9c7ad7413)"
+    "version": "0.8.44"
    }
   },
   {
@@ -6481,18 +6515,18 @@
     "version": "mojolearn 0.8.37 (source build, main@89485bc96)"
    },
    "replaced_by": {
-    "box": "nv",
-    "commit_date": "2026-10-12T22:02:26Z",
-    "digest": null,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc2.txt",
-    "hardware": "NVIDIA L40S (nv, RunPod)",
-    "job": "n0001",
-    "kind": "algos",
-    "median_ms": 0.1307465136051178,
+    "box": "nv2",
+    "commit_date": "2026-10-14T03:51:10Z",
+    "digest": "397fca443a1c3c12",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave2/campaign/measured/algos.normalizer.taxi.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-c9556c3f252aa1194a64c96376c0fb74bd48032229cbb52a97a38711cf64b01e",
+    "kind": "paired",
+    "median_ms": 0.17048604786396027,
     "reason": null,
-    "sha": "9c7ad74132aa636a722c126ccc5b22689be25964",
+    "sha": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
     "status": "ok",
-    "version": "mojolearn 0.8.42 (source build, main@9c7ad7413)"
+    "version": "0.8.44"
    }
   },
   {
@@ -11831,6 +11865,414 @@
     "sha": "444f0b96e7d9f49add4c1cf96204d2ac0d4418da",
     "status": "ok",
     "version": "mojolearn 0.8.37 (source build, main@444f0b96e)"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/embedding/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-13T00:09:47Z",
+    "digest": "2753e61a6dde36e3",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0006",
+    "kind": "algos",
+    "median_ms": 2.208532765507698,
+    "reason": null,
+    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
+    "digest": "2753e61a6dde36e3",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.embedding.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bdd40e3c4e91a64b4d5cfb30b592b743a59d021bbb95302e4d97ce67a500253f",
+    "kind": "paired",
+    "median_ms": 2.4649370461702347,
+    "reason": null,
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/dropout2d/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-13T00:09:47Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0006",
+    "kind": "algos",
+    "median_ms": 1.0030297562479973,
+    "reason": null,
+    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
+    "digest": "aba032a7864261be",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-610f767b09e37a85fb418c7ce0cdb391a80736bdcb89631509f191eaef492304",
+    "kind": "paired",
+    "median_ms": 0.9940788149833679,
+    "reason": null,
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/global-avgpool/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-13T00:09:47Z",
+    "digest": "b50e06fc713744d1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0006",
+    "kind": "algos",
+    "median_ms": 0.13655424118041992,
+    "reason": null,
+    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
+    "digest": "b50e06fc713744d1",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.global-avgpool.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-632e4f96f147f2844d710d6fb85796bdb791c543034ead7fe8e50b017a6f08e9",
+    "kind": "paired",
+    "median_ms": 0.2808421850204468,
+    "reason": null,
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/global-maxpool/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-13T00:09:47Z",
+    "digest": "3578657416f43a55",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0006",
+    "kind": "algos",
+    "median_ms": 0.12492761015892029,
+    "reason": null,
+    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
+    "digest": "3578657416f43a55",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.global-maxpool.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-81f7e55aaf889874211dee38ad616b0ba6473a2407d5447e983d34dc58d5ca33",
+    "kind": "paired",
+    "median_ms": 0.38991495966911316,
+    "reason": null,
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/batchnorm1d/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-13T00:09:47Z",
+    "digest": "9c44320d439bdd7e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0006",
+    "kind": "algos",
+    "median_ms": 1.244300976395607,
+    "reason": null,
+    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
+    "digest": "9c44320d439bdd7e",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm1d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-b334e834c14ef661f4c0930df16dbf266750a5cc32f6e43a4aba239f3a102f27",
+    "kind": "paired",
+    "median_ms": 1.5949830412864685,
+    "reason": null,
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/batchnorm2d/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-13T00:09:47Z",
+    "digest": "3da2082b8e470fc7",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0006",
+    "kind": "algos",
+    "median_ms": 0.9064860641956329,
+    "reason": null,
+    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
+    "digest": "3da2082b8e470fc7",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.batchnorm2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-70ab80420ebc83b9c9c63544d4328ea8cc8b42742652f4baec3e64cbc1d07ae5",
+    "kind": "paired",
+    "median_ms": 1.5896447002887726,
+    "reason": null,
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/conv1d/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-13T00:09:47Z",
+    "digest": "720ffaacdfcf76a5",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0006",
+    "kind": "algos",
+    "median_ms": 9.809331968426704,
+    "reason": null,
+    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
+    "digest": "720ffaacdfcf76a5",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv1d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-bae6c90886c366a7aa0d150fa240f2938db6bb763ac4d2880196b521eeb9f5a2",
+    "kind": "paired",
+    "median_ms": 9.866142645478249,
+    "reason": null,
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/conv2d/synthetic/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-13T00:09:47Z",
+    "digest": "9782257b7436241b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc3.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0006",
+    "kind": "algos",
+    "median_ms": 6.436836905777454,
+    "reason": null,
+    "sha": "8899093fceee01e9914ba7f889f5ad26efee071c",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@8899093fc)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T04:12:49Z",
+    "digest": "9782257b7436241b",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave5/campaign/measured/algos.conv2d.synthetic.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-62c8f15cc9a300656258cd5d0e0b6e0daaa445440e5a1eea5799fa39d56d4307",
+    "kind": "paired",
+    "median_ms": 6.290966644883156,
+    "reason": null,
+    "sha": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/binarizer/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-12T22:02:26Z",
+    "digest": "8c2c7037eb44d5c4",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc2.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0001",
+    "kind": "algos",
+    "median_ms": 0.7437430322170258,
+    "reason": null,
+    "sha": "9c7ad74132aa636a722c126ccc5b22689be25964",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@9c7ad7413)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T03:51:10Z",
+    "digest": "8c2c7037eb44d5c4",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave2/campaign/measured/algos.binarizer.istella.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-603f66102ae1d3de379e5b5704cb17e2bda911358ead73c1d74b6fca794273ef",
+    "kind": "paired",
+    "median_ms": 0.2076420933008194,
+    "reason": null,
+    "sha": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/binarizer/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-12T22:02:26Z",
+    "digest": "2c7c25943424d016",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc2.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0001",
+    "kind": "algos",
+    "median_ms": 0.09923055768013,
+    "reason": null,
+    "sha": "9c7ad74132aa636a722c126ccc5b22689be25964",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@9c7ad7413)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T03:51:10Z",
+    "digest": "2c7c25943424d016",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave2/campaign/measured/algos.binarizer.taxi.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-5cc93a8b6016ca88157c94ac4bf3748b987a46a0728f836d3a89aac22b06841c",
+    "kind": "paired",
+    "median_ms": 0.17507188022136688,
+    "reason": null,
+    "sha": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/normalizer/istella/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-12T22:02:26Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc2.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0001",
+    "kind": "algos",
+    "median_ms": 0.1862458884716034,
+    "reason": null,
+    "sha": "9c7ad74132aa636a722c126ccc5b22689be25964",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@9c7ad7413)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T03:51:10Z",
+    "digest": "52c90d74251fa6de",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave2/campaign/measured/algos.normalizer.istella.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-48558cd4f0e060d7976bc41f2685104e65090151ab2e556e6557d018a92134c9",
+    "kind": "paired",
+    "median_ms": 0.10727159678936005,
+    "reason": null,
+    "sha": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "algos/normalizer/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv",
+    "commit_date": "2026-10-12T22:02:26Z",
+    "digest": null,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/nv_ingest/results_nvc2.txt",
+    "hardware": "NVIDIA L40S (nv, RunPod)",
+    "job": "n0001",
+    "kind": "algos",
+    "median_ms": 0.1307465136051178,
+    "reason": null,
+    "sha": "9c7ad74132aa636a722c126ccc5b22689be25964",
+    "status": "ok",
+    "version": "mojolearn 0.8.42 (source build, main@9c7ad7413)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T03:51:10Z",
+    "digest": "397fca443a1c3c12",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave2/campaign/measured/algos.normalizer.taxi.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-c9556c3f252aa1194a64c96376c0fb74bd48032229cbb52a97a38711cf64b01e",
+    "kind": "paired",
+    "median_ms": 0.17048604786396027,
+    "reason": null,
+    "sha": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
+    "status": "ok",
+    "version": "0.8.44"
    }
   },
   {
@@ -19977,5 +20419,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-14T04:04:06Z"
+ "updated": "2026-10-14T05:20:21Z"
 }
