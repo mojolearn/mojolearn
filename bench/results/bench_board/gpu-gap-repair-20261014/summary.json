@@ -1,7 +1,7 @@
 {
   "branch": "main",
   "classical_output_verification": {
-    "checked_at": 1791960559.850483,
+    "checked_at": 1791961898.812371,
     "failures": [],
     "recipes": {
       "amd/classical/kmeans/istella/rows=full": {
@@ -80,6 +80,25 @@
         "scored_cells": 2,
         "verified_output_members": 2
       },
+      "nvidia/classical/dbscan/istella/rows=full": {
+        "artifacts": [
+          {
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/classical-verified-outputs/4fc7da393e00e27f9c1cbf9b8da1fc2e8f8b97761b15a141290eedd99c1c67fa.tar.gz",
+            "reference": {
+              "bytes": 43807538,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/4fc7da393e00e27f9c1cbf9b8da1fc2e8f8b97761b15a141290eedd99c1c67fa.tar.gz",
+              "sha256": "4fc7da393e00e27f9c1cbf9b8da1fc2e8f8b97761b15a141290eedd99c1c67fa",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.dbscan.istella.rows=full/board.json",
+        "missing": [],
+        "scored_cells": 2,
+        "verified_output_members": 2
+      },
       "nvidia/classical/dbscan/taxi/rows=full": {
         "artifacts": [
           {
@@ -139,7 +158,7 @@
       }
     }
   },
-  "code_commit": "2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0",
+  "code_commit": "32fe27974481a93ac10fd1c4b446a968d59c23d0",
   "cross_vendor_scored_hashes": {
     "MATCH": 21
   },
@@ -2245,6 +2264,7 @@
         "algos/normalizer/taxi/rows=full",
         "algos/rmsprop/synthetic/rows=full",
         "algos/sgd/synthetic/rows=full",
+        "classical/dbscan/istella/rows=full",
         "classical/dbscan/taxi/rows=full",
         "classical2/kernel-ridge/istella/rows=full",
         "classical2/kernel-ridge/taxi/rows=full",
@@ -2260,14 +2280,14 @@
         "REFUSED": 182
       },
       "latest_preflight_counts": {
-        "MATCHED": 67,
-        "REFUSED": 146
+        "MATCHED": 68,
+        "REFUSED": 145
       },
-      "new_fit_admissions": 34,
-      "updated_recipes": 36
+      "new_fit_admissions": 35,
+      "updated_recipes": 37
     }
   },
-  "recorded_epoch": 1791960647.9340029,
+  "recorded_epoch": 1791961954.329352,
   "recorded_launch_freezes": {
     "amd-wave2-launch": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
     "amd-wave3-launch": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
@@ -2291,7 +2311,7 @@
   ],
   "retention": {
     "archive_transfer_closure_complete": false,
-    "checked_at": 1791960647.889118,
+    "checked_at": 1791961954.27666,
     "complete": false,
     "known_missing_required_outputs": {
       "amd-wave4": [
@@ -2863,11 +2883,11 @@
         "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/retention-closure.json",
         "complete": false,
         "per_run_verified_references": 0,
-        "process_returncode": null,
-        "remaining_workers": null,
+        "process_returncode": 0,
+        "remaining_workers": [],
         "retention_finished_epoch": null,
         "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/session/session.json",
-        "session_finished_epoch": null
+        "session_finished_epoch": 1791961832.5285118
       },
       "nvidia-wave9": {
         "archives": [],
@@ -2909,8 +2929,8 @@
       "passed": 252
     },
     "host_route_regressions": {
-      "ci_run": 38521399191,
-      "ci_status_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/ci-after-timeout-fix.json",
+      "ci_run": 38523425144,
+      "ci_status_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/ci-controller-stop-result.json",
       "exit_status": 0,
       "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/no-host-routes-checker-tests.log",
       "passed_functions": 14

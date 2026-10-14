@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-14T06:49:27Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-14T07:11:55Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 > MAIN BOARD nvidia-l40s, version label main@50be53955. Unreleased: not reproducible by pip install; the release boards are the reference.
 
@@ -418,6 +418,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical | dbscan | istella | n_clusters | - | 40131 | cuml-gpu 40131 |
 | classical | dbscan | istella | noise_fraction | - | 0.219391 | cuml-gpu 0.219391 |
 | classical | dbscan | istella | rows | - | 1000000 | cuml-gpu 1000000 |
+| classical | dbscan | istella | ari_vs_ours (1 is our partition exactly) | - | - | cuml-gpu 1.000000 |
+| classical | dbscan | istella | noise_agreement_vs_ours | - | - | cuml-gpu 1.000000 |
 | classical | dbscan | taxi | n_clusters | - | 36 | cuml-gpu 36 |
 | classical | dbscan | taxi | noise_fraction | - | 0.000174 | cuml-gpu 0.000174 |
 | classical | dbscan | taxi | rows | - | 1000000 | cuml-gpu 1000000 |
@@ -1067,28 +1069,47 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### dbscan / istella (rows full, shape 1000000x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-grid-logs.txt (nv2/v0011)`, ran on NVIDIA L40S (nv2, RunPod) job v0011
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.dbscan.istella.rows=full/board.json (nv2/paired-f639cdf6bf5a6bc70391e70b26a0dda9180b3a22234025684f6dbca7fd4d66c2)`, ran on d2fe567d3b88
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | mojolearn 0.8.38 (source build, main@5876e9205) | identical | 85163.3 | 85163.3..85163.3 | 1 | - | - | 85163.3 | - | - (stored whole) | - | - | - | - | n_clusters=40131, noise_fraction=0.219391, rows=1000000 | - | main board, one scored run | - | ok (main@5876e9205 nv2/v0011 2026-10-11; identity vs the amd columns: n/a) |
-| cuml-gpu | cuml | gpu | NVIDIA L40S (host 24a11adce16e) | cuml 26.08.00 | opponent | 73482.1 | 73482.1..73482.1 | 1 | 1.159 | - | 74125.8 | 73482.1 | 643.73 (upload_ms_untimed) | 1.149 (whole/whole) | - | 2599.3 | 1272.0 | n_clusters=40131, noise_fraction=0.219391, rows=1000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | 0.8.44 | identical | 601944.2 | 601944.2..601944.2 | 1 | - | - | 601944.2 | 601907.3 | 36.82 (upload_ms_separate) | - | - | 5641.3 | 3498.0 | n_clusters=40131, noise_fraction=0.219391, rows=1000000 | yes | main board, one scored run | wheel | ok (main@50be53955 nv2/paired-f639cdf6bf5a6bc70391e70b26a0dda9180b3a22234025684f6dbca7fd4d66c2 2026-10-14; identity vs the amd columns: n/a) |
+| cuml-gpu | cuml | gpu | NVIDIA L40S (host d2fe567d3b88) | cuml 26.08.00 | opponent | 62967.2 | 62967.2..62967.2 | 1 | 9.560 | - | 63588.8 | 62967.2 | 621.60 (upload_ms_untimed) | 9.466 (whole/whole) | - | 2649.1 | 1932.0 | ari_vs_ours=1.000000, n_clusters=40131, noise_agreement_vs_ours=1.000000, noise_fraction=0.219391, rows=1000000 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
-
-memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+memory, ours, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
 
 settings: eps=3, min_samples=2 (the cuML benchmark's DBSCAN) on every arm; metric='euclidean'. Rows: dbscan block: 1,000,000 rows, standardized. Timed: fit.
 
 mismatch: seed: no arm has a seed argument (deterministic)
 
-mismatch: algorithm (an exact neighbor search on every arm, results unchanged): ours 'rbc' (its default), scikit-learn 'brute' (the cuML benchmark's cpu_args; it has no 'rbc'), cuml-gpu 'brute', cuml-gpu-rbc 'rbc'
+mismatch: algorithm='brute' on every raced arm (ours, cuml-gpu, scikit-learn: the cuML benchmark's cpu_args); ours' default 'rbc' is not raced, and cuml-gpu-rbc (overflows at 1,000,000 rows) is not on the roster
 
 mismatch: leaf_size=30 and n_jobs=-1: scikit-learn only
 
 config: cuML benchmark (RAPIDS), DBSCAN (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | cuml-gpu | ours |
+|---|---||---|---|
+| library (source) | cuml (get_params) | mojolearn (get_params) |
+| algorithm | "brute" | "brute" |
+| calc_core_sample_indices | true | - |
+| eps | 3.0 | 3.0 |
+| max_iterations | - | null |
+| max_mbytes_per_batch | null | null |
+| metric | "euclidean" | "euclidean" |
+| min_samples | 2 | 2 |
+| prediction_data | - | false |
+| seed | "none (deterministic)" | "none (deterministic)" |
+
+accepted difference: cuml-gpu calc_core_sample_indices: our DBSCAN always produces core_sample_indices_ and components_; cuML is explicitly set to retain both
+
+accepted difference: cuml-gpu max_iterations: both propagate labels to the fixed point; cuML exposes no iteration cap, and our None requests completion
+
+accepted difference: cuml-gpu max_mbytes_per_batch: both libraries choose distance-batch memory automatically; neither setting subsamples the input
+
+accepted difference: cuml-gpu prediction_data: no additional prediction cache is requested; cuML DBSCAN exposes no prediction-data option
 
 ### dbscan / taxi (rows full, shape 1000000x11)
 

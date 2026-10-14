@@ -1,5 +1,5 @@
 {
-  "date_epoch": 1791960569.523069,
+  "date_epoch": 1791961953.5899909,
   "scope": "All original 303 GPU-opponent recipes; newest preflight evidence only, not full timing or admission coverage",
   "vendors": {
     "amd": {
@@ -2341,6 +2341,7 @@
         "algos/normalizer/taxi/rows=full",
         "algos/rmsprop/synthetic/rows=full",
         "algos/sgd/synthetic/rows=full",
+        "classical/dbscan/istella/rows=full",
         "classical/dbscan/taxi/rows=full",
         "classical2/kernel-ridge/istella/rows=full",
         "classical2/kernel-ridge/taxi/rows=full",
@@ -2352,10 +2353,10 @@
         "classical2/linearsvc/taxi/rows=full"
       ],
       "latest_preflight_counts": {
-        "MATCHED": 67,
-        "REFUSED": 146
+        "MATCHED": 68,
+        "REFUSED": 145
       },
-      "new_fit_admissions": 34,
+      "new_fit_admissions": 35,
       "recipes": {
         "algos/adafactor/synthetic/rows=full": {
           "audit": {
@@ -4844,19 +4845,13 @@
           "status": "REFUSED"
         },
         "classical/dbscan/istella/rows=full": {
-          "arms": [
-            "ours",
-            "cuml-gpu"
-          ],
-          "family": "classical",
-          "preflight_rc": 1,
-          "problems": [
-            "cuml-gpu: calc_core_sample_indices missing from ours read-back; explicit semantic mapping required",
-            "cuml-gpu: max_iterations missing from cuml-gpu read-back; explicit semantic mapping required",
-            "cuml-gpu: max_mbytes_per_batch is unset on ours and unset on cuml-gpu (a library default is not a matched value; set it explicitly on both)",
-            "cuml-gpu: prediction_data missing from cuml-gpu read-back; explicit semantic mapping required"
-          ],
-          "status": "REFUSED"
+          "audit": {
+            "identical/fit": "MATCHED"
+          },
+          "measurement_status": "done",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.dbscan.istella.rows=full/board.json",
+          "problems": [],
+          "status": "MATCHED"
         },
         "classical/dbscan/taxi/rows=full": {
           "audit": {
@@ -6917,7 +6912,7 @@
           "status": "REFUSED"
         }
       },
-      "updated_recipes": 36
+      "updated_recipes": 37
     }
   }
 }
