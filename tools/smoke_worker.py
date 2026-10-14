@@ -445,6 +445,17 @@ def main(argv=None):
     os.dup2(2, 1)                      # what an import prints goes to the server's log, not the protocol
     sys.stdout = sys.stderr
     report = {}
+    # smoke-fixes (2026-10-14; algos/als/taxi-zones: "missing parameter/version probe: implicit-gpu"): an arm
+    # server runs under an arm venv (tools/bench_board_algos.py ARM_VENVS), and preload's `import implicit`
+    # decides implicit.gpu.HAS_CUDA once, at that import (implicit/gpu/__init__.py: "Disabling GPU support
+    # because of 'libcublas.so.13: cannot open shared object file'", worker/arm-server-0.log). The driver
+    # loads the venv's CUDA 13 libraries first (_build_als); do the same before preload. A no-op where
+    # cuda.pathfinder or the libraries are absent.
+    try:
+        algos = smoke_inproc.driver_module(str(TOOLS / "bench_board_algos.py"))
+        algos._preload_cuda_libs(algos.IMPLICIT_GPU_CUDA_LIBS)
+    except Exception as exc:  # noqa: BLE001 - preload records the driver's own import failure
+        report["cuda_preload_error"] = repr(exc)[:400]
     preload(report)
     proto.write(json.dumps({"event": "ready", "report": report}, sort_keys=True, default=str) + "\n")
     proto.flush()

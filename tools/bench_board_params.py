@@ -1526,6 +1526,71 @@ def _semantic_r8(lane, param, arm, ours, theirs, library):
         # when both arms run SGD.
         return ("SGD on both arms: ours' CNNClassifier uses betas/eps only for adam/adamw "
                 "(_expansion_cnn.py fit), torch.optim.SGD has neither")
+def _semantic_r11(lane, param, arm, ours, theirs, library):
+    """smoke-fixes (2026-10-14, batch 4, r11; NVIDIA algos/kbins, robust-scaler, sparse-rp,
+    label-encoder, onehot vs cuML 26.08). Each row fires only for the named lane, the cuml-gpu arm
+    and only at the values that make the absent setting inactive or equal. cuML sources read at
+    github.com/rapidsai/cuml v26.08.00 python/cuml/cuml/ (paths below); ours python/mojolearn/."""
+    if library != "cuml" or arm != "cuml-gpu" or not lane.startswith("algos/"):
+        return None
+    algo = lane.removeprefix("algos/")
+    lacks_theirs = param in ours and param not in theirs
+    lacks_ours = param in theirs and param not in ours
+    # smoke-fixes (2026-10-14; kbins: "dtype, quantile_method, subsample missing from cuml-gpu
+    # read-back"). cuML _thirdparty/sklearn/preprocessing/_discretization.py: __init__ takes only
+    # n_bins/encode/strategy (line 140); fit keeps X's float dtype (check_inputs dtype=FLOAT_DTYPES,
+    # line 171) and takes quantile edges from every row with cupy's np.percentile (lines 203-205;
+    # `import cupy as np`, line 21), whose default method is 'linear'. Ours _expansion_prep.py
+    # KBinsDiscretizer: quantile_method 'linear' is method 2 (lines 2460-2462), subsample None fits
+    # every row (lines 2473, 2478: no resample), dtype is accepted only (output always float32,
+    # line 2407-2408) and the lane times fit (bin edges), which dtype never reaches.
+    if algo == "kbins" and lacks_theirs and ours.get("strategy") == "quantile" \
+            and theirs.get("strategy") == "quantile":
+        if param == "quantile_method" and ours.get(param) == "linear":
+            return "linear quantile edges on both: ours quantile_method='linear', cuML cupy.percentile's linear default"
+        if param == "subsample" and param in ours and ours[param] is None:
+            return "every fit row on both: ours subsample None draws no resample; cuML has no subsample"
+        if param == "dtype" and param in ours and ours[param] is None:
+            return ("dtype sets only transform's output type (ours always float32, cuML X's float dtype); "
+                    "the lane times fit, the bin edges")
+    # smoke-fixes (2026-10-14; robust-scaler: "unit_variance missing from cuml-gpu read-back").
+    # cuML _thirdparty/sklearn/preprocessing/_data.py RobustScaler: __init__ has no unit_variance
+    # (lines 1270-1271) and scale_ is the plain interquantile range (lines 1341-1347). Ours
+    # _expansion_prep.py:877 rescales by the normal ppf only when unit_variance is True.
+    if algo == "robust-scaler" and param == "unit_variance" and lacks_theirs and ours.get(param) is False:
+        return "scale = the plain interquantile range on both (ours unit_variance False; cuML has no option)"
+    # smoke-fixes (2026-10-14; sparse-rp: "compute_inverse_components missing from cuml-gpu
+    # read-back"). cuML random_projection/random_projection.py _BaseRandomProjection (__init__
+    # lines 53-66, fit lines 81-121; SparseRandomProjection lines 341-408) has no such option and
+    # never forms the inverse; ours _expansion_decomp.py:2098 computes it only when True.
+    if algo == "sparse-rp" and param == "compute_inverse_components" and lacks_theirs \
+            and ours.get(param) is False:
+        return "no pseudo-inverse of the components on either arm; cuML has no inverse option"
+    # smoke-fixes (2026-10-14; label-encoder: "handle_unknown missing from ours read-back"). cuML
+    # preprocessing/_label.py LabelEncoder: handle_unknown='error' raises ValueError on a label not
+    # seen in fit (transform, lines 181-184; inverse_transform 210-215). Ours _expansion_prep.py
+    # LabelEncoder takes no handle_unknown and always raises ValueError on an unseen label
+    # (docstring and transform, lines 5450, 5521, 5530).
+    if algo == "label-encoder" and param == "handle_unknown" and lacks_ours and theirs.get(param) == "error":
+        return "an unseen label raises ValueError on both (cuML handle_unknown='error'; ours always)"
+    # smoke-fixes (2026-10-14; onehot: "drop is unset on ours and unset on cuml-gpu",
+    # "feature_name_combiner, max_categories, min_frequency missing from cuml-gpu read-back").
+    # cuML preprocessing/encoders.py OneHotEncoder: drop None keeps every category (drop_idx_ None,
+    # _compute_drop_idx lines 240-243) and must be None with handle_unknown='ignore' (lines
+    # 228-231); __init__ (lines 189-206) has no infrequent grouping and no feature-name option.
+    # Ours _expansion_prep.py OneHotEncoder: drop None drops nothing (_set_drop_idx), grouping is
+    # on only when min_frequency or max_categories is set (_check_infrequent_params, line 1174),
+    # feature_name_combiner is read only by get_feature_names_out (docstring line 1511).
+    if algo == "onehot":
+        both_ignore = ours.get("handle_unknown") == "ignore" and theirs.get("handle_unknown") == "ignore"
+        if (param == "drop" and param in ours and param in theirs and ours[param] is None
+                and theirs[param] is None and both_ignore):
+            return "no category dropped on either arm (drop None; cuML requires it with handle_unknown='ignore')"
+        if param in ("min_frequency", "max_categories") and lacks_theirs and ours.get(param, 0) is None \
+                and ours.get("min_frequency") is None and ours.get("max_categories") is None:
+            return "no infrequent-category grouping on either arm (ours both None; cuML has none)"
+        if param == "feature_name_combiner" and lacks_theirs and ours.get(param) == "concat":
+            return "feature names only (get_feature_names_out); the encoding is unchanged"
     return None
 
 
@@ -1539,18 +1604,11 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     decomposition.py, density.py, cluster.py and neighbors.py. Reasons below
     apply only to the named recipe, library and resolved settings.
     """
-    why = _semantic_r8(lane, param, arm, ours, theirs, library)
-    if why: return why
-    why = _semantic_r4(lane, param, arm, ours, theirs, library)
-    if why: return why
-    why = _semantic_r5(lane, param, arm, ours, theirs, library)
-    if why:
-        return why
-    why = _semantic_r6(lane, param, arm, ours, theirs, library)
-    if why: return why
-    why = _semantic_r7(lane, param, arm, ours, theirs, library)
-    if why:
-        return why
+    # smoke-fixes (2026-10-14): the per-sub-lane source-reviewed mappings, each value-conditional and lane-named
+    for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_r7, _semantic_r8, _semantic_r11):
+        why = _mapping(lane, param, arm, ours, theirs, library)
+        if why:
+            return why
     # FAIRNESS FIX (2026-10-13 audit): optimizer defaults exposed by torch
     # were treated as absent algorithm settings on our narrower optimizer
     # API. Preserve the raw settings and explicitly distinguish the library's

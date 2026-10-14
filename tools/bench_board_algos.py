@@ -160,6 +160,10 @@ ARM_VENVS = {"nvidia": {"implicit-gpu": [
     "implicit==0.7.3", "rmm-cu13==26.4.0", "librmm-cu13==26.4.0",
     "cuda-toolkit[cublas,curand,cudart]==13.0.3", "numpy==2.4.6", "scipy==1.17.1",
     "threadpoolctl==3.7.0"]}}
+#: the CUDA 13 libraries the implicit-gpu worker loads before `import implicit`
+#: (also loaded by the smoke's arm server before its preload imports implicit:
+#: tools/smoke_worker.py main, arm-serve)
+IMPLICIT_GPU_CUDA_LIBS = ("cudart", "cublasLt", "cublas", "curand")
 #: the index the arm venvs install from besides PyPI
 ARM_VENV_INDEX = "https://pypi.nvidia.com"
 
@@ -884,7 +888,11 @@ for _slug, _cls, _kw, _blk, _cu in (
         ("kbins", "KBinsDiscretizer", dict(n_bins=16, encode="ordinal", strategy="quantile",
                                            quantile_method="linear", subsample=None,
                                            random_state=SEED), "raw", True),
-        ("onehot", "OneHotEncoder", dict(handle_unknown="ignore", sparse_output=False), "cat", True),
+        # smoke-fixes (2026-10-14; onehot: "dtype is unset on ours and 'float32' on cuml-gpu"): the
+        # output dtype pinned on every arm, float32 (cuML 26.08 preprocessing/encoders.py default,
+        # line 195; ours writes float32 whatever dtype says, _expansion_prep.py:1499-1500)
+        ("onehot", "OneHotEncoder", dict(handle_unknown="ignore", sparse_output=False, dtype="float32"),
+         "cat", True),
         ("ordinal", "OrdinalEncoder", dict(handle_unknown="use_encoded_value", unknown_value=-1),
          "cat", False),
         ("variance-threshold", "VarianceThreshold", dict(threshold=0.01), "raw", False),
@@ -6168,7 +6176,7 @@ def _build_als(lane, arm, D):
     if gpu:
         # BEFORE `import implicit`: its __init__ imports implicit.gpu, which
         # decides HAS_CUDA once, at that import
-        _preload_cuda_libs(("cudart", "cublasLt", "cublas", "curand"))
+        _preload_cuda_libs(IMPLICIT_GPU_CUDA_LIBS)
     import implicit
     if gpu:
         import implicit.gpu
