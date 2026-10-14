@@ -2796,6 +2796,9 @@ class Runner:
         #: OUR arm only: the host arrays the timed call is handed, [(name, array)], for the
         #: separate upload probe (`_ours_upload_probe`). None = the builder declared none.
         self.upload_inputs = upload_inputs
+        #: OUR arm only: the host arrays the timed inference call is handed (the predict inputs), for the
+        #: separate predict-upload probe (`predict_upload_ms`, lane harness-evidence 2026-10-14). None = none.
+        self.infer_upload_inputs = None
         self.info, self._fit, self._out, self._infer, self._sync = info, fit, outputs, infer, sync
         #: what this arm was constructed with, for tools/bench_board_params.py:
         #: BP.arm_record(constructed object), or a declared {"__library__": ...}
@@ -2828,10 +2831,26 @@ class Runner:
 OURS_ARMS = ("ours", "ours-fast")
 
 
-def _with_upload(runner, inputs):
-    """Declare the host arrays OUR arm's timed call is handed (see `_ours_upload_probe`)."""
+def _with_upload(runner, inputs, infer_inputs=None):
+    """Declare the host arrays OUR arm's timed call is handed (see `_ours_upload_probe`), and those its timed
+    inference call is handed (`infer_inputs`: the predict inputs, probed apart for the inference cell's kernel
+    clock)."""
     runner.upload_inputs = [(k, v) for k, v in inputs if v is not None]
+    if infer_inputs is not None:
+        runner.infer_upload_inputs = [(k, v) for k, v in infer_inputs if v is not None]
     return runner
+
+
+def _torch_timed_upload(torch, dev, arrays):
+    """(device tensors, ms): an opponent's own pre-clock host-to-device copy of `arrays` (NumPy arrays or CPU
+    tensors), synchronized before and after, timed apart from every scored clock (lane harness-evidence,
+    2026-10-14: the copy the kernel clock leaves out, recorded so the whole clock is derivable; never invented)."""
+    np = _np()
+    _torch_sync(torch, dev)
+    t0 = time.perf_counter()
+    out = [(a if torch.is_tensor(a) else torch.from_numpy(np.ascontiguousarray(a))).to(dev) for a in arrays]
+    _torch_sync(torch, dev)
+    return out, (time.perf_counter() - t0) * 1000.0
 
 
 def _probe_words(np, name, a):
@@ -2853,7 +2872,7 @@ def _probe_words(np, name, a):
     return [(name, a)]
 
 
-def _ours_upload_probe(runner):
+def _ours_upload_probe(runner, inputs=None):
     """A SEPARATE host-to-device upload of OUR arm's inputs, timed on its own and
     OUTSIDE every clock (lane algos-upload-probe, 2026-10-08; the algos twin of
     tools/classical_two_datasets.py `_ours_upload_probe`).
@@ -2872,7 +2891,8 @@ def _ours_upload_probe(runner):
     binding or the inputs are not available the record says why, never a guess."""
     if (runner.info or {}).get("input_home") == "device":
         return {"unavailable": "the inputs are on the device before the clock (input_home=device)"}
-    inputs = getattr(runner, "upload_inputs", None)
+    if inputs is None:
+        inputs = getattr(runner, "upload_inputs", None)
     if not inputs:
         return {"unavailable": "the builder declared no host inputs for this arm"}
     np = _np()
@@ -3291,8 +3311,14 @@ def _build_est(lane, arm, D):
         raise SystemExit("lane %r sets cuml_host_input, removed by the 2026-10-13 fairness audit: "
                          "cuML takes its inputs on the device as in every cuML lane" % lane)
     if arm == "cuml-gpu":
-        keys = [k for k in ("X", "y", "Xq") if k in D]
+        keys = [k for k in ("X", "y") if k in D]
         dev, info, sync = _cuml_up({k: D[k] for k in keys})
+        if "Xq" in D:
+            # the predict rows' own synchronized upload, timed apart from the fit inputs' (lane harness-evidence,
+            # 2026-10-14): upload_ms_untimed is now the fit inputs' copy only, predict_upload_ms the inference's
+            dq, iq, _ = _cuml_up({"Xq": D["Xq"]})
+            dev["Xq"] = dq["Xq"]
+            info["predict_upload_ms"] = iq["upload_ms_untimed"]
         if t == "clf" and "y" in dev:
             import cupy as cp
             dev["y"] = dev["y"].astype(cp.int32)
@@ -3470,7 +3496,16 @@ def _build_est(lane, arm, D):
             ups = [("X", X), ("y", y)]
         else:
             ups = [("X", X)]
-        _with_upload(runner, ups)
+        # the host arrays infer() hands our call (the predict-upload probe)
+        if t == "labels":
+            iups = [("labq", labq)]
+        elif t == "multilabel":
+            iups = []
+        elif s.get("xy_split"):
+            iups = [("Xq_x", Xqa), ("Xq_y", Yqa)]
+        else:
+            iups = [("Xq", Xq)]
+        _with_upload(runner, ups, iups if has_infer(lane) else None)
     return runner
 
 
@@ -3720,8 +3755,9 @@ def _build_cnnclf(lane, arm, D):
     torch.backends.cuda.matmul.allow_tf32 = prec == "tf32"
     torch.backends.cudnn.allow_tf32 = prec == "tf32"
     dt = torch.bfloat16 if prec == "bf16" else None
-    Xt, Xqt = torch.from_numpy(X).to(dev), torch.from_numpy(Xq).to(dev)
-    yt = torch.from_numpy(y.astype(np.int64)).to(dev)
+    # the fit inputs' and the predict rows' own pre-clock copies, each timed apart (lane harness-evidence)
+    (Xt, yt), fit_upload_ms = _torch_timed_upload(torch, dev, [X, y.astype(np.int64)])
+    (Xqt,), predict_upload_ms = _torch_timed_upload(torch, dev, [Xq])
     # FAIRNESS FIX (2026-10-13 audit): the weights and row orders here were numpy
     # default_rng(7) draws (conv i from seed + 101 i, the head from seed + 997, one permutation
     # per epoch) that ours stopped using in 86b2bc254 (InitStream weights, device epoch
@@ -3769,7 +3805,8 @@ def _build_cnnclf(lane, arm, D):
                       "epochs, ours' exported initial weights and row orders, %s %s on %s"
                       % (p["conv_channels"], p["learning_rate"], p["momentum"], p["batch_size"],
                          p["max_iter"], mode, prec, dev),
-            "ours_init": init_meta}
+            "ours_init": init_meta,
+            "upload_ms_untimed": fit_upload_ms, "predict_upload_ms": predict_upload_ms}
     ours_init(net())                      # untimed: the export fits this net, or the arm refuses now
     lossf = nn.CrossEntropyLoss()
 
@@ -3838,8 +3875,10 @@ def _build_seqmodel(lane, arm, D):
     torch.backends.cuda.matmul.allow_tf32 = prec == "tf32"
     torch.backends.cudnn.allow_tf32 = prec == "tf32"
     dt = torch.bfloat16 if prec == "bf16" else None
-    Xt, Xqt = torch.from_numpy(X).to(dev), torch.from_numpy(Xq).to(dev)
-    yt = torch.from_numpy(y.astype(np.int64) if clf else y.astype(np.float32)).to(dev)
+    # the fit inputs' and the predict rows' own pre-clock copies, each timed apart (lane harness-evidence)
+    (Xt, yt), fit_upload_ms = _torch_timed_upload(
+        torch, dev, [X, y.astype(np.int64) if clf else y.astype(np.float32)])
+    (Xqt,), predict_upload_ms = _torch_timed_upload(torch, dev, [Xq])
     cell = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}[s["cell"]]
     ckw = {"nonlinearity": p["nonlinearity"]} if s["cell"] == "RNN" else {}
     oo = p["optimizer_options"]
@@ -3874,7 +3913,8 @@ def _build_seqmodel(lane, arm, D):
                       % (s["cell"], p["hidden_size"], p["learning_rate"], oo["betas"], oo["eps"],
                          oo["weight_decay"], p["batch_size"], p["max_epochs"], p["random_state"], mode,
                          prec, dev),
-            "ours_init": init_meta}
+            "ours_init": init_meta,
+            "upload_ms_untimed": fit_upload_ms, "predict_upload_ms": predict_upload_ms}
     Net().load_state_dict(init)           # untimed, strict: the export fits this net or the arm refuses now
     lossf = nn.CrossEntropyLoss() if clf else nn.MSELoss()
     rec = dict(__library__="torch", seed=p["random_state"], hidden_size=p["hidden_size"],
@@ -4525,7 +4565,7 @@ def _build_ann(lane, arm, D):
         if t == "ivf-refine":           # k results after a re-rank of k x refine_ratio candidates
             rec.update(n_neighbors=k, refine_ratio=p["refine_ratio"])
         return _with_upload(Runner(info, fit, lambda: {"ind": _arr(S["ind"], np.int64)}, infer,
-                                   record=rec), [("index", X)])
+                                   record=rec), [("index", X)], [("queries", Q)])
     if arm == "faiss-cpu":
         import faiss
         info = {"library": "faiss", "version": faiss.__version__, "device": "cpu",
@@ -4592,7 +4632,11 @@ def _build_ann(lane, arm, D):
     # same `cuvs` Python API, on the same code path and pinned settings as cuvs-gpu; the upload
     # helper no longer imports cuML, which AMD does not have. Results raced before this change
     # were wrong for these lanes; apply extra scrutiny.
-    dev, info, sync = _cuml_up({"index": X, "queries": Q}, library="cuvs")
+    dev, info, sync = _cuml_up({"index": X}, library="cuvs")
+    # the queries' own synchronized upload, timed apart from the index's (lane harness-evidence, 2026-10-14)
+    dq, iq, _ = _cuml_up({"queries": Q}, library="cuvs")
+    dev["queries"] = dq["queries"]
+    info["predict_upload_ms"] = iq["upload_ms_untimed"]
     info.update(library="hipvs" if arm == "hipvs-gpu" else "cuvs",
                 version=getattr(cuvs, "__version__", "unknown"))
     from cuvs.neighbors import ivf_flat, ivf_pq, cagra
@@ -5073,7 +5117,7 @@ def _build_layer(lane, arm, D):
                 S["y"] = cls(x, None, w_, b_, kw["eps"])
             return _with_upload(Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
                                        record=dict(kw, __library__="mojolearn", __implementation__=cls,
-                                                   input_arrays=_input_array_records([("x", x_cpu)] + sorted(state.items())))), [("x", x)])
+                                                   input_arrays=_input_array_records([("x", x_cpu)] + sorted(state.items())))), [("x", x)], [("x", x)])
         if s["task"] == "embedding":          # ours takes the table (weight=), torch's seeded init
             ids = x_cpu                       # (from the fixture file)
             layer = cls(weight=state["weight"], **kw)
@@ -5109,7 +5153,7 @@ def _build_layer(lane, arm, D):
             # despite both arms loading the same retained table and token IDs.
             return _with_upload(Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
                                        record=dict(kw, __library__="mojolearn", __implementation__=cls,
-                                                   input_arrays=_input_array_records([("x", ids)] + sorted(state.items())))), [("ids", ids)])
+                                                   input_arrays=_input_array_records([("x", ids)] + sorted(state.items())))), [("ids", ids)], [("ids", ids)])
         if s["task"] in ("gcn", "sage"):
             kw["in_channels"] = x_cpu.shape[1]
         import inspect
@@ -5223,8 +5267,9 @@ def _build_layer(lane, arm, D):
                        [("extra%d" % i, a) for i, a in enumerate(extra_cpu)] + sorted(state.items())))
         # the host x and extra forward arrays (the probe reads input_home=device and stands down
         # when x went to the device before the clock)
-        return _with_upload(Runner(info, fit, out, infer, record=rec),
-                            [("x", x_cpu)] + [("extra%d" % i, e) for i, e in enumerate(extra_cpu)])
+        # the inference call is the same forward on the same host arrays
+        layer_ups = [("x", x_cpu)] + [("extra%d" % i, e) for i, e in enumerate(extra_cpu)]
+        return _with_upload(Runner(info, fit, out, infer, record=rec), layer_ups, layer_ups)
     import torch
     make, x_cpu, extra_cpu = _layer_inputs(lane, D, torch)
     ref = make()
@@ -5256,7 +5301,10 @@ def _build_layer(lane, arm, D):
     if getattr(mod, "library", None):
         info["twin"] = mod.library
     mod = mod.to(dev)
-    x = x_cpu.to(dev)
+    # x and the extra forward arrays: the pre-clock copy the kernel clock leaves out, timed apart (lane
+    # harness-evidence, 2026-10-14). The inference call reads the same device x, so its copy is the same arrays.
+    (x, *extra_dev), layer_upload_ms = _torch_timed_upload(torch, dev, [x_cpu] + list(extra_cpu))
+    info.update(upload_ms_untimed=layer_upload_ms, predict_upload_ms=layer_upload_ms)
     # FAIRNESS FIX (2026-10-13 audit): gcn and sage were excluded here, so torch's backward
     # computed only the weight gradients while ours' GCNConv/SAGEConv.backward also computes
     # grad_x (GCN: one more GEMM; SAGE: a GEMM, two SpMMs and an add), ours doing more work.
@@ -5265,7 +5313,7 @@ def _build_layer(lane, arm, D):
     if s["task"] != "embedding" and not s.get("forward_only"):
         x.requires_grad_(True)             # backward computes dx, as ours' backward returns it
                                            # (embedding: integer ids, the gradient is the table's)
-    extra = tuple(e.to(dev) for e in extra_cpu)
+    extra = tuple(extra_dev)
     if s["task"] == "gcn" and GCN_TORCH_KW.get("cached"):
         # FAIRNESS FIX (2026-10-13 audit): GCNConv(cached=True) fills its cache on the first
         # call; filled inside a compiled forward, the next call would fail dynamo's guard on
@@ -5471,7 +5519,10 @@ def _build_optim(lane, arm, D):
         impl = {"fused": True}
     elif "foreach" in sig:
         impl = {"foreach": True}
-    g_dev = [torch.from_numpy(gr).to(dev) for gr in grads]
+    # the gradients' pre-clock copy, timed apart (lane harness-evidence, 2026-10-14); the parameter's copy from
+    # the host stays inside the clock (fit() below), so whole = the stored median + this copy
+    g_dev, info["upload_ms_untimed"] = _torch_timed_upload(torch, dev, grads)
+    info["upload_scope"] = "gradients before the clock; the parameter's host copy is inside the clock"
     p0_host = torch.from_numpy(p0)
     # FAIRNESS FIX (2026-10-13 audit): every fit built a new optimizer and a new
     # torch.compile(opt.step), so the compile arm recompiled (dynamo's guards on the new instance
@@ -5620,7 +5671,8 @@ def _build_linalg(lane, arm, D):
             dev = _torch_device(torch)
             info = {"library": "torch", "version": torch.__version__, "device": "gpu",
                     "pre_clock_fit": False, "input_home": "device"}
-            targs = [torch.from_numpy(np.ascontiguousarray(a)).to(dev) for a in args]
+            # the synchronized pre-clock copy, timed apart as the cupy arm's (lane harness-evidence)
+            targs, info["upload_ms_untimed"] = _torch_timed_upload(torch, dev, args)
 
             def fit():
                 if t == "lu":
@@ -6242,7 +6294,7 @@ def _build_svgp(lane, arm, D):
         rec = dict(hyp, __library__="mojolearn", n_inducing=int(Z0.shape[0]))
         return _with_upload(Runner(info, fit, lambda: {"pred": _arr(S["pred"], np.float64).reshape(-1)},
                                    infer, record=rec),
-                            [("inducing_points", Z0), ("X", X), ("y", y)])
+                            [("inducing_points", Z0), ("X", X), ("y", y)], [("Xq", Xq)])
     import torch
     import gpytorch
     dev = _torch_device(torch) if arm == "gpytorch-gpu" else "cpu"
@@ -6256,9 +6308,10 @@ def _build_svgp(lane, arm, D):
                       "(the Titsias posterior, no FITC diagonal); the fit clock builds the "
                       "prediction cache" % (Z0.shape[0], hyp["kernel_variance"], hyp["lengthscale"],
                                             hyp["noise_variance"])}
-    Xt, yt = torch.from_numpy(X).to(dev), torch.from_numpy(y.astype(np.float32)).to(dev)
-    Xqt = torch.from_numpy(Xq).to(dev)
-    Zt = torch.from_numpy(Z0).to(dev)
+    # the fit inputs' (with the inducing points) and the predict rows' own pre-clock copies, timed apart
+    # (lane harness-evidence, 2026-10-14)
+    (Xt, yt, Zt), info["upload_ms_untimed"] = _torch_timed_upload(torch, dev, [X, y.astype(np.float32), Z0])
+    (Xqt,), info["predict_upload_ms"] = _torch_timed_upload(torch, dev, [Xq])
 
     class GP(gpytorch.models.ExactGP):
         def __init__(self, lik):
@@ -6491,9 +6544,12 @@ def worker(args):
                     aft_capture = _aft_capture_worker(args, B, D, rec, runner)
                 # the separate upload clock (OUR arm only), after every clock of this round
                 # has closed (ms, infer_ms, operation_ms, mem); see _ours_upload_probe
-                upload_sep = None
+                upload_sep = upload_sep_infer = None
                 if args.arm in OURS_ARMS and (runner.info or {}).get("library") == "mojolearn":
                     upload_sep = _ours_upload_probe(runner)
+                    # the predict inputs' own copy (the inference cell's kernel clock, lane harness-evidence)
+                    if did and runner.infer_upload_inputs:
+                        upload_sep_infer = _ours_upload_probe(runner, runner.infer_upload_inputs)
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -6501,6 +6557,7 @@ def worker(args):
                 return 1
             say({"event": "round", "round": r, "ms": ms, "infer_ms": ims, "digest": digest, "mem": m, "state_receipt": state_receipt,
                  "aft_capture": aft_capture, "upload_separate": upload_sep,
+                 "upload_separate_infer": upload_sep_infer,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -7359,6 +7416,9 @@ def race(args):
             if msg.get("upload_separate") is not None:
                 a.setdefault("upload_separate", []).append(dict(msg["upload_separate"], round=r,
                                                                  warmup=r == 0))
+            if msg.get("upload_separate_infer") is not None:
+                a.setdefault("upload_separate_infer", []).append(dict(msg["upload_separate_infer"], round=r,
+                                                                       warmup=r == 0))
             a["mem"].append(msg.get("mem"))
             print("ALGOS-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f infer_ms=%s digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg.get("infer_ms"), msg["digest"]), flush=True)
@@ -7423,7 +7483,7 @@ def race(args):
             infer["arms"][arm] = {"ms": list(a["infer_ms"]), "warmup_ms": a["infer_warmup_ms"],
                                   "status": ist, "error": a.get("error") if ist != "ok" else None,
                                   "digests": a["digests"], "digest_stable": a["digest_stable"],
-                                  "info": info}
+                                  "info": info, "span": predict_upload_span(arm, a)}
         print("ALGOS lane=%s dataset=%s arm=%s status=%s median_ms=%s quality=%s"
               % (lane, ds, arm, a["status"], a["median_ms"],
                  json.dumps(result["quality"].get(arm, {}), sort_keys=True, default=str)), flush=True)
@@ -7464,6 +7524,29 @@ def arm_span(lane, arm, a, ok):
     if arm in OURS_ARMS:
         span.update(upload_span(a, ok))
     return span
+
+
+def predict_upload_span(arm, a):
+    """THE INFERENCE CELL'S COPY CLOCK (lane harness-evidence, 2026-10-14): `predict_upload_ms`, the predict
+    inputs' own host-to-device copy, timed apart from every scored clock. OUR arm: the median of the scored
+    rounds' separate predict uploads (`_ours_upload_probe` on `Runner.infer_upload_inputs`), so kernel = the
+    inference median - copy. An opponent whose predict rows went up before its inference clock: that copy as
+    its builder timed it (`predict_upload_ms` in its ready info), so whole = the inference median + copy.
+    Absent when neither was recorded; never estimated (tools/board_clock_audit.py reads it)."""
+    if arm in OURS_ARMS:
+        recs = [u for u in a.get("upload_separate_infer", []) if not u.get("warmup")]
+        ups = [u["ms"] for u in recs if "ms" in u]
+        if ups:
+            return {"predict_upload_ms": statistics.median(ups),
+                    "predict_upload_inputs": next((u["inputs"] for u in recs if "inputs" in u), None),
+                    "predict_upload_source": "our separate predict-input upload probe, median of the scored rounds"}
+        why = next((u["unavailable"] for u in recs if u.get("unavailable")), "no probe record")
+        return {"predict_upload_unavailable": why}
+    up = (a.get("info") or {}).get("predict_upload_ms")
+    if isinstance(up, (int, float)):
+        return {"predict_upload_ms": up,
+                "predict_upload_source": "the arm's own synchronized pre-clock upload of its predict inputs"}
+    return {}
 
 
 def upload_span(a, ok):
