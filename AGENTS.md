@@ -98,10 +98,8 @@ not make a race bad:
   or bf16, fixed reduction order, exact instead of approximate kernels, extra deterministic work, its
   host-to-device copy inside its clock. That is the identity penalty the boards exist to measure;
 - the opponent's own fast settings and modes (bf16 or TF32 arms, torch.compile, its GPU defaults);
-- the library version or host the opponent was measured on, when the settings match, unless the board shows the
-  host to run identical work measurably slower than another box of the same GPU model (tools/race_fairness.py
-  SLOW_HOSTS retains the audited finding for the L40S host cc560ebdaf91): that is a
-  broken measurement box, and every opponent cell measured on it is excluded, any library, any lane;
+- the library version or host the opponent was measured on, when the settings match (no host is ever excluded
+  for being slow; the slow-host rule was removed 2026-10-14);
 - a tie (ours/theirs between 0.95 and 1.05): it is shown like any other result.
 
 A race is BROKEN, marked rerace "x" and omitted from the paper and mojolearn.org, when:
@@ -124,8 +122,8 @@ only when no valid opponent is left.
 
 THE RULE IS CODE: tools/race_fairness.py (tests: tools/test_race_fairness.py) applies it to any board.json, and
 tools/main_board_ingest.py calls it on every rebuild; `python3 tools/race_fairness.py --check <board.json>...` shows
-what it would change and `--review` lists warning signs on rows still shown. Its registries (HARNESS_ARMS, SLOW_HOSTS)
-are where a new harness-written arm or slow box is recorded. The paper (mlsys) and mojolearn.org only read its marks.
+what it would change and `--review` lists warning signs on rows still shown. Its registry HARNESS_ARMS
+is where a new harness-written arm is recorded. The paper (mlsys) and mojolearn.org only read its marks.
 
 Every (mode, phase) row of a race in board.json carries an entry in race["audit"] (verdict, reason, evidence,
 opponent, ratio, date, pairing fingerprint); an entry with rerace "x" is broken, and race["rerace"] is "x" when

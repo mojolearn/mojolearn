@@ -96140,6 +96140,53 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "forecast_rmse",
+           "observed": 0.8998301286623491,
+           "opponent": 32.552989857498105,
+           "ours": 3.260828805681439,
+           "verdict": "FAIL"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: forecast_rmse",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 822487.8290500492,
+        "ours_ms": 12843.513267114758,
+        "preferred": "whole",
+        "value": 0.01561544476828145
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 822487.8290500492,
+         "ours_ms": 12843.513267114758,
+         "preferred": "whole",
+         "value": 0.01561544476828145
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
       "statsforecast-cpu": {
        "audit": "fairness audit 2026-10-13 (no reruns)",
        "date": "2026-10-13",
@@ -96918,17 +96965,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "312d3091be034efe6f917d948edadc3ce4a1264cfefbdd2d30516619994ae33d",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -261782,6 +261818,62 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0,
+           "opponent": 0.79405,
+           "ours": 0.79405,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 1.1728643078312388e-06,
+           "opponent": 5.350631296164491,
+           "ours": 5.350625020600019,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 766.1069873720407,
+        "ours_ms": 52.29731649160385,
+        "preferred": "whole",
+        "value": 0.06826372471943917
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 766.1069873720407,
+         "ours_ms": 52.29731649160385,
+         "preferred": "whole",
+         "value": 0.06826372471943917
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -262425,17 +262517,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "03ed4a7566de55cf3dfb0486bf49d4f2b5d7c8bc520a75da89e77cf4ff170658",
-    "date": "2026-10-14",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -283703,6 +283784,62 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0,
+           "opponent": 0.83885,
+           "ours": 0.83885,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 4.7051460781028223e-07,
+           "opponent": 0.412625042097812,
+           "ours": 0.4126248479517021,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 104.21789437532425,
+        "ours_ms": 20.9830142557621,
+        "preferred": "whole",
+        "value": 0.20133792168353637
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 104.21789437532425,
+         "ours_ms": 20.9830142557621,
+         "preferred": "whole",
+         "value": 0.20133792168353637
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -284349,17 +284486,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "e9dc69dbee599acca216ad05ca3eff776ccf0e4b30e4f2e2ed3d430e38460c0c",
-    "date": "2026-10-14",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -296668,6 +296794,62 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 4.0000000000040004e-05,
+           "opponent": 0.67806,
+           "ours": 0.67802,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 5.3488761503561584e-05,
+           "opponent": 0.7155305207812402,
+           "ours": 0.7154922479398657,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 66.82776100933552,
+        "ours_ms": 29.345424845814705,
+        "preferred": "whole",
+        "value": 0.43912027580447127
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 66.82776100933552,
+         "ours_ms": 29.345424845814705,
+         "preferred": "whole",
+         "value": 0.43912027580447127
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -297485,17 +297667,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "88876a0daade89813aaffa91629beec5e2e9a48244e19595aaa1f92280414e52",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -440741,6 +440912,62 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0,
+           "opponent": 0.87657,
+           "ours": 0.87657,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 0.044113148078722575,
+           "opponent": 3.4167412678136375,
+           "ours": 3.574420195179152,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 828.1865119934082,
+        "ours_ms": 92.08561573177576,
+        "preferred": "whole",
+        "value": 0.11118946565566465
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 828.1865119934082,
+         "ours_ms": 92.08561573177576,
+         "preferred": "whole",
+         "value": 0.11118946565566465
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -441373,17 +441600,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "c4a222f34487e64f70ea47364cde398138dd519ecf9700fe49e2b51204cb9ddd",
-    "date": "2026-10-14",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -442440,6 +442656,43 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 31.426284462213516,
+        "ours_ms": 54.32491656392813,
+        "preferred": "whole",
+        "value": 1.728645861054544
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 31.426284462213516,
+         "ours_ms": 54.32491656392813,
+         "preferred": "whole",
+         "value": 1.728645861054544
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -443010,17 +443263,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "979deaf2b27ae4cb6d2d64a9a74395eb846994bc7bb6a4d7cbb6ed988ee6f851",
-    "date": "2026-10-14",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -518490,7 +518732,308 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "torch-compile-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.00032552083333337034,
+           "opponent": 0.9719509548611112,
+           "ours": 0.9716254340277778,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07005435105803763,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.3408520521309685
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.3408520521309685
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-compile-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.00021701388888883955,
+           "opponent": 0.9718424479166666,
+           "ours": 0.9716254340277778,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07005435105803763,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.3755989283673394
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.3755989283673394
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-compile-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.00021701388888883955,
+           "opponent": 0.9718424479166666,
+           "ours": 0.9716254340277778,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07005435105803763,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.3580396725533174
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.3580396725533174
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.00032552083333337034,
+           "opponent": 0.9719509548611112,
+           "ours": 0.9716254340277778,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07005435105803763,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.28874427321231444
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.28874427321231444
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.00021701388888883955,
+           "opponent": 0.9718424479166666,
+           "ours": 0.9716254340277778,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07005435105803763,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.40507994833207916
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.40507994833207916
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.00021701388888883955,
+           "opponent": 0.9718424479166666,
+           "ours": 0.9716254340277778,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07005435105803763,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.42046947442637006
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.42046947442637006
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:fe16c6b10d1e7bb66a4d7f7e4b7480e2fb53693b78060c9786e46fe8c442f027",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -519493,27 +520036,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "torch-compile-bf16",
-     "torch-compile-fp32",
-     "torch-compile-tf32",
-     "torch-eager-bf16",
-     "torch-eager-fp32",
-     "torch-eager-tf32"
-    ],
-    "basis": "2df47ecfc01a86ddb5f1f9f13545cb642135643b577a1a87e6d29c53faaa6bad",
-    "date": "2026-10-14",
-    "reason": "torch-compile-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "torch-compile-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -521749,7 +522271,320 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "torch-compile-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0004392224036301462,
+           "opponent": 0.9818981016306153,
+           "ours": 0.9823373240342455,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.012206441754105974,
+           "opponent": 0.15587813308688844,
+           "ours": 0.15397541573462456,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.3347435917302465
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.3347435917302465
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-compile-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0003914223645593573,
+           "opponent": 0.9819459016696861,
+           "ours": 0.9823373240342455,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.010899664797842993,
+           "opponent": 0.15567219042864275,
+           "ours": 0.15397541573462456,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.3903249007073239
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.3903249007073239
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-compile-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0003914454973475978,
+           "opponent": 0.9819458785368979,
+           "ours": 0.9823373240342455,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.01090029846633604,
+           "opponent": 0.15567229016031,
+           "ours": 0.15397541573462456,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.38956198252608915
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.38956198252608915
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0004392224036301462,
+           "opponent": 0.9818981016306153,
+           "ours": 0.9823373240342455,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.012206441754105974,
+           "opponent": 0.15587813308688844,
+           "ours": 0.15397541573462456,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.29206351410254283
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.29206351410254283
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0003914223645593573,
+           "opponent": 0.9819459016696861,
+           "ours": 0.9823373240342455,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.010899664797842993,
+           "opponent": 0.15567219042864275,
+           "ours": 0.15397541573462456,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.39376415679499666
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.39376415679499666
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0003914454973475978,
+           "opponent": 0.9819458785368979,
+           "ours": 0.9823373240342455,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.01090029846633604,
+           "opponent": 0.15567229016031,
+           "ours": 0.15397541573462456,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.4375822587931596
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.4375822587931596
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:52f981c7ce133b15b136e029eaac061a6ae54b25c9a688e066f72b72257b4c41",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -522766,27 +523601,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "torch-compile-bf16",
-     "torch-compile-fp32",
-     "torch-compile-tf32",
-     "torch-eager-bf16",
-     "torch-eager-fp32",
-     "torch-eager-tf32"
-    ],
-    "basis": "4966739f2257dd709d6b1fe5586dd81eb1e874b74f98668c973d51d31f0fb662",
-    "date": "2026-10-14",
-    "reason": "torch-compile-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "torch-compile-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -525085,6 +525899,53 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "explained_variance_fraction",
+           "observed": 5.811551018197747e-09,
+           "opponent": 0.9999999761263999,
+           "ours": 0.9999999703148489,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 2206.085979938507,
+        "ours_ms": 864.0780812129378,
+        "preferred": "whole",
+        "value": 0.391679240551188
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 2206.085979938507,
+         "ours_ms": 864.0780812129378,
+         "preferred": "whole",
+         "value": 0.391679240551188
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -525689,17 +526550,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "960a93918eabff14113b8228fbb855f2d37f4103500574c7b1034b2a20967801",
-    "date": "2026-10-14",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -526521,13 +527371,61 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "cuvs-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "recall_at_10",
+           "observed": 0.010800000000000032,
+           "opponent": 0.7913,
+           "ours": 0.8021,
+           "verdict": "FAIL"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: recall_at_10",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 2248.5354132950306,
+        "ours_ms": 756.9426875561476,
+        "preferred": "whole",
+        "value": 0.33663809921806603
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 2248.5354132950306,
+         "ours_ms": 756.9426875561476,
+         "preferred": "whole",
+         "value": 0.33663809921806603
+        }
+       ],
+       "verdict": "UNFAIR"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:7f7310500e4c547c7d9cc46532b7d42a101fe2bc347efa037508337b57f6a380",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "UNFAIR"
     }
    },
    "audit_history": [
@@ -526971,17 +527869,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuvs-gpu"
-    ],
-    "basis": "5d88460fcd600068594234df6b6bcc2dc66b0b4f3ee2784c8ee42a17767ba151",
-    "date": "2026-10-13",
-    "reason": "cuvs-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuvs-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -527958,7 +528845,55 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "cuvs-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "recall_at_10",
+           "observed": 0.0009500000000000064,
+           "opponent": 0.993625,
+           "ours": 0.994575,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 1596.2898265570402,
+        "ours_ms": 753.545543178916,
+        "preferred": "whole",
+        "value": 0.4720606061896677
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 1596.2898265570402,
+         "ours_ms": 753.545543178916,
+         "preferred": "whole",
+         "value": 0.4720606061896677
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:66faae189a34dcb90f31b64df69972b0a6a57d41fa64079e884e086e1ba70770",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -528411,17 +529346,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuvs-gpu"
-    ],
-    "basis": "6c8d81f6ed851f131becb386437c12423e06ae7905a7a8f406d07f35e1a8cb00",
-    "date": "2026-10-13",
-    "reason": "cuvs-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuvs-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -530409,6 +531333,51 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "metric": "rel_diff_vs_sklearn",
+           "opponent": null,
+           "ours": 0.0,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 1447.6367309689522,
+        "ours_ms": 276.09576284885406,
+        "preferred": "whole",
+        "value": 0.19072171694901238
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 1447.6367309689522,
+         "ours_ms": 276.09576284885406,
+         "preferred": "whole",
+         "value": 0.19072171694901238
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -531154,17 +532123,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "4a22bebcc9ad397a78c087989fda897517fd8207e61ce30cbcad0ba28d534748",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -533561,6 +534519,43 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 15334.14837345481,
+        "ours_ms": 3928.2506965100765,
+        "preferred": "whole",
+        "value": 0.2561766457999281
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 15334.14837345481,
+         "ours_ms": 3928.2506965100765,
+         "preferred": "whole",
+         "value": 0.2561766457999281
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "shap-cpu": {
        "audit": "fairness audit 2026-10-13 (no reruns)",
        "date": "2026-10-13",
@@ -534276,17 +535271,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "8ba1dacb713472640f9a9e809a4a7de89d800c7dc936a7f7f037da93e8a2abba",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -556882,6 +557866,51 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "metric": "rel_diff_vs_sklearn",
+           "opponent": null,
+           "ours": 0.0,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 37.34406270086765,
+        "ours_ms": 7.0560164749622345,
+        "preferred": "whole",
+        "value": 0.1889461393497043
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 37.34406270086765,
+         "ours_ms": 7.0560164749622345,
+         "preferred": "whole",
+         "value": 0.1889461393497043
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -557604,17 +558633,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "1464a24c4bb900fb821b108a8e7e5da5336390986d5f9ab031ea9b9d01694053",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -558908,6 +559926,62 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0006105820102697557,
+           "opponent": 0.32808810340853933,
+           "ours": 0.3286986854188091,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.0004544649298200717,
+           "opponent": 0.6847256437241399,
+           "ours": 0.6844144599325188,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 745.1358661055565,
+        "ours_ms": 337.92158029973507,
+        "preferred": "whole",
+        "value": 0.45350330814952994
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 745.1358661055565,
+         "ours_ms": 337.92158029973507,
+         "preferred": "whole",
+         "value": 0.45350330814952994
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "audit": "fairness audit 2026-10-13 (no reruns)",
        "date": "2026-10-13",
@@ -559735,17 +560809,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "a1b3dc72dd42298a38d69c91c8dc0086db066b4dd5da04a56979541211ed15a3",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -606869,7 +607932,308 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "torch-compile-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0021158854166667407,
+           "opponent": 0.8683268229166666,
+           "ours": 0.8704427083333334,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.29714570175365423,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.3149480853889576
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.3149480853889576
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-compile-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0022243923611111605,
+           "opponent": 0.8682183159722222,
+           "ours": 0.8704427083333334,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.29714570175365423,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.4346539749514376
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.4346539749514376
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-compile-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0022786458333333703,
+           "opponent": 0.8681640625,
+           "ours": 0.8704427083333334,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.29714570175365423,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.42785854242104804
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.42785854242104804
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0021158854166667407,
+           "opponent": 0.8683268229166666,
+           "ours": 0.8704427083333334,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.29714570175365423,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.30270666635693616
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.30270666635693616
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0022243923611111605,
+           "opponent": 0.8682183159722222,
+           "ours": 0.8704427083333334,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.29714570175365423,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.4384510467429586
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.4384510467429586
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0022786458333333703,
+           "opponent": 0.8681640625,
+           "ours": 0.8704427083333334,
+           "verdict": "PASS"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.29714570175365423,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.44420301737790735
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.44420301737790735
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:017daf33ed88cb31b9664f5300b952ea3f080cc918db52322bbcb8268fa707da",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -607872,27 +609236,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "torch-compile-bf16",
-     "torch-compile-fp32",
-     "torch-compile-tf32",
-     "torch-eager-bf16",
-     "torch-eager-fp32",
-     "torch-eager-tf32"
-    ],
-    "basis": "708b37c5eab995ad5873790ba18e5e31e4cc185ab58d0601c741dcadf31c012e",
-    "date": "2026-10-14",
-    "reason": "torch-compile-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "torch-compile-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -610190,7 +611533,320 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "torch-compile-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.002594267492519453,
+           "opponent": 0.7517120496863796,
+           "ours": 0.7543063171788991,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.005238030594952134,
+           "opponent": 0.5403937298315591,
+           "ours": 0.5375631309413811,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.3545297081016478
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.3545297081016478
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-compile-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.00262717282246705,
+           "opponent": 0.751679144356432,
+           "ours": 0.7543063171788991,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.005303941400514612,
+           "opponent": 0.5404295375395983,
+           "ours": 0.5375631309413811,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.4388643263429922
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.4388643263429922
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-compile-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.002626610476696767,
+           "opponent": 0.7516797067022023,
+           "ours": 0.7543063171788991,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.005302815107537881,
+           "opponent": 0.5404289256126704,
+           "ours": 0.5375631309413811,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.4246659595850757
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.4246659595850757
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.002594267492519453,
+           "opponent": 0.7517120496863796,
+           "ours": 0.7543063171788991,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.005238030594952134,
+           "opponent": 0.5403937298315591,
+           "ours": 0.5375631309413811,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.3189604878999429
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.3189604878999429
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.00262717282246705,
+           "opponent": 0.751679144356432,
+           "ours": 0.7543063171788991,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.005303941400514612,
+           "opponent": 0.5404295375395983,
+           "ours": 0.5375631309413811,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.41010166656304636
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.41010166656304636
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.002626610476696767,
+           "opponent": 0.7516797067022023,
+           "ours": 0.7543063171788991,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.005302815107537881,
+           "opponent": 0.5404289256126704,
+           "ours": 0.5375631309413811,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.4353118028361249
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.4353118028361249
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:8865e7c6079503600fafc85e52a48eb142adb899898dad40af29339fc2305448",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -611207,27 +612863,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "torch-compile-bf16",
-     "torch-compile-fp32",
-     "torch-compile-tf32",
-     "torch-eager-bf16",
-     "torch-eager-fp32",
-     "torch-eager-tf32"
-    ],
-    "basis": "a753b567064f286dd69727178b18f1a1f525f3a7eb4ac2c616fa497ed98b434b",
-    "date": "2026-10-14",
-    "reason": "torch-compile-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "torch-compile-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -612660,6 +614295,49 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cupy-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "both-reference-errors-at-most",
+           "margin": 0.0001,
+           "metric": "relative_residual",
+           "observed": 0.7563658809251067,
+           "opponent": 0.7563658809251067,
+           "ours": 0.7563658809249554,
+           "verdict": "FAIL"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: relative_residual",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "whole",
+        "value": 0.7561964670108835
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "whole",
+         "value": 0.7561964670108835
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
       "numpy-cpu": {
        "quality_comparison": [
         {
@@ -612703,6 +614381,49 @@
          "ours_ms": 7.485581561923027,
          "preferred": "whole",
          "value": 0.04088216853309898
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
+      "torch-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "both-reference-errors-at-most",
+           "margin": 0.0001,
+           "metric": "relative_residual",
+           "observed": 0.7563658809250823,
+           "opponent": 0.7563658809250823,
+           "ours": 0.7563658809249554,
+           "verdict": "FAIL"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: relative_residual",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 1.059295145940717
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 1.059295145940717
         }
        ],
        "verdict": "UNFAIR"
@@ -613485,19 +615206,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cupy-gpu",
-     "torch-gpu"
-    ],
-    "basis": "eba40bb8843ed15efec87f473fde360bcbe7a89ced5f51a2f7f421e45500ebd0",
-    "date": "2026-10-13",
-    "reason": "cupy-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cupy-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -750656,6 +752364,62 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0,
+           "opponent": 0.85362,
+           "ours": 0.85362,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 9.337816343265258e-06,
+           "opponent": 3.628599105341562,
+           "ours": 3.628565222149533,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 769.5542816072702,
+        "ours_ms": 112.77099885046482,
+        "preferred": "whole",
+        "value": 0.1465406684697204
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 769.5542816072702,
+         "ours_ms": 112.77099885046482,
+         "preferred": "whole",
+         "value": 0.1465406684697204
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -751470,17 +753234,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "5b859ec28d758f59ac3331bfb686186729cc9797829ecefc204d0a98a14df029",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -752700,6 +754453,62 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0,
+           "opponent": 0.9830666943694162,
+           "ours": 0.9830666943694162,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 8.702089281638752e-06,
+           "opponent": 0.5595238781321302,
+           "ours": 0.559528747201244,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 1389.99792188406,
+        "ours_ms": 56.188120506703854,
+        "preferred": "whole",
+        "value": 0.04042316871275907
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 1389.99792188406,
+         "ours_ms": 56.188120506703854,
+         "preferred": "whole",
+         "value": 0.04042316871275907
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -753350,17 +755159,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "89e0694b35bae94329f49774e5f8d61335d08c406dc5a622bca290d3a2453e20",
-    "date": "2026-10-14",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -792004,6 +793802,51 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "metric": "rel_diff_vs_sklearn",
+           "opponent": null,
+           "ours": 0.0,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 82.39968679845333,
+        "ours_ms": 34.516070038080215,
+        "preferred": "whole",
+        "value": 0.4188859373034424
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 82.39968679845333,
+         "ours_ms": 34.516070038080215,
+         "preferred": "whole",
+         "value": 0.4188859373034424
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -792732,17 +794575,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "748cebce04aa8dc7f983f14ced7a871aff56b1f61847175fe602564c6e6dc3bb",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -796494,6 +798326,43 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cugraph-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 4.96305339038372,
+        "ours_ms": 1.403973437845707,
+        "preferred": "whole",
+        "value": 0.28288501601977695
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 4.96305339038372,
+         "ours_ms": 1.403973437845707,
+         "preferred": "whole",
+         "value": 0.28288501601977695
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "networkx-cpu": {
        "quality_comparison": [
         {
@@ -797055,17 +798924,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cugraph-gpu"
-    ],
-    "basis": "0448efd15336a1bd8998305c3dc714a1b073c36df2d602dc705d1c7ef6afe97e",
-    "date": "2026-10-14",
-    "reason": "cugraph-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cugraph-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -797805,6 +799663,43 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 2324.422262609005,
+        "ours_ms": 3872.505348175764,
+        "preferred": "whole",
+        "value": 1.6660076830571833
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 2324.422262609005,
+         "ours_ms": 3872.505348175764,
+         "preferred": "whole",
+         "value": 1.6660076830571833
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "shap-cpu": {
        "audit": "fairness audit 2026-10-13 (no reruns)",
        "date": "2026-10-13",
@@ -798514,17 +800409,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "63796bff84801fc65aea5cd780f92fdd0aee4a38cf62387f255e41d04c12dc3a",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -881021,6 +882905,49 @@
         }
        ],
        "verdict": "INSUFFICIENT"
+      },
+      "torch-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "relative_reconstruction_error",
+           "observed": 1.9744877814602194e-10,
+           "opponent": 0.00023594584429967625,
+           "ours": 0.00023594584434626347,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 2.4926103310764782
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 2.4926103310764782
+        }
+       ],
+       "verdict": "INSUFFICIENT"
       }
      },
      "ours_over_theirs": null,
@@ -881716,17 +883643,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "torch-gpu"
-    ],
-    "basis": "2ec091eaa5946d703cd0e34063ba72a6134b4dfbef98a79cb6fbcd5d2b80d469",
-    "date": "2026-10-13",
-    "reason": "torch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -903142,13 +905058,314 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "torch-compile-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.01426866319444442,
+           "opponent": 0.9535590277777778,
+           "ours": 0.9678276909722222,
+           "verdict": "FAIL"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07902916044175469,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: accuracy",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.27918383354189785
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.27918383354189785
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
+      "torch-compile-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.01426866319444442,
+           "opponent": 0.9535590277777778,
+           "ours": 0.9678276909722222,
+           "verdict": "FAIL"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07902916044175469,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: accuracy",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.2113780162661707
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.2113780162661707
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
+      "torch-compile-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.01432291666666663,
+           "opponent": 0.9535047743055556,
+           "ours": 0.9678276909722222,
+           "verdict": "FAIL"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07902916044175469,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: accuracy",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.20654655136549271
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.20654655136549271
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
+      "torch-eager-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.01426866319444442,
+           "opponent": 0.9535590277777778,
+           "ours": 0.9678276909722222,
+           "verdict": "FAIL"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07902916044175469,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: accuracy",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.19942591007797064
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.19942591007797064
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
+      "torch-eager-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.01426866319444442,
+           "opponent": 0.9535590277777778,
+           "ours": 0.9678276909722222,
+           "verdict": "FAIL"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07902916044175469,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: accuracy",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.2697182849126088
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.2697182849126088
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
+      "torch-eager-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.01432291666666663,
+           "opponent": 0.9535047743055556,
+           "ours": 0.9678276909722222,
+           "verdict": "FAIL"
+          },
+          {
+           "metric": "logloss",
+           "opponent": null,
+           "ours": 0.07902916044175469,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: accuracy",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.27825997576827716
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.27825997576827716
+        }
+       ],
+       "verdict": "UNFAIR"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:9c58a3850ece6cc0e30f6fd0909ad735566149dd7e0700c624f4c1f765298a2a",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "UNFAIR"
     }
    },
    "audit_history": [
@@ -904152,27 +906369,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "torch-compile-bf16",
-     "torch-compile-fp32",
-     "torch-compile-tf32",
-     "torch-eager-bf16",
-     "torch-eager-fp32",
-     "torch-eager-tf32"
-    ],
-    "basis": "e9ed3db702d8aec13ac820df9028cc5d585d819b955043696b019e3b29790d52",
-    "date": "2026-10-14",
-    "reason": "torch-compile-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "torch-compile-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -906415,7 +908611,320 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "torch-compile-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0012575634497038468,
+           "opponent": 0.9773446098366766,
+           "ours": 0.9786021732863804,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.028150400234160662,
+           "opponent": 0.17438491239333995,
+           "ours": 0.16947590731466838,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.16805385943780898
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.16805385943780898
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-compile-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0012546833779801814,
+           "opponent": 0.9773474899084003,
+           "ours": 0.9786021732863804,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.02808862104105454,
+           "opponent": 0.17437382767984572,
+           "ours": 0.16947590731466838,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.26855773672873895
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.26855773672873895
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-compile-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0012546999840199469,
+           "opponent": 0.9773474733023605,
+           "ours": 0.9786021732863804,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.028088977283919566,
+           "opponent": 0.1743738915945771,
+           "ours": 0.16947590731466838,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.20861785944276806
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.20861785944276806
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-bf16": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0012575634497038468,
+           "opponent": 0.9773446098366766,
+           "ours": 0.9786021732863804,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.028150400234160662,
+           "opponent": 0.17438491239333995,
+           "ours": 0.16947590731466838,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.14741252075279654
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.14741252075279654
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-fp32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0012546833779801814,
+           "opponent": 0.9773474899084003,
+           "ours": 0.9786021732863804,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.02808862104105454,
+           "opponent": 0.17437382767984572,
+           "ours": 0.16947590731466838,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.2212035247895767
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.2212035247895767
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-eager-tf32": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.0012546999840199469,
+           "opponent": 0.9773474733023605,
+           "ours": 0.9786021732863804,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.028088977283919566,
+           "opponent": 0.1743738915945771,
+           "ours": 0.16947590731466838,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 0.21324958646558062
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 0.21324958646558062
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:62b17c0f9103a0c3ad5a7bfc9c6afb444948544b0ed524ee67af295fd5a62386",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -907439,27 +909948,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "torch-compile-bf16",
-     "torch-compile-fp32",
-     "torch-compile-tf32",
-     "torch-eager-bf16",
-     "torch-eager-fp32",
-     "torch-eager-tf32"
-    ],
-    "basis": "329be98ae06e740c90e5ae39fa9d2507f5c98f27d405b211ed4dda00680451f9",
-    "date": "2026-10-14",
-    "reason": "torch-compile-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-compile-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-bf16: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-fp32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-eager-tf32: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "torch-compile-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-compile-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-bf16": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-fp32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-eager-tf32": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -909765,6 +912253,51 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "metric": "rel_diff_vs_sklearn",
+           "opponent": null,
+           "ours": 7.339101932526082e-09,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 1526.6797915101051,
+        "ours_ms": 273.3268551528454,
+        "preferred": "whole",
+        "value": 0.17903351879865126
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 1526.6797915101051,
+         "ours_ms": 273.3268551528454,
+         "preferred": "whole",
+         "value": 0.17903351879865126
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -910505,17 +913038,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "14465bbbf2b244670422c73883560fa332d4fac34364648e2bc605b2df624dee",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -943157,6 +945679,53 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "masked_rmse",
+           "observed": 0.0,
+           "opponent": 5.985179889540097,
+           "ours": 5.985179889540097,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 84.75298061966896,
+        "ours_ms": 9.829790331423283,
+        "preferred": "whole",
+        "value": 0.1159816476016897
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 84.75298061966896,
+         "ours_ms": 9.829790331423283,
+         "preferred": "whole",
+         "value": 0.1159816476016897
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -943761,17 +946330,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "8193a4c42ef85794e2202e6b7eb5134ccc341e8c8ce6c52206b0402636978d6f",
-    "date": "2026-10-14",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -946010,6 +948568,43 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 5.875200033187866,
+        "ours_ms": 4.665103740990162,
+        "preferred": "whole",
+        "value": 0.7940331758302518
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 5.875200033187866,
+         "ours_ms": 4.665103740990162,
+         "preferred": "whole",
+         "value": 0.7940331758302518
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -946586,17 +949181,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "17b0311024473b3e38902891deeb1fb7e00380b2aa207ad423258142b6d195ca",
-    "date": "2026-10-14",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -970514,6 +973098,49 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cupy-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "relative_reconstruction_error_100k_rows",
+           "observed": 0.8286648746296297,
+           "opponent": 6.886231046789054e-06,
+           "ours": 1.1798532597309387e-06,
+           "verdict": "FAIL"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: relative_reconstruction_error_100k_rows",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "whole",
+        "value": 3.5732728009808707
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "whole",
+         "value": 3.5732728009808707
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
       "numpy-cpu": {
        "quality_comparison": [
         {
@@ -970557,6 +973184,49 @@
          "ours_ms": 29.56867404282093,
          "preferred": "whole",
          "value": 0.09268719929506969
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
+      "torch-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "relative_reconstruction_error_100k_rows",
+           "observed": 0.8371345639376981,
+           "opponent": 7.244344093240278e-06,
+           "ours": 1.1798532597309387e-06,
+           "verdict": "FAIL"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: relative_reconstruction_error_100k_rows",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "kernel",
+        "value": 3.439985065176247
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "kernel",
+         "value": 3.439985065176247
         }
        ],
        "verdict": "UNFAIR"
@@ -971352,19 +974022,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cupy-gpu",
-     "torch-gpu"
-    ],
-    "basis": "b5087ab7d7542b2325b6926e87bc9ee7daf2bcd40a8f5700c412d0f3f2a9eff1",
-    "date": "2026-10-13",
-    "reason": "cupy-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); torch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cupy-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -972638,6 +975295,58 @@
         }
        ],
        "verdict": "UNFAIR"
+      },
+      "gpytorch-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.014544921253662801,
+           "opponent": -0.20952678663999658,
+           "ours": -0.19498186538633377,
+           "verdict": "FAIL"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.006030834983566407,
+           "opponent": 17.831017676819524,
+           "ours": 17.72348175162157,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: r2",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "mixed",
+        "kind": "mixed",
+        "label": "MIXED ours whole / arm kernel",
+        "preferred": "whole",
+        "value": 11.444722394121426
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "mixed",
+         "kind": "mixed",
+         "label": "MIXED ours whole / arm kernel",
+         "preferred": "whole",
+         "value": 11.444722394121426
+        }
+       ],
+       "verdict": "UNFAIR"
       }
      },
      "ours_over_theirs": null,
@@ -973427,17 +976136,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "gpytorch-gpu"
-    ],
-    "basis": "edf463f8c7a0eff4c8325eed1adc322b5eabc6e738f73ac9f3ba867ff259dbc9",
-    "date": "2026-10-13",
-    "reason": "gpytorch-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "gpytorch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -974523,6 +977221,51 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "metric": "rel_diff_vs_sklearn",
+           "opponent": null,
+           "ours": 1.5805856642037004e-08,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 1205.023217946291,
+        "ours_ms": 98.38082548230886,
+        "preferred": "whole",
+        "value": 0.08164226549093247
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 1205.023217946291,
+         "ours_ms": 98.38082548230886,
+         "preferred": "whole",
+         "value": 0.08164226549093247
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "quality_comparison": [
         {
@@ -975271,17 +978014,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "9e197bea7247a2940764cc16292c8c2d41f73dc8abd29bf65c02f375dbd24584",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -978993,6 +981725,53 @@
      "date": "2026-10-14",
      "opponent": null,
      "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "trustworthiness_k15",
+           "observed": 0.000568249320051395,
+           "opponent": 0.9983528354274082,
+           "ours": 0.9989210847474596,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 401.6192201524973,
+        "ours_ms": 1070.0561050325632,
+        "preferred": "whole",
+        "value": 2.6643548200363925
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 401.6192201524973,
+         "ours_ms": 1070.0561050325632,
+         "preferred": "whole",
+         "value": 2.6643548200363925
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
       "sklearn-cpu": {
        "audit": "fairness audit 2026-10-13 (no reruns)",
        "date": "2026-10-13",
@@ -979798,17 +982577,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "3d3eb116f4b82a5f1314700c0fbe7c7418581fab62bf849b3b5ac50d763ca196",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -1057536,7 +1060304,120 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 3.974124117567257e-07,
+           "opponent": 0.9088361344383943,
+           "ours": 0.908836531850806,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 2.179662097654832e-06,
+           "opponent": 4.696487588860491,
+           "ours": 4.696477352104502,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 196.3093001395464,
+        "ours_ms": 14.9405337870121,
+        "preferred": "whole",
+        "value": 0.076107111463347
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 196.3093001395464,
+         "ours_ms": 14.9405337870121,
+         "preferred": "whole",
+         "value": 0.076107111463347
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 8.451419020172324e-08,
+           "opponent": 0.9088364473366158,
+           "ours": 0.908836531850806,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 4.635306947995544e-07,
+           "opponent": 4.696479529066921,
+           "ours": 4.696477352104502,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: whole/whole (kernel not derivable)",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "fallback",
+        "label": "whole/whole (kernel not derivable)",
+        "opponent_ms": 53.64803783595562,
+        "ours_ms": 14.9405337870121,
+        "preferred": "kernel",
+        "value": 0.27849170984961463
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "fallback",
+         "label": "whole/whole (kernel not derivable)",
+         "opponent_ms": 53.64803783595562,
+         "ours_ms": 14.9405337870121,
+         "preferred": "kernel",
+         "value": 0.27849170984961463
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:f669c2e28dae43e461cd95f0eef863aa7f10eb65c50dec9e0bc7d942c4ee7214",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -1058048,16 +1060929,12 @@
    },
    "opponents_excluded": {
     "arms": [
-     "cuml-gpu",
-     "torch-gpu",
      "torch-gpu-eigh"
     ],
     "basis": "f10050a032cef8124f28c87508835b131fd3a3067860cb80ff7bb71a2ddb1b20",
     "date": "2026-10-13",
-    "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+    "reason": "torch-gpu-eigh: code our harness wrote, not a library's own implementation",
     "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "torch-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
      "torch-gpu-eigh": "code our harness wrote, not a library's own implementation"
     }
    },
@@ -1080292,7 +1083169,55 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0,
+           "opponent": 0.7675,
+           "ours": 0.7675,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 387.78344728052616,
+        "ours_ms": 1205.524630844593,
+        "preferred": "whole",
+        "value": 3.1087573213833064
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 387.78344728052616,
+         "ours_ms": 1205.524630844593,
+         "preferred": "whole",
+         "value": 3.1087573213833064
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:22a545e9c93c2fc75cae91300a02b693cba52cef7b231a6205265a9d0fe80860",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -1080610,17 +1083535,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "227ee8a4deb689082563a5025b47b04103849febe2132648c020a9304100e068",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -1082101,7 +1085015,55 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "cuvs-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "recall_at_k",
+           "observed": 0.00019999999999986695,
+           "opponent": 0.9994500000000001,
+           "ours": 0.9996499999999999,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 323.68300296366215,
+        "ours_ms": 53.00345364958048,
+        "preferred": "whole",
+        "value": 0.16375111811333154
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 323.68300296366215,
+         "ours_ms": 53.00345364958048,
+         "preferred": "whole",
+         "value": 0.16375111811333154
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:02ddded84fe559621f584ed424d0d6f89abba189fbc0a16bc34b003b7231833e",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -1082415,17 +1085377,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuvs-gpu"
-    ],
-    "basis": "82014c8b4b43830ad41671e93749abdbbf93d2fce3036bd19de3a715c114f0b9",
-    "date": "2026-10-13",
-    "reason": "cuvs-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuvs-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -1149296,7 +1152247,64 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 4.5715191965278734e-08,
+           "opponent": 0.9089830087498776,
+           "ours": 0.9089830544650696,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 2.511355135686187e-07,
+           "opponent": 4.8050512968125325,
+           "ours": 4.805050090093507,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 71.66293635964394,
+        "ours_ms": 4.634343087673187,
+        "preferred": "whole",
+        "value": 0.06466861843918188
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 71.66293635964394,
+         "ours_ms": 4.634343087673187,
+         "preferred": "whole",
+         "value": 0.06466861843918188
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:847b37051b4fb2ab4064e3caa40f1786c5e1a2345a96214672f446338658beca",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -1149620,17 +1152628,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "7161f0c2fea70c68739c93675c3052f5c903910d4c90047d25aa78de2e7b7db9",
-    "date": "2026-10-13",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -1162414,7 +1165411,64 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "cuml-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "explained_variance_ratio_sum",
+           "observed": 7.730902231717351e-07,
+           "opponent": 0.9999642728589039,
+           "ours": 0.999965045949127,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "relative_reconstruction_error",
+           "observed": 2.864110906656012e-08,
+           "opponent": 0.003257073482141212,
+           "ours": 0.0032570735754274115,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 54.361261427402496,
+        "ours_ms": 2.9165148735046387,
+        "preferred": "whole",
+        "value": 0.053650610690841656
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 54.361261427402496,
+         "ours_ms": 2.9165148735046387,
+         "preferred": "whole",
+         "value": 0.053650610690841656
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:3b09a397d4f69226897ebcfe74b3d9d4c1464de9c4a6de98e2f36a6e7dd1f8bc",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -1162687,17 +1165741,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-gpu"
-    ],
-    "basis": "5e340b08466c3b46ab3dae1318e2ae90a5343588cc2db36e2469d9cd6c252acc",
-    "date": "2026-10-14",
-    "reason": "cuml-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -1195878,13 +1198921,182 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "catboost-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "auc",
+           "observed": 8.20000000000265e-05,
+           "opponent": 0.983668,
+           "ours": 0.983586,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 0.005850758999373726,
+           "opponent": 0.149188,
+           "ours": 0.150066,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 23630.572,
+        "ours_ms": 7437.894,
+        "preferred": "whole",
+        "value": 0.31475725598178494
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 23630.572,
+         "ours_ms": 7437.894,
+         "preferred": "whole",
+         "value": 0.31475725598178494
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "lightgbm-cuda": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "auc",
+           "observed": 0.48358599999999996,
+           "opponent": 0.5,
+           "ours": 0.983586,
+           "verdict": "FAIL"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 0.5790752142266103,
+           "opponent": 0.356515,
+           "ours": 0.150066,
+           "verdict": "FAIL"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "quality outside declared margin: auc; quality outside declared margin: logloss",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 4935.521,
+        "ours_ms": 7437.894,
+        "preferred": "whole",
+        "value": 1.5070129374386212
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 4935.521,
+         "ours_ms": 7437.894,
+         "preferred": "whole",
+         "value": 1.5070129374386212
+        }
+       ],
+       "verdict": "UNFAIR"
+      },
+      "xgboost-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "auc",
+           "observed": 3.6000000000036e-05,
+           "opponent": 0.983622,
+           "ours": 0.983586,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 0.0053509789026161695,
+           "opponent": 0.149263,
+           "ours": 0.150066,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 13126.229,
+        "ours_ms": 7437.894,
+        "preferred": "whole",
+        "value": 0.5666436262844416
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 13126.229,
+         "ours_ms": 7437.894,
+         "preferred": "whole",
+         "value": 0.5666436262844416
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:141684b58e4f2f955b740380cd6dd570267c8f7d8b505447bed052754d5ede36",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "INSUFFICIENT"
+     "verdict": "UNFAIR"
     }
    },
    "audit_history": [
@@ -1196775,25 +1199987,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "catboost-cpu",
-     "catboost-gpu",
-     "lightgbm-cuda",
-     "xgboost-cpu",
-     "xgboost-gpu"
-    ],
-    "basis": "ea25d0ae9ad1a728fdb7d83a4fcbd71c280d07737d634768f0db07f853db58a1",
-    "date": "2026-10-13",
-    "reason": "catboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); catboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); lightgbm-cuda: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "catboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "catboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "lightgbm-cuda": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "xgboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "xgboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -1198811,7 +1202004,149 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "catboost-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.00022400000000000198,
+           "opponent": 0.90778,
+           "ours": 0.907556,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 15195.608,
+        "ours_ms": 14667.822,
+        "preferred": "whole",
+        "value": 0.9652672008912049
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 15195.608,
+         "ours_ms": 14667.822,
+         "preferred": "whole",
+         "value": 0.9652672008912049
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "lightgbm-cuda": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.003846000000000016,
+           "opponent": 0.911402,
+           "ours": 0.907556,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 170658.003,
+        "ours_ms": 14667.822,
+        "preferred": "whole",
+        "value": 0.08594863259943339
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 170658.003,
+         "ours_ms": 14667.822,
+         "preferred": "whole",
+         "value": 0.08594863259943339
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "xgboost-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0025839999999999197,
+           "opponent": 0.91014,
+           "ours": 0.907556,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 33556.007,
+        "ours_ms": 14667.822,
+        "preferred": "whole",
+        "value": 0.43711464239472836
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 33556.007,
+         "ours_ms": 14667.822,
+         "preferred": "whole",
+         "value": 0.43711464239472836
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:72e2e0fc51601c407347a9400fdf54f84d85fa020ac1f4ecdeb8a0bb242c6517",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -1199768,25 +1203103,6 @@
      "opponents-default-20261006",
      "release-board-resume-r2"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "catboost-cpu",
-     "catboost-gpu",
-     "lightgbm-cuda",
-     "xgboost-cpu",
-     "xgboost-gpu"
-    ],
-    "basis": "6b9af27bb8ccf399e05b4f236c824464947eeac7a19c486e9995db9b508855f2",
-    "date": "2026-10-14",
-    "reason": "catboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); catboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); lightgbm-cuda: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "catboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "catboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "lightgbm-cuda": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "xgboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "xgboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -1201882,7 +1205198,82 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "catboost-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 4241.27,
+        "ours_ms": 2768.778,
+        "preferred": "whole",
+        "value": 0.6528181417358478
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 4241.27,
+         "ours_ms": 2768.778,
+         "preferred": "whole",
+         "value": 0.6528181417358478
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "xgboost-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "comparable quantitative quality evidence needs review",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 5040.938,
+        "ours_ms": 2768.778,
+        "preferred": "whole",
+        "value": 0.5492584911776339
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 5040.938,
+         "ours_ms": 2768.778,
+         "preferred": "whole",
+         "value": 0.5492584911776339
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:949f38c0b52a482fd1cd55dc4a26ea68127bb655e2d2ff4575c4a167bb3281c5",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -1202527,23 +1205918,6 @@
      "opponents-default-20261006"
     ]
    },
-   "opponents_excluded": {
-    "arms": [
-     "catboost-cpu",
-     "catboost-gpu",
-     "xgboost-cpu",
-     "xgboost-gpu"
-    ],
-    "basis": "dd00b16a004f370c8d65705c2107414645e3b177f1d09b4021cc57ef7cc9f59d",
-    "date": "2026-10-14",
-    "reason": "catboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); catboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); xgboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "catboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "catboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "xgboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "xgboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
-   },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
    "rerace": "x",
@@ -1202557,7 +1205931,64 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "catboost-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "auc",
+           "observed": 0.00011100000000008325,
+           "opponent": 0.980018,
+           "ours": 0.980129,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 0.0032355893471157095,
+           "opponent": 0.187292,
+           "ours": 0.186686,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 8181.368,
+        "ours_ms": 6137.361,
+        "preferred": "whole",
+        "value": 0.7501631756449532
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 8181.368,
+         "ours_ms": 6137.361,
+         "preferred": "whole",
+         "value": 0.7501631756449532
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:fb2989c7ab6f641110c42abb4bc460431e0b8a825b2feebebd48a546d0d8b67c",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -1202949,19 +1206380,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "catboost-cpu",
-     "catboost-gpu"
-    ],
-    "basis": "776694bd43daa6a436f38c3a9feea4b419254eda180d1c39826c1bb02174919f",
-    "date": "2026-10-14",
-    "reason": "catboost-cpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13); catboost-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "catboost-cpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-     "catboost-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,
@@ -1233774,7 +1237192,64 @@
      "admitted_opponents": [],
      "date": "2026-10-14",
      "opponent": null,
-     "opponents": {},
+     "opponents": {
+      "cuml-rf-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "auc",
+           "observed": 3.700000000006476e-05,
+           "opponent": 0.945348,
+           "ours": 0.945385,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "logloss",
+           "observed": 0.00028560600651399463,
+           "opponent": 0.182069,
+           "ours": 0.182017,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v6",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 24023.243,
+        "ours_ms": 30726.601,
+        "preferred": "whole",
+        "value": 1.2790363482565614
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 24023.243,
+         "ours_ms": 30726.601,
+         "preferred": "whole",
+         "value": 1.2790363482565614
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
      "ours_over_theirs": null,
      "pairing": "v2:03e2e3bbbbd9195df793fee77861f274ca2106001e8a07a6c58666e21906049e",
      "reason": "no opponent with sufficient valid comparison evidence",
@@ -1234047,17 +1237522,6 @@
     "boards": [
      "opponents-default-20261006"
     ]
-   },
-   "opponents_excluded": {
-    "arms": [
-     "cuml-rf-gpu"
-    ],
-    "basis": "b4708da8bb941b5f71d6e1fb2ba11e1a691e36f201f180b0a0481806fc8a9de5",
-    "date": "2026-10-14",
-    "reason": "cuml-rf-gpu: measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-    "why": {
-     "cuml-rf-gpu": "measured on cc560ebdaf91, a slow box: L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)"
-    }
    },
    "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
    "rc": null,

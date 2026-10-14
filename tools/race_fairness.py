@@ -50,12 +50,8 @@ for _lane in ("lm-forward", "lm-train-step", "lm-infer", "lm-host-train-step", "
               "resnet-block"):
     HARNESS_ARMS[_lane] = _TORCH                   # harness twins and pure-PyTorch references (the stored cells)
 
-# Existing evidence-backed host finding is retained. The former automatic
-# lane/arm/shape timing heuristic was insufficient to establish equal work.
-SLOW_HOSTS = {
-    "cc560ebdaf91": "L40S host about 1.75x slower than host 24a11adce16e on 36 matched torch cells (RNN/GRU/LSTM, same "
-                    "shape) and 5x on matched cuML AutoARIMA (fairness audit 2026-10-13)",
-}
+# No host-based exclusion (Andrew, 2026-10-14): the slow-host rule added on 2026-10-13 was never asked for and is
+# removed. An opponent measured on another box of the same GPU model is judged like any other opponent cell.
 
 
 def phase_cells(race, phase):
@@ -77,11 +73,6 @@ def n_iter(cell):
         if isinstance(q.get(k), (int, float)) and not isinstance(q.get(k), bool):
             return q[k]
     return None
-
-
-def cell_host(cell):
-    host = ((cell.get("copied_from") or {}).get("box")) or ""
-    return host or (cell.get("hardware") or "")
 
 
 def legacy_pairing(race, mode, phase):
@@ -138,21 +129,10 @@ def pairing(race, mode, phase, observations_only=False):
     return "v2:" + hashlib.sha256(json.dumps(basis, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def slow_hosts(board):
-    """Only recorded host findings; timing ratios alone do not establish cause.
-
-    FAIRNESS FIX (2026-10-13 audit): matching lane/arm/shape did not verify
-    matching settings, versions or resource allocation. Do not automatically
-    turn that heuristic into a blanket exclusion of an entire host.
-    """
-    return dict(SLOW_HOSTS)
-
-
-def exclusions(race, slow=None):
+def exclusions(race):
     """{arm: reason} for the opponent arms rules 1a and 1b exclude from this race."""
     out = {}
     pred = HARNESS_ARMS.get(race.get("lane"))
-    slow = SLOW_HOSTS if slow is None else slow
     for c in phase_cells(race, "fit") + phase_cells(race, "infer"):
         arm = c.get("arm")
         if c.get("mode") != "opponent" or arm in out:
@@ -165,15 +145,27 @@ def exclusions(race, slow=None):
             if not module.startswith(("transformers.", "mamba_ssm.", "hipvs.", "cuml.", "sklearn.")):
                 out[arm] = "code our harness wrote, not a library's own implementation"
                 continue
-        for host, why in slow.items():
-            if host in cell_host(c):
-                out[arm] = "measured on %s, a slow box: %s" % (host, why)
     return out
 
 
-def exclude(race, today, slow=None):
+def _drop_slow_host_exclusions(race):
+    """Undo exclusions written by the removed slow-host rule (2026-10-13); every other exclusion stays."""
+    ex = race.get("opponents_excluded") or {}
+    why = ex.get("why") or {}
+    gone = [arm for arm, reason in why.items() if ", a slow box: " in str(reason)]
+    if not gone:
+        return
+    for arm in gone:
+        why.pop(arm)
+    ex["arms"] = [arm for arm in ex.get("arms") or [] if arm not in gone]
+    ex["reason"] = "; ".join("%s: %s" % kv for kv in sorted(why.items()))
+    if not ex["arms"]:
+        race.pop("opponents_excluded", None)
+
+
+def exclude(race, today):
     """Merge rule 1 into race["opponents_excluded"] (arms a human audit excluded stay)."""
-    found = exclusions(race, slow)
+    found = exclusions(race)
     if not found:
         return
     ex = race.setdefault("opponents_excluded", {"arms": [], "reason": "", "date": today})
@@ -349,7 +341,6 @@ def apply(board, prev=None, today=None, upgrade_legacy=False):
     today = today or datetime.date.today().isoformat()
     prev = board if prev is None else prev
     modes = (board.get("config") or {}).get("modes") or ["identical"]
-    slow = slow_hosts(board)
     marked = 0
     for section in ("races", "extra_races"):
         for rid, rr in ((board.get(section) or {}).items()):
@@ -364,9 +355,10 @@ def apply(board, prev=None, today=None, upgrade_legacy=False):
             basis = exclusion_basis(rr)
             if old_ex and (old_ex.get("basis") == basis or (upgrade_legacy and not old_ex.get("basis"))):
                 rr["opponents_excluded"] = json.loads(json.dumps(old_ex))
+                _drop_slow_host_exclusions(rr)
             elif old_ex:
                 rr.pop("opponents_excluded", None)
-            exclude(rr, today, slow)
+            exclude(rr, today)
             if rr.get("opponents_excluded"):
                 rr["opponents_excluded"]["basis"] = basis
             audit = {}

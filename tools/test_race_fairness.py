@@ -169,23 +169,20 @@ class RaceFairness(unittest.TestCase):
         self.assertEqual(rr["opponents_excluded"]["arms"], ["torch-gpu"])
         self.assertEqual(rr["audit"]["identical/fit"]["opponent"], "cuml-gpu")
 
-    def test_every_cell_from_a_slow_host_is_excluded_any_library(self):
-        slow = {"library": "cuml", "copied_from": {"box": "cc560ebdaf91"}}
-        b = board(n=race("rnn-clf", [("torch-eager-fp32", 9.0, dict(slow, library="torch"))]),
-                  l=race("svd", [("cupy-gpu", 9.0, slow)]))
-        RF.apply(b, None, "2026-10-13")
-        self.assertEqual(b["races"]["n"]["opponents_excluded"]["arms"], ["torch-eager-fp32"])
-        self.assertEqual(b["races"]["l"]["opponents_excluded"]["arms"], ["cupy-gpu"])
-        self.assertEqual(b["races"]["n"]["rerace"], "x")
+    def test_a_cell_from_another_host_is_not_excluded(self):
+        other = {"library": "cuml", "copied_from": {"box": "cc560ebdaf91"}}
+        b = board(l=race("svd", [("cupy-gpu", 9.0, other)]))
+        RF.apply(b, None, "2026-10-14")
+        self.assertNotIn("opponents_excluded", b["races"]["l"])
 
-    def test_a_slow_host_is_found_from_the_board(self):
-        races = {}
-        for i in range(6):
-            r = race("lane%d" % i, [("torch-a", 20.0, {"copied_from": {"box": "hostS"}, "shape": "X 10x2"})])
-            races["s%d" % i] = r
-            races["f%d" % i] = race("lane%d" % i, [("torch-a", 10.0, {"copied_from": {"box": "hostF"}, "shape": "X 10x2"})])
-        self.assertNotIn("hostS", RF.slow_hosts({"races": races}))
-        self.assertNotIn("hostF", RF.slow_hosts({"races": races}))
+    def test_old_slow_host_exclusions_are_dropped_and_others_kept(self):
+        rr = race("pca", [("torch-gpu", 1.0, {"library": "torch"}), ("cuml-gpu", 10.0, {"library": "cuml"})])
+        rr["opponents_excluded"] = {"arms": ["cuml-gpu"], "date": "2026-10-13", "reason": "",
+                                    "why": {"cuml-gpu": "measured on cc560ebdaf91, a slow box: old rule"}}
+        rr["opponents_excluded"]["basis"] = RF.exclusion_basis(rr)
+        b = board(r=rr)
+        RF.apply(b, None, "2026-10-14")
+        self.assertEqual(b["races"]["r"]["opponents_excluded"]["arms"], ["torch-gpu"])
 
     def test_iterations_differ_with_near_quality_and_ties_show(self):
         b = board(i=race("kmeans", [("cuml-gpu", 9.0, {"quality": {"n_iter": 21, "inertia": 101}})], ours_q={"n_iter": 33, "inertia": 100}),
