@@ -1628,8 +1628,14 @@ _add("cagra", xlane="ann", ours=("CAGRAIndex", "CagraIndex"), kind="ann", task="
      notes=[_ANN], mism=["cuvs-gpu (NVIDIA) and hipvs-gpu (AMD, hipVS) are CAGRA itself"])
 _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
      sk="sklearn.manifold:TSNE",
+     # release-0845: ours runs cuML's schedule after early exaggeration, learning_rate x 2.0
+     # (cuML 26.08 t_sne.pyx:201-202 post_learning_rate, no Python switch; ours'
+     # post_exaggeration_learning_rate_factor, x_ann/tsne_device.mojo tsne_fit_device). Both arms
+     # read back 2.0 as post_exaggeration_rate_factor (tools/bench_board_params.py _read_params_object).
+     # scikit-learn (factor 1.0) is refused on this lane below.
      params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0, max_iter=1000,
-                 learning_rate="auto", init="seeded", random_state=SEED),
+                 learning_rate="auto", init="seeded", random_state=SEED,
+                 post_exaggeration_learning_rate_factor=2.0),
      sk_params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0, max_iter=1000,
                     learning_rate="auto", init="seeded", random_state=SEED, n_jobs=-1,
                     method="barnes_hut", metric="euclidean", n_iter_without_progress=1000,
@@ -1670,7 +1676,8 @@ _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
            "learning rate: ours and scikit-learn 'auto' = max(n / early_exaggeration / 4, 50); "
            "cuML that value with learning_rate_method='none', which doubles it after the 250 "
            "exaggeration steps (t_sne.pyx post_learning_rate = 2 x learning_rate; no Python "
-           "switch). Every arm runs the same number of steps",
+           "switch); ours doubles it there too (post_exaggeration_learning_rate_factor=2.0). "
+           "Every arm runs the same number of steps",
            "k-NN: 91 = min(n - 1, floor(3 x perplexity) + 1) neighbours on ours and "
            "scikit-learn (its rule), cuML n_neighbors=91 by its own exact k-NN",
            "init: ours and scikit-learn start from the SAME array, ours' 'random' rule "
