@@ -68,7 +68,7 @@
   "smoke": false,
   "vendor": "amd"
  },
- "created": "2026-10-14T07:31:49Z",
+ "created": "2026-10-14T07:44:22Z",
  "main_board": {
   "backfill": {
    "filled": {
@@ -277,7 +277,7 @@
   },
   "inputs": {
    "branch": "main",
-   "generated": "2026-10-14T07:31:49Z",
+   "generated": "2026-10-14T07:44:22Z",
    "grid_logs": [
     "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
     "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -365,6 +365,9 @@
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.knn.taxi.rows=full/board.json",
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.istella.rows=full/board.json",
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.taxi.rows=full/board.json",
+    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.cholesky.synthetic.rows=full/board.json",
+    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.lu-factor.synthetic.rows=full/board.json",
+    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.lu-solve.synthetic.rows=full/board.json",
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.istella.rows=full/board.json",
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.taxi.rows=full/board.json",
     "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.maxabs-scaler.istella.rows=full/board.json",
@@ -764,7 +767,7 @@
      "pairing": "v2:f5c365b4f4c1b7398a0776d599d797b5ccf554e531baf806905f841fc30f2d0e",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -15654,7 +15657,7 @@
      "pairing": "v2:00b753e2bf87e5f0715d48852cfa569bf1357f6796ac999ae8ce6b0741ff46b8",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -30621,7 +30624,7 @@
      "pairing": "v2:4cee3d2b85e12831f222d603628e66c2d95cd74633750bfb96cf3134c48a1730",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -50923,7 +50926,7 @@
      "pairing": "v2:0803408226f232ddcea4848aa6d928e9cbcd6124f82f5057dbe1d9ae5f18ef93",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -66018,7 +66021,7 @@
      "pairing": "v2:0e123b01c3c78b2fae9e7c8a5699e8051083acab1074990cd582b933ec236407",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -86264,7 +86267,7 @@
      "pairing": "v2:b3de427d0ed616da3816cbeecc44228f8511810cc09be3119470a936ff76fe21",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -87137,7 +87140,7 @@
      "pairing": "v2:2f772b22e1a6e8918db5a706bd791caa05704d8db957110c1cfade2fe496796d",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -87343,7 +87346,7 @@
      "pairing": "v2:797c128a5749bc88550898d7a993db6ad8fea5e256d1774ca25b47fa09a47423",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -107794,7 +107797,7 @@
      "pairing": "v2:98295fe2acb0bdf1c4ab3d79dedf672e88b2c991b7e94d5f71cfccfe5e2cbe4d",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -108000,7 +108003,7 @@
      "pairing": "v2:af36c237135651b67b9f51e0a2a4e2f2ef844ae9a5daa331c96e0d5ba7744773",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -129163,7 +129166,7 @@
      "pairing": "v2:8377715df03ca408e4b46b6ec648c9c161ae02248256d8a869d290f3263152f2",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -129369,7 +129372,7 @@
      "pairing": "v2:ae9db20828c72eceabc3c7ad0db8c346a834103d529a8dace13de87985088a50",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -157339,7 +157342,7 @@
      "pairing": "v2:2a82076b8c13041f807a484f8b48627f50eeed2e057d96d99a704c2249613b44",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -157545,7 +157548,7 @@
      "pairing": "v2:11cdd0a586a537fd793286033169a33616387e0024cf08a16c498476c8b6c245",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -185569,7 +185572,7 @@
      "pairing": "v2:17308537ffd3452eda243f8ea5b99a3283e9432ce2ab75d9a17055ae58a25da1",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -186297,7 +186300,7 @@
      "pairing": "v2:759d8425b3ec5d8878578499180674d51323a9ff3054c15cf5e39d5547321d3b",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -186843,7 +186846,7 @@
      "pairing": "v2:cc7a5757e5e5c33caabc9e94c56fbc963a7a43707deb3ecf38f8a67f00aad075",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -187499,7 +187502,7 @@
      "pairing": "v2:b6d886048f21d7822425547fd39b95e80e258198824c9eb5901e1998db349dba",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -188146,7 +188149,7 @@
      "pairing": "v2:9bbc6d721300b97690b5e6b7e96595d79b4f65004eaeb7ea4bbdabbbe83a15f6",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -188806,7 +188809,7 @@
      "pairing": "v2:e630d58f8360813e1cb7acec8be8a589c685db3cba361120368e2c5d9c04fbd7",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -189477,7 +189480,7 @@
      "pairing": "v2:eefdcfa605e0cc764c83bfe627d929c11bbf951d0c359092b1aa7d4923f7aa8f",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -190136,7 +190139,7 @@
      "pairing": "v2:a7b405a966185a28631b30ef0c24e1f8d7bc253922fb778d4c6131567a0dfc85",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -195496,7 +195499,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -195539,7 +195542,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -195582,7 +195585,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -195628,7 +195631,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -195655,7 +195658,7 @@
      "pairing": "v2:c5d69c477616ec093aa9edaf8b4c3792180bb8e9d777e5c951c222e96d552738",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -197425,7 +197428,7 @@
      "pairing": "v2:3afc8bbd848ce2952e066a6379b6daadccb39f9a6738b09a54a899bdb06c324a",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -198163,7 +198166,7 @@
      "pairing": "v2:27e13ac9c65c07d7d5e0074fcdb5cde37b77d83febd4ec9c6d3ae635a31cced8",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -198910,7 +198913,7 @@
      "pairing": "v2:0b5c364a39d241b508fd63ff2711465988b3da744daedc523098494cec69806f",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -199524,7 +199527,7 @@
      "pairing": "v2:5453a844ef7193f6a88fd53f0fbdccc30adfbedfc0241aa76ac67cf21251d3ae",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -199808,7 +199811,7 @@
      "pairing": "v2:0001c414f7f231fa7c2a3238df92a3678b494b14bd0f03907fb71c6e978f4e3e",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -200286,7 +200289,7 @@
      "pairing": "v2:a435d738692418dd40cba37b7921410653d942fa2333ef255197b03f24198bf5",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -200492,7 +200495,7 @@
      "pairing": "v2:843b761456b6aa1dd39483280e6db71837de00eac6e48607a5ed5bee39126c44",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -225457,7 +225460,7 @@
      "pairing": "v2:2a6cf692c8235e936fdb75fe679d1a89154f71a5d50c5788dba1ab3729ea1bcc",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -225663,7 +225666,7 @@
      "pairing": "v2:ded0a6b01f27b74b657a3490e565ef880707c2d90bd776a731b6b17386d09c31",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -250911,7 +250914,7 @@
      "pairing": "v2:424acfc7da056b7e5d7266ff990896d0f2ea12d6e6447b101559ca2acf597292",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -251996,7 +251999,7 @@
      "pairing": "v2:41ddf55bf97200b7767d412247c9717689ea7a6c8d5a451df1942f0bffbea1dd",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -253096,7 +253099,7 @@
      "pairing": "v2:6e384233d7775649b7d31629967820409dcf0f8c106d290086da999b96759bb6",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -253224,7 +253227,7 @@
      "pairing": "v2:086258896f5a1ab51ce9df4167515a85f7adf7ff2b30b9327464eb6821c6b450",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -265827,7 +265830,7 @@
      "pairing": "v2:fff1c7aed2fbc3f65ad15ca4e7c3e1bb4225801bf5ac00e29958ef7f48d57c50",
      "reason": "statsforecast DynamicOptimizedTheta with ours' settings; CPU float64 is the library's only precision (declared)",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -266502,7 +266505,7 @@
      "pairing": "v2:6565f01d1a633c96005571542c903cc0b6a2143e3f171f60c5fc0261073c69f6",
      "reason": "statsforecast DynamicOptimizedTheta with ours' settings; CPU float64 is the library's only precision (declared)",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -267174,7 +267177,7 @@
      "pairing": "v2:56e6f7543f8b0c1c95b0411e816d58e921acd8ab0681f4aab8d5f3a2d7be064e",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -272520,7 +272523,7 @@
      "pairing": "v2:e3be719265c9b5d9ec5bba1231a25bb4ad9cb16949c7ca0ea93bf1afe8117876",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -272892,7 +272895,7 @@
      "pairing": "v2:a1a408ff73eb980a009fddb42fafcef38c4fa237da27e4f4bfcac81834b11700",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; FastMCD on both with each library's own random subsets (allowed)",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -273571,7 +273574,7 @@
      "pairing": "v2:f7af033fccd4872c7d4dd6799930c5f39cbc7f1d3712a92fa725b9155d1613d9",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -273600,7 +273603,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -273643,7 +273646,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -273670,7 +273673,7 @@
      "pairing": "v2:76242955702ae1501355444f241c6e670d714707bf50b87295b6996b5339d1df",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -287991,7 +287994,7 @@
      "pairing": "v2:58c61f45f2d1371a211b75679969d75342bf8f04758c20cb12b8df0e4637a330",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -288758,7 +288761,7 @@
      "pairing": "v2:be08ddec357adc9c8c62e6c1c9cf035fa12abfd9034856a62a152893d0bcf86d",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -289525,7 +289528,7 @@
      "pairing": "v2:cd91dd4c5bef039d61126e935929835a8b88dfd94727bc521b4914fa4eee7e55",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -290187,7 +290190,7 @@
      "pairing": "v2:8b082823b5572551a0baa9c93d1ebfae4f74e33339432ae005b774c3d62f9ced",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -290952,7 +290955,7 @@
      "pairing": "v2:89803b15699bd56cabe40a11c222835e8937af9f204203755de7ce4c33e0e576",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -292265,7 +292268,7 @@
      "pairing": "v2:a6e4b910d0eab2b5acd949a469b32dc62f8ba87735920c9336c5df5bed4c72f4",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -293607,7 +293610,7 @@
      "pairing": "v2:347b291293b35fe66a6fe875a41c861e1d527ec7b6576fde1f392c4c7a0063b7",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -293813,7 +293816,7 @@
      "pairing": "v2:1b2f0d85360c8500e7878cba3cfeea1b6b2286417ed34a95a83b6a414f54eaf6",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -313874,7 +313877,7 @@
      "pairing": "v2:a2507b6675aa30d6aef85294f1f90043d27728a1f64b8b731a3d30b6aeaa680b",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -314080,7 +314083,7 @@
      "pairing": "v2:8b9e4800533452792fc48854da13f4b630aab24794feede58d73bc51d98e7240",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -334112,7 +334115,7 @@
      "pairing": "v2:a2c8643e9af990ccc8f015c45ce236d6a9447a1f60a74dbb7ec5fe7293006d36",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -335430,7 +335433,7 @@
      "pairing": "v2:f03783d3c41c5eb20bb96805bc10af9edc8a273624333df8720c11037958ed47",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -336607,7 +336610,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -336657,7 +336660,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -336707,7 +336710,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -336757,7 +336760,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -336784,7 +336787,7 @@
      "pairing": "v2:900518de28d3eef952a793a6b84aafc818562a6c22f97e4cb48ed49100e4b305",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -338164,7 +338167,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -338214,7 +338217,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -338264,7 +338267,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -338314,7 +338317,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -338341,7 +338344,7 @@
      "pairing": "v2:977dbdddeacd6f0410709d7db2d59c047b06950e5bc2b369fa2967273f025017",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -339723,7 +339726,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -339775,7 +339778,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -339827,7 +339830,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -339879,7 +339882,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -339906,7 +339909,7 @@
      "pairing": "v2:5264872797d06761f25377c1ebaac656012438bb6e7601255f3461de4cee1518",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -341322,7 +341325,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -341374,7 +341377,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -341426,7 +341429,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -341478,7 +341481,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -341505,7 +341508,7 @@
      "pairing": "v2:25a7d8618431d0689c81f55a4d5984cea382b20b9f9b701a4c51d05483f13680",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -342946,7 +342949,7 @@
      "pairing": "v2:1b420df8f7082b4e6051d68320e42839ae9b4ba3a8a34a9e281d00d622812058",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -343617,7 +343620,7 @@
      "pairing": "v2:6cc94cdf836c45c8f8fb372b608bbb3111c931cd2065d4900c852c5385db7a14",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -344126,7 +344129,7 @@
      "pairing": "v2:184916dd8d85555e11d90c80fa6696aa76e243b9a850292df3c94ae942efc04d",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -344795,7 +344798,7 @@
      "pairing": "v2:e9eb0e9beb8dde55a9268c86a4bc78872a07715367432f419e9602dd75bcfd0c",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; scikit-learn's johnson_lindenstrauss_min_dim, one scalar call per point on both arms: a building block whose race measures call overhead",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -345414,7 +345417,7 @@
      "pairing": "v2:cb31ecd2680a0aa74881977fb0be3b17b003375c044be3df27bba790e01388b8",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -346095,7 +346098,7 @@
      "pairing": "v2:68e84105716a04a77ae7b343f2f0032238afc51183833834aa7d896c85fe9524",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -346768,7 +346771,7 @@
      "pairing": "v2:aa397ef5f61ef87e72ac7ea87c223cf944c6d61d13b5141a39d6c03f5c5b4018",
      "reason": "same kernel and gamma; top-8 eigenpairs by an iterative Krylov solver on both (ours Lanczos, scikit-learn ARPACK at n > 200, k < 10); subspace agrees to 1e-11",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -347425,7 +347428,7 @@
      "pairing": "v2:bf4def12214130cd7d8c490d7b2eaf6664beca8ede857d7219e4e8c1778846ec",
      "reason": "same kernel and gamma; top-8 eigenpairs by an iterative Krylov solver on both (ours Lanczos, scikit-learn ARPACK at n > 200, k < 10); subspace agrees to 1e-11",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -348079,7 +348082,7 @@
      "pairing": "v2:cd41c1b283675fb442d480db9735c5ae861f567d1a430743fe021a80eeea58fa",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -348653,7 +348656,7 @@
      "pairing": "v2:efbfd7bbffcd0087e1f6eee4f2182554ed3e0078e2dd2205480bd6bca70aeee1",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -348905,7 +348908,7 @@
      "pairing": "v2:b44c1e67d1a4a70d8bcfd3fd0ea22cef13bd96d1cfa4e744337a9d719a5afa37",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -349581,7 +349584,7 @@
      "pairing": "v2:072121001aec1ff7fae56077e96c5d90365a5b0410fba3f1aff3455c54e41981",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -350097,7 +350100,7 @@
      "pairing": "v2:223f0bd78c01fc76d7fd50bf2e63b14ea8fa23999dbca0f5ddba3c645d88b869",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -350765,7 +350768,7 @@
      "pairing": "v2:a80923e2ee5db41dacd7c256455e990e03090ad1a6cb98816f22737e0c8e31f8",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -351433,7 +351436,7 @@
      "pairing": "v2:3c06cdef74cd86fa7f3c34b546afbdc204ea34488f9e9d0bebcfaa58ced7ccdd",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -352099,7 +352102,7 @@
      "pairing": "v2:639c811f0ac0abbe1e41e53c437351e2bb38346d3257b97dd4cc47cffbb2723d",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -352713,7 +352716,7 @@
      "pairing": "v2:e5ccadcb852ae1cdbf54ca096eeddc6aa1fc8b0d91c66fd097798a264297921c",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -353007,7 +353010,7 @@
      "pairing": "v2:be061f7757acb9fd724d38891f00ee88c403a2a1104cf6731e2b3361ac91f585",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -353735,7 +353738,7 @@
      "pairing": "v2:0eba29162aa35d89fe6085b24d5b11c9786d5bbf254fcdf1a75aa0d45ffbdd1c",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -354465,7 +354468,7 @@
      "pairing": "v2:036e367e5e32c8364351258fa7714461ae746e883adda8f7424ba402c987a1c2",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -355229,7 +355232,7 @@
      "pairing": "v2:428f03475d112c418a875988e46c28d32d281c8a3df0cca050bd74a6dd05f310",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -355991,7 +355994,7 @@
      "pairing": "v2:49093be53a5f69fa3d6187635f9ce5d9af38b07cfc4afd67ff5396784e35e97b",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -356724,7 +356727,7 @@
      "pairing": "v2:0635967ae7e8d0f16d5d31e6c4ffcfd59ea153acd876715735f61206c496a38d",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -357591,7 +357594,7 @@
      "pairing": "v2:1786492ad1feae399b15c20654b06505b733db48c600ea2ad819d3f657d98ead",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -357797,7 +357800,7 @@
      "pairing": "v2:ddf69d05628d13ffafa7b51203a5f5439f186c06bb19506c3f8a0ae3f2aba8c6",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -380661,7 +380664,7 @@
      "pairing": "v2:8abf9e0923516086df3127be9e1d88d21b27994345550784487ac8984230ac19",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -381198,7 +381201,7 @@
      "pairing": "v2:b9df729bec694be62ea509810f8279bb14d785e1c25ccb265589b389f472e54f",
      "reason": "same settings (MATCHED read-back), same algorithm, comparable quality",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -381796,7 +381799,7 @@
      "pairing": "v2:35b2dd573a27db72b77231eb3078cdf13f28f3d656ac591c14276e3ef10cc4e6",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -382029,7 +382032,7 @@
      "pairing": "v2:e6cdbb17b0a21adb2dd703881e4edf5e54430e562ef5619b66c6474cac74a315",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -382326,7 +382329,7 @@
      "pairing": "v2:b56009c580316d4964b02a73fdfa97e337e4412b6233dc76d94ed70ae0ecc2bf",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -382647,7 +382650,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -382697,7 +382700,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -382747,7 +382750,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -382797,7 +382800,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -382824,7 +382827,7 @@
      "pairing": "v2:99f7b7ddb94495085203bd052698372f688863cc5e2b128db2578218946923c7",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -384204,7 +384207,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -384254,7 +384257,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -384304,7 +384307,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -384354,7 +384357,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -384381,7 +384384,7 @@
      "pairing": "v2:ad6d0d2393f43e80062282b085e006699dfed834b3b48818866060bf161dbd2a",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -385763,7 +385766,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -385815,7 +385818,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -385867,7 +385870,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -385919,7 +385922,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -385946,7 +385949,7 @@
      "pairing": "v2:a95de119d5a0574f25262d075ef3aa3a4e7f2484661f23d92bc4feb10fdf1033",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -387362,7 +387365,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -387414,7 +387417,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -387466,7 +387469,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -387518,7 +387521,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -387545,7 +387548,7 @@
      "pairing": "v2:3e7b996d69d47e13e68b186e95ed7eed5ebfbeefe4e3df3fbd3a80eb70a24396",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -388935,7 +388938,7 @@
      "pairing": "v2:f8b0cff14fc4593c98fdb111c7aafce252c9b76db41e7f46f968ba0bad9906d4",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -393702,7 +393705,7 @@
      "pairing": "v2:d326a527c4d02f73cebf3b0f03f6aded0dad40011915d1c7bf7dc2d5b6d2813d",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -399207,7 +399210,7 @@
      "pairing": "v2:6fdb55ca433ffbe67ba8a9c82fc7787ff060d58b51ed5ce26c35a4c305a3dadf",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -404953,7 +404956,7 @@
      "pairing": "v2:4522ce9dea920a1c19d44d9256819edae3ef0b10edf3007c2646143fbd2d9862",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -410708,7 +410711,7 @@
      "pairing": "v2:f6083431b37786357ac48d4f4435772ceaa3ffbbc541b72b821231af33cdf589",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -411370,7 +411373,7 @@
      "pairing": "v2:8314dfd928719ae2d05847e778c4dac5558fd8568581edc4ad23c79efcd4b3eb",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -412174,7 +412177,7 @@
      "pairing": "v2:450c47464c4ac0a48f4e88aa7ade0101867ae97542ef9f3290138e72111f4094",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -412380,7 +412383,7 @@
      "pairing": "v2:8eee727d89cf70b3dfb3fd7bfd4d38cd4d889a8934016becca42a01c951b090c",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "TIE"
     }
    },
@@ -432831,7 +432834,7 @@
      "pairing": "v2:fecdc908ddb3d31c24b346a3a7f0f755928b457e406eb1aaf5e05390335a9023",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -433037,7 +433040,7 @@
      "pairing": "v2:68ef99d3e356483fbcb76bf736ea5b481017ffb670bbe14c1898dbab82708aca",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -453482,7 +453485,7 @@
      "pairing": "v2:113e959d449577bde676cb19c184a8b6f197b14765c771fe8664f4e8124c2356",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -453861,7 +453864,7 @@
      "pairing": "v2:8930251449c9cdb455817613e5f47a4cf864467c005aa374c7e54924360e3c79",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; FastMCD on both with each library's own random subsets (allowed)",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -454523,7 +454526,7 @@
      "pairing": "v2:fb059b130fadafd90dfa154a2f49eaa2990be4265d24665979560d24946f69c3",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -455205,7 +455208,7 @@
      "pairing": "v2:b9d58e3e7805b945d75d03fe1407ee84fef2fd374653603588143aa78ecf3710",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -455888,7 +455891,7 @@
      "pairing": "v2:fccd4803572eb4f641b82b18249e5e2e4e87473c4a2265d7a4af49fce2d032ab",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -456557,7 +456560,7 @@
      "pairing": "v2:17169fd2bb17cc70e28d71e6dd992bdb0933c916bae9547865d570445f388e0b",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -457174,7 +457177,7 @@
      "pairing": "v2:e45973cbb167c4d44783e3603bd5dcba6686493f4af4313ad27507ae55fcb166",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -457929,7 +457932,7 @@
      "pairing": "v2:966f6a96fc94b680abef53249f03cb8bbc2c7f6cb08a01fc02620884c3f98c09",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -458596,7 +458599,7 @@
      "pairing": "v2:a2b7ecf131b83c72e73f6a7a94cbf39b1fa5768bc5a704fd1e47d0eff828fd4c",
      "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 1.03): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "TIE"
     }
    },
@@ -459271,7 +459274,7 @@
      "pairing": "v2:41a728cce5ebca6f0d680a1599e547483791be820175b30ad7b0b5cedfc5185b",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -460007,7 +460010,7 @@
      "pairing": "v2:249ab4ffb5e28b3d3832aaacc98505ca2a138545103343f30cdc420e7bf28fd6",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -460752,7 +460755,7 @@
      "pairing": "v2:a0c7e45b99f66243a7c25d9ea7a4c3e689d18c3748fc038bd57df189828049ae",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -461480,7 +461483,7 @@
      "pairing": "v2:db69a29d194c8310728d00cc944effcf346c29eec15bda61bb931ac246e0f468",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -476712,7 +476715,7 @@
      "pairing": "v2:a9d044b41bcb89a00460dcecdca8b97c901784186c090efa051308cf3b276e59",
      "reason": "euclidean, uniform priors on both; identical held-out accuracy",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -477441,7 +477444,7 @@
      "pairing": "v2:4c4530ea581a31355e1d51e4001f3ccd8e35dfed65e523e1f9d9f811fd347ae0",
      "reason": "euclidean, uniform priors on both; identical held-out accuracy",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -478157,7 +478160,7 @@
      "pairing": "v2:e628bd68aa7af6af9ec71b80b19dd3c64462bdb5037e98733a770a9052e8abe0",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -478804,7 +478807,7 @@
      "pairing": "v2:d0d9d799425de91115a950b4f16164e7f473f7b68943ba76bf29b4a49391b1ef",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -479454,7 +479457,7 @@
      "pairing": "v2:863fd44744a01d69ce7f48dfb526a71ed03e3f8cdc6f077344bd952a3db45e2b",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -480124,7 +480127,7 @@
      "pairing": "v2:336b8b7945a465ee18e82cdc4df7ec3b390aec5c0a857ac6ccf0e1b627e43e3c",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -480795,7 +480798,7 @@
      "pairing": "v2:6523d427ab64c00503e50e4ac37000121d5991a49273501ce3186e67d302ecb9",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; statsforecast OptimizedTheta, the same season and decomposition; forecast RMSE equal",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -481470,7 +481473,7 @@
      "pairing": "v2:8ea61abab72848e9ce73721fbf5b453bcfb55bae5e7598917bc8d9cd3bc2a07e",
      "reason": "a tie (ours/theirs within 0.95-1.05), shown (Andrew, 2026-10-13); audit note: a tie (ours/theirs 0.95): the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; statsforecast OptimizedTheta, the same season and decomposition; forecast RMSE equal",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "TIE"
     }
    },
@@ -482144,7 +482147,7 @@
      "pairing": "v2:1353ee6174022ee682e10cd444d5c2865884b7b326cc10b6561a78ec8ac62ea0",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -482812,7 +482815,7 @@
      "pairing": "v2:0d8e428d52897939986208fbb6aa76de251855154ed33ea51fe139102d458984",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -483472,7 +483475,7 @@
      "pairing": "v2:aa76608064a5cded82f6e75643cac76b1dce3ef710a0b48eafa0d237ec81072b",
      "reason": "alpha 0.85, max_iter 100 and the same stopping rule (L1 change below n x tol) on ours and networkx; scores sum to 1 on both",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -484048,7 +484051,7 @@
      "pairing": "v2:41a8f26b414ea990350f5ca643e9dbe24b84f35f5fcbeb8c5986b5a609133d77",
      "reason": "alpha 0.85, max_iter 100 and the same stopping rule (L1 change below n x tol) on ours and networkx; scores sum to 1 on both",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -484621,7 +484624,7 @@
      "pairing": "v2:a493c1b74d1706da5d55bc56c47535302a532e04b4c14140de626367c1db1ae6",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -485232,7 +485235,7 @@
      "pairing": "v2:1707578a6ad59f553742557300251a046496ce2aad609940fcaa084ff7f320b1",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -485851,7 +485854,7 @@
      "pairing": "v2:21bc31d1d233781a1269e5ecc38fcb93ad46667b32b5901eb61a9a1cac9d5cb3",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -486508,7 +486511,7 @@
      "pairing": "v2:134b0907451a90478b8b36a847dba1cf4a530147da8bd7ec76eefd1b8180c08f",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -487165,7 +487168,7 @@
      "pairing": "v2:0a6b4976878f5cf48461cf7ce285b14b53e0fa53dc1f27f251247cba1f13d81b",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -487814,7 +487817,7 @@
      "pairing": "v2:adf682304ab40f66c9e44901c79d421aaea565f1c8308e194a019669b05d6345",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -488462,7 +488465,7 @@
      "pairing": "v2:5280caaf43a57fb0ecccc3631126db29e14c1f35a4e64ca3eb6315e086b4ab80",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -493686,7 +493689,7 @@
      "pairing": "v2:b70a0171842301a898b9a13b7cb4e982289dff6e02ec37c33dea2592bf1c5917",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -498866,7 +498869,7 @@
      "pairing": "v2:3639d05e6daff35d280d0b41313945a79d3a3587debf8da98092a999a3505b54",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -499099,7 +499102,7 @@
      "pairing": "v2:3a94750439826cd5b1c59fd7036020371aca44f00bd4cc0e52c19a19ded8fcc2",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -499389,7 +499392,7 @@
      "pairing": "v2:ad2de068c86b02189b638f3e4503120ebdad73d36488adc24bb642891cff786e",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -499939,7 +499942,7 @@
      "pairing": "v2:009697be3ddc2195d0e2c551c98e1466886719afa27b5a583c387da09f874d7c",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -500482,7 +500485,7 @@
      "pairing": "v2:52fb4b570faddd6184c59f8205e076e7e239542bd48be4a29e30408bba6f762b",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -505970,7 +505973,7 @@
      "pairing": "v2:1f37492a387cd5de14522f71aabef4b028ca11081520d80915c1955b5b1cb200",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -511408,7 +511411,7 @@
      "pairing": "v2:ec94db51384247e1907803b78c2c6ff95594eb14dce57f1ee7f73c4762916844",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -512128,7 +512131,7 @@
      "pairing": "v2:a7d607938862eb7db2503f59078d5167f40581d3f2b8174c4869298e732c4841",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -512743,7 +512746,7 @@
      "pairing": "v2:f6da727984a6921e67a713b825ec785dcf4007b9aadedb1ff1ca442ab808cd92",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -513379,7 +513382,7 @@
      "pairing": "v2:b20c58e464097868ff0c5e65aeec72d85751f8830558d3e36b82a0020098cb7b",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -514132,7 +514135,7 @@
      "pairing": "v2:5cc61ad0f180f4d9db9df5dea34c578b74b631ab5b8bb13c2ae6e80512a57325",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -514868,7 +514871,7 @@
      "pairing": "v2:6331cdc08c3bf2cae4eebf4e8487bdb15b8daadb38c8696274e4163baea1b7a0",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -529987,7 +529990,7 @@
      "pairing": "v2:94bcb794b57f6c3bf507d1eadeb3763552b3431388dfd67289d7989293d943b3",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -531372,7 +531375,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -531422,7 +531425,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -531472,7 +531475,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -531522,7 +531525,7 @@
          "verdict": "INSUFFICIENT"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -531549,7 +531552,7 @@
      "pairing": "v2:ab8c96ba580ca46b358e16eee906bb1ac0b061a471fbe056c05d8b2f6f27f495",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -532936,7 +532939,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -532988,7 +532991,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -533040,7 +533043,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -533092,7 +533095,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -533119,7 +533122,7 @@
      "pairing": "v2:e711e9d994c846d2939bf37f458c86c457170e10505e9f87affccf9cd42e2f8e",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -534540,7 +534543,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -534592,7 +534595,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -534644,7 +534647,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -534696,7 +534699,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
@@ -534723,7 +534726,7 @@
      "pairing": "v2:90237122cc1001cb7dfea25df1c5735f16f2513a68153293aee2204bff7c7082",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -536170,7 +536173,7 @@
      "pairing": "v2:e8667c25898f7ac59c634d208518417569b3b08c78398208174c602de223c740",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -536848,7 +536851,7 @@
      "pairing": "v2:37f4bc2f31842b62ab1c7ea6010daa13e06ac26618cc7c5c88d7bc2aec39c7b8",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -537518,7 +537521,7 @@
      "pairing": "v2:9b58fd2ddd2c84e611f433f1fdd82684866b3b8d2b890a5ddc8e0c0fa52cd291",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -538140,7 +538143,7 @@
      "pairing": "v2:c11079985d99dbe603dfbe479d68925239cdc93adb9db0ba8ab0daa3400d01bd",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -538759,7 +538762,7 @@
      "pairing": "v2:d2326d08c0a13c4ffd64559ca08c74370961857df1ac9d2be893010caeda15c9",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -539361,7 +539364,7 @@
      "pairing": "v2:d30ee03ecb3deafaf66517b50ef39750321ca1196796d4fd18a411c98955bcf5",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -539966,7 +539969,7 @@
      "pairing": "v2:5d5d3a213841ae2a2ef2b889077a00d2af23176c1689d562eab4c0d1c8c402c5",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -540588,7 +540591,7 @@
      "pairing": "v2:f6fc1ac8d113255024df5e2982bfefe936e6949772adbfd52f428be5acbe2d4a",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -541210,7 +541213,7 @@
      "pairing": "v2:4d5eaa5aa1ba18b9d5b3f8e797634ea9aff4cd611570182699286ece04ab4286",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -541832,7 +541835,7 @@
      "pairing": "v2:c75f1c03eeb6b3df68e6e432c481dbff2dbceb10bd7fa22dfe68ca97a63345bc",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -542451,7 +542454,7 @@
      "pairing": "v2:a2a6a0ba897d6d0c4a84eec140ee438512c05436c00b56e1a67850e1341b8759",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -543060,7 +543063,7 @@
      "pairing": "v2:5e37aab7eb756c37043c2476f69f895d3ee51e795d018f03dd5a6a9a16f2a55a",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -543669,7 +543672,7 @@
      "pairing": "v2:2a08d2e18a5c6fdf421292db06a31c895f82567862459b4c0a2c8990493cb635",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -544278,7 +544281,7 @@
      "pairing": "v2:474e4855c1f069c93366281da3071fe5ae7773dda3c1f1792d619b576e4d04b4",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -544890,7 +544893,7 @@
      "pairing": "v2:592e1b95df6ec58e10e5d86529ea932a9b77a2081e0f6ce5ca6dafee004082e8",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -545512,7 +545515,7 @@
      "pairing": "v2:70983b52488333cb76ef0ce961a91fc36375e9d1609ccdf22d5de28268193080",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -546090,7 +546093,7 @@
      "pairing": "v2:b2b9bf789104cf37783225c993cc95ae9bab3532b5c605f46906e02371531d1d",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -546306,7 +546309,7 @@
      "pairing": "v2:b23a87b7732940927446b7ec0024a2be495d6ece0eefb50447c290f6f9879175",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -546695,7 +546698,7 @@
      "pairing": "v2:fc176515b9ad8fe18ba88624cb1b588e221947d8831f82c8ef3b5d7bcfbf70b9",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -566172,7 +566175,7 @@
      "pairing": "v2:f742b4d017c007ed8ddfb79bb9d0eac2da3ebed27ff61016a0b8012823201c03",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -566836,7 +566839,7 @@
      "pairing": "v2:f49658a48dd721ded8f2804b3e9918c8f1b601108ed44efff7622dda1ee2f258",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -567503,7 +567506,7 @@
      "pairing": "v2:d8e7bf311389633ed81005f4de0845f7a8918b07777d248c8025c14e114266a9",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -568176,7 +568179,7 @@
      "pairing": "v2:31b363724a56bfc495e5b02ad19c271361438c86e7ee25b8e10034390ba8eec5",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -568849,7 +568852,7 @@
      "pairing": "v2:31b56a7e29509f515bc09e3451f6b1b3c73a4c987625e9b27d2013dee906b833",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -569512,7 +569515,7 @@
      "pairing": "v2:b26db5c9def0a66ef72b8b3ef13e672d3cf157630773c1d3939397942e354e1a",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -570171,7 +570174,7 @@
      "pairing": "v2:6d1fba25851c0cc866949357fb6bab35f1588ae951786702c8622fd4ac609570",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -575399,7 +575402,7 @@
      "pairing": "v2:ef13674da6e87a4202aeb3e613605397235703ca8106b5b0eed2039a85c875f7",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -580667,13 +580670,13 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "common timing boundary not derivable: MIXED ours whole / arm kernel",
+       "reason": "required whole/whole timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
         "clock": "mixed",
         "kind": "mixed",
         "label": "MIXED ours whole / arm kernel",
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 12.726870473900584
        },
        "timing_comparisons": [
@@ -580683,7 +580686,7 @@
          "clock": "mixed",
          "kind": "mixed",
          "label": "MIXED ours whole / arm kernel",
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 12.726870473900584
         }
        ],
@@ -580694,7 +580697,7 @@
      "pairing": "v2:684c5b7e99ce5b7903d31def87b5dd7ea204bfe8546066826750c9396dd71ffa",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -581873,7 +581876,7 @@
         "clock": "mixed",
         "kind": "mixed",
         "label": "MIXED ours whole / arm kernel",
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 15.300121421543079
        },
        "timing_comparisons": [
@@ -581883,7 +581886,7 @@
          "clock": "mixed",
          "kind": "mixed",
          "label": "MIXED ours whole / arm kernel",
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 15.300121421543079
         }
        ],
@@ -581894,7 +581897,7 @@
      "pairing": "v2:2147e9517385ecf1dcaa6ea51f52b8a446844e1306b3c0e9c17ca5cfa60e198b",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -583031,7 +583034,7 @@
      "pairing": "v2:f0eae8ce50d28e9eec8d6c34f0379416723ab2a8bc43641907594cc3aec59604",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; same smoothing and fold count; cuML's interleaved folds vs shuffled KFold are a fold-draw difference (the cuML benchmark's own args)",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -583714,7 +583717,7 @@
      "pairing": "v2:d0ef6eda281e97112eaaacde949aac89722f3a6e9307ccb21d717d60f6549643",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work; same smoothing and fold count; cuML's interleaved folds vs shuffled KFold are a fold-draw difference (the cuML benchmark's own args)",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -584446,7 +584449,7 @@
      "pairing": "v2:ddd29b479c8b1a88f5ec15a81637dba7c6389b9a829fbd773dedccf3a15e723a",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -585524,7 +585527,7 @@
      "pairing": "v2:89a07d08e548a08938a38040db77242a0078da6cb1b29d26a31602c0b8afd6cb",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -586501,7 +586504,7 @@
      "pairing": "v2:aa479b7f02e9b88eae49a4db9af90a42d660cdc6154238f84a187e260d89eeef",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -586707,7 +586710,7 @@
      "pairing": "v2:b53fc53205c45bb0600a4f0e764337fed5086f62a0995fb94b64b2974b64780d",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -586964,7 +586967,7 @@
      "pairing": "v2:3236b62847bc30616c1da1c4878dd7c57d4b59a79929ad01decd02bfe5800bfd",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -587655,7 +587658,7 @@
      "pairing": "v2:08403f9a0b8391b15044992a0ac3b2d95c3fa5b93d1dca6afa123dc20678fadc",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -588347,7 +588350,7 @@
      "pairing": "v2:3dae219ad42c4ef87561b67939af5743f7ce6ef9ae0623e2c371fa3d0fd68990",
      "reason": "same settings (MATCHED read-back), same algorithm, comparable quality; scikit-learn VarianceThreshold converts to float64 (its only path); outputs identical to the bit",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -589006,7 +589009,7 @@
      "pairing": "v2:d270b819519494ccb12a7c0d08c36d995f7e69fb9c833982163628f1b285dd79",
      "reason": "same settings (MATCHED read-back), same algorithm, comparable quality; scikit-learn VarianceThreshold converts to float64 (its only path); outputs identical to the bit",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -589662,7 +589665,7 @@
      "pairing": "v2:caab6ba8e39910016845c87dfd46ba7d60db768b83785ae07f684fc5571cc1e1",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -590090,7 +590093,7 @@
      "pairing": "v2:3fbaa02580c8d68942d00af358f36fab88b0115dc0e7739242b41941c71bc136",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -590409,7 +590412,7 @@
      "pairing": "v2:e2fd6bfbd26c305ffdb748ddddd30fc852199084363217a9265fc31796c9c887",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -591001,7 +591004,7 @@
      "pairing": "v2:99cb1ae9a2f15d3214b43a458cc1e585cae745dbd05ab4be23878fb8fc125363",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -591603,7 +591606,7 @@
      "pairing": "v2:fbf49c02709237858fbfd6148465ea15b204c0be71b59f5c683243c7b486d0be",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -592251,7 +592254,7 @@
      "pairing": "v2:f3934b25869d41e13234a80ec55e55271b2ac1a76422ba44b40fc5649a0d8676",
      "reason": "exact Gaussian KDE on both (scikit-learn's tree prunes nothing at zero tolerance); likelihood equal",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -592907,7 +592910,7 @@
      "pairing": "v2:3818145744c7f44206b8d8e3495fb4dd18a781a5cd04d3b5dff7668d611237a0",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -592919,7 +592922,7 @@
      "pairing": "v2:7ef8fdd2e6d8ca6a3804d49b1a15efb4eaa4f07ba14280656f43b7b87f84d474",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -599711,7 +599714,7 @@
      "pairing": "v2:e8cfe75c5fd30d93c796269472c0b144211bc2bc2fb267844cdec036371b32a5",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     },
     "identical/infer": {
@@ -599723,7 +599726,7 @@
      "pairing": "v2:8982909496a1343348cf2ebd556db9f352ad1ef4f239413f13b3c43df734c57d",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -606515,7 +606518,7 @@
      "pairing": "v2:aa7f11080c6acefdb51f51562fc18a3e401b91c1573878908a07623d32f89e73",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -610538,7 +610541,7 @@
      "pairing": "v2:9938ff42d220625ff9f087fb598f586b4f5fcf0993a4bb09301660c01f648a2f",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -614628,7 +614631,7 @@
      "pairing": "v2:ef57087f252c42657e342268b0925ec54db574fd110ccca2bbac82d2aa3ccb07",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -615856,7 +615859,7 @@
          "verdict": "PASS"
         }
        ],
-       "reason": "no supported audit or matched effective settings for this pairing",
+       "reason": "required kernel/kernel timing boundary not derivable: whole/whole (kernel not derivable)",
        "rerace": "x",
        "timing_comparison": {
         "clock": "whole",
@@ -615887,7 +615890,7 @@
      "pairing": "v2:4844009351c0834a9c71b16aadd921f78c72ff4bb90615644dcf771a5002e286",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -617054,7 +617057,7 @@
      "pairing": "v2:5f46b1e30f531e256b0f785c989a4462fc237a80d76ca8abb74a2d9db9250199",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -617788,7 +617791,7 @@
      "pairing": "v2:21706d030e746a0cf112cc88ce2e1f9c9d81ab2ec2d138f2198bf51c8ccdf2e7",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -618527,7 +618530,7 @@
      "pairing": "v2:add5b27290891b96cd7ba01865a5adc012a10eb53ae92c95b26d70f44f92d58e",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -619188,7 +619191,7 @@
      "pairing": "v2:b6026edeb24670c32ab1abc39337b21b2cc8a02af010005a867b7b244902184e",
      "reason": "the library's own estimator through its public API, the same settings (params check MATCHED where checked) and the same work",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -619796,7 +619799,7 @@
      "pairing": "v2:a4b5379138a4c625732a1c45ea58bb031021e1c7c3d60e19a17169bc01859755",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -619982,7 +619985,7 @@
      "pairing": "v2:5a784c14c65169a5e90395c4825413e4ff22cb7dd251f569020b7157f5b4659d",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -620168,7 +620171,7 @@
      "pairing": "v2:c281ee7025526c516190c2e92a7efb72e0756e28273be1e44ff52bfc3ce376dc",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -620387,7 +620390,7 @@
      "pairing": "v2:91139dad687eb985724e5f004059c205b8ebca4b2e88582ac906bd87a7ed3fa9",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -620655,7 +620658,7 @@
      "pairing": "v2:94341294e7192eb58c20d9e6f97057fadc2c333beb540ab59a638e45c272c90a",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -621284,7 +621287,7 @@
      "pairing": "v2:74d7dc4aa9226a7abbbba16629bbebb44737e37b0cd62bb0a4e052c1735f3ace",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -621864,7 +621867,7 @@
      "pairing": "v2:fa23350d40f1f27bda009b8490f406241907facdffdb6550ceaccd317da3e539",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -622049,7 +622052,7 @@
      "pairing": "v2:718d8df345c0c3e89605a2fa1e98c0e86ffa84a4e8a56c193461cb02c6e3b4b5",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -622234,7 +622237,7 @@
      "pairing": "v2:0c003f268dc6508e17b1a720f3c53e40a93a94e5e6bb1588c7231308669d3f5c",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -622420,7 +622423,7 @@
      "pairing": "v2:7798a5d862ea4caa254441f0b7259ae294378a3f635402fff05b491bff8fbba3",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -622668,7 +622671,7 @@
      "pairing": "v2:9dc4d567fd15847625585daf9fe333a835d1cf1b7c979f52d0f85cd75d2d416c",
      "reason": "ours' IDENTICAL fit solves the centered normal equations by Cholesky (glm/impl/gram_solve.mojo), scikit-learn solver='cholesky': the same algorithm; R2 equal. (The lane note said 'eig'; fixed)",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -623390,7 +623393,7 @@
      "pairing": "v2:a618347975ef9103ac94283feaf0b1c1c828945b87f0878d1c46103e6a5d1e08",
      "reason": "ours' IDENTICAL fit solves the centered normal equations by Cholesky (glm/impl/gram_solve.mojo), scikit-learn solver='cholesky': the same algorithm; R2 equal. (The lane note said 'eig'; fixed)",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -624110,7 +624113,7 @@
      "pairing": "v2:e5f950d2f801ba7902f78b181aded40a18353023d0332e51445117e7926b4bd3",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -624809,7 +624812,7 @@
      "pairing": "v2:ae8262d2c38759f12db0ef62d2b2c5e6b9234ae5732708bdc7e64d9cfd62be6e",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -625292,11 +625295,11 @@
        "rerace": "",
        "timing_comparison": {
         "clock": "whole",
-        "kind": "fallback",
-        "label": "whole/whole (kernel not derivable)",
+        "kind": "preferred",
+        "label": "whole/whole",
         "opponent_ms": 9.502311999995072,
         "ours_ms": 23.069772999861016,
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 2.4278063064939333
        },
        "timing_comparisons": [
@@ -625304,11 +625307,11 @@
          "batch": null,
          "batch_rows": null,
          "clock": "whole",
-         "kind": "fallback",
-         "label": "whole/whole (kernel not derivable)",
+         "kind": "preferred",
+         "label": "whole/whole",
          "opponent_ms": 9.502311999995072,
          "ours_ms": 23.069772999861016,
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 2.4278063064939333
         }
        ],
@@ -625339,11 +625342,11 @@
        "rerace": "",
        "timing_comparison": {
         "clock": "whole",
-        "kind": "fallback",
-        "label": "whole/whole (kernel not derivable)",
+        "kind": "preferred",
+        "label": "whole/whole",
         "opponent_ms": 9.178551000104562,
         "ours_ms": 23.069772999861016,
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 2.513443897582331
        },
        "timing_comparisons": [
@@ -625351,11 +625354,11 @@
          "batch": null,
          "batch_rows": null,
          "clock": "whole",
-         "kind": "fallback",
-         "label": "whole/whole (kernel not derivable)",
+         "kind": "preferred",
+         "label": "whole/whole",
          "opponent_ms": 9.178551000104562,
          "ours_ms": 23.069772999861016,
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 2.513443897582331
         }
        ],
@@ -625366,7 +625369,7 @@
      "pairing": "v2:4190938cc5ea14345653db4458daf6fc204004a97af771b61f8c7ddc4d9eb6f3",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -633165,11 +633168,11 @@
        "rerace": "",
        "timing_comparison": {
         "clock": "whole",
-        "kind": "fallback",
-        "label": "whole/whole (kernel not derivable)",
+        "kind": "preferred",
+        "label": "whole/whole",
         "opponent_ms": 11.725400999921476,
         "ours_ms": 28.605120999827705,
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 2.439585733572717
        },
        "timing_comparisons": [
@@ -633177,11 +633180,11 @@
          "batch": null,
          "batch_rows": null,
          "clock": "whole",
-         "kind": "fallback",
-         "label": "whole/whole (kernel not derivable)",
+         "kind": "preferred",
+         "label": "whole/whole",
          "opponent_ms": 11.725400999921476,
          "ours_ms": 28.605120999827705,
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 2.439585733572717
         }
        ],
@@ -633212,11 +633215,11 @@
        "rerace": "",
        "timing_comparison": {
         "clock": "whole",
-        "kind": "fallback",
-        "label": "whole/whole (kernel not derivable)",
+        "kind": "preferred",
+        "label": "whole/whole",
         "opponent_ms": 11.666770999909204,
         "ours_ms": 28.605120999827705,
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 2.4518455877851997
        },
        "timing_comparisons": [
@@ -633224,11 +633227,11 @@
          "batch": null,
          "batch_rows": null,
          "clock": "whole",
-         "kind": "fallback",
-         "label": "whole/whole (kernel not derivable)",
+         "kind": "preferred",
+         "label": "whole/whole",
          "opponent_ms": 11.666770999909204,
          "ours_ms": 28.605120999827705,
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 2.4518455877851997
         }
        ],
@@ -633259,11 +633262,11 @@
        "rerace": "",
        "timing_comparison": {
         "clock": "whole",
-        "kind": "fallback",
-        "label": "whole/whole (kernel not derivable)",
+        "kind": "preferred",
+        "label": "whole/whole",
         "opponent_ms": 10.809161999986827,
         "ours_ms": 28.605120999827705,
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 2.646377304721917
        },
        "timing_comparisons": [
@@ -633271,11 +633274,11 @@
          "batch": null,
          "batch_rows": null,
          "clock": "whole",
-         "kind": "fallback",
-         "label": "whole/whole (kernel not derivable)",
+         "kind": "preferred",
+         "label": "whole/whole",
          "opponent_ms": 10.809161999986827,
          "ours_ms": 28.605120999827705,
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 2.646377304721917
         }
        ],
@@ -633306,11 +633309,11 @@
        "rerace": "",
        "timing_comparison": {
         "clock": "whole",
-        "kind": "fallback",
-        "label": "whole/whole (kernel not derivable)",
+        "kind": "preferred",
+        "label": "whole/whole",
         "opponent_ms": 11.849249000078999,
         "ours_ms": 28.605120999827705,
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 2.4140872556258204
        },
        "timing_comparisons": [
@@ -633318,11 +633321,11 @@
          "batch": null,
          "batch_rows": null,
          "clock": "whole",
-         "kind": "fallback",
-         "label": "whole/whole (kernel not derivable)",
+         "kind": "preferred",
+         "label": "whole/whole",
          "opponent_ms": 11.849249000078999,
          "ours_ms": 28.605120999827705,
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 2.4140872556258204
         }
        ],
@@ -633333,7 +633336,7 @@
      "pairing": "v2:727308a5357622bb7f9f613f6b7e96c82d3ff1e97b0b2acf79b2ffd877d80bee",
      "reason": "recorded effective settings and quality within declared margins",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "MATCHED"
     }
    },
@@ -644015,7 +644018,7 @@
      "pairing": "v2:9348a9086e153d5e763cf558427bbc66038a6cfaaf1c65fd8001d056f212da62",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -644662,7 +644665,7 @@
      "pairing": "v2:fff8ab4cd7b5c8aecd9cb652365031a66e82e465d0f7bdaa40b6d9056a6596b9",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -645393,7 +645396,7 @@
      "pairing": "v2:ad9c40e9edf09ba197d12eafb19df04fc557015d740f9612a3e5bc30c332057b",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -645823,7 +645826,7 @@
      "pairing": "v2:ba3ee0f5725d0b48f1679b15992f82620462d6942d57f08da0d77159ef2b43d3",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -646481,11 +646484,11 @@
        "rerace": "x",
        "timing_comparison": {
         "clock": "whole",
-        "kind": "fallback",
-        "label": "whole/whole (kernel not derivable)",
+        "kind": "preferred",
+        "label": "whole/whole",
         "opponent_ms": 1.4836090012977365,
         "ours_ms": 3.418841999518918,
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 2.304409043439614
        },
        "timing_comparisons": [
@@ -646493,11 +646496,11 @@
          "batch": null,
          "batch_rows": null,
          "clock": "whole",
-         "kind": "fallback",
-         "label": "whole/whole (kernel not derivable)",
+         "kind": "preferred",
+         "label": "whole/whole",
          "opponent_ms": 1.4836090012977365,
          "ours_ms": 3.418841999518918,
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 2.304409043439614
         }
        ],
@@ -646528,11 +646531,11 @@
        "rerace": "x",
        "timing_comparison": {
         "clock": "whole",
-        "kind": "fallback",
-        "label": "whole/whole (kernel not derivable)",
+        "kind": "preferred",
+        "label": "whole/whole",
         "opponent_ms": 2.140775000952999,
         "ours_ms": 3.418841999518918,
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 1.5970113617717732
        },
        "timing_comparisons": [
@@ -646540,11 +646543,11 @@
          "batch": null,
          "batch_rows": null,
          "clock": "whole",
-         "kind": "fallback",
-         "label": "whole/whole (kernel not derivable)",
+         "kind": "preferred",
+         "label": "whole/whole",
          "opponent_ms": 2.140775000952999,
          "ours_ms": 3.418841999518918,
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 1.5970113617717732
         }
        ],
@@ -646575,11 +646578,11 @@
        "rerace": "x",
        "timing_comparison": {
         "clock": "whole",
-        "kind": "fallback",
-        "label": "whole/whole (kernel not derivable)",
+        "kind": "preferred",
+        "label": "whole/whole",
         "opponent_ms": 1.8893600008595968,
         "ours_ms": 3.418841999518918,
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 1.8095238588535043
        },
        "timing_comparisons": [
@@ -646587,11 +646590,11 @@
          "batch": null,
          "batch_rows": null,
          "clock": "whole",
-         "kind": "fallback",
-         "label": "whole/whole (kernel not derivable)",
+         "kind": "preferred",
+         "label": "whole/whole",
          "opponent_ms": 1.8893600008595968,
          "ours_ms": 3.418841999518918,
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 1.8095238588535043
         }
        ],
@@ -646625,11 +646628,11 @@
        "rerace": "",
        "timing_comparison": {
         "clock": "whole",
-        "kind": "fallback",
-        "label": "whole/whole (kernel not derivable)",
+        "kind": "preferred",
+        "label": "whole/whole",
         "opponent_ms": 1.3260720006655902,
         "ours_ms": 3.418841999518918,
-        "preferred": "kernel",
+        "preferred": "whole",
         "value": 2.5781722242856433
        },
        "timing_comparisons": [
@@ -646637,11 +646640,11 @@
          "batch": null,
          "batch_rows": null,
          "clock": "whole",
-         "kind": "fallback",
-         "label": "whole/whole (kernel not derivable)",
+         "kind": "preferred",
+         "label": "whole/whole",
          "opponent_ms": 1.3260720006655902,
          "ours_ms": 3.418841999518918,
-         "preferred": "kernel",
+         "preferred": "whole",
          "value": 2.5781722242856433
         }
        ],
@@ -646652,7 +646655,7 @@
      "pairing": "v2:0fae5c5159558333cb49393f6cb03e82d3de8154c2838e129ee79f921a13da15",
      "reason": "same weights and batches (losses equal to 4e-7), FP32, torch's own layers and AdamW; torch 2.6.0 is not a reason",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -648373,7 +648376,7 @@
      "pairing": "v2:d6182f94c9b59e38660255dbe100f05fe2a85680dcfff6dbaa0164be5a5e90ae",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -649016,7 +649019,7 @@
      "pairing": "v2:e9b29247315a1088e18d8c18bc22f575ee0c8024f6e1cbbd9075071bc4cdb5b8",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -649736,7 +649739,7 @@
      "pairing": "v2:bc48f2b4a10a9f5fa6e079b76375b1746d9fd4b7976c6c651e79542a6b7be79d",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -650439,7 +650442,7 @@
      "pairing": "v2:327c48dd0eb1c758f4561c1cd89cffc75c3d48ab843957d9c376d56230fb8ee2",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -651406,7 +651409,7 @@
      "pairing": "v2:6f1d5cef76af257fcb63f4c9c0c27bc76ad883f93123f1461dbf9fc021adaf8d",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -651778,7 +651781,7 @@
      "pairing": "v2:4427028fde08f2942d83e1b375cd85a6a554c3cc23dd9a4078b4ef29df529274",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -652040,7 +652043,7 @@
      "pairing": "v2:57d08679fdc040dcb13f0a2baa0ae97fbad34db98993d9993f20473a6d4acd83",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -653052,7 +653055,7 @@
      "pairing": "v2:d63afaae9fa52f97b4c39bf7ca37f9f1b6efa443bf8e18fb70af5166ff398969",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
     }
    },
@@ -654146,7 +654149,7 @@
      "pairing": "v2:bdcccf409f48bb9bbbfb53fec60c7148d32d2922a220f9c1017593f473c1cf7d",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -655318,7 +655321,7 @@
      "pairing": "v2:ba931926645c3a776783adb0742d621e1d91278033102d0ce1e52cc72135043e",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -656410,7 +656413,7 @@
      "pairing": "v2:8ed2d7f6bd8fd1e91b81a9c31fd93f62ae4d579c509588eca0488cb7eaf80780",
      "reason": "same pinned settings read back (symmetric trees, Cosine, random_strength 1, Newton x1, 254 borders, no bootstrap, Ordered with fold_permutation_block 64); CatBoost has no AMD or Apple GPU path; leaves and quality equal to 3-4 digits",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -657047,7 +657050,7 @@
      "pairing": "v2:26399d3f8a0125b9dfbcde429aefbdc28be5fd2f3e51eae6c1e05935bf236d2d",
      "reason": "same pinned settings read back (symmetric trees, Cosine, random_strength 1, Newton x1, 254 borders, no bootstrap, Ordered with fold_permutation_block 64); CatBoost has no AMD or Apple GPU path; leaves and quality equal to 3-4 digits",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -657697,7 +657700,7 @@
      "pairing": "v2:fb1b6c475ede7dab4c73935589f27587d8480bd228cede2e2dcdfbd5639083e8",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    },
@@ -658466,7 +658469,7 @@
      "pairing": "v2:3886192341d064a0e65a53c8f66464f22d73ff1aec93c5bc8b8849968f253f5d",
      "reason": "same pinned settings read back (symmetric trees, Cosine, random_strength 1, Newton x1, 254 borders, no bootstrap); CatBoost has no AMD or Apple GPU path; leaves and quality equal to 3-4 digits",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -659103,7 +659106,7 @@
      "pairing": "v2:5c212d17751438b8b5ddf11960a66f093a0ad3fb8e2322509a756f2a5a9be343",
      "reason": "same pinned settings read back (symmetric trees, Cosine, random_strength 1, Newton x1, 254 borders, no bootstrap); CatBoost has no AMD or Apple GPU path; leaves and quality equal to 3-4 digits",
      "rerace": "",
-     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, 2026-10-14)",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "FAIR"
     }
    },
@@ -659669,5 +659672,5 @@
   }
  },
  "schema": "mojolearn-bench-board/1",
- "updated": "2026-10-14T07:31:51Z"
+ "updated": "2026-10-14T07:44:24Z"
 }

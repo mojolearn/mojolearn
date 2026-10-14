@@ -310,7 +310,7 @@
       }
     }
   },
-  "code_commit": "f5a9d0fd4a5a5eed74eaa8ca341a6b3e66057f67",
+  "code_commit": "2b733fdfa9dac5ae8a7598d68e4889c9c5ce5e28",
   "cross_vendor_scored_hashes": {
     "MATCH": 25
   },
@@ -594,7 +594,263 @@
   },
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014",
   "linalg_output_verification": {
-    "status": "pending"
+    "checked_at": 1791963667.1795042,
+    "failures": [],
+    "recipes": {
+      "algos/cholesky/synthetic/rows=full": {
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.cholesky.synthetic.rows=full/board.json",
+        "scored_cells": 3,
+        "verified_outputs": [
+          {
+            "archive": {
+              "bytes": 484548784,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/d5160dcd2230c8dd0e0dcf85639aafe736e208aca124f108d1ed4abb39953ddb.tar.gz",
+              "sha256": "d5160dcd2230c8dd0e0dcf85639aafe736e208aca124f108d1ed4abb39953ddb",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "ours",
+            "full_shapes": {
+              "L": [
+                8192,
+                8192
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/d5160dcd2230c8dd0e0dcf85639aafe736e208aca124f108d1ed4abb39953ddb.tar.gz",
+            "proof": {
+              "bytes": 536871168,
+              "member": "run/work/cholesky-synthetic-ours.npz",
+              "output_digest": "c5127aab3d327628",
+              "output_sha256": "39f4c0a7156c5f666cee5d38a9544f8c589f000e034e1adbd7b69c868b3bc201",
+              "sha256": "4734762e5a643e4dce0b71afa574ddb609e13a023eac281a96cff4d4fef7916c"
+            }
+          },
+          {
+            "archive": {
+              "bytes": 484548784,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/d5160dcd2230c8dd0e0dcf85639aafe736e208aca124f108d1ed4abb39953ddb.tar.gz",
+              "sha256": "d5160dcd2230c8dd0e0dcf85639aafe736e208aca124f108d1ed4abb39953ddb",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "torch-gpu",
+            "full_shapes": {
+              "L": [
+                8192,
+                8192
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/d5160dcd2230c8dd0e0dcf85639aafe736e208aca124f108d1ed4abb39953ddb.tar.gz",
+            "proof": {
+              "bytes": 536871168,
+              "member": "run/work/cholesky-synthetic-torch-gpu.npz",
+              "output_digest": "2dcb629d38689c77",
+              "output_sha256": "80102cbecbd526f62f1a6653d1d0b973815107a8449d77d955e7f6e47420bd31",
+              "sha256": "168e916c5fe070b454e15c70781cdfed4fcb416be16e73ddf5c64222189250c7"
+            }
+          },
+          {
+            "archive": {
+              "bytes": 484548784,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/d5160dcd2230c8dd0e0dcf85639aafe736e208aca124f108d1ed4abb39953ddb.tar.gz",
+              "sha256": "d5160dcd2230c8dd0e0dcf85639aafe736e208aca124f108d1ed4abb39953ddb",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "cupy-gpu",
+            "full_shapes": {
+              "L": [
+                8192,
+                8192
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/d5160dcd2230c8dd0e0dcf85639aafe736e208aca124f108d1ed4abb39953ddb.tar.gz",
+            "proof": {
+              "bytes": 536871168,
+              "member": "run/work/cholesky-synthetic-cupy-gpu.npz",
+              "output_digest": "b40089bb769874c1",
+              "output_sha256": "a7266739b33bc449ddcef5bccc9202bc09e98813461d12f4622134a27471a49f",
+              "sha256": "cf5ebee02c461ab38d01e7606199cec0db8f66f2c4f123826e210cec419e521a"
+            }
+          }
+        ]
+      },
+      "algos/lu-factor/synthetic/rows=full": {
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.lu-factor.synthetic.rows=full/board.json",
+        "scored_cells": 3,
+        "verified_outputs": [
+          {
+            "archive": {
+              "bytes": 48771083,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/72fcbecee7c0bcf11fe49b2447cf6454a88b95715ec9842e73df0117573d7d3f.tar.gz",
+              "sha256": "72fcbecee7c0bcf11fe49b2447cf6454a88b95715ec9842e73df0117573d7d3f",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "ours",
+            "full_shapes": {
+              "x": [
+                524288
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/72fcbecee7c0bcf11fe49b2447cf6454a88b95715ec9842e73df0117573d7d3f.tar.gz",
+            "proof": {
+              "bytes": 4194560,
+              "member": "run/work/lu-factor-synthetic-ours.npz",
+              "output_digest": "44a7ac0c0f57abc2",
+              "output_sha256": "420d8626da216adb90e1ca8e48c21d7c114046d3e59a006767761c585a9e8219",
+              "sha256": "1d66a1bb806ddb6d188150095d65cf316a0c74f75593b214a8824ffe9db4006c"
+            }
+          },
+          {
+            "archive": {
+              "bytes": 48771083,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/72fcbecee7c0bcf11fe49b2447cf6454a88b95715ec9842e73df0117573d7d3f.tar.gz",
+              "sha256": "72fcbecee7c0bcf11fe49b2447cf6454a88b95715ec9842e73df0117573d7d3f",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "torch-gpu",
+            "full_shapes": {
+              "x": [
+                524288
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/72fcbecee7c0bcf11fe49b2447cf6454a88b95715ec9842e73df0117573d7d3f.tar.gz",
+            "proof": {
+              "bytes": 4194560,
+              "member": "run/work/lu-factor-synthetic-torch-gpu.npz",
+              "output_digest": "87086fbb72b740a0",
+              "output_sha256": "439c79189f379fab7a83fb48828f768fd673367f5920eccaa7c406529c2e14ae",
+              "sha256": "d498933547a7b2707d159252014a8dd8ed76f3f5f7f997ab9420dc2ef7abb674"
+            }
+          },
+          {
+            "archive": {
+              "bytes": 48771083,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/72fcbecee7c0bcf11fe49b2447cf6454a88b95715ec9842e73df0117573d7d3f.tar.gz",
+              "sha256": "72fcbecee7c0bcf11fe49b2447cf6454a88b95715ec9842e73df0117573d7d3f",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "cupy-gpu",
+            "full_shapes": {
+              "x": [
+                524288
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/72fcbecee7c0bcf11fe49b2447cf6454a88b95715ec9842e73df0117573d7d3f.tar.gz",
+            "proof": {
+              "bytes": 4194560,
+              "member": "run/work/lu-factor-synthetic-cupy-gpu.npz",
+              "output_digest": "87086fbb72b740a0",
+              "output_sha256": "439c79189f379fab7a83fb48828f768fd673367f5920eccaa7c406529c2e14ae",
+              "sha256": "d498933547a7b2707d159252014a8dd8ed76f3f5f7f997ab9420dc2ef7abb674"
+            }
+          }
+        ]
+      },
+      "algos/lu-solve/synthetic/rows=full": {
+        "board": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.lu-solve.synthetic.rows=full/board.json",
+        "scored_cells": 3,
+        "verified_outputs": [
+          {
+            "archive": {
+              "bytes": 48771148,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/61c6549981a465fc35a59053f57f2d86bd591435fafb6ddf1875d55add527537.tar.gz",
+              "sha256": "61c6549981a465fc35a59053f57f2d86bd591435fafb6ddf1875d55add527537",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "ours",
+            "full_shapes": {
+              "x": [
+                524288
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/61c6549981a465fc35a59053f57f2d86bd591435fafb6ddf1875d55add527537.tar.gz",
+            "proof": {
+              "bytes": 4194560,
+              "member": "run/work/lu-solve-synthetic-ours.npz",
+              "output_digest": "44a7ac0c0f57abc2",
+              "output_sha256": "420d8626da216adb90e1ca8e48c21d7c114046d3e59a006767761c585a9e8219",
+              "sha256": "1d66a1bb806ddb6d188150095d65cf316a0c74f75593b214a8824ffe9db4006c"
+            }
+          },
+          {
+            "archive": {
+              "bytes": 48771148,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/61c6549981a465fc35a59053f57f2d86bd591435fafb6ddf1875d55add527537.tar.gz",
+              "sha256": "61c6549981a465fc35a59053f57f2d86bd591435fafb6ddf1875d55add527537",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "torch-gpu",
+            "full_shapes": {
+              "x": [
+                524288
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/61c6549981a465fc35a59053f57f2d86bd591435fafb6ddf1875d55add527537.tar.gz",
+            "proof": {
+              "bytes": 4194560,
+              "member": "run/work/lu-solve-synthetic-torch-gpu.npz",
+              "output_digest": "87086fbb72b740a0",
+              "output_sha256": "439c79189f379fab7a83fb48828f768fd673367f5920eccaa7c406529c2e14ae",
+              "sha256": "d498933547a7b2707d159252014a8dd8ed76f3f5f7f997ab9420dc2ef7abb674"
+            }
+          },
+          {
+            "archive": {
+              "bytes": 48771148,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/61c6549981a465fc35a59053f57f2d86bd591435fafb6ddf1875d55add527537.tar.gz",
+              "sha256": "61c6549981a465fc35a59053f57f2d86bd591435fafb6ddf1875d55add527537",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "arm": "cupy-gpu",
+            "full_shapes": {
+              "x": [
+                524288
+              ]
+            },
+            "local_verified_copy": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-verified-outputs/61c6549981a465fc35a59053f57f2d86bd591435fafb6ddf1875d55add527537.tar.gz",
+            "proof": {
+              "bytes": 4194560,
+              "member": "run/work/lu-solve-synthetic-cupy-gpu.npz",
+              "output_digest": "87086fbb72b740a0",
+              "output_sha256": "439c79189f379fab7a83fb48828f768fd673367f5920eccaa7c406529c2e14ae",
+              "sha256": "d498933547a7b2707d159252014a8dd8ed76f3f5f7f997ab9420dc2ef7abb674"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "linear_algebra_dispatch_stop": {
+    "action": "Terminated paused dispatch controller only after current measurement process exited with verified archives; no scored GPU work interrupted.",
+    "completed_records": [
+      {
+        "board": "/root/gpu-gap-wave10-evidence/campaign/measured/algos.lu-factor.synthetic.rows=full/board.json",
+        "recipe": "algos/lu-factor/synthetic/rows=full",
+        "required_archives_verified": true,
+        "status": "done"
+      }
+    ],
+    "controller_pid": 53555,
+    "drained_at": 1791963602.6860368,
+    "measurement_workers_remaining": [],
+    "reason": "Stop controller dispatch after current cell; child completes and retains its scored measurement unchanged. Remaining recipes move to a new freeze with fast evidence compression and CuPy copy clocks.",
+    "stopped_at": 1791963544.107191
   },
   "original_amd_retention_incident": {
     "original_teardown_receipt": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-retired-first-rental.json",
@@ -2643,6 +2899,7 @@
         "algos/batchnorm2d/synthetic/rows=full",
         "algos/binarizer/istella/rows=full",
         "algos/binarizer/taxi/rows=full",
+        "algos/cholesky/synthetic/rows=full",
         "algos/conv1d/synthetic/rows=full",
         "algos/conv2d/synthetic/rows=full",
         "algos/dropout2d/synthetic/rows=full",
@@ -2650,6 +2907,8 @@
         "algos/global-avgpool/synthetic/rows=full",
         "algos/global-maxpool/synthetic/rows=full",
         "algos/layernorm/synthetic/rows=full",
+        "algos/lu-factor/synthetic/rows=full",
+        "algos/lu-solve/synthetic/rows=full",
         "algos/maxpool1d/synthetic/rows=full",
         "algos/maxpool2d/synthetic/rows=full",
         "algos/nadam/synthetic/rows=full",
@@ -2681,14 +2940,14 @@
         "REFUSED": 182
       },
       "latest_preflight_counts": {
-        "MATCHED": 68,
-        "REFUSED": 145
+        "MATCHED": 71,
+        "REFUSED": 142
       },
-      "new_fit_admissions": 43,
-      "updated_recipes": 45
+      "new_fit_admissions": 46,
+      "updated_recipes": 48
     }
   },
-  "recorded_epoch": 1791963144.7849321,
+  "recorded_epoch": 1791964040.0118241,
   "recorded_launch_freezes": {
     "amd-wave2-launch": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
     "amd-wave3-launch": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
@@ -2697,6 +2956,7 @@
     "amd-wave6-launch": "0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54",
     "amd-wave8-launch": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "nvidia-wave10-launch": "dbc9b18c156d7ebcfbf94bdd7224f3b319eac6ab",
+    "nvidia-wave11-launch": "2b733fdfa9dac5ae8a7598d68e4889c9c5ce5e28",
     "nvidia-wave2-launch": "aa8e9e72bd7cd60072c52b4e6af46296ada6aa01",
     "nvidia-wave3-launch": "3c60869cf55956fafc84d469f06aa90adfbb11e2",
     "nvidia-wave5-launch": "d11b8209177712088e282ad88ae6ef9383a5f4d8",
@@ -2713,7 +2973,7 @@
   ],
   "retention": {
     "archive_transfer_closure_complete": false,
-    "checked_at": 1791963144.740049,
+    "checked_at": 1791964039.960356,
     "complete": false,
     "historical_missing_outputs_recoverable": false,
     "known_missing_required_outputs": {
@@ -3100,14 +3360,60 @@
         "session_finished_epoch": 1791950137.0978165
       },
       "nvidia-wave10": {
-        "archives": [],
+        "archives": [
+          {
+            "paths": [
+              "/root/gpu-gap-cache/algos-data",
+              "/root/gpu-gap-cache/ctd-data",
+              "/root/gpu-gap-cache/more-data",
+              "/root/gpu-gap-cache/wheels",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_nvidia-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_amd-0.8.44.dist-info",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn_diagnostics.py",
+              "/root/gpu-gap-cache/venv/lib/python3.11/site-packages/mojolearn-0.8.44.dist-info"
+            ],
+            "reference": {
+              "bytes": 3288391955,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/7b1cee5c003e287d891841484ee31ed09d674524c00d8ce92072a94a134c99eb.tar.gz",
+              "sha256": "7b1cee5c003e287d891841484ee31ed09d674524c00d8ce92072a94a134c99eb",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          },
+          {
+            "paths": [
+              "/root/gpu-gap-wave10-evidence"
+            ],
+            "reference": {
+              "bytes": 463411487,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/4887f2996a8ad8f503b2f1d8b678d3d455acdc65cf38566264b735e6633e552d.tar.gz",
+              "sha256": "4887f2996a8ad8f503b2f1d8b678d3d455acdc65cf38566264b735e6633e552d",
+              "status": "verified",
+              "verification": "GET sha256"
+            }
+          }
+        ],
         "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/retention-closure.json",
+        "complete": true,
+        "per_run_verified_references": 6,
+        "process_returncode": 241,
+        "remaining_workers": [],
+        "retention_finished_epoch": 1791963946.5020907,
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/session/session.json",
+        "session_finished_epoch": 1791963613.098925
+      },
+      "nvidia-wave11": {
+        "archives": [],
+        "closure_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave11/retention-closure.json",
         "complete": false,
         "per_run_verified_references": 0,
         "process_returncode": null,
         "remaining_workers": null,
         "retention_finished_epoch": null,
-        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/session/session.json",
+        "session_evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave11/session/session.json",
         "session_finished_epoch": null
       },
       "nvidia-wave2": {
@@ -3409,11 +3715,17 @@
   },
   "validation": {
     "board_format_verification": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/board-format-verification.json",
+    "copy_clock_retention_tests": {
+      "exit_status": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/cupy-clock-fast-retention-tests.log",
+      "passed": 95
+    },
     "fairness_check_log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/board-audit-wave8.log",
     "focused_tests": {
       "exit_status": 0,
-      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/final-focused-tests-07.log",
-      "passed": 252
+      "freeze": "2b733fdfa9dac5ae8a7598d68e4889c9c5ce5e28",
+      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/final-focused-tests-08.log",
+      "passed": 205
     },
     "host_route_regressions": {
       "ci_run": 38523425144,
@@ -3432,6 +3744,17 @@
       "freeze": "dbc9b18c156d7ebcfbf94bdd7224f3b319eac6ab",
       "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/linalg-retention-quality-tests.log",
       "passed": 138
-    }
+    },
+    "previous_focused_tests": {
+      "exit_status": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/final-focused-tests-07.log",
+      "passed": 252
+    },
+    "required_clock_tests": {
+      "exit_status": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/required-clock-tests.log",
+      "passed": 109
+    },
+    "retention_compression_screen": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/retention-compression-screen.json"
   }
 }

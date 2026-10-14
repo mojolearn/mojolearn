@@ -1,5 +1,5 @@
 {
-  "date_epoch": 1791963144.346636,
+  "date_epoch": 1791963861.179457,
   "scope": "All original 303 GPU-opponent recipes; newest preflight evidence only, not full timing or admission coverage",
   "vendors": {
     "amd": {
@@ -2327,6 +2327,7 @@
         "algos/batchnorm2d/synthetic/rows=full",
         "algos/binarizer/istella/rows=full",
         "algos/binarizer/taxi/rows=full",
+        "algos/cholesky/synthetic/rows=full",
         "algos/conv1d/synthetic/rows=full",
         "algos/conv2d/synthetic/rows=full",
         "algos/dropout2d/synthetic/rows=full",
@@ -2334,6 +2335,8 @@
         "algos/global-avgpool/synthetic/rows=full",
         "algos/global-maxpool/synthetic/rows=full",
         "algos/layernorm/synthetic/rows=full",
+        "algos/lu-factor/synthetic/rows=full",
+        "algos/lu-solve/synthetic/rows=full",
         "algos/maxpool1d/synthetic/rows=full",
         "algos/maxpool2d/synthetic/rows=full",
         "algos/nadam/synthetic/rows=full",
@@ -2361,10 +2364,10 @@
         "classical2/linearsvc/taxi/rows=full"
       ],
       "latest_preflight_counts": {
-        "MATCHED": 68,
-        "REFUSED": 145
+        "MATCHED": 71,
+        "REFUSED": 142
       },
-      "new_fit_admissions": 43,
+      "new_fit_admissions": 46,
       "recipes": {
         "algos/adafactor/synthetic/rows=full": {
           "audit": {
@@ -2578,18 +2581,13 @@
           "status": "REFUSED"
         },
         "algos/cholesky/synthetic/rows=full": {
-          "arms": [
-            "ours",
-            "torch-gpu",
-            "cupy-gpu"
-          ],
-          "family": "algos",
-          "preflight_rc": 1,
-          "problems": [
-            "missing real library implementation read-back: torch-gpu",
-            "missing real library implementation read-back: cupy-gpu"
-          ],
-          "status": "REFUSED"
+          "audit": {
+            "identical/fit": "MATCHED"
+          },
+          "measurement_status": "done",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.cholesky.synthetic.rows=full/board.json",
+          "problems": [],
+          "status": "MATCHED"
         },
         "algos/clip-grad-norm/synthetic/rows=full": {
           "arms": [
@@ -3825,32 +3823,22 @@
           "status": "REFUSED"
         },
         "algos/lu-factor/synthetic/rows=full": {
-          "arms": [
-            "ours",
-            "torch-gpu",
-            "cupy-gpu"
-          ],
-          "family": "algos",
-          "preflight_rc": 1,
-          "problems": [
-            "missing real library implementation read-back: torch-gpu",
-            "missing real library implementation read-back: cupy-gpu"
-          ],
-          "status": "REFUSED"
+          "audit": {
+            "identical/fit": "MATCHED"
+          },
+          "measurement_status": "done",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.lu-factor.synthetic.rows=full/board.json",
+          "problems": [],
+          "status": "MATCHED"
         },
         "algos/lu-solve/synthetic/rows=full": {
-          "arms": [
-            "ours",
-            "torch-gpu",
-            "cupy-gpu"
-          ],
-          "family": "algos",
-          "preflight_rc": 1,
-          "problems": [
-            "missing real library implementation read-back: torch-gpu",
-            "missing real library implementation read-back: cupy-gpu"
-          ],
-          "status": "REFUSED"
+          "audit": {
+            "identical/fit": "MATCHED"
+          },
+          "measurement_status": "done",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.lu-solve.synthetic.rows=full/board.json",
+          "problems": [],
+          "status": "MATCHED"
         },
         "algos/maxabs-scaler/istella/rows=full": {
           "arms": [
@@ -6668,7 +6656,7 @@
           "status": "REFUSED"
         }
       },
-      "updated_recipes": 45
+      "updated_recipes": 48
     }
   }
 }

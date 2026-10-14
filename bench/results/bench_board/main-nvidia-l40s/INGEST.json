@@ -1,8 +1,8 @@
 {
- "generated": "2026-10-14T07:31:49Z",
+ "generated": "2026-10-14T07:44:22Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-14T07:31:49Z",
+  "generated": "2026-10-14T07:44:22Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -90,6 +90,9 @@
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.knn.taxi.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.istella.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave9/campaign/measured/classical.pca.taxi.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.cholesky.synthetic.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.lu-factor.synthetic.rows=full/board.json",
+   "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave10/campaign/measured/algos.lu-solve.synthetic.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.istella.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.label-binarizer.taxi.rows=full/board.json",
    "nv2=/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/recovered-inference/algos.maxabs-scaler.istella.rows=full/board.json",
@@ -325,5 +328,5 @@
   "GRIDBB: branch gbdt-categorical-oom": 6,
   "GRIDBB: not a bench_board race": 8
  },
- "summary": "MAINBOARD column=nvidia-l40s label=main@2b9a0ea93 races=262 add=0 change=0 drop=0 failed=0 ledger=352 withheld_opponents=43 identity=MATCH:86,n/a:176"
+ "summary": "MAINBOARD column=nvidia-l40s label=main@dbc9b18c1 races=262 add=0 change=3 drop=0 failed=0 ledger=355 withheld_opponents=43 identity=MATCH:85,n/a:177"
 }
