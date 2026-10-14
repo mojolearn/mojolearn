@@ -765,13 +765,28 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
             return "cuML KMeans fixes DistanceType.L2Expanded, matching our squared Euclidean objective (kmeans.pyx set_params)"
         if param == "max_samples_per_batch" and param not in ours and isinstance(theirs.get(param), int) and theirs[param] > 0:
             return "cuML distance-computation batch size partitions all rows without subsampling; library implementation tiling is retained, not a model setting (kmeans.pyx)"
-    if lane == "knn" and ours.get("algorithm") == theirs.get("algorithm") == "brute":
+    # FAIRNESS FIX (2026-10-13 audit): the classifier/regressor inherit
+    # cuML's same NearestNeighbors implementation. Their inactive overrides
+    # and complete-query tiling were incorrectly treated as model differences.
+    # Labels, weights, k and metric remain ordinary compared parameters.
+    if lane in ("knn", "knn-clf", "knn-reg") and ours.get("algorithm") == theirs.get("algorithm") == "brute":
         if param in ("algo_params", "metric_params") and theirs.get(param) is None and param not in ours:
             return "no algorithm or distance keyword overrides on the explicit brute-force kneighbors call (nearest_neighbors.pyx)"
         if param == "radius" and param not in ours:
             return "kneighbors uses the compared n_neighbors, never the radius-neighbors query option (nearest_neighbors.pyx)"
         if param == "query_tile" and isinstance(ours.get(param), int) and ours[param] >= 0 and param not in theirs:
             return "our query_tile partitions all queries without changing k or the exact distance metric; internal tiling is logged (neighbors.py)"
+    # FAIRNESS FIX (2026-10-13 audit): retain implementation scheduling and
+    # inactive callable-kernel arguments without inventing missing readback.
+    # Reviewed against cuML 26.8 svm/linear_svc.py and
+    # kernel_ridge/kernel_ridge.py::_get_kernel.
+    if lane == "linearsvc" and param == "n_streams" and param not in ours:
+        value = theirs.get(param)
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            return "cuML n_streams schedules fitting in parallel streams; loss, penalty, multiclass strategy and stopping controls are compared separately"
+    if lane == "kernel-ridge" and param == "kernel_params" and param not in ours and theirs.get(param) is None:
+        if ours.get("kernel") == theirs.get("kernel") and ours.get("kernel") in ("linear", "rbf", "poly", "polynomial", "sigmoid", "cosine"):
+            return "cuML's named kernel uses gamma/degree/coef0; kernel_params=None supplies no callable-kernel overrides"
     return None
 
 

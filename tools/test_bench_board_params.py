@@ -85,13 +85,30 @@ def test_in_memory_kmeans_does_not_waive_subsampling_or_model_changes():
     assert BP.check("kmeans", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
 
 
-def test_brute_knn_tiling_is_not_a_model_parameter_but_k_is():
+@pytest.mark.parametrize("lane", ["knn", "knn-clf", "knn-reg"])
+def test_brute_knn_tiling_is_not_a_model_parameter_but_k_is(lane):
     a = _est("mojolearn.neighbors", "NearestNeighbors", n_neighbors=10, algorithm="brute", query_tile=0)
     b = _est("cuml.neighbors", "NearestNeighbors", n_neighbors=10, algorithm="brute",
              algo_params=None, metric_params=None, radius=1.0)
-    assert BP.check("knn", {"ours": a, "cuml-gpu": b})["verdict"] == "MATCHED"
+    assert BP.check(lane, {"ours": a, "cuml-gpu": b})["verdict"] == "MATCHED"
     b._p["n_neighbors"] = 11
-    assert BP.check("knn", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
+    assert BP.check(lane, {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
+    b._p["n_neighbors"] = 10
+    b._p["metric_params"] = {"p": 3}
+    assert BP.check(lane, {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
+
+
+def test_cuml_scheduling_and_inactive_kernel_options_preserve_work_checks():
+    a = _est("mojolearn.svm", "LinearSVC", C=1., loss="squared_hinge")
+    b = _est("cuml.svm", "LinearSVC", C=1., loss="squared_hinge", n_streams=1)
+    assert BP.check("linearsvc", {"ours": a, "cuml-gpu": b})["verdict"] == "MATCHED"
+    b._p["C"] = 2.
+    assert BP.check("linearsvc", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
+    a = _est("mojolearn.kernel_ridge", "KernelRidge", kernel="rbf", gamma=.1)
+    b = _est("cuml.kernel_ridge", "KernelRidge", kernel="rbf", gamma=.1, kernel_params=None)
+    assert BP.check("kernel-ridge", {"ours": a, "cuml-gpu": b})["verdict"] == "MATCHED"
+    b._p["kernel_params"] = {"gamma": .2}
+    assert BP.check("kernel-ridge", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
 
 
 def test_cuml_minmax_fixed_behavior_remains_parameter_checked():
