@@ -4577,8 +4577,10 @@ def main(argv=None):
     # after every planned race passed a smoke run of these board and driver files
     full = not args.smoke and rows is None and not (
         any(r["family"] == "neural" for r in races) and args.neural_shape != "full")
-    if args.evidence_local_only and not args.smoke:
-        raise SystemExit("bench_board: --evidence-local-only is for smoke runs only")
+    if args.evidence_local_only and not (args.smoke or args.preflight_only):
+        # smoke-fixes (2026-10-14): the campaign smoke's preflight-only recipes keep their preflight archive local;
+        # the campaign uploads each recipe's evidence to R2 right after the recipe, outside its 5 s timer
+        raise SystemExit("bench_board: --evidence-local-only is for smoke and preflight-only runs only")
     try:
         artifact_identity = _load_tool("bench_board_provenance").identity(args.artifact_manifest)
     except (OSError, ValueError) as exc:

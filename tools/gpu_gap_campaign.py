@@ -194,7 +194,7 @@ def smoke_command(args, race, directory, mode, receipts):
     cmd = [python, str(ROOT / "tools/bench_board.py"),
            "--vendor", args.vendor, "--python-env", python, "--skip-install",
            "--cache", args.cache, "--rows", "full", "--rounds", "1", "--modes", mode,
-           "--gpu-opponents-only", "--preflight-only", "--preflight-scorer",
+           "--gpu-opponents-only", "--preflight-only", "--preflight-scorer", "--evidence-local-only",
            "--families", race["family"], "--lanes", race["lane"], "--race-ids", race["id"],
            "--out", str(directory)]
     if race["dataset"] in B.DATASETS:
