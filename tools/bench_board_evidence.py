@@ -376,13 +376,13 @@ def seal(ctx, directory, recipe, rec):
                     absent.append("worker runtime settings changed or missing: " + cell.get("arm", "?"))
             if cell.get("mode") != "opponent" and not any(w.get("loaded_mojolearn_files") for w in witnessed):
                 absent.append("loaded product code receipt")
-            if not (cell.get("shape") or rec.get("inputs") or cell.get("batch_rows")):
+            if not (measured_shape(cell, rec) or cell.get("batch_rows")):
                 absent.append("actual measured input shape")
             if not (cell.get("comparability") or {}).get("span"):
                 absent.append("timing boundary")
             record = dict(schema=SCHEMA, phase=phase, source=recipe["source"], artifacts=public_ref(ref),
                           software=dict(library=cell.get("library"), version=cell.get("library_version") or cell.get("version")),
-                          parameters=params, dataset=recipe["dataset"], shape=cell.get("shape") or rec.get("inputs"),
+                          parameters=params, dataset=recipe["dataset"], shape=measured_shape(cell, rec),
                           invocation=dict(implementation=(params or {}).get("implementation"),
                               effective_arguments=(params or {}).get("raw_params"),
                               readback_source=(params or {}).get("source"),
@@ -422,6 +422,62 @@ def seal(ctx, directory, recipe, rec):
     return rec
 
 
+def measured_shape(cell, rec):
+    shape = cell.get("shape") or rec.get("inputs")
+    if shape:
+        return shape
+    params = ((cell.get("measurement") or {}).get("parameters")) or cell.get("params") or {}
+    arrays = (params.get("raw_params") or params.get("params") or {}).get("input_arrays")
+    if isinstance(arrays, list) and arrays and all(
+            isinstance(a, dict) and isinstance(a.get("shape"), list) and a["shape"]
+            and all(type(n) is int and n > 0 for n in a["shape"])
+            and a.get("dtype") and isinstance(a.get("sha256"), str) and len(a["sha256"]) == 64
+            for a in arrays):
+        return {"input_arrays": arrays}
+    return None
+
+
+def recover_shapes(board_path):
+    """Recover omitted shape metadata from verified original worker readback.
+
+    FAIRNESS FIX (2026-10-13 audit): function arms already recorded dimensions
+    and input hashes in their parameters, but finalization overlooked them.
+    Keep the original receipt; never repeat or alter a timing/quality observation.
+    """
+    path = Path(board_path)
+    board = json.loads(path.read_text())
+    for rr in board.get("races", {}).values():
+        cells = (rr.get("cells") or []) + (rr.get("infer_cells") or [])
+        candidates = [c for c in cells if "actual measured input shape" in
+                      (c.get("measurement") or {}).get("missing", []) and measured_shape(c, rr)]
+        if not candidates:
+            continue
+        directory = path.parent / rr["evidence_directory"]
+        original = rr["evidence_receipt"]
+        retained = directory / "original-shape-receipt.tar.gz"
+        fetch(original, retained)
+        with tarfile.open(retained) as archive_file:
+            old = json.load(archive_file.extractfile("result.json"))
+        old_records = {c["measurement"]["id"]: c for field in ("cells", "infer_cells")
+                       for c in old.get(field, []) if c.get("measurement")}
+        for cell in candidates:
+            record = cell["measurement"]
+            if old_records.get(record["id"]) != cell:
+                raise ValueError("original R2 receipt does not match shape recovery input")
+            previous_id = record.pop("id")
+            record["shape"] = measured_shape(cell, rr)
+            record["missing"] = [m for m in record["missing"] if m != "actual measured input shape"]
+            record["completeness"] = "incomplete" if record["missing"] else "complete"
+            record["metadata_recovery"] = dict(original_receipt=original, previous_id=previous_id,
+                reason="dimensions and input hashes from original worker parameter readback")
+            record["id"] = digest(encoded(record))
+        if all((c.get("measurement") or {}).get("completeness") == "complete" for c in cells if c.get("status") == "ok"):
+            rr.pop("evidence_failure", None)
+        receipt = upload(archive(directory / "recovered-shape-receipt.tar.gz", {"result.json": encoded(rr)}))
+        rr["evidence_receipt"] = public_ref(receipt)
+    write(path, board)
+
+
 def sync(board_path):
     """Retry retention only; never launch a measurement or replace timing data."""
     path = Path(board_path)
@@ -453,7 +509,7 @@ def sync(board_path):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("command", choices=["sync", "fetch"])
+    ap.add_argument("command", choices=["sync", "fetch", "recover-shapes"])
     ap.add_argument("board")
     ap.add_argument("--race")
     ap.add_argument("--arm", default="ours")
@@ -462,6 +518,8 @@ if __name__ == "__main__":
     args = ap.parse_args()
     if args.command == "sync":
         sync(args.board)
+    elif args.command == "recover-shapes":
+        recover_shapes(args.board)
     else:
         if not args.race or not args.destination:
             ap.error("fetch requires --race and --destination")

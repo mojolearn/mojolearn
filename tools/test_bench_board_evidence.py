@@ -24,6 +24,31 @@ P = load("bench_board_params")
 
 
 class Evidence(unittest.TestCase):
+    def test_shape_recovery_uses_original_verified_receipt_and_preserves_observations(self):
+        arrays = [dict(shape=[32, 16], dtype="float32", sha256="a" * 64)]
+        cell = dict(arm="ours", status="ok", median_ms=12.3, quality={"relative_residual": 1e-6},
+                    params={"raw_params": {"input_arrays": arrays}}, measurement={
+                    "id": "old-id", "shape": None, "missing": ["actual measured input shape"],
+                    "completeness": "incomplete"})
+        rr = dict(cells=[cell], evidence_directory="evidence", evidence_receipt={"sha256": "original"},
+                  evidence_failure="incomplete worker evidence")
+        path = self.root / "board.json"
+        (self.root / "evidence").mkdir()
+        E.write(path, {"races": {"r": rr}})
+        def fetch(ref, destination):
+            self.assertEqual(ref, rr["evidence_receipt"])
+            E.archive(destination, {"result.json": E.encoded(rr)})
+        with patch.object(E, "fetch", side_effect=fetch), patch.object(E, "upload", side_effect=lambda r: dict(r, status="verified")):
+            E.recover_shapes(path)
+        got = json.loads(path.read_text())["races"]["r"]["cells"][0]
+        self.assertEqual(got["median_ms"], cell["median_ms"])
+        self.assertEqual(got["quality"], cell["quality"])
+        self.assertEqual(got["measurement"]["shape"], {"input_arrays": arrays})
+        self.assertEqual(got["measurement"]["completeness"], "complete")
+        self.assertEqual(got["measurement"]["metadata_recovery"]["previous_id"], "old-id")
+        cell["params"]["raw_params"]["input_arrays"][0].pop("sha256")
+        self.assertIsNone(E.measured_shape(cell, {}))
+
     def test_actual_iterations_are_not_inferred_from_a_limit(self):
         from types import SimpleNamespace
         probe=load("bench_board_probe")
