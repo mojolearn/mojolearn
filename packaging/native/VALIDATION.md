@@ -17,11 +17,14 @@ the commits added after this worktree was created). Toolchain: Mojo 1.0.0
 | CPU/GPU sample output words against unmodified source at the base commit | Both matched exactly |
 | Conda dependencies: osx-arm64, linux-64, linux-aarch64 | All solved |
 | Clean osx-arm64 conda build and isolated installed-package mode/CPU tests | Passed, including automatic import discovery without `-I` |
+| GitHub platform builds and isolated install tests: Apple arm64, Linux x86-64, Linux arm64 | All passed at `620b1783f98d03c351597779668af82b3a82d98e` |
 
 These are packaging and representative consumer checks, not a new full numerical
 qualification or measurement campaign. NVIDIA/AMD binaries were cross-compiled
-on the Mac and were not executed on those devices. Linux CPU execution is left
-to the platform build jobs; no result here claims it ran locally.
+on the Mac and were not executed on those devices. Linux CPU execution passed
+in the platform build jobs, using actual Linux x86-64 and arm64 runners.
+The complete [platform workflow](https://github.com/mojolearn/mojolearn/actions/runs/38618790611)
+retains each conda artifact, full build log, and rendered recipe.
 
 The first precompile failed because the tokenizer's generated table had not been
 included, a shared module contained a standalone `main`, and a dormant
@@ -53,3 +56,4 @@ Key records:
 - `solve2-*.log`: platform dependency resolutions.
 - `conda-build-2.log`: clean conda build, isolated installation and passing tests.
 - `conda-output/osx-arm64/mojolearn-0.8.44-h60d57d3_0.conda`: built distribution artifact.
+- `ci-status.json` and `ci-artifacts/`: successful platform jobs and retained downloads.
