@@ -1,14 +1,14 @@
 # mojolearn benchmark board
 
-Generated 2026-10-14T05:20:22Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-14T05:51:54Z from `board.json` (schema `mojolearn-bench-board/1`).
 
-> MAIN BOARD nvidia-l40s, version label main@0f3f674f2. Unreleased: not reproducible by pip install; the release boards are the reference.
+> MAIN BOARD nvidia-l40s, version label main@4dce9b50a. Unreleased: not reproducible by pip install; the release boards are the reference.
 
-> Cells: 262 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@0f3f674f2 (2026-10-14T04:36:54Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).
+> Cells: 262 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@4dce9b50a (2026-10-14T05:15:01Z). Boxes: NVIDIA L40S (nv, RunPod), NVIDIA L40S (nv2, RunPod).
 
-> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 349 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
+> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 352 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
-> Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 88, n/a 174).
+> Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 86, n/a 176).
 
 > Opponents: retained from each paired session when present; otherwise retained historical pairs or stored opponent boards (opponents-default-20261006, opponents-specific-20261006, release-board-resume-r2). Ingestion runs no measurements. `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 43 races.
 
@@ -18,14 +18,17 @@ Generated 2026-10-14T05:20:22Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Identity
 
-Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 88, n/a 174.
+Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 86, n/a 176.
 
 DIFFER: none.
 
 ## FAILED
 
-Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 0 failed runs.
+Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 1 failed runs.
 
+| lane | dataset | commit | hardware | version | box/job | reason | ok cell on the board |
+|---|---|---|---|---|---|---|---|
+| dbscan | taxi | main@0f3f674f2 | NVIDIA L40S (nv2, RunPod) | 0.8.44 | nv2/paired-9236d7e7af5a2d46002ba5b9a6600f4c6d05adcd9e9700caa8089192218ba342 | REFUSED(timeout: null) | main@5876e9205 nv2/v0011 stays |
 
 ## Box
 
@@ -38,8 +41,8 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | memory bytes | - |
 | OS | - |
 | Python | - |
-| mojolearn | main@0f3f674f2 (wheel mixed source/wheel provenance; see each cell's version and measurement record, sha256 -) |
-| script commit | 0f3f674f25519c5dbbeeb3503ab8e0c8b41f3f54 |
+| mojolearn | main@4dce9b50a (wheel mixed source/wheel provenance; see each cell's version and measurement record, sha256 -) |
+| script commit | 4dce9b50aa68d8561d71cadea49d2bf2c539aad6 |
 | patch sync | - |
 | modes | identical |
 | rounds | 1 timed after 1 warm-up, arms interleaved round by round |
@@ -424,9 +427,13 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical | hdbscan | istella | n_clusters | - | 47 | cuml-gpu 53 |
 | classical | hdbscan | istella | noise_fraction | - | 0.253810 | cuml-gpu 0.256280 |
 | classical | hdbscan | istella | rows | - | 100000 | cuml-gpu 100000 |
+| classical | hdbscan | istella | ari_vs_ours (1 is our partition exactly) | - | - | cuml-gpu 0.857120 |
+| classical | hdbscan | istella | noise_agreement_vs_ours | - | - | cuml-gpu 0.940610 |
 | classical | hdbscan | taxi | n_clusters | - | 161 | cuml-gpu 159 |
 | classical | hdbscan | taxi | noise_fraction | - | 0.140550 | cuml-gpu 0.130970 |
 | classical | hdbscan | taxi | rows | - | 100000 | cuml-gpu 100000 |
+| classical | hdbscan | taxi | ari_vs_ours (1 is our partition exactly) | - | - | cuml-gpu 0.917885 |
+| classical | hdbscan | taxi | noise_agreement_vs_ours | - | - | cuml-gpu 0.984420 |
 | classical | kde | istella | mean_log_likelihood (higher is better) | - | -222.270583 | cuml-gpu -222.270582 |
 | classical | kde | istella | rows_without_density | - | 0 | cuml-gpu 0 |
 | classical | kde | taxi | mean_log_likelihood (higher is better) | - | -14.826436 | cuml-gpu -14.826437 |
@@ -1109,16 +1116,14 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### hdbscan / istella (rows full, shape 1000000x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-grid-logs.txt (nv2/v0132)`, ran on NVIDIA L40S (nv2, RunPod) job v0132
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.istella.rows=full/board.json (nv2/paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9)`, ran on d2fe567d3b88
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | mojolearn 0.8.38 (source build, main@c8ef6c66d) | identical | 1193.1 | 1193.1..1193.1 | 1 | - | - | 1193.1 | - | - (stored whole) | - | - | - | - | n_clusters=47, noise_fraction=0.253810, rows=100000 | - | main board, one scored run | - | ok (main@c8ef6c66d nv2/v0132 2026-10-11; identity vs the amd columns: n/a) |
-| cuml-gpu | cuml | gpu | NVIDIA L40S (host 24a11adce16e) | cuml 26.08.00 | opponent | 899.7 | 899.7..899.7 | 1 | 1.326 | - | 992.4 | 899.7 | 92.66 (upload_ms_untimed) | 1.202 (whole/whole) | - | 1866.3 | 526.0 | n_clusters=53, noise_fraction=0.256280, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-specific-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | 0.8.44 | identical | 1162.9 | 1162.9..1162.9 | 1 | - | - | 1162.9 | 1159.2 | 3.75 (upload_ms_separate) | - | - | 2438.2 | 1194.0 | n_clusters=47, noise_fraction=0.253810, rows=100000 | yes | main board, one scored run | wheel | ok (main@4dce9b50a nv2/paired-90f251d179f08f042b370efb7b678fe3124877d4e366037d3e30ef9b99593ca9 2026-10-14; identity vs the amd columns: n/a) |
+| cuml-gpu | cuml | gpu | NVIDIA L40S (host d2fe567d3b88) | cuml 26.08.00 | opponent | 859.2 | 859.2..859.2 | 1 | 1.354 | - | 942.3 | 859.2 | 83.15 (upload_ms_untimed) | 1.234 (whole/whole) | - | 1867.5 | 526.0 | ari_vs_ours=0.857120, n_clusters=53, noise_agreement_vs_ours=0.940610, noise_fraction=0.256280, rows=100000 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
-
-memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+memory, ours, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
 
 settings: min_samples=10 (scikit-learn 11: the same core distance, the 10th neighbour besides the point), min_cluster_size=100, metric='euclidean', cluster_selection_method='eom', cluster_selection_epsilon=0.0, alpha=1.0, allow_single_cluster=False. Rows: the dbscan block's first 100,000 rows. Timed: fit.
 
@@ -1128,24 +1133,51 @@ mismatch: max_cluster_size: ours and cuML 0, scikit-learn None (both mean no lim
 
 mismatch: min_samples: ours and cuML 10, scikit-learn 11. The SAME k-th neighbour: cuML's runner.h:68-80 (ours transcribes it) runs the k-NN at min_samples + 1 including the point itself; scikit-learn's kneighbors(X, min_samples) counts the point itself (its HDBSCAN Notes say so). tools/bench_board_params.py maps both to one canonical value
 
-mismatch: scikit-learn algorithm='auto', leaf_size=40, n_jobs=-1: its own; cuML build_algo at its default
+mismatch: k-NN graph: exact brute force on every arm; cuML build_algo='brute_force' pinned (as ours); scikit-learn algorithm='brute' (FAIRNESS FIX 2026-10-13: it was 'auto', a KD/ball tree), leaf_size=40 unused, n_jobs=-1
 
 config: cuML benchmark (RAPIDS), HDBSCAN (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | cuml-gpu | ours |
+|---|---||---|---|
+| library (source) | cuml (get_params) | mojolearn (get_params) |
+| allow_single_cluster | false | false |
+| alpha | 1.0 | 1.0 |
+| build_algo | "brute_force" | - |
+| build_kwds | null | - |
+| cluster_selection_epsilon | 0.0 | 0.0 |
+| cluster_selection_method | "eom" | "eom" |
+| device_ids | null | - |
+| gen_min_span_tree | false | - |
+| max_cluster_size | 0 | 0 |
+| metric | "euclidean" | "euclidean" |
+| min_cluster_size | 100 | 100 |
+| min_samples | 10 | 10 |
+| p | null | - |
+| prediction_data | false | false |
+| seed | "none (deterministic)" | "none (deterministic)" |
+
+accepted difference: cuml-gpu build_algo: our HDBSCAN fixes exhaustive neighbors; cuML explicitly selects the same exact brute-force graph construction
+
+accepted difference: cuml-gpu build_kwds: cuML's exact graph uses the default unpartitioned single-device path; no approximate or multi-device overrides are requested
+
+accepted difference: cuml-gpu device_ids: cuML's exact graph uses the default unpartitioned single-device path; no approximate or multi-device overrides are requested
+
+accepted difference: cuml-gpu gen_min_span_tree: both construct the internal MST for clustering; neither requests an additional exported minimum-spanning-tree object
+
+accepted difference: cuml-gpu p: p only parameterizes Minkowski distance; both arms explicitly use Euclidean distance
 
 ### hdbscan / taxi (rows full, shape 1000000x11)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-grid-logs.txt (nv2/v0132)`, ran on NVIDIA L40S (nv2, RunPod) job v0132
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.taxi.rows=full/board.json (nv2/paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b)`, ran on d2fe567d3b88
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | mojolearn 0.8.38 (source build, main@c8ef6c66d) | identical | 426.0 | 426.0..426.0 | 1 | - | - | 426.0 | - | - (stored whole) | - | - | - | - | n_clusters=161, noise_fraction=0.140550, rows=100000 | - | main board, one scored run | - | ok (main@c8ef6c66d nv2/v0132 2026-10-11; identity vs the amd columns: n/a) |
-| cuml-gpu | cuml | gpu | NVIDIA L40S (host cc560ebdaf91) | cuml 26.08.00 | opponent | 369.1 | 369.1..369.1 | 1 | 1.154 | - | 381.7 | 369.1 | 12.57 (upload_ms_untimed) | 1.116 (whole/whole) | - | 940.5 | 448.0 | n_clusters=159, noise_fraction=0.130970, rows=100000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-default-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | NVIDIA L40S (nv2, RunPod) | 0.8.44 | identical | 409.4 | 409.4..409.4 | 1 | - | - | 409.4 | 409.0 | 0.34 (upload_ms_separate) | - | - | 1558.4 | 682.0 | n_clusters=161, noise_fraction=0.140550, rows=100000 | yes | main board, one scored run | wheel | ok (main@4dce9b50a nv2/paired-0b1735a3e389812db8950073c1cefdfeb347f7e30e061b8b2e1cadb0d1d92a9b 2026-10-14; identity vs the amd columns: n/a) |
+| cuml-gpu | cuml | gpu | NVIDIA L40S (host d2fe567d3b88) | cuml 26.08.00 | opponent | 357.6 | 357.6..357.6 | 1 | 1.145 | - | 370.4 | 357.6 | 12.74 (upload_ms_untimed) | 1.105 (whole/whole) | - | 975.7 | 448.0 | ari_vs_ours=0.917885, n_clusters=159, noise_agreement_vs_ours=0.984420, noise_fraction=0.130970, rows=100000 | yes | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
-
-memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+memory, ours, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
 
 settings: min_samples=10 (scikit-learn 11: the same core distance, the 10th neighbour besides the point), min_cluster_size=100, metric='euclidean', cluster_selection_method='eom', cluster_selection_epsilon=0.0, alpha=1.0, allow_single_cluster=False. Rows: the dbscan block's first 100,000 rows. Timed: fit.
 
@@ -1155,11 +1187,40 @@ mismatch: max_cluster_size: ours and cuML 0, scikit-learn None (both mean no lim
 
 mismatch: min_samples: ours and cuML 10, scikit-learn 11. The SAME k-th neighbour: cuML's runner.h:68-80 (ours transcribes it) runs the k-NN at min_samples + 1 including the point itself; scikit-learn's kneighbors(X, min_samples) counts the point itself (its HDBSCAN Notes say so). tools/bench_board_params.py maps both to one canonical value
 
-mismatch: scikit-learn algorithm='auto', leaf_size=40, n_jobs=-1: its own; cuML build_algo at its default
+mismatch: k-NN graph: exact brute force on every arm; cuML build_algo='brute_force' pinned (as ours); scikit-learn algorithm='brute' (FAIRNESS FIX 2026-10-13: it was 'auto', a KD/ball tree), leaf_size=40 unused, n_jobs=-1
 
 config: cuML benchmark (RAPIDS), HDBSCAN (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | cuml-gpu | ours |
+|---|---||---|---|
+| library (source) | cuml (get_params) | mojolearn (get_params) |
+| allow_single_cluster | false | false |
+| alpha | 1.0 | 1.0 |
+| build_algo | "brute_force" | - |
+| build_kwds | null | - |
+| cluster_selection_epsilon | 0.0 | 0.0 |
+| cluster_selection_method | "eom" | "eom" |
+| device_ids | null | - |
+| gen_min_span_tree | false | - |
+| max_cluster_size | 0 | 0 |
+| metric | "euclidean" | "euclidean" |
+| min_cluster_size | 100 | 100 |
+| min_samples | 10 | 10 |
+| p | null | - |
+| prediction_data | false | false |
+| seed | "none (deterministic)" | "none (deterministic)" |
+
+accepted difference: cuml-gpu build_algo: our HDBSCAN fixes exhaustive neighbors; cuML explicitly selects the same exact brute-force graph construction
+
+accepted difference: cuml-gpu build_kwds: cuML's exact graph uses the default unpartitioned single-device path; no approximate or multi-device overrides are requested
+
+accepted difference: cuml-gpu device_ids: cuML's exact graph uses the default unpartitioned single-device path; no approximate or multi-device overrides are requested
+
+accepted difference: cuml-gpu gen_min_span_tree: both construct the internal MST for clustering; neither requests an additional exported minimum-spanning-tree object
+
+accepted difference: cuml-gpu p: p only parameterizes Minkowski distance; both arms explicitly use Euclidean distance
 
 ### kde / istella (rows full, shape 100000x220)
 

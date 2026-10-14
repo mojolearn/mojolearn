@@ -1,5 +1,5 @@
 {
-  "date_epoch": 1791955221.0337632,
+  "date_epoch": 1791957116.190049,
   "scope": "All original 303 GPU-opponent recipes; newest preflight evidence only, not full timing or admission coverage",
   "vendors": {
     "amd": {
@@ -25,17 +25,13 @@
         "algos/maxpool2d/synthetic/rows=full",
         "algos/nadam/synthetic/rows=full",
         "algos/rmsprop/synthetic/rows=full",
-        "algos/sgd/synthetic/rows=full",
-        "classical/kmeans/istella/rows=full",
-        "classical/kmeans/taxi/rows=full",
-        "classical/knn/istella/rows=full",
-        "classical/knn/taxi/rows=full"
+        "algos/sgd/synthetic/rows=full"
       ],
       "latest_preflight_counts": {
         "MATCHED": 39,
         "REFUSED": 51
       },
-      "new_fit_admissions": 25,
+      "new_fit_admissions": 21,
       "recipes": {
         "algos/adafactor/synthetic/rows=full": {
           "audit": {
@@ -1529,7 +1525,7 @@
         },
         "classical/kmeans/istella/rows=full": {
           "audit": {
-            "identical/fit": "MATCHED",
+            "identical/fit": "INSUFFICIENT",
             "identical/infer": "INSUFFICIENT"
           },
           "measurement_status": "done",
@@ -1539,7 +1535,7 @@
         },
         "classical/kmeans/taxi/rows=full": {
           "audit": {
-            "identical/fit": "MATCHED",
+            "identical/fit": "INSUFFICIENT",
             "identical/infer": "INSUFFICIENT"
           },
           "measurement_status": "done",
@@ -1549,7 +1545,7 @@
         },
         "classical/knn/istella/rows=full": {
           "audit": {
-            "identical/fit": "MATCHED"
+            "identical/fit": "INSUFFICIENT"
           },
           "measurement_status": "done",
           "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.istella.rows=full/board.json",
@@ -1558,7 +1554,7 @@
         },
         "classical/knn/taxi/rows=full": {
           "audit": {
-            "identical/fit": "MATCHED"
+            "identical/fit": "INSUFFICIENT"
           },
           "measurement_status": "done",
           "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/classical.knn.taxi.rows=full/board.json",
@@ -2351,8 +2347,8 @@
         "classical2/linearsvc/taxi/rows=full"
       ],
       "latest_preflight_counts": {
-        "MATCHED": 64,
-        "REFUSED": 149
+        "MATCHED": 67,
+        "REFUSED": 146
       },
       "new_fit_admissions": 33,
       "recipes": {
@@ -4858,51 +4854,31 @@
           "status": "REFUSED"
         },
         "classical/dbscan/taxi/rows=full": {
-          "arms": [
-            "ours",
-            "cuml-gpu"
-          ],
-          "family": "classical",
-          "preflight_rc": 1,
-          "problems": [
-            "cuml-gpu: calc_core_sample_indices missing from ours read-back; explicit semantic mapping required",
-            "cuml-gpu: max_iterations missing from cuml-gpu read-back; explicit semantic mapping required",
-            "cuml-gpu: max_mbytes_per_batch is unset on ours and unset on cuml-gpu (a library default is not a matched value; set it explicitly on both)",
-            "cuml-gpu: prediction_data missing from cuml-gpu read-back; explicit semantic mapping required"
-          ],
-          "status": "REFUSED"
+          "audit": {
+            "identical/fit": "INSUFFICIENT"
+          },
+          "measurement_status": "done",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/campaign/measured/classical.dbscan.taxi.rows=full/board.json",
+          "problems": [],
+          "status": "MATCHED"
         },
         "classical/hdbscan/istella/rows=full": {
-          "arms": [
-            "ours",
-            "cuml-gpu"
-          ],
-          "family": "classical",
-          "preflight_rc": 1,
-          "problems": [
-            "cuml-gpu: build_algo missing from ours read-back; explicit semantic mapping required",
-            "cuml-gpu: build_kwds missing from ours read-back; explicit semantic mapping required",
-            "cuml-gpu: device_ids missing from ours read-back; explicit semantic mapping required",
-            "cuml-gpu: gen_min_span_tree missing from ours read-back; explicit semantic mapping required",
-            "cuml-gpu: p missing from ours read-back; explicit semantic mapping required"
-          ],
-          "status": "REFUSED"
+          "audit": {
+            "identical/fit": "INSUFFICIENT"
+          },
+          "measurement_status": "done",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.istella.rows=full/board.json",
+          "problems": [],
+          "status": "MATCHED"
         },
         "classical/hdbscan/taxi/rows=full": {
-          "arms": [
-            "ours",
-            "cuml-gpu"
-          ],
-          "family": "classical",
-          "preflight_rc": 1,
-          "problems": [
-            "cuml-gpu: build_algo missing from ours read-back; explicit semantic mapping required",
-            "cuml-gpu: build_kwds missing from ours read-back; explicit semantic mapping required",
-            "cuml-gpu: device_ids missing from ours read-back; explicit semantic mapping required",
-            "cuml-gpu: gen_min_span_tree missing from ours read-back; explicit semantic mapping required",
-            "cuml-gpu: p missing from ours read-back; explicit semantic mapping required"
-          ],
-          "status": "REFUSED"
+          "audit": {
+            "identical/fit": "INSUFFICIENT"
+          },
+          "measurement_status": "done",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave7/campaign/measured/classical.hdbscan.taxi.rows=full/board.json",
+          "problems": [],
+          "status": "MATCHED"
         },
         "classical/kde/istella/rows=full": {
           "board": "/root/fairness-evidence/repair3/measured/classical.kde.istella.rows=full/board.json",
@@ -6936,7 +6912,7 @@
           "status": "REFUSED"
         }
       },
-      "updated_recipes": 33
+      "updated_recipes": 36
     }
   }
 }
