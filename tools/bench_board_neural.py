@@ -1056,6 +1056,59 @@ def _ours_record(lane, config_readback=None):
     return rec
 
 
+#: The architecture fields both arms of a model lane read back and the board compares as one value,
+#: `config_readback` (preflight-smoke, 2026-10-14: the torch arm had none, so every LM and Samba race refused
+#: with "config_readback missing from torch-* read-back"). Ours reads them from its own config object; the
+#: torch arm from the transformers config and modules it actually built. A field one side cannot read back
+#: is None there and the race refuses by name.
+ARCH_FIELDS = {
+    "lm": ("layers", "d_model", "n_heads", "n_kv_heads", "head_dim", "intermediate", "vocab", "tied_head",
+           "param_dtype"),
+    "samba": ("layers", "d_model", "n_heads", "n_kv_heads", "head_dim", "intermediate", "vocab", "tied_head",
+              "norm_eps"),
+}
+
+
+def arch_readback(model, values):
+    """The canonical config_readback JSON of `model` ('lm' or 'samba') from read-back `values`: exactly the
+    ARCH_FIELDS keys, ints as ints, floats at float32 precision (both libraries store eps as float32)."""
+    import struct
+    out = {}
+    for key in ARCH_FIELDS[model]:
+        v = values.get(key)
+        if isinstance(v, bool) or v is None or isinstance(v, str):
+            out[key] = v
+        elif isinstance(v, (list, tuple)):
+            out[key] = [str(x) for x in v]
+        elif isinstance(v, float):
+            out[key] = repr(struct.unpack("f", struct.pack("f", v))[0])
+        else:
+            out[key] = int(v)
+    return json.dumps(out, sort_keys=True)
+
+
+def ours_lm_arch(config, profile):
+    """Ours' LM architecture from LanguageModelTrainer.run_metadata()['config'] (ByteLanguageModelConfig
+    fields) and its native profile name. Ours' parameter registry holds a separate lm_head (untied;
+    python/mojolearn/_byte_lm_config.py parameter_names) and the profile names its parameter precision."""
+    c = config or {}
+    prof = str(profile or "")
+    return arch_readback("lm", dict(layers=c.get("n_layers"), d_model=c.get("d_model"), n_heads=c.get("n_heads"),
+                                    n_kv_heads=c.get("n_kv"), head_dim=c.get("head_dim"),
+                                    intermediate=c.get("intermediate"), vocab=c.get("vocab_size"),
+                                    tied_head=False,
+                                    param_dtype="float32" if ".fp32." in prof else (prof or None)))
+
+
+def ours_samba_arch(config):
+    """Ours' Samba architecture from SambaConfig.to_dict() (python/mojolearn/_samba_impl.py)."""
+    c = config or {}
+    return arch_readback("samba", dict(layers=c.get("layers"), d_model=c.get("d_model"), n_heads=c.get("n_heads"),
+                                       n_kv_heads=c.get("n_kv_heads"), head_dim=c.get("head_dim"),
+                                       intermediate=c.get("intermediate"), vocab=c.get("vocab"),
+                                       tied_head=c.get("tie_embeddings"), norm_eps=c.get("norm_eps")))
+
+
 def _gemm_record(lane, library, implementation, data):
     """Witness the actual library callable and the shared input values, untimed."""
     # FAIRNESS FIX (2026-10-13 audit): GEMM previously reported no work
@@ -1220,7 +1273,9 @@ class OursLM(Ours):
         self.k = 0
         self.losses = []
         self.ids = np.ascontiguousarray(self.batches[0][:, :-1])
-        self.record = _ours_record(lane, config_readback=meta.get("config"))
+        self.record = _ours_record(lane)
+        # the canonical architecture read-back (ARCH_FIELDS); the raw config stays in info["config"]
+        self.record["config_readback"] = ours_lm_arch(meta.get("config"), meta.get("native_profile"))
 
     def call(self):
         np = self.np
@@ -1458,7 +1513,9 @@ class OursSamba(Ours):
         self.info = _ours_info(ml, getattr(sys.modules[type(self.model).__module__], "__file__", None),
                                mode, dev)
         self.info.update(call=LANE_TEXT[lane][0], config=json.dumps(cfg.to_dict(), sort_keys=True))
-        self.record = _ours_record(lane, config_readback=cfg.to_dict())
+        self.record = _ours_record(lane)
+        # the canonical architecture read-back (ARCH_FIELDS); the raw config stays in info["config"]
+        self.record["config_readback"] = ours_samba_arch(cfg.to_dict())
         if lane == "samba-train-step":
             self.record.update(max_grad_norm=max_norm, accumulation_steps=accumulation_steps)
         self.batches = data["batches"]
@@ -1769,6 +1826,12 @@ class TorchArm:
                 rec["betas"] = list(rec["betas"])
         else:
             rec.update(self.block_consts)
+        # preflight-smoke (2026-10-14): the library class this arm actually built (transformers' Llama, mamba_ssm's
+        # Block) and its architecture read-back, so the parameter check compares them with ours'
+        if getattr(self, "library_impl", None) is not None:
+            rec["__implementation__"] = self.library_impl
+        if getattr(self, "config_readback", None) is not None:
+            rec["config_readback"] = self.config_readback
         if MODEL_OF[lane] == "gemm":
             rec = _gemm_record(lane, "torch", self.library_call, data)
         if MODEL_OF[lane] == "samba":
@@ -1873,6 +1936,14 @@ class TorchArm:
         hf_load_exact(torch, model, state, self.arm)
         model = model.to(self.dev)
         theta = hf_check_rotary(torch, model.model.rotary_emb, hd, twin.ROPE_THETA, self.arm)
+        self.library_impl = LlamaForCausalLM
+        mc = model.config
+        self.config_readback = arch_readback("lm", dict(
+            layers=len(model.model.layers), d_model=mc.hidden_size, n_heads=mc.num_attention_heads,
+            n_kv_heads=mc.num_key_value_heads, head_dim=getattr(mc, "head_dim", None),
+            intermediate=mc.intermediate_size, vocab=model.lm_head.out_features,
+            tied_head=model.lm_head.weight is model.model.embed_tokens.weight,
+            param_dtype=str(next(model.parameters()).dtype).replace("torch.", "")))
         attn = getattr(model.config, "_attn_implementation", None)
         if attn != "sdpa":
             raise RuntimeError("REFUSED: %s: transformers' attention implementation reads back %r, not "
@@ -1932,33 +2003,7 @@ class TorchArm:
         from transformers.models.llama.modeling_llama import LlamaDecoderLayer, LlamaRotaryEmbedding
         torch.manual_seed(SEED)
         layer = LlamaDecoderLayer(cfg, layer_idx=0)
-        state = {HF_LAYER_NAME[k]: torch.from_numpy(np.ascontiguousarray(v)) for k, v in W.items()}
-        hf_load_exact(torch, layer, state, self.arm)
-        layer = layer.to(self.dev)
-        rotary = LlamaRotaryEmbedding(config=cfg).to(self.dev)
-        back = hf_check_rotary(torch, rotary, d["head_dim"], theta, self.arm)
-        pos = torch.arange(length, device=self.dev)[None, :]
-        with torch.no_grad():
-            cos, sin = rotary(torch.zeros((1, length, d["d_model"]), dtype=torch.float32,
-                                          device=self.dev), pos)
-        self.block_consts = {"eps": float(cfg.rms_norm_eps), "rope_theta": back}
-        self.info["transformers_version"] = transformers.__version__
-        return layer, cfg, cos, sin, pos
-
-    def _hf_layer(self, W, d, length, eps, theta):
-        """transformers' own LlamaDecoderLayer holding ours' block weights W (our names, numpy),
-        with RoPE cos/sin for positions 0..length-1 from its LlamaRotaryEmbedding, precomputed on
-        the device before the clock (as the previous twin precomputed its tables). FAIRNESS FIX
-        (2026-10-13 audit): replaces tools/speed_torch_seq.py's LlamaEager, harness code. Results
-        raced before this change were wrong for this lane; apply extra scrutiny."""
-        torch, np = self.torch, self.np
-        transformers, cfg = hf_llama_config(self.arm, vocab=1, d_model=d["d_model"],
-                                            n_heads=d["n_heads"], n_kv=d["n_kv"],
-                                            head_dim=d["head_dim"], intermediate=d["intermediate"],
-                                            layers=1, max_pos=length, eps=eps, theta=theta)
-        from transformers.models.llama.modeling_llama import LlamaDecoderLayer, LlamaRotaryEmbedding
-        torch.manual_seed(SEED)
-        layer = LlamaDecoderLayer(cfg, layer_idx=0)
+        self.library_impl = LlamaDecoderLayer
         state = {HF_LAYER_NAME[k]: torch.from_numpy(np.ascontiguousarray(v)) for k, v in W.items()}
         hf_load_exact(torch, layer, state, self.arm)
         layer = layer.to(self.dev)
@@ -2099,7 +2144,7 @@ class TorchArm:
         corpus = _load_mamba_corpus_restoring(torch, self.info)
         W = _weights(self.data)
         hd = dm // d["n_heads"]
-        layers, kinds, rope, ssm_back = torch.nn.ModuleList(), [], None, None
+        layers, kinds, rope, ssm_back, attn_cfg, ssm_cls = torch.nn.ModuleList(), [], None, None, None, None
         for i, kind in enumerate(d["layers"]):
             pre = "layers.%d." % i
             w = {k[len(pre):]: v for k, v in W.items() if k.startswith(pre)}
@@ -2107,10 +2152,12 @@ class TorchArm:
                 blk, ssm_back, _eps_back, fused, _cfg, _eps = mamba_ssm_block(
                     torch, self.dev, "mamba3", corpus, dm, w, self.arm)
                 layers.append(blk)
+                ssm_cls = ssm_cls or type(blk)
                 self.info["mamba3_fused_path"] = fused
             else:
                 layer, _cfg, cos, sin, pos = self._hf_layer(
                     w, dict(d, n_kv=d["n_heads"], head_dim=hd), L, BLOCK_NORM_EPS, BLOCK_ROPE_THETA)
+                attn_cfg = _cfg
                 layers.append(layer)
                 rope = (cos, sin, pos)
             kinds.append(kind)
@@ -2147,6 +2194,17 @@ class TorchArm:
 
         self.module = Stack()
         self.module.train(train)
+        # the library classes in the stack: mamba_ssm's Block where present (else transformers' Llama layer)
+        if ssm_cls is not None:
+            self.library_impl = ssm_cls
+        self.config_readback = arch_readback("samba", dict(
+            layers=kinds, d_model=embed.embedding_dim, vocab=embed.num_embeddings,
+            n_heads=getattr(attn_cfg, "num_attention_heads", None) if attn_cfg is not None else d["n_heads"],
+            n_kv_heads=getattr(attn_cfg, "num_key_value_heads", None) if attn_cfg is not None else None,
+            head_dim=getattr(attn_cfg, "head_dim", None) if attn_cfg is not None else None,
+            intermediate=getattr(attn_cfg, "intermediate_size", None) if attn_cfg is not None else None,
+            tied_head=True,          # Stack.forward computes the logits with self.embed.weight
+            norm_eps=eps))
         self.batches = self.data["batches"]
         if not train:
             self.host = [torch.from_numpy(np.ascontiguousarray(self.batches[0][:, :-1]).astype(np.int64))]
