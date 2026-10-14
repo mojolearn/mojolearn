@@ -84,13 +84,37 @@ def clear_once():
 # inputs as read-only (the timed worker already rebuilds every arm from the same D each round, so a builder
 # that wrote into its inputs would change its own later rounds).
 
-#: the staged-input budget of one process, in GiB (least recently used entries go first)
+#: the staged-input budget of one process, in GiB: an explicit override. Unset, the budget is sized from the
+#: box's free memory when the cache first stores something (free_memory_bytes x STAGE_FREE_FRACTION).
 STAGE_BUDGET_ENV = "MOJOLEARN_SMOKE_STAGE_GB"
-STAGE_BUDGET_GB = 8.0
+STAGE_BUDGET_GB = 8.0          # the budget where the free memory cannot be read
+STAGE_FREE_FRACTION = 0.5      # the share of the free memory the staged inputs may hold (the arms need the rest)
+STAGE_LRU_FLOOR = 1 << 30      # the LRU keeps at least this much (at most a quarter of the budget) beside the pins
+
+
+def free_memory_bytes():
+    """(bytes, source): the memory this process can still take. Linux: MemAvailable, lowered to the cgroup
+    memory.max headroom when one is set (a RunPod container sees the host's /proc/meminfo; the same rule as
+    tools/build_sizing.py box_resources). Elsewhere half the physical memory (macOS has no MemAvailable).
+    (None, why) when neither can be read."""
+    try:
+        import build_sizing
+        available = build_sizing.mem_available()
+        headroom = build_sizing.cgroup_memory_headroom()
+        if headroom is not None and headroom < available:
+            return int(headroom), "cgroup memory.max headroom"
+        return int(available), "MemAvailable"
+    except Exception:  # noqa: BLE001 - not Linux, or no /proc/meminfo
+        pass
+    try:
+        return int(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")) // 2, "half the physical memory"
+    except (AttributeError, OSError, ValueError):
+        return None, "free memory unreadable"
 
 
 def nbytes_of(value, seen=None):
-    """The bytes of the NumPy arrays held by `value` (dicts, lists, tuples), each array once."""
+    """The bytes of the arrays held by `value` (NumPy arrays and torch tensors, in dicts, lists, tuples, scipy
+    sparse matrices and plain objects' attributes), each array once."""
     seen = set() if seen is None else seen
     if id(value) in seen:
         return 0
@@ -101,26 +125,69 @@ def nbytes_of(value, seen=None):
         return sum(nbytes_of(v, seen) for v in value.values())
     if isinstance(value, (list, tuple)):
         return sum(nbytes_of(v, seen) for v in value)
+    if all(hasattr(value, k) for k in ("data", "indices", "indptr")):          # scipy CSR/CSC
+        return sum(nbytes_of(getattr(value, k), seen) for k in ("data", "indices", "indptr"))
+    if hasattr(value, "memory_usage") and hasattr(value, "columns"):           # a pandas DataFrame
+        try:
+            return int(value.memory_usage(index=True, deep=False).sum())
+        except Exception:  # noqa: BLE001
+            return 0
+    if hasattr(value, "__dict__") and not isinstance(value, type) and not callable(value):
+        return sum(nbytes_of(v, seen) for v in vars(value).values())
     return 0
 
 
 class StagedInputs:
-    """An in-process LRU of staged inputs under a byte budget, with hit/miss/eviction counts."""
+    """An in-process cache of staged inputs: PINNED entries (dataset blocks read from files, kept for the whole
+    smoke) and an LRU of the rest under the remaining budget, with hit/miss/eviction counts.
+
+    smoke-fixes r14 (2026-10-14; NVIDIA in-process smoke, 32 STARTED at 5 s, up from 3): under the fixed 8 GB
+    budget the LRU evicted 85-96 times, so the istella/taxi blocks were read again inside later recipes'
+    timers, and every family re-read its npz there. Now the file-backed blocks are pinned (never evicted)
+    while they fit the budget, and the budget is sized from the box's free memory (free_memory_bytes x
+    STAGE_FREE_FRACTION) unless MOJOLEARN_SMOKE_STAGE_GB names it; report() records the budget, its source,
+    the pinned bytes and the evictions."""
 
     def __init__(self, budget_bytes=None):
         import collections
-        if budget_bytes is None:
+        self.budget_source = None
+        self.free_bytes = None
+        if budget_bytes is None and os.environ.get(STAGE_BUDGET_ENV):
             try:
-                budget_bytes = float(os.environ.get(STAGE_BUDGET_ENV) or STAGE_BUDGET_GB) * (1 << 30)
+                budget_bytes = float(os.environ[STAGE_BUDGET_ENV]) * (1 << 30)
+                self.budget_source = STAGE_BUDGET_ENV
             except ValueError:
-                budget_bytes = STAGE_BUDGET_GB * (1 << 30)
-        self.budget = int(budget_bytes)
-        self.entries = collections.OrderedDict()     # key -> (value, nbytes)
-        self.bytes = 0
-        self.hits = self.misses = self.evictions = 0
+                budget_bytes = None
+        self.budget = None if budget_bytes is None else int(budget_bytes)
+        if self.budget is not None and self.budget_source is None:
+            self.budget_source = "explicit"
+        self.entries = collections.OrderedDict()     # key -> (value, nbytes), least recently used first
+        self.pinned = {}                             # key -> (value, nbytes), never evicted
+        self.bytes = 0                               # LRU bytes
+        self.pinned_bytes = 0
+        self.hits = self.misses = self.evictions = self.pin_declined = 0
         self.build_seconds = 0.0
 
-    def get(self, key, build, nbytes=None):
+    def _size(self):
+        """The budget, sized from the free memory on first use (not at import: the worker loads its libraries
+        first)."""
+        if self.budget is None:
+            free, source = free_memory_bytes()
+            self.free_bytes = free
+            if free is None:
+                self.budget, self.budget_source = int(STAGE_BUDGET_GB * (1 << 30)), source + ": the default"
+            else:
+                self.budget = int(free * STAGE_FREE_FRACTION)
+                self.budget_source = "%s x %g at first use" % (source, STAGE_FREE_FRACTION)
+        return self.budget
+
+    def lru_budget(self):
+        return max(self._size() - self.pinned_bytes, min(STAGE_LRU_FLOOR, self._size() // 4))
+
+    def get(self, key, build, nbytes=None, pin=False):
+        if key in self.pinned:
+            self.hits += 1
+            return self.pinned[key][0]
         if key in self.entries:
             self.entries.move_to_end(key)
             self.hits += 1
@@ -129,65 +196,157 @@ class StagedInputs:
         t0 = time.time()
         value = build()
         self.build_seconds += time.time() - t0
-        size = nbytes_of(value) if nbytes is None else int(nbytes)
+        size = nbytes_of(value) if nbytes is None else int(nbytes)   # int() of a _Deferred reads it after build
+        if pin:
+            if self.pinned_bytes + size <= self._size():
+                self.pinned[key] = (value, size)
+                self.pinned_bytes += size
+                self._evict(None)
+                return value
+            self.pin_declined += 1                   # over the budget: an ordinary LRU entry instead
         self.entries[key] = (value, size)
         self.bytes += size
-        while self.bytes > self.budget and len(self.entries) > 1:
+        self._evict(key)
+        return value
+
+    def _evict(self, keep):
+        limit = self.lru_budget()
+        while self.bytes > limit and self.entries:
             old_key = next(iter(self.entries))
-            if old_key == key:
+            if old_key == keep:
                 break
             self.bytes -= self.entries.pop(old_key)[1]
             self.evictions += 1
-        return value
 
     def clear(self):
         self.entries.clear()
-        self.bytes = 0
+        self.pinned.clear()
+        self.bytes = self.pinned_bytes = 0
 
     def report(self):
-        return dict(entries=len(self.entries), bytes=self.bytes, budget=self.budget, hits=self.hits,
-                    misses=self.misses, evictions=self.evictions, build_seconds=round(self.build_seconds, 2))
+        return dict(entries=len(self.entries), bytes=self.bytes, budget=self.budget,
+                    budget_source=self.budget_source, free_bytes_at_sizing=self.free_bytes,
+                    lru_budget=self.lru_budget() if self.budget is not None else None,
+                    pinned=len(self.pinned), pinned_bytes=self.pinned_bytes, pin_declined=self.pin_declined,
+                    hits=self.hits, misses=self.misses, evictions=self.evictions,
+                    build_seconds=round(self.build_seconds, 2))
 
 
 STAGED = StagedInputs()
 
 
-def staged(key, build, nbytes=None):
+def staged(key, build, nbytes=None, pin=False):
     """build() once per smoke-worker process for `key` (a tuple naming the exact file stamp or seed and size);
-    outside the smoke worker it is simply build()."""
+    outside the smoke worker it is simply build(). pin=True (a dataset block read from files) keeps it for the
+    whole smoke, outside the LRU, while the pinned blocks fit the budget."""
     if not in_process():
         return build()
-    return STAGED.get(key, build, nbytes=nbytes)
+    return STAGED.get(key, build, nbytes=nbytes, pin=pin)
+
+
+class _Deferred:
+    """An nbytes known only after build() ran (memo_on: the derived value's bytes, not its inputs')."""
+
+    def __init__(self, box):
+        self.box = box
+
+    def __int__(self):
+        return int(self.box.get("n", 0))
+
+
+def file_stamp(path):
+    """(absolute path, size, mtime_ns) of a file: the key part that names its exact bytes."""
+    st = os.stat(path)
+    return (os.path.abspath(path), st.st_size, st.st_mtime_ns)
+
+
+def staged_npz(path, keys=None, contiguous=True, pin=True):
+    """{name: array} of an npz file, read once per smoke-worker process and pinned (keyed by its stamp). The
+    arrays are what `{k: np.ascontiguousarray(z[k]) for k in z.files}` (contiguous=True) or
+    `{k: z[k] ...}` gives: the same values every reader of that file computes from. `keys` limits the arrays
+    read (None: all). Outside the smoke worker it simply reads the file."""
+    def read():
+        import numpy as np
+        with np.load(path) as z:
+            names = [k for k in z.files if keys is None or k in keys]
+            return {k: (np.ascontiguousarray(z[k]) if contiguous else z[k]) for k in names}
+    if not in_process():
+        return read()
+    key = ("npz",) + file_stamp(path) + (tuple(sorted(keys)) if keys is not None else None, bool(contiguous))
+    return dict(STAGED.get(key, read, pin=pin))
+
+
+def memo_on(tag, inputs, build, extra=(), nbytes=None, pin=False):
+    """build() once per smoke-worker process for the same live input objects (and `extra`, a hashable that
+    names everything else build reads): a value derived from staged inputs (a CSR of a staged block, a
+    DataFrame of a staged matrix). The entry holds the inputs, so their ids cannot be reused while it lives.
+    Outside the smoke worker it is simply build()."""
+    if not in_process():
+        return build()
+    inputs = tuple(inputs)
+    key = ("memo-on", tag, tuple((id(a), _array_stamp(a)) for a in inputs), extra)
+    sized = {}
+
+    def make():
+        value = build()
+        sized["n"] = nbytes_of(value) if nbytes is None else int(nbytes)      # the inputs are counted already
+        return inputs, value
+    got = STAGED.get(key, make, nbytes=_Deferred(sized), pin=pin)
+    if any(x is not y for x, y in zip(got[0], inputs)):        # cannot happen while the entry holds them
+        STAGED.entries.pop(key, None)
+        STAGED.pinned.pop(key, None)
+        return build()
+    return got[1]
 
 
 class _HashMemo:
-    """sha256 of an array's C-order bytes, once per live array object (weak references: an entry goes with
-    its array). The same bytes as hashlib.sha256(np.ascontiguousarray(a).tobytes())."""
+    """sha256 of an array's C-order bytes, once per live memory (weak references: an entry goes with the object
+    that owns the memory). The same bytes as hashlib.sha256(np.ascontiguousarray(a).tobytes()).
+
+    smoke-fixes r14 (2026-10-14): keyed by the object that OWNS the memory (the end of the array's .base
+    chain: an ndarray, or the torch tensor behind `t.numpy()`) plus the view's data pointer, dtype, shape and
+    strides, not by the view object: every torch layer arm records `x_cpu.numpy()`, a new view object of the
+    same staged tensor, and re-hashed its 0.2-0.3 GB per arm. While the owner lives its memory cannot be
+    reused, so the same pointer, dtype, shape and strides are the same bytes."""
 
     def __init__(self):
-        self.memo = {}
+        self.memo = {}                # id(owner) -> (weakref to owner, {stamp: digest})
         self.hits = self.misses = 0
 
     def _drop(self, key):
         self.memo.pop(key, None)
 
+    @staticmethod
+    def _owner(a):
+        owner = a
+        while getattr(owner, "base", None) is not None:
+            owner = owner.base
+        return owner
+
     def sha256(self, a, compute):
         import weakref
-        key = id(a)
-        got = self.memo.get(key)
-        if got is not None:
-            ref, stamp, digest = got
-            if ref() is a and stamp == _array_stamp(a):
+        stamp = _array_stamp(a)
+        owner = self._owner(a)
+        for cand in (owner, a):
+            got = self.memo.get(id(cand))
+            if got is not None and got[0]() is cand and stamp in got[1]:
                 self.hits += 1
-                return digest
+                return got[1][stamp]
         self.misses += 1
         digest = compute(a)
-        try:
-            ref = weakref.ref(a, lambda _r, k=key: self._drop(k))
-        except TypeError:             # not weak-referenceable: not memoized
+        for cand in (owner, a):       # an owner that is not weak-referenceable (bytes): the view itself
+            key = id(cand)
+            got = self.memo.get(key)
+            if got is not None and got[0]() is cand:
+                got[1][stamp] = digest
+                return digest
+            try:
+                ref = weakref.ref(cand, lambda _r, k=key: self._drop(k))
+            except TypeError:
+                continue
+            self.memo[key] = (ref, {stamp: digest})
             return digest
-        self.memo[key] = (ref, _array_stamp(a), digest)
-        return digest
+        return digest                 # nothing weak-referenceable: not memoized
 
     def report(self):
         return dict(live=len(self.memo), hits=self.hits, misses=self.misses)

@@ -3418,6 +3418,18 @@ def _est_factory(lane, arm, D):
     raise SystemExit("no arm %r for lane %r" % (arm, lane))
 
 
+def _count_csr(a):
+    """scipy.sparse.csr_matrix(a): the count block as CSR (lane apple-fast-nb). Inside the smoke worker
+    (smoke-fixes r14, 2026-10-14; complement-nb/multinomial-nb istella STARTED at 5 s in M.nonzero / the COO
+    coordinate cast of this conversion, once per arm) it is converted once per staged array
+    (smoke_inproc.memo_on) and every sparse-taking arm gets the same matrix; the estimators only read it."""
+    import scipy.sparse as sp
+    SI = _staging()
+    if SI is None:
+        return sp.csr_matrix(a)
+    return SI.memo_on("algos-count-csr", (a,), lambda: sp.csr_matrix(a))
+
+
 def _build_est(lane, arm, D):
     np = _np()
     s = LANES[lane]
@@ -3465,8 +3477,7 @@ def _build_est(lane, arm, D):
             ready = getattr(cls, "_nb_csr_ready", None)
             sparse_ok = ready is not None and ready()
         if sparse_ok:
-            import scipy.sparse as sp
-            X, Xq = sp.csr_matrix(X), sp.csr_matrix(Xq)
+            X, Xq = _count_csr(X), _count_csr(Xq)
     y = dev.get("y")
     if t == "semi":
         y = D["y_semi"]
@@ -5316,6 +5327,47 @@ def _basic_block(torch, inplanes, planes):
     return BasicBlock()
 
 
+def _torch_layer_setup_build(lane, D, torch, s, keep_rng=False):
+    """(make, x_cpu, extra_cpu, state, drift[, cpu RNG state]): a torch layer arm's inputs, its seeded reference
+    module's state and the fixture drift check, exactly as _build_layer always built them (keep_rng: also the
+    global CPU generator's state right after make(), a read that draws nothing)."""
+    make, x_cpu, extra_cpu = _layer_inputs(lane, D, torch)
+    ref = make()
+    _neural_ab_layer_mode(ref, s)
+    state = {k: v.detach().cpu().numpy() for k, v in ref.state_dict().items()}
+    rng = torch.get_rng_state() if keep_rng else None
+    # untimed, before the generator below: torch's tensors must equal our arm's fixture bytes
+    drift = _neural_fixture_drift_check(lane, D, x_cpu, state, torch)
+    return (make, x_cpu, extra_cpu, state, drift) + ((rng,) if keep_rng else ())
+
+
+def _torch_layer_setup(lane, D, torch, s):
+    """(make, x_cpu, extra_cpu, state, drift) of a torch layer arm (_torch_layer_setup_build).
+
+    smoke-fixes r14 (2026-10-14; avgpool2d STARTED at 5 s in `torch.randn(nb, 64, 112, 112)` and moe at 5 s
+    after six torch arms each drew x, built the seeded reference module (moe: 69M parameters), compared it with
+    the fixture and hashed it): inside the smoke worker this is built ONCE per process by the same function and
+    shared by every torch arm and recipe of the lane (keyed by lane, dataset, the lane arrays' shapes, the
+    batch, the seed, torch's version and the fixture directory). The global RNG ends exactly where the build
+    left it: torch.manual_seed(SEED) (every device, as _layer_inputs seeds them) and then the CPU state saved
+    right after make(). x and state are only read downstream (copied to the device, loaded into the arm's
+    module); the drift record is each arm's own copy."""
+    SI = _staging()
+    if SI is None:
+        return _torch_layer_setup_build(lane, D, torch, s)
+    import copy
+    NF = _tool("neural_fixtures")
+    key = ("algos-torch-layer", lane, _DATASET or os.environ.get("MOJOLEARN_BOARD_DATASET"),
+           tuple(sorted((k, tuple(getattr(v, "shape", ()) or ())) for k, v in D.items() if not k.startswith("_"))),
+           NF.layer_batch(D), SEED, torch.__version__, s.get("_neural_ab_training"),
+           os.path.abspath(_NEURAL_FIXTURES or os.environ.get(NF.ENV_DIR) or ""))
+    make, x_cpu, extra_cpu, state, drift, rng = SI.staged(
+        key, lambda: _torch_layer_setup_build(lane, D, torch, s, keep_rng=True))
+    torch.manual_seed(SEED)
+    torch.set_rng_state(rng)
+    return make, x_cpu, extra_cpu, dict(state), copy.deepcopy(drift)
+
+
 def _build_layer(lane, arm, D):
     np = _np()
     s = LANES[lane]
@@ -5526,12 +5578,7 @@ def _build_layer(lane, arm, D):
         layer_ups = [("x", x_cpu)] + [("extra%d" % i, e) for i, e in enumerate(extra_cpu)]
         return _with_upload(Runner(info, fit, out, infer, record=rec), layer_ups, layer_ups)
     import torch
-    make, x_cpu, extra_cpu = _layer_inputs(lane, D, torch)
-    ref = make()
-    _neural_ab_layer_mode(ref, s)
-    state = {k: v.detach().cpu().numpy() for k, v in ref.state_dict().items()}
-    # untimed, before the generator below: torch's tensors must equal our arm's fixture bytes
-    drift = _neural_fixture_drift_check(lane, D, x_cpu, state, torch)
+    make, x_cpu, extra_cpu, state, drift = _torch_layer_setup(lane, D, torch, s)
     g = torch.Generator().manual_seed(SEED + 1)
     setting = arm[len("torch-"):]
     mode, prec = setting.split("-")
@@ -6254,11 +6301,21 @@ def _als_split(X):
     return sp.csr_matrix(Xh), held
 
 
+def _staged_als_split(X):
+    """_als_split(X); inside the smoke worker (smoke-fixes r14, 2026-10-14; als/text STARTED at 5 s in this
+    split's dense copy, once per arm) once per staged X (smoke_inproc.memo_on), the same (csr, held) for every
+    arm; the arms only read them."""
+    SI = _staging()
+    if SI is None:
+        return _als_split(X)
+    return SI.memo_on("algos-als-split", (X,), lambda: _als_split(X))
+
+
 def _build_als(lane, arm, D):
     np = _np()
     s = LANES[lane]
     p = s["params"]
-    C, held = _als_split(D["X"])
+    C, held = _staged_als_split(D["X"])
     S = {}
     sync = None
     if arm in OURS_ARMS:
@@ -6830,9 +6887,54 @@ def stage_inputs(lane, dataset, data):
         elif s["kind"] == "shap" and s["task"] in ("kernel-shap", "permutation-shap"):
             _staged_shared_ridge(D["X"], D["y"])
             staged.append("shared ridge")
+        # smoke-fixes r14 (2026-10-14): the builder-side inputs the arms derived inside the recipe's timer
+        elif s["kind"] == "est" and s["block"] == "countclf" and s["task"] == "clf" and D.get("X") is not None:
+            _count_csr(D["X"])
+            _count_csr(D["Xq"])
+            staged.append("count CSR")
+        elif s["kind"] == "als":
+            _staged_als_split(D["X"])
+            staged.append("ALS split")
+        elif s["kind"] == "extra" and s["task"] == "xent":
+            _EXTRA._ce_inputs_once(_np(), SEED, globals())
+            staged.append("cross-entropy inputs")
+        elif s["kind"] == "layer":
+            staged.extend(_stage_layer(lane, dataset, data, D))
     finally:
         _DATASET = saved
     return {"status": "ok", "staged": staged, "arrays": sorted(k for k in D if not k.startswith("_"))}
+
+
+def _stage_layer(lane, dataset, data, D):
+    """stage_inputs for a layer lane (smoke-fixes r14, 2026-10-14; avgpool2d and moe STARTED at 5 s): the ours
+    arm's fixture set (neural_fixtures.load, sha256-verified once per process) and the torch arms' inputs,
+    seeded reference state and drift check (_torch_layer_setup), with every input array's digest, as the arms'
+    records then read them. The fixture directory is the one worker_ready uses (neural_fixtures.default_dir of
+    the block directory). Returns what it staged."""
+    global _NEURAL_FIXTURES
+    np = _np()
+    s = LANES[lane]
+    NF = _tool("neural_fixtures")
+    saved, out = _NEURAL_FIXTURES, []
+    _NEURAL_FIXTURES = NF.default_dir(data)
+    try:
+        try:
+            fx = NF.load_for_lane(_NEURAL_FIXTURES, lane, s, dataset, D)
+        except NF.FixturesMissing as exc:
+            out.append("fixtures absent: %s" % str(exc)[:200])
+        else:
+            for a in ([fx["x"]] if fx["x"] is not None else []) + [fx["state"][k] for k in sorted(fx["state"])]:
+                _array_sha256(np.ascontiguousarray(a))
+            out.append("ours fixtures + digests")
+        if s.get("torch"):
+            import torch
+            _make, x_cpu, extra_cpu, state, _drift = _torch_layer_setup(lane, D, torch, s)
+            for a in [x_cpu.numpy()] + [e.numpy() for e in extra_cpu] + [state[k] for k in sorted(state)]:
+                _array_sha256(np.ascontiguousarray(a))
+            out.append("torch inputs + reference state + digests")
+    finally:
+        _NEURAL_FIXTURES = saved
+    return out
 
 
 def _aft_capture_worker(args, B, D, rec, runner):

@@ -665,6 +665,47 @@ def _load(name):
     return mod
 
 
+def _smoke_staging():
+    """tools/smoke_inproc.py when this process is the campaign smoke's worker or one of its arm servers (they serve
+    the --params-only parameter probe only), else None: a timed worker returns None here without importing
+    anything, so it reads its block exactly as before."""
+    if os.environ.get("MOJOLEARN_SMOKE_IN_PROCESS") != str(os.getpid()):
+        return None
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import smoke_inproc
+    return smoke_inproc if smoke_inproc.in_process() else None
+
+
+def _staged_block_inputs(SI, lane, block, race_arms=None):
+    """(B, rec, D) of one classical2 block inside the smoke worker.
+
+    smoke-fixes r14 (2026-10-14; classical2 recipes on istella STARTED at 5 s in zipfile crc32 / read_array and in
+    lane_arrays' stride subsets `np.ascontiguousarray(a[idx])`: the conductor and every arm re-read the npz and
+    re-took the subsets inside the recipe's timer). The block is read once per process and pinned
+    (smoke_inproc.staged_npz: the C-contiguous arrays worker_ready reads; the conductor's `z[k]` are the same
+    values), and the lane's arrays are taken once per (lane, block file, record) by lane_arrays itself. Every
+    caller gets new dicts over the same arrays, so the parameter records are the timed path's."""
+    B = SI.staged_npz(block + ".npz")
+    with open(block + ".json") as fh:
+        rec = json.load(fh)
+    if race_arms is not None:               # the worker's record (worker_ready), keyed with it
+        rec = dict(rec, race_arms=race_arms)
+    key = ("more-lane-arrays", lane) + SI.file_stamp(block + ".npz") + (json.dumps(rec, sort_keys=True,
+                                                                                   default=str),)
+    return B, rec, dict(SI.staged(key, lambda: lane_arrays(lane, B, rec)))
+
+
+def stage_inputs(lane, dataset, data):
+    """The smoke worker's stage-data step for one classical2 recipe (tools/smoke_worker.py), outside every recipe's
+    timer: the block (pinned) and the lane's arrays. A no-op outside the smoke worker."""
+    SI = _smoke_staging()
+    if SI is None:
+        return {"status": "not in the smoke worker"}
+    _, _, D = _staged_block_inputs(SI, lane, os.path.join(data, "%s-%s" % (block_of(lane), dataset)))
+    return {"status": "ok", "staged": ["block", "lane_arrays"], "arrays": sorted(D)}
+
+
 def _cap(n, cap, floor=0):
     return n if not cap else max(min(floor, n), min(n, cap))
 
@@ -1706,13 +1747,19 @@ def worker_ready(args):
     np = _np()
     block = os.path.join(args.data, "%s-%s" % (block_of(args.lane), args.dataset))
     try:
-        with np.load(block + ".npz") as z:
-            B = {k: np.ascontiguousarray(z[k]) for k in z.files}
-        with open(block + ".json") as fh:
-            rec = json.load(fh)
         # the race's whole arm list (a setting of ours may depend on which opponent it is paired with)
-        rec = dict(rec, race_arms=[a for a in (getattr(args, "race_arms", "") or "").split(",") if a])
-        runner = build(args.lane, args.arm, lane_arrays(args.lane, B, rec), rec)
+        race_arms = [a for a in (getattr(args, "race_arms", "") or "").split(",") if a]
+        SI = _smoke_staging()
+        if SI is not None:                  # smoke-fixes r14: once per smoke worker (_staged_block_inputs)
+            B, rec, D = _staged_block_inputs(SI, args.lane, block, race_arms=race_arms)
+        else:
+            with np.load(block + ".npz") as z:
+                B = {k: np.ascontiguousarray(z[k]) for k in z.files}
+            with open(block + ".json") as fh:
+                rec = json.load(fh)
+            rec = dict(rec, race_arms=race_arms)
+            D = lane_arrays(args.lane, B, rec)
+        runner = build(args.lane, args.arm, D, rec)
         # the parameters this arm really got, read back from what it constructed
         params = _load("classical_two_datasets").params_record(runner.params)
     except Exception as exc:  # noqa: BLE001
@@ -2093,10 +2140,14 @@ def race(args):
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.work, exist_ok=True)
     block = os.path.join(args.data, "%s-%s" % (block_of(lane), ds))
-    with open(block + ".json") as fh:
-        rec = json.load(fh)
-    with np.load(block + ".npz") as z:
-        D = lane_arrays(lane, {k: z[k] for k in z.files}, rec)
+    SI = _smoke_staging() if getattr(args, "params_only", False) else None
+    if SI is not None:                      # smoke-fixes r14: once per smoke worker (_staged_block_inputs)
+        _, rec, D = _staged_block_inputs(SI, lane, block)
+    else:
+        with open(block + ".json") as fh:
+            rec = json.load(fh)
+        with np.load(block + ".npz") as z:
+            D = lane_arrays(lane, {k: z[k] for k in z.files}, rec)
     shape = shape_desc(D)
     result = {"lane": lane, "dataset": ds, "block": rec, "shape": shape, "arms": {},
               "lane_config": LANE_CONFIG[lane], "rounds_requested": args.rounds,

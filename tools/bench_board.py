@@ -2271,7 +2271,15 @@ def ensure_algos_prep(ctx, races):
         log = os.path.join(ctx["out"], "logs", "algos-prep-rows-%s.log" % rows_tag(rows))
         print("bench_board: algos prep rows=%s lanes=%d datasets=%s"
               % (rows_tag(rows), len(lanes), ",".join(dss)), flush=True)
-        rc = run_logged(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])
+        if _in_smoke_worker():
+            # smoke-fixes r14 (2026-10-14; algos recipes STARTED at 5 s): inside the campaign smoke's worker every
+            # algos recipe started a `bench_board_algos.py prep` interpreter (imports included) inside its own
+            # 5 s, only for the driver to find every block prepared by the smoke's stage. The same prep (its
+            # main(argv): it skips every block whose JSON record exists) now runs as a function call there
+            # (probe_run; another interpreter or loader environment still gets a subprocess)
+            rc = probe_run(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])[0]
+        else:
+            rc = run_logged(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])
         if rc != 0:
             print("bench_board: algos prep rc %d (see %s); its races will fail by name"
                   % (rc, log), flush=True)

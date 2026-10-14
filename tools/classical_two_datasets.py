@@ -961,6 +961,12 @@ def scorer_preflight(RSP, lane, ds, block, rec):
     holder = {}
 
     def load():
+        if smoke_staging() is not None:
+            # smoke-fixes r14 (2026-10-14; classical/dbscan istella STARTED in this load): the staged block
+            # (read_block_arrays), the same arrays and file list the npz gives
+            arrays = read_block_arrays(block + ".npz")
+            holder["data"] = {k: v for k, v in arrays.items() if k in SCORER_ARRAYS.get(lane, ())}
+            return sorted(arrays)
         with np.load(block + ".npz") as z:
             holder["data"] = {k: z[k] for k in z.files if k in SCORER_ARRAYS.get(lane, ())}
             return sorted(z.files)
@@ -2592,8 +2598,7 @@ def worker_ready(args):
     The worker subprocess and the smoke's in-process probe (probe_ready) both run exactly this."""
     block = os.path.join(args.data, "%s-%s" % (BLOCK_OF[args.lane], args.dataset))
     try:
-        with np.load(block + ".npz") as z:
-            data = {k: np.ascontiguousarray(z[k]) for k in z.files}
+        data = read_block_arrays(block + ".npz")    # smoke-fixes r14: once per smoke worker (read_block_arrays)
         with open(block + ".json") as fh:
             rec = json.load(fh)
         runner = BUILDERS[(args.lane, args.arm)](data, rec)
@@ -2798,6 +2803,41 @@ class Worker:
         except subprocess.TimeoutExpired:
             self.kill(self.status, self.error)
         self.log.close()
+
+
+def smoke_staging():
+    """tools/smoke_inproc.py when this process is the campaign smoke's worker or one of its arm servers (they serve
+    the --params-only parameter probe only), else None: a timed worker returns None here without importing
+    anything, so it reads its block exactly as before."""
+    if os.environ.get("MOJOLEARN_SMOKE_IN_PROCESS") != str(os.getpid()):
+        return None
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import smoke_inproc
+    return smoke_inproc if smoke_inproc.in_process() else None
+
+
+def read_block_arrays(path):
+    """{name: C-contiguous array} of a block's npz: what every worker reads. Inside the smoke worker
+    (smoke-fixes r14, 2026-10-14; classical recipes on istella STARTED at 5 s in zipfile crc32 / read_array:
+    the conductor's scorer preflight and every arm re-read the same npz inside the recipe's timer) the file is
+    read once per process, pinned for the whole smoke (smoke_inproc.staged_npz, keyed by its path, size and
+    mtime), and every caller gets a new dict over the same arrays: the same values, so the same records."""
+    SI = smoke_staging()
+    if SI is not None:
+        return SI.staged_npz(path)
+    with np.load(path) as z:
+        return {k: np.ascontiguousarray(z[k]) for k in z.files}
+
+
+def stage_inputs(lane, dataset, data):
+    """The smoke worker's stage-data step for one classical recipe (tools/smoke_worker.py), outside every recipe's
+    timer: the lane's block, read into the process's pinned staged inputs. A no-op outside the smoke worker."""
+    if smoke_staging() is None:
+        return {"status": "not in the smoke worker"}
+    block = os.path.join(data, "%s-%s" % (BLOCK_OF[lane], dataset))
+    arrays = read_block_arrays(block + ".npz")
+    return {"status": "ok", "staged": ["block %s-%s" % (BLOCK_OF[lane], dataset)], "arrays": sorted(arrays)}
 
 
 def start_worker(arm, cmd, env, log_path, cwd, params_only=False):

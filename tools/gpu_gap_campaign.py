@@ -649,17 +649,38 @@ def plan_data_files(args, plans):
 def stage_request(args, race, arm_python=None):
     """The stage-data request for one recipe (smoke-fixes r12, 2026-10-14): an algos recipe's dataset block,
     lane arrays and generated synthetic inputs (with their sha256), staged in the smoke worker and in the arm
-    servers of the race's arm interpreters before the recipe's timer starts. None for the other families
-    (their drivers read their inputs once per process already)."""
-    if race.get("family") != "algos":
+    servers of the race's arm interpreters before the recipe's timer starts.
+
+    smoke-fixes r14 (2026-10-14; NVIDIA in-process smoke, 26 classical/classical2/trees recipes STARTED at 5 s
+    in their drivers' own npz reads, which nothing staged): the classical, classical2 and trees recipes too,
+    each through its own driver's stage_inputs (the block or decoded dataset, pinned for the whole smoke, and
+    what the arms derive from it). None for the other families."""
+    cache = os.path.abspath(os.path.expanduser(args.cache))
+    family = race.get("family")
+    if family == "algos":                                         # the smoke runs --rows full
+        driver, data = ROOT / "tools/bench_board_algos.py", B.algos_data_dir(
+            dict(algos_data=os.path.join(cache, "algos-data")), None)
+        dataset = race["dataset"]
+    elif family == "classical":
+        driver, data = ROOT / "tools/classical_two_datasets.py", B.classical_data_dir(
+            dict(ctd_data=os.path.join(cache, "ctd-data")), None)
+        dataset = race["dataset"]
+    elif family == "classical2":
+        driver, data = ROOT / "tools/bench_board_more.py", B.more_data_dir(
+            dict(more_data=os.path.join(cache, "more-data")), None)
+        dataset = race["dataset"]
+    elif family == "trees":
+        # the forest driver's dataset under the board's tree command (bench_board.tree_cmd: --dataset
+        # tree_driver_dataset, MOJOLEARN_SPEED_SIZE shipped, the full rows)
+        driver = ROOT / "bench/speed/forest_speed_arm.py"
+        dataset = B.tree_driver_dataset(race["lane"], race["dataset"])
+        data = dict(size="shipped", rows=None, arms=sorted(race.get("opponents") or race.get("arms") or ()))
+    else:
         return None
-    data = B.algos_data_dir(dict(algos_data=os.path.join(
-        os.path.abspath(os.path.expanduser(args.cache)), "algos-data")), None)      # the smoke runs --rows full
     arms = set(race.get("arms") or ())
     pythons = sorted({py for arm, py in (arm_python or {}).items() if arm in arms and py})
     return dict(op="stage-data", key=race["id"], arm_pythons=pythons,
-                items=[dict(driver=str(ROOT / "tools/bench_board_algos.py"), lane=race["lane"],
-                            dataset=race["dataset"], data=data)])
+                items=[dict(driver=str(driver), lane=race["lane"], dataset=dataset, data=data)])
 
 
 def smoke_stage(args, plans, out, receipts):

@@ -222,6 +222,17 @@ def _ce_inputs(np, seed):
     return x, t
 
 
+def _ce_inputs_once(np, seed, A):
+    """_ce_inputs(np, seed). Inside the smoke worker (smoke-fixes r14, 2026-10-14; cross-entropy STARTED at 5 s
+    in this 8192 x 8192 draw, once per arm) it is drawn once per process by the same function
+    (smoke_inproc.staged, keyed by seed and size) and every arm reads the same arrays (ours passes x to the
+    loss; the torch arms copy it to the device)."""
+    SI = A["_staging"]()
+    if SI is None:
+        return _ce_inputs(np, seed)
+    return SI.staged(("extra-ce-inputs", seed, CE_ROWS, CE_CLASSES), lambda: _ce_inputs(np, seed))
+
+
 # ---------------------------------------------------------------------------
 # arms
 # ---------------------------------------------------------------------------
@@ -346,7 +357,7 @@ def build(lane, arm, D, A):
                         np.copyto(g, g0)
                     return {"norm": np.array([S["norm"]])}
                 return Runner(info, fit, outputs, record=rec)
-            x, tg = _ce_inputs(np, SEED)
+            x, tg = _ce_inputs_once(np, SEED, A)
             tg32 = tg.astype(np.int32)
 
             def fit():
@@ -392,7 +403,7 @@ def build(lane, arm, D, A):
             # torch-*"): the record names the torch function the arm really calls
             return Runner(info, fit, outputs, sync=sync, record=dict(
                 rec, __implementation__=torch.nn.utils.clip_grad_norm_, seed=SEED, **p))
-        x_np, tg = _ce_inputs(np, SEED)
+        x_np, tg = _ce_inputs_once(np, SEED, A)
         xt = torch.from_numpy(x_np).to(dev).requires_grad_(True)
         tt = torch.from_numpy(tg).to(dev)
         F = torch.nn.functional

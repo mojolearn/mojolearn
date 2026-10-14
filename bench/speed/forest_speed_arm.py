@@ -1160,6 +1160,13 @@ def save_scored_forests(directory, retained, live_names):
         raise ValueError("no successful scored own forest to export")
 
 
+def stage_inputs(lane, dataset, data):
+    """The smoke worker's stage-data step for one trees recipe (tools/smoke_worker.py, smoke-fixes r14): the
+    dataset this driver's main loads (spec.load_with_fallback, pinned) and its CatBoost frames, outside every
+    recipe's timer (speed_gbdt_arm.stage_inputs). A no-op outside the smoke worker."""
+    return spec.stage_inputs(lane, dataset, data)
+
+
 def main(argv=None):
     started = time.time()
     args = build_parser().parse_args(argv)

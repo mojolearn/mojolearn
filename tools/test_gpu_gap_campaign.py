@@ -479,6 +479,25 @@ def test_stage_request_names_the_algos_block_dir_and_the_race_arm_interpreters(t
     assert C.stage_request(args, dict(race, family='neural'), {}) is None
 
 
+def test_stage_request_stages_classical_classical2_and_trees_through_their_drivers(tmp_path):
+    """smoke-fixes r14: the classical, classical2 and trees recipes are staged too, each by its own driver's
+    stage_inputs, from the block dir the board's command reads (rows=full) or the forest driver's dataset."""
+    args = SimpleNamespace(cache=str(tmp_path / "cache"))
+    cache = tmp_path / 'cache'
+    for family, driver, data in (('classical', 'tools/classical_two_datasets.py', cache / 'ctd-data' / 'rows-full'),
+                                 ('classical2', 'tools/bench_board_more.py', cache / 'more-data' / 'rows-full')):
+        race = dict(id='%s/x/istella/rows=full' % family, family=family, lane='kmeans', dataset='istella',
+                    arms=['ours', 'cuml-gpu'])
+        item, = C.stage_request(args, race, {})['items']
+        assert item['driver'].endswith(driver) and item['data'] == str(data) and item['dataset'] == 'istella'
+    race = dict(id='trees/gbdt-multiclass/istella/rows=full', family='trees', lane='gbdt-multiclass',
+                dataset='istella', arms=['ours', 'catboost-gpu'], opponents=['catboost-gpu'])
+    item, = C.stage_request(args, race, {})['items']
+    assert item['driver'].endswith('bench/speed/forest_speed_arm.py')
+    assert item['dataset'] == C.B.tree_driver_dataset('gbdt-multiclass', 'istella')
+    assert item['data'] == dict(size='shipped', rows=None, arms=['catboost-gpu'])
+
+
 def test_smoke_worker_stage_restarts_a_worker_that_does_not_answer(tmp_path):
     """A stage-data request with no answer kills and restarts the worker (recorded), and the recipe goes on."""
     args = SimpleNamespace(smoke_load_timeout=5, smoke_grace=1)

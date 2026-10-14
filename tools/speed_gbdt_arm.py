@@ -456,6 +456,32 @@ def ranking_metrics(bounds, grades, scores):
 # Datasets.
 # --------------------------------------------------------------------------
 
+def _smoke_staging():
+    """tools/smoke_inproc.py when this process is the campaign smoke's worker (it serves the --params-only
+    parameter probe only), else None: a timed run returns None here without importing anything, so it loads
+    its dataset exactly as before."""
+    if os.environ.get("MOJOLEARN_SMOKE_IN_PROCESS") != str(os.getpid()):
+        return None
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import smoke_inproc
+    return smoke_inproc if smoke_inproc.in_process() else None
+
+
+def _open_npz(path):
+    """np.load(path), as every loader here reads its decoded cache. Inside the smoke worker (smoke-fixes r14,
+    2026-10-14; the trees recipes on istella/taxi STARTED at 5 s in zipfile crc32 / read_array inside these
+    loaders) every array of the file is read once per process and pinned for the whole smoke
+    (smoke_inproc.staged_npz, keyed by the file's path, size and mtime; the arrays `z[k]` gives), shared by
+    every dataset form built from it (istella, istellareg, istellamc, istellarank; taxi, taxireg, taximc,
+    taxicat)."""
+    SI = _smoke_staging()
+    if SI is None:
+        return np.load(path)
+    return SI.staged_npz(path, contiguous=False)
+
+
 class Data(object):
     """Train/test split, already in host memory, already the right dtype.
 
@@ -863,7 +889,7 @@ def load_istella(size, rows_cap=None, regression=False, multiclass=False):
     cached = None
     if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
         try:
-            cached = np.load(npz_path)
+            cached = _open_npz(npz_path)
         except Exception as exc:                   # noqa: BLE001
             sys.stderr.write(
                 "speed_gbdt_arm: %s is unreadable (%s); re-decoding from "
@@ -929,8 +955,8 @@ def load_istella_rank(rows_cap=None):
     cuts at the last query boundary at or below the cap. Grades stay 0..4,
     the target of every ranking loss here."""
     folder = os.path.join(data_root(), "istella")
-    speed = np.load(os.path.join(folder, "istella_speed.npz"))
-    rank = np.load(os.path.join(folder, "istella_rank.npz"))
+    speed = _open_npz(os.path.join(folder, "istella_speed.npz"))
+    rank = _open_npz(os.path.join(folder, "istella_rank.npz"))
     x_tr, r_tr = speed["x_train"], speed["r_train"]
     qid_tr = rank["qid_train"]
     if qid_tr.shape[0] != r_tr.shape[0]:
@@ -1095,7 +1121,7 @@ def load_taxi(size, rows_cap=None, regression=False, multiclass=False,
     cached = None
     if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
         try:
-            cached = np.load(npz_path)
+            cached = _open_npz(npz_path)
         except Exception as exc:                   # noqa: BLE001
             sys.stderr.write(
                 "speed_gbdt_arm: %s is unreadable (%s); re-decoding from "
@@ -1524,6 +1550,70 @@ def load_with_fallback(name, size, rows_cap=None):
             "anomaly."
             % (name, exc.__class__.__name__, " ".join(str(exc).split()),
                where))
+
+
+_load_with_fallback_uncached = load_with_fallback
+
+
+def _dataset_files(name):
+    """The decoded-cache files dataset `name` is built from (its dataset-store folder's .npz files), for the
+    smoke's staging key; () for a generated dataset."""
+    key = DATASET_STORE_KEYS.get(name)
+    if not key:
+        return ()
+    folder = os.path.join(data_root(), key.split("/")[1])
+    try:
+        return tuple(sorted(os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".npz")))
+    except OSError:
+        return ()
+
+
+def load_with_fallback(name, size, rows_cap=None):
+    """The dataset (see _load_with_fallback_uncached: a missing dataset is a refusal, never a substitute).
+
+    Inside the smoke worker (smoke-fixes r14, 2026-10-14; trees recipes on istella/taxi STARTED at 5 s inside
+    their loaders) the Data of (name, size, rows_cap) is built once per process by the same loader, from the
+    pinned decoded caches (_open_npz), and kept pinned for the whole smoke while it fits (keyed by the data root
+    and every decoded-cache file's path, size and mtime). Each caller gets its own Data object over the same
+    arrays (attributes a run sets on it stay that run's own); the arrays are only read downstream. A timed run
+    never reaches the cache."""
+    SI = _smoke_staging()
+    if SI is None:
+        return _load_with_fallback_uncached(name, size, rows_cap)
+    import copy
+    files = _dataset_files(name)
+    key = (("trees-data", name, size, rows_cap, os.path.abspath(data_root()))
+           + tuple(SI.file_stamp(f) for f in files))
+    data = SI.staged(key, lambda: _load_with_fallback_uncached(name, size, rows_cap), pin=bool(files))
+    return copy.copy(data)
+
+
+def catboost_cat_frame_once(x, cat_idx):
+    """catboost_cat_frame(x, cat_idx); inside the smoke worker (smoke-fixes r14, 2026-10-14;
+    trees/gbdt-categorical/taxi STARTED at 5 s building this frame) once per staged matrix (the Data arrays are
+    the pinned ones of load_with_fallback), the same frame for every recipe that reads it."""
+    SI = _smoke_staging()
+    if SI is None:
+        return catboost_cat_frame(x, cat_idx)
+    return SI.memo_on("catboost-cat-frame", (x,), lambda: catboost_cat_frame(x, cat_idx),
+                      extra=tuple(int(j) for j in cat_idx))
+
+
+def stage_inputs(lane, dataset, data):
+    """The smoke worker's stage-data step for one trees recipe (tools/smoke_worker.py; the forest driver's
+    stage_inputs), outside every recipe's timer: the dataset (load_with_fallback, pinned) and, when a CatBoost
+    arm races a categorical dataset, its frames. `data`: {"size", "rows", "arms"}. A no-op outside the smoke
+    worker."""
+    if _smoke_staging() is None:
+        return {"status": "not in the smoke worker"}
+    data = dict(data or {})
+    d = load_with_fallback(dataset, data.get("size") or "shipped", data.get("rows"))
+    staged = ["dataset %s" % d.name]
+    if getattr(d, "cat_idx", None) and any("catboost" in str(a) for a in data.get("arms") or ()):
+        catboost_cat_frame_once(d.X_train, d.cat_idx)
+        catboost_cat_frame_once(d.X_test, d.cat_idx)
+        staged.append("catboost frames")
+    return {"status": "ok", "staged": staged}
 
 
 #: The decoded cache each `--download <name>` exists to produce. When the R2
@@ -2679,8 +2769,8 @@ def catboost_arms(lane, cfg, data, devices):
     # dataset inside its fit. Results raced before this change were wrong for this lane;
     # apply extra scrutiny.
     if data.cat_idx:
-        data._catboost_X_train = catboost_cat_frame(data.X_train, data.cat_idx)
-        data._catboost_X_test = catboost_cat_frame(data.X_test, data.cat_idx)
+        data._catboost_X_train = catboost_cat_frame_once(data.X_train, data.cat_idx)
+        data._catboost_X_test = catboost_cat_frame_once(data.X_test, data.cat_idx)
 
     def _fit(m, d):
         if not d.cat_idx:

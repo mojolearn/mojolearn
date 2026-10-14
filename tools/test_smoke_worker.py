@@ -354,3 +354,22 @@ def test_torch_switches_a_recipe_flipped_are_put_back(monkeypatch):
     state['threads'] = 1                                       # what gen_corpus.py does at import
     assert SW.restore_torch_switches(saved) == {'deterministic_algorithms': [True, False], 'num_threads': [1, 8]}
     assert state == dict(det=False, warn=False, threads=8)
+
+
+def test_algos_prep_is_a_function_call_inside_the_smoke_worker(monkeypatch, tmp_path):
+    """smoke-fixes r14: inside the smoke worker the board's algos prep runs the driver's prep as a function call
+    (probe_run), not a fresh interpreter inside each recipe's timer; outside it is the subprocess as always."""
+    B = C.B
+    ctx = dict(out=str(tmp_path), algos_data=str(tmp_path / "algos"), python=sys.executable,
+               algos_driver=str(tmp_path / "bench_board_algos.py"), nice=0, data_root=str(tmp_path),
+               vendor="nvidia")
+    races = [dict(family="algos", lane="adam", dataset="synthetic", rows=None)]
+    calls = []
+    monkeypatch.setattr(B, "probe_run", lambda cmd, env, log, ceiling, nice=0: calls.append(("probe", cmd)) or (0, {}))
+    monkeypatch.setattr(B, "run_logged", lambda cmd, env, log, timeout, nice=0: calls.append(("sub", cmd)) or 0)
+    monkeypatch.setenv(SI.ENV_FLAG, str(os.getpid()))
+    B.ensure_algos_prep(ctx, races)
+    monkeypatch.setenv(SI.ENV_FLAG, str(os.getpid() + 1))
+    B.ensure_algos_prep(ctx, races)
+    assert [c[0] for c in calls] == ["probe", "sub"] and calls[0][1] == calls[1][1]
+    assert calls[0][1][2:4] == [ctx["algos_driver"], "prep"]
