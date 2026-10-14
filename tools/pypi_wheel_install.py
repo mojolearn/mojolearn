@@ -28,13 +28,15 @@ import urllib.request
 INDEX_URL = "https://pypi.org/simple"
 JSON_API = "https://pypi.org/pypi/%s/%s/json"
 SCHEMA = "mojolearn-pypi-wheel-manifest/1"
-PLUGIN = {"nvidia": "mojolearn-nvidia", "amd": "mojolearn-amd"}
+#: Apple has no plugin package: the macOS core wheel carries the Metal bindings (Andrew 2026-10-14: the
+#: M4 smoke runs against `pip install mojolearn==<version>`; core only).
+PLUGIN = {"nvidia": "mojolearn-nvidia", "amd": "mojolearn-amd", "apple": None}
 
 
 def distributions(vendor):
     if vendor not in PLUGIN:
-        raise ValueError("vendor must be nvidia or amd, not %r" % vendor)
-    return ["mojolearn", PLUGIN[vendor]]
+        raise ValueError("vendor must be nvidia, amd or apple, not %r" % vendor)
+    return ["mojolearn"] + ([PLUGIN[vendor]] if PLUGIN[vendor] else [])
 
 
 def wheel_prefix(name, version):
