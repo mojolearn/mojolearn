@@ -1513,6 +1513,25 @@ def setup_arm_venvs(args, vendor, out, log):
     return got
 
 
+def data_needs(races, datasets=DATASETS):
+    """(the R2 dataset names the races read, the algos corpus keys missing on this box).
+    tools/gpu_gap_campaign.py --smoke checks the same list once for a whole manifest."""
+    # taxi and Istella-S are read by trees and classical only; a neural-only
+    # run needs no R2 data.
+    needed = [ds for ds in datasets if any(r["dataset"] == ds for r in races
+                                           if r["family"] != "neural")]
+    needed += sorted({k for r in races if r["family"] == "trees"
+                      for k in race_data_keys(r) if k not in needed})
+    # the algos family's own taxi-derived data (taxi-hourly, taxi-zones)
+    if "taxi" not in needed and any(r["family"] == "algos" and "gbm-bench/taxi/taxi_speed.npz"
+                                    in ALGOS.r2_keys(r["lane"], r["dataset"]) for r in races):
+        needed.append("taxi")
+    corpus_missing = sorted({k for r in races if r["family"] == "algos"
+                             for k in ALGOS.r2_keys(r["lane"], r["dataset"])
+                             if k.startswith("corpus/") and not os.path.isfile(ALGOS.corpus_path(k))})
+    return needed, corpus_missing
+
+
 def data_status(data_root, datasets, verify=False):
     """{dataset: {path, present, bytes, pinned_bytes, sha256_ok}}."""
     pins = {}
@@ -2594,7 +2613,7 @@ _PARAMS_ONLY_CMD = {"classical": "classical_cmd", "classical2": "more_cmd", "alg
                     "neural": "neural_cmd"}
 
 
-def params_probe(ctx, race, arms):
+def params_probe(ctx, race, arms, scorer=None):
     """Construct `arms` (no fit, no timed round) through the race's own driver
     (--params-only) and read back what each got: {arm: {"params": canonical
     read-back, "version", "device_name"}}. An arm that did not construct is
@@ -2637,6 +2656,8 @@ def params_probe(ctx, race, arms):
     cmd = list(cmd)
     cmd[cmd.index("--out") + 1] = probe_dir
     cmd.append("--params-only")
+    if scorer is not None:
+        cmd.append("--scorer-preflight")
     for f in os.listdir(probe_dir):
         if f.endswith(".params.json"):
             os.remove(os.path.join(probe_dir, f))
@@ -2645,6 +2666,8 @@ def params_probe(ctx, race, arms):
     if not found:
         return {}
     r = load_result(os.path.join(probe_dir, found[0])) or {}
+    if scorer is not None and r.get("scorer_preflight") is not None:
+        scorer["receipt"] = r["scorer_preflight"]
     rep = r.get("params_check") or {}
     for arm in arms:
         a = (r.get("arms") or {}).get(arm) or {}
@@ -2662,7 +2685,8 @@ def params_probe(ctx, race, arms):
 
 def preflight_check(ctx, race, arms):
     """Construct both arms and audit the complete parameter union before timing."""
-    probes = params_probe(ctx, race, arms)
+    scorer = {} if ctx.get("scorer_preflight") else None
+    probes = params_probe(ctx, race, arms, scorer=scorer)
     missing = [a for a in arms if a not in probes or not probes[a].get("version")]
     records = {a: dict(p["record"], __record__=True) for a, p in probes.items() if p.get("record")}
     lane = ("algos/" if race["family"] == "algos" else "") + race["lane"]
@@ -2701,6 +2725,18 @@ def preflight_check(ctx, race, arms):
             report["problems"].append(arm + ": " + exclusions[arm])
     report["probe_workers"] = {a: {k: p.get(k) for k in ("version", "device_name", "hardware", "environment")}
                                for a, p in probes.items()}
+    if scorer is not None:
+        # --preflight-scorer (preflight smoke, 2026-10-14): the same scorer preflight the timed race runs
+        # first. A refusal there refuses the race here, so it is found before any GPU time is spent.
+        receipt = scorer.get("receipt")
+        if race["family"] == "trees":
+            receipt = dict(status="not-checked", reason="the trees driver scores inside its timed run; "
+                                                        "it has no separate scorer preflight")
+        elif receipt is None:
+            report["problems"].append("missing scorer preflight receipt (the probe wrote none)")
+        elif receipt.get("status") == "refused":
+            report["problems"].append(str(receipt.get("reason") or "quality scorer unavailable"))
+        report["scorer_preflight"] = receipt
     if report["problems"]:
         report["verdict"] = "REFUSED"
     return report
@@ -3820,6 +3856,27 @@ def shard_races(races, shard):
     return [r for k, r in enumerate(ordered) if k % n == i - 1]
 
 
+def select_race_ids(races, spec):
+    """--race-ids: keep exactly the listed race ids (a comma list, or @FILE holding a JSON list or one id per
+    line). An id the plan does not hold is refused by name, never dropped silently (preflight smoke,
+    2026-10-14: one board process audits a whole campaign manifest instead of one process per recipe)."""
+    if spec.startswith("@"):
+        text = open(spec[1:]).read()
+        try:
+            wanted = json.loads(text)
+        except ValueError:
+            wanted = [line.strip() for line in text.splitlines() if line.strip()]
+    else:
+        wanted = [x.strip() for x in spec.split(",") if x.strip()]
+    if not isinstance(wanted, list) or not wanted:
+        raise SystemExit("--race-ids wants a nonempty list of race ids")
+    by_id = {r["id"]: r for r in races}
+    unknown = [rid for rid in wanted if rid not in by_id]
+    if unknown:
+        raise SystemExit("--race-ids: not in this plan: " + ", ".join(sorted(unknown)))
+    return [by_id[rid] for rid in dict.fromkeys(wanted)]
+
+
 def _planned_refusal(vendor, key, arm):
     import fnmatch
     for v, kg, ag, why in PLANNED_REFUSALS:
@@ -4026,6 +4083,12 @@ def build_parser():
                    help="remove all CPU opponents, including fallback opponents where no GPU library exists")
     p.add_argument("--preflight-only", action="store_true",
                    help="construct and audit the selected arms and retain the report; no warmups, fits or scored rounds")
+    p.add_argument("--preflight-scorer", action="store_true",
+                   help="with --preflight-only: also run each race's quality-scorer preflight in the parameter "
+                        "probe (untimed; the heavy algos references are deferred to the timed race) and refuse "
+                        "the race when it fails (tools/gpu_gap_campaign.py --smoke)")
+    p.add_argument("--race-ids", default=None, metavar="IDS|@FILE",
+                   help="keep exactly these planned race ids (comma list or @file); unknown ids are refused")
     p.add_argument("--retime-cpu-opponents", action="store_true", help="fresh CPU opponents for this harness; GPU opponents stay missing-only")
     p.add_argument("--opponents-only", action="store_true", help="run missing or failed opponent cells only; never run our arms")
     p.add_argument("--with-opponents", action="store_true",
@@ -4303,18 +4366,11 @@ def main(argv=None):
         races = gpu_opponents_only(races, vendor)
     if args.opponents_only:
         races = [dict(r, our_arms={}, arms=list(r["opponents"])) for r in races]
+    if getattr(args, "race_ids", None):
+        races = select_race_ids(races, args.race_ids)
     if args.shard:
         races = shard_races(races, args.shard)
-    # taxi and Istella-S are read by trees and classical only; a neural-only
-    # run needs no R2 data.
-    needed = [ds for ds in datasets if any(r["dataset"] == ds for r in races
-                                           if r["family"] != "neural")]
-    needed += sorted({k for r in races if r["family"] == "trees"
-                      for k in race_data_keys(r) if k not in needed})
-    # the algos family's own taxi-derived data (taxi-hourly, taxi-zones)
-    if "taxi" not in needed and any(r["family"] == "algos" and "gbm-bench/taxi/taxi_speed.npz"
-                                    in ALGOS.r2_keys(r["lane"], r["dataset"]) for r in races):
-        needed.append("taxi")
+    needed, corpus_missing = data_needs(races, datasets)
     data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed)
 
     if args.dry_run:
@@ -4330,9 +4386,6 @@ def main(argv=None):
             "Stage from R2 on the Mac that holds the credential:\n  sh tools/dataset_store.sh stage "
             "\"<ssh flags+target>\" %s\n(a remote Mac: prefix MOJOLEARN_STAGE_BOX_HOME=<its home>)"
             % (",".join(missing), args.data_root, " ".join(R2_KEYS[d] for d in missing)))
-    corpus_missing = sorted({k for r in races if r["family"] == "algos"
-                             for k in ALGOS.r2_keys(r["lane"], r["dataset"])
-                             if k.startswith("corpus/") and not os.path.isfile(ALGOS.corpus_path(k))})
     if corpus_missing:
         raise SystemExit(
             "bench_board: REFUSING: corpus key(s) %s missing (looked in $MOJOLEARN_CORPUS_ROOT, "
@@ -4428,6 +4481,7 @@ def main(argv=None):
         ctx["artifact_hardware"] = box["artifact_hardware"]
     ctx["box"] = box
     ctx["capture_measurements"] = True
+    ctx["scorer_preflight"] = bool(getattr(args, "preflight_scorer", False) and args.preflight_only)
     ctx["evidence_r2"] = not args.evidence_local_only
     ctx["retime"] = args.retime_opponents
     ctx["retime_cpu_opponents"] = args.retime_cpu_opponents
