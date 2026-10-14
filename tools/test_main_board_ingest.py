@@ -239,6 +239,46 @@ class MainBoardIngest(unittest.TestCase):
         self.assertEqual(len(keys), len(set(keys)))
 
 
+class PairedSessions(unittest.TestCase):
+    def board(self):
+        m=dict(id="frozen-worker",completeness="complete",hardware={"gpu":"uuid"},
+               source={"status":"verified","commit":B},artifacts={"status":"verified"})
+        ours=dict(arm="ours",library="mojolearn",mode="identical",device="gpu",rows_tag="full",
+                  status="ok",median_ms=4,library_version="0.8.44",measurement=m,
+                  iteration_receipts=[dict(status="recorded",values=[17])])
+        opp=dict(ours,arm="cuml-gpu",library="cuml",mode="opponent",median_ms=2,library_version="26.8.0")
+        rid=BB.race_id("classical2","linearsvr","taxi",None)
+        race=dict(id=rid,family="classical2",lane="linearsvr",dataset="taxi",params_check="MATCHED",
+                  cells=[ours,opp],infer_cells=[],evidence_receipt={"status":"verified","sha256":"receipt"})
+        return dict(box={"gpu":{"vendor":"nvidia","name":"NVIDIA L40S"},"host":{"hostname":"actual-worker"}},races={rid:race})
+
+    def test_rebuild_keeps_the_actual_paired_opponent_and_receipts(self):
+        with tempfile.TemporaryDirectory() as d:
+            p=os.path.join(d,"board.json")
+            with open(p,"w") as f:json.dump(self.board(),f)
+            obs=MB.paired_observations(BB,["nv="+p],FakeGit(),MB.Skips())
+        winners,failures,ledger=MB.choose(obs)
+        board=MB.assemble(BB,"nvidia-l40s",winners,ledger,MB.identity_index(obs),[],{},"2026-10-14",failures)
+        # Rebuilding with no paired input path must preserve the same pair.
+        obs2=MB.previous_observations(board)
+        winners,failures,ledger=MB.choose(obs2)
+        rebuilt=MB.assemble(BB,"nvidia-l40s",winners,ledger,MB.identity_index(obs2),[],{},"2026-10-14",failures)
+        race=next(iter(rebuilt["races"].values()))
+        self.assertEqual(race["params_check"],"MATCHED")
+        self.assertEqual(race["evidence_receipt"]["sha256"],"receipt")
+        self.assertEqual([(c["arm"],c["median_ms"]) for c in race["cells"]],[("ours",4),("cuml-gpu",2)])
+        self.assertEqual(race["cells"][0]["iteration_receipts"][0]["values"],[17])
+
+    def test_mixed_worker_hardware_is_refused(self):
+        board=self.board();race=next(iter(board["races"].values()))
+        race["cells"][1]["measurement"]=dict(race["cells"][1]["measurement"],hardware={"gpu":"other"})
+        with tempfile.TemporaryDirectory() as d:
+            p=os.path.join(d,"board.json")
+            with open(p,"w") as f:json.dump(board,f)
+            with self.assertRaisesRegex(ValueError,"mixed worker evidence"):
+                MB.paired_observations(BB,["nv="+p],FakeGit(),MB.Skips())
+
+
 class FairnessMarks(unittest.TestCase):
     """Supported historical measurements survive; missing evidence does not publish."""
 

@@ -798,7 +798,16 @@ It is labelled `main@<sha>` of its newest cell, never a wheel number, and it is
 unreleased: it cannot be reproduced with `pip install`, and the release boards
 remain the reference.
 
-`tools/main_board_ingest.py` builds it from the lq results and the board-runner
+`tools/main_board_ingest.py --paired-board nv=/path/to/board.json` also imports
+a fresh paired session (`amd=` for MI325X). It requires verified worker evidence,
+one frozen source on main, matching hardware, and a successful parameter audit.
+The actual paired opponents, fitted settings, executed iteration counts and R2
+receipts survive later rebuilds; historical opponents are never substituted for
+this pair. The fairness rule still excludes mismatched executed counts or other
+unqualified comparisons. A configured `rows=full` recipe can have an intrinsic
+lane cap: read each cell's actual `shape`, not just the command-line option.
+
+`tools/main_board_ingest.py` otherwise builds it from the lq results and the board-runner
 summaries of default-configuration jobs on main (lines carrying
 `MOJOLEARN_BUILD_DEFINES` or a grid run's `MOJOLEARN_GRID_TAG` are A/B or grid
 arms and never enter). For each lane x dataset the newest race wins: the

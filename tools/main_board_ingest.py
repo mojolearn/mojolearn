@@ -150,10 +150,10 @@ INFRA = ("not_ready", "NO-RECORD", "NO-OURS-CELL")
 #: Lane-settings keys that change what a race measures (bench_board_algos.lane_config,
 #: bench_board_more.LANE_CONFIG); descriptive text keys are not compared.
 SETTINGS_KEYS = ("params", "dataset_params", "block", "task", "kind", "stride_subsets", "sklearn", "cuml", "rows")
-PRIORITY = {"json": 3, "algos": 2, "gridbb": 2, "previous": 1}
+PRIORITY = {"paired": 4, "json": 3, "algos": 2, "gridbb": 2, "previous": 1}
 OB_FIELDS = ("column", "vendor", "box", "job", "sha", "ct", "kind", "family", "lane", "dataset", "race_id",
              "status_raw", "status", "infra", "median_ms", "quality", "digest", "comparability", "evidence",
-             "measured", "tag", "reason", "hardware", "version", "gpu_recorded", "measured_cell")
+             "measured", "tag", "reason", "hardware", "version", "gpu_recorded", "measured_cell", "paired_race", "paired_box")
 #: A line that records the GPU a job ran on (FSPEED-HEADER device=, an ALGOS/GRIDBB device header); a value with
 #: spaces is quoted or written with '_'. Text naming no GPU ("gpu", "selftest") is not judged.
 DEVICE_LINE_RE = re.compile(r"(?:^|[\s:])(?:FSPEED-HEADER|ALGOS-HEADER|ALGOS-DEVICE|GRIDBB-DEVICE)\b.*?"
@@ -557,6 +557,44 @@ def previous_observations(prev):
     return [o for o in out if o.get("column")]
 
 
+def paired_observations(BB, specs, resolve, skips):
+    """Import an actual paired session, retaining its opponents across rebuilds.
+
+    The measurement ID is its job identity; no lq job or historical opponent
+    is invented. Fairness still judges every pair after assembly.
+    """
+    out = []
+    for box, path in _pairs(specs or []):
+        board = BB.load_result(path)
+        for rid, rr in (board.get("races") or {}).items():
+            cells = rr.get("cells") or []
+            ours = next((c for c in cells if c.get("library") == "mojolearn" and c.get("mode") == "identical"), None)
+            measured = [c for c in cells if c.get("status") == "ok"]
+            if not ours or ours.get("rows_tag") not in (None, "full") or rr.get("params_check") != "MATCHED":
+                raise ValueError("paired board lacks a full-recipe, parameter-checked own arm: " + rid)
+            m = ours.get("measurement") or {}
+            for c in measured:
+                cm = c.get("measurement") or {}
+                if (cm.get("completeness") != "complete" or not cm.get("id")
+                        or any((cm.get(k) or {}).get("status") != "verified" for k in ("source", "artifacts"))
+                        or cm.get("hardware") != m.get("hardware") or cm.get("source") != m.get("source")):
+                    raise ValueError("paired board has incomplete or mixed worker evidence: " + rid)
+            sha = (m.get("source") or {}).get("commit")
+            if not sha or not resolve.on_main(sha):
+                raise ValueError("paired source freeze is not on main: " + rid)
+            ob = make_ob(BB, resolve, skips, kind="paired", vendor=(board.get("box", {}).get("gpu") or {}).get("vendor"), box=box,
+                job="paired-" + m["id"], head=sha, family=rr["family"], lane=rr["lane"], dataset=rr["dataset"],
+                status_raw=ours.get("status"), median_ms=ours.get("median_ms"), quality=ours.get("quality"),
+                digest=ours.get("hash"), evidence=path, comparability=ours.get("comparability"),
+                measured=rr.get("finished"), gpu_recorded=(board.get("box", {}).get("gpu") or {}).get("name"))
+            if ob is None or ob["status_raw"] == "REFUSED(hardware mismatch)":
+                raise ValueError("paired source commit or hardware refused: " + rid)
+            ob.update(measured_cell=copy.deepcopy(ours), paired_race=copy.deepcopy(rr),
+                      paired_box=copy.deepcopy(board.get("box")), version=ours.get("library_version"))
+            out.append(ob)
+    return out
+
+
 def _reroute(ob):
     """A previous board's observation: its box from the job id prefix, its column from the box's GPU model and its
     hardware from the box table (an older board stored neither). Andrew 2026-10-10: every row names its exact
@@ -824,7 +862,8 @@ def our_cell(BB, ob, ident, newer_failed=()):
     original = ob.get("measured_cell") or {}
     for field in ("measurement", "params", "settings", "library_version", "device_name", "shape",
                   "times_ms", "warmup_ms", "min_ms", "max_ms", "rounds", "state_receipts", "operations",
-                  "comparability", "memory", "peak_host_mb", "peak_gpu_mb", "hash_stable", "installed_wheel"):
+                  "comparability", "memory", "peak_host_mb", "peak_gpu_mb", "hash_stable", "installed_wheel",
+                  "iteration_receipts", "fitted_parameters"):
         if field in original:
             cell[field] = copy.deepcopy(original[field])
     # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
@@ -893,7 +932,15 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
             continue
         ident = identity(ob, idx)
         cell = our_cell(BB, ob, ident, failures.get((col, rid)) or ())
-        opps, src_rr, why = copy_opponents(BB, sources, ob["family"], ob["lane"], rid, archive, backfill)
+        paired = ob.get("paired_race")
+        if paired:
+            src_rr, why = paired, None
+            opps = copy.deepcopy([c for c in paired.get("cells", []) if c.get("library") != "mojolearn"])
+            for c in opps:
+                c["copied_from"] = dict(board="paired session", path=ob["evidence"], race=rid)
+                HW.opponent_fields(c, ob.get("paired_box"), "paired session")
+        else:
+            opps, src_rr, why = copy_opponents(BB, sources, ob["family"], ob["lane"], rid, archive, backfill)
         # our cell without a quality (the host reference refused) whose output hash equals a copied opponent's:
         # quality {"identical_to": <arm>} (tools/bench_board.py stored_identity_quality; a digest compare only)
         cells = BB.add_ratios(BB.stored_identity_quality([cell] + opps))
@@ -914,6 +961,18 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
               "main_board": {"sha": ob["sha"], "box": ob["box"], "job": ob["job"], "identity": ident["status"]}}
         if lane_config:
             rr["lane_config"] = lane_config
+        if paired:
+            for field in ("params", "params_check", "preflight", "audit", "rerace", "opponents_excluded",
+                          "command", "finished", "started", "evidence_directory", "evidence_receipt", "infer_cells"):
+                if field in paired:
+                    rr[field] = copy.deepcopy(paired[field])
+            rr["host"] = copy.deepcopy(paired.get("host"))
+            rr["opponent_source"] = dict(paired_session=ob["job"], path=ob["evidence"])
+            for c in rr.get("infer_cells", []):
+                if c.get("library") == "mojolearn":
+                    HW.our_fields(c, box=ob["box"], version_text=ob["version"], source="paired worker record")
+                else:
+                    HW.opponent_fields(c, ob.get("paired_box"), "paired session")
         # neural lanes: the headline is ours IDENTICAL over torch's fastest bf16 arm, the fp32 twin beside it
         # (tools/bench_board.py neural_headline; render_board draws the table and each race's headline line)
         hl = BB.neural_headline(rr)
@@ -1086,6 +1145,7 @@ def collect(BB, args, resolve, skips):
             if ob is not None:
                 obs.append(ob)
     obs.extend(json_observations(BB, args.json_dir, jobs, args.branch, skip_tag_re, resolve, skips))
+    obs.extend(paired_observations(BB, getattr(args, "paired_board", None), resolve, skips))
     return obs
 
 
@@ -1121,6 +1181,7 @@ def build_parser():
                    % ", ".join(DEFAULT_RESULTS))
     p.add_argument("--grid-logs", action="append", help="BOX=PATH grid-logs file with GRIDBB lines (repeatable)")
     p.add_argument("--json-dir", help="directory of bench_board board.json files from lq jobs (optional)")
+    p.add_argument("--paired-board", action="append", help="BOX=PATH verified paired board; preserves its actual opponents")
     p.add_argument("--opponents", action="append", help="COLUMN=LABEL=PATH stored opponent board, priority order")
     p.add_argument("--columns", default=",".join(COLUMN_GPU))
     p.add_argument("--opponent-archive", default=OPPONENT_ARCHIVE,
@@ -1147,7 +1208,7 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
     fresh = collect(BB, args, resolve, skips)
     generated = now_utc()
     inputs = {"results": args.results, "grid_logs": args.grid_logs, "json_dir": args.json_dir,
-              "branch": args.branch, "generated": generated}
+              "paired_boards": args.paired_board, "branch": args.branch, "generated": generated}
     columns = [c for c in args.columns.split(",") if c]
     prevs, all_obs = {}, list(fresh)
     for column in columns:
