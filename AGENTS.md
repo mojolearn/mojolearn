@@ -109,7 +109,14 @@ A race is BROKEN, marked rerace "x" and omitted from the paper and mojolearn.org
   cache or precompute one arm uses and the other is told not to), unless the difference is required by bitwise
   identity on our side;
 - the opponent is code our harness wrote rather than a library's own implementation;
-- either arm ran more iterations than the other (the opponent more than ours, or ours more than the opponent).
+- measured quality is outside the declared metric margin, or the quality evidence is insufficient.
+
+Latest owner clarification (2026-10-13, supersedes the earlier iteration rule): different executed iteration
+counts do NOT make a race unfair. Compare quality first, then time for the same task, data and model. Retain
+counts, limits, tolerances and seeds as evidence; never pad work to equalize counts. The versioned margins
+and exceptions are in `tools/board_quality.py` and `docs/RACE_FAIRNESS_DECISIONS.md`. Each audit records the
+metric values, margins and decision. Existing supported evidence is reused; rerun only missing or bad
+evidence. This campaign covers all NVIDIA/AMD GPU-opponent recipes; no Apple runs are authorized.
 
 When only one opponent arm of a race is broken (for example harness-written), that arm is excluded
 (race["opponents_excluded"]) and the race is shown against its remaining opponents; the whole race is hidden

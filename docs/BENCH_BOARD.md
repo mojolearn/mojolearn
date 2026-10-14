@@ -106,9 +106,13 @@ R2 retention requires a successful download and matching SHA-256 after upload.
 remeasuring. Runtime credentials are excluded from these records.
 
 Matching preflight settings is necessary but does not alone admit a result.
-Changed worker settings, missing evidence, quality failures, and unequal actual
-iterations keep a new comparison out. A maximum iteration setting is not an
-executed iteration count. Unavailable counts remain explicit and unqualified.
+Changed worker settings, missing evidence and quality failures keep a new
+comparison out. Different executed iteration counts are allowed when measured
+quality is comparable: compare quality first, then time. Limits, tolerances and
+actual counts (or explicit unavailability) remain recorded. Audit entries include
+the metric values and margins from `tools/board_quality.py`; see
+`docs/RACE_FAIRNESS_DECISIONS.md`. One scored sample is not a statistical
+equivalence test.
 `tools/bench_board_session.py --out RUN --seconds 3600 -- COMMAND...` supervises
 a Linux job and its marked descendants, including separate process sessions.
 Arm the provider's billing deadman separately and copy evidence off the machine

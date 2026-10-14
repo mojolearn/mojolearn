@@ -24,7 +24,14 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import sys
+
+# Also support callers loading this module by absolute path with importlib.
+if os.path.dirname(__file__) not in sys.path:
+    sys.path.insert(0, os.path.dirname(__file__))
+import board_quality as BQ
+import board_clock_audit as BC
 
 TIE_BAND = (0.95, 1.05)
 
@@ -173,31 +180,15 @@ def _pair_problems(race, ours, opp):
     bad, missing = [], []
     if not completed(ours):
         missing.append("our measurement did not complete")
-    for c in (ours, opp):
-        q = c.get("quality") or {}
-        if q.get("error") or q.get("finite") is False or q.get("host_reference_passed") is False:
-            bad.append("recorded quality failure: " + str(c.get("arm")))
-    a, b = n_iter(ours), n_iter(opp)
-    if a is not None and b is not None and a != b:
-        bad.append("iterations differ: ours %s, %s %s" % (a, opp.get("arm"), b))
+    # FAIRNESS FIX (2026-10-13 audit, superseded owner clarification):
+    # Different executed iteration counts are expected for different solvers.
+    # Judge measured output quality; retain iteration receipts as provenance.
+    quality = BQ.compare(ours, opp)
+    if quality["verdict"] == "FAIL":
+        bad.extend(quality["failures"])
+        bad.extend("quality outside declared margin: " + c["metric"]
+                   for c in quality["checks"] if c["verdict"] == "FAIL")
     po, pt = _parameters(race, ours), _parameters(race, opp)
-    # New paired runs must witness executed iterations, not infer them from
-    # matching caps/tolerances. Historical accepted evidence is not rerun.
-    if any(c.get("measurement") for c in (ours, opp)) and any(
-            k in po or k in pt for k in ("max_iter", "maxiter", "n_iter", "n_iters")):
-        actual = []
-        for cell in (ours, opp):
-            receipts = cell.get("iteration_receipts") or []
-            if receipts and len(receipts) == cell.get("rounds") and all(
-                    r and r.get("status") == "recorded" and r.get("values") for r in receipts):
-                actual.append([r["values"] for r in receipts])
-            elif n_iter(cell) is not None:
-                actual.append(n_iter(cell))
-            else:
-                actual.append(None)
-                missing.append("actual executed iterations not recorded: " + str(cell.get("arm")))
-        if all(v is not None for v in actual) and actual[0] != actual[1]:
-            bad.append("executed iteration receipts differ: %r vs %r" % tuple(actual))
     exceptions = list((race.get("params") or {}).get("exceptions") or [])
     exceptions.extend((opp.get("measurement") or {}).get("parameter_exceptions") or [])
     allowed = {e.get("param") for e in exceptions if e.get("arm") == opp.get("arm") and e.get("reason")}
@@ -221,6 +212,9 @@ def _pair_problems(race, ours, opp):
             bad.append("different dataset identity")
         if mo.get("shape") and mt.get("shape") and mo["shape"] != mt["shape"]:
             bad.append("different measured input shape")
+    clock = BC.pair_ratio(BC.cell_clock(ours), BC.cell_clock(opp), opp)
+    if clock["kind"] in ("mixed", "none"):
+        missing.append("common timing boundary not derivable: " + clock["label"])
     return bad, missing, bool(po and pt and (set(po) & set(pt) - {"seed"}))
 
 
@@ -242,11 +236,14 @@ def fairness_rule(race, mode, phase, today, prior=None):
         opp = next((c for c in group if batch(c) == batch(ours)), group[0])
         arm = opp["arm"]
         bad, missing, readback = [], [], True
+        quality_checks = []
         for candidate in group:
             own = next((c for c in our_cells if batch(c) == batch(candidate)), None)
             if own is None:
                 missing.append("no matching inference batch")
                 continue
+            quality_checks.append(dict(batch=candidate.get("batch"),
+                                       **BQ.compare(own, candidate)))
             problems, gaps, checked = _pair_problems(race, own, candidate)
             bad.extend(problems); missing.extend(gaps); readback = readback and checked
         if any(not any(batch(c) == batch(o) for c in group) for o in our_cells):
@@ -261,6 +258,13 @@ def fairness_rule(race, mode, phase, today, prior=None):
             hand = old_pair
         else:
             hand = prior if hand else None
+        # Retire only a precisely scoped obsolete count-only finding. Compound
+        # findings (settings, harness code, data, etc.) still require review.
+        superseded = None
+        if (hand and re.fullmatch(r"iterations differ: ours [\d.]+, [\w-]+ [\d.]+", hand.get("reason", ""))
+                and readback and race.get("params_check") == "MATCHED"
+                and quality_checks and all(q["verdict"] == "PASS" for q in quality_checks)):
+            superseded, hand = hand, None
         if bad:
             verdict, reason = "UNFAIR", "; ".join(bad)
         elif missing:
@@ -269,12 +273,20 @@ def fairness_rule(race, mode, phase, today, prior=None):
             verdict, reason = hand["verdict"], hand.get("reason", "audit unresolved")
         elif hand and hand.get("verdict") in ("FAIR", "TIE", "MATCHED") and hand.get("evidence"):
             verdict, reason = hand["verdict"], hand.get("reason", "retained supported audit")
+        elif any(q["verdict"] != "PASS" for q in quality_checks):
+            verdict, reason = "INSUFFICIENT", "comparable quantitative quality evidence needs review"
         elif readback and (race.get("params_check") == "MATCHED" or
                            (ours.get("measurement") and opp.get("measurement"))):
-            verdict, reason = "MATCHED", "recorded effective settings compared on both arms"
+            verdict, reason = "MATCHED", "recorded effective settings and quality within declared margins"
         else:
             verdict, reason = "INSUFFICIENT", "no supported audit or matched effective settings for this pairing"
         row = dict(verdict=verdict, reason=reason, rerace="" if verdict in ("FAIR", "TIE", "MATCHED") else "x")
+        row["quality_comparison"] = quality_checks
+        row["timing_comparison"] = BC.pair_ratio(BC.cell_clock(ours), BC.cell_clock(opp), opp)
+        if superseded:
+            row["superseded_iteration_audit"] = superseded
+        if hand and verdict in ("FAIR", "TIE", "MATCHED") and any(q["verdict"] != "PASS" for q in quality_checks):
+            row["quality_basis"] = "retained supported historical audit; no new numeric equivalence claim"
         if hand:
             row.update({k: hand[k] for k in ("audit", "evidence", "date") if k in hand})
         judged[arm] = row
@@ -283,7 +295,7 @@ def fairness_rule(race, mode, phase, today, prior=None):
     best = min([c for c in admitted if c.get("device") == "gpu"] or admitted,
                key=lambda c: c["median_ms"]) if admitted else None
     ratio = ours["median_ms"] / best["median_ms"] if completed(ours) and best else None
-    entry = {"rule": "race_fairness.fairness_rule (2026-10-13)", "date": today, "opponent": best.get("arm") if best else None,
+    entry = {"rule": "race_fairness.fairness_rule (quality-parity.v1, 2026-10-14)", "date": today, "opponent": best.get("arm") if best else None,
              "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
              "pairing": pairing(race, mode, phase), "opponents": judged,
              "admitted_opponents": [c["arm"] for c in admitted]}
@@ -336,7 +348,7 @@ def apply(board, prev=None, today=None, upgrade_legacy=False):
                         if archived not in history:
                             history.append(archived)
                     prior = entry if keep else None
-                    if entry and not keep:
+                    if entry and (not keep or "quality-parity.v1" not in entry.get("rule", "")):
                         history = rr.setdefault("audit_history", [])
                         if entry not in history:
                             history.append(entry)

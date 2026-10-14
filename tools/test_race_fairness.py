@@ -16,11 +16,13 @@ spec.loader.exec_module(RF)
 
 
 def race(lane, opps, params_check="MATCHED", ours_ms=5.0, ours_q=None):
-    cells = [{"arm": "ours", "mode": "identical", "status": "ok", "median_ms": ours_ms, "quality": ours_q or {},
+    cells = [{"arm": "ours", "mode": "identical", "status": "ok", "median_ms": ours_ms, "quality": {"rmse": 1.0} if ours_q is None else ours_q,
+              "comparability": {"span": {"input_home": "host"}},
               "params": {"params": {"alpha": 1.0}}}]
     for arm, ms, extra in opps:
         cells.append(dict({"arm": arm, "mode": "opponent", "device": "gpu", "status": "ok", "median_ms": ms,
-                           "params": {"params": {"alpha": 1.0}}}, **extra))
+                           "params": {"params": {"alpha": 1.0}}, "quality": {"rmse": 1.0},
+                           "comparability": {"span": {"input_home": "host"}}}, **extra))
     return {"lane": lane, "params_check": params_check, "cells": cells, "infer_cells": []}
 
 
@@ -29,6 +31,24 @@ def board(**races):
 
 
 class RaceFairness(unittest.TestCase):
+    def test_old_count_only_audit_is_superseded_but_other_findings_are_not(self):
+        for reason, admitted in (("iterations differ: ours 24, sklearn-cpu 30", True),
+                                 ("iterations differ and dataset differs", False)):
+            rr = race("gmm", [("sklearn-cpu", 10, {})])
+            rr["audit"] = {"identical/fit": dict(verdict="UNFAIR", reason=reason,
+                opponent="sklearn-cpu", audit="human", evidence="recorded counts",
+                pairing=RF.pairing(rr, "identical", "fit"))}
+            RF.apply(board(r=rr))
+            self.assertEqual(bool(rr["audit"]["identical/fit"]["admitted_opponents"]), admitted)
+            self.assertTrue(rr["audit_history"])
+
+    def test_quality_and_settings_cannot_approve_mixed_clocks(self):
+        rr = race("solver", [("lib", 10, {})])
+        rr["cells"][1]["comparability"]["span"]["input_home"] = "device"
+        RF.apply(board(r=rr))
+        self.assertEqual(rr["rerace"], "x")
+        self.assertIn("timing boundary", rr["audit"]["identical/fit"]["opponents"]["lib"]["reason"])
+
     def test_derived_identity_annotation_preserves_supported_audit_but_settings_do_not(self):
         old=board(r=race("ridge",[("lib",10,{})],params_check="not checked"))
         rr=old["races"]["r"]
@@ -45,20 +65,18 @@ class RaceFairness(unittest.TestCase):
         RF.apply(changed,old,"2026-10-14")
         self.assertEqual(changed["races"]["r"]["rerace"],"x")
 
-    def test_new_iterative_measurements_need_executed_counts(self):
+    def test_actual_iterations_are_evidence_not_an_admission_gate(self):
         rr=race("linearsvr",[("lib",10,{})])
         for c in rr["cells"]:
             c.update(rounds=1,params={"params":{"max_iter":1000}},
                      measurement={"completeness":"complete","source":{"status":"verified"},
                                   "artifacts":{"status":"verified"}})
-        bad,missing,_=RF._pair_problems(rr,*rr["cells"])
-        self.assertFalse(bad)
-        self.assertTrue(any("iterations not recorded" in s for s in missing))
-        for c in rr["cells"]:
-            c["iteration_receipts"]=[dict(status="recorded",values=[17])]
         self.assertEqual(RF._pair_problems(rr,*rr["cells"])[:2],([],[]))
-        rr["cells"][1]["iteration_receipts"][0]["values"]=[18]
-        self.assertTrue(any("iteration receipts differ" in s for s in RF._pair_problems(rr,*rr["cells"])[0]))
+        for i,c in enumerate(rr["cells"]):
+            c["iteration_receipts"]=[dict(status="recorded",values=[17+i])]
+        self.assertEqual(RF._pair_problems(rr,*rr["cells"])[:2],([],[]))
+        RF.apply(board(r=rr))
+        self.assertEqual(rr["audit"]["identical/fit"]["admitted_opponents"],["lib"])
 
     def test_harness_arm_is_excluded_and_the_race_judged_on_the_rest(self):
         b = board(r=race("pca", [("torch-gpu", 1.0, {"library": "torch"}), ("cuml-gpu", 10.0, {"library": "cuml"})]))
@@ -85,11 +103,11 @@ class RaceFairness(unittest.TestCase):
         self.assertNotIn("hostS", RF.slow_hosts({"races": races}))
         self.assertNotIn("hostF", RF.slow_hosts({"races": races}))
 
-    def test_iterations_differ_hides_and_ties_show(self):
-        b = board(i=race("kmeans", [("cuml-gpu", 9.0, {"quality": {"n_iter": 21}})], ours_q={"n_iter": 33}),
+    def test_iterations_differ_with_near_quality_and_ties_show(self):
+        b = board(i=race("kmeans", [("cuml-gpu", 9.0, {"quality": {"n_iter": 21, "inertia": 101}})], ours_q={"n_iter": 33, "inertia": 100}),
                   t=race("ridge", [("cuml-gpu", 5.1, {})]))
         RF.apply(b, None, "2026-10-13")
-        self.assertEqual(b["races"]["i"]["rerace"], "x")
+        self.assertNotIn("rerace", b["races"]["i"])
         self.assertEqual(b["races"]["t"]["audit"]["identical/fit"]["verdict"], "TIE")
         self.assertNotIn("rerace", b["races"]["t"])
 
@@ -106,8 +124,8 @@ class RaceFairness(unittest.TestCase):
         self.assertEqual(rr["rerace"], "x")
 
     def test_one_bad_arm_does_not_hide_a_supported_opponent(self):
-        b = board(r=race("solver", [("bad", 1, {"quality": {"n_iter": 20}}),
-                                    ("good", 10, {"quality": {"n_iter": 10}})], ours_q={"n_iter": 10}))
+        b = board(r=race("solver", [("bad", 1, {"quality": {"n_iter": 20, "rmse": 2.0}}),
+                                    ("good", 10, {"quality": {"n_iter": 10, "rmse": 1.0}})], ours_q={"n_iter": 10, "rmse": 1.0}))
         RF.apply(b)
         e = b["races"]["r"]["audit"]["identical/fit"]
         self.assertEqual(e["admitted_opponents"], ["good"])

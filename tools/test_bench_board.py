@@ -1114,6 +1114,15 @@ def test_noncompiled_classical_cell_keeps_actual_fit_receipts(monkeypatch):
     assert cell["fitted_parameters"] == fitted
 
 
+def test_global_quality_failure_survives_cell_extraction(monkeypatch):
+    monkeypatch.setattr(bb, "base_cell", lambda *a: {"device":"gpu", "arm":"cuml-gpu"})
+    race=dict(arms=["cuml-gpu"],our_arms={})
+    for quality in ({"error":"scorer failed"}, {"status":"pending_reference"}):
+        raw=dict(arms={"cuml-gpu":dict(ms=[2],status="ok")},quality=quality)
+        cell=bb.classical_cells(dict(rounds=1),race,raw)[0]
+        assert cell["quality"]["error"]
+
+
 def _run_more(env, *extra):
     return bb.main(["--vendor", "apple", "--families", "classical2", "--lanes", "umap,arima",
                     "--datasets", "taxi"] + env["base"] + list(extra))

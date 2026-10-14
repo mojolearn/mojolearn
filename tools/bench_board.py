@@ -2114,6 +2114,12 @@ def classical_cells(ctx, race, r):
         refused = None if a.get("status") == "ok" else "%s: %s" % (
             a.get("status"), json.dumps(a.get("error"))[:200])
         q = {k: v for k, v in (qual.get(arm) or {}).items() if k != "reference"}
+        # FAIRNESS FIX (2026-10-13 audit): a failed whole-race scorer was
+        # previously discarded while extracting per-arm scores.
+        if qual.get("error"):
+            q["error"] = qual["error"]
+        if qual.get("status") and qual["status"] != "ok":
+            q["error"] = "quality computation incomplete: " + str(qual["status"])
         span = a.get("span") or spans.get(arm) or {}
         asym = []
         if arm_library(arm) != "mojolearn":
@@ -2571,7 +2577,10 @@ def preflight_check(ctx, race, arms):
 def audit_plan(ctx, races):
     """Audit the entire selection, without entering any timed driver."""
     E = _load_tool("bench_board_evidence")
-    report = dict(schema="mojolearn.plan-preflight.v1", races={}, verdict="MATCHED")
+    report = dict(schema="mojolearn.plan-preflight.v1", races={}, verdict="MATCHED",
+                  status="running", expected=len(races), completed=0)
+    checkpoint = os.path.join(ctx["out"], "evidence", "preflight.json")
+    E.write(checkpoint, report)
     for race in races:
         unsupported = unsupported_our_arms(race)
         arms = [a for a in race["arms"] if a not in unsupported]
@@ -2589,6 +2598,11 @@ def audit_plan(ctx, races):
         report["races"][race["id"]] = dict(recipe=recipe, audit=entry)
         if entry["verdict"] == "REFUSED":
             report["verdict"] = "REFUSED"
+        report["completed"] = len(report["races"])
+        # Retain partial coverage under a deadman; a killed full-plan audit
+        # must not look like an empty or completed campaign.
+        E.write(checkpoint, report)
+    report["status"] = "complete"
     report["source"] = E.public_ref(ctx["measurement_source"]) if races else None
     E.write(os.path.join(ctx["out"], "evidence", "preflight.json"), report)
     members = {"preflight.json": E.encoded(report)}
