@@ -160,7 +160,12 @@ def exclusions(race):
             module = implementation.get("module", "")
             # New real-library replacements retain the actual class read-back.
             # Historical harness arms keep their original exclusion.
-            if not module.startswith(("transformers.", "mamba_ssm.", "hipvs.", "cuml.", "sklearn.")):
+            # smoke-fixes (2026-10-14; algos/resnet-block: "code our harness wrote, not a library's own
+            # implementation"): the torch arm races torchvision's own BasicBlock since the 2026-10-13 audit
+            # (tools/bench_board_algos.py _library_layer; its read-back is torchvision.models.resnet.BasicBlock),
+            # so torchvision's modules count as a library's own implementation.
+            if not module.startswith(("transformers.", "mamba_ssm.", "hipvs.", "cuml.", "sklearn.",
+                                      "torchvision.")):
                 out[arm] = "code our harness wrote, not a library's own implementation"
                 continue
     return out
