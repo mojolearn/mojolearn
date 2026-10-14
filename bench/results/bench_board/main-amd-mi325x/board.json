@@ -290786,14 +290786,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -290829,14 +290831,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -290872,14 +290876,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -290907,14 +290913,16 @@
         {
          "batch": null,
          "checks": [],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-qu",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -292099,14 +292107,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -292142,14 +292152,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -292185,14 +292197,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -292220,14 +292234,16 @@
         {
          "batch": null,
          "checks": [],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -333946,14 +333962,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -333989,14 +334007,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -334032,14 +334052,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -334067,14 +334089,16 @@
         {
          "batch": null,
          "checks": [],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-ist",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -335264,14 +335288,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -335307,14 +335333,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -335350,14 +335378,16 @@
            "verdict": "INSUFFICIENT"
           }
          ],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
@@ -335385,14 +335415,16 @@
         {
          "batch": null,
          "checks": [],
-         "failures": [
-          "recorded quality failure: ours"
-         ],
+         "failures": [],
          "interpretation": "engineering margin; not a statistical equivalence claim",
+         "not_scored": [
+          "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h"
+         ],
          "policy": "mojolearn.quality-parity.v6",
-         "verdict": "FAIL"
+         "verdict": "INSUFFICIENT"
         }
        ],
+       "quality_note": "quality not scored (scorer failed): ours: Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-h",
        "reason": "required kernel/kernel timing boundary not derivable: MIXED ours whole / arm kernel",
        "rerace": "x",
        "timing_comparison": {
