@@ -4508,6 +4508,30 @@ def _ours_ivf_train_rows(n, nlist):
     return n // max(1, n // target)
 
 
+def _ivf_pq_effective(n, d, n_train):
+    """The IVF-PQ work settings ours runs and cuVS (hipVS) is pinned to, one dict for both
+    read-backs (opponent-quality lane, 2026-10-14: ours recorded none of these while cuVS
+    recorded two, so the parameter check could not match the pair).
+
+    ours (x_ann/ivf_pq_core.mojo, x_ann/ivf_pq_device.mojo, x_ann/switches.mojo):
+      * coarse k-means on every s-th row, n_train of n (_ours_ivf_train_rows); cuVS takes its
+        own strided subsample at kmeans_trainset_fraction = n_train / n (ivf_pq_build.cuh:
+        trainset_ratio = n / (fraction n), every ratio-th row), the same rows when n_train
+        divides n;
+      * one codebook per subspace on the residuals, trained on at most 256 rows per code
+        (IDN_PQ_TRAIN_ROWS_PER_CODE, the stride sample; cuVS max_train_points_per_pq_code);
+      * no rotation: zero padding to pq_dim * pq_len, the identity when pq_dim divides d (cuVS
+        rotates only when it does not, or when forced);
+      * squared Euclidean, a float32 lookup table, float32 distance sums and coarse search;
+      * no refinement in ivf-pq (ivf-refine records its refine_ratio separately).
+    What stays different is the algorithm, not a setting: cuVS's coarse quantizer and
+    codebooks run its balanced k-means, ours cluster/'s Lloyd k-means (ivf_pq_core.mojo)."""
+    return dict(metric="sqeuclidean", kmeans_trainset_fraction=n_train / float(n),
+                max_train_points_per_pq_code=256, codebook_kind="subspace",
+                force_random_rotation=False, lut_dtype="float32",
+                internal_distance_dtype="float32", coarse_search_dtype="float32")
+
+
 def _build_ann(lane, arm, D):
     np = _np()
     s = LANES[lane]
@@ -4564,6 +4588,8 @@ def _build_ann(lane, arm, D):
         rec = dict(kw, __library__="mojolearn")
         if t == "ivf-refine":           # k results after a re-rank of k x refine_ratio candidates
             rec.update(n_neighbors=k, refine_ratio=p["refine_ratio"])
+        if t in ("ivf-pq", "ivf-refine"):
+            rec.update(_ivf_pq_effective(n, d, n_train))
         return _with_upload(Runner(info, fit, lambda: {"ind": _arr(S["ind"], np.int64)}, infer,
                                    record=rec), [("index", X)], [("queries", Q)])
     if arm == "faiss-cpu":
@@ -4653,6 +4679,7 @@ def _build_ann(lane, arm, D):
     # lanes; apply extra scrutiny.
     trainset_fraction = n_train / float(n)
     per_list = max(1, n_train // nlist)
+    pq_eff = _ivf_pq_effective(n, d, n_train)
 
     def fit():
         if t == "cagra":
@@ -4660,10 +4687,13 @@ def _build_ann(lane, arm, D):
                                                    intermediate_graph_degree=p["intermediate_graph_degree"]),
                                  dev["index"])
         elif t in ("ivf-pq", "ivf-refine"):
-            S["i"] = ivf_pq.build(ivf_pq.IndexParams(n_lists=nlist, metric="sqeuclidean",
+            S["i"] = ivf_pq.build(ivf_pq.IndexParams(n_lists=nlist, metric=pq_eff["metric"],
                                                      kmeans_n_iters=20, pq_dim=_pq_dim(d), pq_bits=8,
                                                      kmeans_trainset_fraction=trainset_fraction,
-                                                     max_train_points_per_pq_code=256),
+                                                     max_train_points_per_pq_code=256,
+                                                     codebook_kind=pq_eff["codebook_kind"],
+                                                     force_random_rotation=pq_eff["force_random_rotation"],
+                                                     add_data_on_build=True),
                                   dev["index"])
         elif t == "ivf-sq":
             from cuvs.neighbors import ivf_sq
@@ -4683,7 +4713,10 @@ def _build_ann(lane, arm, D):
                                     dev["queries"], k)[1]
         elif t in ("ivf-pq", "ivf-refine"):
             kk = k * p.get("refine_ratio", 1)
-            _dd, ind = ivf_pq.search(ivf_pq.SearchParams(n_probes=nprobe), S["i"], dev["queries"], kk)
+            _dd, ind = ivf_pq.search(ivf_pq.SearchParams(n_probes=nprobe, lut_dtype=np.float32,
+                                                         internal_distance_dtype=np.float32,
+                                                         coarse_search_dtype=np.float32),
+                                     S["i"], dev["queries"], kk)
             if t == "ivf-refine":
                 from cuvs.neighbors import refine
                 _dd, ind = refine(dev["index"], dev["queries"], ind, k)
@@ -4701,8 +4734,7 @@ def _build_ann(lane, arm, D):
     else:
         rec.update(n_lists=nlist, n_probes=nprobe, kmeans_n_iters=20)
         if t in ("ivf-pq", "ivf-refine"):
-            rec.update(pq_dim=_pq_dim(d), pq_bits=8, kmeans_trainset_fraction=trainset_fraction,
-                       max_train_points_per_pq_code=256)
+            rec.update(pq_dim=_pq_dim(d), pq_bits=8, **pq_eff)
         elif t == "ivf-sq":
             rec.update(max_train_points_per_cluster=per_list)
         info["config"] += " coarse trainset %d of %d rows (ours' count)" % (
