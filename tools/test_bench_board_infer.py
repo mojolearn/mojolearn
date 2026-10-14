@@ -40,9 +40,12 @@ env = bbt.env            # the shared fixture (stub drivers, fake data)
 
 @pytest.fixture(autouse=True)
 def fake_driver_evidence(monkeypatch):
-    # Fake timing drivers have no worker receipts; test retention separately.
+    # Fake timing drivers have no worker receipts or parameter probes. The
+    # shared fixture patches its own board module; this separately loaded
+    # inference board needs the same isolation. Real audit tests stay separate.
     run_race = bb.run_race
     monkeypatch.setattr(bb, "run_race", lambda ctx, race: run_race(dict(ctx, capture_measurements=False), race))
+    monkeypatch.setattr(bb, "audit_plan", lambda ctx, races: dict(verdict="MATCHED", races={}))
 
 # The trees stub, extended: with --infer it emits the FSPEED-INFER protocol.
 STUB_TREES_INFER = bbt.STUB_TREES + r'''

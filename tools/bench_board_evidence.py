@@ -611,14 +611,34 @@ def sync(board_path):
                 receipt = upload(receipt)
                 write(receipt_path, receipt)
             rr["evidence_receipt"] = public_ref(receipt)
+        records_changed = False
         for cell in (rr.get("cells") or []) + (rr.get("infer_cells") or []):
             record = cell.get("measurement")
             if record and record["artifacts"]["sha256"] == state["run"]["sha256"]:
+                before = encoded(record)
                 record.update(source=public_ref(state["source"]), artifacts=public_ref(state["run"]))
+                outputs = record.get("retained_outputs")
+                if outputs and outputs.get("status") == "local" and state["run"].get("status") == "verified":
+                    # The output member and scored digest were validated at
+                    # seal time. This retry verified the same archive bytes.
+                    outputs["status"] = "verified"
                 record.pop("id", None)
                 record["id"] = digest(encoded(record))
+                records_changed |= encoded(record) != before
         if str(rr.get("evidence_failure", "")).startswith("R2 retention failed"):
             rr.pop("evidence_failure", None)
+            records_changed = True
+        if records_changed:
+            # FAIRNESS FIX (2026-10-13 audit): the old receipt still described
+            # local-only archives. Preserve it and retain the finalized record
+            # so later evidence recovery sees the same IDs as the board.
+            previous = rr.get("evidence_receipt")
+            if previous:
+                rr.setdefault("evidence_receipt_history", []).append(previous)
+            receipt = upload(archive(state_path.with_name("synced-receipt.tar.gz"),
+                                     {"result.json": encoded(rr)}))
+            rr["evidence_receipt"] = public_ref(receipt)
+            write(receipt_path, receipt)
     write(path, board)
 
 

@@ -18,6 +18,10 @@ class QualityParity(unittest.TestCase):
                              ("noise_agreement_vs_ours", .99), ("rows", 11)):
             bad = dict(b, quality=dict(b["quality"], **{field: value}))
             self.assertEqual(Q.compare(a, bad)["verdict"], "INSUFFICIENT")
+        one = dict(a, quality={"rows": 1})
+        boolean_rows = dict(b, quality=dict(b["quality"], rows=True))
+        self.assertEqual(Q.compare(one, boolean_rows)["verdict"], "INSUFFICIENT")
+        self.assertEqual(Q.compare(boolean_rows, one)["verdict"], "INSUFFICIENT")
         a["quality"]["silhouette"] = .5
         b["quality"].update(silhouette=.52, ari_vs_ours=.7)
         self.assertEqual(Q.compare(a, b)["verdict"], "FAIL")

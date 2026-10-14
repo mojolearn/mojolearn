@@ -75,7 +75,8 @@ def compare(ours, theirs):
     links = [q for q in (qo, qt) if "ari_vs_ours" in q]
     if (not checks and ours.get("lane") in ("dbscan", "hdbscan")
             and ours.get("lane") == theirs.get("lane")
-            and type(qo.get("rows")) is int and qo["rows"] > 0 and qo["rows"] == qt.get("rows")
+            and type(qo.get("rows")) is int and type(qt.get("rows")) is int
+            and qo["rows"] > 0 and qo["rows"] == qt["rows"]
             and links and all(number(q.get("ari_vs_ours")) and number(q.get("noise_agreement_vs_ours"))
                               and q["ari_vs_ours"] == 1.0 and q["noise_agreement_vs_ours"] == 1.0 for q in links)):
         checks.append(dict(metric="partition_equivalence", ours=1.0, opponent=1.0,

@@ -173,7 +173,8 @@ class Evidence(unittest.TestCase):
         ref=E.archive(d/"run.tar.gz",{"log":b"original"})
         E.write(d/"upload.json",dict(source=ref,run=ref))
         b=dict(races={"r":dict(evidence_directory="evidence/runs/r1",evidence_failure="R2 retention failed; retry sync without rerunning the measurement",
-                 cells=[dict(arm="ours",times_ms=[3,4],median_ms=3.5,measurement=dict(artifacts=E.public_ref(ref)))])})
+                 cells=[dict(arm="ours",times_ms=[3,4],median_ms=3.5,measurement=dict(artifacts=E.public_ref(ref),
+                     retained_outputs=dict(status="local", member="run/work/scored.npz", sha256="scored-bytes")))])})
         p=self.root/"board.json";E.write(p,b)
         with patch.object(E,"upload",side_effect=lambda r: dict(r,status="verified",r2_key="key")):
             E.sync(p)
@@ -181,6 +182,14 @@ class Evidence(unittest.TestCase):
         self.assertEqual(rr["cells"][0]["times_ms"],[3,4])
         self.assertEqual(rr["cells"][0]["median_ms"],3.5)
         self.assertNotIn("evidence_failure",rr)
+        self.assertEqual(rr["cells"][0]["measurement"]["retained_outputs"]["status"], "verified")
+        with tarfile.open(d/"synced-receipt.tar.gz") as receipt:
+            retained = json.load(receipt.extractfile("result.json"))
+        self.assertEqual(retained["cells"], rr["cells"])
+        with patch.object(E, "upload") as again:
+            E.sync(p)
+        again.assert_not_called()
+        self.assertEqual(json.loads(p.read_text())["races"]["r"], rr)
 
     def test_preflight_failure_never_enters_timed_driver(self):
         from types import SimpleNamespace
