@@ -158,9 +158,14 @@ def _repulse_host(y: F32P, n: Int, row_z: F32P, rep: F32P, yf0: F32P, yf1: F32P)
 
 def tsne_fit_host(
     x_in: List[Float32], n: Int, d: Int, y0: List[Float32], perplexity: Float32, exaggeration: Float32,
-    learning_rate: Float32, max_iter: Int, exploration: Int, mut y_out: List[Float32], mut kl_out: Float32,
+    learning_rate: Float32, post_exaggeration_lr_factor: Float32, max_iter: Int, exploration: Int,
+    mut y_out: List[Float32], mut kl_out: Float32,
 ) raises:
     tsne_validate(n, d, perplexity, max_iter, exploration)
+    # release-0845: after the exaggeration phase the step is learning_rate x
+    # post_exaggeration_lr_factor, the same host float32 product as x_ann/tsne_device.mojo
+    # tsne_fit_device (factor 1.0 gives learning_rate exactly).
+    var post_lr = learning_rate * post_exaggeration_lr_factor
     var nn = tsne_nn(n, perplexity)
     var x = x_in.copy()
     var nn_d = List[Float32](length=n * nn, fill=Float32(0.0))
@@ -206,6 +211,7 @@ def tsne_fit_host(
     for it in range(max_iter):
         var ex = exaggeration if it < exploration else Float32(1.0)
         var mom = Float32(0.5) if it < exploration else Float32(0.8)
+        var lr_it = learning_rate if it < exploration else post_lr
         var ycur = fp(ya) if it % 2 == 0 else fp(yb)
         var ynext = fp(yb) if it % 2 == 0 else fp(ya)
         _repulse_host(ycur, n, fp(rz), repp, fp(yf0), fp(yf1))
@@ -214,7 +220,7 @@ def tsne_fit_host(
         def step_coords(t: Int) {imm}:
             var span = ann_span(t, stasks, 2 * n)
             for e in range(span[0], span[1]):
-                ts_step_cell(e, ycur, ynext, ipp, idp, vp, repp, zp, up, gp, ex, mom, learning_rate)
+                ts_step_cell(e, ycur, ynext, ipp, idp, vp, repp, zp, up, gp, ex, mom, lr_it)
 
         ann_tasks(step_coords, stasks)
     var yfin = fp(ya) if max_iter % 2 == 0 else fp(yb)

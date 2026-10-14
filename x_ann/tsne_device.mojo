@@ -821,9 +821,15 @@ def _ts_kl(
 
 def tsne_fit_device(
     x: List[Float32], n: Int, d: Int, y0: List[Float32], perplexity: Float32, exaggeration: Float32,
-    learning_rate: Float32, max_iter: Int, exploration: Int, mut y_out: List[Float32], mut kl_out: Float32,
+    learning_rate: Float32, post_exaggeration_lr_factor: Float32, max_iter: Int, exploration: Int,
+    mut y_out: List[Float32], mut kl_out: Float32,
 ) raises:
     tsne_validate(n, d, perplexity, max_iter, exploration)
+    # release-0845: the step size after the exaggeration phase is learning_rate x
+    # post_exaggeration_lr_factor (cuML's exact/barnes-hut schedule uses 2.0, t_sne.pyx
+    # post_learning_rate). One float32 product, formed on the host once, the same here and in
+    # x_ann/host/tsne_host.mojo; factor 1.0 gives learning_rate exactly (default bits unchanged).
+    var post_lr = learning_rate * post_exaggeration_lr_factor
     var nn = tsne_nn(n, perplexity)
     var st = AnnStages("tsne_fit")
     var ctx = x_ann_ctx()
@@ -868,18 +874,19 @@ def tsne_fit_device(
     for it in range(max_iter):
         var ex = exaggeration if it < exploration else Float32(1.0)
         var mom = Float32(0.5) if it < exploration else Float32(0.8)
+        var lr_it = learning_rate if it < exploration else post_lr
         if st.on:
             # the stage pass: each launch drained and timed (ann-apple3)
             if it % 2 == 0:
                 _ts_iter_timed(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
-                               learning_rate, t_rep, t_sum, t_step, dzs, dcnt, dparts)
+                               lr_it, t_rep, t_sum, t_step, dzs, dcnt, dparts)
             else:
                 _ts_iter_timed(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
-                               learning_rate, t_rep, t_sum, t_step, dzs, dcnt, dparts)
+                               lr_it, t_rep, t_sum, t_step, dzs, dcnt, dparts)
         elif it % 2 == 0:
-            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts, dzs)
+            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, lr_it, dcnt, dparts, dzs)
         else:
-            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts, dzs)
+            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, lr_it, dcnt, dparts, dzs)
     st.mark(ctx, "iterations")
     if st.on:
         print("ANN-STAGE tsne_iter repulse", Float64(t_rep) / 1.0e6)

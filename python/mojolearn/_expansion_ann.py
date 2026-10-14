@@ -547,6 +547,12 @@ class TSNE(NumericModeMixin):
     learning_rate : float or 'auto', default 'auto'
         Optimizer step size. 'auto' is scikit-learn's
         ``max(n_samples / early_exaggeration / 4, 50)``.
+    post_exaggeration_learning_rate_factor : float, default 1.0
+        Multiplies the step size for the iterations after the early
+        exaggeration phase, which then use
+        ``learning_rate * post_exaggeration_learning_rate_factor``. The default
+        1.0 keeps one step size throughout, as scikit-learn does; 2.0 doubles
+        it after the early phase, as cuML's ``TSNE`` does. Must be positive.
     max_iter : int, default 1000
         Number of optimization iterations, all of which run.
     init : {'pca', 'random'} or array-like of shape (n_samples, 2), default 'pca'
@@ -582,17 +588,28 @@ class TSNE(NumericModeMixin):
     >>> embedding = mojolearn.TSNE(perplexity=30.0).fit_transform(X)
     >>> embedding.shape
     (1000, 2)
+
+    Doubling the step size after the early exaggeration phase:
+
+    >>> tsne = mojolearn.TSNE(post_exaggeration_learning_rate_factor=2.0)
+    >>> tsne.fit_transform(X).shape
+    (1000, 2)
     """
 
     _BINDING = "_mojolearn_x_ann"
     _EXPLORATION_MAX_ITER = 250
 
     def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate="auto",
-                 max_iter=1000, init="pca", random_state=0):
+                 max_iter=1000, init="pca", random_state=0, post_exaggeration_learning_rate_factor=1.0):
         self.n_components = n_components
         self.perplexity = perplexity
         self.early_exaggeration = early_exaggeration
         self.learning_rate = learning_rate
+        # release-0845: cuML's exact/barnes-hut schedule multiplies the rate by 2.0 after early
+        # exaggeration (t_sne.pyx post_learning_rate); the kernels apply this factor there
+        # (x_ann/tsne_device.mojo, x_ann/host/tsne_host.mojo tsne_fit_*). Last in the signature
+        # so positional callers are unchanged.
+        self.post_exaggeration_learning_rate_factor = post_exaggeration_learning_rate_factor
         self.max_iter = max_iter
         self.init = init
         self.random_state = random_state
@@ -628,7 +645,8 @@ class TSNE(NumericModeMixin):
         Raises
         ------
         ValueError
-            If `n_components` is not 2, `perplexity` is out of range, `init`
+            If `n_components` is not 2, `perplexity` is out of range,
+            `post_exaggeration_learning_rate_factor` is not positive, `init`
             is an unknown string, or an `init` array has the wrong shape.
         TypeError
             If `max_iter` or `random_state` is not an int.
@@ -649,6 +667,10 @@ class TSNE(NumericModeMixin):
             lr = max(n / exag / 4.0, 50.0)
         else:
             lr = float(self.learning_rate)
+        post_factor = float(self.post_exaggeration_learning_rate_factor)
+        if not 0.0 < post_factor < float("inf"):
+            raise ValueError("mojolearn TSNE: post_exaggeration_learning_rate_factor must be positive and finite, "
+                             f"got {self.post_exaggeration_learning_rate_factor!r}")
         exploration = min(self._EXPLORATION_MAX_ITER, max_iter)
         native = self._bind()
         tail = []
@@ -676,9 +698,10 @@ class TSNE(NumericModeMixin):
         native.x_ann_tsne_fit(
             # x, y0, y_out, kl_out
             [addr_ro(x, name="X"), addr_ro(y0, name="init"), addr(emb, name="embedding_"), addr(kl, name="kl")],
-            # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate
+            # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate,
+            # post_exaggeration_learning_rate_factor (the binding forms the product)
             # (+ init mode, random_state low, high: the binding builds y0)
-            [n, d, max_iter, exploration, perplexity, exag, lr] + tail,
+            [n, d, max_iter, exploration, perplexity, exag, lr, post_factor] + tail,
         )
         self.embedding_ = emb.reshape((n, 2))
         self.kl_divergence_ = float(np.asarray(kl)[0])
