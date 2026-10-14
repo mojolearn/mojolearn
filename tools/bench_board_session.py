@@ -7,6 +7,7 @@ without inspecting or saving other environment values. Full output stays on disk
 """
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -15,6 +16,18 @@ import time
 import uuid
 
 MARKER = "MOJOLEARN_BOARD_SESSION"
+
+
+def validate_window(seconds, provider_deadline=None, now=None):
+    """Long full-workload sessions require a bounded rental and retention time."""
+    if not 1 <= seconds <= 4 * 3600:
+        raise ValueError("session limit must be between 1 second and 4 hours")
+    if seconds > 3600 and provider_deadline is None:
+        raise ValueError("sessions longer than one hour require a provider deadline")
+    if provider_deadline is not None:
+        now = time.time() if now is None else now
+        if not math.isfinite(provider_deadline) or not provider_deadline >= now + seconds + 900:
+            raise ValueError("leave at least 900 seconds before the provider deadline for retention")
 
 
 def marked_processes(marker, proc_root=Path("/proc")):
@@ -44,13 +57,17 @@ def kill_session(marker):
             time.sleep(1)
 
 
-def run(command, out, seconds, interval=10):
+def run(command, out, seconds, interval=10, provider_deadline=None):
+    validate_window(seconds, provider_deadline)
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     marker = uuid.uuid4().hex
     start, end = time.time(), time.monotonic() + seconds
     state = dict(session=marker, command=command, started_epoch=start,
                  deadline_epoch=start + seconds, limit_seconds=seconds)
+    if provider_deadline is not None:
+        state["provider_deadline_epoch"] = provider_deadline
+        state["retention_reserve_seconds"] = provider_deadline - start - seconds
     interrupted = []
     def stop(signum, frame):
         interrupted.append(signum)
@@ -101,9 +118,15 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", required=True)
     ap.add_argument("--seconds", type=int, default=3600)
+    ap.add_argument("--provider-deadline", type=float,
+                    help="already armed provider deadline, epoch; required for sessions over one hour")
     ap.add_argument("command", nargs=argparse.REMAINDER)
     args = ap.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
-    if not command or not 1 <= args.seconds <= 3600 or not Path("/proc").is_dir():
-        ap.error("Linux required; supply a command and a limit between 1 and 3600 seconds")
-    raise SystemExit(run(command, args.out, args.seconds))
+    if not command or not Path("/proc").is_dir():
+        ap.error("Linux required; supply a command")
+    try:
+        validate_window(args.seconds, args.provider_deadline)
+    except ValueError as exc:
+        ap.error(str(exc))
+    raise SystemExit(run(command, args.out, args.seconds, provider_deadline=args.provider_deadline))
