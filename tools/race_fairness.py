@@ -195,14 +195,10 @@ def _pair_problems(race, ours, opp):
     bad, missing = [], []
     if not completed(ours):
         missing.append("our measurement did not complete")
-    # FAIRNESS FIX (2026-10-13 audit, superseded owner clarification):
-    # Different executed iteration counts are expected for different solvers.
-    # Judge measured output quality; retain iteration receipts as provenance.
-    quality = BQ.compare(ours, opp)
-    if quality["verdict"] == "FAIL":
-        bad.extend(quality["failures"])
-        bad.extend("quality outside declared margin: " + c["metric"]
-                   for c in quality["checks"] if c["verdict"] == "FAIL")
+    # Quality never decides whether a race is shown (Andrew, 2026-10-14): fairness is about the parameters
+    # being set the same on both arms. Both arms' quality is always recorded and shown beside the time
+    # (quality_comparison); it is for judging changes to our own algorithms, and it is fine for us to be better.
+    # Different executed iteration counts are expected for different solvers; receipts stay as provenance.
     po, pt = _parameters(race, ours), _parameters(race, opp)
     exceptions = list((race.get("params") or {}).get("exceptions") or [])
     exceptions.extend((opp.get("measurement") or {}).get("parameter_exceptions") or [])
@@ -282,12 +278,17 @@ def fairness_rule(race, mode, phase, today, prior=None):
             hand = old_pair
         else:
             hand = prior if hand else None
+        # A stored verdict that rests only on quality no longer holds (2026-10-14: quality is shown, never gated).
+        if hand and hand.get("verdict") in ("UNFAIR", "SUSPECT", "INSUFFICIENT") and str(hand.get("reason", "")).strip() and all(
+                re.match(r"(quality outside declared margin|recorded quality failure|comparable quantitative "
+                         r"quality evidence)", clause.strip())
+                for clause in str(hand.get("reason", "")).split(";") if clause.strip()):
+            hand = None
         # Retire only a precisely scoped obsolete count-only finding. Compound
         # findings (settings, harness code, data, etc.) still require review.
         superseded = None
         if (hand and re.fullmatch(r"iterations differ: ours [\d.]+, [\w-]+ [\d.]+", hand.get("reason", ""))
-                and readback and race.get("params_check") == "MATCHED"
-                and quality_checks and all(q["verdict"] == "PASS" for q in quality_checks)):
+                and readback and race.get("params_check") == "MATCHED"):
             superseded, hand = hand, None
         if bad:
             verdict, reason = "UNFAIR", "; ".join(bad)
@@ -297,11 +298,9 @@ def fairness_rule(race, mode, phase, today, prior=None):
             verdict, reason = hand["verdict"], hand.get("reason", "audit unresolved")
         elif hand and hand.get("verdict") in ("FAIR", "TIE", "MATCHED") and hand.get("evidence"):
             verdict, reason = hand["verdict"], hand.get("reason", "retained supported audit")
-        elif any(q["verdict"] != "PASS" for q in quality_checks):
-            verdict, reason = "INSUFFICIENT", "comparable quantitative quality evidence needs review"
         elif readback and (race.get("params_check") == "MATCHED" or
                            (ours.get("measurement") and opp.get("measurement"))):
-            verdict, reason = "MATCHED", "recorded effective settings and quality within declared margins"
+            verdict, reason = "MATCHED", "recorded effective settings match"
         else:
             verdict, reason = "INSUFFICIENT", "no supported audit or matched effective settings for this pairing"
         row = dict(verdict=verdict, reason=reason, rerace="" if verdict in ("FAIR", "TIE", "MATCHED") else "x")
@@ -310,8 +309,6 @@ def fairness_rule(race, mode, phase, today, prior=None):
         row["timing_comparisons"] = timing_checks
         if superseded:
             row["superseded_iteration_audit"] = superseded
-        if hand and verdict in ("FAIR", "TIE", "MATCHED") and any(q["verdict"] != "PASS" for q in quality_checks):
-            row["quality_basis"] = "retained supported historical audit; no new numeric equivalence claim"
         if hand:
             row.update({k: hand[k] for k in ("audit", "evidence", "date") if k in hand})
         judged[arm] = row
@@ -320,7 +317,7 @@ def fairness_rule(race, mode, phase, today, prior=None):
     best = max([c for c in admitted if c.get("device") == "gpu"] or admitted,
                key=lambda c: judged[c["arm"]]["timing_comparison"]["value"]) if admitted else None
     ratio = judged[best["arm"]]["timing_comparison"]["value"] if completed(ours) and best else None
-    entry = {"rule": "race_fairness.fairness_rule (%s; %s, 2026-10-14)" % (BQ.POLICY, BC.POLICY), "date": today, "opponent": best.get("arm") if best else None,
+    entry = {"rule": "race_fairness.fairness_rule (%s, shown not gated; %s, 2026-10-14)" % (BQ.POLICY, BC.POLICY), "date": today, "opponent": best.get("arm") if best else None,
              "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
              "pairing": pairing(race, mode, phase), "opponents": judged,
              "admitted_opponents": [c["arm"] for c in admitted]}

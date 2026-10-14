@@ -205,7 +205,7 @@ class RaceFairness(unittest.TestCase):
         self.assertEqual(rr["rerace"], "x")
 
     def test_one_bad_arm_does_not_hide_a_supported_opponent(self):
-        b = board(r=race("solver", [("bad", 1, {"quality": {"n_iter": 20, "rmse": 2.0}}),
+        b = board(r=race("solver", [("bad", 1, {"params": {"params": {"alpha": 2.0}}}),
                                     ("good", 10, {"quality": {"n_iter": 10, "rmse": 1.0}})], ours_q={"n_iter": 10, "rmse": 1.0}))
         RF.apply(b)
         e = b["races"]["r"]["audit"]["identical/fit"]
@@ -213,6 +213,14 @@ class RaceFairness(unittest.TestCase):
         self.assertEqual(e["opponent"], "good")
         self.assertEqual(e["opponents"]["bad"]["verdict"], "UNFAIR")
         self.assertEqual(e["rerace"], "")
+
+    def test_quality_never_hides_a_race_and_is_always_recorded(self):
+        for theirs in (0.5, 2.0):   # we are better, we are worse: both shown, both recorded
+            b = board(r=race("solver", [("lib", 10, {"quality": {"rmse": theirs}})], ours_q={"rmse": 1.0}))
+            RF.apply(b)
+            e = b["races"]["r"]["audit"]["identical/fit"]
+            self.assertEqual(e["admitted_opponents"], ["lib"])
+            self.assertEqual(e["opponents"]["lib"]["quality_comparison"][0]["checks"][0]["opponent"], theirs)
 
     def test_no_evidence_never_qualifies_even_with_matched_label(self):
         b = board(r=race("solver", [("lib", 10, {})]))
