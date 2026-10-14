@@ -61,6 +61,16 @@ paper and website consume the same per-mode, per-phase admitted opponents.
 
 ## Retention and guarded execution
 
+Comparison-clock policy `mojolearn.comparison-clocks.v2` enforces the owner's
+declared boundary at admission. Torch GPU arms with device-resident inputs use
+kernel/kernel; arms that already upload inside the clock, including neural
+torch twins, use whole/whole. Other libraries, including CuPy and GPyTorch,
+require whole/whole. A displayed alternate common clock remains diagnostic
+and cannot admit a pairing. Earlier audits incorrectly accepted this fallback.
+Keep those measured kernel times; do not invent their missing copy durations
+or re-score a valid opponent. New CuPy linear-algebra adapters separately
+record their actual synchronized input upload before the kernel clock.
+
 The v6 correction recognizes classical PCA inference's already recorded
 `transform_max_rel_err_own_fp64`: maximum absolute projection error divided by
 the maximum absolute FP64 projection of the same fitted model and query rows.

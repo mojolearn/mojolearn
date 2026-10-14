@@ -239,8 +239,12 @@ def _pair_problems(race, ours, opp):
         if mo.get("shape") and mt.get("shape") and mo["shape"] != mt["shape"]:
             bad.append("different measured input shape")
     clock = BC.pair_ratio(BC.cell_clock(ours), BC.cell_clock(opp), opp)
-    if clock["kind"] in ("mixed", "none"):
-        missing.append("common timing boundary not derivable: " + clock["label"])
+    # FAIRNESS FIX (2026-10-13 audit): an alternate common clock may be
+    # shown diagnostically, but cannot replace the owner's required clock.
+    # In particular, missing CuPy copy time cannot admit kernel/kernel.
+    if clock["kind"] != "preferred":
+        missing.append("required %s/%s timing boundary not derivable: %s" %
+                       (clock["preferred"], clock["preferred"], clock["label"]))
     return bad, missing, bool(po and pt and (set(po) & set(pt) - {"seed"}))
 
 
@@ -324,7 +328,7 @@ def fairness_rule(race, mode, phase, today, prior=None):
     best = max([c for c in admitted if c.get("device") == "gpu"] or admitted,
                key=lambda c: judged[c["arm"]]["timing_comparison"]["value"]) if admitted else None
     ratio = judged[best["arm"]]["timing_comparison"]["value"] if completed(ours) and best else None
-    entry = {"rule": "race_fairness.fairness_rule (%s, 2026-10-14)" % BQ.POLICY, "date": today, "opponent": best.get("arm") if best else None,
+    entry = {"rule": "race_fairness.fairness_rule (%s; %s, 2026-10-14)" % (BQ.POLICY, BC.POLICY), "date": today, "opponent": best.get("arm") if best else None,
              "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
              "pairing": pairing(race, mode, phase), "opponents": judged,
              "admitted_opponents": [c["arm"] for c in admitted]}

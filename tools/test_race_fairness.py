@@ -31,6 +31,25 @@ def board(**races):
 
 
 class RaceFairness(unittest.TestCase):
+    def test_alternate_clock_does_not_replace_required_comparison(self):
+        for lib in ("cupy", "gpytorch"):
+            rr = race("solver", [(lib + "-gpu", 30, {"library": lib, "family": "algos",
+                "comparability": {"span": {"input_home": "device"}}})], ours_ms=100)
+            rr["cells"][0]["comparability"]["span"]["upload_ms_separate"] = 40
+            RF.apply(board(r=rr))
+            self.assertEqual(rr["audit"]["identical/fit"]["verdict"], "INSUFFICIENT")
+            rr["cells"][1]["comparability"]["span"]["upload_ms_untimed"] = 10
+            RF.apply(board(r=rr))
+            self.assertEqual(rr["audit"]["identical/fit"]["verdict"], "MATCHED")
+        rr = race("solver", [("torch-gpu", 30, {"library": "torch", "family": "classical",
+            "comparability": {"span": {"input_home": "device", "upload_ms_untimed": 10}}})])
+        RF.apply(board(r=rr))
+        self.assertEqual(rr["audit"]["identical/fit"]["verdict"], "INSUFFICIENT")
+        rr["cells"][1]["family"] = "neural"
+        RF.apply(board(r=rr))
+        self.assertEqual(rr["audit"]["identical/fit"]["verdict"], "MATCHED")
+        self.assertEqual(rr["audit"]["identical/fit"]["opponents"]["torch-gpu"]["timing_comparison"]["clock"], "whole")
+
     def test_best_opponent_uses_comparable_clocks_and_retains_operands(self):
         rr = race("solver", [("torch-gpu", 30, {"library": "torch", "family": "classical",
             "comparability": {"span": {"input_home": "device", "upload_ms_untimed": 80}}}),

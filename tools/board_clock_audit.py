@@ -67,9 +67,10 @@ import os
 import sys
 
 #: Opponent libraries whose GPU column is compared on the kernel-only clock
-#: (AGENTS.md item 6: "torch ratios use the kernel-only clock"). gpytorch is
-#: torch underneath and sets up its tensors on the device the same way.
-KERNEL_PREFERRED_LIBRARIES = ("torch", "gpytorch")
+#: (AGENTS.md item 6: "torch ratios use the kernel-only clock"). A library
+#: using torch internally does not inherit the torch-column exception.
+KERNEL_PREFERRED_LIBRARIES = ("torch",)
+POLICY = "mojolearn.comparison-clocks.v2"
 
 WHOLE, KERNEL, UNKNOWN = "whole", "kernel", "unknown"
 
@@ -174,6 +175,11 @@ def cell_clock(cell):
 
 def preferred_clock(cell):
     """The clock a ratio against this opponent cell is read on."""
+    # FAIRNESS FIX (2026-10-13 audit): neural torch twins already upload
+    # inside their whole-operation clock. This also covers a declared host
+    # input on other torch lanes; they need no kernel-clock substitution.
+    if stored_clock(cell)[0] == WHOLE:
+        return WHOLE
     if cell.get("library") in KERNEL_PREFERRED_LIBRARIES and cell.get("device") != "cpu":
         return KERNEL
     return WHOLE
