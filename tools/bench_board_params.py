@@ -102,6 +102,16 @@ def _cuml_pca_solver(v):
     return "covariance_eigh" if v == "full" else v
 
 
+def _cuml_split_criterion(v):
+    """cuML RandomForest split_criterion as scikit-learn's criterion name (cuML 26.08
+    ensemble/randomforest_common.pyx _split_criterion_to_criterion: gini/0 -> 'gini',
+    entropy/1 -> 'entropy', mse/2 -> 'squared_error', poisson/4 -> 'poisson'). Any other value
+    keeps its own spelling, so it is compared and refuses."""
+    return {"gini": "gini", 0: "gini", "0": "gini", "entropy": "entropy", 1: "entropy",
+            "1": "entropy", "mse": "squared_error", 2: "squared_error", "2": "squared_error",
+            "poisson": "poisson", 4: "poisson", "4": "poisson"}.get(v, v)
+
+
 def _hw_component(v):
     """Holt-Winters component names: cuML and statsmodels also spell
     'additive'/'multiplicative' as 'add'/'mul' (the same model)."""
@@ -241,7 +251,13 @@ ALIASES = {
                   # GradientBoosting's class weights as the positive-class weight
                   "class_weights": ("scale_pos_weight", _pos_over_neg)},
     "cuvs": {"init_method": "init"},
-    "cuml": {"n_bins": "max_bin", "n_folds": "cv",
+    # smoke-fixes (2026-10-14; decision-tree-clf/-reg: "split_criterion missing from ours read-back",
+    # "criterion missing from cuml-gpu read-back"): cuML's forests name the criterion split_criterion
+    # and spell squared error 'mse' (or the enum code); cuML 26.08 ensemble/randomforest_common.pyx
+    # _split_criterion_to_criterion is its own map to scikit-learn's criterion names, used here so
+    # the VALUE is compared under one name.
+    "cuml": {"split_criterion": ("criterion", _cuml_split_criterion),
+             "n_bins": "max_bin", "n_folds": "cv",
              "svd_solver": ("svd_solver", _cuml_pca_solver),
              "seasonal": ("seasonal", _hw_component)},
     "statsmodels": {"seasonal": ("seasonal", _hw_component), "trend": ("trend", _hw_component)},
@@ -470,10 +486,11 @@ EXCEPTIONS = [
      "and networkx stop when the L1 change of the scores is below n x tol (networkx pagerank: "
      "err < N * tol), cuGraph when it is below its tol (unscaled), so cuGraph is given n x tol; "
      "l1_stop_threshold is equal on every arm"),
-    ("algos/sgd-clf", "max_iter", "cuml-gpu", "cuML MBSGD reads epochs=100, not max_iter"),
+    # smoke-fixes (2026-10-14; sgd-clf/-reg: "epochs missing from ours read-back"): the two
+    # unconditional max_iter rows that stood here never fired (max_iter is absent from cuML's
+    # read-back, not different); semantic_exception now maps epochs <-> max_iter by value.
     ("algos/sgd-clf", "tol", "cuml-gpu", "cuML MBSGD tol=0.0 is its no-early-stop value; ours "
      "and scikit-learn tol=None"),
-    ("algos/sgd-reg", "max_iter", "cuml-gpu", "cuML MBSGD reads epochs=100, not max_iter"),
     ("algos/sgd-reg", "tol", "cuml-gpu", "cuML MBSGD tol=0.0 is its no-early-stop value; ours "
      "and scikit-learn tol=None"),
     ("algos/sgd-reg", "loss", "cuml-gpu", "cuML spells squared error 'squared_loss'"),
@@ -561,6 +578,20 @@ def read_params(obj):
             recovered = [name for name in names if name not in got and hasattr(obj, name)]
             got.update({name: getattr(obj, name) for name in recovered})
             return lib, "get_params + constructor attributes " + ",".join(recovered), got
+        if lib == "mojolearn" and type(obj).__name__ in ("DecisionTreeClassifier", "DecisionTreeRegressor"):
+            # smoke-fixes (2026-10-14; decision-tree-clf/-reg: "n_estimators, bootstrap, max_samples,
+            # oob_score, n_streams, max_batch_size missing from ours read-back"): ours' DecisionTree*
+            # is its forest builder with settings fixed in __init__ (python/mojolearn/_expansion_trees.py:
+            # n_estimators=1, bootstrap=False, n_streams=1; max_samples, oob_score and max_batch_size the
+            # forest defaults) that get_params does not list. The object holds them in `_cfg`, the dict
+            # its fit hands the binding (python/mojolearn/randomforest.py _RandomForestBase._fit_params);
+            # read them from there. An absent key stays absent.
+            cfg = getattr(obj, "_cfg", None) or {}
+            names = ("n_estimators", "bootstrap", "max_samples", "oob_score", "n_streams", "max_batch_size")
+            got = dict(got)
+            recovered = [name for name in names if name not in got and name in cfg]
+            got.update({name: cfg[name] for name in recovered})
+            return lib, "get_params + forest settings _cfg " + ",".join(recovered), got
         if lib == "cuml" and type(obj).__name__ == "MinMaxScaler" and "clip" not in got:
             # The pinned cuML 26.08 transform only scales and translates. Its
             # documented out-of-range example returns 1.5, not 1.0:
@@ -837,6 +868,65 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
             return "both construct the internal MST for clustering; neither requests an additional exported minimum-spanning-tree object"
         if param == "p" and param not in ours and theirs.get(param) is None and ours.get("metric") == theirs.get("metric") == "euclidean":
             return "p only parameterizes Minkowski distance; both arms explicitly use Euclidean distance"
+    # smoke-fixes (2026-10-14; decision-tree-clf/-reg: "ccp_alpha, min_weight_fraction_leaf,
+    # monotonic_cst, splitter, inference_engine missing from cuml-gpu read-back"; decision-tree-clf:
+    # "class_weight is unset on ours and unset on cuml-gpu"): cuML's one-tree forest has none of
+    # ours' scikit-learn tree options. Its own scikit-learn interop refuses every non-default value
+    # (cuML 26.08 ensemble/randomforest_common.pyx BaseRandomForestModel._params_from_cpu:
+    # ccp_alpha != 0, min_weight_fraction_leaf != 0 and monotonic_cst not None raise
+    # UnsupportedOnGPU), so each maps only at the value that means "off". Ours: _expansion_trees.py
+    # (ccp_alpha, min_weight_fraction_leaf and monotonic_cst accept only these values; splitter
+    # 'best' searches every quantile bin of every candidate feature, as cuML's builder does).
+    if lane in ("algos/decision-tree-clf", "algos/decision-tree-reg") and theirs.get("n_estimators") == 1 \
+            and theirs.get("bootstrap") is False and ours.get("bootstrap") is False:
+        if param not in theirs:
+            if param == "ccp_alpha" and ours.get(param) == 0.0:
+                return "no cost-complexity pruning on either arm: ours ccp_alpha=0.0; cuML has no pruning (randomforest_common.pyx refuses ccp_alpha != 0)"
+            if param == "min_weight_fraction_leaf" and ours.get(param) == 0.0:
+                return "no leaf weight-fraction floor on either arm: ours 0.0; cuML has none (randomforest_common.pyx refuses != 0); min_samples_leaf is compared"
+            if param == "monotonic_cst" and param in ours and ours[param] is None:
+                return "no monotonic constraints on either arm: ours None; cuML has none (randomforest_common.pyx refuses non-None)"
+            if param == "splitter" and ours.get(param) == "best":
+                return ("best split on both arms: ours splitter='best' and cuML's builder search every quantile-bin "
+                        "threshold of every candidate feature (max_bin and max_features compared); cuML has no random splitter")
+            if param == "inference_engine" and ours.get(param) in ("auto", "sequential"):
+                # implementation only: the prediction kernel that walks the same fitted tree
+                # (_expansion_trees.py: 'auto' predicts as 'sequential' in identical mode)
+                return "ours' prediction-kernel choice walks the same fitted tree; cuML predicts its own forest; not a model setting"
+        if param == "class_weight" and lane == "algos/decision-tree-clf" and param in ours and param in theirs \
+                and ours[param] is None and theirs[param] is None:
+            # cuML 26.08 common/classification.py process_class_weight: None returns the
+            # sample_weight unchanged (None, unweighted); ours randomforest.py _class_weight_rows: None
+            # gives no row weights. A dict of unit weights would route both through their weighted
+            # kernels instead, so None is the explicit unweighted setting on both.
+            return "None is unweighted on both (cuML process_class_weight; ours _class_weight_rows); no class weights"
+    # smoke-fixes (2026-10-14; sgd-clf/-reg: "epochs missing from ours read-back", "max_iter, average,
+    # early_stopping, epsilon, warm_start (and sgd-clf class_weight) missing from cuml-gpu read-back"):
+    # cuML 26.08 cpp/src/solver/sgd.cuh: `for (i = 0; i < epochs; i++)` runs full passes of
+    # batch_size-row minibatches, and the stop rule is read only when tol > 0 (sgd.cuh:235); ours
+    # x_linear/sgd.mojo minibatch fit runs `for epoch in range(max_iter)` full passes and reads its
+    # stop rule only when tol is not None (-3e38 sentinel, _expansion_linear.py _sgd_fit). So
+    # epochs == max_iter is the same pass count only when neither arm can stop early.
+    if lane in ("algos/sgd-clf", "algos/sgd-reg"):
+        no_stop = ours.get("tol", 1.0) is None and theirs.get("tol") == 0.0
+        if param in ("epochs", "max_iter") and no_stop and isinstance(ours.get("max_iter"), int) \
+                and ours.get("max_iter") == theirs.get("epochs") and "max_iter" not in theirs and "epochs" not in ours:
+            return ("the same number of full passes: ours max_iter=%d, cuML epochs=%d, neither arm stops early "
+                    "(ours tol=None, cuML tol=0.0; sgd.cuh reads n_iter_no_change only when tol > 0)"
+                    % (ours["max_iter"], theirs["epochs"]))
+        if param in theirs:
+            return None
+        if param == "average" and ours.get(param) is False:
+            return "no iterate averaging on either arm: ours average=False; cuML sgd.cuh has no averaging"
+        if param == "early_stopping" and ours.get(param) is False:
+            return "no validation-split early stop on either arm: ours early_stopping=False; cuML MBSGD has none"
+        if param == "warm_start" and ours.get(param) is False:
+            return "both fits start from zero coefficients: ours warm_start=False; cuML sgd.pyx fit_sgd allocates cp.zeros each fit"
+        if param == "epsilon" and ours.get("loss") in ("hinge", "log_loss", "squared_error"):
+            return ("epsilon is read only by ours' huber/epsilon-insensitive/modified_huber losses; the raced loss "
+                    "(compared) is %s, and cuML MBSGD has only hinge/log/squared_loss (sgd.pyx _LOSSES)" % ours["loss"])
+        if param == "class_weight" and lane == "algos/sgd-clf" and param in ours and ours[param] is None:
+            return "no class weights on either arm: ours class_weight=None; cuML MBSGDClassifier has no class weighting"
     return None
 
 

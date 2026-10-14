@@ -1265,7 +1265,14 @@ _add("decision-tree-clf", xlane="trees", ours="DecisionTreeClassifier", task="cl
      sk="sklearn.tree:DecisionTreeClassifier", params=dict(max_depth=16, max_features=1.0, random_state=SEED),
      cuml="cuml.ensemble:RandomForestClassifier",
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
-                      random_state=SEED),
+                      random_state=SEED, n_streams=1),
+     # smoke-fixes (2026-10-14; decision-tree-clf: "n_streams missing from ours read-back"): ours'
+     # DecisionTree* fixes n_streams=1 (python/mojolearn/_expansion_trees.py DecisionTreeClassifier
+     # __init__), now read back (bench_board_params.read_params); cuML is pinned to 1, the count its
+     # builder uses anyway for one tree (cuML 26.08 cpp/src/randomforest/randomforest.cuh:329 caps
+     # n_streams at n_trees). n_bins=128 is passed explicitly to ours (its default) so no arm runs on
+     # a library default.
+     ours_extra=dict(n_bins=128),
      mism=["cuml-gpu is cuML's forest with one tree, no bootstrap, every feature (no GPU "
            "single-tree class exists), n_bins=128 as ours",
            "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
@@ -1273,7 +1280,15 @@ _add("decision-tree-reg", xlane="trees", ours="DecisionTreeRegressor", task="reg
      sk="sklearn.tree:DecisionTreeRegressor", params=dict(max_depth=16, max_features=1.0, random_state=SEED),
      cuml="cuml.ensemble:RandomForestRegressor",
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
-                      random_state=SEED),
+                      random_state=SEED, n_streams=1),
+     # smoke-fixes (2026-10-14; decision-tree-reg: "max_bin is unset on ours and 128 on cuml-gpu"):
+     # ours' DecisionTreeRegressor n_bins=None resolves at fit to the tier default (128 in
+     # IDENTICAL, 256 in an Apple FAST build: _expansion_trees.py _dt_tier_bins), so the race read
+     # back None. Both arms run the same split search, a histogram over per-feature quantile bins
+     # (ours _expansion_trees.py DecisionTreeRegressor docstring "cuML's rule"; cuML 26.08
+     # randomforest_common.pyx n_bins -> max_n_bins), so ours now gets n_bins=128 explicitly, cuML's
+     # value, in every mode. n_streams: as decision-tree-clf.
+     ours_extra=dict(n_bins=128),
      mism=["cuml-gpu is cuML's forest with one tree (see decision-tree-clf)", "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("bagging-clf", xlane="trees", ours="BaggingClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:BaggingClassifier",
