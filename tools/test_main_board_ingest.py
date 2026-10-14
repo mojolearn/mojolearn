@@ -268,6 +268,19 @@ class PairedSessions(unittest.TestCase):
         self.assertEqual(race["evidence_receipt"]["sha256"],"receipt")
         self.assertEqual([(c["arm"],c["median_ms"]) for c in race["cells"]],[("ours",4),("cuml-gpu",2)])
         self.assertEqual(race["cells"][0]["iteration_receipts"][0]["values"],[17])
+        # An older supported pair has no new paired-session metadata. It must
+        # survive a rebuild even when its historical input board is unavailable.
+        own=race["cells"][0]
+        own["main_board"]["observation"].pop("paired_race",None)
+        own["main_board"]["observation"].pop("paired_box",None)
+        obs3=MB.previous_observations(rebuilt)
+        winners,failures,ledger=MB.choose(obs3)
+        again=MB.assemble(BB,"nvidia-l40s",winners,ledger,MB.identity_index(obs3),[],{},"2026-10-14",failures)
+        kept=next(iter(again["races"].values()))
+        self.assertEqual(kept["params_check"],race["params_check"])
+        self.assertEqual(kept["cells"][1],race["cells"][1])
+        self.assertEqual(kept["cells"][0]["measurement"],own["measurement"])
+        self.assertNotIn("preserved_race",kept["cells"][0]["main_board"]["observation"])
 
     def test_mixed_worker_hardware_is_refused(self):
         board=self.board();race=next(iter(board["races"].values()))

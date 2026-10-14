@@ -86,7 +86,7 @@ def legacy_pairing(race, mode, phase):
     return hashlib.sha256(json.dumps(rows).encode()).hexdigest()[:16]
 
 
-def pairing(race, mode, phase):
+def pairing(race, mode, phase, observations_only=False):
     """Bind approval to actual evidence, never just unchanged median times."""
     cells = sorted((c for c in phase_cells(race, phase)
                     if c.get("arm") == our_arm(mode) or c.get("mode") == "opponent"),
@@ -94,7 +94,14 @@ def pairing(race, mode, phase):
     # Computed display ratios are not observations and can change on rebuild.
     ignored = {"ratio_ours_identical_over", "ratio_ours_fast_over", "ratio_ours_identical_clock",
                "ratio_ours_fast_clock", "clock"}
-    basis = dict(cells=[{k: v for k, v in c.items() if k not in ignored} for c in cells],
+    records = [{k: v for k, v in c.items() if k not in ignored} for c in cells]
+    if observations_only:
+        # Cross-vendor identity and newer-failure flags are derived annotations,
+        # not a change to this race's measured work, device, source or settings.
+        records = [dict(c, main_board={k: v for k, v in c["main_board"].items()
+                                      if k not in ("identity", "newer_failed")})
+                   if isinstance(c.get("main_board"), dict) else c for c in records]
+    basis = dict(cells=records,
                  params=race.get("params"), params_check=race.get("params_check"),
                  lane=race.get("lane"), dataset=race.get("dataset"),
                  lane_config=race.get("lane_config"))
@@ -319,6 +326,9 @@ def apply(board, prev=None, today=None, upgrade_legacy=False):
                     key = "%s/%s" % (mode, phase)
                     entry = old.get(key)
                     keep = entry and entry.get("pairing") == pairing(rr, mode, phase)
+                    if (entry and not keep and entry.get("pairing") == pairing(prev_rr, mode, phase)
+                            and pairing(rr, mode, phase, True) == pairing(prev_rr, mode, phase, True)):
+                        keep = True
                     if upgrade_legacy and entry and entry.get("pairing") == legacy_pairing(rr, mode, phase):
                         keep = True
                         history = rr.setdefault("audit_history", [])

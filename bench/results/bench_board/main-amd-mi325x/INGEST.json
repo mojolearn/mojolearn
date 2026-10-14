@@ -1,17 +1,27 @@
 {
- "generated": "2026-10-13T07:59:53Z",
+ "generated": "2026-10-14T00:36:40Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-13T07:59:53Z",
+  "generated": "2026-10-14T00:36:40Z",
   "grid_logs": [
-   "amd=/Users/andrewhendel/mojolearn-evidence/r43/ingest/amd-gridlogs.txt"
+   "nv=/dev/null"
   ],
   "json_dir": null,
+  "paired_boards": [
+   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/fitted-receipts/linearsvr-taxi/board.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/fitted-receipts/svr-istella/board.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/fitted-receipts/svr-taxi/board.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/fitted-receipts/linearsvr-istella/board.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/measured/trees.iforest.istella.rows=full/board.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/measured/trees.iforest.taxi.rows=full/board.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/nvidia/gemm/board.json",
+   "amd=/Users/andrewhendel/mojolearn-evidence/measurement-readiness-20261013/amd/gemm/board.json"
+  ],
   "results": [
-   "amd=/Users/andrewhendel/mojolearn-evidence/r43/ingest/amd-results.txt"
+   "nv=/dev/null"
   ]
  },
  "skip_notes": [],
  "skipped": {},
- "summary": "MAINBOARD column=amd-mi325x label=main@a6b5f76cb races=229 add=3 change=3 drop=0 failed=9 ledger=12 withheld_opponents=4 identity=n/a:229"
+ "summary": "MAINBOARD column=amd-mi325x label=main@18679c3bb races=229 add=0 change=0 drop=0 failed=9 ledger=9 withheld_opponents=39 identity=MATCH:86,n/a:143"
 }

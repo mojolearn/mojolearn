@@ -549,7 +549,14 @@ def previous_observations(prev):
             mb = c.get("main_board") or {}
             ob = mb.get("observation")
             if c.get("library") == "mojolearn" and isinstance(ob, dict) and ob.get("sha"):
-                out.append(_reroute(dict({k: ob.get(k) for k in OB_FIELDS}, prior_kind=ob.get("kind"), kind="previous")))
+                item = _reroute(dict({k: ob.get(k) for k in OB_FIELDS}, prior_kind=ob.get("kind"), kind="previous"))
+                # A rebuild is not a new measurement. Preserve an unchanged
+                # historical pair and its audit instead of borrowing different
+                # opponents or reconstructing its old settings from today's code.
+                # Ephemeral only: not OB_FIELDS, so no recursively nested boards.
+                if not item.get("paired_race"):
+                    item["preserved_race"] = copy.deepcopy(rr)
+                out.append(item)
     # the failed runs the previous board listed (FAILED table, flags), so a rotated input keeps them too
     for ob in ((prev or {}).get("main_board") or {}).get("failed_observations") or []:
         if isinstance(ob, dict) and ob.get("sha"):
@@ -973,6 +980,12 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
                     HW.our_fields(c, box=ob["box"], version_text=ob["version"], source="paired worker record")
                 else:
                     HW.opponent_fields(c, ob.get("paired_box"), "paired session")
+        elif ob.get("preserved_race"):
+            rr = copy.deepcopy(ob["preserved_race"])
+            rr["main_board"]["identity"] = ident["status"]
+            original = next(c for c in rr["cells"] if c.get("library") == "mojolearn")
+            original["main_board"]["identity"] = ident
+            original["main_board"]["newer_failed"] = cell["main_board"]["newer_failed"]
         # neural lanes: the headline is ours IDENTICAL over torch's fastest bf16 arm, the fp32 twin beside it
         # (tools/bench_board.py neural_headline; render_board draws the table and each race's headline line)
         hl = BB.neural_headline(rr)
@@ -1002,14 +1015,17 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
         "older ok cell stays, flagged with the newer failed run). %d replaced or failed observations are in "
         "LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on "
         "this board." % n_replaced,
-        "Ours: one scored run per cell (lq RACE ALGOS lines, lq CMD bench_board summaries); the status column "
+        "Ours: recorded scored runs from lq jobs or verified paired sessions; the status column "
         "names the cell's commit, box/job, commit date and the other vendor's digest at the same commit "
         "(identity: %s)." % (", ".join("%s %d" % kv for kv in sorted(idn.items())) or "none"),
-        "Opponents: copied from the stored opponent boards (%s), never re-run here; `ours IDENTICAL / arm` "
+        "Opponents: retained from each paired session when present; otherwise retained historical pairs or "
+        "stored opponent boards (%s). Ingestion runs no measurements. `ours IDENTICAL / arm` "
         "divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every "
         "other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded "
         "upload_ms_separate. Opponents withheld for changed lane settings: %d races." % (
             ", ".join(s["label"] for s in sources) or "none found", withheld),
+        "Provenance: main@ identifies the source or harness freeze. Paired wheel runs separately record the "
+        "installed library version and loaded binary hashes; they are not source builds of that harness commit.",
         "Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over "
         "torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. "
         "Note: " + BB.IDENTITY_TAX_NOTE + ". A cell of ours whose output hash equals a copied opponent's shows "
@@ -1027,7 +1043,7 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
         "schema": BB.SCHEMA, "main_board_schema": SCHEMA_NOTE, "created": generated,
         "box": {"gpu": gpu, "host": {"hostname": ", ".join(BOX_TEXT.get(b, b) for b in sorted(boxes)) or None},
                 "mojolearn": {"version": label,
-                              "wheel": {"file": "none (unreleased; built from source at each cell's commit)",
+                              "wheel": {"file": "mixed source/wheel provenance; see each cell's version and measurement record",
                                         "sha256": "-"}},
                 "repo": {"commit": newest}},
         "config": {"vendor": COLUMN_VENDOR[column], "modes": ["identical"], "rounds": 1, "smoke": False,

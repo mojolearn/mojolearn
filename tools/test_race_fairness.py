@@ -29,6 +29,22 @@ def board(**races):
 
 
 class RaceFairness(unittest.TestCase):
+    def test_derived_identity_annotation_preserves_supported_audit_but_settings_do_not(self):
+        old=board(r=race("ridge",[("lib",10,{})],params_check="not checked"))
+        rr=old["races"]["r"]
+        rr["cells"][0]["main_board"]={"sha":"frozen","identity":{"status":"n/a"}}
+        rr["audit"]={"identical/fit":dict(verdict="FAIR",opponent="lib",audit="human",
+            evidence="retained source and worker review",reason="matched",pairing=RF.pairing(rr,"identical","fit"))}
+        RF.apply(old,None,"2026-10-13")
+        new=copy.deepcopy(old)
+        new["races"]["r"]["cells"][0]["main_board"]["identity"]={"status":"MATCH"}
+        RF.apply(new,old,"2026-10-14")
+        self.assertEqual(new["races"]["r"]["audit"]["identical/fit"]["verdict"],"FAIR")
+        changed=copy.deepcopy(new)
+        changed["races"]["r"]["cells"][0]["params"]["params"]["alpha"]=2
+        RF.apply(changed,old,"2026-10-14")
+        self.assertEqual(changed["races"]["r"]["rerace"],"x")
+
     def test_new_iterative_measurements_need_executed_counts(self):
         rr=race("linearsvr",[("lib",10,{})])
         for c in rr["cells"]:
