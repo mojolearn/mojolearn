@@ -388,7 +388,10 @@ def build(lane, arm, D, A):
                         q.grad.copy_(g0)
                 sync()
                 return {"norm": np.array([S["norm"]])}
-            return Runner(info, fit, outputs, sync=sync, record=dict(rec, seed=SEED, **p))
+            # smoke-fixes (2026-10-14; algos/clip-grad-norm: "missing real library implementation read-back:
+            # torch-*"): the record names the torch function the arm really calls
+            return Runner(info, fit, outputs, sync=sync, record=dict(
+                rec, __implementation__=torch.nn.utils.clip_grad_norm_, seed=SEED, **p))
         x_np, tg = _ce_inputs(np, SEED)
         xt = torch.from_numpy(x_np).to(dev).requires_grad_(True)
         tt = torch.from_numpy(tg).to(dev)
@@ -409,7 +412,10 @@ def build(lane, arm, D, A):
             # change were wrong for this lane; apply extra scrutiny.
             g_host = xt.grad.float().cpu().numpy()
             S["o"] = {"loss": np.array([float(loss.item())]), "grad": g_host[:256].copy()}
-        return Runner(info, fit, lambda: S["o"], sync=sync, record=dict(rec, seed=SEED, **p))
+        # smoke-fixes (2026-10-14; algos/cross-entropy: "missing real library implementation read-back:
+        # torch-*"): the record names the torch function the arm really calls
+        return Runner(info, fit, lambda: S["o"], sync=sync, record=dict(
+            rec, __implementation__=F.cross_entropy, seed=SEED, **p))
 
     # ---- BPE encode and train
     if t in ("bpeencode", "bpetrain"):

@@ -1048,6 +1048,9 @@ _add("cross-val-score", xlane="model_selection", ours=("cross_val_score",
 # ---- lane sequence --------------------------------------------------------
 _TORCH = "torch"      # opponents: torch at every fast setting of the box (bench_board_neural)
 SEQ_T = 24
+# the torch sequence arm's inference chunk (rows per forward), recorded and compared with ours'
+# predict_chunk read-back (default 4096, python/mojolearn/_x_sequence_rnn.py _RecurrentBase.__init__)
+SEQ_PREDICT_CHUNK = 4096
 for _cell in ("LSTM", "GRU", "RNN"):
     for _task in ("clf", "reg"):
         _add("%s-%s" % (_cell.lower(), _task), xlane="sequence",
@@ -3991,11 +3994,16 @@ def _build_cnnclf(lane, arm, D):
             out = torch.cat([run(S["fwd"], Xqt[i:i + 4096]).float() for i in range(0, Xqt.shape[0], 4096)])
         S["pred"] = out.argmax(1)
         _torch_sync(torch, dev)
-    rec = dict(__library__="torch", seed=p["random_state"], learning_rate=p["learning_rate"],
+    # smoke-fixes (2026-10-14; algos/cnn-clf: "missing real library implementation read-back: torch-*",
+    # "input_shape missing from torch-* read-back"): the record names the torch.nn layer class the net is
+    # built from (nn.Conv2d, net() above) and the (C, H, W) input_shape net() really builds from.
+    # betas/eps: torch.optim.SGD has none (mapped in tools/bench_board_params.py _semantic_r8).
+    rec = dict(__library__="torch", __implementation__=nn.Conv2d, seed=p["random_state"],
+               learning_rate=p["learning_rate"],
                momentum=p["momentum"], dampening=p["dampening"], nesterov=p["nesterov"],
                weight_decay=p["weight_decay"], batch_size=p["batch_size"], max_iter=p["max_iter"],
                shuffle=p["shuffle"], kernel_size=p["kernel_size"], pool_size=p["pool_size"],
-               conv_channels=list(p["conv_channels"]), optimizer="sgd")
+               conv_channels=list(p["conv_channels"]), input_shape=list(p["input_shape"]), optimizer="sgd")
     return Runner(info, fit, lambda: {"pred": _torch_metric_array(S["pred"])}, infer, record=rec)
 
 
@@ -4058,10 +4066,20 @@ def _build_seqmodel(lane, arm, D):
             "upload_ms_untimed": fit_upload_ms, "predict_upload_ms": predict_upload_ms}
     Net().load_state_dict(init)           # untimed, strict: the export fits this net or the arm refuses now
     lossf = nn.CrossEntropyLoss() if clf else nn.MSELoss()
-    rec = dict(__library__="torch", seed=p["random_state"], hidden_size=p["hidden_size"],
+    # smoke-fixes (2026-10-14; algos/lstm-*/gru-*/rnn-*: "missing real library implementation read-back:
+    # torch-*", "optimizer_options missing from torch-* read-back", "predict_chunk missing from torch-*
+    # read-back"): the record names the torch.nn class the arm really builds (nn.LSTM / nn.GRU / nn.RNN,
+    # Net.rnn below), the exact options dict handed to torch.optim.Adam in fit(), and the inference chunk
+    # infer() really uses (SEQ_PREDICT_CHUNK rows, ours' predict_chunk default 4096,
+    # python/mojolearn/_x_sequence_rnn.py _RecurrentBase.__init__ and _run). lr_schedule: no scheduler here,
+    # Adam at the constant learning_rate (mapped in tools/bench_board_params.py _semantic_r8).
+    rec = dict(__library__="torch", __implementation__=cell, seed=p["random_state"],
+               hidden_size=p["hidden_size"],
                num_layers=p["num_layers"], learning_rate=p["learning_rate"], batch_size=p["batch_size"],
                max_epochs=p["max_epochs"], shuffle=p["shuffle"], optimizer="adam",
-               betas=list(oo["betas"]), eps=oo["eps"], weight_decay=oo["weight_decay"], **ckw)
+               betas=list(oo["betas"]), eps=oo["eps"], weight_decay=oo["weight_decay"],
+               optimizer_options=dict(betas=list(oo["betas"]), eps=oo["eps"], weight_decay=oo["weight_decay"]),
+               predict_chunk=SEQ_PREDICT_CHUNK, **ckw)
 
     def run(net, x):
         if dt is not None:
@@ -4101,8 +4119,8 @@ def _build_seqmodel(lane, arm, D):
 
     def infer():
         with torch.no_grad():                    # in chunks, as ours' predict_chunk does
-            out = torch.cat([run(S["fwd"], Xqt[i:i + 4096]).float()
-                             for i in range(0, Xqt.shape[0], 4096)])
+            out = torch.cat([run(S["fwd"], Xqt[i:i + SEQ_PREDICT_CHUNK]).float()
+                             for i in range(0, Xqt.shape[0], SEQ_PREDICT_CHUNK)])
         S["pred"] = out.argmax(1) if clf else out[:, 0]
         _torch_sync(torch, dev)
     return Runner(info, fit, lambda: {"pred": _torch_metric_array(S["pred"])}, infer, record=rec)

@@ -666,7 +666,26 @@ def read_params(obj):
     got = {n: getattr(obj, n) for n in names if hasattr(obj, n)}
     if not got:
         got = {k: v for k, v in vars(obj).items() if not k.startswith("_") and _scalar(v)}
+    if lib == "mojolearn" and type(obj).__name__ in _OURS_RECURRENT and "optimizer" in got:
+        # smoke-fixes (2026-10-14; algos/lstm-*/gru-*/rnn-*: "betas, eps, weight_decay missing from ours
+        # (ours-fast) read-back"): ours' recurrent models hand the trainer the optimizer's PyTorch
+        # defaults updated by optimizer_options (python/mojolearn/_x_sequence_rnn.py optimizer_arguments:
+        # o = dict(_OPT_DEFAULTS[name]); o.update(options); _RecurrentBase._fit passes its slots to
+        # rnn_fit). Read those effective values from the model's own module; optimizer_options stays as
+        # given. An unknown optimizer or option adds nothing (the trainer itself raises on them).
+        mod = sys.modules.get(type(obj).__module__)
+        defaults = getattr(mod, "_OPT_DEFAULTS", {}).get(got["optimizer"])
+        options = got.get("optimizer_options") or {}
+        if isinstance(defaults, dict) and isinstance(options, dict) and set(options) <= set(defaults):
+            effective = dict(defaults, **options)
+            recovered = sorted(n for n in effective if n not in got)
+            got.update({n: effective[n] for n in recovered})
+            return lib, "attributes + effective optimizer options " + ",".join(recovered), got
     return lib, "attributes", got
+
+
+#: ours' recurrent estimators (python/mojolearn/_x_sequence_rnn.py), read by read_params above
+_OURS_RECURRENT = frozenset({"%s%s" % (c, t) for c in ("LSTM", "GRU", "RNN") for t in ("Classifier", "Regressor")})
 
 
 def arm_record(obj):
@@ -1466,6 +1485,50 @@ def _semantic_r7(lane, param, arm, ours, theirs, library):
     return None
 
 
+_R8_SEQ_LANES = frozenset("algos/%s-%s" % (c, t) for c in ("lstm", "gru", "rnn") for t in ("clf", "reg"))
+
+
+def _semantic_r8(lane, param, arm, ours, theirs, library):
+    """smoke-fixes (2026-10-14) sub-lane r8: algos/lstm-*, gru-*, rnn-* and cnn-clf against torch,
+    absent API fields only, each conditional on the values that make it the same work. Sources:
+    python/mojolearn/_x_sequence_rnn.py, python/mojolearn/_expansion_cnn.py, the torch arms in
+    tools/bench_board_algos.py (_build_seqmodel, _build_cnnclf) and torch/nn/modules/rnn.py,
+    torch/optim/sgd.py."""
+    if library != "torch" or not arm.startswith("torch-"):
+        return None
+    if lane in _R8_SEQ_LANES and param == "lr_schedule" and "lr_schedule" not in theirs \
+            and "lr_schedule" in ours and ours["lr_schedule"] is None \
+            and "learning_rate" in ours and "learning_rate" in theirs \
+            and _equal(ours["learning_rate"], theirs["learning_rate"]):
+        # smoke-fixes (2026-10-14; algos/lstm-*/gru-*/rnn-*: "lr_schedule missing from torch-* read-back"):
+        # ours with lr_schedule None steps at learning_rate on every step (_x_sequence_rnn.py:186-195,
+        # _RecurrentBase._lrs: np.full(n_steps, learning_rate)); the torch arm builds torch.optim.Adam
+        # (lr=learning_rate) with no LR scheduler (bench_board_algos.py _build_seqmodel fit()). Fires only
+        # when ours' lr_schedule is None and both learning rates are equal.
+        return ("no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant "
+                "learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler")
+    if lane in _R8_SEQ_LANES and not lane.startswith("algos/rnn-") and param == "nonlinearity" \
+            and "nonlinearity" not in theirs and ours.get("nonlinearity") == "tanh":
+        # smoke-fixes (2026-10-14; algos/lstm-*/gru-*: "nonlinearity missing from torch-* read-back"):
+        # ours' LSTM/GRU ignore nonlinearity (_x_sequence_rnn.py:111-116, _RecurrentBase._cell reads it for
+        # the RNN cell only; the LSTM*/GRU* docstrings: "Unused by this model"); torch.nn.LSTM / nn.GRU take
+        # no nonlinearity (torch/nn/modules/rnn.py; only nn.RNN does): both run the fixed sigmoid gates and
+        # tanh candidate/cell. Fires only on the lstm/gru lanes and ours' default 'tanh'.
+        return ("LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' "
+                "nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU "
+                "take none")
+    if lane == "algos/cnn-clf" and param in ("betas", "eps") and param not in theirs \
+            and str(ours.get("optimizer", "")).lower() == "sgd" and str(theirs.get("optimizer", "")).lower() == "sgd":
+        # smoke-fixes (2026-10-14; algos/cnn-clf: "betas, eps missing from torch-* read-back"): ours'
+        # CNNClassifier reads betas and eps only on its Adam/AdamW branch (_expansion_cnn.py:1557-1563 and
+        # 1620-1637: optimizer == 'sgd' hands x_cnn_fit_epoch_d / x_cnn_sgd_r lr, momentum, weight_decay,
+        # dampening and nesterov only); torch.optim.SGD has no betas or eps (torch/optim/sgd.py). Fires only
+        # when both arms run SGD.
+        return ("SGD on both arms: ours' CNNClassifier uses betas/eps only for adam/adamw "
+                "(_expansion_cnn.py fit), torch.optim.SGD has neither")
+    return None
+
+
 def semantic_exception(lane, param, arm, ours, theirs, library):
     """Source-reviewed inactive/fixed API settings, conditional on actual values.
 
@@ -1476,6 +1539,8 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     decomposition.py, density.py, cluster.py and neighbors.py. Reasons below
     apply only to the named recipe, library and resolved settings.
     """
+    why = _semantic_r8(lane, param, arm, ours, theirs, library)
+    if why: return why
     why = _semantic_r4(lane, param, arm, ours, theirs, library)
     if why: return why
     why = _semantic_r5(lane, param, arm, ours, theirs, library)
