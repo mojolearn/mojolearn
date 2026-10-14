@@ -192,6 +192,12 @@ SEED = 7
 #: default): ours' LanguageModelTrainer / SambaStack / SmallMLPTrainer and
 #: torch.optim.AdamW. Samba runs without clipping on both (max_norm=None).
 ADAMW = {"lr": 1e-3, "betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.01}
+#: The AdamW flags that change the update and that ours' trainers fix by implementation (preflight-smoke,
+#: 2026-10-14). Ours' record carries them; the torch arm passes the same values explicitly and its read-back
+#: is compared. Source-reviewed: python/mojolearn/_training_impl.py AdamW (_KIND_ADAMW: decoupled decay
+#: p*(1-lr*wd); amsgrad unsupported, raises TypeError; maximize default False, and the trainers
+#: (_mlp_impl.SmallMLPTrainer, LanguageModelTrainer, SambaStack) never pass it).
+OURS_ADAMW_SEMANTICS = {"amsgrad": False, "maximize": False, "decoupled_weight_decay": True}
 #: TransformerBlock / LlamaEager: RMSNorm eps and RoPE base, passed explicitly
 #: to ours and read back from tools/speed_torch_seq.py on the torch side.
 BLOCK_NORM_EPS, BLOCK_ROPE_THETA = 1e-6, 10000.0
@@ -1042,6 +1048,9 @@ def _ours_record(lane, config_readback=None):
     seed: every parameter and input comes from the conductor's seed-7 file)."""
     rec = {"__library__": "mojolearn"}
     rec.update(_lane_params(lane))
+    if lane in TRAIN_LANES:
+        for flag, value in OURS_ADAMW_SEMANTICS.items():
+            rec.setdefault(flag, value)
     if config_readback is not None:
         rec["config_readback"] = json.dumps(config_readback, sort_keys=True, default=str)
     return rec
@@ -1740,9 +1749,17 @@ class TorchArm:
                                    (twin.LR, twin.BETAS, twin.ADAM_EPS, twin.WEIGHT_DECAY), ADAMW))
         rec = {"__library__": "torch", "seed": SEED}
         if self.train:
+            # preflight-smoke (2026-10-14): every math flag pinned to ours' value where this torch takes it;
+            # capturable/differentiable explicitly off (implementation-only, recorded as exceptions)
+            import inspect
+            try:
+                sig = inspect.signature(torch.optim.AdamW).parameters
+            except (TypeError, ValueError):
+                sig = {}
+            pinned = {k: v for k, v in OURS_ADAMW_SEMANTICS.items() if k in sig}
+            pinned.update({k: False for k in ("capturable", "differentiable") if k in sig})
             self.opt = torch.optim.AdamW(self.module.parameters(), lr=ADAMW["lr"], betas=ADAMW["betas"],
-                                         eps=ADAMW["eps"], weight_decay=ADAMW["weight_decay"],
-                                         amsgrad=False)
+                                         eps=ADAMW["eps"], weight_decay=ADAMW["weight_decay"], **pinned)
             self.info["optimizer"] = "torch.optim.AdamW lr %g betas %s eps %g wd %g (torch's default impl)" % (
                 ADAMW["lr"], ADAMW["betas"], ADAMW["eps"], ADAMW["weight_decay"])
             # read back from the optimizer itself

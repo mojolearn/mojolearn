@@ -705,6 +705,16 @@ def exception_for(lane, param, arm):
     return None
 
 
+#: Lanes whose torch arm constructs a torch.optim optimizer (algos optimizer lanes, without the "algos/" prefix,
+#: and the neural train-step lanes with torch.optim.AdamW).
+_TORCH_OPTIMIZER_LANES = frozenset({
+    "sgd", "adam", "adamw", "rmsprop", "adagrad", "adamax", "nadam", "adafactor",
+    "mlp-train-step", "lm-train-step", "samba-train-step", "lm-host-train-step"})
+#: torch.optim classes that fix decoupled_weight_decay by class, by lane.
+_TORCH_DECOUPLED_BY_CLASS = {"adam": False, "adamw": True, "mlp-train-step": True, "lm-train-step": True,
+                             "samba-train-step": True, "lm-host-train-step": True}
+
+
 def semantic_exception(lane, param, arm, ours, theirs, library):
     """Source-reviewed inactive/fixed API settings, conditional on actual values.
 
@@ -728,20 +738,27 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
                                "max_norm": "None disables embedding-vector renormalization on both arms"}}
         if param in unset.get(optimizer, {}) and param in ours and param in theirs and ours[param] is None and theirs[param] is None:
             return unset[optimizer][param] + "; all active arguments remain compared"
-    if library == "torch" and arm.startswith("torch-") and optimizer in {
-            "sgd", "adam", "adamw", "rmsprop", "adagrad", "adamax", "nadam", "adafactor"}:
+    # preflight-smoke (2026-10-14): the math-changing flags (amsgrad, maximize, decoupled_weight_decay) are no
+    # longer waived here. Ours' read-back carries the values its implementation fixes (bench_board_algos.py
+    # _OURS_OPT_SEMANTICS, bench_board_neural.py OURS_ADAMW_SEMANTICS), the torch arm passes the same values
+    # explicitly, and the two are compared like any other setting. Only torch's implementation choices are
+    # exceptions, on every lane whose torch arm builds a torch.optim optimizer (the algos optimizer lanes and
+    # the neural train-step lanes, whose torch arm is torch.optim.AdamW).
+    if library == "torch" and arm.startswith("torch-") and optimizer in _TORCH_OPTIMIZER_LANES:
         if param not in ours and param in theirs:
             value = theirs[param]
             if param in ("foreach", "fused") and (value is None or isinstance(value, bool)):
                 return "torch's foreach/fused selects its own implementation of the same optimizer update; the raw execution choice remains recorded"
             if param in ("capturable", "differentiable") and value is False:
                 return "no captured-graph or differentiable optimizer step is requested; our standalone update has neither mode"
-            if param == "maximize" and value is False:
-                return "both standalone optimizers minimize; our sequence optimizer rejects maximize=True"
-            if param == "amsgrad" and value is False and optimizer in ("adam", "adamw"):
-                return "ordinary Adam moments on both arms; AMSGrad is disabled and our API does not implement that variant"
-            if param == "decoupled_weight_decay" and optimizer in ("adam", "adamw") and value is (optimizer == "adamw"):
-                return "Adam uses coupled decay and AdamW uses decoupled decay; our class fixes that choice (_training_impl.py _KIND)"
+        # An older torch whose AdamW/Adam takes no decoupled_weight_decay and does not read it back: the class
+        # itself fixes the choice (torch.optim.AdamW decoupled, torch.optim.Adam coupled). Waived only when
+        # ours' read-back value is that class's fixed choice.
+        if param == "decoupled_weight_decay" and param in ours and param not in theirs:
+            fixed = _TORCH_DECOUPLED_BY_CLASS.get(optimizer)
+            if fixed is not None and ours[param] is fixed:
+                return ("this torch's %s takes no decoupled_weight_decay argument and fixes it to %s; ours reads back "
+                        "the same" % ("AdamW" if fixed else "Adam", fixed))
     if library == "cuvs" and arm == "hipvs-gpu":
         if lane == "kmeans":
             if param == "init" and ours.get(param) == "k-means++" and theirs.get(param) == "KMeansPlusPlus":

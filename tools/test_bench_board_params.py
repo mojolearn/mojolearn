@@ -185,7 +185,9 @@ def _matched():
 
 @pytest.mark.parametrize("lane,decoupled", [("adam", False), ("adamw", True)])
 def test_optimizer_implementation_choices_do_not_waive_algorithm_changes(lane, decoupled):
-    own = dict(__library__="mojolearn", lr=.001, betas=(.9, .999), eps=1e-8, weight_decay=.01)
+    # ours' read-back carries the math flags its implementation fixes (preflight-smoke, 2026-10-14)
+    own = dict(__library__="mojolearn", lr=.001, betas=(.9, .999), eps=1e-8, weight_decay=.01,
+               amsgrad=False, maximize=False, decoupled_weight_decay=decoupled)
     lib = dict(own, __library__="torch", foreach=True, fused=None, capturable=False,
                differentiable=False, amsgrad=False, maximize=False, decoupled_weight_decay=decoupled)
     arms = {"ours": own, "torch-eager-fp32": lib}
@@ -199,6 +201,31 @@ def test_optimizer_implementation_choices_do_not_waive_algorithm_changes(lane, d
     assert BP.check("unrelated", arms)["verdict"] == "REFUSED"
     assert BP.check("algos/" + lane, {"ours": dict(own, amsgrad=True),
                                      "torch-eager-fp32": lib})["verdict"] == "REFUSED"
+
+
+@pytest.mark.parametrize("lane", ["algos/adamw", "mlp-train-step", "lm-train-step", "samba-train-step"])
+def test_math_flags_missing_from_ours_read_back_still_refuse(lane):
+    """Implementation-only torch flags are exceptions; the math flags must come from ours' read-back."""
+    own = dict(__library__="mojolearn", lr=.001, betas=(.9, .999), eps=1e-8, weight_decay=.01)
+    lib = dict(own, __library__="torch", foreach=None, fused=None, capturable=False, differentiable=False,
+               amsgrad=False, maximize=False, decoupled_weight_decay=True)
+    got = BP.check(lane, {"ours": own, "torch-eager-fp32": lib})
+    assert got["verdict"] == "REFUSED"
+    assert {p.split(": ")[1].split(" ")[0] for p in got["problems"]} == {"amsgrad", "maximize", "decoupled_weight_decay"}
+    full = dict(own, amsgrad=False, maximize=False, decoupled_weight_decay=True)
+    got = BP.check(lane, {"ours": full, "torch-eager-fp32": lib})
+    assert got["verdict"] == "MATCHED", got["problems"]
+    waived = {e["param"] for e in got["exceptions"]}
+    assert waived == {"foreach", "fused", "capturable", "differentiable"}
+
+
+@pytest.mark.parametrize("lane,decoupled", [("algos/adam", False), ("algos/adamw", True), ("mlp-train-step", True)])
+def test_torch_without_a_decoupled_argument_matches_only_its_class_choice(lane, decoupled):
+    own = dict(__library__="mojolearn", lr=.001, amsgrad=False, maximize=False, decoupled_weight_decay=decoupled)
+    lib = dict(__library__="torch", lr=.001, amsgrad=False, maximize=False, foreach=None)
+    assert BP.check(lane, {"ours": own, "torch-eager-fp32": lib})["verdict"] == "MATCHED"
+    wrong = dict(own, decoupled_weight_decay=not decoupled)
+    assert BP.check(lane, {"ours": wrong, "torch-eager-fp32": lib})["verdict"] == "REFUSED"
 
 
 def test_matched_race_passes_and_maps_names():

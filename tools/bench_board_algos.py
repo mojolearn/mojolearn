@@ -1102,6 +1102,21 @@ _OPT_HYPER = {
     "Adam": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, maximize=False),
     "AdamW": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01, maximize=False),
 }
+#: The optimizer flags that change the update equation and that ours fixes by implementation (preflight-smoke,
+#: 2026-10-14). They are not constructor arguments of ours (passing them would raise), so they are recorded in
+#: ours' read-back beside the hyperparameters and pinned to the same values on the torch arm, where they are
+#: then compared like any other setting. Source-reviewed:
+#:   amsgrad: python/mojolearn/_training_impl.py Adam/AdamW ("amsgrad is not supported and raises TypeError").
+#:   decoupled_weight_decay: _training_impl.py _KIND_ADAM (coupled) / _KIND_ADAMW (decoupled, p*(1-lr*wd));
+#:     NAdam takes it as an argument (in _OPT_HYPER).
+#:   maximize: _x_sequence_optim.py RMSprop/Adagrad/Adamax/NAdam ("Not supported: ... maximize"); SGD, Adam,
+#:     AdamW and Adafactor take it as an argument (in _OPT_HYPER) and it is read back from the instance.
+_OURS_OPT_SEMANTICS = {
+    "RMSprop": dict(maximize=False), "Adagrad": dict(maximize=False), "Adamax": dict(maximize=False),
+    "NAdam": dict(maximize=False),
+    "Adam": dict(amsgrad=False, decoupled_weight_decay=False),
+    "AdamW": dict(amsgrad=False, decoupled_weight_decay=True),
+}
 for _slug, _cls, _torch in (("rmsprop", "RMSprop", "RMSprop"), ("adagrad", "Adagrad", "Adagrad"),
                             ("adamax", "Adamax", "Adamax"), ("nadam", "NAdam", "NAdam"),
                             ("adafactor", "Adafactor", "Adafactor"), ("lion", "Lion", None),
@@ -5514,6 +5529,9 @@ def _build_optim(lane, arm, D):
     input_arrays = _input_array_records([("p0", p0)] + [("grad%d" % i, g) for i, g in enumerate(grads)])
     S = {}
     hyper = dict(s["params"])
+    # the math-changing flags ours fixes (_OURS_OPT_SEMANTICS), keyed by ours' class name
+    ours_name = s["ours"][0] if isinstance(s["ours"], tuple) else s["ours"]
+    semantics = dict(_OURS_OPT_SEMANTICS.get(ours_name, {}))
     if arm in OURS_ARMS:
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
@@ -5579,7 +5597,19 @@ def _build_optim(lane, arm, D):
             if S.get("opt") is not None:
                 S["opt"].params_to_host()          # outside the clock (outputs are read after it)
             return {"param": np.asarray(S["p"], dtype=np.float32)}
+        # read the fixed flags back from a constructed instance where it holds them (1-element probe, untimed)
+        try:
+            probe = cls([p0[:1].copy()], **hyper)
+            for flag in ("maximize", "amsgrad", "decoupled_weight_decay"):
+                if hasattr(probe, flag) and not callable(getattr(probe, flag)):
+                    semantics[flag] = bool(getattr(probe, flag))
+            del probe
+        except Exception as exc:  # noqa: BLE001  (the declared source-reviewed values stand)
+            info["semantics_probe_error"] = repr(exc)[:300]
+        info["fixed_semantics"] = dict(semantics)
         rec = dict(hyper, __library__="mojolearn", __implementation__=cls, input_arrays=input_arrays)
+        for flag, value in semantics.items():
+            rec.setdefault(flag, value)
         return _with_upload(Runner(info, fit, outputs, record=rec),
                             [("p0", p0)] + [("grad%d" % i, gr) for i, gr in enumerate(grads)])
     import torch
@@ -5622,14 +5652,19 @@ def _build_optim(lane, arm, D):
     # place (_opt_state_reset), then runs the 10 steps. The eager arm does the same per-round
     # work. Results raced before this change were wrong for this lane; apply extra scrutiny.
     p = torch.nn.Parameter(p0_host.to(dev))
+    # preflight-smoke (2026-10-14): ours' fixed math flags pinned explicitly where this torch class takes them
+    # (compared through the read-back), and torch's capturable/differentiable modes explicitly off (no captured
+    # graph, no autograd through the step; recorded as implementation-only exceptions).
+    pinned = {k: v for k, v in semantics.items() if k in sig and k not in hyper}
+    pinned.update({k: False for k in ("capturable", "differentiable") if k in sig})
     try:
-        opt = ocls([p], **dict(hyper, **impl))
+        opt = ocls([p], **dict(hyper, **pinned, **impl))
     except (RuntimeError, ValueError, TypeError) as exc:
         raise RuntimeError("REFUSED: %s: torch.optim.%s(%s) does not construct on %s: %r"
                            % (arm, s["torch_opt"], impl, dev, exc))
     snap = _opt_state_snapshot(torch, opt, p)
     step = torch.compile(opt.step) if mode == "compile" else opt.step
-    info["config"] = "torch.optim.%s([p], %s) on %s, %s" % (s["torch_opt"], dict(hyper, **impl), dev, mode)
+    info["config"] = "torch.optim.%s([p], %s) on %s, %s" % (s["torch_opt"], dict(hyper, **pinned, **impl), dev, mode)
     info["implementation"] = impl or "torch default (no foreach/fused argument)"
     info["build_once"] = "parameter, optimizer and compiled step built once; reset in place per round"
     # read back from the constructed optimizer (its defaults are what every step uses)
