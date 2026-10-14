@@ -5719,18 +5719,25 @@ def _build_linalg(lane, arm, D):
                                    "solution on this rank-deficient X; not a result")
         if t == "rsvd":
             vt = _arr(r[2], np.float64)          # (k, d), scikit-learn's Vt
-            return {"components": vt[:p["n_components"]]}
+            # FAIRNESS FIX (2026-10-13 audit): the quality projection alone
+            # omitted the other scored factors from retained output bytes.
+            return {"components": vt[:p["n_components"]], "U": _arr(r[0], np.float64),
+                    "S": _arr(r[1], np.float64), "Vh": vt}
         if t == "chol":
             return {"L": _arr(r, np.float64)}
-        if t == "qr":                            # R only: Q is (n, d) and R^T R carries the check
-            return {"R": _arr(r[1], np.float64)}
+        if t == "qr":
+            # FAIRNESS FIX (2026-10-13 audit): retaining only R lost Q and
+            # could accept a correct R paired with an incorrect Q.
+            return {"Q": _arr(r[0], np.float64), "R": _arr(r[1], np.float64)}
         if t == "eigh":
             return {"w": _arr(r[0], np.float64), "V": _arr(r[1], np.float64)}
-        if t == "svd":                           # U on 100,000 stride rows for the reconstruction
+        if t == "svd":
             U = _arr(r[0], np.float64)
             return {"S": _arr(r[1], np.float64), "Vh": _arr(r[2], np.float64),
-                    "U_rows": _stride(U, 100_000)}
-        return {"x": _arr(r, np.float64).reshape(-1)[:1 << 22]}
+                    # FAIRNESS FIX (2026-10-13 audit): keep every scored
+                    # factor row even when a scorer uses a declared sample.
+                    "U": U, "U_rows": _stride(U, 100_000)}
+        return {"x": _arr(r, np.float64).reshape(-1)}
     runner = Runner(info, fit, outputs, record=rec)
     if arm in OURS_ARMS:                # the host arrays fit() hands our call (the upload probe)
         _with_upload(runner, [("arg%d" % i, a) for i, a in enumerate(args)])
@@ -6931,6 +6938,13 @@ def quality(lane, D, outs):
                 G = X.T @ X
                 Rm = o["R"]
                 e["relative_gram_difference"] = float(np.linalg.norm(Rm.T @ Rm - G) / np.linalg.norm(G))
+                # FAIRNESS FIX (2026-10-13 audit): check both full scored
+                # factors; R's Gram matrix alone never validated Q.
+                Qm = o["Q"]
+                e["relative_residual"] = float(np.linalg.norm(Qm @ Rm - X) / np.linalg.norm(X))
+                identity = np.eye(Qm.shape[1])
+                e["relative_orthogonality_error"] = float(
+                    np.linalg.norm(Qm.T @ Qm - identity) / np.linalg.norm(identity))
             elif qk == "svd":
                 X = D["X"].astype(np.float64)
                 s64 = np.sqrt(np.maximum(np.linalg.eigvalsh(X.T @ X)[::-1], 0))

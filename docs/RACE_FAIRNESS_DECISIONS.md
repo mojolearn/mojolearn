@@ -16,7 +16,7 @@ Equal iteration caps never prove equal executed work or equal quality. Fixed
 training-step throughput measurements still perform the declared step count;
 they are distinct from time to a quality target.
 
-`tools/board_quality.py` implements `mojolearn.quality-parity.v3`. Its engineering
+`tools/board_quality.py` implements `mojolearn.quality-parity.v5`. Its engineering
 margins are declared by metric, independent of dataset, vendor and timing winner:
 
 | Metric | Admission margin |
@@ -25,7 +25,7 @@ margins are declared by metric, independent of dataset, vendor and timing winner
 | RMSE, forecast/masked RMSE, log loss, inertia, perplexity, final training loss, reconstruction error | Difference / max(abs(values)) ≤ 5%; two zeros agree |
 | Mean log likelihood, mean predictive log density, mean NLL | Absolute difference ≤ 0.05 nats per observation |
 | GEMM relative error against FP64 | Both errors ≤ 0.01 (permits native fast precision) |
-| Linear algebra relative residual / Gram error | Both errors ≤ 0.0001 |
+| Linear algebra relative residual / Gram / orthogonality error | Both errors ≤ 0.0001 |
 | Deterministic transformations against a common scikit-learn reference | Both relative Frobenius errors ≤ 0.0001; nonfinite outputs fail |
 | Neural layer outputs against the same eager FP32 torch reference | Both relative Frobenius errors ≤ 0.01 (permits native fast precision) |
 | Optimizer updates against the same eager FP32 torch reference | Both relative Frobenius update errors ≤ 0.0001; compare final minus initial parameters |
@@ -60,6 +60,15 @@ remains in force. Quality admission does not remove that hold. The generated
 paper and website consume the same per-mode, per-phase admitted opponents.
 
 ## Retention and guarded execution
+
+The v5 addition is declared before the next linear-algebra measurements on
+2026-10-14. QR retains both complete scored factors. Each arm must pass the
+existing full-input reconstruction and R-Gram bounds, plus
+`||Q.T @ Q - I||_F / ||I||_F <= 1e-4`. Previously, retaining only R neither
+preserved Q nor validated it. All previous numeric margins remain unchanged.
+SVD and randomized SVD also retain every scored factor, even when a quality
+metric uses a declared sample or projection. Solve outputs are retained without
+truncation. These are benchmark evidence repairs, not product algorithm changes.
 
 The v4 additions are declared before the repaired classical reruns on
 2026-10-14. All existing numeric margins remain unchanged. HDBSCAN records

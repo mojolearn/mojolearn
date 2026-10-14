@@ -27,6 +27,36 @@ A = _load("bench_board_algos")
 bb = _load("bench_board")
 
 
+@pytest.mark.parametrize("lane", ["qr", "svd", "randomized-svd"])
+def test_linalg_retains_all_scored_factors(monkeypatch, lane):
+    X = np.random.default_rng(7).normal(size=(31, 5)).astype(np.float32)
+    factors = np.linalg.qr(X) if lane == "qr" else np.linalg.svd(X, full_matrices=False)
+    monkeypatch.setattr(A, "_ours_class", lambda name: (name, lambda *a, **kw: factors))
+    monkeypatch.setattr(A, "_ours_info", lambda name: {})
+    runner = A._build_linalg(lane, "ours", {"X": X})
+    runner.fit()
+    outputs = runner.outputs()
+    keys = ("Q", "R") if lane == "qr" else ("U", "S", "Vh")
+    for key, original in zip(keys, factors):
+        np.testing.assert_array_equal(outputs[key], original)
+        assert outputs[key].shape == original.shape
+
+
+def test_qr_quality_rejects_corrupt_q_even_when_r_is_correct():
+    import board_quality as policy
+    X = np.random.default_rng(7).normal(size=(31, 5))
+    Q, R = np.linalg.qr(X)
+    values = A.quality("qr", {"X": X}, {
+        "ours": {"Q": Q, "R": R}, "library": {"Q": Q.copy(), "R": R.copy()}})
+    own, other = (dict(arm=name, quality=values[name]) for name in ("ours", "library"))
+    assert policy.compare(own, other)["verdict"] == "PASS"
+    bad = A.quality("qr", {"X": X}, {"library": {"Q": np.zeros_like(Q), "R": R}})
+    assert bad["library"]["relative_gram_difference"] < 1e-12
+    assert policy.compare(own, dict(arm="library", quality=bad["library"]))["verdict"] == "FAIL"
+    missing = A.quality("qr", {"X": X}, {"library": {"R": R}})
+    assert policy.compare(own, dict(arm="library", quality=missing["library"]))["verdict"] == "FAIL"
+
+
 def test_function_identity_survives_worker_json_transport():
     import math
     runner = A.Runner({}, lambda: None, lambda: {}, record={
