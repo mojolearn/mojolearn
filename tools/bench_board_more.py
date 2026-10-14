@@ -1148,6 +1148,20 @@ def _supervised_out(lane, np, est, Xq):
     return {"pred": np.asarray(_host(est.predict(Xq)), dtype=np.float64).reshape(-1)}
 
 
+#: smoke-fixes (2026-10-14; classical2/ets: "initialization_method missing from cuml-gpu read-back"; Andrew's rule:
+#: change ours' explicit setting when the library cannot). cuML 26.08 ExponentialSmoothing has only its heuristic
+#: start over start_periods (python/cuml/cuml/tsa/holtwinters.pyx:137, 265-300; no option), while ours raced
+#: 'estimated' (statsmodels' definition, which also estimates the initial states). Ours' 'heuristic' (alias
+#: 'cuml', python/mojolearn/_tsa_impl.py:113-116, 421-440) is cuML's start, so in a race against cuml-gpu ours
+#: runs it, set explicitly and read back; any other race keeps 'estimated' (statsmodels' arm takes it too).
+#: BIT CHANGE for ours on ets in races with cuml-gpu.
+ETS_INIT_FOR_CUML = "heuristic"
+
+
+def ets_initialization(rec):
+    return ETS_INIT_FOR_CUML if "cuml-gpu" in (rec or {}).get("race_arms", ()) else "estimated"
+
+
 def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=None):
     np = _np()
     import mojolearn as ml
@@ -1243,7 +1257,7 @@ def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=
         Y = D["Yfit"]
         make = lambda: ml.ExponentialSmoothing(Y, seasonal="additive", seasonal_periods=SEASON_PERIOD,  # noqa: E731
                                                start_periods=2, ts_num=Y.shape[0], eps=ETS_EPS,
-                                               initialization_method="estimated")
+                                               initialization_method=ets_initialization(rec))
         call = lambda: S.update(est=make().fit())  # noqa: E731
 
         def out():
@@ -1696,6 +1710,8 @@ def worker_ready(args):
             B = {k: np.ascontiguousarray(z[k]) for k in z.files}
         with open(block + ".json") as fh:
             rec = json.load(fh)
+        # the race's whole arm list (a setting of ours may depend on which opponent it is paired with)
+        rec = dict(rec, race_arms=[a for a in (getattr(args, "race_arms", "") or "").split(",") if a])
         runner = build(args.lane, args.arm, lane_arrays(args.lane, B, rec), rec)
         # the parameters this arm really got, read back from what it constructed
         params = _load("classical_two_datasets").params_record(runner.params)
@@ -2104,7 +2120,7 @@ def race(args):
     for arm in arms:
         py = args.ours_python if arm in ("ours", "ours-fast") else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm, "--lane", lane,
-                                 "--dataset", ds, "--data", args.data]
+                                 "--dataset", ds, "--data", args.data, "--race-arms", ",".join(arms)]
         workers[arm] = ctd.start_worker(arm, cmd, _worker_env(arm),
                                         os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO,
                                         params_only=getattr(args, "params_only", False))
@@ -2253,6 +2269,7 @@ def build_parser():
     w.add_argument("--lane", required=True, choices=LANE_ORDER)
     w.add_argument("--dataset", required=True)
     w.add_argument("--data", required=True)
+    w.add_argument("--race-arms", default="", help="the race's arms (comma list); see ETS_INIT_FOR_CUML")
     return p
 
 

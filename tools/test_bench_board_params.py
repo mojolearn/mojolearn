@@ -514,3 +514,24 @@ def test_prebinned_xgboost_pairing_maps_border_fields_only_on_the_same_bins():
     assert [p for p in rep["problems"] if "feature_border_type missing" in p]
     assert [p for p in rep["problems"] if "border_build_max_samples missing" in p]
 
+
+
+def test_als_every_arm_runs_cg_and_use_gpu_maps_only_on_the_same_solver():
+    # smoke-fixes 2026-10-14: implicit-gpu has only CG (3 steps); ours and implicit-cpu now set use_cg=True
+    import bench_board_params as BP
+    base = dict(alpha=1.0, calculate_training_loss=False, factors=64, iterations=15, random_state=7,
+                regularization=0.01)
+    ours = dict(base, __library__="mojolearn", use_cg=True, cg_steps=3)
+    gpu = dict(base, __library__="implicit", use_gpu=True, use_cg=True, cg_steps=3)
+    rep = BP.check("algos/als", {"ours": ours, "implicit-gpu": gpu}, family="algos")
+    assert rep["verdict"] == "MATCHED", rep["problems"]
+    rep = BP.check("algos/als", {"ours": dict(ours, use_cg=False), "implicit-gpu": gpu}, family="algos")
+    assert rep["verdict"] == "REFUSED" and any("use_cg" in p for p in rep["problems"])
+
+
+def test_ets_heuristic_start_maps_to_cuml_and_estimated_does_not():
+    import bench_board_params as BP
+    import bench_board_more as M
+    assert M.ets_initialization({"race_arms": ["ours", "cuml-gpu"]}) == "heuristic"
+    assert M.ets_initialization({"race_arms": ["ours", "statsmodels-cpu"]}) == "estimated"
+    assert M.ets_initialization({}) == "estimated"
