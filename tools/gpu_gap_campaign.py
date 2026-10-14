@@ -372,6 +372,14 @@ def smoke_text(doc):
     for r in rows:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
     lines.append("COUNTS " + " ".join("%s=%d" % kv for kv in sorted(counts.items())))
+    sus = doc.get("suspects")
+    if sus is not None:
+        prev = ", ".join("%s@%s" % (p.get("path"), str(p.get("source_commit"))[:9]) for p in sus.get("previous") or [])
+        lines.append("SUSPECTS ran=%d skipped_known_good=%d from %s%s" % (
+            len(sus.get("ran") or {}) if not sus.get("everything") else len(rows),
+            len(sus.get("skipped_known_good") or {}), prev or "-",
+            ("; EVERYTHING: " + str(sus["everything"])) if sus.get("everything") else
+            ("; families changed: " + ",".join(sorted(sus.get("families_changed") or {})) or "")))
     kinds = {}
     for r in rows:
         for text in r.get("problems") or []:
@@ -807,7 +815,7 @@ def worker_row(race, mode, reply, restart, directory, log, timeout):
     return row
 
 
-def run_smoke(args, plans, out):
+def run_smoke(args, plans, out, suspects=None):
     """--smoke: load everything once (the smoke worker), stage the data once, read the box facts once, then
     every recipe of every mode's plan in the worker, each with its own --smoke-timeout from when its check
     starts. Never stops early: an error, refusal or timeout is recorded and the loop goes on. Uploads the smoke
@@ -820,6 +828,8 @@ def run_smoke(args, plans, out):
                started=time.time(), timeout_s=args.smoke_timeout, expected=sum(len(p) for p in plans.values()),
                scope="does every recipe start: no timed work, no fits, no warm-ups", checks={}, rows={},
                timer="each recipe's own --smoke-timeout (SIGALRM in the worker), from when its check starts")
+    if suspects is not None:
+        doc["suspects"] = suspects
     write_smoke(out, doc)
     worker = SmokeWorker(args, out, worker_env(args))
     try:
@@ -954,6 +964,10 @@ def main(argv=None):
                          "(once per worker start, recorded)")
     ap.add_argument("--smoke-stage-timeout", type=float, default=6 * 3600.0,
                     help="seconds for the one-time block prep of every recipe before the per-recipe loop")
+    ap.add_argument("--smoke-suspects", metavar="SMOKE_JSON[,...]",
+                    help="run only the recipes not known good in these previous smokes (one per vendor; others are "
+                         "ignored) plus every recipe whose code changed since their source_commit; the skipped "
+                         "recipes are recorded in smoke.json (tools/smoke_suspects.py)")
     ap.add_argument("--smoke-verify-data", action="store_true",
                     help="also sha256 the datasets in the smoke (default: presence and pinned size)")
     ap.add_argument("--data-root", default=os.environ.get(
@@ -968,7 +982,11 @@ def main(argv=None):
         modes = ("identical", "fast") if args.vendor == "apple" else ("identical",)
         plans = {m: selected_plan(args.vendor, manifest, m, smoke=True) for m in modes}
         os.environ["MOJOLEARN_REPO_COMMIT"] = B.repo_commit()
-        return run_smoke(args, plans, Path(args.out).resolve())
+        suspects = None
+        if args.smoke_suspects:
+            # Andrew 2026-10-14: only what was not known good last time, plus what the code changes touch
+            plans, suspects = __import__("smoke_suspects").select(plans, args.smoke_suspects, args.vendor)
+        return run_smoke(args, plans, Path(args.out).resolve(), suspects=suspects)
     if args.vendor == "apple":
         ap.error("Apple runs --smoke only; Apple timing is the M3 Ultra's")
     if not args.manifest or args.stop_at is None:
