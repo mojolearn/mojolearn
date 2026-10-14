@@ -5070,7 +5070,8 @@ def _build_layer(lane, arm, D):
             def infer():
                 S["y"] = cls(x, None, w_, b_, kw["eps"])
             return _with_upload(Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
-                                       record=dict(kw, __library__="mojolearn")), [("x", x)])
+                                       record=dict(kw, __library__="mojolearn", __implementation__=cls,
+                                                   input_arrays=_input_array_records([("x", x_cpu)] + sorted(state.items())))), [("x", x)])
         if s["task"] == "embedding":          # ours takes the table (weight=), torch's seeded init
             ids = x_cpu                       # (from the fixture file)
             layer = cls(weight=state["weight"], **kw)
@@ -5101,8 +5102,12 @@ def _build_layer(lane, arm, D):
 
             def infer():
                 S["y"] = layer.forward(ids, device=True) if dev_io else layer.forward(ids)
+            # FAIRNESS FIX (2026-10-13 audit): this early return bypassed the
+            # common layer input/implementation receipt, refusing embedding
+            # despite both arms loading the same retained table and token IDs.
             return _with_upload(Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
-                                       record=dict(kw, __library__="mojolearn")), [("ids", ids)])
+                                       record=dict(kw, __library__="mojolearn", __implementation__=cls,
+                                                   input_arrays=_input_array_records([("x", ids)] + sorted(state.items())))), [("ids", ids)])
         if s["task"] in ("gcn", "sage"):
             kw["in_channels"] = x_cpu.shape[1]
         import inspect

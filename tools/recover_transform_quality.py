@@ -136,8 +136,12 @@ def recover(board_path, verified, inventory, destination, source):
             arm = cell.get("arm")
             if cell.get("status") != "ok" or arm not in qualities:
                 continue
-            if field == "infer_cells" and cell.get("batch") not in (None, "test"):
-                continue
+            if field == "infer_cells":
+                # FAIRNESS FIX (2026-10-13 audit): algos names its query batch
+                # Xq. Recover only the same retained scored output digest.
+                if (cell.get("batch") != (raw.get("infer") or {}).get("batch")
+                        or cell.get("hash") != proofs[arm]["scored_digest"]):
+                    continue
             old_quality = copy.deepcopy(cell.get("quality"))
             # Preserve any original numerical quality or error. This tool only
             # fills shapes-only records and never replaces an observed failure.

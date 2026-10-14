@@ -422,6 +422,26 @@ def test_no_other_lane_has_dataset_params():
     assert sorted(k for k, s in A.LANES.items() if s.get("dataset_params")) == ["bayesian-gmm"]
 
 
+def test_embedding_early_return_retains_actual_inputs_and_implementation(monkeypatch, tmp_path):
+    nf = A._tool('neural_fixtures')
+    spec = A.LANES['embedding']
+    ids = np.array([[0, 1]], dtype=np.int64)
+    weight = np.array([[1., 2.], [3., 4.]], dtype=np.float32)
+    entry = nf.write_entry(str(tmp_path), 'embedding', 'synthetic', nf.variant(spec['task'], {}),
+                           task=spec['task'], params=spec['params'], smoke=False,
+                           x=ids, dy=np.ones((1, 2, 2), dtype=np.float32), state={'weight': weight})
+    nf.write_manifest(str(tmp_path), [entry], torch_version='fixture', seed=A.SEED)
+    monkeypatch.setattr(A, '_NEURAL_FIXTURES', str(tmp_path))
+    monkeypatch.setattr(A, '_DATASET', 'synthetic')
+    class Layer:
+        def __init__(self, weight, **kw): self.weight = weight
+    monkeypatch.setattr(A, '_ours_class', lambda lane: ('Embedding', Layer))
+    monkeypatch.setattr(A, '_ours_info', lambda lane: {})
+    runner = A._build_layer('embedding', 'ours', {})
+    assert runner.record['implementation']['name'].endswith('Layer')
+    assert runner.record['params']['input_arrays'] == A._input_array_records([('x', ids), ('weight', weight)])
+
+
 @pytest.mark.parametrize('lane', ['gcn', 'graphsage', 'resnet-block'])
 @pytest.mark.parametrize('comparable', [False, True])
 def test_own_layer_retains_outputs_without_false_opponent_comparison(monkeypatch, tmp_path, lane, comparable):
