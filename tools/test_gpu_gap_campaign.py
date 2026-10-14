@@ -69,13 +69,57 @@ def test_campaign_stops_on_unsealed_work_but_continues_explicit_preflight_refusa
         C.E.write(out / 'board.json', {'preflight': {'verdict': preflight}, 'races': races})
         return returncode
     monkeypatch.setattr(C, 'logged', execute)
+    wheel = tmp_path / 'wheel-manifest.json'
+    wheel.write_text('{}')
+    monkeypatch.setattr(C.B.PYPI, 'verify', lambda path, py: ({'vendor': 'amd', 'version': '0.8.44'}, None))
     out = tmp_path / 'campaign'
     rc = C.main(['--vendor', 'amd', '--manifest', str(manifest), '--out', str(out),
                  '--cache', str(tmp_path / 'cache'), '--python-env', 'fixture-python',
-                 '--stop-at', str(time.time() + 3600)])
+                 '--wheel-manifest', str(wheel), '--stop-at', str(time.time() + 3600)])
     assert rc == expected_exit and len(calls) == expected_calls
     state = json.loads((out / 'campaign.json').read_text())
     if expected_exit:
         assert state['stop_reason']
         assert state['recipes'][ids[1]]['status'] == 'pending'
     assert (out / 'measured' / ids[0].replace('/', '.') / 'scored-output.bin').read_bytes() == b'original scored bytes'
+
+
+def _campaign(tmp_path, monkeypatch, extra, verify):
+    rid = 'algos/adam/synthetic/rows=full'
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    manifest = tmp_path / 'manifest.json'
+    manifest.write_text(json.dumps({'amd': [rid]}))
+    monkeypatch.setattr(C, 'prepare_fixtures', lambda *a: {})
+    calls = []
+    monkeypatch.setattr(C, 'logged', lambda cmd, log: calls.append(cmd) or 1)
+    monkeypatch.setattr(C.B.PYPI, 'verify', verify)
+    out = tmp_path / 'campaign'
+    rc = C.main(['--vendor', 'amd', '--manifest', str(manifest), '--out', str(out),
+                 '--cache', str(tmp_path / 'cache'), '--python-env', 'fixture-python',
+                 '--stop-at', str(time.time() + 3600)] + extra)
+    return rc, calls, json.loads((out / 'campaign.json').read_text())
+
+
+def test_campaign_refuses_to_time_without_a_wheel_manifest(tmp_path, monkeypatch):
+    rc, calls, state = _campaign(tmp_path, monkeypatch, [], lambda p, py: ({}, None))
+    assert rc == 1 and calls == []
+    assert 'wheel-manifest' in state['stop_reason']
+
+
+def test_campaign_refuses_when_ours_did_not_load_from_the_pypi_files(tmp_path, monkeypatch):
+    wheel = tmp_path / 'w.json'
+    wheel.write_text('{}')
+    rc, calls, state = _campaign(tmp_path, monkeypatch, ['--wheel-manifest', str(wheel)],
+                                 lambda p, py: ({'vendor': 'amd'}, 'mojolearn loaded from /src, not site-packages'))
+    assert rc == 1 and calls == []
+    assert 'site-packages' in state['stop_reason']
+    rc, calls, state = _campaign(tmp_path / 'b', monkeypatch, ['--wheel-manifest', str(wheel)],
+                                 lambda p, py: ({'vendor': 'nvidia'}, None))
+    assert rc == 1 and calls == [] and 'nvidia' in state['stop_reason']
+
+
+def test_command_passes_the_wheel_manifest_to_every_recipe(tmp_path):
+    args = SimpleNamespace(python_env="python", vendor="nvidia", cache=str(tmp_path),
+                           wheel_manifest=str(tmp_path / "wheel-manifest.json"))
+    cmd = C.command(args, dict(family="algos", lane="adam", dataset="synthetic"), tmp_path)
+    assert cmd[cmd.index("--wheel-manifest") + 1] == str((tmp_path / "wheel-manifest.json").resolve())

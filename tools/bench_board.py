@@ -570,6 +570,46 @@ WATCHDOG = _load_tool("bench_board_watchdog")
 #: Per-arm memory and the our-CPU refusal (standard library only at import).
 PROBE = _load_tool("bench_board_probe")
 
+#: Our PyPI wheels with byte provenance (standard library only): download, SHA-256 against PyPI's
+#: JSON digests, install those files, and the loaded-from-those-files check (Andrew 2026-10-14).
+PYPI = _load_tool("pypi_wheel_install")
+
+
+def pypi_wheel_record(manifest):
+    """The box's mojolearn.wheel from a PyPI wheel manifest: the core file's name, sha256 and bytes
+    (what box_key and the race data hash read) plus the whole manifest under `pypi`."""
+    core = next((f for f in manifest.get("files") or [] if f.get("distribution") == "mojolearn"), {})
+    return {"file": core.get("file"), "sha256": core.get("sha256"), "bytes": core.get("bytes"),
+            "source": "pypi", "index_url": manifest.get("index_url"),
+            "requested": manifest.get("requested"), "pypi": manifest}
+
+
+def pypi_wheel_guard(args, python, vendor):
+    """(wheel record or None, refusal or None). With --wheel-manifest, our timing starts only when
+    `python` loads mojolearn (and the vendor plugin) from site-packages, at the manifest's version,
+    installed from the manifest's files. A GPU box timing ours with --mojolearn-version and no
+    manifest refuses: the cell would carry no wheel provenance."""
+    path = getattr(args, "wheel_manifest", None)
+    if not path:
+        if vendor in ("nvidia", "amd") and args.mojolearn_version and not args.mojolearn_wheel \
+                and not getattr(args, "opponents_only", False):
+            return None, ("--mojolearn-version %s without --wheel-manifest: ours must come from "
+                          "tools/pypi_wheel_install.py files" % args.mojolearn_version)
+        return None, None
+    try:
+        manifest, why = PYPI.verify(os.path.abspath(path), python)
+    except (OSError, ValueError) as e:
+        return None, "unreadable wheel manifest %s: %s" % (path, e)
+    if not why and manifest.get("vendor") != vendor:
+        why = "wheel manifest is for %s, this board is %s" % (manifest.get("vendor"), vendor)
+    if not why and args.mojolearn_version and manifest.get("version") != args.mojolearn_version:
+        why = "wheel manifest is %s, --mojolearn-version %s" % (manifest.get("version"), args.mojolearn_version)
+    if why:
+        return None, why
+    if not args.mojolearn_version:
+        args.mojolearn_version = manifest["version"]
+    return pypi_wheel_record(manifest), None
+
 #: The two clocks (tools/board_clock_audit.py, standard library only): per cell
 #: the whole-operation clock (incl. the host-to-device copy) and the kernel-only
 #: clock where stored fields give them, and each opponent ratio on its clock
@@ -1265,7 +1305,25 @@ def setup_python(args, vendor, out, log):
     pip = [python, "-m", "pip", "install", "--no-input", "--disable-pip-version-check"]
     wheels = os.path.join(cache_dir(args, out), "wheels")
     os.makedirs(wheels, exist_ok=True)
-    if args.mojolearn_wheel:
+    if vendor in ("nvidia", "amd") and not args.mojolearn_wheel:
+        # PyPI provenance (Andrew 2026-10-14): ours on a GPU box is the PyPI release, core plus the
+        # vendor plugin, downloaded from pypi.org/simple, hashed, checked against PyPI's JSON digests
+        # and installed from exactly those files (tools/pypi_wheel_install.py). Every cell's
+        # measurement then carries the manifest (controller_hardware.mojolearn.wheel).
+        if not args.mojolearn_version:
+            raise SystemExit("bench_board: --mojolearn-version is required to install the wheel")
+        manifest_path = os.path.abspath(args.wheel_manifest or os.path.join(out, "wheel-manifest.json"))
+        ddir = os.path.join(cache_dir(args, out), "pypi-wheels",
+                            "%s-%s-%d" % (args.mojolearn_version, vendor, int(time.time())))
+        rc = run_logged([sys.executable, os.path.join(HERE, "pypi_wheel_install.py"), "install",
+                         "--version", args.mojolearn_version, "--vendor", vendor, "--python", python,
+                         "--dir", ddir, "--manifest", manifest_path, "--log", log + ".pypi"], None, log, 7200)
+        if rc != 0:
+            raise SystemExit("bench_board: PyPI wheel install with provenance failed (rc %d); see %s"
+                             % (rc, log))
+        args.wheel_manifest = manifest_path
+        wheel = pypi_wheel_record(PYPI.load_manifest(manifest_path))
+    elif args.mojolearn_wheel:
         wfile = os.path.abspath(args.mojolearn_wheel)
     else:
         if not args.mojolearn_version:
@@ -1279,10 +1337,11 @@ def setup_python(args, vendor, out, log):
             raise SystemExit("bench_board: could not download mojolearn==%s (rc %d); see %s"
                              % (args.mojolearn_version, rc, log))
         wfile = os.path.join(wheels, cands[-1])
-    wheel = {"file": os.path.basename(wfile), "sha256": sha256_file(wfile),
-             "bytes": os.path.getsize(wfile)}
-    if run_logged(pip + [wfile], None, log, 3600) != 0:
-        raise SystemExit("bench_board: installing %s failed; see %s" % (wfile, log))
+    if wheel is None:
+        wheel = {"file": os.path.basename(wfile), "sha256": sha256_file(wfile),
+                 "bytes": os.path.getsize(wfile)}
+        if run_logged(pip + [wfile], None, log, 3600) != 0:
+            raise SystemExit("bench_board: installing %s failed; see %s" % (wfile, log))
     # torch FIRST: the opponent sets that depend on torch (torch-geometric,
     # gpytorch, ...) then resolve against the pinned build instead of pulling
     # PyPI's newest torch (another CUDA major on Linux)
@@ -3881,6 +3940,10 @@ def build_parser():
     p.add_argument("--mojolearn-version", default=None, help="pip install mojolearn==<V>")
     p.add_argument("--mojolearn-wheel", default=None,
                    help="install this wheel file instead of downloading one (sha256 recorded)")
+    p.add_argument("--wheel-manifest", default=None,
+                   help="PyPI wheel manifest (tools/pypi_wheel_install.py); timing refuses unless ours "
+                        "loads from its files, and every cell records it. A GPU box installing "
+                        "--mojolearn-version writes <out>/wheel-manifest.json itself")
     p.add_argument("--cache", default=None,
                    help="venv, wheel download and classical blocks (default <out>/cache; "
                         "a leg puts it outside the fetched directory)")
@@ -4286,6 +4349,11 @@ def main(argv=None):
 
     python, wheel = setup_python(args, vendor, out, os.path.join(out, "logs", "setup.log"))
     arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
+    pypi_wheel, why = pypi_wheel_guard(args, python, vendor)
+    if why:
+        raise SystemExit("bench_board: REFUSING to time ours: " + why)
+    if pypi_wheel:
+        wheel = pypi_wheel        # with the fresh loaded-from receipt
     why = None if getattr(args, "opponents_only", False) else gpu_set_refusal(python, vendor)
     if why:
         raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "

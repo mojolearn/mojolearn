@@ -40,6 +40,10 @@ def command(args, race, directory):
            "--gpu-opponents-only", "--verify-data", "--no-smoke-gate",
            "--round-seconds", str(getattr(args, "round_seconds", 0)),
            "--families", race["family"], "--lanes", race["lane"], "--out", str(directory)]
+    if getattr(args, "wheel_manifest", None):
+        # Ours is the PyPI release installed from the manifest's verified files; the board refuses
+        # to time unless it loads from them and copies the manifest into every cell's measurement.
+        cmd += ["--wheel-manifest", str(Path(args.wheel_manifest).resolve())]
     if getattr(args, "opponent_store", None):
         # The board rechecks recorded parameters, library/device and input
         # identity before reusing a retained opponent from a failed pairing.
@@ -104,6 +108,9 @@ def main(argv=None):
                     help="required remaining worker time before starting a recipe; size this for the selected workload")
     ap.add_argument("--stop-at", type=float, required=True,
                     help="epoch after which no new recipe starts; leave retention time before provider deadline")
+    ap.add_argument("--wheel-manifest",
+                    help="PyPI wheel manifest from tools/pypi_wheel_install.py (bench_board.py setup writes "
+                         "<out>/wheel-manifest.json); required to measure")
     ap.add_argument("--plan-only", action="store_true")
     args = ap.parse_args(argv)
     if args.round_seconds < 0 or args.minimum_start_seconds < 1:
@@ -122,6 +129,21 @@ def main(argv=None):
     E.write(path, state)
     if args.plan_only:
         return 0
+    # PyPI provenance (Andrew 2026-10-14): no recipe starts unless ours loads from the verified
+    # PyPI files at the requested version; the manifest goes into campaign.json and every cell.
+    if not args.wheel_manifest:
+        state["stop_reason"] = "no --wheel-manifest: ours has no PyPI wheel provenance"
+        E.write(path, state)
+        return 1
+    manifest, why = B.PYPI.verify(str(Path(args.wheel_manifest).resolve()), args.python_env)
+    state["wheel_manifest"] = manifest
+    if not why and manifest.get("vendor") != args.vendor:
+        why = "wheel manifest is for %s" % manifest.get("vendor")
+    if why:
+        state["stop_reason"] = "refused before timing: " + why
+        E.write(path, state)
+        return 1
+    E.write(path, state)
     state["fixture_artifacts"] = prepare_fixtures(args, plan, out)
     E.write(path, state)
     controller_failed = False
