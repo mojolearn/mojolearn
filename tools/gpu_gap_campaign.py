@@ -124,6 +124,7 @@ def main(argv=None):
         return 0
     state["fixture_artifacts"] = prepare_fixtures(args, plan, out)
     E.write(path, state)
+    controller_failed = False
     for race in plan:
         if time.time() + args.minimum_start_seconds >= args.stop_at:
             state["stop_reason"] = "insufficient time for another recipe and retention"
@@ -144,10 +145,19 @@ def main(argv=None):
         E.write(path, state)
         if any(r.get("evidence_failure") for r in board.get("races", {}).values()):
             state["stop_reason"] = "retention failed; retry upload without rerunning completed measurements"
+            controller_failed = True
+            break
+        # FAIRNESS FIX (2026-10-13 audit): a crash before seal() may leave
+        # scored arrays and logs but no final
+        # race record. Preserve that work and stop before another measurement.
+        # An explicit preflight refusal has not entered the timed driver.
+        if row["preflight"] != "REFUSED" and (rc != 0 or not board.get("races")):
+            state["stop_reason"] = "controller failed or result missing; inspect and retain existing work before continuing"
+            controller_failed = True
             break
     state["finished"] = time.time()
     E.write(path, state)
-    return 0
+    return 1 if controller_failed else 0
 
 
 if __name__ == "__main__":

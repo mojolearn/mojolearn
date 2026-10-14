@@ -1,4 +1,6 @@
 from types import SimpleNamespace
+import json
+import time
 
 import pytest
 import gpu_gap_campaign as C
@@ -43,3 +45,37 @@ def test_repair_can_reuse_a_verified_opponent_without_forcing_a_retime(tmp_path)
     assert "--retime-opponents" not in cmd
     assert "--with-opponents" in cmd
     assert cmd[cmd.index("--opponent-store") + 1] == args.opponent_store
+
+
+@pytest.mark.parametrize("preflight,returncode,races,expected_calls,expected_exit", [
+    ("MATCHED", 1, {}, 1, 1),
+    ("MATCHED", 0, {}, 1, 1),
+    (None, 1, {}, 1, 1),
+    ("MATCHED", 0, {"r": {"evidence_failure": "R2 retention failed"}}, 1, 1),
+    ("REFUSED", 1, {}, 2, 0),
+])
+def test_campaign_stops_on_unsealed_work_but_continues_explicit_preflight_refusals(
+        tmp_path, monkeypatch, preflight, returncode, races, expected_calls, expected_exit):
+    ids = ['algos/adam/synthetic/rows=full', 'algos/adamw/synthetic/rows=full']
+    manifest = tmp_path / 'manifest.json'
+    manifest.write_text(json.dumps({'amd': ids}))
+    monkeypatch.setattr(C, 'prepare_fixtures', lambda *a: {})
+    calls = []
+    def execute(cmd, log):
+        calls.append(cmd)
+        out = C.Path(cmd[cmd.index('--out') + 1]); out.mkdir(parents=True)
+        # A retained raw scored output must survive an unexpected driver exit.
+        (out / 'scored-output.bin').write_bytes(b'original scored bytes')
+        C.E.write(out / 'board.json', {'preflight': {'verdict': preflight}, 'races': races})
+        return returncode
+    monkeypatch.setattr(C, 'logged', execute)
+    out = tmp_path / 'campaign'
+    rc = C.main(['--vendor', 'amd', '--manifest', str(manifest), '--out', str(out),
+                 '--cache', str(tmp_path / 'cache'), '--python-env', 'fixture-python',
+                 '--stop-at', str(time.time() + 3600)])
+    assert rc == expected_exit and len(calls) == expected_calls
+    state = json.loads((out / 'campaign.json').read_text())
+    if expected_exit:
+        assert state['stop_reason']
+        assert state['recipes'][ids[1]]['status'] == 'pending'
+    assert (out / 'measured' / ids[0].replace('/', '.') / 'scored-output.bin').read_bytes() == b'original scored bytes'

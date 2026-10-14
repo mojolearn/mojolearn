@@ -20,6 +20,7 @@ import sys
 import tarfile
 import urllib.error
 import urllib.request
+import zipfile
 
 SCHEMA = "mojolearn.measurement.v1"
 ROOT = Path(__file__).resolve().parents[1]
@@ -375,7 +376,9 @@ def classical_output_refs(rec, members):
                 receipts = cell.get("state_receipts") or []
                 if receipts and receipts[-1].get("output_sha256") != output_hash:
                     raise ValueError("scored receipt differs")
-            except (ValueError, OSError, KeyError):
+            except (ValueError, OSError, KeyError, zipfile.BadZipFile, EOFError):
+                # FAIRNESS FIX (2026-10-13 audit): malformed saved bytes must
+                # become a retention failure, not escape before one is recorded.
                 missing[(phase, cell["arm"])] = "scored output bytes do not match recorded output: " + name
                 continue
             refs[(phase, cell["arm"])] = dict(member=name, bytes=len(members[name]),
