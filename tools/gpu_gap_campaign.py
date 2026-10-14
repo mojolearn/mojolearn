@@ -6,12 +6,16 @@ controller never rents, extends or deletes machines. It does not select work
 from timing ratios and never retries a completed recipe implicitly.
 
 --smoke (2026-10-14) answers only "does every recipe start": no timed work, no
-fits, no warm-ups. It checks the drivers import, the data, the neural fixtures,
-the PyPI wheel and our GPU set once, then gives each recipe's preflight-only
-board process (parameter probe plus scorer preflight) a hard --smoke-timeout
-(default 5 s). A recipe still alive then is STARTED (no verdict yet); one that
-exits earlier records MATCHED/REFUSED with every problem string. Apple runs
---smoke only (its timing belongs to the M3 Ultra's own tools).
+fits, no warm-ups. It loads every driver and library ONCE in a warm process
+(tools/smoke_warm.py; its import cost is recorded separately in smoke.json),
+checks the data, the neural fixtures, the PyPI wheel and our GPU set once, then
+gives each recipe's preflight-only check (parameter probe plus scorer preflight)
+its own hard --smoke-timeout (default 5 s), timed from when that recipe's check
+starts with everything already loaded. A recipe still alive then is STARTED (no
+verdict yet); one that exits earlier records MATCHED/REFUSED with every problem
+string. A recipe that errors, refuses or times out is recorded and the loop goes
+on; every failure is reported at the end. Apple runs --smoke only (its timing
+belongs to the M3 Ultra's own tools) and keeps one cold process per recipe.
 """
 import argparse
 import json
@@ -25,6 +29,7 @@ import time
 
 import bench_board as B
 import bench_board_evidence as E
+import smoke_warm as W
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -164,10 +169,12 @@ DRIVERS = ("bench_board", "bench_board_algos", "bench_board_neural", "bench_boar
            "classical_two_datasets", "bench_board_params", "race_scorer_preflight", "neural_fixtures")
 
 
-def smoke_command(args, race, directory, mode, receipts):
-    """One recipe's preflight-only board process: parameter probe plus scorer preflight, nothing timed."""
-    cmd = [args.python_env, str(ROOT / "tools/bench_board.py"),
-           "--vendor", args.vendor, "--python-env", args.python_env, "--skip-install",
+def smoke_command(args, race, directory, mode, receipts, python=None):
+    """One recipe's preflight-only board process: parameter probe plus scorer preflight, nothing timed.
+    `python` is the warm launcher when the warm process serves (every level of the recipe forks from it)."""
+    python = python or args.python_env
+    cmd = [python, str(ROOT / "tools/bench_board.py"),
+           "--vendor", args.vendor, "--python-env", python, "--skip-install",
            "--cache", args.cache, "--rows", "full", "--rounds", "1", "--modes", mode,
            "--gpu-opponents-only", "--preflight-only", "--preflight-scorer",
            "--families", race["family"], "--lanes", race["lane"], "--race-ids", race["id"],
@@ -267,6 +274,14 @@ def smoke_text(doc):
     rows = list(doc["rows"].values())
     lines = ["SMOKE vendor=%s modes=%s recipes=%d timeout=%ss" % (doc["vendor"], ",".join(doc["modes"]),
                                                                   len(rows), doc["timeout_s"])]
+    warm = doc.get("warm") or {}
+    if warm:
+        cold = sum(len((r.get("launches") or {}).get("cold") or []) for r in rows)
+        hot = sum((r.get("launches") or {}).get("warm") or 0 for r in rows)
+        lines.append("WARM %s import_s=%s starts=%d launches warm=%d cold=%d%s" % (
+            warm.get("status"), warm.get("import_seconds"), len(warm.get("starts") or []), hot, cold,
+            (": " + str(warm.get("problem") or (warm.get("starts") or [{}])[-1].get("problem") or ""))[:400]
+            if warm.get("status") not in ("serving", "off") else ""))
     for name, chk in sorted(doc["checks"].items()):
         lines.append("CHECK %s %s%s" % (name, chk.get("status"), (": " + "; ".join(chk["problems"])[:600])
                                        if chk.get("problems") else ""))
@@ -309,18 +324,25 @@ def bounded_check(cmd, timeout=120):
     return p.returncode == 0, (text[-1] if text else "rc %d" % p.returncode)[:600]
 
 
-def smoke_checks(args, plans, out):
+def smoke_checks(args, plans, out, warm=None):
     """The box-level checks, once: driver imports, data, neural fixtures, the PyPI wheel, our GPU set and the
-    retained source snapshot the recipe processes reuse. Returns ({name: check}, receipts for the commands)."""
+    retained source snapshot the recipe processes reuse. Returns ({name: check}, receipts for the commands).
+    With the warm process serving, its preload report is the drivers-and-libraries check."""
     checks, receipts = {}, {}
     races = [r for plan in plans.values() for r in plan]
-    probs = []
-    for mod in DRIVERS:
-        ok, detail = bounded_check([args.python_env, "-c", "import sys; sys.path.insert(0, %r); import %s"
-                                    % (str(ROOT / "tools"), mod)])
-        if not ok:
-            probs.append("%s does not import: %s" % (mod, detail))
-    checks["drivers-import"] = dict(status="ok" if not probs else "failed", problems=probs)
+    python = warm.python() if warm is not None else args.python_env
+    if warm is not None and warm.serving():
+        checks["drivers-import"] = warm_check(warm.report)
+    else:
+        probs = []
+        for mod in DRIVERS:
+            ok, detail = bounded_check([args.python_env, "-c", "import sys; sys.path.insert(0, %r); import %s"
+                                        % (str(ROOT / "tools"), mod)])
+            if not ok:
+                probs.append("%s does not import: %s" % (mod, detail))
+        if warm is not None:
+            probs += warm_check(warm.report)["problems"]
+        checks["drivers-import"] = dict(status="ok" if not probs else "failed", problems=probs)
     needed, corpus_missing = B.data_needs(races)
     root = os.path.abspath(os.path.expanduser(args.data_root))
     data = B.data_status(root, needed, verify=args.smoke_verify_data)
@@ -338,7 +360,7 @@ def smoke_checks(args, plans, out):
             checks["neural-fixtures"] = dict(status="failed", lanes=layer, problems=[
                 "no neural fixtures at %s (the timed campaign generates them before its first recipe)" % fixdir])
         else:
-            ok, detail = bounded_check([args.python_env, str(ROOT / "tools/neural_fixtures.py"), "verify",
+            ok, detail = bounded_check([python, str(ROOT / "tools/neural_fixtures.py"), "verify",
                                         "--dir", fixdir], timeout=600)
             checks["neural-fixtures"] = dict(status="ok" if ok else "failed", lanes=layer, dir=fixdir,
                                              problems=[] if ok else ["fixture verify failed: " + detail])
@@ -368,46 +390,260 @@ def smoke_checks(args, plans, out):
     return checks, receipts
 
 
+def warm_wanted(args):
+    """--smoke-warm: auto serves on Linux (NVIDIA, AMD); macOS forks are not safe once Metal is loaded."""
+    mode = getattr(args, "smoke_warm", "auto")
+    return mode == "on" or (mode == "auto" and sys.platform.startswith("linux"))
+
+
+def _sock_dir(out):
+    """A directory for the warm server's socket: under the smoke dir when its path fits a Unix socket
+    name (108 bytes), else a fresh private directory under the system temp dir (the socket only)."""
+    if len(str(out / "warm" / "s.sock")) < 100:
+        return out / "warm"
+    import tempfile
+    return Path(tempfile.mkdtemp(prefix="mlsw"))
+
+
+def warm_arch(args, env):
+    """mojolearn's GPU arch from one cold process, so the warm server can import mojolearn without cuInit.
+    (arch or None, detail)."""
+    code = "import sys, mojolearn; sys.stdout.write(str(mojolearn.gpu_arch or ''))"
+    try:
+        p = subprocess.run([args.python_env, "-c", code], cwd=ROOT, env=env, capture_output=True, text=True,
+                           timeout=600)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, repr(exc)[:400]
+    arch = p.stdout.strip().splitlines()[-1].strip() if p.stdout.strip() else ""
+    if p.returncode or not arch:
+        return None, ("rc %d: " % p.returncode) + (p.stderr.strip().splitlines() or [""])[-1][:400]
+    return arch, "reported by a cold `import mojolearn`"
+
+
+class Warm:
+    """The smoke's warm process (tools/smoke_warm.py serve) and its launcher."""
+
+    def __init__(self, args, out):
+        self.args, self.out = args, out
+        self.dir = out / "warm"
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self.sock = _sock_dir(out) / "s.sock"
+        self.launcher = W.write_launcher(self.dir, args.python_env, self.sock)
+        self.proc = None
+        self.report = dict(status="starting", launcher=str(self.launcher), starts=[])
+        ctx = dict(vendor=args.vendor, python=args.python_env, data_root=os.path.abspath(
+            os.path.expanduser(args.data_root)), commit=os.environ.get("MOJOLEARN_REPO_COMMIT"))
+        self.env = B.child_env(ctx)
+        # ours' arm workers run identical (the NVIDIA and AMD smoke is identical only); a child whose numeric
+        # mode differs re-imports mojolearn in its own environment
+        self.env["MOJOLEARN_NUMERIC_MODE"] = "identical"
+        self.arch = None
+
+    def start(self):
+        """Start the server and wait for its preload report. Returns the report (import cost, per-module
+        status). A server that cannot serve leaves every launch cold, recorded."""
+        if self.arch is None:
+            self.arch, self.report["mojolearn_arch"] = warm_arch(self.args, self.env)
+        ready = Path(str(self.sock) + ".ready")
+        for p in (ready, self.sock):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        cmd = [self.args.python_env, str(ROOT / "tools/smoke_warm.py"), "serve", "--sock", str(self.sock),
+               "--launcher", str(self.launcher)] + (["--mojolearn-arch", self.arch] if self.arch else [])
+        t0 = time.time()
+        log = (self.dir / "server.log").open("ab")
+        self.proc = subprocess.Popen(cmd, cwd=ROOT, env=self.env, stdin=subprocess.DEVNULL, stdout=log,
+                                     stderr=subprocess.STDOUT, start_new_session=True)
+        log.close()
+        start = dict(started=t0, pid=self.proc.pid)
+        deadline = t0 + self.args.smoke_warm_timeout
+        while time.time() < deadline and not ready.exists() and self.proc.poll() is None:
+            time.sleep(0.2)
+        start["wall_seconds"] = round(time.time() - t0, 2)
+        if ready.exists():
+            try:
+                start.update(json.loads(ready.read_text()))
+            except ValueError as exc:
+                start.update(serving=False, problem="unreadable ready report: %s" % exc)
+        else:
+            start.update(serving=False, problem="no preload report within %ss (rc %s): %s" % (
+                self.args.smoke_warm_timeout, self.proc.poll(), "; ".join(_tail(self.dir / "server.log", 2))))
+            self.stop()
+        if start.get("gpu_initialized_by"):
+            start["problem"] = "a preload initialized a GPU runtime (%s): not fork safe, every launch runs cold" % (
+                start["gpu_initialized_by"])
+        self.report["starts"].append(start)
+        self.report.update(status="serving" if self.serving() else "cold",
+                           import_seconds=start.get("import_seconds"), wall_seconds=start["wall_seconds"])
+        return self.report
+
+    def serving(self):
+        return self.proc is not None and self.proc.poll() is None and self.sock.exists()
+
+    def python(self):
+        """The interpreter recipes run under: the launcher while the server serves, else the real one."""
+        return str(self.launcher) if self.serving() else self.args.python_env
+
+    def end_recipe(self):
+        """Kill whatever the recipe left alive in the server and return its launch counts."""
+        if not self.serving():
+            return dict(warm=0, cold=["warm process not serving"])
+        reply = W.control(self.sock, "end") or {}
+        return {k: reply.get(k) for k in ("warm", "cold", "killed") if k in reply}
+
+    def stop(self):
+        if self.proc is None:
+            return
+        if self.proc.poll() is None:
+            W.control(self.sock, "shutdown", timeout=20)
+            try:
+                self.proc.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(self.proc.pid, signal.SIGKILL)
+                except OSError:
+                    pass
+                self.proc.wait()
+
+
+def warm_check(report):
+    """The drivers-and-libraries check from the warm server's preload report: a driver that does not
+    import, or a library that is installed but fails to import, is a problem; an absent library is
+    listed (the recipe that needs it fails on its own)."""
+    start = (report.get("starts") or [{}])[-1]
+    pre = start.get("preloads") or {}
+    probs = ["%s does not import: %s" % (n, r.get("error")) for n, r in sorted(pre.items())
+             if r.get("status") == "failed"]
+    if start.get("problem"):
+        probs.append(start["problem"])
+    return dict(status="ok" if not probs else "failed", problems=probs,
+                absent=sorted(n for n, r in pre.items() if r.get("status") == "absent"),
+                import_seconds=start.get("import_seconds"))
+
+
+def smoke_stage(args, plans, out, receipts, python=None):
+    """Every recipe's untimed block prep (algos, classical, classical2 blocks under --cache), ONCE, before the
+    per-recipe loop: one --preflight-only --prep-only board process per mode over that mode's whole plan. A
+    recipe's own check then finds its blocks prepared. Returns the stage check."""
+    probs, runs = [], {}
+    for mode, plan in sorted(plans.items()):
+        races = {r["id"]: r for r in plan if r["family"] in ("algos", "classical", "classical2")}
+        if not races:
+            continue
+        ids = out / ("stage-race-ids.%s.txt" % mode)
+        ids.write_text("\n".join(sorted(races)) + "\n")
+        cmd = smoke_command(args, next(iter(races.values())), out / "stage" / mode, mode, receipts, python)
+        cmd[cmd.index("--families") + 1] = ",".join(sorted({r["family"] for r in races.values()}))
+        cmd[cmd.index("--lanes") + 1] = ",".join(sorted({r["lane"] for r in races.values()}))
+        cmd[cmd.index("--race-ids") + 1] = "@" + str(ids)
+        if "--datasets" in cmd:
+            i = cmd.index("--datasets")
+            del cmd[i:i + 2]
+        cmd.append("--prep-only")
+        log = out / "logs" / ("stage.%s.log" % mode)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        rc, seconds = run_bounded(cmd, log, args.smoke_stage_timeout)
+        runs[mode] = dict(returncode=rc, seconds=seconds, log=str(log), races=len(races))
+        if rc != 0:
+            probs.append("data stage (%s) %s: %s" % (mode, "timed out at %ss" % args.smoke_stage_timeout
+                                                     if rc is None else "rc %s" % rc, "; ".join(_tail(log, 2))))
+    if not runs:
+        return dict(status="ok", problems=[], skipped="no recipe prepares blocks")
+    return dict(status="ok" if not probs else "failed", problems=probs, runs=runs)
+
+
 def write_smoke(out, doc):
     E.write(out / "smoke.json", doc)
     (out / "smoke.txt").write_text(smoke_text(doc))
 
 
 def run_smoke(args, plans, out):
-    """--smoke: every recipe of every mode's plan, one bounded preflight-only process each. Uploads the smoke
-    archive (smoke.json, smoke.txt, every recipe's log and preflight) to R2 after each recipe."""
+    """--smoke: load everything once (the warm process), then every recipe of every mode's plan, each with its
+    own --smoke-timeout from when its check starts. Never stops early: an error, refusal or timeout is
+    recorded and the loop goes on. Uploads the smoke archive (smoke.json, smoke.txt, every recipe's log and
+    preflight) to R2 after each recipe."""
     out = out / "smoke"
     if (out / "smoke.json").exists():
         raise ValueError("smoke directory already exists; preserve it and use a new --out")
     out.mkdir(parents=True, exist_ok=True)
     doc = dict(schema=SMOKE_SCHEMA, vendor=args.vendor, modes=sorted(plans), source_commit=B.repo_commit(),
                started=time.time(), timeout_s=args.smoke_timeout, expected=sum(len(p) for p in plans.values()),
-               scope="does every recipe start: no timed work, no fits, no warm-ups", checks={}, rows={})
+               scope="does every recipe start: no timed work, no fits, no warm-ups", checks={}, rows={},
+               timer="each recipe's own --smoke-timeout, from when its check starts")
     write_smoke(out, doc)
-    doc["checks"], receipts = smoke_checks(args, plans, out)
+    warm = None
+    if warm_wanted(args):
+        warm = Warm(args, out)
+        try:
+            doc["warm"] = warm.start()
+        except Exception as exc:  # noqa: BLE001 - recorded; the smoke goes on cold
+            doc["warm"] = dict(status="failed", problem=repr(exc)[:600])
+            warm = None
+    else:
+        doc["warm"] = dict(status="off", reason="--smoke-warm off" if getattr(args, "smoke_warm", "auto") == "off"
+                           else "macOS: forks are not safe once Metal is loaded; one cold process per recipe")
+    write_smoke(out, doc)
+    try:
+        doc["checks"], receipts = smoke_checks(args, plans, out, warm)
+    except Exception as exc:  # noqa: BLE001 - never stop early
+        doc["checks"], receipts = dict(box=dict(status="failed", problems=["box checks raised: %r" % (exc,)])), {}
+    write_smoke(out, doc)
+    try:
+        doc["checks"]["stage"] = smoke_stage(args, plans, out, receipts, warm.python() if warm is not None else None)
+    except Exception as exc:  # noqa: BLE001 - never stop early
+        doc["checks"]["stage"] = dict(status="failed", problems=["data stage raised: %r" % (exc,)])
     write_smoke(out, doc)
     members = {}
-    for mode, plan in sorted(plans.items()):
-        for race in plan:
-            key = "%s|%s" % (mode, race["id"])
-            name = "%s.%s" % (mode, race["id"].replace("/", "."))
-            directory, log = out / "recipes" / name, out / "logs" / (name + ".log")
-            log.parent.mkdir(parents=True, exist_ok=True)
-            rc, seconds = run_bounded(smoke_command(args, race, directory, mode, receipts), log,
-                                      args.smoke_timeout)
-            row = smoke_row(race, mode, rc, seconds, directory, log, args.smoke_timeout)
-            doc["rows"][key] = row
-            members.update({name + "/" + k: v for k, v in recipe_members(row, log, directory).items()})
-            write_smoke(out, doc)
-            members["smoke.json"] = (out / "smoke.json").read_bytes()
-            members["smoke.txt"] = (out / "smoke.txt").read_bytes()
-            try:
-                doc["retention"] = retain(out / "smoke.tar.gz", members)
-                doc.pop("retention_failure", None)
-            except (OSError, ValueError) as exc:
-                doc["retention_failure"] = str(exc)[:600]
-            write_smoke(out, doc)
+    try:
+        for mode, plan in sorted(plans.items()):
+            for race in plan:
+                key = "%s|%s" % (mode, race["id"])
+                name = "%s.%s" % (mode, race["id"].replace("/", "."))
+                directory, log = out / "recipes" / name, out / "logs" / (name + ".log")
+                try:
+                    log.parent.mkdir(parents=True, exist_ok=True)
+                    if warm is not None and not warm.serving() and len(warm.report["starts"]) < 3:
+                        warm.report["restarted_before"] = key
+                        doc["warm"] = warm.start()          # the server died: start it again (recorded)
+                    python = warm.python() if warm is not None else None
+                    rc, seconds = run_bounded(smoke_command(args, race, directory, mode, receipts, python),
+                                              log, args.smoke_timeout)
+                    row = smoke_row(race, mode, rc, seconds, directory, log, args.smoke_timeout)
+                    if warm is not None:
+                        row["launches"] = warm.end_recipe()
+                except Exception as exc:  # noqa: BLE001 - recorded, the loop goes on
+                    row = dict(id=race["id"], family=race["family"], lane=race["lane"], dataset=race["dataset"],
+                               mode=mode, returncode=None, seconds=None, timeout_s=args.smoke_timeout,
+                               status="FAILED", problems=["smoke harness raised: %r" % (exc,)])
+                doc["rows"][key] = row
+                members.update({name + "/" + k: v for k, v in recipe_members(row, log, directory).items()})
+                write_smoke(out, doc)
+                members["smoke.json"] = (out / "smoke.json").read_bytes()
+                members["smoke.txt"] = (out / "smoke.txt").read_bytes()
+                try:
+                    doc["retention"] = retain(out / "smoke.tar.gz", members)
+                    doc.pop("retention_failure", None)
+                except (OSError, ValueError) as exc:
+                    doc["retention_failure"] = str(exc)[:600]
+                write_smoke(out, doc)
+    finally:
+        if warm is not None:
+            warm.stop()
     doc["finished"] = time.time()
+    write_smoke(out, doc)
+    members["smoke.json"] = (out / "smoke.json").read_bytes()
+    members["smoke.txt"] = (out / "smoke.txt").read_bytes()
+    for extra in ("warm/server.log",):
+        data = _read(out / extra)
+        if data is not None:
+            members[extra] = data
+    try:
+        doc["retention"] = retain(out / "smoke.tar.gz", members)
+        doc.pop("retention_failure", None)
+    except (OSError, ValueError) as exc:
+        doc["retention_failure"] = str(exc)[:600]
     write_smoke(out, doc)
     print((out / "smoke.txt").read_text().splitlines()[0])
     return 0
@@ -442,6 +678,13 @@ def main(argv=None):
                          "process under --smoke-timeout; writes <out>/smoke/smoke.json and smoke.txt; no timing")
     ap.add_argument("--smoke-timeout", type=float, default=5.0,
                     help="seconds per recipe before it is recorded STARTED (no verdict yet) and killed")
+    ap.add_argument("--smoke-warm", choices=("auto", "on", "off"), default="auto",
+                    help="load every driver and library once in a warm process and fork each recipe's "
+                         "processes from it (auto: Linux on, macOS off)")
+    ap.add_argument("--smoke-warm-timeout", type=float, default=1800.0,
+                    help="seconds the warm process may take to import everything (once per box, recorded)")
+    ap.add_argument("--smoke-stage-timeout", type=float, default=6 * 3600.0,
+                    help="seconds for the one-time block prep of every recipe before the per-recipe loop")
     ap.add_argument("--smoke-verify-data", action="store_true",
                     help="also sha256 the datasets in the smoke (default: presence and pinned size)")
     ap.add_argument("--data-root", default=os.environ.get(

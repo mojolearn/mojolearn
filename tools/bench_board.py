@@ -1282,6 +1282,36 @@ def cache_dir(args, out):
     return os.path.abspath(os.path.expanduser(args.cache or os.path.join(out, "cache")))
 
 
+
+def hipvs_system_libraries(python, log):
+    """smoke-fixes (2026-10-14; classical/knn/taxi and every hipvs-gpu arm on the MI325X refused with
+    "missing parameter/version probe: hipvs-gpu": the worker's `from cuvs.neighbors import brute_force`
+    raised ImportError('libopenblas.so.0: cannot open shared object file')). amd-hipvs 1.0.0's libcuvs links
+    the system OpenBLAS, which its wheel does not ship and a fresh Ubuntu image lacks. Probe the import; when
+    only that library is missing, install the distribution's OpenBLAS (libopenblas0) and probe again. The
+    outcome is logged; a failure leaves the hipvs-gpu arms refusing by name."""
+    probe = [python, "-c", "import cuvs.neighbors"]
+    if run_logged(probe, None, log, 600) == 0:
+        return True
+    try:
+        with open(log, errors="replace") as fh:
+            missing = "libopenblas.so.0" in fh.read()[-20000:]
+    except OSError:
+        missing = False
+    if not missing or not shutil.which("apt-get") or os.geteuid() != 0:
+        print("bench_board: hipVS does not import (see %s); the hipvs-gpu arms will refuse by name" % log,
+              flush=True)
+        return False
+    env = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
+    run_logged(["apt-get", "install", "-y", "--no-install-recommends", "libopenblas0"], env, log, 1800)
+    if run_logged(probe, None, log, 600) == 0:
+        print("bench_board: hipVS imports after installing the system OpenBLAS (libopenblas0)", flush=True)
+        return True
+    print("bench_board: hipVS still does not import after libopenblas0 (see %s); the hipvs-gpu arms will "
+          "refuse by name" % log, flush=True)
+    return False
+
+
 def setup_python(args, vendor, out, log):
     """Returns (python, wheel record or None). Creates the venv and installs
     unless --python-env/--skip-install say otherwise. The wheel is DOWNLOADED
@@ -1402,6 +1432,8 @@ def setup_python(args, vendor, out, log):
         if run_logged(cmd + AMD_HIPVS, None, log, 3600) != 0:
             print("bench_board: hipVS install failed (%s); the hipvs-gpu arms will refuse by name"
                   % " ".join(AMD_HIPVS), flush=True)
+        else:
+            hipvs_system_libraries(python, log)
     if "classical2" in (args.families or ""):
         cmd = list(pip)
         if args.opponent_wheels:
@@ -4092,6 +4124,9 @@ def build_parser():
                         "implies --with-opponents")
     p.add_argument("--gpu-opponents-only", action="store_true",
                    help="remove all CPU opponents, including fallback opponents where no GPU library exists")
+    p.add_argument("--prep-only", action="store_true",
+                   help="with --preflight-only: run the selected races' untimed block prep and stop (the campaign "
+                        "smoke stages all data once)")
     p.add_argument("--preflight-only", action="store_true",
                    help="construct and audit the selected arms and retain the report; no warmups, fits or scored rounds")
     p.add_argument("--preflight-scorer", action="store_true",
@@ -4446,6 +4481,8 @@ def main(argv=None):
 
     python, wheel = setup_python(args, vendor, out, os.path.join(out, "logs", "setup.log"))
     arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
+    if getattr(args, "prep_only", False) and not args.preflight_only:
+        raise SystemExit("bench_board: --prep-only is for --preflight-only runs")
     box_checked = bool(getattr(args, "box_checked", None)) and args.preflight_only
     if getattr(args, "box_checked", None) and not args.preflight_only:
         raise SystemExit("bench_board: --box-checked is for --preflight-only runs")
@@ -4592,6 +4629,11 @@ def main(argv=None):
         ensure_algos_prep(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
+    if getattr(args, "prep_only", False):
+        # smoke-fixes (2026-10-14): the campaign smoke stages every recipe's untimed block prep ONCE before its
+        # per-recipe loop, so no recipe's 5 s check is spent preparing data
+        print("bench_board: prep only (%d races); stopping before the parameter probes" % len(todo), flush=True)
+        return 0
     if ctx.get("capture_measurements") and todo:
         # Audit all selected recipes before the first warm-up, not after
         # spending money on the first several hundred rows of a bad plan.
