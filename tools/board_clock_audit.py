@@ -186,7 +186,8 @@ def pair_ratio(ours_clock, opp_clock, opp_cell):
     for clock, kind in ((pref, "preferred"), (other, "fallback")):
         a, b = ours_clock.get(clock + "_ms"), opp_clock.get(clock + "_ms")
         if a is not None and b is not None and b > 0:
-            return {"value": a / b, "clock": clock, "kind": kind, "preferred": pref,
+            return {"value": a / b, "ours_ms": a, "opponent_ms": b,
+                    "clock": clock, "kind": kind, "preferred": pref,
                     "label": "%s/%s" % (clock, clock) + ("" if kind == "preferred" else
                                                          " (%s not derivable)" % pref)}
     a, b = ours_clock.get("median_ms"), opp_clock.get("median_ms")

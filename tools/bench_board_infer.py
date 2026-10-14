@@ -231,8 +231,15 @@ def classical_cells(bb, ctx, race, r):
         cell["call"] = a.get("call_text") or "%s(Xq)" % inf.get("call")
         cell["hash"] = (a.get("digests") or [None])[-1]
         cell["hash_stable"] = a.get("digest_stable")
-        cell["quality"] = {k: v for k, v in (qual.get(arm) or {}).items() if k != "error"}
+        # FAIRNESS FIX (2026-10-13 audit): never discard failed inference
+        # scoring, including an exception from the whole-race scorer.
+        cell["quality"] = dict(qual.get(arm) or {})
+        if qual.get("error"):
+            cell["quality"]["error"] = qual["error"]
+        if inf.get("quality_basis"):
+            cell["quality_basis"] = inf["quality_basis"]
         span = ((fit.get(arm) or {}).get("span") or {})
+        span = dict(span, inside_clock=cell["call"], pre_clock_fit=True)
         info = a.get("info") or {}
         fitted_info = (fit.get(arm) or {}).get("info") or {}
         cell["library_version"] = info.get("version") or fitted_info.get("version")

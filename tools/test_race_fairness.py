@@ -31,6 +31,19 @@ def board(**races):
 
 
 class RaceFairness(unittest.TestCase):
+    def test_best_opponent_uses_comparable_clocks_and_retains_operands(self):
+        rr = race("solver", [("torch-gpu", 30, {"library": "torch", "family": "classical",
+            "comparability": {"span": {"input_home": "device", "upload_ms_untimed": 80}}}),
+            ("lib", 40, {})], ours_ms=100)
+        rr["cells"][0]["library"] = "mojolearn"
+        rr["cells"][0]["comparability"]["span"]["upload_ms_separate"] = 40
+        RF.apply(board(r=rr))
+        a = rr["audit"]["identical/fit"]
+        self.assertEqual(a["opponent"], "lib")
+        self.assertEqual(a["ours_over_theirs"], 2.5)
+        pair = a["opponents"]["torch-gpu"]["timing_comparisons"][0]
+        self.assertEqual((pair["ours_ms"], pair["opponent_ms"]), (60., 30.))
+
     def test_old_count_only_audit_is_superseded_but_other_findings_are_not(self):
         for reason, admitted in (("iterations differ: ours 24, sklearn-cpu 30", True),
                                  ("iterations differ and dataset differs", False)):

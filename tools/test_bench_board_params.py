@@ -36,6 +36,49 @@ def _est(library, cls_name, **params):
     return obj
 
 
+def test_covariance_pca_inactive_controls_are_conditional_and_retained():
+    a = _est("mojolearn.decomposition", "PCA", svd_solver="covariance_eigh",
+             iterated_power="auto", n_oversamples=10, power_iteration_normalizer="auto")
+    b = _est("cuml.decomposition", "PCA", svd_solver="full", iterated_power=15)
+    report = BP.check("pca", {"ours": a, "cuml-gpu": b})
+    assert report["verdict"] == "MATCHED"
+    assert report["arms"]["ours"]["raw_params"]["n_oversamples"] == 10
+    assert len(report["exceptions"]) == 3
+    b._p["svd_solver"] = "jacobi"
+    assert BP.check("pca", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
+
+
+def test_fixed_brute_kde_controls_do_not_waive_active_parameters():
+    a = _est("mojolearn.density", "KernelDensity", bandwidth=1.0, metric="euclidean",
+             algorithm="auto", atol=0., rtol=0., breadth_first=True, leaf_size=40, metric_params=None)
+    b = _est("cuml.neighbors", "KernelDensity", bandwidth=1.0, metric="euclidean", metric_params=None)
+    assert BP.check("kde", {"ours": a, "cuml-gpu": b})["verdict"] == "MATCHED"
+    for key, value in (("bandwidth", 2.), ("atol", .1), ("algorithm", "kd_tree")):
+        old = a._p[key]; a._p[key] = value
+        assert BP.check("kde", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
+        a._p[key] = old
+
+
+def test_in_memory_kmeans_does_not_waive_subsampling_or_model_changes():
+    a = _est("mojolearn.cluster", "KMeans", n_clusters=8, metric="euclidean", init_centroids=None)
+    b = _est("cuml.cluster", "KMeans", n_clusters=8, device_buffer_samples=0,
+             init_size=0, max_samples_per_batch=32768)
+    assert BP.check("kmeans", {"ours": a, "cuml-gpu": b})["verdict"] == "MATCHED"
+    b._p["device_buffer_samples"] = 100
+    assert BP.check("kmeans", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
+    b._p["device_buffer_samples"] = 0; b._p["n_clusters"] = 9
+    assert BP.check("kmeans", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
+
+
+def test_brute_knn_tiling_is_not_a_model_parameter_but_k_is():
+    a = _est("mojolearn.neighbors", "NearestNeighbors", n_neighbors=10, algorithm="brute", query_tile=0)
+    b = _est("cuml.neighbors", "NearestNeighbors", n_neighbors=10, algorithm="brute",
+             algo_params=None, metric_params=None, radius=1.0)
+    assert BP.check("knn", {"ours": a, "cuml-gpu": b})["verdict"] == "MATCHED"
+    b._p["n_neighbors"] = 11
+    assert BP.check("knn", {"ours": a, "cuml-gpu": b})["verdict"] == "REFUSED"
+
+
 def test_cuml_minmax_fixed_behavior_remains_parameter_checked():
     ours = _est("mojolearn.preprocessing", "MinMaxScaler", feature_range=(0, 1), clip=False)
     theirs = _est("cuml.preprocessing", "MinMaxScaler", feature_range=(0, 1))

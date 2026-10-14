@@ -2083,7 +2083,9 @@ def race(args):
             if msg is not None and msg.get("event") == "saved":
                 with np.load(path) as z:
                     outs[arm] = {k: z[k] for k in z.files}
-                os.remove(path)
+                # FAIRNESS FIX (2026-10-13 audit): retain the actual scored
+                # predictions/state used by the quality pass, not only hashes.
+                result.setdefault("saved_outputs", {})[arm] = path
             else:
                 result["arms"][arm].update(status="save_failed", error=msg)
         w.close()

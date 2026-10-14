@@ -220,6 +220,18 @@ def test_driver_without_infer_lines_is_unknown_not_blank(env):
     assert st == {"UNKNOWN(no inference lines)"}
 
 
+def test_inference_preserves_quality_errors_and_its_own_call(monkeypatch):
+    monkeypatch.setattr(bb, "base_cell", lambda *a: {"arm":"ours", "mode":"identical", "device":"gpu", "library":"mojolearn"})
+    race=dict(arms=["ours"], our_arms={"ours":"identical"})
+    for q in ({"error":"scorer failed"}, {"ours":{"error":"bad predictions"}}):
+        raw=dict(arms={"ours":{"span":{"input_home":"host", "inside_clock":"fit"}}},
+                 infer=dict(call="predict", quality=q, arms={"ours":dict(ms=[2.], status="ok")}))
+        cell=inf.classical_cells(bb, dict(rounds=1), race, raw)[0]
+        assert cell["quality"]["error"]
+        assert cell["comparability"]["span"]["inside_clock"] == "predict(Xq)"
+        assert cell["comparability"]["span"]["pre_clock_fit"] is True
+
+
 # --- the trees driver's phase (forest_speed_arm.py --infer) ----------------------
 
 def test_forest_driver_infer_is_off_by_default():

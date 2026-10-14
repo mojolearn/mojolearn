@@ -257,16 +257,18 @@ def _table_widths(text):
 
 def test_board_renders_both_clocks_and_keeps_the_stored_ratio():
     bb = _bb()
-    res = {"schema": bb.SCHEMA, "plan": [], "races": {
-        "classical/kmeans/taxi/rows=full": {
-            "family": "classical", "lane": "kmeans", "dataset": "taxi", "rows": None, "status": "done",
+    res = {"schema": bb.SCHEMA, "box": {"gpu": {"name": "NVIDIA L40S"}}, "plan": [], "races": {
+        "classical/ols/taxi/rows=full": {
+            "family": "classical", "lane": "ols", "dataset": "taxi", "rows": None, "status": "done",
             "cells": [cell("ours", "mojolearn", 100.0, span=dict(OURS_SPAN, upload_ms_separate=40.0)),
                       dict(cell("torch-gpu", "torch", 30.0,
                                 span={"input_home": "device", "upload_ms_untimed": 10.0}),
                            ratio_ours_identical_over=100.0 / 30.0)]}}}
-    for c in res["races"]["classical/kmeans/taxi/rows=full"]["cells"]:
-        c.update(rounds=1, min_ms=c["median_ms"], max_ms=c["median_ms"], quality={}, hash_stable=True,
+    for c in res["races"]["classical/ols/taxi/rows=full"]["cells"]:
+        c.update(lane="ols", rounds=1, min_ms=c["median_ms"], max_ms=c["median_ms"], quality={"rmse": 1.0}, params={"params":{"fit_intercept":True}}, hash_stable=True,
                  verdict="LIKE-FOR-LIKE-SPAN", memory={}, settings={})
+    res["races"]["classical/ols/taxi/rows=full"]["params_check"] = "MATCHED"
+    _load("race_fairness").apply(res)
     stored = json.dumps(res, sort_keys=True)
     text = bb.render_board(res)
     assert json.dumps(res, sort_keys=True) == stored          # render never writes the record

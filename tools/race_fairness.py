@@ -236,7 +236,7 @@ def fairness_rule(race, mode, phase, today, prior=None):
         opp = next((c for c in group if batch(c) == batch(ours)), group[0])
         arm = opp["arm"]
         bad, missing, readback = [], [], True
-        quality_checks = []
+        quality_checks, timing_checks = [], []
         for candidate in group:
             own = next((c for c in our_cells if batch(c) == batch(candidate)), None)
             if own is None:
@@ -244,6 +244,8 @@ def fairness_rule(race, mode, phase, today, prior=None):
                 continue
             quality_checks.append(dict(batch=candidate.get("batch"),
                                        **BQ.compare(own, candidate)))
+            timing_checks.append(dict(batch=candidate.get("batch"), batch_rows=candidate.get("batch_rows"),
+                **BC.pair_ratio(BC.cell_clock(own), BC.cell_clock(candidate), candidate)))
             problems, gaps, checked = _pair_problems(race, own, candidate)
             bad.extend(problems); missing.extend(gaps); readback = readback and checked
         if any(not any(batch(c) == batch(o) for c in group) for o in our_cells):
@@ -283,6 +285,7 @@ def fairness_rule(race, mode, phase, today, prior=None):
         row = dict(verdict=verdict, reason=reason, rerace="" if verdict in ("FAIR", "TIE", "MATCHED") else "x")
         row["quality_comparison"] = quality_checks
         row["timing_comparison"] = BC.pair_ratio(BC.cell_clock(ours), BC.cell_clock(opp), opp)
+        row["timing_comparisons"] = timing_checks
         if superseded:
             row["superseded_iteration_audit"] = superseded
         if hand and verdict in ("FAIR", "TIE", "MATCHED") and any(q["verdict"] != "PASS" for q in quality_checks):
@@ -292,9 +295,9 @@ def fairness_rule(race, mode, phase, today, prior=None):
         judged[arm] = row
         if not row["rerace"]:
             admitted.append(opp)
-    best = min([c for c in admitted if c.get("device") == "gpu"] or admitted,
-               key=lambda c: c["median_ms"]) if admitted else None
-    ratio = ours["median_ms"] / best["median_ms"] if completed(ours) and best else None
+    best = max([c for c in admitted if c.get("device") == "gpu"] or admitted,
+               key=lambda c: judged[c["arm"]]["timing_comparison"]["value"]) if admitted else None
+    ratio = judged[best["arm"]]["timing_comparison"]["value"] if completed(ours) and best else None
     entry = {"rule": "race_fairness.fairness_rule (quality-parity.v1, 2026-10-14)", "date": today, "opponent": best.get("arm") if best else None,
              "ours_over_theirs": round(ratio, 3) if ratio is not None else None,
              "pairing": pairing(race, mode, phase), "opponents": judged,

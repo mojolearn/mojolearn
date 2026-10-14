@@ -694,6 +694,46 @@ def exception_for(lane, param, arm):
     return None
 
 
+def semantic_exception(lane, param, arm, ours, theirs, library):
+    """Source-reviewed inactive/fixed API settings, conditional on actual values.
+
+    FAIRNESS FIX (2026-10-13 audit): an absent API option need not mean different
+    work. Retain raw readback and the explanation, never fabricate a parameter.
+    cuML 26.8 source: decomposition/pca.pyx, neighbors/kernel_density.pyx,
+    cluster/kmeans.pyx and neighbors/nearest_neighbors.pyx. Our matching source:
+    decomposition.py, density.py, cluster.py and neighbors.py. Reasons below
+    apply only to the named recipe, library and resolved settings.
+    """
+    if library != "cuml" or arm != "cuml-gpu":
+        return None
+    if lane == "pca" and ours.get("svd_solver") == theirs.get("svd_solver") == "covariance_eigh":
+        if param in ("iterated_power", "n_oversamples", "power_iteration_normalizer"):
+            return "covariance eigendecomposition on both arms: randomized/Jacobi iteration controls are inactive (cuML pca.pyx; mojolearn decomposition.py)"
+    if lane == "kde":
+        fixed = {"algorithm": "auto", "atol": 0.0, "rtol": 0.0, "breadth_first": True, "leaf_size": 40}
+        if param in fixed and ours.get(param) == fixed[param] and param not in theirs:
+            return "both implementations use exact brute-force KDE; ours refuses nondefault tree controls and cuML exposes no tree (density.py; kernel_density.pyx)"
+        if param == "metric_params" and ours.get(param) is None and theirs.get(param) is None:
+            return "None means no metric keyword overrides, p=2 on both implementations (density.py; kernel_density.pyx)"
+    if lane == "kmeans":
+        if param in ("device_buffer_samples", "init_size") and theirs.get("device_buffer_samples") == 0:
+            return "cuML device_buffer_samples=0 uses the full in-memory dataset; init_size only applies to its out-of-core path (kmeans.pyx)"
+        if param == "init_centroids" and ours.get(param) is None and param not in theirs:
+            return "no supplied centroids; both use the separately compared init method (cluster.py; kmeans.pyx)"
+        if param == "metric" and ours.get(param) == "euclidean" and param not in theirs:
+            return "cuML KMeans fixes DistanceType.L2Expanded, matching our squared Euclidean objective (kmeans.pyx set_params)"
+        if param == "max_samples_per_batch" and isinstance(theirs.get(param), int) and theirs[param] > 0:
+            return "cuML distance-computation batch size partitions all rows without subsampling; library implementation tiling is retained, not a model setting (kmeans.pyx)"
+    if lane == "knn" and ours.get("algorithm") == theirs.get("algorithm") == "brute":
+        if param in ("algo_params", "metric_params") and theirs.get(param) is None and param not in ours:
+            return "no algorithm or distance keyword overrides on the explicit brute-force kneighbors call (nearest_neighbors.pyx)"
+        if param == "radius" and param not in ours:
+            return "kneighbors uses the compared n_neighbors, never the radius-neighbors query option (nearest_neighbors.pyx)"
+        if param == "query_tile" and isinstance(ours.get(param), int) and ours[param] >= 0 and param not in theirs:
+            return "our query_tile partitions all queries without changing k or the exact distance metric; internal tiling is logged (neighbors.py)"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # The check
 # ---------------------------------------------------------------------------
@@ -718,7 +758,11 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
         problems.append("no parameter records")
 
     def _excused(param, arm):
-        why = exception_for(lane, param, arm)
+        own = {k: v[0] for k, v in resolved.get(ref, {}).items()}
+        theirs = {k: v[0] for k, v in resolved.get(arm, {}).items()}
+        why = semantic_exception(lane, param, arm, own, theirs, libs.get(arm))
+        if why is None:
+            why = exception_for(lane, param, arm)
         if why is None:
             for p, ag, r in extra_exceptions:
                 if p == param and fnmatch.fnmatch(arm, ag):
@@ -757,6 +801,17 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
             if param == "seed":
                 continue
             if param not in canon or param not in resolved[ref]:
+                # Only a centrally reviewed conditional mapping may explain an
+                # absent API field. A driver-supplied exception cannot waive it.
+                why = semantic_exception(lane, param, name,
+                    {k: v[0] for k, v in resolved[ref].items()},
+                    {k: v[0] for k, v in canon.items()}, libs[name])
+                if why:
+                    applied.append({"arm": name, "param": param,
+                                    "ours": resolved[ref].get(param, (None,))[0],
+                                    "theirs": canon.get(param, (None,))[0],
+                                    "reason": why, "absent_api_field": True})
+                    continue
                 problems.append("%s: %s missing from %s read-back; explicit semantic mapping required"
                                 % (name, param, name if param not in canon else ref))
                 continue

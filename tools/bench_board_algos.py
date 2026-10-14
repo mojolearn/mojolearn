@@ -4418,7 +4418,11 @@ def _build_graph(lane, arm, D):
         full = np.zeros(n) if t == "pagerank" else np.arange(n, dtype=np.int64) + n
         full[df["vertex"].to_numpy()] = df[col].to_numpy()
         return {"scores": full.astype(np.float64)} if t == "pagerank" else {"labels": full.astype(np.int64)}
-    rec = dict(p, __library__="cugraph")
+    # FAIRNESS FIX (2026-10-13 audit): record the actual called library
+    # routine; a bare library-name string cannot establish an opponent.
+    graph_call = {"pagerank": cugraph.pagerank, "components": cugraph.connected_components,
+                  "louvain": cugraph.louvain}[t]
+    rec = dict(p, __library__="cugraph", __implementation__=graph_call)
     if t == "pagerank":
         rec.update(tol=pr_tol, l1_stop_threshold=pr_tol)   # what cuGraph was given
     if t == "louvain":
@@ -5652,6 +5656,25 @@ def _build_linalg(lane, arm, D):
             rec.update(p)
         elif t == "chol":
             rec.update(jitter=0.0)                     # scipy/torch/CuPy add no ridge
+
+    # FAIRNESS FIX (2026-10-13 audit): retain actual function identity and
+    # shared input bytes even for parameterless linear-algebra APIs.
+    if arm in OURS_ARMS:
+        rec["__implementation__"] = fn
+    elif lib == "torch":
+        rec["__implementation__"] = torch.svd_lowrank if t == "rsvd" else getattr(torch.linalg,
+            {"lu":"solve", "lufac":"lu_factor", "lstsq":"lstsq", "chol":"cholesky",
+             "qr":"qr", "eigh":"eigh", "svd":"svd"}[t])
+    elif lib == "cupy":
+        if t == "lufac":
+            import cupyx.scipy.linalg as csla
+            rec["__implementation__"] = csla.lu_factor
+        else:
+            rec["__implementation__"] = getattr(cp.linalg,
+                {"lu":"solve", "lstsq":"lstsq", "chol":"cholesky", "qr":"qr",
+                 "eigh":"eigh", "svd":"svd"}[t])
+    rec.update(seed=SEED, input_arrays=[dict(shape=list(a.shape), dtype=str(a.dtype),
+        sha256=hashlib.sha256(np.ascontiguousarray(a).tobytes()).hexdigest()) for a in args])
 
     def outputs():
         r = S["r"]
@@ -7108,7 +7131,12 @@ def race(args):
         import traceback
         traceback.print_exc()
         result["quality"] = {"error": repr(exc)}
-    infer = {"call": infer_call(lane), "batch": "Xq", "rows": None, "arms": {}, "quality": {}}
+    # FAIRNESS FIX (2026-10-13 audit): worker() saves outputs AFTER the scored
+    # runner.infer() and quality() reads those exact bytes. The inference board
+    # used to drop this already measured quality and publish an empty dict.
+    infer = {"call": infer_call(lane), "batch": "Xq", "rows": None, "arms": {},
+             "quality": result["quality"],
+             "quality_basis": "same scored post-inference outputs as fit quality; saved_outputs retains bytes"}
     for arm in arms:
         a = result["arms"][arm]
         ok = a["status"] == "ok" and len(a["ms"]) == args.rounds
