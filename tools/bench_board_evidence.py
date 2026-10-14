@@ -462,7 +462,12 @@ def recover_shapes(board_path):
                        for c in old.get(field, []) if c.get("measurement")}
         for cell in candidates:
             record = cell["measurement"]
-            if old_records.get(record["id"]) != cell:
+            original_cell = old_records.get(record["id"]) or {}
+            # Board rendering/ingest adds display-only hardware/version labels
+            # after finalization. Verify the observations and worker records.
+            if any(original_cell.get(k) != cell.get(k) for k in (
+                    "measurement", "params", "quality", "median_ms", "times_ms", "warmup_ms",
+                    "status", "fitted_parameters", "iterations", "comparability", "hash")):
                 raise ValueError("original R2 receipt does not match shape recovery input")
             previous_id = record.pop("id")
             record["shape"] = measured_shape(cell, rr)
