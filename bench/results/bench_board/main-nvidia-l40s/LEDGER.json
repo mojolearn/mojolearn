@@ -9253,7 +9253,7 @@
    "column": "nvidia-l40s",
    "failed": true,
    "race": "classical/dbscan/taxi/rows=full",
-   "reason": "failed run (REFUSED(timeout: null)) never replaces an ok cell; flagged on the ok cell from main@5876e9205",
+   "reason": "failed run (REFUSED(timeout: null)) never replaces an ok cell",
    "replaced": {
     "box": "nv2",
     "commit_date": "2026-10-14T04:36:54Z",
@@ -9270,6 +9270,26 @@
    },
    "replaced_by": {
     "box": "nv2",
+    "commit_date": "2026-10-14T05:52:40Z",
+    "digest": "d6fa652f25a01af8",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.dbscan.taxi.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-4cb0d8fec346b3017270f76c4ec43b4576ae05ad9fe23131be60311b6c5a7ac4",
+    "kind": "paired",
+    "median_ms": 943355.7941969484,
+    "reason": null,
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
+    "status": "ok",
+    "version": "0.8.44"
+   }
+  },
+  {
+   "column": "nvidia-l40s",
+   "failed": false,
+   "race": "classical/dbscan/taxi/rows=full",
+   "reason": "older commit",
+   "replaced": {
+    "box": "nv2",
     "commit_date": "2026-10-11T13:48:04Z",
     "digest": "d6fa652f25a01af8",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-grid-logs.txt",
@@ -9281,6 +9301,20 @@
     "sha": "5876e92056619d10a7c730ef48eb1da084f46e4e",
     "status": "ok",
     "version": "mojolearn 0.8.38 (source build, main@5876e9205)"
+   },
+   "replaced_by": {
+    "box": "nv2",
+    "commit_date": "2026-10-14T05:52:40Z",
+    "digest": "d6fa652f25a01af8",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.dbscan.taxi.rows=full/board.json",
+    "hardware": "NVIDIA L40S (nv2, RunPod)",
+    "job": "paired-4cb0d8fec346b3017270f76c4ec43b4576ae05ad9fe23131be60311b6c5a7ac4",
+    "kind": "paired",
+    "median_ms": 943355.7941969484,
+    "reason": null,
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
+    "status": "ok",
+    "version": "0.8.44"
    }
   },
   {
@@ -9304,17 +9338,17 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-11T13:48:04Z",
+    "commit_date": "2026-10-14T05:52:40Z",
     "digest": "d6fa652f25a01af8",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-grid-logs.txt",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.dbscan.taxi.rows=full/board.json",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "v0011",
-    "kind": "gridbb",
-    "median_ms": 13203.72717641294,
+    "job": "paired-4cb0d8fec346b3017270f76c4ec43b4576ae05ad9fe23131be60311b6c5a7ac4",
+    "kind": "paired",
+    "median_ms": 943355.7941969484,
     "reason": null,
-    "sha": "5876e92056619d10a7c730ef48eb1da084f46e4e",
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "status": "ok",
-    "version": "mojolearn 0.8.38 (source build, main@5876e9205)"
+    "version": "0.8.44"
    }
   },
   {
@@ -9338,17 +9372,17 @@
    },
    "replaced_by": {
     "box": "nv2",
-    "commit_date": "2026-10-11T13:48:04Z",
+    "commit_date": "2026-10-14T05:52:40Z",
     "digest": "d6fa652f25a01af8",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/nv2-grid-logs.txt",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.dbscan.taxi.rows=full/board.json",
     "hardware": "NVIDIA L40S (nv2, RunPod)",
-    "job": "v0011",
-    "kind": "gridbb",
-    "median_ms": 13203.72717641294,
+    "job": "paired-4cb0d8fec346b3017270f76c4ec43b4576ae05ad9fe23131be60311b6c5a7ac4",
+    "kind": "paired",
+    "median_ms": 943355.7941969484,
     "reason": null,
-    "sha": "5876e92056619d10a7c730ef48eb1da084f46e4e",
+    "sha": "50be53955e44d38634eb7117dfc43a3dc427be01",
     "status": "ok",
-    "version": "mojolearn 0.8.38 (source build, main@5876e9205)"
+    "version": "0.8.44"
    }
   },
   {
@@ -20589,5 +20623,5 @@
   }
  ],
  "schema": "mojolearn-main-board/1",
- "updated": "2026-10-14T06:04:31Z"
+ "updated": "2026-10-14T06:49:26Z"
 }

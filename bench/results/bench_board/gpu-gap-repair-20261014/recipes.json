@@ -1,5 +1,5 @@
 {
-  "date_epoch": 1791957874.3977191,
+  "date_epoch": 1791960569.523069,
   "scope": "All original 303 GPU-opponent recipes; newest preflight evidence only, not full timing or admission coverage",
   "vendors": {
     "amd": {
@@ -2341,6 +2341,7 @@
         "algos/normalizer/taxi/rows=full",
         "algos/rmsprop/synthetic/rows=full",
         "algos/sgd/synthetic/rows=full",
+        "classical/dbscan/taxi/rows=full",
         "classical2/kernel-ridge/istella/rows=full",
         "classical2/kernel-ridge/taxi/rows=full",
         "classical2/knn-clf/istella/rows=full",
@@ -2354,7 +2355,7 @@
         "MATCHED": 67,
         "REFUSED": 146
       },
-      "new_fit_admissions": 33,
+      "new_fit_admissions": 34,
       "recipes": {
         "algos/adafactor/synthetic/rows=full": {
           "audit": {
@@ -4859,10 +4860,10 @@
         },
         "classical/dbscan/taxi/rows=full": {
           "audit": {
-            "identical/fit": "INSUFFICIENT"
+            "identical/fit": "MATCHED"
           },
           "measurement_status": "done",
-          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave6/campaign/measured/classical.dbscan.taxi.rows=full/board.json",
+          "path": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/nvidia-wave8/campaign/measured/classical.dbscan.taxi.rows=full/board.json",
           "problems": [],
           "status": "MATCHED"
         },

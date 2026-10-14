@@ -1,10 +1,10 @@
 # GPU evidence repair continuation — 2026-10-14
 
-Updated 2026-10-14T06:08:23.918613+00:00. Branch `main`; latest implementation commit `e99667df2d794779a8830543e98800cb354863c9`. This is an incremental repair of the original 303 NVIDIA/AMD GPU-opponent recipes. Full-board timing remains incomplete. No Apple runs, fast-mode reruns, numerical default changes, paper publication or website publication occurred. The faster-than-opponent publication hold remains.
+Updated 2026-10-14T06:50:47.934003+00:00. Branch `main`; latest implementation commit `2b9a0ea932a4d9d674f47bc010e21b50a35a3ba0`. This is an incremental repair of the original 303 NVIDIA/AMD GPU-opponent recipes. Full-board timing remains incomplete. No Apple runs, fast-mode reruns, numerical default changes, paper publication or website publication occurred. The faster-than-opponent publication hold remains.
 
 | Vendor | Original recipes | Latest preflight matched | Latest preflight refused | Newly admitted fit recipes |
 | --- | ---: | ---: | ---: | ---: |
-| nvidia | 213 | 67 | 146 | 33 |
+| nvidia | 213 | 67 | 146 | 34 |
 | amd | 90 | 39 | 51 | 25 |
 
 Preflight counts are parameter checks, not timing completion. Newly admitted fits are complete paired measurements from this continuation, with one excluded warmup and one scored sample. They are not statistical performance equivalence claims. Actual dimensions, parameters, seeds, calls, versions, clocks, quality and retention references remain in the board cells. DBSCAN's saved workload is 1,000,000 rows; HDBSCAN's is the saved 100,000-row block. Dataset caps are explicit recipes, not proof that an entire original source dataset was timed.
@@ -25,10 +25,11 @@ The classical runner previously deleted scored output arrays before sealing arch
 
 ## Validation and evidence
 
-247 focused tests passed (`final-focused-tests-06.log`), including classical retention, actual-shape reporting, quality policy, upload retries and inference fixture checks. Full logs are retained under `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014`. The board fairness check is recorded alongside them. The latest main NVIDIA/AMD boards were updated through `tools/main_board_ingest.py`; this file does not substitute for their per-phase audit marks.
+252 focused tests passed (`final-focused-tests-07.log`), including classical retention, actual-shape reporting, quality policy, upload retries, controller-failure stop behavior and inference fixture checks. The full host-route checker regression suite also passed locally; its required GitHub workflow passed after repairing the five-minute timeout. Full logs are retained under `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014`. The board fairness check is recorded alongside them. The latest main NVIDIA/AMD boards were updated through `tools/main_board_ingest.py`; this file does not substitute for their per-phase audit marks.
 
 - [Summary, freezes, quality recovery and retention references](summary.json)
 - [All 303 recipes and latest unresolved preflight reasons](recipes.json)
+- [Retained numerical quality failures](quality-failures.json)
 - [Scored cross-vendor hashes](cross-vendor-scored-hashes.json)
 - [Historical audit recovery decisions](supported-audit-recovery.json)
 
