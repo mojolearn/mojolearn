@@ -5647,7 +5647,16 @@ def _build_linalg(lane, arm, D):
             import cupy as cp
             info = {"library": "cupy", "version": cp.__version__, "device": "gpu",
                     "pre_clock_fit": False, "input_home": "device"}
+            # FAIRNESS FIX (2026-10-13 audit): the kernel clock already
+            # excluded these copies, but their duration was discarded.
+            # Retain the actual synchronized upload separately so new
+            # measurements can derive a whole/whole comparison. Never
+            # backfill an older cell with this later copy measurement.
+            cp.cuda.runtime.deviceSynchronize()
+            upload_start = time.perf_counter()
             cargs = [cp.asarray(a) for a in args]
+            cp.cuda.runtime.deviceSynchronize()
+            info["upload_ms_untimed"] = (time.perf_counter() - upload_start) * 1000.0
 
             def fit():
                 if t == "lu":

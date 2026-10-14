@@ -73,7 +73,11 @@ def write(path, value):
 
 def archive(path, members):
     """Deterministic archive; names are controlled, never command strings."""
-    with open(path, "wb") as raw, gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as zipped:
+    # Full factor arrays make maximum gzip compression spend minutes on
+    # retention after subsecond GPU calls. Fast compression preserves all
+    # bytes and deterministic archives; it is outside every scored clock.
+    with open(path, "wb") as raw, gzip.GzipFile(filename="", fileobj=raw, mode="wb",
+                                              compresslevel=1, mtime=0) as zipped:
         with tarfile.open(fileobj=zipped, mode="w") as out:
             for name, data in sorted(members.items()):
                 info = tarfile.TarInfo(name)

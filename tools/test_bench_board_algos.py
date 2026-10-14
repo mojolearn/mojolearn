@@ -57,6 +57,28 @@ def test_qr_quality_rejects_corrupt_q_even_when_r_is_correct():
     assert policy.compare(own, dict(arm="library", quality=missing["library"]))["verdict"] == "FAIL"
 
 
+def test_cupy_linalg_records_synchronized_input_copy_outside_fit(monkeypatch):
+    events = []
+    cp = types.ModuleType("cupy")
+    cp.__version__ = "fixture"
+    cp.asarray = lambda a: events.append("copy") or a.copy()
+    cp.cuda = types.SimpleNamespace(runtime=types.SimpleNamespace(
+        deviceSynchronize=lambda: events.append("sync")))
+    def cholesky(a):
+        events.append("fit")
+        return a
+    cp.linalg = types.SimpleNamespace(cholesky=cholesky)
+    ticks = iter([1., 1.003])
+    monkeypatch.setitem(sys.modules, "cupy", cp)
+    monkeypatch.setattr(A.time, "perf_counter", lambda: next(ticks))
+    runner = A._build_linalg("cholesky", "cupy-gpu", {"_cap": 256})
+    assert events == ["sync", "copy", "sync"]
+    assert runner.info["upload_ms_untimed"] == pytest.approx(3.)
+    assert runner.info["input_home"] == "device"
+    runner.fit()
+    assert events == ["sync", "copy", "sync", "fit", "sync"]
+
+
 def test_function_identity_survives_worker_json_transport():
     import math
     runner = A.Runner({}, lambda: None, lambda: {}, record={
