@@ -1613,6 +1613,13 @@ def stage_inputs(lane, dataset, data):
         catboost_cat_frame_once(d.X_train, d.cat_idx)
         catboost_cat_frame_once(d.X_test, d.cat_idx)
         staged.append("catboost frames")
+    arms = [str(a) for a in data.get("arms") or ()]
+    if any(board_pairing.prebinned_arm(lane, a) for a in arms) and not getattr(d, "cat_idx", None):
+        # smoke-fixes r17 (2026-10-14; trees/gbdt-depthwise/istella and gbdt-lossguide/istella STARTED at 5 s
+        # in the pre-binned XGBoost pairing's binning): the block both arms of the pairing read, built once
+        # here by the same function and cfg as the recipe's (prebinned_data), pinned for the whole smoke.
+        blk = _prebinned_block_once(d, lane_config(lane, data.get("size") or "shipped"))
+        staged.append("pre-binned block (bins sha256 %s)" % blk["sha256"])
     return {"status": "ok", "staged": staged}
 
 
@@ -1937,12 +1944,29 @@ TASK_LANES = {
             "pandas frame with the declared columns int64 (it refuses float categorical "
             "columns) and the others float32; each library builds its own pool inside its "
             "fit clock",
-            "CTR row order: CatBoost has_time True, so it computes its target statistics "
-            "over the rows in the order given, as ours does, instead of shuffling them first",
+            "CTR row order: one permutation, the rows in the order given, on both arms: "
+            "CatBoost has_time True (no shuffle, one identity permutation), ours one "
+            "permutation with the identity as its CTR estimation order, set explicitly",
             "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense "
             "categorical column); a test value unseen in training shares one unknown bucket "
             "k per column",
-        )),
+        ),
+        # smoke-fixes (2026-10-14; gbdt-categorical/taxi: "ctr_estimation_permutation_id missing
+        # from catboost-gpu read-back", "has_time missing from ours read-back"): the CTR
+        # permutations, pinned on ours to the ones CatBoost's has_time=True runs. CatBoost 1.2.10:
+        # has_time sets PermutationCount = 1 (catboost_options.cpp:1042-1044, an assignment), the
+        # estimation permutation is PermutationsCount() - 1 = 0 (doc_parallel_boosting.h:101-103),
+        # and permutation 0 is the identity order (permutation.cpp:14-17, permutation.h
+        # IdentityPermutationId 0); has_time also skips the load-time pool shuffle
+        # (private/libs/algo/preprocess.cpp:161-199). Ours unset ran CatBoost's has_time=False
+        # GPU default instead: 4 permutations (gbdt/train.mojo perm_count) with the CTRs of the
+        # exported model estimated on permutation 3, a keyed shuffle of the rows
+        # (gbdt/ctrs/ctr_order.mojo), so the lane note "ours computes them over the rows in the
+        # order given" was not what ours ran. Ours now runs one permutation, the identity
+        # (train.mojo est_perm; doc_parallel_boosting.mojo learn_perm_count fallback 1, as theirs
+        # :317). Ours' bits on this lane change. Results raced before this change were wrong for
+        # this lane; apply extra scrutiny.
+        ctr_permutations=dict(permutation_count=1, ctr_estimation_permutation_id=0)),
 }
 
 
@@ -2280,6 +2304,8 @@ def lane_config(lane, size):
                 cfg["boosting_type"] = task["boosting_type"]
             if task.get("ordered"):
                 cfg.update(task["ordered"])
+            if task.get("ctr_permutations"):
+                cfg.update(task["ctr_permutations"])    # ours only (catboost_tree_params skips them)
             if task["grow_policy"] == "SymmetricTree" and lane != "gbdt-ordered":
                 # the opponents without an oblivious grower race their own
                 # at the same depth (TASK_LANES, "grower")
@@ -2386,10 +2412,19 @@ def boost_from_average_for(data):
     for RMSE (ours and CatBoost's default, LightGBM's, XGBoost's fitted
     intercept), margin 0 for Logloss (ours and CatBoost's default; XGBoost
     and LightGBM default to the class prior and are pinned to 0). None for
-    multiclass and ranking, whose losses no arm starts from an average."""
+    multiclass, whose loss no arm starts from an average.
+
+    smoke-fixes (2026-10-14; gbdt-rank-pairlogit/-yetirank: "boost_from_average missing from
+    catboost-gpu read-back"): False for ranking, set explicitly on ours and CatBoost's ranker
+    (catboost_rank_arms) and read back on both. It is the value both resolve unset: CatBoost's
+    default false (boosting_options.cpp:17), True refused for PairLogit and YetiRank
+    (catboost_options.cpp:703-709); ours' unset is True only for RMSE, MAE, Quantile and MAPE
+    (gbdt/train.mojo boost_from_average -1), True refused for the ranking losses (:2805-2822).
+    No bit change. XGBoost's and LightGBM's ranking arms are refused by name on these lanes
+    and do not call this."""
     if data.task == "regression":
         return True
-    if data.task == "binary":
+    if data.task in ("binary", "ranking"):
         return False
     return None
 
@@ -2533,24 +2568,53 @@ def prebinned_data(lane, data, cfg):
 
     Returns a shallow copy of `data` carrying `input_binning` (the read-back record, with the
     sha256 of the borders and both binned blocks) and `bins_sha256`. Raises by name on
-    categorical columns or NaN (neither arm's binning of them is the other's)."""
+    categorical columns or NaN (neither arm's binning of them is the other's).
+
+    smoke-fixes r17 (2026-10-14; trees/gbdt-depthwise/istella and trees/gbdt-lossguide/istella STARTED at
+    5 s, "parameter probe started; no board line", on NVIDIA and AMD): the binning (Pool.quantize over the
+    full training set, the bin ids of every train and test value, the NaN scan and the sha256) is
+    _prebinned_block, which inside the smoke worker runs once per staged matrix pair and cfg and stays
+    pinned (stage_inputs builds it before the recipe's timer); each caller still gets its own copy of its
+    own `data` carrying the same arrays and record. A timed run never reaches the cache."""
     cached = getattr(data, "_prebinned", None)
     if cached is not None:
         return cached
     import copy
-    import tempfile
     if data.cat_idx:
         raise RuntimeError("PREBIN: declared categorical columns are not pre-binned")
-    if np.isnan(data.X_train).any() or np.isnan(data.X_test).any():
-        raise RuntimeError("PREBIN NAN-INPUT: the data holds NaN; a missing value has no bin id "
-                           "both arms read the same way")
+    blk = _prebinned_block_once(data, cfg)
+    n_borders = blk["n_borders"]
+    pb = copy.copy(data)
+    for k in ("_ours_X", "_ours_Xtest", "_ours_y", "_prebinned"):
+        pb.__dict__.pop(k, None)
+    pb.X_train, pb.X_test = blk["x_train"], blk["x_test"]
+    pb.bins_sha256 = blk["sha256"]
+    pb.input_binning = "%s; bins sha256 %s" % (PREBIN_RECORD % n_borders, blk["sha256"])
+    data._prebinned = pb
+    emit_note(lane, ["*"], "input_binning", float(blk["widest"]),
+              "%s for the XGBoost pairing (CatBoost %s Pool.quantize, %d-row border sample, seed %d; "
+              "at most %d bins per feature; the CatBoost pairings take the raw rows)"
+              % (pb.input_binning, blk["catboost_version"], BORDER_SAMPLE_ROWS, int(cfg["seed"]), blk["widest"]))
+    return pb
+
+
+def _prebin_settings(cfg):
+    """Everything of cfg the binning reads (the memo key's extra part)."""
+    return (int(cfg["borders"]), str(cfg["feature_border_type"]), str(cfg["nan_mode"]), int(cfg["seed"]),
+            BORDER_SAMPLE_ROWS)
+
+
+def greedylogsum_borders(x_train, cfg):
+    """(per-feature sorted unique float32 borders, catboost version): CatBoost's own Pool.quantize over
+    `x_train` with cfg's border count and type, nan_mode, seed and the 200,000-row border sample."""
+    import tempfile
     import catboost
     n_borders = int(cfg["borders"])
-    pool = catboost.Pool(np.ascontiguousarray(data.X_train, dtype=np.float32))
+    pool = catboost.Pool(np.ascontiguousarray(x_train, dtype=np.float32))
     pool.quantize(border_count=n_borders, feature_border_type=cfg["feature_border_type"],
                   nan_mode=cfg["nan_mode"], random_seed=int(cfg["seed"]),
                   dev_max_subset_size_for_build_borders=BORDER_SAMPLE_ROWS)
-    n_feat = data.X_train.shape[1]
+    n_feat = x_train.shape[1]
     borders = [[] for _ in range(n_feat)]
     with tempfile.TemporaryDirectory() as td:
         path = os.path.join(td, "borders.tsv")
@@ -2561,7 +2625,18 @@ def prebinned_data(lane, data, cfg):
                 if len(fields) >= 2 and fields[0].strip():
                     borders[int(fields[0])].append(float(fields[1]))
     del pool
-    borders = [np.unique(np.asarray(b, dtype=np.float32)) for b in borders]
+    return [np.unique(np.asarray(b, dtype=np.float32)) for b in borders], catboost.__version__
+
+
+def _prebinned_block(x_train_raw, x_test_raw, cfg):
+    """The pre-binned arrays of prebinned_data: {"x_train", "x_test", "sha256", "widest", "n_borders",
+    "catboost_version"}. Raises by name on NaN or more bins than XGBoost's max_bin."""
+    if np.isnan(x_train_raw).any() or np.isnan(x_test_raw).any():
+        raise RuntimeError("PREBIN NAN-INPUT: the data holds NaN; a missing value has no bin id "
+                           "both arms read the same way")
+    n_borders = int(cfg["borders"])
+    n_feat = x_train_raw.shape[1]
+    borders, version = greedylogsum_borders(x_train_raw, cfg)
 
     def binned(x):
         out = np.empty(x.shape, dtype=np.float32)
@@ -2569,7 +2644,7 @@ def prebinned_data(lane, data, cfg):
             out[:, f] = np.searchsorted(borders[f], np.asarray(x[:, f], dtype=np.float32), side="left")
         return out
 
-    x_train, x_test = binned(data.X_train), binned(data.X_test)
+    x_train, x_test = binned(x_train_raw), binned(x_test_raw)
     widest = max((len(b) + 1 for b in borders), default=1)
     if widest > n_borders + 1:
         raise RuntimeError("PREBIN: %d bins on one feature, more than XGBoost's max_bin %d"
@@ -2580,19 +2655,20 @@ def prebinned_data(lane, data, cfg):
         h.update(b.tobytes())
     h.update(np.ascontiguousarray(x_train).tobytes())
     h.update(np.ascontiguousarray(x_test).tobytes())
-    sha = h.hexdigest()
-    pb = copy.copy(data)
-    for k in ("_ours_X", "_ours_Xtest", "_ours_y", "_prebinned"):
-        pb.__dict__.pop(k, None)
-    pb.X_train, pb.X_test = x_train, x_test
-    pb.bins_sha256 = sha
-    pb.input_binning = "%s; bins sha256 %s" % (PREBIN_RECORD % n_borders, sha)
-    data._prebinned = pb
-    emit_note(lane, ["*"], "input_binning", float(widest),
-              "%s for the XGBoost pairing (CatBoost %s Pool.quantize, %d-row border sample, seed %d; "
-              "at most %d bins per feature; the CatBoost pairings take the raw rows)"
-              % (pb.input_binning, catboost.__version__, BORDER_SAMPLE_ROWS, int(cfg["seed"]), widest))
-    return pb
+    return dict(x_train=x_train, x_test=x_test, sha256=h.hexdigest(), widest=int(widest), n_borders=n_borders,
+                catboost_version=str(version))
+
+
+def _prebinned_block_once(data, cfg):
+    """_prebinned_block of data's train and test matrices; inside the smoke worker (smoke-fixes r17) once per
+    staged matrix pair and cfg (smoke_inproc.memo_on, pinned: the staged Data copies of load_with_fallback
+    share the matrices), the same arrays and sha256 for every recipe that reads them."""
+    build = lambda: _prebinned_block(data.X_train, data.X_test, cfg)       # noqa: E731
+    SI = _smoke_staging()
+    if SI is None:
+        return build()
+    return SI.memo_on("trees-prebinned", (data.X_train, data.X_test), build, extra=_prebin_settings(cfg),
+                      pin=True)
 
 
 def attach_input(arm, pb):
@@ -3291,6 +3367,9 @@ def catboost_rank_arms(lane, cfg, data, devices):
     def make(task_type):
         p = catboost_tree_params(cfg, task_type)
         p["loss_function"] = cfg["objectives"]["catboost"]
+        bfa = boost_from_average_for(data)
+        if bfa is not None:
+            p["boost_from_average"] = bfa       # False, as ours (boost_from_average_for)
         return catboost.CatBoostRanker(**p)
 
     def fit(m, d):

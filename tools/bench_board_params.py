@@ -1650,6 +1650,82 @@ def _semantic_r15(lane, param, arm, ours, theirs, library):
     return None
 
 
+#: smoke-fixes (2026-10-14) sub-lane r18: the CatBoost GPU task lanes whose mappings live in
+#: _semantic_r18 (tools/speed_gbdt_arm.py TASK_LANES)
+_R18_RANK_LANES = frozenset({"gbdt-rank-pairlogit", "gbdt-rank-yetirank"})
+_R18_CATBOOST_LANES = _R18_RANK_LANES | {"gbdt-categorical"}
+
+
+def _semantic_r18(lane, param, arm, ours, theirs, library):
+    """smoke-fixes (2026-10-14) sub-lane r18: trees/gbdt-categorical/taxi,
+    gbdt-rank-pairlogit/istella and gbdt-rank-yetirank/istella against CatBoost 1.2.10's GPU
+    learner (arm catboost-gpu only), absent API fields only, each conditional on the values that
+    make it the same work. Sources: CatBoost v1.2.10 catboost/private/libs/options/*.cpp,
+    catboost/cuda/{train_lib,methods,data,gpu_data} (github.com/catboost/catboost/tree/v1.2.10,
+    cached in ~/mojolearn-evidence/smoke-fixes/r7-src/); ours python/mojolearn/ensemble.py,
+    gbdt/train.mojo, gbdt/ctrs/ctr_order.mojo. boost_from_average on the ranking lanes is pinned
+    False on both arms instead (speed_gbdt_arm.boost_from_average_for)."""
+    if lane not in _R18_CATBOOST_LANES or library != "catboost" or arm != "catboost-gpu":
+        return None
+    plain = ours.get("boosting_type") == "Plain" and theirs.get("boosting_type") == "Plain"
+    loss = ours.get("loss") if ours.get("loss") == theirs.get("loss") else None
+    # the one-identity-permutation CTR setup of gbdt-categorical (TASK_LANES ctr_permutations):
+    # CatBoost has_time=True forces PermutationCount = 1 (catboost_options.cpp:1042-1044, an
+    # assignment), its estimation permutation is PermutationsCount() - 1 = 0
+    # (doc_parallel_boosting.h:101-103), permutation 0 is the identity (permutation.cpp:14-17), and
+    # has_time skips the load-time pool shuffle (private/libs/algo/preprocess.cpp:161-199). Ours
+    # never shuffles the pool, and permutation_count 1 with ctr_estimation_permutation_id 0 is its
+    # one identity order (gbdt/train.mojo perm_count/est_perm, gbdt/ctrs/ctr_order.mojo)
+    identity_ctrs = (lane == "gbdt-categorical" and plain and theirs.get("has_time") is True
+                     and ours.get("permutation_count") == 1
+                     and ours.get("ctr_estimation_permutation_id") == 0)
+    if param == "has_time" and param in theirs and param not in ours:
+        # smoke-fixes (2026-10-14; gbdt-categorical/taxi: "has_time missing from ours read-back"):
+        # ours has no has_time; its CTRs are always computed over the rows as passed, in the
+        # estimation permutation's order, here the identity
+        if identity_ctrs:
+            return ("CTRs over the rows in the order given on both arms: CatBoost has_time=True (one "
+                    "permutation, the identity, no pool shuffle); ours permutation_count 1, "
+                    "ctr_estimation_permutation_id 0 (compared)")
+        return None
+    if param not in ours or param in theirs:
+        return None
+    v = ours[param]
+    if param in ("ctr_estimation_permutation_id", "permutation_count") and identity_ctrs:
+        # smoke-fixes (2026-10-14; gbdt-categorical/taxi: "ctr_estimation_permutation_id,
+        # permutation_count missing from catboost-gpu read-back"): CatBoost's Python constructor
+        # takes neither (1.2.10); has_time=True fixes both on its side (above)
+        return ("one CTR permutation, the identity, on both arms: CatBoost has_time=True forces "
+                "permutation_count 1 and estimates on permutation 0; ours is given 1 and 0")
+    if param == "fold_len_multiplier" and v == 2.0 and plain:
+        # smoke-fixes (2026-10-14; gbdt-categorical/taxi: "fold_len_multiplier missing from
+        # catboost-gpu read-back"; with CTRs, so the earlier no-categorical rules do not fire):
+        # read only by Ordered's TDynamicBoosting (dynamic_boosting.h:595); the Plain TBoosting of
+        # doc_parallel_boosting.h, the only one CatBoost's Lossguide trainer runs, never reads it.
+        # Ours refuses another value on a Plain fit (ensemble.py)
+        return "Ordered-only fold growth; both arms boost Plain (compared)"
+    if param == "fold_permutation_block" and v is None and plain:
+        # smoke-fixes (2026-10-14; gbdt-categorical/taxi: "fold_permutation_block missing from
+        # catboost-gpu read-back"; with CTRs, so the earlier no-categorical rules do not fire):
+        # the GPU sets the option to 64 (train.cpp:118-121), but only TDynamicBoosting reads it
+        # (dynamic_boosting.h:127-143). The Plain doc-parallel datasets, including every CTR
+        # permutation, are built with GetPermutation(DataProvider, permutationId)
+        # (doc_parallel_dataset_builder.cpp:48), whose blockSize defaults to 1 (permutation.h
+        # GetPermutation), so the option reaches no order. Ours reads it only
+        # under Ordered and refuses it on a Plain fit (ensemble.py)
+        return "read only by Ordered boosting; CatBoost's Plain datasets shuffle with block size 1"
+    if param in ("loss_alpha", "loss_delta", "loss_q", "loss_variance_power", "loss_border") \
+            and v is None and lane in _R18_RANK_LANES and loss in ("PairLogit", "YetiRank"):
+        # smoke-fixes (2026-10-14; gbdt-rank-*: "loss_alpha, loss_border, loss_delta missing from
+        # catboost-gpu read-back"): alpha is read by Quantile/LogLinQuantile/Expectile, delta by
+        # Huber, q by Lq, variance_power by Tweedie (ensemble.py _REQUIRED_PARAM and the
+        # GradientBoosting docstring), the border by Logloss only (GetLogLossBorder asserts
+        # Logloss, loss_description.cpp:90-92; ours loss_border is Logloss's threshold). The
+        # pairwise losses read the grades within each query and none of these
+        return "the raced loss (compared) is %s on both, which reads no %s" % (loss, param[5:])
+    return None
+
+
 def semantic_exception(lane, param, arm, ours, theirs, library):
     """Source-reviewed inactive/fixed API settings, conditional on actual values.
 
@@ -1661,7 +1737,7 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     apply only to the named recipe, library and resolved settings.
     """
     # smoke-fixes (2026-10-14): the per-sub-lane source-reviewed mappings, each value-conditional and lane-named
-    for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_r7, _semantic_r8, _semantic_r11, _semantic_r15):
+    for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_r7, _semantic_r8, _semantic_r11, _semantic_r15, _semantic_r18):
         why = _mapping(lane, param, arm, ours, theirs, library)
         if why:
             return why

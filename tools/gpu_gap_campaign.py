@@ -488,9 +488,9 @@ def smoke_checks(args, plans, out, worker=None):
 class SmokeWorker:
     """The smoke's one long-lived worker process (tools/smoke_worker.py serve) and its outer watchdog."""
 
-    def __init__(self, args, out, env, worker_cmd=None):
+    def __init__(self, args, out, env, worker_cmd=None, name="worker"):
         self.args, self.out, self.env = args, Path(out), env
-        self.dir = self.out / "worker"
+        self.dir = self.out / name
         self.dir.mkdir(parents=True, exist_ok=True)
         self.cmd = worker_cmd or [args.python_env, str(ROOT / "tools/smoke_worker.py"), "serve",
                                   "--vendor", args.vendor, "--out", str(self.dir)]
@@ -832,7 +832,30 @@ def run_smoke(args, plans, out, suspects=None):
     if suspects is not None:
         doc["suspects"] = suspects
     write_smoke(out, doc)
-    worker = SmokeWorker(args, out, worker_env(args))
+    # smoke-fixes (2026-10-14; Apple b7: 56 fast-mode recipes STARTED, every one waiting on the own-tier arm server
+    # the identical worker had to restart inside each recipe's timer): ONE WORKER PER NUMERIC MODE. Our bindings
+    # load one tier per process, so each mode's recipes run in their own long-lived worker started in that mode
+    # (loaded once, recorded per mode in doc["workers"]); no recipe ever crosses tiers inside a worker.
+    modes = sorted(plans)
+    worker_mode = modes[0] if modes else "identical"
+
+    def mode_worker(mode):
+        return SmokeWorker(args, out, dict(worker_env(args), MOJOLEARN_NUMERIC_MODE=mode),
+                           name="worker" if mode == "identical" else "worker-%s" % mode)
+
+    def warm_request(mode):
+        first_of_mode = next((r for r in plans.get(mode) or ()), None)
+        if first_of_mode is None:
+            return None
+        return dict(op="warm-box", argv=smoke_command(args, first_of_mode, out / ("warm-box-%s" % mode), mode,
+                                                      receipts)[2:],
+                    paths=plan_data_files(args, plans),
+                    arm_pythons=sorted(set(((doc["checks"].get("arm-venvs") or {}).get("arms") or {}).values())),
+                    numeric_modes=[mode])
+
+    receipts = {}
+    worker = mode_worker(worker_mode)
+    doc["workers"] = {}
     try:
         doc["worker"] = worker.start()
     except Exception as exc:  # noqa: BLE001 - recorded; every recipe then fails by name
@@ -854,21 +877,30 @@ def run_smoke(args, plans, out, suspects=None):
     except Exception as exc:  # noqa: BLE001 - never stop early; the layer recipes then refuse by name
         doc["checks"]["neural-fixtures"] = dict(status="failed", problems=["neural fixtures raised: %r" % (exc,)])
     write_smoke(out, doc)
-    first = next((r for p in plans.values() for r in p), None)
-    if first is not None and worker.alive():
+    request = warm_request(worker_mode)
+    if request is not None and worker.alive():
         # the box facts and the data hashes every recipe's check reads, once, outside every recipe's timer
-        facts = worker.warm(dict(op="warm-box", argv=smoke_command(args, first, out / "warm-box", "identical",
-                                                                   receipts)[2:],
-                                 paths=plan_data_files(args, plans),
-                                 arm_pythons=sorted(set(((doc["checks"].get("arm-venvs") or {}).get("arms")
-                                                         or {}).values())),
-                                 # smoke-fixes r16: each mode's own-tier arm server, started before the loop
-                                 numeric_modes=sorted(plans)), args.smoke_stage_timeout)
+        facts = worker.warm(request, args.smoke_stage_timeout)
         doc["worker"]["box_facts"] = facts or dict(status="failed", problem="no answer (worker killed)")
         write_smoke(out, doc)
     members = {}
     try:
         for mode, plan in sorted(plans.items()):
+            if mode != worker_mode:
+                # this mode's own worker, loaded once before its first recipe (outside every timer)
+                doc["workers"][worker_mode] = worker.report
+                worker.stop()
+                worker_mode, worker = mode, mode_worker(mode)
+                try:
+                    doc["worker"] = worker.start()
+                except Exception as exc:  # noqa: BLE001 - recorded; this mode's recipes then fail by name
+                    doc["worker"] = dict(status="failed", problem="smoke worker did not start: %r" % (exc,),
+                                         starts=[], restarts=[])
+                request = warm_request(mode)
+                if request is not None and worker.alive():
+                    facts = worker.warm(request, args.smoke_stage_timeout)
+                    doc["worker"]["box_facts"] = facts or dict(status="failed", problem="no answer (worker killed)")
+                write_smoke(out, doc)
             for race in plan:
                 key = "%s|%s" % (mode, race["id"])
                 name = "%s.%s" % (mode, race["id"].replace("/", "."))
@@ -910,6 +942,7 @@ def run_smoke(args, plans, out, suspects=None):
                     doc["retention_failure"] = str(exc)[:600]
                 write_smoke(out, doc)
     finally:
+        doc["workers"][worker_mode] = worker.report
         worker.stop()
     doc["finished"] = time.time()
     write_smoke(out, doc)

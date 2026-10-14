@@ -409,3 +409,56 @@ def test_cross_entropy_inputs_once_with_the_timed_bytes(in_worker, monkeypatch):
     rng = np.random.default_rng(7)
     assert x1.tobytes() == rng.standard_normal((16, 8)).astype(np.float32).tobytes()
     assert t1.tobytes() == rng.integers(0, 8, 16).astype(np.int64).tobytes()
+
+
+# ---------------------------------------------------------------------------
+# smoke-fixes r17: the pre-binned block of the XGBoost pairing (gbdt-depthwise / gbdt-lossguide)
+# ---------------------------------------------------------------------------
+
+def _fake_borders(x_train, cfg):
+    """Stands in for CatBoost's Pool.quantize (not installed here): per-feature quantile borders."""
+    x = np.asarray(x_train, dtype=np.float32)
+    return [np.unique(np.quantile(x[:, f], [0.25, 0.5, 0.75]).astype(np.float32)) for f in range(x.shape[1])], "fake"
+
+
+@pytest.mark.parametrize("lane,arm", [("gbdt-depthwise", "xgboost-gpu"), ("gbdt-lossguide", "ours-gain0")])
+def test_prebinned_block_staged_once_and_equal_to_the_timed_record(tmp_path, monkeypatch, lane, arm):
+    _istella(tmp_path, monkeypatch)
+    monkeypatch.setattr(SPEC, "greedylogsum_borders", _fake_borders)
+    cfg = SPEC.lane_config(lane, "shipped")
+    monkeypatch.setenv(SI.ENV_FLAG, str(os.getpid() + 1))                     # the timed path
+    timed_pb = SPEC.prebinned_data(lane, SPEC.load_with_fallback("istella", "shipped", None), cfg)
+    monkeypatch.setenv(SI.ENV_FLAG, str(os.getpid()))
+    monkeypatch.setattr(SI, "STAGED", SI.StagedInputs())
+    calls = _counting(monkeypatch, SPEC, "greedylogsum_borders")
+    got = SPEC.stage_inputs(lane, "istella", dict(size="shipped", rows=None, arms=[arm]))
+    assert got["status"] == "ok" and any(timed_pb.bins_sha256 in s for s in got["staged"])
+    assert len(calls) == 1
+    one = SPEC.prebinned_data(lane, SPEC.load_with_fallback("istella", "shipped", None), cfg)
+    two = SPEC.prebinned_data(lane, SPEC.load_with_fallback("istella", "shipped", None), cfg)
+    assert len(calls) == 1                                                       # the recipes only read it
+    assert one is not two and one.X_train is two.X_train
+    for pb in (one, two):
+        assert pb.input_binning == timed_pb.input_binning and pb.bins_sha256 == timed_pb.bins_sha256
+        assert pb.X_train.tobytes() == timed_pb.X_train.tobytes()
+        assert pb.X_test.tobytes() == timed_pb.X_test.tobytes()
+    assert SI.STAGED.report()["pinned"] >= 3                                    # the npz, the Data, the block
+
+
+def test_prebinned_block_not_staged_without_a_prebinned_arm(in_worker, tmp_path, monkeypatch):
+    _istella(tmp_path, monkeypatch)
+    calls = _counting(monkeypatch, SPEC, "greedylogsum_borders")
+    got = SPEC.stage_inputs("gbdt-depthwise", "istella", dict(size="shipped", rows=None, arms=["catboost-gpu"]))
+    assert got["status"] == "ok" and calls == []
+    SPEC.stage_inputs("rf", "istella", dict(size="shipped", rows=None, arms=["xgboost-gpu"]))
+    assert calls == []
+
+
+def test_prebinned_block_is_built_every_time_outside_the_worker(timed, tmp_path, monkeypatch):
+    _istella(tmp_path, monkeypatch)
+    monkeypatch.setattr(SPEC, "greedylogsum_borders", _fake_borders)
+    calls = _counting(monkeypatch, SPEC, "greedylogsum_borders")
+    cfg = SPEC.lane_config("gbdt-depthwise", "shipped")
+    a = SPEC.prebinned_data("gbdt-depthwise", SPEC.load_with_fallback("istella", "shipped", None), cfg)
+    b = SPEC.prebinned_data("gbdt-depthwise", SPEC.load_with_fallback("istella", "shipped", None), cfg)
+    assert len(calls) == 2 and a.bins_sha256 == b.bins_sha256 and a.X_train is not b.X_train
