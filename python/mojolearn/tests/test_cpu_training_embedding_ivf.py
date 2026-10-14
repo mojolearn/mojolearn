@@ -19,8 +19,8 @@ restores the last step's shadow once; a multi-GPU entry is absent by name.
 
 What the source checks hold: the manifest declares the embedding and ivf
 families, routes `_mojolearn_embedding` and `_mojolearn_ivf` to them, covers
-the four lanes, puts them in the set diffed against their own records
-(TRAINING_FIX_LANES) and not the 166-lane record's, and no longer names the
+the four lanes, puts them in the set diffed against the training record
+(their own records were superseded in release-0845), and no longer names the
 Embedding layer as having no CPU path; each host binding registers exactly
 the GPU binding's names plus its four read-backs; the two host modules import
 no GPU module and do not import the device entry points, and they call the
@@ -62,10 +62,11 @@ IVF_LANES = ("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")
 #: three single-index lanes this file is about, and the family assertion
 #: below names it rather than widening to "contains".
 IVF_DRIVER_LANES = ("par-ivf",)
-#: The lanes a committed record of their own carries; ivf-extend (stage 2 of
-#: lane/inference-embedding-ivf-cholesky) is in no record and is OWED against
-#: the training record.
-RECORDED_OWN = ("embedding", "embedding-sort", "ivf", "ivf-euclidean")
+#: The lanes diffed against a committed record of their own instead of the
+#: training record. Empty since release-0845: the 2026-10-14 training record
+#: (host_surface.TRAINING_GPU_COLUMNS) carries embedding, embedding-sort, ivf
+#: and ivf-euclidean on all three columns, so their own records are superseded.
+RECORDED_OWN = ()
 EMB_HOST = "embedding/host/embedding_host.mojo"
 IVF_HOST = "ivf/host/ivf_host.mojo"
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)

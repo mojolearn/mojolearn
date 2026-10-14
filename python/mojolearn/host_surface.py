@@ -270,52 +270,35 @@ BUILDER = "bindings/build_host_family.sh"
 #: fixed since 9fde8f5f7 (DEVIATIONS 2715 and 2716); the kmeans lanes' cells
 #: after the fix are bench/results/identity_break/2026-09-14_kmeans-sqrt-fix,
 #: which the workflow asserts IDENTICAL x3 in its own step.
+#:
+#: release-0845 (2026-10-14): the record is the one taken from pip-installed
+#: 0.8.44 with the wheel's own harness (commit b6c49ce41): Apple M4, NVIDIA
+#: L40S (sm_89) and AMD MI325X (gfx942), 454 lanes x 9 fixtures, 4086 cells,
+#: every one IDENTICAL x3 (its diff.txt beside the columns). The 2026-09-14
+#: record named kmeans-cosine, a lane the harness no longer defines, so
+#: `python -m mojolearn identity` on a GPU box refused before it ran. The new
+#: record does not carry the one-device par-* lanes, so the command does not
+#: run them. The wheels ship this record instead
+#: (packaging/macos/build_release_wheel.sh, packaging/linux/pack_wheel.py read
+#: this tuple). No Mojo code changed between b6c49ce41 and this release's
+#: identity lanes' kernels, and the new TSNE and IVFSQIndex options are off by
+#: default, so the record stands for 0.8.45.
 TRAINING_GPU_COLUMNS = (
-    "bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json",
-    "bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json",
+    "bench/results/identity_break/2026-10-14_0844-pypi/apple-m4.json",
+    "bench/results/identity_break/2026-10-14_0844-pypi/nvidia-l40s-sm_89.json",
+    "bench/results/identity_break/2026-10-14_0844-pypi/amd-mi325x-gfx942.json",
 )
 
-#: The covered lanes whose cells in TRAINING_GPU_COLUMNS predate a fix of
-#: the lane on every GPU column, and the three columns of the same boxes
-#: taken after the fix, which the training gate diffs those lanes against
-#: instead (--require-columns 4, the same verdict rule). kmeans-sqrt is the
-#: one (lane/cpu-training-misc, 2026-09-15): the 166-lane record carries its
-#: pre-fix labels on all three columns and the H100's pre-fix inertia on
-#: `wide` (DEVIATIONS 2716 and 2715), the fix record at 9fde8f5f7 carries the
-#: fixed cells IDENTICAL x3, and the host oracle was fixed in the same
-#: commit, so the CPU column reads IDENTICAL x4 against the fix record and
-#: DIVERGENT on all nine fixtures against the 166-lane record. A lane leaves
-#: this list the day TRAINING_GPU_COLUMNS names a record taken after its
-#: fix. `python -m mojolearn identity` diffs against TRAINING_GPU_COLUMNS
-#: alone, so on a CPU-only install it runs `record_covered_lanes()`.
-#:
-#: The same list also carries covered lanes the record does not have at all
-#: (lane/cpu-training-embedding-ivf, 2026-09-15): embedding and
-#: embedding-sort, whose three GPU columns are
-#: bench/results/identity_break/2026-09-15_embedding-sort (Apple M4, H100,
-#: MI325X at ba4a108bb and e2d770ba8), and ivf and ivf-euclidean, whose three
-#: are bench/results/identity_break/2026-09-14_ivf-euclidean (Apple M4, H100,
-#: MI300X at 76a170dcf, after the L2SqrtExpanded fix). `identity_break --diff`
-#: takes every JSON here at once: a column that lacks a lane reads "(not
-#: run)" on its cells and is not counted, so each of these lanes rests on
-#: its own record's three GPU hashes plus the CPU column's, which
-#: `--require-columns 4` demands, and a JSON that carried a lane it should
-#: not would add a fifth hash to the cell rather than hide one. They leave
-#: this list the day TRAINING_GPU_COLUMNS names a record that carries them
-#: (lane/identity-record-next's 178-lane record does).
-TRAINING_FIX_COLUMNS = (
-    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json",
-    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/amd-mi325x-gfx942.json",
-    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.apple-m4.json",
-    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.nvidia-nvidia-h100-80gb-hbm3-sm_90a.json",
-    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.amd-gfx942.json",
-    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.apple-m4.json",
-    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.nvidia-nvidia-h100-80gb-hbm3-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.amd-mi300x-gfx942.json",
-)
-TRAINING_FIX_LANES = ("kmeans-sqrt", "embedding", "embedding-sort", "ivf", "ivf-euclidean")
+#: Covered lanes whose cells in TRAINING_GPU_COLUMNS predate a fix of the
+#: lane (or that the record does not carry), with the columns taken after the
+#: fix, which the training gate diffs those lanes against instead. EMPTY
+#: since release-0845: the 2026-10-14 record carries kmeans-sqrt, embedding,
+#: embedding-sort, ivf and ivf-euclidean after their fixes on all three
+#: columns, so the 2026-09-14 kmeans-sqrt-fix, 2026-09-15 embedding-sort and
+#: 2026-09-14 ivf-euclidean records are superseded. A lane joins this list
+#: again only when a fix lands after the record and before the next one.
+TRAINING_FIX_COLUMNS = ()
+TRAINING_FIX_LANES = ()
 
 #: The GPU columns the classical INFERENCE gate compares each host identity
 #: hash against (tools/classical_host_gate.py check --gpu-column).

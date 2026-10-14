@@ -589,7 +589,7 @@ def build_parser():
             "Runs tools/identity_break.py (the wheel's copy, or the "
             "checkout's) on this box under the identical tier, then diffs "
             "the column it wrote against the three training GPU columns the "
-            "manifest names (Apple M4, NVIDIA H100, AMD MI300X at the "
+            "manifest names (Apple M4, NVIDIA L40S, AMD MI325X at the "
             "recorded commit), requiring IDENTICAL x4 on every cell this box "
             "ran. On a CPU-only install only the lanes with a CPU training "
             "path run. Needs numpy. The whole record takes minutes to an "
