@@ -94,6 +94,7 @@ def main(argv=None):
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     plan = selected_plan(args.vendor, json.loads(Path(args.manifest).read_text()))
+    os.environ["MOJOLEARN_REPO_COMMIT"] = B.repo_commit()
     path = out / "campaign.json"
     if path.exists():
         raise ValueError("campaign directory already exists; preserve it and select remaining work in a new manifest")
