@@ -1836,6 +1836,12 @@ class TorchArm:
             rec = _gemm_record(lane, "torch", self.library_call, data)
         if MODEL_OF[lane] == "samba":
             rec.update(dropout=SAMBA_DROPOUT, max_grad_norm=None if self.train else "n/a")
+            if lane == "samba-train-step":
+                # smoke-fixes (2026-10-14; samba-train-step refused with "accumulation_steps missing from
+                # torch-* read-back"): this arm's call() runs zero_grad, ONE backward and opt.step per
+                # call, so it accumulates over exactly 1 micro-batch by construction (see call() below).
+                # Ours reads back its own value; an A/B that sets ours to n != 1 shows as a mismatch.
+                rec.update(accumulation_steps=1)
         self.record = rec
         self.fn = torch.compile(self.module) if self.compile else self.module
         sync()
