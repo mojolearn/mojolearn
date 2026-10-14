@@ -2219,16 +2219,37 @@ class TorchArm:
         F = torch.nn.functional
         train = self.train
 
-        def forward(p, x, y=None):
-            logits = F.linear(F.relu(F.linear(x, p["weight1"], p["bias1"])), p["weight2"], p["bias2"])
-            if not train:
-                return logits
-            return F.cross_entropy(logits.float(), y, reduction="mean")
+        # smoke-fixes (2026-10-14; mlp-predict, mlp-train-step refused with "missing real library implementation
+        # read-back: torch-*"): the twin was F.linear calls in a harness closure, so its implementation read back
+        # as bench_board_neural. It is now torch's own modules, torch.nn.Sequential(Linear, ReLU, Linear), holding
+        # ours' weights (nn.Linear computes x @ W.T + b with W (out, in), the same F.linear as before: same work,
+        # same math), and the arm reads back the class it built.
+        p = self._dev_params()
+        nn = torch.nn
+        seq = nn.Sequential(nn.Linear(p["weight1"].shape[1], p["weight1"].shape[0], device=self.dev,
+                                      dtype=p["weight1"].dtype),
+                            nn.ReLU(),
+                            nn.Linear(p["weight2"].shape[1], p["weight2"].shape[0], device=self.dev,
+                                      dtype=p["weight2"].dtype))
+        seq[0].weight, seq[0].bias = nn.Parameter(p["weight1"]), nn.Parameter(p["bias1"])
+        seq[2].weight, seq[2].bias = nn.Parameter(p["weight2"]), nn.Parameter(p["bias2"])
 
-        self.module = self._module(self._dev_params(), forward)
+        class MLP(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.net = seq
+
+            def forward(self, x, y=None):
+                logits = self.net(x)
+                if not train:
+                    return logits
+                return F.cross_entropy(logits.float(), y, reduction="mean")
+
+        self.module = MLP()
+        self.library_impl = type(seq)
         if not train:
             self.host = [self._t(self.data["X"][0])]
-        self.info["twin"] = "F.linear, ReLU, F.linear (mean CE, AdamW for the step)"
+        self.info["twin"] = "torch.nn.Sequential(Linear, ReLU, Linear) (mean CE, AdamW for the step)"
 
     # -- the protocol ------------------------------------------------------
     def _train_inputs(self):
