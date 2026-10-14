@@ -597,6 +597,15 @@ def read_params(obj):
             recovered = [name for name in names if name not in got and name in cfg]
             got.update({name: cfg[name] for name in recovered})
             return lib, "get_params + forest settings _cfg " + ",".join(recovered), got
+        if (lib == "mojolearn" and type(obj).__name__ == "TSNE" and "exaggeration_iter" not in got
+                and isinstance(getattr(obj, "_EXPLORATION_MAX_ITER", None), int)):
+            # smoke-fixes (2026-10-14; algos/tsne: "exaggeration_iter missing from ours read-back"):
+            # ours' TSNE fixes its early-exaggeration phase in the class (python/mojolearn/
+            # _expansion_ann.py TSNE._EXPLORATION_MAX_ITER = 250; fit runs min(it, max_iter) steps
+            # with the exaggeration, as cuML clips exaggeration_iter to max_iter, t_sne.pyx:173).
+            # get_params does not list it; read the object's own constant.
+            return lib, "get_params + class constant _EXPLORATION_MAX_ITER", dict(
+                got, exaggeration_iter=obj._EXPLORATION_MAX_ITER)
         if lib == "cuml" and type(obj).__name__ == "MinMaxScaler" and "clip" not in got:
             # The pinned cuML 26.08 transform only scales and translates. Its
             # documented out-of-range example returns 1.5, not 1.0:
@@ -751,6 +760,74 @@ _TORCH_DECOUPLED_BY_CLASS = {"adam": False, "adamw": True, "mlp-train-step": Tru
                              "samba-train-step": True, "lm-host-train-step": True}
 
 
+def _semantic_r4(lane, param, arm, ours, theirs, library):
+    """smoke-fixes sub-lane r4 (2026-10-14): source-reviewed, value-conditional mappings for
+    algos/tsne (cuML TSNE settings ours' TSNE fixes in its code and does not take)."""
+    # smoke-fixes (2026-10-14; algos/tsne: "<14 settings> missing from ours read-back"). Sources:
+    # cuML 26.08 python/cuml/cuml/manifold/t_sne.pyx (TSNEParams fields :34-59, _init_params
+    # :144-232), cpp/src/tsne/tsne_runner.cuh (k-NN, squaring, perplexity search :195-260),
+    # cpp/src/tsne/exact_tsne.cuh (the EXACT loop :83-157); ours python/mojolearn/_expansion_ann.py
+    # TSNE (takes n_components, perplexity, early_exaggeration, learning_rate, max_iter, init,
+    # random_state), x_ann/tsne_core.mojo (:12-27 design; ts_knn_cell :104 squared distances;
+    # bisection :156, 100 steps), x_ann/tsne_device.mojo (:869-870 exaggeration 1.0 and momentum
+    # 0.5 -> 0.8 after the exploration steps). Each fires only for cuML on algos/tsne, only when
+    # the setting is absent from ours, and only for the values that prove the same work.
+    if lane != "algos/tsne" or arm != "cuml-gpu" or library != "cuml":
+        return None
+    if param in ours or param not in theirs:
+        return None
+    v = theirs[param]
+    exact = theirs.get("method") == "exact"
+    sq_euclid = ((theirs.get("metric") == "euclidean" and theirs.get("square_distances") is True)
+                 or (theirs.get("metric") == "sqeuclidean" and theirs.get("square_distances") is False))
+    if param == "method" and v == "exact":
+        return ("cuML method='exact' (TSNE_ALGORITHM.EXACT, exact_tsne.cuh): attraction over the "
+                "sparse k-NN P, exact all-pairs repulsion; ours' only algorithm (tsne_core.mojo)")
+    if param == "angle" and exact:
+        return ("angle is the Barnes-Hut theta; cuML's exact loop never reads it (exact_tsne.cuh "
+                "has no theta); ours has no tree")
+    if param == "late_exaggeration" and exact and _equal(v, 1.0):
+        return ("cuML's exact loop sets the exaggeration to 1.0 after exaggeration_iter "
+                "(exact_tsne.cuh:92-95; late_exaggeration is FFT only), ours too "
+                "(tsne_device.mojo:869)")
+    if param == "learning_rate_method" and exact and v in ("none", None):
+        return ("no adaptive rewrite of rate, exaggeration or n_neighbors (t_sne.pyx:189: never "
+                "under EXACT, and 'none' off); NOTE cuML's non-adaptive path still doubles the "
+                "rate after exaggeration_iter (t_sne.pyx:201-202), ours keeps it: compared under "
+                "learning_rate, not waived here")
+    if param == "metric" and sq_euclid:
+        return ("squared Euclidean k-NN distances on both: cuML metric='euclidean' then "
+                "square_distances squares them (tsne_runner.cuh:207-217); ours ranks and weighs "
+                "by squared distance (tsne_core.mojo:104)")
+    if param == "square_distances" and sq_euclid:
+        return "with metric='euclidean' it makes cuML's distances squared Euclidean, ours' (tsne_core.mojo:104)"
+    if param == "metric_params" and v is None and theirs.get("metric") != "minkowski":
+        return "metric_params is read only for minkowski's p (t_sne.pyx:232); unset and inactive"
+    if param == "min_grad_norm" and _equal(v, 0.0):
+        return ("min_grad_norm=0.0: cuML stops only when the gradient norm is < 0 "
+                "(exact_tsne.cuh:146), never; ours has no early stop: both run exactly max_iter")
+    if param == "n_iter_without_progress":
+        return ("cuML stores n_iter_without_progress but never passes it to its solver "
+                "(TSNEParams, t_sne.pyx:34-59, has no such field); no early stop on either arm")
+    if (param == "n_neighbors" and isinstance(v, int) and not isinstance(v, bool)
+            and isinstance(ours.get("perplexity"), (int, float))
+            and v == math.floor(3.0 * float(ours["perplexity"])) + 1):
+        return ("cuML n_neighbors equals ours' fixed rule k = floor(3 x perplexity) + 1 "
+                "(tsne_core.mojo:12, clipped to n - 1 as cuML clips to n, t_sne.pyx:180); both "
+                "exact brute-force k-NN")
+    if param == "perplexity_max_iter" and v == 100:
+        return ("100 perplexity bisection steps on both, tolerance 1e-5 on both (ours "
+                "tsne_core.mojo:14,156; cuML params.perplexity_tol, t_sne.pyx:215)")
+    if param == "pre_momentum" and _equal(v, 0.5):
+        return "momentum 0.5 during the exaggeration phase on both (ours tsne_device.mojo:870)"
+    if param == "post_momentum" and _equal(v, 0.8):
+        return "momentum 0.8 after the exaggeration phase on both (ours tsne_device.mojo:870)"
+    if param == "precomputed_knn" and v is None:
+        return ("no supplied k-NN graph: cuML computes its own exact brute-force k-NN "
+                "(distances.cuh get_distances, cuvs brute_force), ours its own exact k-NN")
+    return None
+
+
 def semantic_exception(lane, param, arm, ours, theirs, library):
     """Source-reviewed inactive/fixed API settings, conditional on actual values.
 
@@ -761,6 +838,8 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     decomposition.py, density.py, cluster.py and neighbors.py. Reasons below
     apply only to the named recipe, library and resolved settings.
     """
+    why = _semantic_r4(lane, param, arm, ours, theirs, library)
+    if why: return why
     # FAIRNESS FIX (2026-10-13 audit): optimizer defaults exposed by torch
     # were treated as absent algorithm settings on our narrower optimizer
     # API. Preserve the raw settings and explicitly distinguish the library's
