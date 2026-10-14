@@ -274,6 +274,42 @@ def run_driver(cmd, env, log, cwd=ROOT):
 # a driver's per-arm worker, in process
 # ---------------------------------------------------------------------------
 
+def _wanted_mode(env):
+    return str((env or {}).get("MOJOLEARN_NUMERIC_MODE") or "identical").strip().lower()
+
+
+def single_tier_conflict(env):
+    """The type-registering mojolearn bindings loaded in this process under another tier than `env`'s
+    numeric mode ([] when there is none, or the mode is the process's own).
+    # smoke-fixes (2026-10-14; neural/lm-train-step Apple fast: "foreach is unset on torch-eager-fp32 and unset
+    # on torch-compile-fp32", "missing parameter/version probe: ours-fast"): the identical recipes loaded
+    # _mojolearn_byte_lm's identical tier in the smoke worker; ours-fast then switched the tier in process
+    # (scoped_env -> set_numeric_mode) and its import refused (python/mojolearn/_backend.py _TYPE_REGISTERING
+    # and _load_member: a binding that registers Mojo-owned Python types holds one tier per process, "Use one
+    # numeric_mode per process for this binding"). ours-fast had no record, so a torch arm became the
+    # reference and its foreach/fused (torch-only implementation choices) were compared torch to torch.
+    # Such an arm now goes to an arm server started in its own numeric mode (ArmServers keys on the mode)."""
+    mj = sys.modules.get("mojolearn")
+    backend = getattr(mj, "_backend", None) if mj is not None else None
+    if backend is None:
+        return []
+    want = _wanted_mode(env)
+    try:
+        current = str(backend.default_mode()).strip().lower()
+    except Exception:  # noqa: BLE001
+        return []
+    if current == want:
+        return []
+    names = getattr(backend, "_TYPE_REGISTERING", ()) or ()
+    loaded = []
+    for name in sorted(names):
+        if ("mojolearn." + name) in sys.modules or any(
+                k.startswith("mojolearn._sets.") and k.endswith("." + name)
+                and k != "mojolearn._sets.%s.%s" % (want, name) for k in list(sys.modules)):
+            loaded.append(name)
+    return loaded
+
+
 class InProcessWorker:
     """Stands in for classical_two_datasets.Worker on the --params-only path inside the smoke worker. The
     first read() constructs the arm through the driver's own `probe_ready(argv)` (the worker subprocess's
@@ -298,10 +334,13 @@ class InProcessWorker:
 
     def _ready(self):
         diff = env_difference(self.env)
-        if not same_interpreter(self.interp) or diff["process_start"]:
+        tiers = single_tier_conflict(self.env)
+        if not same_interpreter(self.interp) or diff["process_start"] or tiers:
             # another interpreter or loader environment: its own long-lived process (loaded once)
             why = ("interpreter %s" % " ".join(self.interp) if not same_interpreter(self.interp)
-                   else "process-start settings %s" % ",".join(diff["process_start"]))
+                   else "process-start settings %s" % ",".join(diff["process_start"]) if diff["process_start"]
+                   else "numeric mode %s while %s of another tier is loaded here (one tier per process)"
+                   % (_wanted_mode(self.env), ",".join(tiers)))
             self.environment = dict(process="arm server (%s)" % why)
             msg = ARM_SERVERS.ready(self.interp, self.env, self.script, self.argv, self.log_path)
             self.environment.update(msg.pop("probe_environment", None) or {})
@@ -460,7 +499,9 @@ class _ArmServers:
         self.log_dir = Path(os.environ.get("TMPDIR") or "/tmp")
 
     def server(self, interp, env):
-        key = (tuple(interp), tuple(sorted((k, env.get(k)) for k in PROCESS_START_ENV)))
+        # the numeric mode is part of the key: a server loads one tier of the type-registering bindings
+        # (single_tier_conflict)
+        key = (tuple(interp), tuple(sorted((k, env.get(k)) for k in PROCESS_START_ENV)), _wanted_mode(env))
         if key not in self.servers:
             self.servers[key] = ArmServer(interp, env, self.load_timeout, self.log_dir)
         return self.servers[key]
