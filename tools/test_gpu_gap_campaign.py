@@ -504,3 +504,25 @@ def test_only_the_slow_table_recipes_get_a_longer_timer_and_rows_record_it():
     assert all(isinstance(v, tuple) and v[0] > 5.0 and v[1] for v in C.SMOKE_SLOW.values())
     # an explicit longer --smoke-timeout is never shortened by the table
     assert C.recipe_timeout(SimpleNamespace(smoke_timeout=60.0), slow) == (60.0, 'default --smoke-timeout')
+
+
+def test_mamba_ssm_is_prepared_once_per_box_only_when_a_planned_arm_needs_it(tmp_path, monkeypatch):
+    import install_mamba_ssm as M
+    calls = []
+    monkeypatch.setattr(M, 'install', lambda python, vendor, log, wheels=None: calls.append((python, vendor)) or
+                        {'status': 'failed', 'problem': 'no hipcc under /opt/rocm'})
+    args = SimpleNamespace(python_env='py', vendor='amd')
+    neural = [{'id': 'neural/mamba1-forward/gaussian/shape=full', 'family': 'neural', 'lane': 'mamba1-forward',
+               'arms': ['ours', 'mamba-ssm-fp32']}]
+    algos = [{'id': 'algos/adam/synthetic/rows=full', 'family': 'algos', 'lane': 'adam', 'arms': ['ours']}]
+    assert C.prepare_mamba_ssm(args, algos, tmp_path)['status'] == 'ok' and calls == []
+    rec = C.prepare_mamba_ssm(args, neural, tmp_path)
+    assert calls == [('py', 'amd')] and rec['status'] == 'failed' and rec['problems'] == ['no hipcc under /opt/rocm']
+    assert C.prepare_mamba_ssm(SimpleNamespace(python_env='py', vendor='apple'), neural, tmp_path)['status'] == 'ok'
+
+
+def test_install_mamba_ssm_does_nothing_when_both_import(monkeypatch, tmp_path):
+    import install_mamba_ssm as M
+    monkeypatch.setattr(M, 'imports', lambda python: (True, '2.3.0'))
+    monkeypatch.setattr(M.B, 'run_logged', lambda *a, **k: (_ for _ in ()).throw(AssertionError('no build')))
+    assert M.install('py', 'amd', str(tmp_path / 'log'))['installed'] is False

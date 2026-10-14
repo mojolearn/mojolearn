@@ -148,6 +148,24 @@ def prepare_arm_venvs(args, plan, out):
     return dict(status="ok" if not problems else "failed", problems=sorted(problems.values()), arms=got)
 
 
+def prepare_mamba_ssm(args, plan, out):
+    """smoke-fixes (2026-10-14; neural/mamba1/2/3-forward on AMD: "missing parameter/version probe: mamba-ssm-fp32"):
+    every recipe runs with --skip-install, so bench_board's own mamba-ssm build (mamba_ssm_install_steps) never ran
+    and the arms refused in every recipe. Build causal-conv1d + mamba-ssm into the board venv once per box
+    (tools/install_mamba_ssm.py: idempotent, the same steps as bench_board setup; on AMD it needs the HIP SDK,
+    tools/amd_box_runtime_setup.sh). Returns a check record; a failure is reported once here and the arms then
+    refuse by name in their recipes."""
+    wants = [r for r in plan if r["family"] == "neural" and (
+        any(str(a).startswith("mamba-ssm") for a in list(r.get("arms") or ()) + list(r.get("opponents") or ()))
+        or str(r["lane"]).startswith("samba"))]
+    if not wants or args.vendor not in ("nvidia", "amd"):
+        return dict(status="ok", problems=[], skipped="no planned arm needs mamba_ssm")
+    M = __import__("install_mamba_ssm")
+    rec = M.install(args.python_env, args.vendor, str(out / "mamba-ssm-install.log"))
+    return dict(rec, problems=[rec["problem"]] if rec.get("problem") else [],
+                recipes=sorted(r["id"] for r in wants))
+
+
 def fixture_commands(args, lanes, fixtures):
     """The layer lanes' fixture preparation: the graph lanes' data blocks, generate, verify (the timed
     campaign's prepare_fixtures and the smoke's smoke_fixtures run the same three commands)."""
@@ -435,6 +453,10 @@ def smoke_checks(args, plans, out, worker=None):
         checks["arm-venvs"] = prepare_arm_venvs(args, races, out)
     except Exception as exc:  # noqa: BLE001 - recorded; the arm then refuses by name in its recipe
         checks["arm-venvs"] = dict(status="failed", problems=["arm venvs raised: %r" % (exc,)])
+    try:
+        checks["mamba-ssm"] = prepare_mamba_ssm(args, races, out)
+    except Exception as exc:  # noqa: BLE001 - recorded; the arms then refuse by name in their recipes
+        checks["mamba-ssm"] = dict(status="failed", problems=["mamba-ssm install raised: %r" % (exc,)])
     why = B.gpu_set_refusal(args.python_env, args.vendor)
     checks["gpu-set"] = dict(status="ok" if not why else "failed", problems=[str(why)[:1500]] if why else [])
     try:
@@ -958,6 +980,7 @@ def main(argv=None):
         return 1
     E.write(path, state)
     state["arm_venvs"] = prepare_arm_venvs(args, plan, out)
+    state["mamba_ssm"] = prepare_mamba_ssm(args, plan, out)
     E.write(path, state)
     state["fixture_artifacts"] = prepare_fixtures(args, plan, out)
     E.write(path, state)
