@@ -96,6 +96,7 @@ numbers only (CONTRIBUTING.md, "never say we are faster"). A ratio column is
 `ours median / that arm's median`: below 1.0 our median time is the lower one.
 """
 import argparse
+import glob
 import copy
 import datetime
 import hashlib
@@ -421,7 +422,7 @@ AMD_TORCH_ROCM = "torch==2.13.0+rocm7.1"
 #: ROCm may fail the install, which leaves the hipvs-gpu arms refusing by name. Results raced
 #: before this change were wrong for those lanes; apply extra scrutiny.
 AMD_HIPVS_INDEX = "https://pypi.amd.com/rocm-7.2.3/simple/"
-AMD_HIPVS = ["amd-hipvs==1.0.0"]
+AMD_HIPVS = ["amd-hipvs==1.0.0", "amd-cupy==13.5.1"]
 DEFAULT_TORCH_SPEC = {"apple": "torch==2.13.0", "nvidia": "torch==2.13.0+cu129",
                       "amd": AMD_TORCH_ROCM}
 #: FAIRNESS FIX (2026-10-13 audit): torchvision's build for each default torch (torch 2.13 pairs
@@ -988,6 +989,14 @@ def child_env(ctx, extra=None):
     env["MOJOLEARN_REPO_COMMIT"] = ctx.get("commit") or "unknown"
     env["PYTHONUNBUFFERED"] = "1"
     env["MOJOLEARN_BOARD_VENDOR"] = ctx["vendor"]     # tools/bench_board_probe.py
+    if ctx["vendor"] == "amd":
+        # FAIRNESS FIX (2026-10-13 audit): AMD's hipVS wheels put native
+        # libraries in package-local lib64 directories; retain their paths in
+        # worker receipts. A successful pip install alone did not prove import.
+        prefix = os.path.dirname(os.path.dirname(os.path.abspath(ctx["python"])))
+        native = sorted(glob.glob(os.path.join(prefix, "lib", "python*", "site-packages", "*", "lib64")))
+        if native:
+            env["LD_LIBRARY_PATH"] = os.pathsep.join(native + ([env["LD_LIBRARY_PATH"]] if env.get("LD_LIBRARY_PATH") else []))
     if ctx.get("measurement_receipts"):
         env["MOJOLEARN_MEASUREMENT_RECEIPTS"] = ctx["measurement_receipts"]
     if ctx["vendor"] == "nvidia" and ctx.get("ptxas"):
