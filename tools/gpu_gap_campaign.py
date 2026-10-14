@@ -431,6 +431,7 @@ class SmokeWorker:
                                   "--vendor", args.vendor, "--out", str(self.dir)]
         self.proc, self.buf = None, b""
         self.report = dict(status="starting", starts=[], restarts=[])
+        self.warm_request, self.warm_timeout = None, None
 
     def start(self):
         """Start the worker and wait for its load report (imports and GPU init, recorded per start)."""
@@ -456,6 +457,10 @@ class SmokeWorker:
             rep = msg.get("report") or {}
             start.update(report=rep, import_seconds=rep.get("import_seconds"),
                          gpu_init_seconds=rep.get("gpu_init_seconds"))
+            if self.warm_request is not None:
+                # a restarted worker reads the box facts again, outside every recipe's timer (recorded)
+                reply = self.ask(self.warm_request, self.warm_timeout)
+                start["box_facts"] = (reply or {}).get("facts") or dict(status="failed", problem="no answer")
         self.report["starts"].append(start)
         self.report.update(status="serving" if self.alive() else "failed",
                            import_seconds=start.get("import_seconds"),
@@ -464,6 +469,15 @@ class SmokeWorker:
 
     def alive(self):
         return self.proc is not None and self.proc.poll() is None
+
+    def warm(self, request, timeout):
+        """The box facts (and arm servers) every recipe reads, once per worker start; the reply's facts."""
+        self.warm_request, self.warm_timeout = request, timeout
+        reply = self.ask(request, timeout)
+        if reply is None:
+            self.kill()
+            return None
+        return reply.get("facts")
 
     def ask(self, request, timeout):
         """Send one request; its reply, or None when the worker did not answer within `timeout`."""
@@ -651,15 +665,12 @@ def run_smoke(args, plans, out):
     first = next((r for p in plans.values() for r in p), None)
     if first is not None and worker.alive():
         # the box facts and the data hashes every recipe's check reads, once, outside every recipe's timer
-        reply = worker.ask(dict(op="warm-box", argv=smoke_command(args, first, out / "warm-box", "identical",
-                                                                    receipts)[2:],
-                                paths=plan_data_files(args, plans),
-                                arm_pythons=sorted(set(((doc["checks"].get("arm-venvs") or {}).get("arms")
-                                                        or {}).values()))), args.smoke_stage_timeout)
-        doc["worker"]["box_facts"] = (reply or {}).get("facts") or dict(status="failed", problem="no answer")
-        if reply is None:
-            worker.kill()
-            worker.start()
+        facts = worker.warm(dict(op="warm-box", argv=smoke_command(args, first, out / "warm-box", "identical",
+                                                                   receipts)[2:],
+                                 paths=plan_data_files(args, plans),
+                                 arm_pythons=sorted(set(((doc["checks"].get("arm-venvs") or {}).get("arms")
+                                                         or {}).values()))), args.smoke_stage_timeout)
+        doc["worker"]["box_facts"] = facts or dict(status="failed", problem="no answer (worker killed)")
         write_smoke(out, doc)
     members = {}
     try:

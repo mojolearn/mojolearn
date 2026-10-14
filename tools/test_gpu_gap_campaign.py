@@ -268,6 +268,9 @@ class FakeWorker:
         self.asked.append(request['op'])
         return {'event': request['op'], 'facts': {'box_fingerprint': {'status': 'ok', 'seconds': 2.0}}}
 
+    def warm(self, request, timeout):
+        return self.ask(request, timeout)['facts']
+
     def recipe(self, key, argv, log, timeout):
         self.recipes.append((key, argv, timeout))
         reply, restart = FakeWorker.behave(argv, log, timeout)

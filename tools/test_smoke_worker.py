@@ -91,6 +91,9 @@ FAKE_WORKER = textwrap.dedent('''
         req = json.loads(line)
         if req["op"] == "quit":
             break
+        if req["op"] == "warm-box":
+            proto.write(json.dumps({"event": "warm-box", "facts": {"status": "done"}}) + "\n")
+            continue
         if "hang" in req.get("argv", []):
             time.sleep(600)       # a C call that never returns to Python
         proto.write(json.dumps({"event": "recipe", "key": req.get("key"), "status": "done", "rc": 0}) + "\\n")
@@ -109,6 +112,7 @@ def test_a_hung_worker_is_killed_and_restarted_and_the_next_recipe_runs(tmp_path
     try:
         rep = w.start()
         assert rep['status'] == 'serving' and rep['import_seconds'] == 0.1
+        assert w.warm({'op': 'warm-box', 'argv': []}, 10) == {'status': 'done'}
         first = w.proc.pid
         t0 = time.time()
         reply, restart = w.recipe('identical|a', ['hang'], tmp_path / 'a.log', 0.2)
@@ -116,6 +120,7 @@ def test_a_hung_worker_is_killed_and_restarted_and_the_next_recipe_runs(tmp_path
         assert restart['after'] == 'identical|a' and restart['started'] and 'killed' in restart['reason']
         assert w.alive() and w.proc.pid != first
         assert len(w.report['starts']) == 2 and len(w.report['restarts']) == 1   # load cost recorded again
+        assert w.report['starts'][-1]['box_facts']['status'] == 'done'           # box facts read again
         reply, restart = w.recipe('identical|b', ['ok'], tmp_path / 'b.log', 0.2)
         assert reply['status'] == 'done' and restart is None
     finally:
