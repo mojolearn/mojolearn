@@ -2777,6 +2777,19 @@ def preflight_check(ctx, race, arms):
                 and a.startswith("torch-")}
     arms = [a for a in arms if a not in excluded]
     probes = params_probe(ctx, race, arms) if scorer is None else params_probe(ctx, race, arms, scorer=scorer)
+    # smoke-fixes (2026-10-14; trees/gbdt-lossguide/taxi: "missing parameter/version probe: lightgbm-cuda",
+    # "missing worker GPU/driver/OS evidence: lightgbm-cuda", "missing real library implementation read-back:
+    # lightgbm-cuda"): the trees driver refuses every LightGBM arm by name before constructing it
+    # (tools/speed_gbdt_arm.py lightgbm_arms: MIN-CHILD, ROW-SAMPLING, CATEGORICAL-ALGORITHM;
+    # lightgbm_rank_arms: DIFFERENT-ALGORITHM), so it has no read-back and is never timed. An arm the probe
+    # did not build is excluded with its reason ONLY when PLANNED_REFUSALS names it for this vendor and race
+    # (the same table the smoke verdict accepts a named REFUSED cell from); an arm the probe did build is
+    # checked like any other, and an unplanned missing probe still refuses the race.
+    planned = {a: _planned_refusal(ctx.get("vendor") or "", smoke_key(race), a) for a in arms if a not in probes}
+    planned = {a: "refused by name by its driver before construction (PLANNED_REFUSALS): " + why
+               for a, why in planned.items() if why}
+    excluded.update(planned)
+    arms = [a for a in arms if a not in planned]
     missing = [a for a in arms if a not in probes or not probes[a].get("version")]
     records = {a: dict(p["record"], __record__=True) for a, p in probes.items() if p.get("record")}
     lane = ("algos/" if race["family"] == "algos" else "") + race["lane"]
@@ -3909,8 +3922,12 @@ SMOKE_FILE_GLOBS = ("tools/bench_board*.py", "tools/speed_gbdt_arm.py",
 #: race passes with such an arm only when its cell is a named REFUSED(...).
 #: (vendor glob, race key glob family/lane/dataset, arm glob, why)
 PLANNED_REFUSALS = [
+    # smoke-fixes (2026-10-14; trees/gbdt-lossguide/taxi): the reason named the old refusal; since the
+    # 2026-10-13 audit the driver refuses every LightGBM tree arm by name whatever the build.
     ("nvidia", "trees/*", "lightgbm-cuda",
-     "the pip LightGBM wheel has no CUDA build (tools/speed_gbdt_arm.py lightgbm_arms)"),
+     "the driver refuses every LightGBM tree arm by name (tools/speed_gbdt_arm.py lightgbm_arms "
+     "MIN-CHILD / ROW-SAMPLING / CATEGORICAL-ALGORITHM, lightgbm_rank_arms DIFFERENT-ALGORITHM): "
+     "LightGBM 4.7.0 aborts at the lanes' min_child_samples 1 and min_child_weight 0"),
     ("amd", "*", "xgboost-gpu",
      "the pinned XGBoost wheel is CUDA; the image carries no ROCm build"),
     ("nvidia", "classical2/spectral*", "cuml-gpu",
