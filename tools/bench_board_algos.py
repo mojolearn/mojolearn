@@ -6106,7 +6106,15 @@ def _build_als(lane, arm, D):
         # with use_cg=False on both sides no CG step runs, so ours' cg_steps
         # has no effect either
         akw.update(use_cg=p["use_cg"])
-    rec = dict(akw, __library__="implicit")
+    # smoke-fixes (2026-10-14; algos/als/taxi-zones: "missing real library implementation read-back:
+    # implicit-gpu"): implicit.als.AlternatingLeastSquares is a factory that returns
+    # implicit.gpu.als.AlternatingLeastSquares (use_gpu=True) or implicit.cpu.als.AlternatingLeastSquares
+    # (implicit/als.py, github.com/benfred/implicit v0.7.x); record the class that really runs.
+    if gpu:
+        import implicit.gpu.als as impl_mod
+    else:
+        import implicit.cpu.als as impl_mod
+    rec = dict(akw, __library__="implicit", __implementation__=impl_mod.AlternatingLeastSquares)
 
     def fit():
         m = AlternatingLeastSquares(**akw)
@@ -6337,6 +6345,8 @@ def _build_shap(lane, arm, D):
                          "coefficients (_shared_ridge_f32)")
         info["config"] = "mojolearn.%s(mojolearn.RidgeCV(alphas=[1.0]).predict, background 100)" % name
 
+        impl = cls
+
         def fit():
             ex = (cls(ridge, bg, link=p["link"], random_state=SEED) if t == "kernel-shap"
                   else cls(ridge, bg, random_state=SEED))
@@ -6345,6 +6355,7 @@ def _build_shap(lane, arm, D):
     elif arm == "shap-cpu":
         import shap
         b_f32 = np.float32(b32)
+        impl = shap.KernelExplainer if t == "kernel-shap" else shap.PermutationExplainer
 
         def predict(Z):
             return np.asarray(_host(Z), dtype=np.float32) @ w32 + b_f32
@@ -6367,6 +6378,11 @@ def _build_shap(lane, arm, D):
                 S["phi"] = ex(Xq, max_evals=2 * p["npermutations"] * (X.shape[1] + 1)).values
     else:
         from cuml.explainer import KernelExplainer, PermutationExplainer
+        # smoke-fixes (2026-10-14; algos/permutation-shap/taxi: "missing real library implementation
+        # read-back: cuml-gpu"): the record names the cuML explainer class this arm really runs
+        # (cuml.explainer.permutation_shap.PermutationExplainer / kernel_shap.KernelExplainer; cuml v26.08.00
+        # python/cuml/cuml/explainer/__init__.py imports them from there).
+        impl = KernelExplainer if t == "kernel-shap" else PermutationExplainer
         # float32 background and rows (the upload is untimed), so cuML generates float32
         # synthetic rows, the precision of the model
         dev, info, sync = _cuml_up({"bg": np.ascontiguousarray(bg, dtype=np.float32),
@@ -6406,7 +6422,7 @@ def _build_shap(lane, arm, D):
     def outputs():
         return {"phi": _arr(S["phi"], np.float64).reshape(exact.shape), "exact": exact}
     rec = dict(__library__="mojolearn" if arm in OURS_ARMS else arm.rsplit("-", 1)[0], seed=SEED,
-               n_background=p["n_background"])
+               n_background=p["n_background"], __implementation__=impl)
     rec.update({k: p[k] for k in ("nsamples", "link", "l1_reg", "npermutations") if k in p})
     return Runner(info, fit, outputs, record=rec)
 
