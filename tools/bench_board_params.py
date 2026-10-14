@@ -572,8 +572,13 @@ def read_params(obj):
         # Normalizer constructors store these attributes but inherit a
         # get_params list that omits them (_thirdparty/sklearn/preprocessing/
         # _data.py). Read the actual object; an absent attribute stays absent.
-        if lib == "cuml" and type(obj).__name__ in ("Binarizer", "Normalizer"):
-            names = ("threshold", "copy") if type(obj).__name__ == "Binarizer" else ("norm", "copy")
+        # smoke-fixes (2026-10-14; simple-imputer: "add_indicator, missing_values missing from
+        # cuml-gpu read-back"): cuML 26.08 SimpleImputer stores both in _BaseImputer.__init__
+        # (_thirdparty/sklearn/preprocessing/_imputation.py:109-111) but its _get_param_names
+        # (lines 261-267) lists only strategy, fill_value, verbose and copy. Same recovery.
+        if lib == "cuml" and type(obj).__name__ in ("Binarizer", "Normalizer", "SimpleImputer"):
+            names = {"Binarizer": ("threshold", "copy"), "Normalizer": ("norm", "copy"),
+                     "SimpleImputer": ("missing_values", "add_indicator")}[type(obj).__name__]
             got = dict(got)
             recovered = [name for name in names if name not in got and hasattr(obj, name)]
             got.update({name: getattr(obj, name) for name in recovered})
@@ -805,6 +810,89 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
         return None
     if library != "cuml" or arm != "cuml-gpu":
         return None
+    algo = lane.removeprefix("algos/") if lane.startswith("algos/") else None
+    # smoke-fixes (2026-10-14; bernoulli-nb, categorical-nb, multinomial-nb, complement-nb:
+    # "class_prior is unset on ours and unset on cuml-gpu", "force_alpha missing from cuml-gpu
+    # read-back"). Source: cuML 26.08 python/cuml/cuml/naive_bayes/naive_bayes.py
+    # (_update_class_log_prior, lines 591-608; partial_fit alpha check, line 661;
+    # _update_feature_log_prob adds self.alpha unclipped, lines 876, 1018, 1146, 1388) against
+    # python/mojolearn/_expansion_prep.py (_DiscreteNB._prior_stages, lines 3560-3568; CategoricalNB
+    # lines 7432-7435; _check_alpha, line 3140: alpha used as given, force_alpha only stored).
+    if algo in ("bernoulli-nb", "categorical-nb", "multinomial-nb", "complement-nb"):
+        if (param == "class_prior" and param in ours and param in theirs and ours[param] is None
+                and theirs[param] is None and ours.get("fit_prior") is True
+                and theirs.get("fit_prior") is True):
+            return ("class_prior None with fit_prior True learns log(class_count / n) from the fit "
+                    "rows on both (cuML _update_class_log_prior; ours class_log_prior stage); "
+                    "fit_prior and alpha remain compared")
+        if param == "force_alpha" and param not in theirs and ours.get(param) is True:
+            return ("cuML has no force_alpha and adds alpha unclipped; ours force_alpha=True is "
+                    "scikit-learn's unclipped alpha (ours never clips); alpha remains compared")
+        if (algo == "categorical-nb" and param == "min_categories" and param not in theirs
+                and isinstance(ours.get(param), list) and ours[param]
+                and all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in ours[param])):
+            # the driver refuses the cuML arm unless these equal cuML's fit-derived counts
+            # (tools/bench_board_algos.py _est_factory, categorical-nb)
+            return ("cuML sizes each feature by its highest fit code + 1 (naive_bayes.py lines "
+                    "1380-1388); ours' min_categories equals those counts on every raced dataset "
+                    "(the driver refuses the cuML arm when a query code exceeds the fit maximum)")
+    # smoke-fixes (2026-10-14; gaussian-nb: "priors is unset on ours and unset on cuml-gpu").
+    # cuML 26.08 naive_bayes.py GaussianNB.fit lines 387-388 (priors None: class_count_ / sum);
+    # ours _expansion_prep.py:3166-3168 (None uses the training class frequencies) and 3222-3228.
+    if (algo == "gaussian-nb" and param == "priors" and param in ours and param in theirs
+            and ours[param] is None and theirs[param] is None):
+        return "priors None means the fit rows' class frequencies on both; var_smoothing remains compared"
+    # smoke-fixes (2026-10-14; gaussian-rp: "compute_inverse_components missing from cuml-gpu
+    # read-back"). cuML 26.08 random_projection/random_projection.py: _BaseRandomProjection
+    # (__init__ lines 53-66, fit lines 81-121) has no such option and never forms the inverse;
+    # ours _expansion_decomp.py:2098 computes the pseudo-inverse only when it is True.
+    if (algo == "gaussian-rp" and param == "compute_inverse_components" and param not in theirs
+            and ours.get(param) is False):
+        return "no pseudo-inverse of the components on either arm; cuML has no inverse option"
+    # smoke-fixes (2026-10-14; lars: "jitter missing from cuml-gpu read-back"). cuML 26.08
+    # linear_model/lars.pyx (__init__ lines 134-151, fit lines 202-222) takes no jitter and adds no
+    # noise to y; ours _expansion_linear.py:1444 refuses any jitter but None (no noise).
+    if algo == "lars" and param == "jitter" and param not in theirs and param in ours and ours[param] is None:
+        return "no target jitter on either arm: ours None adds none, cuML has no jitter option"
+    # smoke-fixes (2026-10-14; simple-imputer: "keep_empty_features missing from cuml-gpu
+    # read-back", "fill_value is unset on ours and unset on cuml-gpu"). cuML 26.08
+    # _thirdparty/sklearn/preprocessing/_imputation.py: transform drops columns whose statistic is
+    # NaN unless strategy='constant' (lines 448-463); fill_value None means 0 for numeric input
+    # (lines 336-344) and is read only by strategy='constant' (_dense_fit, lines 424-426). Ours
+    # _expansion_prep.py:2226-2234: keep_empty_features False drops them; fill_value None means 0.
+    if algo == "simple-imputer":
+        same_stat = (ours.get("strategy") == theirs.get("strategy")
+                     and ours.get("strategy") in ("mean", "median", "most_frequent"))
+        if param == "keep_empty_features" and param not in theirs and ours.get(param) is False and same_stat:
+            return "both drop columns with no observed fit value (non-constant strategy); strategy remains compared"
+        if (param == "fill_value" and param in ours and param in theirs and ours[param] is None
+                and theirs[param] is None):
+            return "fill_value None means 0 on both and is read only by strategy='constant'"
+    # smoke-fixes (2026-10-14; target-encoder: "categories, shuffle, target_type missing from
+    # cuml-gpu read-back", "multi_feature_mode, split_method, stat missing from ours read-back").
+    # cuML 26.08 preprocessing/_target_encoder.py: categories_ are the fit rows' sorted uniques
+    # (lines 326-330); multi_feature_mode='independent' encodes each column alone over all fit
+    # rows and never reads the fold column (_fit_transform_independent, lines 421-470,
+    # _compute_single_feature_encoding lines 472-487: (sum + smooth * mean) / (count + smooth)).
+    # Ours _expansion_prep.py:1901-1960 (TargetEncoder): categories 'auto' from the fit rows,
+    # fit() (line 2099) builds no folds. The race times fit() then transform(); the driver refuses
+    # the cuML arm for a timed fit_transform or a target that is not 0/1
+    # (tools/bench_board_algos.py _est_factory, target-encoder).
+    if algo == "target-encoder" and theirs.get("multi_feature_mode") == "independent":
+        if param == "categories" and param not in theirs and ours.get(param) == "auto":
+            return "categories from the fit rows' unique values on both (ours 'auto', cuML categories_)"
+        if param == "multi_feature_mode" and param not in ours:
+            return "cuML 'independent' encodes each column separately, as ours always does"
+        if (param == "target_type" and param not in theirs and ours.get(param) == "binary"
+                and theirs.get("stat") == "mean"):
+            return "ours' binary positive-class rate is cuML's mean(y) on the 0/1 target the driver requires"
+        if (param == "stat" and param not in ours and theirs.get(param) == "mean"
+                and ours.get("target_type") == "binary"):
+            return "cuML stat='mean' is ours' mean target encoding; smooth remains compared"
+        if param == "split_method" and param not in ours:
+            return "fold assignment is inactive: fit() cross-fits on neither arm (cuML independent mode never reads folds)"
+        if param == "shuffle" and param not in theirs and isinstance(ours.get(param), bool):
+            return "fold shuffling is inactive: ours' fit() builds no folds; cuML independent mode never reads folds"
     if lane == "pca" and ours.get("svd_solver") == theirs.get("svd_solver") == "covariance_eigh":
         if param in ("iterated_power", "n_oversamples", "power_iteration_normalizer"):
             return "covariance eigendecomposition on both arms: randomized/Jacobi iteration controls are inactive (cuML pca.pyx; mojolearn decomposition.py)"
