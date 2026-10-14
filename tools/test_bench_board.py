@@ -1682,3 +1682,12 @@ def test_paired_lossguide_plans_two_own_configurations_and_pairs_each_ratio():
     assert bb.PAIR.prebinned_arm("gbdt-depthwise", "xgboost-gpu") and bb.PAIR.prebinned_arm("gbdt-lossguide", "ours-gain0")
     assert not bb.PAIR.prebinned_arm("gbdt-depthwise", "ours") and not bb.PAIR.prebinned_arm("gbdt-lossguide", "catboost-gpu")
     assert not bb.PAIR.prebinned_arm("gbdt-symmetric", "xgboost-gpu")
+
+
+def test_samba_torch_arms_that_cannot_build_are_excluded_by_name_on_every_vendor():
+    # smoke-fixes 2026-10-14: a named exclusion, never a missing probe; applied only to an arm the probe did not build
+    for vendor in ("apple", "amd", "nvidia"):
+        for lane in ("samba-forward", "samba-train-step"):
+            why = bb._planned_refusal(vendor, "neural/%s" % lane, "torch-eager-fp32")
+            assert why and "no library implements Samba" in why
+    assert bb._planned_refusal("amd", "neural/mamba1-forward", "torch-eager-fp32") is None

@@ -4059,17 +4059,18 @@ PLANNED_REFUSALS = [
      "the pinned XGBoost wheel is CUDA; the image carries no ROCm build"),
     ("nvidia", "classical2/spectral*", "cuml-gpu",
      "cuML SpectralClustering / SpectralEmbedding are absent from the pinned cuML 26.8.0"),
-    # smoke-fixes (2026-10-14; neural/samba-forward, samba-train-step on Apple: "code our harness wrote, not a
-    # library's own implementation"): no library implements Samba. The torch arms assemble it from
-    # mamba_ssm's Mamba3 layers and transformers' attention (bench_board_neural.TorchArm._build_samba), and
-    # mamba_ssm's kernels are CUDA or ROCm/HIP only, so on mps every torch arm refuses by name before it
-    # builds (_build_samba: "mamba_ssm's Mamba3 kernels run on CUDA or ROCm/HIP only"); the pure-PyTorch
-    # Mamba-3 reference is never raced in its place (REFERENCE_TWIN_LANES). Recorded as an excluded arm with
-    # this reason, like the Mamba lanes' torch references (637b53946). Not on AMD: mamba_ssm is planned
-    # there (bench_board.mamba_ssm_install_steps), so a missing probe there is an install failure and refuses.
-    ("apple", "neural/samba-*", "torch-*",
-     "no library implements Samba and mamba_ssm's Mamba3 kernels (the torch arms' SSM layers) run on CUDA "
-     "or ROCm/HIP only; the pure-PyTorch reference is not an opponent, so the lane has no opponent on Apple"),
+    # smoke-fixes (2026-10-14; neural/samba-forward, samba-train-step: "code our harness wrote, not a library's own
+    # implementation" on Apple, "missing parameter/version probe: torch-*" on AMD): no library implements Samba.
+    # The torch arms are our harness's composition of mamba_ssm's Mamba3 layers and transformers' attention
+    # (bench_board_neural.TorchArm._build_samba); they refuse by name before building wherever mamba_ssm does not
+    # run (mps: its Mamba3 kernels are CUDA or ROCm/HIP only) or is not installed. On every vendor such an arm is
+    # recorded as excluded with this reason (preflight_check applies a planned refusal ONLY to an arm the probe did
+    # not build); where the arm builds (NVIDIA with mamba_ssm), it is checked like any other. A missing mamba_ssm
+    # install is reported once per box by the campaign's mamba-ssm check (gpu_gap_campaign.prepare_mamba_ssm).
+    ("*", "neural/samba-*", "torch-*",
+     "no library implements Samba: the torch arms compose mamba_ssm's Mamba3 with transformers' attention and "
+     "refuse by name where mamba_ssm does not run (mps) or is not installed; the pure-PyTorch reference is not "
+     "an opponent"),
 ]
 #: Race keys whose arms produce no comparable output (a random mask), so a
 #: smoke pass needs a time but no quality value.
