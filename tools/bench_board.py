@@ -4052,7 +4052,7 @@ def _smoke_files_sha256(repo=REPO):
 
 def smoke_key(race):
     """family/lane/dataset: the same race in a smoke run and a full run."""
-    return "%s/%s/%s" % (race["family"], race["lane"], race["dataset"])
+    return "%s/%s/%s" % (race["family"], race["lane"], race.get("dataset", ""))
 
 
 def shard_races(races, shard):
