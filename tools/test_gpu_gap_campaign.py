@@ -34,3 +34,12 @@ def test_explicit_wall_time_ceiling_does_not_change_workload(tmp_path):
     assert cmd[cmd.index("--round-seconds") + 1] == "1800"
     assert cmd[cmd.index("--rows") + 1] == "full"
     assert cmd[cmd.index("--rounds") + 1] == "1"
+
+
+def test_repair_can_reuse_a_verified_opponent_without_forcing_a_retime(tmp_path):
+    args = SimpleNamespace(python_env="python", vendor="nvidia", cache=str(tmp_path),
+                           opponent_store=str(tmp_path / "retained-opponents.jsonl"))
+    cmd = C.command(args, dict(family="classical", lane="dbscan", dataset="taxi"), tmp_path)
+    assert "--retime-opponents" not in cmd
+    assert "--with-opponents" in cmd
+    assert cmd[cmd.index("--opponent-store") + 1] == args.opponent_store

@@ -37,9 +37,15 @@ def command(args, race, directory):
     cmd = [args.python_env, str(ROOT / "tools/bench_board.py"),
            "--vendor", args.vendor, "--python-env", args.python_env, "--skip-install",
            "--cache", args.cache, "--rows", "full", "--rounds", "1", "--modes", "identical",
-           "--gpu-opponents-only", "--retime-opponents", "--verify-data", "--no-smoke-gate",
+           "--gpu-opponents-only", "--verify-data", "--no-smoke-gate",
            "--round-seconds", str(getattr(args, "round_seconds", 0)),
            "--families", race["family"], "--lanes", race["lane"], "--out", str(directory)]
+    if getattr(args, "opponent_store", None):
+        # The board rechecks recorded parameters, library/device and input
+        # identity before reusing a retained opponent from a failed pairing.
+        cmd += ["--with-opponents", "--opponent-store", args.opponent_store]
+    else:
+        cmd += ["--retime-opponents"]
     if race["dataset"] in B.DATASETS:
         cmd += ["--datasets", race["dataset"]]
     return cmd
@@ -87,6 +93,7 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--cache", required=True)
     ap.add_argument("--python-env", default=sys.executable)
+    ap.add_argument("--opponent-store", help="reuse verified matching opponents; measure only missing ones")
     # FAIRNESS FIX (2026-10-13 audit): a fixed 240-second override truncated
     # legitimate full clustering workloads. Reuse the board's established
     # workload budgets unless the caller explicitly supplies another ceiling.
