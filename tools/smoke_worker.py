@@ -288,9 +288,11 @@ def run_recipe(fn, argv, log, timeout):
     return reply
 
 
-def warm_box(argv, paths):
-    """The box facts every recipe's check reads, once, outside any recipe's timer. Returns per-fact seconds."""
+def warm_box(argv, paths, arm_pythons=()):
+    """The box facts every recipe's check reads, once, outside any recipe's timer, and the arm servers of the
+    arms that run under their own interpreter (an arm venv). Returns per-fact seconds."""
     import bench_board as B
+    import smoke_inproc
     got = {}
 
     def step(name, fn):
@@ -321,6 +323,10 @@ def warm_box(argv, paths):
         else:
             missing.append(p)
     got["data_sha256"] = dict(status="ok", files=hashed, missing=missing, seconds=round(time.time() - t0, 2))
+    for py in arm_pythons or ():
+        start = smoke_inproc.ARM_SERVERS.prestart([py], dict(os.environ))
+        got["arm-server " + py] = dict(status="failed" if start.get("problem") else "ok",
+                                       seconds=start.get("wall_seconds"), problem=start.get("problem"))
     return got
 
 
@@ -363,7 +369,7 @@ def serve(vendor, out):
             return 0
         if op == "warm-box":
             say({"event": "warm-box", "key": req.get("key"),
-                 "facts": warm_box(req.get("argv") or [], req.get("paths") or [])})
+                 "facts": warm_box(req.get("argv") or [], req.get("paths") or [], req.get("arm_pythons") or [])})
             continue
         if op == "recipe":
             reply = run_recipe(B.main, list(req["argv"]), req["log"], float(req["timeout"]))

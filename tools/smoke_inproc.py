@@ -424,19 +424,20 @@ class ArmServer:
         self.busy = False
 
     def ready(self, script, argv, env, log, timeout):
-        if self.busy:          # an earlier request was cut off (its recipe timed out): its reply is stale
+        if self.busy:          # an earlier load or request was cut off (its recipe timed out): start afresh
             self.stop()
+        self.busy = True       # stays set if this recipe's timer cuts the load or the request off
         if not self.alive() and not self.start():
+            self.busy = False
             return {"event": "error", "stage": "ready", "error": "arm server for %s did not load: %s" % (
                 " ".join(self.interp), self.starts[-1].get("problem"))}
-        self.busy = True
         req = dict(driver=str(script), argv=list(argv), env=dict(env), log=str(log))
         self.proc.stdin.write((json.dumps(req) + "\n").encode())
         self.proc.stdin.flush()
         deadline = time.monotonic() + timeout
         while True:
             msg, self.buf = read_json_line(self.proc, self.buf, deadline)
-            if msg is None or msg.get("event") != "noise":
+            if msg is None or msg.get("event") not in ("noise", "ready"):
                 break
         self.busy = False
         if msg is None:
@@ -452,12 +453,21 @@ class _ArmServers:
         self.request_timeout = 3600.0
         self.log_dir = Path(os.environ.get("TMPDIR") or "/tmp")
 
-    def ready(self, interp, env, script, argv, log):
+    def server(self, interp, env):
         key = (tuple(interp), tuple(sorted((k, env.get(k)) for k in PROCESS_START_ENV)))
-        server = self.servers.get(key)
-        if server is None:
-            server = self.servers[key] = ArmServer(interp, env, self.load_timeout, self.log_dir)
-        return server.ready(script, argv, env, log, self.request_timeout)
+        if key not in self.servers:
+            self.servers[key] = ArmServer(interp, env, self.load_timeout, self.log_dir)
+        return self.servers[key]
+
+    def ready(self, interp, env, script, argv, log):
+        return self.server(interp, env).ready(script, argv, env, log, self.request_timeout)
+
+    def prestart(self, interp, env):
+        """Load an arm server before the per-recipe loop (outside every recipe's timer). Returns its start."""
+        server = self.server(interp, env)
+        if not server.alive():
+            server.start()
+        return (server.starts or [{}])[-1]
 
     def report(self):
         return dict(servers=len(self.servers), starts=list(self.starts))

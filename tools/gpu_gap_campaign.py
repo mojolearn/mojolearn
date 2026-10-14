@@ -653,7 +653,9 @@ def run_smoke(args, plans, out):
         # the box facts and the data hashes every recipe's check reads, once, outside every recipe's timer
         reply = worker.ask(dict(op="warm-box", argv=smoke_command(args, first, out / "warm-box", "identical",
                                                                     receipts)[2:],
-                                paths=plan_data_files(args, plans)), args.smoke_stage_timeout)
+                                paths=plan_data_files(args, plans),
+                                arm_pythons=sorted(set(((doc["checks"].get("arm-venvs") or {}).get("arms")
+                                                        or {}).values()))), args.smoke_stage_timeout)
         doc["worker"]["box_facts"] = (reply or {}).get("facts") or dict(status="failed", problem="no answer")
         if reply is None:
             worker.kill()
