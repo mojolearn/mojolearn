@@ -512,6 +512,15 @@ def now_utc():
 
 
 def sha256_file(path, chunk=1 << 20):
+    """sha256 of a file; inside the smoke worker once per (path, size, mtime)."""
+    if _in_smoke_worker():
+        st = os.stat(path)
+        return _box_once(("sha256", os.path.abspath(path), st.st_size, st.st_mtime_ns),
+                         lambda: _sha256_file(path, chunk))
+    return _sha256_file(path, chunk)
+
+
+def _sha256_file(path, chunk=1 << 20):
     h = hashlib.sha256()
     with open(path, "rb") as fh:
         while True:
@@ -529,6 +538,25 @@ def _load_tool(name):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _smoke_inproc():
+    """tools/smoke_inproc.py (one module per process): the campaign smoke's in-process seams."""
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import smoke_inproc
+    return smoke_inproc
+
+
+def _in_smoke_worker():
+    """True only inside the campaign smoke's one worker process (tools/smoke_worker.py)."""
+    return os.environ.get("MOJOLEARN_SMOKE_IN_PROCESS") == str(os.getpid())
+
+
+def _box_once(key, fn):
+    """fn(), or inside the smoke worker fn() once per process for `key`: box facts that cannot change between
+    two recipes of one smoke (the box fingerprint, the repo commit, a data file's bytes, the driver version)."""
+    return _smoke_inproc().once(key, fn) if _in_smoke_worker() else fn()
 
 
 #: The classical2 driver's tables (its module imports nothing beyond the
@@ -1079,6 +1107,11 @@ def repo_sync(repo=REPO):
 
 
 def repo_commit(repo=REPO):
+    """_repo_commit, once per smoke worker process."""
+    return _box_once(("repo_commit", os.path.abspath(repo)), lambda: _repo_commit(repo))
+
+
+def _repo_commit(repo=REPO):
     """The repo commit this script shipped in: on a patch-synced pod the synced
     commit (repo_sync; the box's HEAD is only the merge base), git, else
     SHIPPED_COMMIT.txt (legs ship `git archive`, which has no .git), else the
@@ -1188,6 +1221,14 @@ def python_packages(python):
 
 
 def box_fingerprint(ctx):
+    """_box_fingerprint, once per smoke worker process (the same interpreter, vendor, commit and wheel)."""
+    key = ("box_fingerprint", ctx["python"], ctx["vendor"], ctx.get("commit"), ctx.get("mojolearn_version"),
+           json.dumps(ctx.get("wheel"), sort_keys=True, default=str))
+    box = _box_once(key, lambda: _box_fingerprint(ctx))
+    return json.loads(json.dumps(box)) if _in_smoke_worker() else box
+
+
+def _box_fingerprint(ctx):
     python = ctx["python"]
     pyver = capture([python, "-c", "import sys,platform;print(sys.version.split()[0], platform.python_implementation())"],
                     timeout=60)
@@ -2646,6 +2687,23 @@ _PARAMS_ONLY_CMD = {"classical": "classical_cmd", "classical2": "more_cmd", "alg
                     "neural": "neural_cmd"}
 
 
+def probe_run(cmd, env, log, ceiling, nice=0):
+    """Run one --params-only driver command: (returncode, process record). The board's own path is a
+    subprocess (run_logged). Inside the campaign smoke's worker process (tools/smoke_worker.py, everything
+    already loaded) the same driver's main(argv) runs as a function call under the same environment, its output
+    into the same log; a driver needing another interpreter or loader environment still gets a subprocess."""
+    if _in_smoke_worker():
+        SI = _smoke_inproc()
+        if SI.can_run_here(cmd, env):
+            os.makedirs(os.path.dirname(log), exist_ok=True)
+            with open(log, "a") as fh:
+                fh.write("\n=== %s in-process %s\n" % (now_utc(), " ".join(shlex.quote(c) for c in cmd)))
+            return SI.run_driver(cmd, env, log, cwd=REPO)
+        rc = run_logged(cmd, env, log, ceiling, nice=nice)
+        return rc, {"process": "subprocess (another interpreter or loader environment)"}
+    return run_logged(cmd, env, log, ceiling, nice=nice), {"process": "subprocess"}
+
+
 def params_probe(ctx, race, arms, scorer=None):
     """Construct `arms` (no fit, no timed round) through the race's own driver
     (--params-only) and read back what each got: {arm: {"params": canonical
@@ -2659,7 +2717,7 @@ def params_probe(ctx, race, arms, scorer=None):
     if race["family"] == "trees":
         cmd, extra = tree_cmd(ctx, sub)
         cmd = cmd + ["--params-only"]
-        rc = run_logged(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
+        rc, process = probe_run(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
         try:
             with open(log, errors="replace") as fh:
                 text = fh.read()
@@ -2683,7 +2741,7 @@ def params_probe(ctx, race, arms, scorer=None):
                         "record": a, "exceptions": rep.get("exceptions", []),
                         "hardware": libs[arm].get("hardware_receipt"),
                         "environment": libs[arm].get("runtime_environment"),
-                        "device_name": libs[arm].get("device_name")}
+                        "device_name": libs[arm].get("device_name"), "probe_process": process}
         return out
     cmd, extra, ceiling = globals()[_PARAMS_ONLY_CMD[race["family"]]](ctx, sub)
     cmd = list(cmd)
@@ -2694,7 +2752,7 @@ def params_probe(ctx, race, arms, scorer=None):
     for f in os.listdir(probe_dir):
         if f.endswith(".params.json"):
             os.remove(os.path.join(probe_dir, f))
-    rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+    rc, process = probe_run(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
     found = [f for f in os.listdir(probe_dir) if f.endswith(".params.json")]
     if not found:
         return {}
@@ -2712,7 +2770,11 @@ def params_probe(ctx, race, arms, scorer=None):
                     "record": p, "exceptions": rep.get("exceptions", []),
                     "hardware": info.get("hardware_receipt"),
                     "environment": info.get("runtime_environment"),
-                    "device_name": info.get("device_name")}
+                    "device_name": info.get("device_name"),
+                    # where the record was taken: the driver call's process and, in the smoke worker, the
+                    # environment the arm was constructed under (tools/smoke_inproc.py)
+                    "probe_process": dict(process, arm=info.get("probe_process")) if info.get("probe_process")
+                    else process}
     return out
 
 
@@ -2764,7 +2826,8 @@ def preflight_check(ctx, race, arms):
                  hardware=((probes.get(arm) or {}).get("hardware") or {}).get("host", ""))]))
         if arm in exclusions:
             report["problems"].append(arm + ": " + exclusions[arm])
-    report["probe_workers"] = {a: {k: p.get(k) for k in ("version", "device_name", "hardware", "environment")}
+    report["probe_workers"] = {a: {k: p.get(k) for k in ("version", "device_name", "hardware", "environment",
+                                                          "probe_process")}
                                for a, p in probes.items()}
     if excluded:
         report["excluded_arms"] = excluded
@@ -3873,6 +3936,10 @@ QUALITY_EXEMPT = ("algos/dropout2d/*",)
 
 
 def smoke_files_sha256(repo=REPO):
+    return _box_once(("smoke_files_sha256", os.path.abspath(repo)), lambda: _smoke_files_sha256(repo))
+
+
+def _smoke_files_sha256(repo=REPO):
     import glob
     h = hashlib.sha256()
     for pat in SMOKE_FILE_GLOBS:
@@ -4510,7 +4577,8 @@ def main(argv=None):
         wheel = ((result.get("box") or {}).get("mojolearn") or {}).get("wheel")
     ptxas = None
     if vendor == "nvidia":
-        drv = capture(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"])
+        drv = _box_once(("nvidia-driver",), lambda: capture(["nvidia-smi", "--query-gpu=driver_version",
+                                                              "--format=csv,noheader"]))
         try:
             if drv and int(drv.splitlines()[0].split(".")[0]) < 580 and os.access(
                     "/usr/local/cuda/bin/ptxas", os.X_OK):

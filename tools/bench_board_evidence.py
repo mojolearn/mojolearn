@@ -241,8 +241,17 @@ def fetch(ref, destination, request=None):
 
 
 def hardware_context(vendor=None):
-    """Worker-observed physical GPU/driver and OS, outside any measured clock."""
+    """Worker-observed physical GPU/driver and OS, outside any measured clock. Inside the campaign smoke's one
+    worker process (tools/smoke_inproc.py) every arm is observed by that one process, so it is read once."""
     vendor = vendor or os.environ.get("MOJOLEARN_BOARD_VENDOR")
+    if os.environ.get("MOJOLEARN_SMOKE_IN_PROCESS") == str(os.getpid()):
+        import copy
+        import smoke_inproc
+        return copy.deepcopy(smoke_inproc.once(("hardware_context", vendor), lambda: _hardware_context(vendor)))
+    return _hardware_context(vendor)
+
+
+def _hardware_context(vendor):
     row = dict(vendor=vendor, host=platform.node(), os=platform.platform(),
                kernel=platform.release(), machine=platform.machine())
     try:
