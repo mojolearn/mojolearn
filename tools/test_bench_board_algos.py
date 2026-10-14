@@ -54,7 +54,8 @@ def test_qr_quality_rejects_corrupt_q_even_when_r_is_correct():
     assert bad["library"]["relative_gram_difference"] < 1e-12
     assert policy.compare(own, dict(arm="library", quality=bad["library"]))["verdict"] == "FAIL"
     missing = A.quality("qr", {"X": X}, {"library": {"R": R}})
-    assert policy.compare(own, dict(arm="library", quality=missing["library"]))["verdict"] == "FAIL"
+    # A missing Q metric is "not scored" (2026-10-14), never passed.
+    assert policy.compare(own, dict(arm="library", quality=missing["library"]))["verdict"] == "INSUFFICIENT"
 
 
 def test_cupy_linalg_records_synchronized_input_copy_outside_fit(monkeypatch):
