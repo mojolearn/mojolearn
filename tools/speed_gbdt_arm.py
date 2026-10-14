@@ -1879,6 +1879,37 @@ TASK_LANES["gbdt-ordered"] = dict(
     ))
 
 
+#: smoke-fixes (2026-10-14; gbdt-symmetric/-1000, gbdt-multiclass, gbdt-ordered:
+#: "use_pointwise_searcher missing from catboost-gpu read-back"): the oblivious-tree SEARCHER
+#: each lane races, pinned on both arms. CatBoost 1.2.10's GPU picks it from the loss and the
+#: boosting type, and ours has both of its searchers (ensemble.py use_pointwise_searcher):
+#:   - single-target Plain SymmetricTree (Logloss, RMSE; no CTRs): pointwise.cpp registers
+#:     train_template_pointwise.h's trainer, a Plain fit without CTRs gets data_partition
+#:     DocParallel (train.cpp:73-83), and DocParallel trains TDocParallelObliviousTree
+#:     (train_template_pointwise.h:49-50), whose searcher is TDocParallelObliviousTreeSearcher
+#:     (doc_parallel_pointwise_oblivious_tree.h:45) -- ours use_pointwise_searcher=True. Ours'
+#:     default greedy subsets searcher is ANOTHER algorithm: on it random_strength cancels in the
+#:     gain (gbdt/train.mojo random_strength note), while on the doc-parallel searcher the lane's
+#:     random_strength 1.0 is real split-score noise. Before this pin ours raced the greedy
+#:     searcher against CatBoost's doc-parallel one. Results raced before this change were wrong
+#:     for these lanes; apply extra scrutiny.
+#:   - MultiClass: multiclass.cpp:1 builds its trainer from
+#:     train_template_pointwise_greedy_subsets_searcher.h (TGreedySubsetsSearcher, line 35), and
+#:     the GPU forces DocParallel for it (catboost_options.cpp:951-971) -- ours' greedy subsets
+#:     searcher, use_pointwise_searcher=False.
+#:   - Ordered: DocParallel refuses Ordered (boosting_options.cpp:70-72), so it trains
+#:     FeatureParallel, TDynamicBoosting with TFeatureParallelPointwiseObliviousTree
+#:     (train_template_pointwise.h:27-29) -- ours' Ordered fold searcher, which refuses
+#:     use_pointwise_searcher=True (ensemble.py _check_ordered_options).
+#: CatBoost's data_partition is GPU-only and passed on its GPU arm only (catboost_tree_params).
+R7_SEARCHER_LANES = {
+    "gbdt-symmetric": dict(use_pointwise_searcher=True, data_partition="DocParallel"),
+    "gbdt-symmetric-1000": dict(use_pointwise_searcher=True, data_partition="DocParallel"),
+    "gbdt-multiclass": dict(use_pointwise_searcher=False, data_partition="DocParallel"),
+    "gbdt-ordered": dict(use_pointwise_searcher=False, data_partition="FeatureParallel"),
+}
+
+
 #: FAIRNESS FIX (2026-10-13 audit): the depth bound of every Lossguide lane, on every arm.
 #: At max_depth 8 with max_leaves 256 (= 2 ** 8) a Lossguide tree that fills its budget is the
 #: depthwise tree, so the lane timed XGBoost's lossguide grower building its depthwise model.
@@ -2166,6 +2197,19 @@ def lane_config(lane, size):
                     "gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM "
                     "min_split_gain 0",
                 ]
+        if lane in R7_SEARCHER_LANES:
+            cfg.update(R7_SEARCHER_LANES[lane])
+            # smoke-fixes (2026-10-14; gbdt-symmetric/-1000, gbdt-multiclass, gbdt-ordered:
+            # "border_build_max_samples, feature_fraction missing from catboost-gpu read-back"):
+            # both are ACTIVE settings, so both arms are given them explicitly and read them back.
+            # The border search subsamples 200,000 rows on both (ours border_build_max_samples;
+            # CatBoost dev_max_subset_size_for_build_borders, binarization_options.h:19, set by
+            # set_params in catboost_arms because the CatBoostClassifier constructor does not take
+            # it; plain_options_helper.cpp:459 parses it). Every feature is a split candidate in
+            # every tree on both (ours feature_fraction 1.0; CatBoost rsm 1.0, the only value its
+            # GPU learner accepts for a non-pairwise loss, catboost_options.cpp:638, a check of
+            # the VALUE against the default, option.h:68).
+            cfg.update(border_build_max_samples=200000, feature_fraction=1.0)
         return cfg
     if lane in ("rf", "et"):
         cfg = dict(common)
@@ -2180,6 +2224,12 @@ def lane_config(lane, size):
             # refuses max_samples without bootstrap, so et leaves it unset
             max_samples=1.0 if lane == "rf" else None,
         )
+        if lane == "rf":
+            # smoke-fixes (2026-10-14; rf: "conflicting aliases for max_leaves" / "no parameter
+            # records"): no leaf cap, cuML's sentinel -1, given explicitly to ours and cuML
+            # (cuML 26.08 ensemble/randomforest_common.pyx __init__ max_leaves=-1; ours
+            # randomforest.py max_leaves=-1), with max_samples beside it on both
+            cfg["max_leaves"] = -1
         if harness:
             # gbm-bench skrf / cumlrf: shared_params minus reg_lambda and
             # learning_rate (max_depth 8), n_estimators = runme.py -ntrees 500
@@ -2389,6 +2439,13 @@ def catboost_tree_params(cfg, task_type):
     for k in ("fold_len_multiplier", "fold_permutation_block"):
         if cfg.get(k) is not None:
             p[k] = cfg[k]
+    # smoke-fixes (2026-10-14; gbdt-symmetric/-1000, gbdt-multiclass, gbdt-ordered:
+    # "feature_fraction, use_pointwise_searcher missing from catboost-gpu read-back"): the
+    # searcher (R7_SEARCHER_LANES) and the feature fraction, where the lane pins them
+    if cfg.get("feature_fraction") is not None:
+        p["rsm"] = cfg["feature_fraction"]
+    if task_type == "GPU" and cfg.get("data_partition") is not None:
+        p["data_partition"] = cfg["data_partition"]     # a GPU-only option
     if task_type == "GPU":
         p["devices"] = "0"
     return p
@@ -2470,10 +2527,19 @@ def catboost_arms(lane, cfg, data, devices):
             # lane; apply extra scrutiny.
             p["has_time"] = True
         if data.task == "regression":
-            return catboost.CatBoostRegressor(loss_function="RMSE", **p)
-        if data.task == "binary":
-            return catboost.CatBoostClassifier(loss_function="Logloss", **p)
-        return catboost.CatBoostClassifier(loss_function="MultiClass", **p)
+            m = catboost.CatBoostRegressor(loss_function="RMSE", **p)
+        elif data.task == "binary":
+            m = catboost.CatBoostClassifier(loss_function="Logloss", **p)
+        else:
+            m = catboost.CatBoostClassifier(loss_function="MultiClass", **p)
+        if cfg.get("border_build_max_samples") is not None:
+            # smoke-fixes (2026-10-14; gbdt-symmetric/-1000, gbdt-multiclass, gbdt-ordered:
+            # "border_build_max_samples missing from catboost-gpu read-back"): the constructors
+            # do not take dev_max_subset_size_for_build_borders (catboost 1.2.10 core.py
+            # CatBoostClassifier.__init__); set_params stores it in the params fit sends
+            # (core.py:3829-3841) and get_params reads it back
+            m.set_params(dev_max_subset_size_for_build_borders=cfg["border_build_max_samples"])
+        return m
 
     # FAIRNESS FIX (2026-10-13 audit): the categorical input was converted with
     # x.astype(object) INSIDE CatBoost's fit clock, while ours got its float32 codes prepared
@@ -3132,6 +3198,10 @@ def cuml_rf_arm(lane, cfg, data):
         min_samples_split=cfg["min_samples_split"],
         min_impurity_decrease=cfg["min_impurity_decrease"],
         bootstrap=cfg["bootstrap"],
+        # smoke-fixes (2026-10-14; rf): explicit, as on ours (cuML's defaults are the same 1.0
+        # and -1, randomforest_common.pyx __init__, but a default is not a matched value)
+        max_samples=cfg["max_samples"],
+        max_leaves=cfg["max_leaves"],
         random_state=cfg["seed"],
     )
 

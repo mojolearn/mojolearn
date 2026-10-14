@@ -236,7 +236,14 @@ ALIASES = {
                  # Ordered boosting's knobs (read back as None when unset, below)
                  "permutation_count": "permutation_count",
                  "fold_len_multiplier": "fold_len_multiplier",
-                 "fold_permutation_block": "fold_permutation_block"},
+                 "fold_permutation_block": "fold_permutation_block",
+                 # smoke-fixes (2026-10-14; gbdt-symmetric/-1000, gbdt-multiclass, gbdt-ordered:
+                 # "feature_fraction, border_build_max_samples missing from catboost-gpu
+                 # read-back"): CatBoost's names for ours' per-tree feature fraction (rsm,
+                 # oblivious_tree_options.cpp:20) and border-search row subsample
+                 # (dev_max_subset_size_for_build_borders, binarization_options.cpp:22)
+                 "rsm": "feature_fraction",
+                 "dev_max_subset_size_for_build_borders": "border_build_max_samples"},
     "mojolearn": {"border_count": ("max_bin", _plus1), "boosting_type": "boosting_type",
                   "random_strength": "random_strength", "score_function": "score_function",
                   "bootstrap_type": "bootstrap_type",
@@ -630,6 +637,16 @@ def read_params(obj):
             recovered = [name for name in names if name not in got and hasattr(obj, name)]
             got.update({name: getattr(obj, name) for name in recovered})
             return lib, "get_params + fixed QN fields " + ",".join(recovered), got
+        if lib == "mojolearn" and type(obj).__name__ in ("RandomForestClassifier", "RandomForestRegressor") \
+                and "max_leaf_nodes" in got and got["max_leaf_nodes"] is None and "max_leaves" in got:
+            # smoke-fixes (2026-10-14; rf: "conflicting aliases for max_leaves: max_leaf_nodes and
+            # max_leaves", which left "no parameter records"): ours' forests carry cuML's leaf cap
+            # as max_leaves and keep scikit-learn's max_leaf_nodes only to refuse it: any value but
+            # None raises (python/mojolearn/randomforest.py _RandomForestBase.__init__,
+            # _MAX_LEAF_NODES_WHY), so None is no setting and the cap is max_leaves alone (compared).
+            got = dict(got)
+            del got["max_leaf_nodes"]
+            return lib, "get_params without the refusal-only max_leaf_nodes=None", got
         if lib == "cuml" and type(obj).__name__ == "MinMaxScaler" and "clip" not in got:
             # The pinned cuML 26.08 transform only scales and translates. Its
             # documented out-of-range example returns 1.5, not 1.0:
@@ -1316,6 +1333,136 @@ def _semantic_r6(lane, param, arm, ours, theirs, library):
     # quantized-histogram grower, ours' only one; the bin count is compared as max_bin.
     if param == "tree_method" and _r6_is(theirs.get(param), "hist"):
         return "histogram growth on quantized features on both (bin count compared as max_bin)"
+
+
+#: smoke-fixes (2026-10-14) sub-lane r7: the trees lanes whose CatBoost GPU mappings live in
+#: _semantic_r7 (tools/speed_gbdt_arm.py lane_config, R7_SEARCHER_LANES).
+_R7_CATBOOST_LANES = frozenset({"gbdt-symmetric", "gbdt-symmetric-1000", "gbdt-multiclass", "gbdt-ordered"})
+#: losses that read none of ours' loss_alpha/loss_delta/loss_q/loss_variance_power (Quantile,
+#: LogLinQuantile and Expectile read alpha, Huber delta, Lq q, Tweedie variance_power; ours
+#: ensemble.py GradientBoosting docstring, CatBoost loss_description.cpp)
+_R7_PLAIN_LOSSES = ("Logloss", "MultiClass", "RMSE")
+
+
+def _semantic_r7(lane, param, arm, ours, theirs, library):
+    """smoke-fixes (2026-10-14) sub-lane r7: trees/gbdt-symmetric, gbdt-symmetric-1000,
+    gbdt-multiclass, gbdt-ordered (CatBoost 1.2.10 GPU) and trees/rf (cuML 26.08), absent API
+    fields only, each conditional on the values that make it the same work. Sources: CatBoost
+    v1.2.10 catboost/private/libs/options/*.cpp and catboost/cuda/{train_lib,methods,data}
+    (github.com/catboost/catboost/tree/v1.2.10); cuML v26.08.00
+    python/cuml/cuml/ensemble/randomforest_common.pyx; ours python/mojolearn/ensemble.py and
+    randomforest.py."""
+    if lane == "rf" and library == "cuml" and param in ours and param not in theirs:
+        # smoke-fixes (2026-10-14; rf: the scikit-learn tree options ours' forest exposes and
+        # cuML's does not): cuML's own scikit-learn interop refuses every non-default value
+        # (randomforest_common.pyx BaseRandomForestModel._params_from_cpu: warm_start,
+        # monotonic_cst not None, ccp_alpha != 0, min_weight_fraction_leaf != 0 raise
+        # UnsupportedOnGPU), and ours refuses the same values (randomforest.py
+        # _RandomForestBase.__init__ and RandomForestClassifier/Regressor.__init__), so each
+        # maps only at the value that means "off".
+        if param == "warm_start" and ours[param] is False:
+            return "both fits build every tree from scratch: ours warm_start=False (True refused); cuML has no warm start"
+        if param == "monotonic_cst" and ours[param] is None:
+            return "no monotonic constraints on either arm: ours None (any other refused); cuML has none"
+        if param == "ccp_alpha" and ours[param] == 0.0:
+            return "no cost-complexity pruning on either arm: ours 0.0 (any other refused); cuML has none"
+        if param == "min_weight_fraction_leaf" and ours[param] == 0.0:
+            return ("no leaf weight-fraction floor on either arm: ours 0.0 (any other refused); cuML has "
+                    "none; min_samples_leaf is compared")
+        if param == "inference_engine" and ours[param] in ("auto", "sequential"):
+            # implementation only: how ours' predict reduces over the same fitted trees
+            # (randomforest.py: 'auto' is 'sequential' outside fast mode)
+            return "ours' prediction reduction over the same fitted forest; not a model setting"
+        return None
+    if lane not in _R7_CATBOOST_LANES or library != "catboost":
+        return None
+    plain = ours.get("boosting_type") == "Plain" and theirs.get("boosting_type") == "Plain"
+    ordered = ours.get("boosting_type") == "Ordered" and theirs.get("boosting_type") == "Ordered"
+    symmetric = ours.get("grow_policy") == "SymmetricTree" and theirs.get("grow_policy") == "SymmetricTree"
+    no_cats = "cat_features" in ours and ours["cat_features"] is None and "cat_features" not in theirs
+    loss = ours.get("loss") if ours.get("loss") == theirs.get("loss") else None
+    if param == "data_partition" and param in theirs and param not in ours and symmetric:
+        # the reverse direction of use_pointwise_searcher below (R7_SEARCHER_LANES)
+        param, mirrored = "use_pointwise_searcher", True
+    else:
+        mirrored = False
+    if param == "use_pointwise_searcher" and (mirrored or (param in ours and param not in theirs)) \
+            and symmetric and no_cats:
+        part = theirs.get("data_partition")
+        if ours.get(param) is True and part == "DocParallel" and plain and loss in ("Logloss", "RMSE"):
+            # pointwise.cpp registers train_template_pointwise.h's trainer for these losses;
+            # DocParallel trains TDocParallelObliviousTree (train_template_pointwise.h:49-50),
+            # searched by TDocParallelObliviousTreeSearcher (doc_parallel_pointwise_oblivious_tree.h:45)
+            return ("the same oblivious searcher: CatBoost data_partition='DocParallel' trains %s with "
+                    "TDocParallelObliviousTreeSearcher, ours use_pointwise_searcher=True" % loss)
+        if ours.get(param) is False and part == "DocParallel" and plain and loss == "MultiClass":
+            # multiclass.cpp:1 builds the MultiClass trainer from
+            # train_template_pointwise_greedy_subsets_searcher.h (TGreedySubsetsSearcher, line 35)
+            return ("the same oblivious searcher: CatBoost's GPU MultiClass trainer is TGreedySubsetsSearcher "
+                    "(doc-parallel), ours use_pointwise_searcher=False, the greedy subsets searcher")
+        if ours.get(param) is False and part == "FeatureParallel" and ordered:
+            # boosting_options.cpp:70-72 refuses DocParallel with Ordered; FeatureParallel trains
+            # TDynamicBoosting with TFeatureParallelPointwiseObliviousTree (train_template_pointwise.h:27-29)
+            return ("the same Ordered fold searcher: CatBoost data_partition='FeatureParallel' "
+                    "(TDynamicBoosting), ours Ordered with use_pointwise_searcher=False (True is refused)")
+        return None
+    if param not in ours or param in theirs:
+        return None
+    v = ours[param]
+    if param == "bagging_temperature" and v == 1.0 and ours.get("bootstrap_type") == "No" \
+            and theirs.get("bootstrap_type") == "No":
+        # CatBoost refuses any bagging_temperature beside bootstrap 'No' (bootstrap_options.cpp:21-24);
+        # ours reads it under Bayesian only and refuses a non-default value otherwise
+        return "no row sampling on either arm (bootstrap_type 'No', compared); bagging_temperature is never read"
+    if param in ("use_best_model", "od_type", "od_wait", "od_pvalue") and v is None:
+        # neither driver passes an eval set (forest_speed_arm._our_fit, speed_gbdt_arm.catboost_arms
+        # _fit): ours' detector and best-model truncation require one (ensemble.py), CatBoost's
+        # stop_pvalue 0 leaves its detector off (overfitting_detector_options.cpp:9) and
+        # use_best_model is false without one (output_file_options.cpp:76)
+        return "no eval set on either fit: no overfitting detector and no best-model truncation on either arm"
+    if param == "best_model_min_trees" and ours.get("use_best_model") is None and ours.get("od_type") is None:
+        return "read only by best-model truncation, which neither arm runs (no eval set on either fit)"
+    if param in ("cat_features", "one_hot_features", "ctr_estimation_permutation_id") and v is None and no_cats:
+        # CatBoost's arm passes cat_features only for a dataset with categorical columns
+        # (speed_gbdt_arm.catboost_arms); ours reads one_hot_features and the CTR permutation only
+        # for declared columns (ensemble.py)
+        return "no categorical columns on either arm: no one-hot encoding and no CTRs"
+    if param in ("loss_alpha", "loss_delta", "loss_q", "loss_variance_power") and v is None \
+            and loss in _R7_PLAIN_LOSSES:
+        return "read only by Quantile/Expectile/Huber/Lq/Tweedie; the raced loss (compared) is %s on both" % loss
+    if param == "loss_border" and v is None and loss in _R7_PLAIN_LOSSES:
+        # ours None is Logloss's 0.5 (ensemble.py); CatBoost's Logloss border defaults to the
+        # default target border (loss_description.cpp:90-92); other losses read no border
+        return ("Logloss's target threshold is the 0.5 default on both arms" if loss == "Logloss"
+                else "%s reads no target border on either arm" % loss)
+    if param in ("min_child_weight", "min_split_gain") and v is None and symmetric:
+        # ours takes both on Depthwise/Lossguide only (ensemble.py); CatBoost's oblivious grower has
+        # neither, and min_data_in_leaf (compared) is its only leaf floor
+        return "no hessian floor and no split-gain threshold on the symmetric grower of either arm"
+    if param == "permutation_count" and v is None and plain and no_cats:
+        # ours None resolves to 1 for a Plain fit without CTRs (ensemble.py); CatBoost's GPU sets 1
+        # for Plain without permutation-dependent features (train.cpp:101-108)
+        return "one permutation on both arms: Plain boosting without CTRs"
+    if param == "fold_len_multiplier" and v == 2.0 and plain:
+        # read only by Ordered's TDynamicBoosting (dynamic_boosting.h:595), never by the Plain
+        # TBoosting (doc_parallel_boosting.h); ours refuses another value on a Plain fit
+        return "Ordered-only fold growth; both arms boost Plain (compared)"
+    if param == "fold_permutation_block" and v is None and plain and no_cats \
+            and ours.get("bootstrap_type") == "No" and theirs.get("bootstrap_type") == "No":
+        # CatBoost's GPU sets 64 and uses it only to block-shuffle a permutation's row order
+        # (train.cpp:118-121, permutation.cpp:7-17); with one permutation, no CTRs and no
+        # bootstrap, Plain boosting sums every row of every leaf, so the order changes no split,
+        # leaf or model value. Ours reads it only under Ordered (ensemble.py)
+        return ("only a row-order block size for CatBoost's one Plain permutation; with no CTRs and no "
+                "bootstrap the order changes no split or leaf")
+    if param == "boost_from_average" and v is None and loss == "MultiClass":
+        # CatBoost refuses boost_from_average for MultiClass (catboost_options.cpp:703-709) and
+        # defaults it false (boosting_options.cpp:17); ours None is False for MultiClass (ensemble.py)
+        return "MultiClass starts from zero on both arms; no arm can start it from an average"
+    if param == "scale_pos_weight" and v == 1.0 and loss == "MultiClass" \
+            and not any(k in theirs for k in ("class_weights", "auto_class_weights")):
+        # ours 1.0 here is class_weights None (_pos_over_neg); CatBoost's arm is given no weights
+        return "no class weights on either arm (ours class_weights None, CatBoost none)"
     return None
 
 
@@ -1336,6 +1483,9 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
         return why
     why = _semantic_r6(lane, param, arm, ours, theirs, library)
     if why: return why
+    why = _semantic_r7(lane, param, arm, ours, theirs, library)
+    if why:
+        return why
     # FAIRNESS FIX (2026-10-13 audit): optimizer defaults exposed by torch
     # were treated as absent algorithm settings on our narrower optimizer
     # API. Preserve the raw settings and explicitly distinguish the library's

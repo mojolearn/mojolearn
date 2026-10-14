@@ -241,6 +241,12 @@ for _v, _arms in (("apple", _TASK_APPLE), ("nvidia", _TASK_NVIDIA), ("amd", _TAS
         TREE_OPPONENTS[_v][_lane] = _no_lgbm(_arms) if _lane == "gbdt-rank-pairlogit" else _arms
     # Ordered boosting: CatBoost only, as gbdt-symmetric
     TREE_OPPONENTS[_v]["gbdt-ordered"] = TREE_OPPONENTS[_v]["gbdt-symmetric"]
+    # smoke-fixes (2026-10-14; gbdt-multiclass: "missing parameter/version probe: xgboost-gpu,
+    # lightgbm-cuda"): the driver refuses both by name on every device (speed_gbdt_arm.py
+    # xgboost_arms DIFFERENT-GROWER: no oblivious grower for MultiClass; lightgbm_arms MIN-CHILD),
+    # so a roster listing them only refused the preflight. CatBoost is the lane's opponent, as
+    # on gbdt-symmetric.
+    TREE_OPPONENTS[_v]["gbdt-multiclass"] = TREE_OPPONENTS[_v]["gbdt-symmetric"]
 DATA_FILES["istella-rank"] = "istella/istella_rank.npz"
 R2_KEYS["istella-rank"] = "gbm-bench/istella/istella_rank.npz"
 

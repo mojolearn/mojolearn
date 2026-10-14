@@ -240,6 +240,13 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
     for k in ("permutation_count", "fold_len_multiplier", "fold_permutation_block"):
         if cfg.get(k) is not None:
             params[k] = cfg[k]      # the Ordered lane's knobs, as CatBoost's arm
+    # smoke-fixes (2026-10-14; gbdt-symmetric/-1000, gbdt-multiclass, gbdt-ordered): the
+    # searcher, border-search subsample and feature fraction the lane pins on both arms
+    # (speed_gbdt_arm.R7_SEARCHER_LANES and lane_config; CatBoost data_partition,
+    # dev_max_subset_size_for_build_borders and rsm)
+    for k in ("use_pointwise_searcher", "border_build_max_samples", "feature_fraction"):
+        if cfg.get(k) is not None:
+            params[k] = cfg[k]
     if cfg.get("min_split_gain") is not None:
         params["min_split_gain"] = cfg["min_split_gain"]
     if cfg.get("min_child_hessian") is not None:
@@ -320,6 +327,8 @@ def our_rf_arm(lane, cfg, data, extra=None):
         random_state=cfg["seed"],
         device="gpu",
     )
+    if cfg.get("max_leaves") is not None:
+        common["max_leaves"] = cfg["max_leaves"]   # smoke-fixes (2026-10-14; rf): -1, as cuML's arm
     if extra:
         common.update(extra)       # `--ours-ab`: one keyword changed
 
