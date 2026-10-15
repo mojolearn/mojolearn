@@ -6,7 +6,8 @@ standard-normal data, not BF16-representable, so the BF16 arms carry their
 real rounding error against the FP64 oracle of the float32 inputs.
 
 Arms:
-  fp32-fast       linalg.matmul(a, b, identical=False) on float32 inputs.
+  fp32-fast       linalg.matmul(a, b, identical=False) on float32 inputs (FAST build: MAX matmul).
+  fp32-fused      linalg_fast.matmul_fused(a, b): the AFN FP32 kernel, no epilogue.
   bf16-ready      linalg.matmul_bf16 on BF16 bits prepared outside the clock.
   bf16-from-fp32  linalg.to_bf16 on both float32 inputs inside the clock, then
                   linalg.matmul_bf16 (to_bf16 round-trips through the host, so
@@ -60,6 +61,12 @@ def run(root, arm):
     assert linalg._fast_bf16_available(), 'BF16 FAST not enabled; refuse a substitute'
     if arm == 'fp32-fast':
         call = lambda d: linalg.matmul(d['a'], d['b'], identical=False)
+    elif arm == 'fp32-fused':
+        # gemm_fused with no epilogue: the AFN FP32 kernel FAST estimators call directly
+        # (needs a build with MOJOLEARN_AFN_GEMM_EPILOGUE).
+        from mojolearn import linalg_fast
+        assert linalg_fast.has_fused(), 'binding has no gemm_fused'
+        call = lambda d: linalg_fast.matmul_fused(d['a'], d['b'])
     elif arm == 'bf16-ready':
         call = lambda d: linalg.matmul_bf16(d['a_bits'], d['b_bits'])
     elif arm == 'bf16-from-fp32':

@@ -1,0 +1,70 @@
+{
+ "arm": "fp32-fused",
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "binary": "/Users/andrewhendel/mojolearn-evidence/bf16-vs-fp32fast-20261015/pkg-epi_simd/mojolearn/_mojolearn_linalg.so",
+ "binary_sha256": "e663d3d8d8ca4908803317e31b2d151c86f37ff8251238c2f806eb35d1347226",
+ "warmup": 1,
+ "scored": 1,
+ "cases": [
+  {
+   "shape": [
+    2048,
+    2048,
+    2048
+   ],
+   "warmup_ms": 88.460666,
+   "scored_ms": 29.609292,
+   "finite": true,
+   "max_abs_error": 0.0005265109516017219,
+   "rel_rms_error": 8.096247922961026e-07
+  },
+  {
+   "shape": [
+    4096,
+    4096,
+    4096
+   ],
+   "warmup_ms": 148.400292,
+   "scored_ms": 135.106958,
+   "finite": true,
+   "max_abs_error": 0.0010292993861185096,
+   "rel_rms_error": 1.145344261784363e-06
+  },
+  {
+   "shape": [
+    4096,
+    4096,
+    2500
+   ],
+   "warmup_ms": 125.743166,
+   "scored_ms": 115.113334,
+   "finite": true,
+   "max_abs_error": 0.0006475078915286758,
+   "rel_rms_error": 8.950258388846867e-07
+  },
+  {
+   "shape": [
+    3000,
+    5000,
+    2500
+   ],
+   "warmup_ms": 109.005875,
+   "scored_ms": 100.609916,
+   "finite": true,
+   "max_abs_error": 0.0007227189257719147,
+   "rel_rms_error": 8.944233716215304e-07
+  },
+  {
+   "shape": [
+    8192,
+    8192,
+    4096
+   ],
+   "warmup_ms": 591.338084,
+   "scored_ms": 913.632167,
+   "finite": true,
+   "max_abs_error": 0.0009877456004687701,
+   "rel_rms_error": 1.1451076914959047e-06
+  }
+ ]
+}
