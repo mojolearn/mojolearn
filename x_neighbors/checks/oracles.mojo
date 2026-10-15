@@ -11,7 +11,7 @@ from checks.numerics import (
     ftz, identical_mul_add, identical_mul, identical_div, identical_exp, identical_log, identical_sqrt,
     identical_tanh, identical_cos, identical_sin,
 )
-from x_neighbors.items import XN_FOLD_BLOCK, xn_fold_blocks
+from x_neighbors.items import XN_FOLD_BLOCK, xn_fold_blocks, XN_IMPUTE_TIE_MEAN
 
 
 def _a(x: Float32, y: Float32) -> Float32:
@@ -751,7 +751,31 @@ def o_knn_impute(x: List[Float32], fx: List[Float32], n: Int, m: Int, d: Int, k:
                         w = ftz(identical_div(Float32(1), sel_d[s]))
                 num = ftz(identical_mul_add(ftz(fx[sel_i[s] * d + c]), w, num))
                 den = _a(den, w)
-            out.append(ftz(identical_div(num, den)))
+            var val = ftz(identical_div(num, den))
+            # the tie mean (x_neighbors/items.mojo `XN_IMPUTE_TIE_MEAN`): uniform
+            # weights, k donors found: the donors closer than the k-th distance
+            # plus the mean of every donor AT it for the remaining slots, both
+            # sums in ascending donor order. variant 1 keeps the plain selection
+            # (the tie-break separation check needs the two rules apart).
+            comptime if XN_IMPUTE_TIE_MEAN:
+                if weights == 0 and variant == 0 and len(sel_d) == k:
+                    var dk = sel_d[k - 1]
+                    var sum_lt = Float32(0)
+                    var sum_eq = Float32(0)
+                    var c_lt = 0
+                    var c_eq = 0
+                    for u in range(len(cand_d)):
+                        var dv = fx[cand_i[u] * d + c]
+                        if cand_d[u] < dk:
+                            sum_lt = _a(sum_lt, dv)
+                            c_lt += 1
+                        elif cand_d[u] == dk:
+                            sum_eq = _a(sum_eq, dv)
+                            c_eq += 1
+                    if c_eq > 0 and c_lt < k:
+                        var fill = ftz(identical_mul(ftz(identical_div(sum_eq, Float32(c_eq))), Float32(k - c_lt)))
+                        val = ftz(identical_div(_a(sum_lt, fill), Float32(k)))
+            out.append(val)
     return out^
 
 

@@ -58,6 +58,7 @@ from x_neighbors.nan_cells_device import (
 )
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
+from x_neighbors.items import XN_IMPUTE_TIE_MEAN, knn_impute_tie_mean_item
 from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
@@ -1278,23 +1279,25 @@ def op_knn_impute_tiled(
     _ = ctx^
 
 
-# lane/apple-fast-gap-manprep (2026-10-03): KNNImputer quality on taxi was
-# masked_rmse 6.15 vs scikit-learn 5.26. Taxi's columns are mostly discrete
-# (passengers, hour, weekday, day, fees) and the fit rows are in time order,
-# so many donors tie at the k-th distance and the lower-index rule always
-# took the EARLIEST trips (early January for late-February queries), a
-# biased draw. The tie mean imputes the expectation of a uniform tie-break:
-# the donors strictly closer than the k-th distance D_k, plus the remaining
-# k - c_lt slots filled by the mean of ALL donors at exactly D_k. Order-free,
-# deterministic, one GPU thread per missing cell, the same distance
-# statements as the scan. Uniform weights only (distance weights keep the
-# scan's result). FAST + Apple default since the M3 A/B gmp-imp-taxi
-# (masked_rmse 6.152 -> 5.109, scikit-learn 5.26; with COLMISS_ONLY);
-# -D MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF restores the lower-index rule.
-# IDENTICAL keeps the lower-index rule (a cross-vendor bit change is the
-# orchestrator's call).
-comptime XN_IMPUTE_TIE_MEAN = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                               and not is_defined["MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF"]())
+# KNNImputer's tie mean: the rule, its history and the define are at
+# `XN_IMPUTE_TIE_MEAN` in x_neighbors/items.mojo (every mode and vendor and
+# the host column since lane quality-fix-identical, 2026-10-15). This kernel
+# runs `knn_impute_tie_mean_item`'s statements with the fit rows staged per
+# block (d <= IMP_MAX_D); `knn_impute_tie_mean_cells_kernel` runs the item
+# itself for any d.
+
+
+def knn_impute_tie_mean_cells_kernel(
+    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    m_: Int64, d_: Int64, k_: Int64, nc_: Int64,
+):
+    """`knn_impute_tie_mean_item` for each missing cell of the compact list,
+    one thread per cell (the row pass's d above IMP_MAX_D)."""
+    var q = Int(block_idx.x) * IMP_TPB + Int(thread_idx.x)
+    if q >= Int(nc_):
+        return
+    knn_impute_tie_mean_item(Int(cells.unsafe_load(q)), x, fx, best_d, best_i, res,
+                             Int(m_), Int(d_), Int(k_))
 
 
 def knn_impute_tie_mean_kernel(
@@ -1746,6 +1749,12 @@ def _op_knn_impute_rows(
     comptime if XN_IMPUTE_TIE_MEAN:
         if weights == 0 and d <= IMP_MAX_D:
             ctx.enqueue_function[knn_impute_tie_mean_kernel](
+                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+            )
+        elif weights == 0:
+            ctx.enqueue_function[knn_impute_tie_mean_cells_kernel](
                 d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
                 d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
                 grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,

@@ -1305,6 +1305,71 @@ def knn_graph_item(t: Int, idx: IP, res: FP, n: Int, m: Int, k: Int):
 
 # ------------------------------------------------------------------ KNNImputer
 # DEVIATION 5215 (row 121)
+# TIE MEAN, every mode, every vendor and the host column (lane
+# quality-fix-identical, 2026-10-15; FAST + Apple only since the M3 A/B
+# gmp-imp-taxi of lane/apple-fast-gap-manprep, masked_rmse 6.152 -> 5.109,
+# scikit-learn 5.26). Taxi's columns are mostly discrete and its fit rows
+# are in time order, so many donors tie at the k-th distance D_k and the
+# lower-index rule always took the EARLIEST trips: identical masked_rmse
+# 6.152 on NVIDIA, AMD and Apple (quality-vs-opponent-20261015). With
+# uniform weights and k donors found, the imputed value is the expectation
+# of a uniform tie-break: the donors strictly closer than D_k plus the
+# remaining k - c_lt slots filled by the mean of ALL donors at exactly D_k,
+# each sum folded in ascending donor order. Order-free and deterministic;
+# one cell per thread on the device (`knn_impute_tie_mean_kernel` and
+# `knn_impute_tie_mean_cells_kernel` in iter_device.mojo run these same
+# statements). Distance weights keep the scan's result. Bits change for
+# uniform KNNImputer cells with a tie at D_k, on every column together.
+# -D MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (A arm) restores the lower-index
+# rule in every mode.
+comptime XN_IMPUTE_TIE_MEAN = not is_defined["MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF"]()
+
+
+@always_inline
+def knn_impute_tie_mean_item(
+    t: Int, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP, m: Int, d: Int, k: Int,
+):
+    """Rewrites missing cell t's uniform donor mean as the tie mean (above),
+    after the donor scan left the k best at best_d / best_i + t * k. Fewer
+    than k donors: every donor is already used, the scan's value stays."""
+    if Int(best_i.unsafe_load(t * k + k - 1)) < 0:
+        return
+    var dk = best_d.unsafe_load(t * k + k - 1)
+    var r = t // d
+    var c = t - r * d
+    var sum_lt = Float32(0)
+    var sum_eq = Float32(0)
+    var c_lt = 0
+    var c_eq = 0
+    for j in range(m):
+        var dv = fx.unsafe_load(j * d + c)
+        if dv != dv:
+            continue
+        var acc = Float32(0)
+        var present = 0
+        for f in range(d):
+            var a = x.unsafe_load(r * d + f)
+            var b = fx.unsafe_load(j * d + f)
+            if a != a or b != b:
+                continue
+            present += 1
+            var df = _sub(a, b)
+            acc = ftz(identical_mul_add(df, df, acc))
+        if present == 0:
+            continue
+        var sq = ftz(identical_mul(ftz(identical_div(acc, Float32(present))), Float32(d)))
+        var dist = ftz(identical_sqrt(sq))
+        if dist < dk:
+            sum_lt = _add(sum_lt, dv)
+            c_lt += 1
+        elif dist == dk:
+            sum_eq = _add(sum_eq, dv)
+            c_eq += 1
+    if c_eq > 0 and c_lt < k:
+        var fill = ftz(identical_mul(ftz(identical_div(sum_eq, Float32(c_eq))), Float32(k - c_lt)))
+        res.unsafe_store(t, ftz(identical_div(_add(sum_lt, fill), Float32(k))))
+
+
 @always_inline
 def knn_impute_finish(
     t: Int, fx: FP, bd: FP, bi: IP, res: FP, m: Int, d: Int, k: Int, weights: Int, n_donors: Int,
@@ -1353,7 +1418,8 @@ def knn_impute_item(
     """sklearn KNNImputer.transform for cell t = r*d + c: a present value is
     copied; a missing one is the (weighted) mean of column c over the k
     nearest donors (fit rows with column c present) by nan_euclidean
-    distance, nearest first and the lower donor index on a tie; donors at no
+    distance, nearest first and the lower donor index on a tie (uniform
+    weights then take the tie mean, `knn_impute_tie_mean_item`); donors at no
     finite distance are skipped (their weight 0). No donor at a finite
     distance: the masked column mean of the fit data. weights: 0 uniform,
     1 distance (1/d; any zero distance: the zero-distance donors only).
@@ -1400,6 +1466,9 @@ def knn_impute_item(
         bd.unsafe_store(s, dist)
         bi.unsafe_store(s, Int32(j))
     knn_impute_finish(t, fx, bd, bi, res, m, d, k, weights, n_donors)
+    comptime if XN_IMPUTE_TIE_MEAN:
+        if weights == 0:
+            knn_impute_tie_mean_item(t, x, fx, best_d, best_i, res, m, d, k)
 
 
 def knn_impute_cell_item(
