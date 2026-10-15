@@ -641,10 +641,12 @@ def paired_observations(BB, specs, resolve, skips):
                     # not ours. Retain their actual bytes and provenance;
                     # compare settings, GPU kind and derivable clocks instead.
                     problems = retained_opponent_problems(rr, ours, c)
+                    rr.setdefault("retained_opponent_checks", {})[c["arm"]] = dict(
+                        measurement_id=cm.get("id"), problems=problems)
                     if problems:
                         ex = rr.setdefault("opponents_excluded", {"arms": [], "why": {}})
                         ex["arms"] = sorted(set(ex.get("arms", [])) | {c["arm"]})
-                        ex.setdefault("why", {})[c["arm"]] = "; ".join(problems)
+                        ex.setdefault("why", {})[c["arm"]] = "retained opponent evidence: " + "; ".join(problems)
                         ex["reason"] = "; ".join("%s: %s" % item for item in sorted(ex["why"].items()))
                     continue
                 if (cm.get("completeness") != "complete" or not cm.get("id")
@@ -1064,7 +1066,8 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
             rr["lane_config"] = lane_config
         if paired:
             for field in ("params", "params_check", "preflight", "audit", "rerace", "opponents_excluded",
-                          "command", "finished", "started", "evidence_directory", "evidence_receipt", "infer_cells"):
+                          "retained_opponent_checks", "command", "finished", "started",
+                          "evidence_directory", "evidence_receipt", "infer_cells"):
                 if field in paired:
                     rr[field] = copy.deepcopy(paired[field])
             rr["host"] = copy.deepcopy(paired.get("host"))
@@ -1292,6 +1295,29 @@ _n_iter = RF.n_iter
 
 def apply_fairness(board, prev, today):
     """tools/race_fairness.py apply(): every row of every race gets its audit entry; returns the races marked x."""
+    for race in (board.get("races") or {}).values():
+        checked = race.get("retained_opponent_checks") or {}
+        ours = next((c for c in race.get("cells", []) if c.get("library") == "mojolearn"
+                     and c.get("mode") == "identical"), None)
+        if not checked or ours is None:
+            continue
+        excluded = False
+        for c in race.get("cells", []):
+            if c.get("arm") not in checked or not c.get("stored"):
+                continue
+            problems = retained_opponent_problems(race, ours, c)
+            checked[c["arm"]] = dict(measurement_id=(c.get("measurement") or {}).get("id"), problems=problems)
+            if problems:
+                ex = race.setdefault("opponents_excluded", {"arms": [], "why": {}})
+                ex["arms"] = sorted(set(ex.get("arms", [])) | {c["arm"]})
+                ex.setdefault("why", {})[c["arm"]] = "retained opponent evidence: " + "; ".join(problems)
+                ex["reason"] = "; ".join("%s: %s" % item for item in sorted(ex["why"].items()))
+                excluded = True
+        if excluded:
+            # Display annotation changes opponent row bytes during assembly.
+            # Bind this freshly rechecked exclusion after those changes so the
+            # fairness tool cannot discard it as an unsupported old finding.
+            race["opponents_excluded"]["basis"] = RF.exclusion_basis(race)
     return RF.apply(board, prev or {}, today)
 
 

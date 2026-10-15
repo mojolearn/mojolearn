@@ -383,6 +383,25 @@ class PairedSessions(unittest.TestCase):
                 self.assertEqual(imported["opponents_excluded"]["arms"], ["cuml-gpu"])
                 audit = MB.RF.fairness_rule(imported, "identical", "fit", "2026-10-15")
                 self.assertFalse((audit or {}).get("admitted_opponents"))
+                # The complete ingest annotates rows and then checks evidence
+                # bases. A later rebuild must not erase this fresh exclusion.
+                obs = self.read_paired(board)
+                winners, failures, ledger = MB.choose(obs)
+                assembled = MB.assemble(BB, "nvidia-l40s", winners, ledger,
+                    MB.identity_index(obs), [], {}, "2026-10-15", failures)
+                MB.CALLS.annotate_board(assembled)
+                MB.apply_fairness(assembled, {}, "2026-10-15")
+                for repeat in range(2):
+                    kept = next(iter(assembled["races"].values()))
+                    self.assertIn("cuml-gpu", kept["opponents_excluded"]["arms"])
+                    self.assertFalse(kept["audit"]["identical/fit"].get("admitted_opponents"))
+                    previous = copy.deepcopy(assembled)
+                    rotated = MB.previous_observations(assembled)
+                    winners, failures, ledger = MB.choose(rotated)
+                    assembled = MB.assemble(BB, "nvidia-l40s", winners, ledger,
+                        MB.identity_index(rotated), [], {}, "2026-10-15", failures)
+                    MB.CALLS.annotate_board(assembled)
+                    MB.apply_fairness(assembled, previous, "2026-10-15")
 
 
 class FairnessMarks(unittest.TestCase):
