@@ -429,7 +429,7 @@ class ElasticNet(ParamsMixin):
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Samples, read as float32; at least two rows.
+            Samples, read as float32.
 
         Returns
         -------

@@ -1959,8 +1959,8 @@ def cd_predict(
         raise Error(
             "Parameter n_cols: number of columns cannot be less than one"
         )
-    if n_rows <= 1:
-        raise Error("Parameter n_rows: number of rows cannot be less than two")
+    # A prediction takes any row count >= 1 (scikit-learn predicts one
+    # row); cuML's two-row floor belongs to the fit (cdFit), not cdPredict.
     if loss != LOSS_SQRD_LOSS:
         raise Error(
             "Parameter loss: Only SQRT_LOSS function is supported for now"

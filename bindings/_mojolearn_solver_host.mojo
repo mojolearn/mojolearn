@@ -294,8 +294,8 @@ def cd_predict_binding(
             raise Error(
                 "Parameter n_cols: number of columns cannot be less than one"
             )
-        if n_rows <= 1:
-            raise Error("Parameter n_rows: number of rows cannot be less than two")
+        # A prediction takes any row count >= 1 (scikit-learn predicts one
+        # row); cuML's two-row floor belongs to the fit (cdFit), not cdPredict.
         var x = read_f32(x_address, n_rows * n_cols)
         var coef = read_f32(coef_address, n_cols)
         # `identical_gemm(ctx, pred, x, coef, n_rows, 1, n_cols, OP_TN)`:
