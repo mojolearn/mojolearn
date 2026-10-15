@@ -132,10 +132,15 @@ class PluginArches(unittest.TestCase):
     normal target; no flag), mojolearn-amd gfx942."""
 
     def test_plugin_arches_read_from_the_registry(self):
-        self.assertEqual(gate.PLUGIN_ARCHES['cuda'], frozenset({'cuda/sm_89', 'cuda/sm_80'}))
+        # the PTX slot is in the release while gpu_plugins ships it (`ptx_shipped`, off since
+        # 0.8.39 while the wheel is over PyPI's 100 MiB limit)
+        ptx = gate.load_gpu_plugins().PLUGINS['cuda'].get('ptx_shipped', True)
+        cuda = ['cuda/sm_89'] + (['cuda/sm_80'] if ptx else [])
+        self.assertEqual(gate.PLUGIN_ARCHES['cuda'], frozenset(cuda))
         self.assertEqual(gate.PLUGIN_ARCHES['hip'], frozenset({'hip/gfx942'}))
-        self.assertTrue(gate.plugin_arch_set_ok('cuda', ['cuda/sm_89', 'cuda/sm_80']))
-        self.assertFalse(gate.plugin_arch_set_ok('cuda', ['cuda/sm_89']))
+        self.assertTrue(gate.plugin_arch_set_ok('cuda', cuda))
+        self.assertEqual(gate.plugin_arch_set_ok('cuda', ['cuda/sm_89', 'cuda/sm_80']), ptx)
+        self.assertFalse(gate.plugin_arch_set_ok('cuda', ['cuda/sm_89', 'hip/gfx942']))
 
 if __name__ == '__main__':
     unittest.main()
