@@ -53,7 +53,52 @@ def _guard_cpu_training(method):
     return guarded
 
 
-class ParamsMixin:
+def sklearn_tags(est):
+    """scikit-learn's tag protocol (1.6+) for a mojolearn estimator, read only
+    by scikit-learn, so importing it here needs no dependency.
+
+    One answer for every public estimator, built from class attributes:
+
+    - `_estimator_type`: 'classifier', 'regressor', 'clusterer',
+      'outlier_detector', 'density_estimator' or None, as scikit-learn's
+      mixins set it. It picks stratified folds and the default scorer in
+      scikit-learn's `cross_val_score` and answers `is_classifier`.
+    - a `transform` method gives transformer tags. `_sklearn_preserves_dtype`
+      names the dtypes `transform` keeps (default: none claimed).
+    - `_sklearn_input_tags` / `_sklearn_target_tags`: overrides of the
+      matching scikit-learn tag fields (allow_nan, positive_only,
+      one_d_array, ...), set where the estimator's contract differs from
+      the defaults.
+    - `_sklearn_requires_fit = False` for a stateless transformer.
+    """
+    from sklearn.utils import (ClassifierTags, InputTags, RegressorTags,  # glue: sklearn tag protocol, imported only when sklearn asks
+                               Tags, TargetTags, TransformerTags)
+    cls = type(est)
+    kind = getattr(est, "_estimator_type", None)
+    tags = Tags(estimator_type=kind,
+                target_tags=TargetTags(required=kind in ("classifier", "regressor")),
+                input_tags=InputTags(),
+                classifier_tags=ClassifierTags() if kind == "classifier" else None,
+                regressor_tags=RegressorTags() if kind == "regressor" else None,
+                requires_fit=getattr(cls, "_sklearn_requires_fit", True))
+    if callable(getattr(est, "transform", None)):
+        tags.transformer_tags = TransformerTags(
+            preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ())))
+    for name, value in getattr(cls, "_sklearn_input_tags", {}).items():  # glue: sklearn tag field overrides by name
+        setattr(tags.input_tags, name, value)
+    for name, value in getattr(cls, "_sklearn_target_tags", {}).items():  # glue: sklearn tag field overrides by name
+        setattr(tags.target_tags, name, value)
+    return tags
+
+
+class SklearnTagsMixin:
+    """`__sklearn_tags__` for an estimator: see `sklearn_tags`."""
+
+    def __sklearn_tags__(self):
+        return sklearn_tags(self)
+
+
+class ParamsMixin(SklearnTagsMixin):
     """`get_params` / `set_params` read off the constructor's signature.
 
     scikit-learn's convention (base.py `BaseEstimator.get_params`): every
@@ -121,18 +166,6 @@ class ParamsMixin:
         self.__dict__.clear()
         self.__dict__.update(replacement.__dict__)
         return self
-
-    def __sklearn_tags__(self):
-        """scikit-learn's tag protocol (1.6+), read only by scikit-learn,
-        so importing it here needs no dependency: `_estimator_type` says
-        classifier or regressor, which picks stratified folds and the
-        default scorer in scikit-learn's own `cross_val_score`."""
-        from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags  # glue: sklearn tag protocol, imported only when sklearn asks
-        kind = getattr(self, "_estimator_type", None)
-        return Tags(estimator_type=kind,
-                    target_tags=TargetTags(required=kind in ("classifier", "regressor")),
-                    classifier_tags=ClassifierTags() if kind == "classifier" else None,
-                    regressor_tags=RegressorTags() if kind == "regressor" else None)
 
 
 class NumericModeMixin(ParamsMixin):
