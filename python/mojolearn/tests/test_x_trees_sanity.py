@@ -400,7 +400,7 @@ def test_bagging_oob_score():
                            random_state=0).fit(Xa, ya)
     assert abs(ours.oob_score_ - ref.oob_score_) < 0.06, (ours.oob_score_, ref.oob_score_)
     with pytest.raises(ValueError):
-        ml.BaggingRegressor(oob_score=True, bootstrap=False)
+        ml.BaggingRegressor(oob_score=True, bootstrap=False).fit(Xa, ya)
 
 
 def test_cv_splitter_objects():

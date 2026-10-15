@@ -930,16 +930,7 @@ def _trees_sub_cols(est):
 class _BaggingBase(_TreesEnsembleBase):
     def __init__(self, estimator, n_estimators, max_samples, max_features, bootstrap,
                  bootstrap_features, oob_score, warm_start, n_jobs, random_state, verbose):
-        if oob_score and not bootstrap:
-            raise ValueError("Out of bag estimation only available if bootstrap=True")
-        if warm_start:
-            _refuse("warm_start=True", "there is no incremental fit here.")
-        if n_jobs is not None:
-            _refuse("n_jobs", "the sub-fits run one after another on the device.")
-        if verbose:
-            _refuse("verbose", "nothing logs per estimator.")
-        if int(n_estimators) < 1:
-            raise ValueError("n_estimators must be >= 1")
+        # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimator = estimator
         self.n_estimators = n_estimators
         self.max_samples = max_samples
@@ -951,7 +942,19 @@ class _BaggingBase(_TreesEnsembleBase):
         self.n_jobs = n_jobs
         self.random_state = random_state
         self.verbose = verbose
-        _trees_seed(random_state)
+
+    def _validate_params(self):
+        if self.oob_score and not self.bootstrap:
+            raise ValueError("Out of bag estimation only available if bootstrap=True")
+        if self.warm_start:
+            _refuse("warm_start=True", "there is no incremental fit here.")
+        if self.n_jobs is not None:
+            _refuse("n_jobs", "the sub-fits run one after another on the device.")
+        if self.verbose:
+            _refuse("verbose", "nothing logs per estimator.")
+        if int(self.n_estimators) < 1:
+            raise ValueError("n_estimators must be >= 1")
+        _trees_seed(self.random_state)
 
     @staticmethod
     def _count(v, total, name):
@@ -1228,6 +1231,7 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
         -------
         self
         """
+        self._validate_params()
         self.classes_, codes = encode_labels(y)
         self.n_classes_ = len(self.classes_)
         if self.n_classes_ < 2:
@@ -1387,6 +1391,7 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
         -------
         self
         """
+        self._validate_params()
         y32, _ = as_f32_c(y, ndim=1, name="y")
         self._fit_bags(X, lambda rows, all_rows: y32 if all_rows else self._gather_vec(y32, rows),
                        sample_weight, DecisionTreeRegressor)
@@ -1487,15 +1492,18 @@ def _trees_normalized_weights_native(est, sample_weight, n):
 
 class _AdaBoostBase(_TreesEnsembleBase):
     def __init__(self, estimator, n_estimators, learning_rate, random_state):
-        if int(n_estimators) < 1:
-            raise ValueError("n_estimators must be >= 1")
-        if not float(learning_rate) > 0:
-            raise ValueError("learning_rate must be > 0")
+        # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimator = estimator
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.random_state = random_state
-        _trees_seed(random_state)
+
+    def _validate_params(self):
+        if int(self.n_estimators) < 1:
+            raise ValueError("n_estimators must be >= 1")
+        if not float(self.learning_rate) > 0:
+            raise ValueError("learning_rate must be > 0")
+        _trees_seed(self.random_state)
 
     def _w32(self, w, n):
         """The boosting weights (summing to one) times n, float32: the
@@ -1569,11 +1577,14 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
 
     def __init__(self, estimator=None, *, n_estimators=50, learning_rate=1.0, algorithm="SAMME",
                  random_state=None):
-        if algorithm not in ("SAMME", "deprecated"):
-            _refuse(f"algorithm={algorithm!r}", "SAMME.R was removed from the reference (sklearn 1.6);"
-                    " SAMME is the algorithm.")
         super().__init__(estimator, n_estimators, learning_rate, random_state)
         self.algorithm = algorithm
+
+    def _validate_params(self):
+        if self.algorithm not in ("SAMME", "deprecated"):
+            _refuse(f"algorithm={self.algorithm!r}", "SAMME.R was removed from the reference (sklearn 1.6);"
+                    " SAMME is the algorithm.")
+        super()._validate_params()
 
     def fit(self, X, y, sample_weight=None):
         """Fit the boosted ensemble.
@@ -1598,6 +1609,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         ValueError
             If the first member is worse than random guessing.
         """
+        self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n = Xa.shape[0]
         self.classes_, codes = encode_labels(y)
@@ -1773,10 +1785,13 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
 
     def __init__(self, estimator=None, *, n_estimators=50, learning_rate=1.0, loss="linear",
                  random_state=None):
-        if loss not in self._LOSSES:
-            raise ValueError(f"loss must be one of {tuple(self._LOSSES)}, got {loss!r}")
         super().__init__(estimator, n_estimators, learning_rate, random_state)
         self.loss = loss
+
+    def _validate_params(self):
+        if self.loss not in self._LOSSES:
+            raise ValueError(f"loss must be one of {tuple(self._LOSSES)}, got {self.loss!r}")
+        super()._validate_params()
 
     def fit(self, X, y, sample_weight=None):
         """Fit the boosted ensemble.
@@ -1795,6 +1810,7 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
         -------
         self
         """
+        self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n, d = Xa.shape
         y32, _ = as_f32_c(y, ndim=1, name="y")
@@ -2527,11 +2543,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
     def __init__(self, n_estimators=100, *, max_depth=5, min_samples_split=2, min_samples_leaf=1,
                  min_weight_fraction_leaf=0.0, max_leaf_nodes=None, min_impurity_decrease=0.0,
                  sparse_output=False, n_jobs=None, random_state=None, verbose=0, warm_start=False):
-        if sparse_output:
-            _refuse("sparse_output=True", "the NumPy-free layer has no sparse container; the dense"
-                    " one-hot is returned.")
-        if n_jobs is not None or verbose or warm_start:
-            _refuse("n_jobs/verbose/warm_start", "not carried in pass 1.")
+        # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
@@ -2544,7 +2556,14 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         self.random_state = random_state
         self.verbose = verbose
         self.warm_start = warm_start
-        _trees_seed(random_state)
+
+    def _validate_params(self):
+        if self.sparse_output:
+            _refuse("sparse_output=True", "the NumPy-free layer has no sparse container; the dense"
+                    " one-hot is returned.")
+        if self.n_jobs is not None or self.verbose or self.warm_start:
+            _refuse("n_jobs/verbose/warm_start", "not carried in pass 1.")
+        _trees_seed(self.random_state)
 
     def fit(self, X, y=None, sample_weight=None):
         """Fit the random trees on ``X`` (n_samples, n_features).
@@ -2556,6 +2575,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         -------
         self
         """
+        self._validate_params()
         if sample_weight is not None:
             _refuse("RandomTreesEmbedding sample_weight", "the members take none.")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
@@ -2620,6 +2640,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
 
     def fit_transform(self, X, y=None, sample_weight=None):
         """Fit on ``X``, then return ``transform(X)``."""
+        self._validate_params()
         return self.fit(X, y, sample_weight).transform(X)
 
 
@@ -2836,16 +2857,19 @@ class VotingClassifier(ClassifierScoreMixin, _TreesWrapperBase):
 
     def __init__(self, estimators, *, voting="hard", weights=None, n_jobs=None, flatten_transform=True,
                  verbose=False):
-        if voting not in ("hard", "soft"):
-            raise ValueError("voting must be 'hard' or 'soft'")
-        if n_jobs is not None or verbose:
-            _refuse("n_jobs/verbose", "the members fit one after another.")
+        # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimators = estimators
         self.voting = voting
         self.weights = weights
         self.n_jobs = n_jobs
         self.flatten_transform = flatten_transform
         self.verbose = verbose
+
+    def _validate_params(self):
+        if self.voting not in ("hard", "soft"):
+            raise ValueError("voting must be 'hard' or 'soft'")
+        if self.n_jobs is not None or self.verbose:
+            _refuse("n_jobs/verbose", "the members fit one after another.")
 
     def _weights(self):
         m = len(self.estimators_)
@@ -2870,6 +2894,7 @@ class VotingClassifier(ClassifierScoreMixin, _TreesWrapperBase):
         -------
         self
         """
+        self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         self.classes_, codes = encode_labels(y)
         self.n_classes_ = len(self.classes_)
@@ -2999,12 +3024,15 @@ class VotingRegressor(RegressorScoreMixin, _TreesWrapperBase):
     _estimator_type = "regressor"
 
     def __init__(self, estimators, *, weights=None, n_jobs=None, verbose=False):
-        if n_jobs is not None or verbose:
-            _refuse("n_jobs/verbose", "the members fit one after another.")
+        # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimators = estimators
         self.weights = weights
         self.n_jobs = n_jobs
         self.verbose = verbose
+
+    def _validate_params(self):
+        if self.n_jobs is not None or self.verbose:
+            _refuse("n_jobs/verbose", "the members fit one after another.")
 
     def fit(self, X, y, sample_weight=None):
         """Fit a clone of every active estimator on ``X`` and ``y``.
@@ -3022,6 +3050,7 @@ class VotingRegressor(RegressorScoreMixin, _TreesWrapperBase):
         -------
         self
         """
+        self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         active = _trees_estimators(self.estimators)
         self.estimators_ = []
@@ -3081,10 +3110,7 @@ class VotingRegressor(RegressorScoreMixin, _TreesWrapperBase):
 # LogisticRegression and Ridge (sklearn: LogisticRegression, RidgeCV).
 class _StackingBase(_TreesWrapperBase):
     def __init__(self, estimators, final_estimator, cv, stack_method, n_jobs, passthrough, verbose):
-        if n_jobs is not None or verbose:
-            _refuse("n_jobs/verbose", "the members fit one after another.")
-        if stack_method not in ("auto", "predict_proba", "decision_function", "predict"):
-            raise ValueError("stack_method must be auto, predict_proba, decision_function or predict")
+        # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimators = estimators
         self.final_estimator = final_estimator
         self.cv = cv
@@ -3092,7 +3118,13 @@ class _StackingBase(_TreesWrapperBase):
         self.n_jobs = n_jobs
         self.passthrough = passthrough
         self.verbose = verbose
-        _trees_cv(cv)
+
+    def _validate_params(self):
+        if self.n_jobs is not None or self.verbose:
+            _refuse("n_jobs/verbose", "the members fit one after another.")
+        if self.stack_method not in ("auto", "predict_proba", "decision_function", "predict"):
+            raise ValueError("stack_method must be auto, predict_proba, decision_function or predict")
+        _trees_cv(self.cv)
 
     def _method(self, est):
         if self.stack_method != "auto":
@@ -3266,6 +3298,7 @@ class StackingClassifier(ClassifierScoreMixin, _StackingBase):
             When a member's output width differs between folds (a class missing
             from a fold's training rows).
         """
+        self._validate_params()
         if sample_weight is not None:
             _refuse("StackingClassifier sample_weight", "not carried in pass 1.")
         self.classes_, codes = encode_labels(y)
@@ -3383,6 +3416,7 @@ class StackingRegressor(RegressorScoreMixin, _StackingBase):
         -------
         self
         """
+        self._validate_params()
         if sample_weight is not None:
             _refuse("StackingRegressor sample_weight", "not carried in pass 1.")
         y32, _ = as_f32_c(y, ndim=1, name="y")
@@ -3461,10 +3495,13 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
     _estimator_type = "regressor"
 
     def __init__(self, estimator, *, n_jobs=None):
-        if n_jobs is not None:
-            _refuse("n_jobs", "the columns fit one after another.")
+        # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimator = estimator
         self.n_jobs = n_jobs
+
+    def _validate_params(self):
+        if self.n_jobs is not None:
+            _refuse("n_jobs", "the columns fit one after another.")
 
     def _fit_ridge_multi(self, b, Xa, Ya):
         """The one-program fit: X centered once (Ridge.fit's own device
@@ -3522,6 +3559,7 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
         -------
         self
         """
+        self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         Ya, _ = as_f32_c(Y, ndim=2, name="Y")
         if Ya.shape[0] != Xa.shape[0]:
@@ -3602,10 +3640,13 @@ class MultiOutputClassifier(_TreesWrapperBase):
     _estimator_type = "classifier"
 
     def __init__(self, estimator, *, n_jobs=None):
-        if n_jobs is not None:
-            _refuse("n_jobs", "the columns fit one after another.")
+        # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimator = estimator
         self.n_jobs = n_jobs
+
+    def _validate_params(self):
+        if self.n_jobs is not None:
+            _refuse("n_jobs", "the columns fit one after another.")
 
     def fit(self, X, Y, sample_weight=None):
         """Fit one clone of ``estimator`` per label column of ``Y``.
@@ -3624,6 +3665,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
         -------
         self
         """
+        self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         W = _trees_label_words(Y)
         if W is not None:
@@ -3792,11 +3834,14 @@ class OneVsRestClassifier(ClassifierScoreMixin, _TreesWrapperBase):
     _estimator_type = "classifier"
 
     def __init__(self, estimator, *, n_jobs=None, verbose=0):
-        if n_jobs is not None or verbose:
-            _refuse("n_jobs/verbose", "the classes fit one after another.")
+        # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimator = estimator
         self.n_jobs = n_jobs
         self.verbose = verbose
+
+    def _validate_params(self):
+        if self.n_jobs is not None or self.verbose:
+            _refuse("n_jobs/verbose", "the classes fit one after another.")
 
     def fit(self, X, y):
         """Fit one binary clone per class.
@@ -3812,6 +3857,7 @@ class OneVsRestClassifier(ClassifierScoreMixin, _TreesWrapperBase):
         -------
         self
         """
+        self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         self.classes_, codes = encode_labels(y)
         k = len(self.classes_)
@@ -4003,18 +4049,21 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
     _estimator_type = "classifier"
 
     def __init__(self, estimator=None, *, method="sigmoid", cv=None, n_jobs=None, ensemble=True):
-        if method not in ("sigmoid", "isotonic"):
-            raise ValueError("method must be 'sigmoid' or 'isotonic'")
-        if n_jobs is not None:
-            _refuse("n_jobs", "the folds fit one after another.")
-        if ensemble not in (True, False):
-            _refuse(f"ensemble={ensemble!r}", "True or False.")
+        # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimator = estimator
         self.method = method
         self.cv = cv
         self.n_jobs = n_jobs
         self.ensemble = ensemble
-        _trees_cv(cv)
+
+    def _validate_params(self):
+        if self.method not in ("sigmoid", "isotonic"):
+            raise ValueError("method must be 'sigmoid' or 'isotonic'")
+        if self.n_jobs is not None:
+            _refuse("n_jobs", "the folds fit one after another.")
+        if self.ensemble not in (True, False):
+            _refuse(f"ensemble={self.ensemble!r}", "True or False.")
+        _trees_cv(self.cv)
 
     def _scores(self, e, Xa):
         """(n, c) float64 scores: c = 1 when binary, else one column per class
@@ -4120,6 +4169,7 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
         ValueError
             When ``cv`` asks for more folds than some class has members.
         """
+        self._validate_params()
         if sample_weight is not None:
             _refuse("CalibratedClassifierCV sample_weight", "not carried in pass 1.")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
