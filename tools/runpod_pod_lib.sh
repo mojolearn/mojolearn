@@ -15,7 +15,7 @@ RP_V2=${RP_V2:-https://api.runpod.io/v2}
 load_key() {
     _kf="${MOJOLEARN_RUNPOD_KEY_FILE:-$HOME/.mojolearn_runpod_key}"
     if [ -z "${RUNPOD_API_KEY:-}" ] && [ -f "$_kf" ]; then
-        _perm=$(stat -f '%OLp' "$_kf" 2>/dev/null || stat -c '%a' "$_kf" 2>/dev/null)
+        _perm=$(stat -c '%a' "$_kf" 2>/dev/null || stat -f '%OLp' "$_kf" 2>/dev/null)
         [ "$_perm" = 600 ] || die "key file $_kf is mode $_perm, must be 600"
         RUNPOD_API_KEY=$(cat "$_kf")
     fi

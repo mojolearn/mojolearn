@@ -195,7 +195,7 @@ uplink_stable() {
   return 0
 }
 sha256_of() { { shasum -a 256 "$1" 2>/dev/null || sha256sum "$1"; } | cut -d' ' -f1; }
-mode_of() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+mode_of() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 
 # ------------------------------------------------------------ preflight (both modes)
 [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "commit must be the full 40-hex SHA, got '$COMMIT'"

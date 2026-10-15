@@ -64,7 +64,7 @@ wait_for_turn() {
             free_since=""
             case "$owner" in *amd-trees-leg*) seen_trees=1 ;; esac
             case "$owner" in *extra:*) [ "$seen_trees" = 1 ] && seen_extra=1 ;; esac
-            local age=$(( $(date +%s) - $(stat -f %m "$LOCK" 2>/dev/null || stat -c %Y "$LOCK") ))
+            local age=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || stat -f %m "$LOCK") ))
             if [ "$age" -gt 6000 ]; then
                 local live
                 live="$(api "$API/droplets?per_page=100" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(sum(1 for x in d.get("droplets",[]) if x["size_slug"].startswith("gpu")))' 2>/dev/null)"

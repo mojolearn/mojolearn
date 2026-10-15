@@ -31,7 +31,7 @@ load_key() {
     _kf="${MOJOLEARN_RUNPOD_KEY_FILE:-}"
     [ -n "$_kf" ] || die "set MOJOLEARN_RUNPOD_KEY_FILE"
     [ -f "$_kf" ] || die "$_kf does not exist"
-    _perm=$(stat -f '%OLp' "$_kf" 2>/dev/null || stat -c '%a' "$_kf" 2>/dev/null || echo "?")
+    _perm=$(stat -c '%a' "$_kf" 2>/dev/null || stat -f '%OLp' "$_kf" 2>/dev/null || echo "?")
     [ "$_perm" = "600" ] || die "key file must be mode 600"
     RUNPOD_API_KEY=$(cat "$_kf")
     export RUNPOD_API_KEY

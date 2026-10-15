@@ -519,7 +519,7 @@ bash -n "$BOX" || die "the box command is not valid bash"
 # ---------------------------------------------------------------- DigitalOcean primitives
 do_token_hygiene() {  # a reason on stdout and 1 when the file must not be used (as tools/do_extra_leg.sh)
     [ -f "$DO_TOKFILE" ] || { echo "token file $DO_TOKFILE does not exist"; return 1; }
-    _p=$(stat -f '%OLp' "$DO_TOKFILE" 2>/dev/null || stat -c '%a' "$DO_TOKFILE" 2>/dev/null || echo '?')
+    _p=$(stat -c '%a' "$DO_TOKFILE" 2>/dev/null || stat -f '%OLp' "$DO_TOKFILE" 2>/dev/null || echo '?')
     [ "$_p" = 600 ] || { echo "token file $DO_TOKFILE is mode $_p, must be 600"; return 1; }
     case "$(cd "$(dirname "$DO_TOKFILE")" && pwd)/" in "$ROOT"/*) echo "token file $DO_TOKFILE is INSIDE the repository"; return 1 ;; esac
     if git -C "$ROOT" ls-files --error-unmatch "$DO_TOKFILE" > /dev/null 2>&1; then
@@ -626,7 +626,7 @@ SK_EOF
     sh -n "$1"
 }
 do_lock_age() {  # seconds since the lock directory was made; 1 when it is absent
-    _m=$(stat -f %m "$DO_GPU_LOCK" 2>/dev/null || stat -c %Y "$DO_GPU_LOCK" 2>/dev/null) || return 1
+    _m=$(stat -c %Y "$DO_GPU_LOCK" 2>/dev/null || stat -f %m "$DO_GPU_LOCK" 2>/dev/null) || return 1
     echo $(( $(now) - _m ))
 }
 do_take_lock() {  # mkdir is the atomic test-and-set; the owner file names the run

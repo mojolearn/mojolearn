@@ -85,7 +85,7 @@ ha_lease_cents() {  # <cents/hour> <minutes> <minimum reservation minutes>: the 
 # ---------------------------------------------------------------- the key and the API
 ha_key_hygiene() {  # a reason on stdout and 1 when the key file must not be used
     [ -f "$HA_KEYFILE" ] || { echo "key file $HA_KEYFILE does not exist"; return 1; }
-    _p=$(stat -f '%OLp' "$HA_KEYFILE" 2>/dev/null || stat -c '%a' "$HA_KEYFILE" 2>/dev/null || echo '?')
+    _p=$(stat -c '%a' "$HA_KEYFILE" 2>/dev/null || stat -f '%OLp' "$HA_KEYFILE" 2>/dev/null || echo '?')
     [ "$_p" = 600 ] || { echo "key file $HA_KEYFILE is mode $_p, must be 600"; return 1; }
     case "$(cd "$(dirname "$HA_KEYFILE")" && pwd)/" in "${ROOT:-/nonexistent}"/*) echo "key file $HA_KEYFILE is INSIDE the repository"; return 1 ;; esac
     return 0
@@ -468,7 +468,7 @@ ha_rent() {
     # the create, serialized with every Hot Aisle leg on this Mac
     _t0=$(date +%s)
     until mkdir "$HA_CREATE_LOCK" 2>/dev/null; do
-        _m=$(stat -f %m "$HA_CREATE_LOCK" 2>/dev/null || stat -c %Y "$HA_CREATE_LOCK" 2>/dev/null || echo 0)
+        _m=$(stat -c %Y "$HA_CREATE_LOCK" 2>/dev/null || stat -f %m "$HA_CREATE_LOCK" 2>/dev/null || echo 0)
         if [ $(( $(date +%s) - _m )) -gt 900 ]; then rm -rf "$HA_CREATE_LOCK"; continue; fi
         [ $(( $(date +%s) - _t0 )) -lt 900 ] || { ha_refuse "the Hot Aisle create lock stayed held for 15 minutes"; return 1; }
         sleep 5
