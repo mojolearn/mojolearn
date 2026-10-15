@@ -115,7 +115,7 @@ def is_fitted(est):
     state = vars(est)
     if state.get("_mojolearn_fitted") or state.get("_mojolearn_fitting"):
         return True
-    return any(k.endswith("_") and not k.startswith("_") for k in state)  # glue: attribute names
+    return any(k.endswith("_") and not k.startswith("_") for k in state)  # glue: scans fitted attribute names
 
 
 def _track_fit(method):
