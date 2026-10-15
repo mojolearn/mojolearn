@@ -5,7 +5,7 @@
 from . import _mojolearn_estimators, _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, zeros
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin, available_if
 from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
 
 #: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
@@ -424,6 +424,7 @@ class DBSCAN(NumericModeMixin):
     # the GPU binding and the CPU host binding (`core/labeled_reference_host_predict.mojo`) compute the
     # same bytes. On 'rbc' the noise guarantee holds where the ball cover's predicate agrees with the
     # brute arm's (`check_dbscan_rbc_matches_brute`) and is not promised past that.
+    @available_if(lambda self: bool(self.prediction_data))
     def predict(self, X):
         """Label new rows using the fitted clustering.
 
@@ -439,8 +440,8 @@ class DBSCAN(NumericModeMixin):
         ``labels_``: the fit gives a border row the lowest-numbered nearby
         cluster, while ``predict`` gives the nearest core sample's cluster.
 
-        Requires a fit with ``prediction_data=True``; otherwise raises
-        ``ValueError``.
+        The method exists only with ``prediction_data=True`` (as in
+        scikit-learn, a DBSCAN without it has no ``predict``).
 
         Parameters
         ----------

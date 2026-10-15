@@ -24,7 +24,7 @@ metrics functions and is loaded through `_metrics_impl._get_binding`.
 """
 
 from . import _backend, _serialize
-from ._mode import ParamsMixin
+from ._mode import ParamsMixin, available_if
 from ._array import Array
 from ._buffer import (
     _native, addr, addr_ro, all_finite, as_f32_c, as_f64_c, as_i32_c, empty,
@@ -810,6 +810,7 @@ class SpectralClustering(ParamsMixin):
     # column with |mu_c| < 1e-3 is refused by name. How often
     # predict(X_train) == labels_ holds is measured in
     # bench/results/identity_break/2026-09-15_spectral-predict/.
+    @available_if(lambda self: bool(self.prediction_data) or getattr(self, "_fit_X", None) is not None)
     def predict(self, X):
         r"""Assign new rows to the fitted clusters.
 
@@ -821,7 +822,9 @@ class SpectralClustering(ParamsMixin):
         centroid index). A row's label does not depend on the other rows in
         the call.
 
-        Requires a fit with ``prediction_data=True``.
+        The method exists only with ``prediction_data=True`` (or on a model
+        loaded with `load`); otherwise, as in scikit-learn, there is no
+        ``predict``.
 
         The affinity of a new row:
 
