@@ -42,10 +42,10 @@ column. The one-block team schedule is gone.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmax, ld, st, ldi, i2f, fill, copy,
-    cholesky, axpy_acc, add_acc, par_rows, row_dots,
+    cholesky, axpy_acc, add_acc, par_rows, row_dots, row_dot,
 )
 from std.sys.info import is_gpu
-from x_linear.team import Team
+from x_linear.team import Team, solo, team_work
 from x_linear.tops import fold_sq, fold_fa, fold_fa_blocked, FOLD_BLOCK
 
 
@@ -269,6 +269,273 @@ def q_tail(fw: FP, nd: Int, d: Int, m: Int, beta: Int, rhs: Int, z: Int, v: Int,
     return (0, Float32(1))
 
 
+# ------------------------------------------------ the vertex polish (lane sk-weq-linear, 2026-10-15)
+# The LP's optimum is a vertex: with k columns in the support (the nonzero
+# coefficients, plus the intercept) k rows sit exactly on the fitted plane.
+# ADMM stops within its tolerance of that point (about 1e-4 relative), so a
+# fit with integer sample weights and the same fit on repeated rows land at
+# two different nearby points (scikit-learn's weight-equivalence check: an
+# intercept-only fit gave 1.99979 weighted against 2.00032 repeated, where
+# HiGHS returns the vertex 2.0 for both). The polish moves the ADMM answer
+# onto a vertex:
+#   1. the support S from z (exact zeros from the soft threshold);
+#   2. every row's residual r_i under the ADMM answer; a row with zero weight
+#      is never a candidate (a weight-0 row is a removed row);
+#   3. rows taken in order of |r_i| (ties: the lower row index), each kept
+#      when its restricted row A[i, S] keeps QP_INDEP of its norm after the
+#      kept rows are projected out (classical Gram-Schmidt, twice), until k
+#      rows are kept: A_R = L Q, L lower triangular, Q orthonormal rows;
+#   4. the vertex A_R beta_S = y_R: beta_S = Q' L^-1 y_R;
+#   5. kept only when its objective (1/den) sum w_i rho_q(r_i) + alpha |w|_1
+#      is not above the ADMM answer's, so the polish never makes a fit worse.
+# A repeated row projects to zero and is skipped, so a weight-w row and w
+# copies of it reach the same vertex. The pick is exact (comparisons only)
+# and every fold is the blocked order, so the host column below and
+# x_linear/quantile_grid.mojo produce the same words.
+
+#: A kept row keeps at least this fraction of its norm after projection. It
+#: bounds the vertex system's condition near 1e3 * sqrt(k), where float32
+#: keeps about four digits, as many as the ADMM tolerance (1e-4) it refines;
+#: a smaller remainder is a (near) duplicate of a kept row.
+comptime QP_INDEP = Float32(1e-3)
+#: The key of a row that is not (or no longer) a candidate.
+comptime QP_GONE = Float32(3.0e38)
+#: Each round costs one pass over the row keys, about one ADMM iteration;
+#: the cap bounds a fit whose candidates are mostly duplicates (16 copies of
+#: every vertex row) to 16 k + 64 rounds, after which the ADMM answer stands.
+comptime QP_ROUNDS_PER_COL = 16
+comptime QP_ROUNDS_EXTRA = 64
+# polish state words
+comptime QP_K = 0
+comptime QP_ACC = 1
+comptime QP_DONE = 2
+comptime QP_OK = 3
+comptime QP_FADMM = 4
+comptime QP_ROUNDS = 5
+comptime QP_WORDS = 8
+
+
+@always_inline
+def qp_rounds(k: Int) -> Int:
+    return QP_ROUNDS_PER_COL * k + QP_ROUNDS_EXTRA
+
+
+@always_inline
+def qp_layout(d: Int, m: Int) -> InlineArray[Int, 10]:
+    """Polish words: Q m*m | L m*m | y_R m | a m | v m | c m | t m | S m |
+    coef d, intercept 1; [9] the total."""
+    var o = InlineArray[Int, 10](fill=0)
+    o[0] = 0
+    o[1] = m * m
+    o[2] = 2 * m * m
+    o[3] = o[2] + m
+    o[4] = o[3] + m
+    o[5] = o[4] + m
+    o[6] = o[5] + m
+    o[7] = o[6] + m
+    o[8] = o[7] + m
+    o[9] = o[8] + d + 1
+    return o^
+
+
+@always_inline
+def qp_pin(r: Float32, q: Float32) -> Float32:
+    """The pinball loss rho_q(r): q r for r >= 0, (q - 1) r below."""
+    if r >= Float32(0):
+        return fm(q, r)
+    return fm(fs(q, Float32(1)), r)
+
+
+@always_inline
+def qp_row(x: FP, y: FP, n: Int, d: Int, sw: Bool, q: Float32, cz: FP, czo: Int, b: Float32, i: Int,
+           keys: FP, terms: FP, want_keys: Bool):
+    """Row i under the coefficients cz[czo, czo + d) and intercept b: its loss
+    term w_i rho_q(r_i) (rho_q(r_i) unweighted) into terms[i]; with want_keys
+    its key |r_i| into keys[i] (QP_GONE for a zero weight or a non-finite r)."""
+    var r = fs(ld(y, i), fa(row_dot(x, i, d, cz, czo), b))
+    var l = qp_pin(r, q)
+    var live = True
+    if sw:
+        var wi = ld(y, n + i)
+        l = fm(wi, l)
+        live = wi > Float32(0)
+    st(terms, i, l)
+    if want_keys:
+        var ar = fabs(r)
+        st(keys, i, ar if (live and ar < QP_GONE) else QP_GONE)
+
+
+def qp_objective(sum_terms: Float32, den: Float32, alpha: Float32, cz: FP, czo: Int, d: Int) -> Float32:
+    """(1/den) sum_terms + alpha |coef|_1, |coef|_1 folded j ascending."""
+    var l1 = Float32(0)
+    for j in range(d):
+        l1 = fa(l1, fabs(ld(cz, czo + j)))
+    return fa(fd(sum_terms, den), fm(alpha, l1))
+
+
+def qp_support(z: FP, zo: Int, d: Int, fi: Bool, pw: FP, so: Int) -> Int:
+    """S (column indices as float32; d is the intercept) into pw[so, so + k); returns k."""
+    var k = 0
+    for j in range(d):
+        if ld(z, zo + j) != Float32(0):
+            st(pw, so + k, i2f(j))
+            k += 1
+    if fi:
+        st(pw, so + k, i2f(d))
+        k += 1
+    return k
+
+
+def qp_try_row(t: Team, x: FP, y: FP, d: Int, m: Int, i: Int, pw: FP, k: Int, acc: Int) -> Bool:
+    """Row i of A restricted to S against the acc kept rows: classical
+    Gram-Schmidt twice (each coefficient one thread's fold over S, each
+    component one thread's fold over the kept rows), kept when the remainder
+    keeps QP_INDEP of the row's norm; then L's row acc, y_R[acc] and Q's row
+    acc are written. Every thread of the team calls it."""
+    var o = qp_layout(d, m)
+    var qo = o[0]
+    var lo = o[1]
+    var yo = o[2]
+    var ao = o[3]
+    var vo = o[4]
+    var co = o[5]
+    var so = o[7]
+    for c in range(t.tid, k, t.nt):
+        var a = q_a(x, i, d, Int(ld(pw, so + c)))
+        st(pw, ao + c, a)
+        st(pw, vo + c, a)
+    for l in range(t.tid, acc, t.nt):
+        st(pw, lo + acc * m + l, Float32(0))
+    t.sync()
+    for _p in range(2):
+        for l in range(t.tid, acc, t.nt):
+            var s = Float32(0)
+            for c in range(k):
+                s = fmad(ld(pw, qo + l * m + c), ld(pw, vo + c), s)
+            st(pw, co + l, s)
+            st(pw, lo + acc * m + l, fa(ld(pw, lo + acc * m + l), s))
+        t.sync()
+        for c in range(t.tid, k, t.nt):
+            var s = ld(pw, vo + c)
+            for l in range(acc):
+                s = fmad(-ld(pw, co + l), ld(pw, qo + l * m + c), s)
+            st(pw, vo + c, s)
+        t.sync()
+    var keep = 0
+    if t.lead():
+        var nv = Float32(0)
+        var na = Float32(0)
+        for c in range(k):
+            nv = fmad(ld(pw, vo + c), ld(pw, vo + c), nv)
+            na = fmad(ld(pw, ao + c), ld(pw, ao + c), na)
+        nv = fsqrt(nv)
+        na = fsqrt(na)
+        if nv > fm(QP_INDEP, na):
+            keep = 1
+            st(pw, lo + acc * m + acc, nv)
+            st(pw, yo + acc, ld(y, i))
+    keep = t.bcast_int(keep, 1)
+    if keep == 1:
+        for c in range(t.tid, k, t.nt):
+            st(pw, qo + acc * m + c, fd(ld(pw, vo + c), ld(pw, lo + acc * m + acc)))
+        t.sync()
+        return True
+    return False
+
+
+def qp_take(t: Team, x: FP, y: FP, d: Int, m: Int, pw: FP, ps: FP, keys: FP, best: Float32, ci: Int):
+    """One round after the pick (the smallest key `best`, its row ci). Every
+    thread enters with QP_DONE read as 0 and the same pick; the lead marks the
+    row taken and moves the state words."""
+    var k = Int(ld(ps, QP_K))
+    var acc = Int(ld(ps, QP_ACC))
+    var rounds = Int(ld(ps, QP_ROUNDS))
+    t.sync()
+    if best >= QP_GONE:
+        if t.lead():
+            st(ps, QP_DONE, Float32(1))
+        return
+    var kept = qp_try_row(t, x, y, d, m, ci, pw, k, acc)
+    if t.lead():
+        st(keys, ci, QP_GONE)
+        var a2 = acc + 1 if kept else acc
+        st(ps, QP_ACC, i2f(a2))
+        st(ps, QP_ROUNDS, i2f(rounds + 1))
+        if a2 == k:
+            st(ps, QP_OK, Float32(1))
+            st(ps, QP_DONE, Float32(1))
+        elif rounds + 1 >= qp_rounds(k):
+            st(ps, QP_DONE, Float32(1))
+
+
+def qp_vertex(t: Team, pw: FP, d: Int, m: Int, k: Int):
+    """beta_S = Q' L^-1 y_R into the polish coefficients (zero off S; the
+    intercept at d): the forward solve on the lead, a component a thread."""
+    var o = qp_layout(d, m)
+    if t.lead():
+        for r in range(k):
+            var s = ld(pw, o[2] + r)
+            for l in range(r):
+                s = fmad(-ld(pw, o[1] + r * m + l), ld(pw, o[6] + l), s)
+            st(pw, o[6] + r, fd(s, ld(pw, o[1] + r * m + r)))
+        fill(pw, o[8], d + 1, Float32(0))
+    t.sync()
+    for c in range(t.tid, k, t.nt):
+        var s = Float32(0)
+        for l in range(k):
+            s = fmad(ld(pw, o[0] + l * m + c), ld(pw, o[6] + l), s)
+        st(pw, o[8] + Int(ld(pw, o[7] + c)), s)
+    t.sync()
+
+
+def _quantile_polish_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, sw: Bool, q: Float32, alpha: Float32,
+                          den: Float32, res: FP):
+    """The vertex polish (above) on the host column: res holds the ADMM answer
+    (coef d, intercept) and takes the vertex when its objective is not above."""
+    var m = d + 1 if fi else d
+    var o = qp_layout(d, m)
+    var pwl = List[Float32](length=max(o[9], 1), fill=Float32(0))
+    var keyl = List[Float32](length=max(n, 1), fill=Float32(0))
+    var terml = List[Float32](length=max(n, 1), fill=Float32(0))
+    var psl = List[Float32](length=QP_WORDS, fill=Float32(0))
+    var twl = List[Float32](length=team_work(0, 3, 0), fill=Float32(0))
+    var pw = FP(unsafe_from_address=Int(pwl.unsafe_ptr()))
+    var keys = FP(unsafe_from_address=Int(keyl.unsafe_ptr()))
+    var terms = FP(unsafe_from_address=Int(terml.unsafe_ptr()))
+    var ps = FP(unsafe_from_address=Int(psl.unsafe_ptr()))
+    var t = solo(FP(unsafe_from_address=Int(twl.unsafe_ptr())), 0, 3, 0)
+    var k = qp_support(res, 0, d, fi, pw, o[7])
+    if k > 0:
+        var b = ld(res, d) if fi else Float32(0)
+        for i in range(n):
+            qp_row(x, y, n, d, sw, q, res, 0, b, i, keys, terms, True)
+        var f_admm = qp_objective(fold_fa_blocked(terms, 0, 1, n), den, alpha, res, 0, d)
+        st(ps, QP_K, i2f(k))
+        while ld(ps, QP_DONE) == Float32(0):
+            var best = QP_GONE
+            var ci = 0
+            for i in range(n):
+                var kv = ld(keys, i)
+                if kv < best:
+                    best = kv
+                    ci = i
+            qp_take(t, x, y, d, m, pw, ps, keys, best, ci)
+        if ld(ps, QP_OK) != Float32(0):
+            qp_vertex(t, pw, d, m, k)
+            var bp = ld(pw, o[8] + d) if fi else Float32(0)
+            for i in range(n):
+                qp_row(x, y, n, d, sw, q, pw, o[8], bp, i, keys, terms, False)
+            var f_pol = qp_objective(fold_fa_blocked(terms, 0, 1, n), den, alpha, pw, o[8], d)
+            if f_pol <= f_admm:
+                copy(res, 0, pw, o[8], d)
+                st(res, d, bp)
+    _ = pwl^
+    _ = keyl^
+    _ = terml^
+    _ = psl^
+    _ = twl^
+
+
 def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """The host column: the blocked schedule (see the module note) one row
     block at a time, the r-update mapped, then ONE fold pass per iteration
@@ -452,6 +719,9 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     st(res, d, ld(fw, beta + d) if fi else Float32(0))
     st(res, d + 1, i2f(iters))
     st(res, d + 2, Float32(1) if converged else Float32(0))
+    # the vertex polish (lane sk-weq-linear): the ADMM answer onto the LP vertex
+    # when that does not raise the objective
+    _quantile_polish_host(x, y, n, d, fi, sw, q, alpha, den, res)
 
 
 def quantile_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
