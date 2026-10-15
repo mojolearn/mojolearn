@@ -24,6 +24,15 @@ from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
 
 class _GBDTAdapter:
     _loss = None
+    # NaN in X takes the learner's nan_mode branch ('Min' by default)
+    _sklearn_input_tags = {"allow_nan": True}
+
+    def __init_subclass__(cls, **kw):
+        # scikit-learn's input and target validation and NotFittedError, as
+        # every other estimator gets them (`_mode.install_fit_tracking`)
+        super().__init_subclass__(**kw)
+        from ._mode import install_fit_tracking
+        install_fit_tracking(cls)
 
     # Every default is GradientBoosting's own, so a default adapter is the
     # default learner: None defers to CatBoost's GPU defaults under
