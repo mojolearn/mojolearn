@@ -31,6 +31,7 @@ from experiments.classical_identical_ideas.linear_controls import C18_RESIDUAL_N
 from x_linear.enetcv_blocks import fb_host_stats, fb_host_prep
 from std.sys.info import is_gpu
 from x_linear.team import Team
+from x_linear.cv_roles import cv_train, cv_test
 from x_linear.tops import upper_cell, fold_fa_ix, fold_sq_ix, chain_cfmad_ix
 
 
@@ -472,10 +473,19 @@ def ecv_finish(res: FP, fw: FP, xm: Int, w: Int, sc: Int, d: Int, fi: Bool, alph
 @always_inline
 def _ecv_row(fid: FP, i: Int, fold: Int, held: Bool) -> Bool:
     """Row i is in the fold's held-out rows (held) or its training rows
-    (all rows when fold < 0)."""
+    (all rows when fold < 0). A partition's fold ids test as before; per-split
+    roles (x_linear/cv_roles.mojo, lane sk-last: ShuffleSplit and other
+    splits that are not a partition) sit after the weights (y: targets n |
+    fold words n | weights n | roles F*n), so they ride the weighted arm,
+    the only arm whose every row test is this one."""
     if held:
-        return Int(ld(fid, i)) == fold
-    return fold < 0 or Int(ld(fid, i)) != fold
+        return cv_test(fid, i, fold, ECV_ROLES_AFTER)
+    return cv_train(fid, i, fold, ECV_ROLES_AFTER)
+
+
+comptime ECV_ROLES_AFTER = 2
+"""n-word blocks between the fold words and the roles: the weights, then
+the roles (fid + n is the weights, fid + 2n split 0's roles)."""
 
 
 def ecv_rows(fid: FP, n: Int, fold: Int) -> Int:
