@@ -83,7 +83,6 @@ from ivf.impl.neighbors.ivf_flat.ivf_group_device import (
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IVF_IDN_RECLUSTER_CAP,
-    IVF_FAST_STRIDED_COARSE,
     IVF_IDN_STRIDED_INIT,
     IVF_MAGNITUDE_BOUND,
     IVF_TRAINSET_STRIDE,
@@ -134,8 +133,6 @@ comptime IVF_FAST_TRAINSET = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_IVF_FAST_TRAINSET_OFF"]()
-    # MOJOLEARN_IVF_FAST_STRIDED_COARSE (ivf_flat_index.mojo) takes the strided trainset instead
-    and not IVF_FAST_STRIDED_COARSE
 )
 """FAST on Apple: the coarse quantizer trains on at most
 `IVF_FAST_ROWS_PER_LIST` rows per list, a seeded uniform sample (FAISS's
@@ -147,8 +144,6 @@ comptime IVF_FAST_SEED = (
     ANN3_COARSE_SEED
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    # MOJOLEARN_IVF_FAST_STRIDED_COARSE takes the strided start instead
-    and not IVF_FAST_STRIDED_COARSE
 )
 """FAST on Apple, DEFAULT (lane ann-apple3; `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` reverts):
 the coarse quantizer is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over
@@ -171,8 +166,6 @@ comptime IVF_FAST_RANDOM_INIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF"]()
-    # MOJOLEARN_IVF_FAST_STRIDED_COARSE takes the strided start instead
-    and not IVF_FAST_STRIDED_COARSE
 )
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9

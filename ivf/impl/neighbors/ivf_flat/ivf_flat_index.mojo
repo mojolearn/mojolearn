@@ -100,25 +100,8 @@ comptime IVF_DEFAULT_N_PROBES = 20
 #: the entries (its refusal is unchanged); the rule below is the build's own.
 #: Every row is still assigned to the trained centroids and laid into the lists.
 #: -D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF trains on every row again.
-#: lane quality-fix-apple-fast (2026-10-15), FAST + Apple EXPERIMENT, default OFF
-#: (`-D MOJOLEARN_IVF_FAST_STRIDED_COARSE` turns it on): the Apple FAST coarse
-#: quantizer trains the way IDENTICAL does, on the strided trainset
-#: (`IVF_TRAINSET_STRIDE`) from the strided start (`IVF_IDN_STRIDED_INIT`), in
-#: place of its seeded uniform sample (`IVF_FAST_TRAINSET`) and its device
-#: k-means++ / random-row start (`IVF_FAST_SEED`, `IVF_FAST_RANDOM_INIT`,
-#: ivf_flat_build.mojo). Cause (quality-vs-opponent-20261015, m3ultra-0834):
-#: ivf-sq taxi FAST recall@10 0.8333 vs faiss 0.8570 (IDENTICAL 0.9350); the
-#: IDENTICAL strided start raised ivf-pq istella recall@10 0.7489 -> 0.8021 on
-#: NV and AMD with taxi equal (postmerge-act-3). A size rule only (rows per
-#: list, cuVS's and FAISS's), no shape key. Applies to IVF-Flat, IVF-SQ,
-#: IVF-RaBitQ and IVF-PQ's coarse step (one build). Measured by an M3 A/B.
-comptime IVF_FAST_STRIDED_COARSE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_IVF_FAST_STRIDED_COARSE"]()
-)
 comptime IVF_TRAINSET_STRIDE = (
-    (not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()) or IVF_FAST_STRIDED_COARSE)
+    not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
     and not is_defined["MOJOLEARN_IVF_TRAINSET_STRIDE_OFF"]()
 )
 #: lane fg-ivf (read_ivf.md idea B2), DEFAULT ON outside FAST
@@ -155,8 +138,7 @@ comptime IVF_IDN_RECLUSTER_CAP = (
 #: (device + ivf/host/ivf_host.mojo); recall gate against cuVS. Applies to
 #: IVF-Flat and to IVF-PQ's coarse step (the same build). B2 is moot with it.
 comptime IVF_IDN_STRIDED_INIT = (
-    (GLOBAL_NUMERIC_MODE != NUMERIC_FAST or IVF_FAST_STRIDED_COARSE)
-    and not is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF"]()
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF"]()
 )
 
 
