@@ -497,6 +497,14 @@ import numpy as np
 from contextlib import contextmanager
 from pathlib import Path
 
+#: The harness is mojolearn's own code, under whatever module name it runs:
+#: `__main__` from tools/, `mojolearn_verify_all_*` inside `verify --all`.
+#: `_mode._caller_outside` reads this marker, so both see the native results
+#: the identity records hash, never the widened public ones; without it the
+#: direct harness hashed float64 predictions while the verifier hashed the
+#: native float32 (test_shipped_verifier_hashes_like_the_harness).
+__mojolearn_internal__ = True
+
 def atomic_json(path, value):
     path = Path(path)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
