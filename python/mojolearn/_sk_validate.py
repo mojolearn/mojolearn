@@ -476,9 +476,8 @@ def after_fit(est, check):
         np = require_numpy("feature_names_in_")
         est.feature_names_in_ = np.asarray(names, dtype=object)
     classes = state.get("classes_")
-    if (_kind(est) == "classifier" and type(classes) is list
-            and not any(isinstance(c, (list, tuple)) or getattr(c, "ndim", 0)  # glue: one test per class label (classes-sized)
-                        for c in classes)):
+    nested = type(classes) is list and any(isinstance(c, (list, tuple)) or getattr(c, "ndim", 0) for c in classes)  # glue: one test per class label (classes-sized)
+    if _kind(est) == "classifier" and type(classes) is list and not nested:
         # `classes_[codes]` with an integer array, as scikit-learn's
         # callers index an ndarray `classes_` (`_labels.ClassLabels`).
         from ._labels import ClassLabels
