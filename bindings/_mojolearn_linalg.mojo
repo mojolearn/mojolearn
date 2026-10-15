@@ -993,7 +993,7 @@ def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
             "Convert a float32 buffer to uint16 BF16 bits using round-to-nearest-even; return a same-shaped mojolearn.Array. Apple fast mode only.")
         m.def_function[fast_from_bf16_binding]("fast_from_bf16",
             "Widen uint16 BF16 bits exactly to a same-shaped float32 mojolearn.Array. Apple fast mode only.")
-        m.def_function[fast_matmul_bf16_binding]("fast_matmul_bf16",
+        m.def_py_function[fast_matmul_bf16_binding]("fast_matmul_bf16",
             "Multiply float32 or BF16-bits a by BF16-bits b with float32 accumulation on Apple in fast mode. Keyword arguments transpose_a=False, transpose_b=False and out=None support NN, NT and TN products. Return a float32 mojolearn.Array, or out when supplied.")
         m.def_function[gemm_int8_binding]("gemm_int8")
         comptime if AFN_GEMM_EPILOGUE:

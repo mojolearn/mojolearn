@@ -20,7 +20,6 @@ instead of silently routing to the identical product when unavailable.
 No numerical source or dispatch of the identical tier changes here.
 """
 
-from std.collections import OwnedKwargsDict
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -198,22 +197,31 @@ def fast_from_bf16_binding(value: PythonObject) raises -> PythonObject:
 
 
 def fast_matmul_bf16_binding(
-    a: PythonObject, b: PythonObject, kwargs: OwnedKwargsDict[PythonObject]
+    mut py_self: PythonObject, mut args: PythonObject, mut kwargs: PythonObject
 ) raises -> PythonObject:
     _require_candidate()
+    # PythonModuleBuilder.def_py_function is the supported raw tuple/dict
+    # binding interface on the pinned compiler. Parsing stays in Mojo.
+    if len(args) != 2:
+        raise Error("fast matmul_bf16 expects two positional operands")
+    var a = args[0]
+    var b = args[1]
     var transpose_a = False
     var transpose_b = False
     var out = PythonObject(None)
-    for entry in kwargs.items():
-        var name = String(entry.key)
-        if name == "transpose_a":
-            transpose_a = Bool(entry.value)
-        elif name == "transpose_b":
-            transpose_b = Bool(entry.value)
-        elif name == "out":
-            out = entry.value
-        else:
-            raise Error("fast matmul_bf16: unknown keyword " + name)
+    if kwargs is not PythonObject(None):
+        var keys = _BOUNDARY.get_or_create_ptr()[].builtins.tuple(kwargs.keys())
+        for index in range(len(keys)):
+            var key = keys[index]
+            var name = String(key)
+            if name == "transpose_a":
+                transpose_a = Bool(kwargs[key])
+            elif name == "transpose_b":
+                transpose_b = Bool(kwargs[key])
+            elif name == "out":
+                out = kwargs[key]
+            else:
+                raise Error("fast matmul_bf16: unknown keyword " + name)
     if transpose_a and transpose_b:
         raise Error("fast matmul_bf16 supports NN, NT and TN, not both transposes")
     var left = _Input(a, True, True)
