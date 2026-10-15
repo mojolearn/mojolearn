@@ -1072,7 +1072,10 @@ class _BaggingBase(_TreesEnsembleBase):
         base = self.estimator if self.estimator is not None else make_default()
         if self._batched_ok(base, n_rows, n, n_feat, d, sample_weight):
             return self._fit_batched(Xa, y_sub(None, True), base, n_rows, n, seed)
-        sw = None if sample_weight is None else as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
+        # scikit-learn's _check_sample_weight: the shape, sign and all-zero
+        # refusals before any member is fitted (a bootstrap gather never
+        # reads past row n, so a too-long vector was accepted silently)
+        sw = None if sample_weight is None else check_sample_weight(sample_weight, n)
         self.estimators_, self.estimators_features_, self._oob_rows = [], [], []
         all_rows = n_rows == n and not self.bootstrap
         all_cols = n_feat == d and not self.bootstrap_features
