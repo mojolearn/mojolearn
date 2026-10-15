@@ -1,0 +1,2699 @@
+{
+  "compared": [
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "bf546d06a019276f427dea7f511dc2956df231588f8de04684cc65f1ce6626bd",
+      "loss": "PairLogit",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "bf546d06a019276f427dea7f511dc2956df231588f8de04684cc65f1ce6626bd",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "PairLogit",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "PairLogit",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "PairLogit",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "loss": "PairLogit",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "PairLogit",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "ebb9d69dc81aef65c21a68cde6312d6e5c167b6aa6f4bafa0e67993d84f6f430",
+      "loss": "PairLogit",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "ebb9d69dc81aef65c21a68cde6312d6e5c167b6aa6f4bafa0e67993d84f6f430",
+      "shape": [
+        20418
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "PairLogit",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "76c4577ea5d3f915dd1cbe68d0dfb737dfaf3a048c26ca163a6648dd5385e1e8",
+      "loss": "PairLogit",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "76c4577ea5d3f915dd1cbe68d0dfb737dfaf3a048c26ca163a6648dd5385e1e8",
+      "shape": [
+        344
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "46415a02fb1fd55843555a6415896dd92102b2fb558166ce8a8408e90ae0ab50",
+      "loss": "PairLogit",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "46415a02fb1fd55843555a6415896dd92102b2fb558166ce8a8408e90ae0ab50",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "PairLogit",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "PairLogit",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "PairLogit",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "loss": "PairLogit",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "PairLogit",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "b4685354487672cdc59e773afbae021c5bbdbdbb3cff38b8f41a7a7884be4b7a",
+      "loss": "PairLogit",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "b4685354487672cdc59e773afbae021c5bbdbdbb3cff38b8f41a7a7884be4b7a",
+      "shape": [
+        20418
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "PairLogit",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "9bed008591008314b5aa61842f65cf45499e730a2475370f0f245c00dd0e38e0",
+      "loss": "PairLogit",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "9bed008591008314b5aa61842f65cf45499e730a2475370f0f245c00dd0e38e0",
+      "shape": [
+        344
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "e0c871b58c8fb7bec571d1981e21ca72052801ac4e751fef1870eda59e235fdc",
+      "loss": "PairLogit",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "e0c871b58c8fb7bec571d1981e21ca72052801ac4e751fef1870eda59e235fdc",
+      "shape": [
+        5
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "PairLogit",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "PairLogit",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "PairLogit",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "loss": "PairLogit",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "PairLogit",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "b247ae8e81bb5249bb78b23e52e84a60c76793b077f67670487d55f00a7a24b7",
+      "loss": "PairLogit",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "b247ae8e81bb5249bb78b23e52e84a60c76793b077f67670487d55f00a7a24b7",
+      "shape": [
+        20424
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "PairLogit",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "ad296bf2809ce67d362125b73e18eb717fb6138ebf2490d6ae0bfafc01b98bc7",
+      "loss": "PairLogit",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "ad296bf2809ce67d362125b73e18eb717fb6138ebf2490d6ae0bfafc01b98bc7",
+      "shape": [
+        344
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "e2f57375e34e67ebe095327bfbed753e7ddcb9bbbd4e6d5d78eb4e324bf44e46",
+      "loss": "PairLogit",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "e2f57375e34e67ebe095327bfbed753e7ddcb9bbbd4e6d5d78eb4e324bf44e46",
+      "shape": [
+        5
+      ],
+      "tag": "explicit-unit"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "PairLogit",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "explicit-unit"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "PairLogit",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "explicit-unit"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "PairLogit",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "explicit-unit"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "loss": "PairLogit",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "shape": [
+        1
+      ],
+      "tag": "explicit-unit"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "PairLogit",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "explicit-unit"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "24ab1460968e404a3fdedf6ec22422d27111dbace80930c5af2924c0b99d3083",
+      "loss": "PairLogit",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "24ab1460968e404a3fdedf6ec22422d27111dbace80930c5af2924c0b99d3083",
+      "shape": [
+        20413
+      ],
+      "tag": "explicit-unit"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "PairLogit",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "explicit-unit"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "ba847955cacca5bdf7586ac5a4266e53b0a35ea2743adfc8272b1e84d602b3c5",
+      "loss": "PairLogit",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "ba847955cacca5bdf7586ac5a4266e53b0a35ea2743adfc8272b1e84d602b3c5",
+      "shape": [
+        344
+      ],
+      "tag": "explicit-unit"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "a47fab4910549b4357af162df38e9415caae9404b5dd0a50ccaca05c72f69a0d",
+      "loss": "PairLogit",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "a47fab4910549b4357af162df38e9415caae9404b5dd0a50ccaca05c72f69a0d",
+      "shape": [
+        5
+      ],
+      "tag": "explicit-weighted"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "PairLogit",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "explicit-weighted"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "PairLogit",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "explicit-weighted"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "PairLogit",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "explicit-weighted"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "loss": "PairLogit",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "shape": [
+        1
+      ],
+      "tag": "explicit-weighted"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "PairLogit",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "explicit-weighted"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "9d0888605a9e459b48b785c09e54ee67647103d7cb62a68f6dd60a2282dafc72",
+      "loss": "PairLogit",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "9d0888605a9e459b48b785c09e54ee67647103d7cb62a68f6dd60a2282dafc72",
+      "shape": [
+        20427
+      ],
+      "tag": "explicit-weighted"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "PairLogit",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "explicit-weighted"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "e3fa78b0b16603ba38098fe0c21016737ae0be3582dedafd26b2afde7d39ef32",
+      "loss": "PairLogit",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "e3fa78b0b16603ba38098fe0c21016737ae0be3582dedafd26b2afde7d39ef32",
+      "shape": [
+        344
+      ],
+      "tag": "explicit-weighted"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "dc925530175406a45077eace38a6d5197bfd5a57e6477a26fa5490ca5014d672",
+      "loss": "PairLogit",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "dc925530175406a45077eace38a6d5197bfd5a57e6477a26fa5490ca5014d672",
+      "shape": [
+        5
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "PairLogit",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "PairLogit",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "PairLogit",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "loss": "PairLogit",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "PairLogit",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "2869eb5ab512eaec89315c80f4e3935800901dfc655d30a5d75fa09105ce3cde",
+      "loss": "PairLogit",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "2869eb5ab512eaec89315c80f4e3935800901dfc655d30a5d75fa09105ce3cde",
+      "shape": [
+        20423
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "PairLogit",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "865f03f1ca6c677e4695db2b53ca32aae9245b5f1462a64487ca74281f3e1fe7",
+      "loss": "PairLogit",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "865f03f1ca6c677e4695db2b53ca32aae9245b5f1462a64487ca74281f3e1fe7",
+      "shape": [
+        344
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "46415a02fb1fd55843555a6415896dd92102b2fb558166ce8a8408e90ae0ab50",
+      "loss": "PairLogit",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "46415a02fb1fd55843555a6415896dd92102b2fb558166ce8a8408e90ae0ab50",
+      "shape": [
+        5
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "PairLogit",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "PairLogit",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "PairLogit",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "loss": "PairLogit",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "PairLogit",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "b4685354487672cdc59e773afbae021c5bbdbdbb3cff38b8f41a7a7884be4b7a",
+      "loss": "PairLogit",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "b4685354487672cdc59e773afbae021c5bbdbdbb3cff38b8f41a7a7884be4b7a",
+      "shape": [
+        20418
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "PairLogit",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "9bed008591008314b5aa61842f65cf45499e730a2475370f0f245c00dd0e38e0",
+      "loss": "PairLogit",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "9bed008591008314b5aa61842f65cf45499e730a2475370f0f245c00dd0e38e0",
+      "shape": [
+        344
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "46415a02fb1fd55843555a6415896dd92102b2fb558166ce8a8408e90ae0ab50",
+      "loss": "PairLogit",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "46415a02fb1fd55843555a6415896dd92102b2fb558166ce8a8408e90ae0ab50",
+      "shape": [
+        5
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "PairLogit",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "PairLogit",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "PairLogit",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "loss": "PairLogit",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "PairLogit",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "b4685354487672cdc59e773afbae021c5bbdbdbb3cff38b8f41a7a7884be4b7a",
+      "loss": "PairLogit",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "b4685354487672cdc59e773afbae021c5bbdbdbb3cff38b8f41a7a7884be4b7a",
+      "shape": [
+        20418
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "PairLogit",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "9bed008591008314b5aa61842f65cf45499e730a2475370f0f245c00dd0e38e0",
+      "loss": "PairLogit",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "9bed008591008314b5aa61842f65cf45499e730a2475370f0f245c00dd0e38e0",
+      "shape": [
+        344
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "b1fb609cf53b573ddfaeb87c67107a1bdf909ebe0f96df0f3c28602ed8136140",
+      "loss": "PairLogit",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "b1fb609cf53b573ddfaeb87c67107a1bdf909ebe0f96df0f3c28602ed8136140",
+      "shape": [
+        5
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "PairLogit",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "PairLogit",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "PairLogit",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "loss": "PairLogit",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "47c4978243bdfdb5eb4a37cb49defe613aa0ca57a8805de5b1b29de12f44e9b1",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "PairLogit",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "8d88dce2d99ea8aed357b30e658ec339e6e4783d7b90a1705298b10f5adc0e3f",
+      "loss": "PairLogit",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "8d88dce2d99ea8aed357b30e658ec339e6e4783d7b90a1705298b10f5adc0e3f",
+      "shape": [
+        19359
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "PairLogit",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "ac7058bdf98d41f2c2c52573ccdae31c00a9ab7d9c61b12d5fa68011c6a7fcf3",
+      "loss": "PairLogit",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "ac7058bdf98d41f2c2c52573ccdae31c00a9ab7d9c61b12d5fa68011c6a7fcf3",
+      "shape": [
+        344
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "9dde4c008b45889c9bdff304e36fa8ee04e612d1779e0e74159d0e356a830a59",
+      "loss": "QueryRMSE",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "9dde4c008b45889c9bdff304e36fa8ee04e612d1779e0e74159d0e356a830a59",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "QueryRMSE",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "QueryRMSE",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "QueryRMSE",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "loss": "QueryRMSE",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "QueryRMSE",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "a78718e9109a80f5adbb2eec0c0b35c09c57ac18e13e38f6aeb407c6cf5a0e7f",
+      "loss": "QueryRMSE",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "a78718e9109a80f5adbb2eec0c0b35c09c57ac18e13e38f6aeb407c6cf5a0e7f",
+      "shape": [
+        20316
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "QueryRMSE",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "5aa1b5b070f2ec6b2a017e2fff4924457c606438d38fe33ffa58da14fa9214b0",
+      "loss": "QueryRMSE",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "5aa1b5b070f2ec6b2a017e2fff4924457c606438d38fe33ffa58da14fa9214b0",
+      "shape": [
+        344
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "fd9ffd1502d23f1b1cf5df25274f20e3e2c7335266a1bf9bc061178a58f9d4d4",
+      "loss": "QueryRMSE",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "fd9ffd1502d23f1b1cf5df25274f20e3e2c7335266a1bf9bc061178a58f9d4d4",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "QueryRMSE",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "QueryRMSE",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "QueryRMSE",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "loss": "QueryRMSE",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "QueryRMSE",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "0d6f7ffc4dac70568ec6b47885b14783b978991a0d93378d7bbf3d475e9c526b",
+      "loss": "QueryRMSE",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "0d6f7ffc4dac70568ec6b47885b14783b978991a0d93378d7bbf3d475e9c526b",
+      "shape": [
+        20318
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "QueryRMSE",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "0515e4572f909180929f03244f4b10ea8312ff9a42d1d373f537bc86e8822fd7",
+      "loss": "QueryRMSE",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "0515e4572f909180929f03244f4b10ea8312ff9a42d1d373f537bc86e8822fd7",
+      "shape": [
+        344
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "991e1dc2010576e8a4969e324436e1ccedae208d3fa029e76ea3842a25334114",
+      "loss": "QueryRMSE",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "991e1dc2010576e8a4969e324436e1ccedae208d3fa029e76ea3842a25334114",
+      "shape": [
+        5
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "QueryRMSE",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "QueryRMSE",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "QueryRMSE",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "loss": "QueryRMSE",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "QueryRMSE",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "cc1fa3b99bee4bd30333e9e3310d9fa1a33e536977dbbd3f0c9a8c3004dd5454",
+      "loss": "QueryRMSE",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "cc1fa3b99bee4bd30333e9e3310d9fa1a33e536977dbbd3f0c9a8c3004dd5454",
+      "shape": [
+        20305
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "QueryRMSE",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "61b171bf26d35da349b5b34c40201f4c60465642f4b2fbb49d3a30406b9ad5f4",
+      "loss": "QueryRMSE",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "61b171bf26d35da349b5b34c40201f4c60465642f4b2fbb49d3a30406b9ad5f4",
+      "shape": [
+        344
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "fd9ffd1502d23f1b1cf5df25274f20e3e2c7335266a1bf9bc061178a58f9d4d4",
+      "loss": "QueryRMSE",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "fd9ffd1502d23f1b1cf5df25274f20e3e2c7335266a1bf9bc061178a58f9d4d4",
+      "shape": [
+        5
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "QueryRMSE",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "QueryRMSE",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "QueryRMSE",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "loss": "QueryRMSE",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "QueryRMSE",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "0d6f7ffc4dac70568ec6b47885b14783b978991a0d93378d7bbf3d475e9c526b",
+      "loss": "QueryRMSE",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "0d6f7ffc4dac70568ec6b47885b14783b978991a0d93378d7bbf3d475e9c526b",
+      "shape": [
+        20318
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "QueryRMSE",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "0515e4572f909180929f03244f4b10ea8312ff9a42d1d373f537bc86e8822fd7",
+      "loss": "QueryRMSE",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "0515e4572f909180929f03244f4b10ea8312ff9a42d1d373f537bc86e8822fd7",
+      "shape": [
+        344
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "fd9ffd1502d23f1b1cf5df25274f20e3e2c7335266a1bf9bc061178a58f9d4d4",
+      "loss": "QueryRMSE",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "fd9ffd1502d23f1b1cf5df25274f20e3e2c7335266a1bf9bc061178a58f9d4d4",
+      "shape": [
+        5
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "QueryRMSE",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "QueryRMSE",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "QueryRMSE",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "loss": "QueryRMSE",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "QueryRMSE",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "0d6f7ffc4dac70568ec6b47885b14783b978991a0d93378d7bbf3d475e9c526b",
+      "loss": "QueryRMSE",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "0d6f7ffc4dac70568ec6b47885b14783b978991a0d93378d7bbf3d475e9c526b",
+      "shape": [
+        20318
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "QueryRMSE",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "0515e4572f909180929f03244f4b10ea8312ff9a42d1d373f537bc86e8822fd7",
+      "loss": "QueryRMSE",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "0515e4572f909180929f03244f4b10ea8312ff9a42d1d373f537bc86e8822fd7",
+      "shape": [
+        344
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "fd9ffd1502d23f1b1cf5df25274f20e3e2c7335266a1bf9bc061178a58f9d4d4",
+      "loss": "QueryRMSE",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "fd9ffd1502d23f1b1cf5df25274f20e3e2c7335266a1bf9bc061178a58f9d4d4",
+      "shape": [
+        5
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "QueryRMSE",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "QueryRMSE",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "QueryRMSE",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "loss": "QueryRMSE",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "QueryRMSE",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "0d6f7ffc4dac70568ec6b47885b14783b978991a0d93378d7bbf3d475e9c526b",
+      "loss": "QueryRMSE",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "0d6f7ffc4dac70568ec6b47885b14783b978991a0d93378d7bbf3d475e9c526b",
+      "shape": [
+        20318
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "QueryRMSE",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "0515e4572f909180929f03244f4b10ea8312ff9a42d1d373f537bc86e8822fd7",
+      "loss": "QueryRMSE",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "0515e4572f909180929f03244f4b10ea8312ff9a42d1d373f537bc86e8822fd7",
+      "shape": [
+        344
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "73f6f4529cfa7a32f00b45a85da1a606d350c5a7e2bec499e3f759e36d305e74",
+      "loss": "QueryRMSE",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "73f6f4529cfa7a32f00b45a85da1a606d350c5a7e2bec499e3f759e36d305e74",
+      "shape": [
+        5
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "QueryRMSE",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "QueryRMSE",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "QueryRMSE",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "loss": "QueryRMSE",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "181930e1fe5922ff9bb246a1bfa04a2c507019a03ce0c221166b74d967c62d13",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "QueryRMSE",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "99e7d05bd008403d6b9b089376a1b31e6ed2f9079453e8c39ec36fe414680fa7",
+      "loss": "QueryRMSE",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "99e7d05bd008403d6b9b089376a1b31e6ed2f9079453e8c39ec36fe414680fa7",
+      "shape": [
+        20315
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "QueryRMSE",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "38329691662147a1611c0daf0e0b16afbc6a2dfe76f369d7a6572279883c34b4",
+      "loss": "QueryRMSE",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "38329691662147a1611c0daf0e0b16afbc6a2dfe76f369d7a6572279883c34b4",
+      "shape": [
+        344
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "loss": "YetiRank",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "YetiRank",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "YetiRank",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "YetiRank",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U8",
+      "equal": true,
+      "left_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "loss": "YetiRank",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "YetiRank",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "09b230670289fb2ec952ff868c60fe634e1ebab568e686b4a387b66e89b9c2b1",
+      "loss": "YetiRank",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "09b230670289fb2ec952ff868c60fe634e1ebab568e686b4a387b66e89b9c2b1",
+      "shape": [
+        20367
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "YetiRank",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "627076ac4eedfae33ee28603e3d63e5c148f27a2e2e69f5f7da95c71cdb6da3d",
+      "loss": "YetiRank",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "627076ac4eedfae33ee28603e3d63e5c148f27a2e2e69f5f7da95c71cdb6da3d",
+      "shape": [
+        344
+      ],
+      "tag": "bayesian"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "loss": "YetiRank",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "YetiRank",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "YetiRank",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "YetiRank",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U8",
+      "equal": true,
+      "left_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "loss": "YetiRank",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "YetiRank",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "90705102cc4fa2315c4beda84beb6a1ebe0e187ddb120bac4cf6ffa36c063728",
+      "loss": "YetiRank",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "90705102cc4fa2315c4beda84beb6a1ebe0e187ddb120bac4cf6ffa36c063728",
+      "shape": [
+        20366
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "YetiRank",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "374be2f840d76cbe5303fce30eb8c54d2a7fd944acded26704d1ebc773a46b44",
+      "loss": "YetiRank",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "374be2f840d76cbe5303fce30eb8c54d2a7fd944acded26704d1ebc773a46b44",
+      "shape": [
+        344
+      ],
+      "tag": "bayesian-zero"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "loss": "YetiRank",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "shape": [
+        5
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "YetiRank",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "YetiRank",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "YetiRank",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U8",
+      "equal": true,
+      "left_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "loss": "YetiRank",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "YetiRank",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "7d6179e8f402091a6ddf29dbe4f0de39ae76c89301afa106bdda9d6a7f4ad8a1",
+      "loss": "YetiRank",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "7d6179e8f402091a6ddf29dbe4f0de39ae76c89301afa106bdda9d6a7f4ad8a1",
+      "shape": [
+        20374
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "YetiRank",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "a89b1baa074ac7c98e1d505745725391ce1302ebeb42a942cefe2a7cbd704de8",
+      "loss": "YetiRank",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "a89b1baa074ac7c98e1d505745725391ce1302ebeb42a942cefe2a7cbd704de8",
+      "shape": [
+        344
+      ],
+      "tag": "different-groups"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "loss": "YetiRank",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "shape": [
+        5
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "YetiRank",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "YetiRank",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "YetiRank",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U8",
+      "equal": true,
+      "left_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "loss": "YetiRank",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "YetiRank",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "90705102cc4fa2315c4beda84beb6a1ebe0e187ddb120bac4cf6ffa36c063728",
+      "loss": "YetiRank",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "90705102cc4fa2315c4beda84beb6a1ebe0e187ddb120bac4cf6ffa36c063728",
+      "shape": [
+        20366
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "YetiRank",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "374be2f840d76cbe5303fce30eb8c54d2a7fd944acded26704d1ebc773a46b44",
+      "loss": "YetiRank",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "374be2f840d76cbe5303fce30eb8c54d2a7fd944acded26704d1ebc773a46b44",
+      "shape": [
+        344
+      ],
+      "tag": "newton-score"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "loss": "YetiRank",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "shape": [
+        5
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "YetiRank",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "YetiRank",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "YetiRank",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U8",
+      "equal": true,
+      "left_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "loss": "YetiRank",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "YetiRank",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "90705102cc4fa2315c4beda84beb6a1ebe0e187ddb120bac4cf6ffa36c063728",
+      "loss": "YetiRank",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "90705102cc4fa2315c4beda84beb6a1ebe0e187ddb120bac4cf6ffa36c063728",
+      "shape": [
+        20366
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "YetiRank",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "374be2f840d76cbe5303fce30eb8c54d2a7fd944acded26704d1ebc773a46b44",
+      "loss": "YetiRank",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "374be2f840d76cbe5303fce30eb8c54d2a7fd944acded26704d1ebc773a46b44",
+      "shape": [
+        344
+      ],
+      "tag": "plain"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "loss": "YetiRank",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "shape": [
+        5
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "YetiRank",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "YetiRank",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "YetiRank",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U8",
+      "equal": true,
+      "left_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "loss": "YetiRank",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "YetiRank",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "90705102cc4fa2315c4beda84beb6a1ebe0e187ddb120bac4cf6ffa36c063728",
+      "loss": "YetiRank",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "90705102cc4fa2315c4beda84beb6a1ebe0e187ddb120bac4cf6ffa36c063728",
+      "shape": [
+        20366
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "YetiRank",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "374be2f840d76cbe5303fce30eb8c54d2a7fd944acded26704d1ebc773a46b44",
+      "loss": "YetiRank",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "374be2f840d76cbe5303fce30eb8c54d2a7fd944acded26704d1ebc773a46b44",
+      "shape": [
+        344
+      ],
+      "tag": "repeat"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "loss": "YetiRank",
+      "member": "loss_curve",
+      "output": "loss_curve",
+      "right_payload_sha256": "0e82de473370cb58697955ca63aca9e5ff3558b6d4a11a4862308f48b08bf74d",
+      "shape": [
+        5
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "float64",
+      "equal": true,
+      "left_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "loss": "YetiRank",
+      "member": "bias",
+      "output": "model",
+      "right_payload_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "loss": "YetiRank",
+      "member": "estimator",
+      "output": "model",
+      "right_payload_sha256": "58a1cb0d520b0de355687b3b2f05e59aa4e064d67da23d183ac069e5c9167fcd",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U16",
+      "equal": true,
+      "left_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "loss": "YetiRank",
+      "member": "format",
+      "output": "model",
+      "right_payload_sha256": "a9660ede44fa25adcfe1d4b9105b2432a40872fea819894e41cd9f1607af9260",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U8",
+      "equal": true,
+      "left_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "loss": "YetiRank",
+      "member": "loss",
+      "output": "model",
+      "right_payload_sha256": "b2bd709fe1a79f01fd3d929fdd869c8211bfc049f7b926dbc2c6842b9b59e5b0",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "int64",
+      "equal": true,
+      "left_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "loss": "YetiRank",
+      "member": "meta",
+      "output": "model",
+      "right_payload_sha256": "7371a2a17b799020aeff4450d9e40b0eeb7a010457e4238965695022cdda79ab",
+      "shape": [
+        5
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "uint8",
+      "equal": true,
+      "left_payload_sha256": "403e772dfd033f80166fe969cf2434019fe9d983ad38f02b008e043e747182ee",
+      "loss": "YetiRank",
+      "member": "model",
+      "output": "model",
+      "right_payload_sha256": "403e772dfd033f80166fe969cf2434019fe9d983ad38f02b008e043e747182ee",
+      "shape": [
+        19292
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "<U9",
+      "equal": true,
+      "left_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "loss": "YetiRank",
+      "member": "numeric_mode",
+      "output": "model",
+      "right_payload_sha256": "dfec6f12430959c27aa5971a3c61cae13cf51f114b98b0b5c2ccbfd55fcc2a6a",
+      "shape": [
+        1
+      ],
+      "tag": "score-noise"
+    },
+    {
+      "dtype": "float32",
+      "equal": true,
+      "left_payload_sha256": "37915b405b9995092366e4e6f029c42fb9f423057e99a7153b819708145fa998",
+      "loss": "YetiRank",
+      "member": "predict",
+      "output": "predict",
+      "right_payload_sha256": "37915b405b9995092366e4e6f029c42fb9f423057e99a7153b819708145fa998",
+      "shape": [
+        344
+      ],
+      "tag": "score-noise"
+    }
+  ],
+  "failures": [],
+  "left": "nvidia/candidate-ranking-f63-nvidia-04/numerical/summary.json",
+  "right": "amd/candidate-ranking-f63-amd-03/numerical/summary.json",
+  "verdict": "PASS"
+}

@@ -1,0 +1,64 @@
+Querywise pointwise ranking handoff (2026-10-15)
+
+Native freeze f63ef2235d8e84339ffafb16c973610a03dcf85a is validated on Apple,
+NVIDIA sm_89 and AMD gfx942 in identical mode: 24 cases per vendor, including
+one expected Simple-leaf refusal; all 207 prediction/loss/model array members
+match Apple, and the saved NVIDIA-to-AMD comparison also passes. These are raw
+candidate diagnostics over a verified 0.8.45 base, not a released-wheel smoke
+or performance result. See results/20261015/summary.json and its adjacent
+comparison/GET-hash-verified R2 receipts for actual source, binary and result
+provenance. Both GPU archives include the full output/model bytes and compiled
+binary/runtime closure; their copied Apple reference contains its output/model
+bytes too. No unsupported setting is accepted or silently substituted.
+
+Root integrated the source through e2918f310 into f9ed2d30 and verified all 226
+retained GBDT source/build closure files unchanged from the accepted f63 compile
+(zero mismatches; integrated-source-closure.json). Preserve f63 ancestry using
+normal merge. The summary lists the exact ten non-merge source/tooling commits
+relative to a2f1e261; this result/handoff commit is additional. Do not rebuild
+accepted identical GBDT binaries merely to merge these harness/evidence changes.
+
+The harness change e2918f310 pins use_pointwise_searcher=True and CatBoost GPU
+data_partition=DocParallel only for gbdt-rank-pairlogit and gbdt-rank-yetirank.
+The absent-field mapping requires the matching loss, Plain SymmetricTree,
+Newton/Gradient leaf estimator and no categorical columns. It refuses False,
+FeatureParallel, CPU opponents and unsupported leaves. All other recipe
+settings and the library's default False route remain unchanged. Full-workload
+ranking recipes remain 100 trees, depth6, the existing Istella ranking input.
+
+Validation: controller 46 CPU tests; compile tooling 27 CPU tests; harness
+85 passed/1 skipped (CatBoost-dependent prebin test because CatBoost is absent
+in the CPU test environment). Original diagnostic failures remain retained;
+none was a numerical GPU failure. The final vendor runs exited zero.
+
+Next supported action is release packaging, explicitly pending. Only GBDT is
+changed by this native lane; reuse unchanged modules and the accepted identical
+GBDT compile/identity evidence through the supported release artifact path.
+The candidate is not itself a staged wheel or release reuse ledger entry.
+FAST builds were not performed in this lane; existing package-required tiers
+must be accounted for without repeating already accepted identical builds.
+Current main's separate BF16/linalg changes are outside this GBDT evidence.
+A new consistent version of core/vendor wheels is needed; do not overwrite or
+label the candidate as the already published 0.8.45. The new canonical
+identity_break lane recipes have different fixtures and were not run here;
+do not manufacture their table entries from this checker's hashes. Reuse the
+verified checker evidence, retaining any required table/packaging work as pending.
+
+After installation from the new released wheel and wheel-digest verification,
+select ONLY these two NVIDIA full-input GPU-opponent recipes for parameter
+preflight/scorer smoke:
+  trees/gbdt-rank-pairlogit/istella/rows=full
+  trees/gbdt-rank-yetirank/istella/rows=full
+Use the existing suspects selector and retain effective settings on both arms.
+These were refused, not timed-out; do not give them the timeout-only 15-second
+extension automatically. Once their actual settings match, measure only those
+missing/bad pairings on the full workload. Preserve all other admitted results.
+Reuse prior CatBoost timing only when its full source/input/settings/clock
+provenance supports this explicit searcher pairing; otherwise rerun just that
+opponent pairing. Record both qualities, executed iterations, output/model
+bytes, binary/source hashes and upload/full-clock evidence. No new Apple race,
+broad board rerun, publication, GPU work or release was started by this lane.
+
+Keep logs out of context: save complete output to files, use targeted rg/grep
+with bounded surrounding lines and short tails, and summarize exit status,
+coverage, failures and evidence paths. Never infer success from filtered output.

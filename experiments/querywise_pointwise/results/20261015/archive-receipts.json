@@ -1,0 +1,18 @@
+{
+  "nvidia": {
+    "bytes": 73235188,
+    "r2_bucket": "mojolearn-data",
+    "r2_key": "measurements/records/v1/907f9aebccc1c3c81da1ba0ed865897cd9a810bdd662a9ddd13f7faa61878f0e.tar.gz",
+    "sha256": "907f9aebccc1c3c81da1ba0ed865897cd9a810bdd662a9ddd13f7faa61878f0e",
+    "status": "verified",
+    "verification": "GET sha256"
+  },
+  "amd": {
+    "bytes": 52151053,
+    "r2_bucket": "mojolearn-data",
+    "r2_key": "measurements/records/v1/71af8c4403905459b6d5a08794381c6b5b1fcf48a188e875450ac5297a9117e9.tar.gz",
+    "sha256": "71af8c4403905459b6d5a08794381c6b5b1fcf48a188e875450ac5297a9117e9",
+    "status": "verified",
+    "verification": "GET sha256"
+  }
+}

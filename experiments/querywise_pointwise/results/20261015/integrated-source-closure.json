@@ -1,0 +1,8 @@
+{
+  "source_commit": "f63ef2235d8e84339ffafb16c973610a03dcf85a",
+  "integrated_commit": "f9ed2d30dc4fe2d7bf023ec5cf037686ea4792d1",
+  "files_checked": 226,
+  "mismatches": [],
+  "status": "pass",
+  "scope": "retained GBDT compile closure; no recompilation"
+}
