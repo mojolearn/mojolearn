@@ -365,9 +365,14 @@ def compute_covariance(
 
 
 def pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
-    """The four shape refusals `pca_fit` makes first (cuML's `pcaFit` asserts, in their order)."""
-    if n_cols <= 1:
-        raise Error("Parameter n_cols: number of columns cannot be less than two")
+    """The four shape refusals `pca_fit` makes first (cuML's `pcaFit` asserts, in their order).
+
+    One column is admitted (lane sk-kernels, 2026-10-15): scikit-learn's PCA
+    fits a single feature (check_fit2d_1feature), and `eig_and_truncate`
+    takes the 1 x 1 covariance without the Jacobi. cuML's assert refuses it;
+    the full (R-SVD) arm keeps that refusal in `pca_full_validate`."""
+    if n_cols < 1:
+        raise Error("Parameter n_cols: number of columns cannot be less than one")
     if n_rows <= 1:
         raise Error("Parameter n_rows: number of rows cannot be less than two")
     if n_components <= 0:
@@ -814,6 +819,8 @@ def eig_and_truncate(
     singular_scale: Int,
 ) raises -> PCAResult:
     """`calEig` + `truncCompExpVars`, shared by PCA and truncated SVD."""
+    if n_cols == 1:
+        return _eig_and_truncate_one(ctx, cov, n_components, singular_scale)
     var vec_buf = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
     # lane idn-cov-overflow: the power-of-two range scale of
@@ -874,6 +881,30 @@ def eig_and_truncate(
     return order_truncate_spectrum(
         diag, vecs, n_cols, n_components, singular_scale
     )
+
+
+def _eig_and_truncate_one(
+    ctx: DeviceContext,
+    mut cov: DeviceBuffer[DType.float32],
+    n_components: Int,
+    singular_scale: Int,
+) raises -> PCAResult:
+    """`eig_and_truncate` at one column (lane sk-kernels, 2026-10-15): a
+    1 x 1 symmetric matrix is already diagonal, so its eigenvalue is the
+    entry itself and its eigenvector is [1] (the sign flip's positive
+    largest entry). No rotation runs and no range scale is applied (the
+    scale is a power of two the unscale undoes exactly on the diagonal, so
+    the value is the one the Jacobi path would hand back). The host column
+    (`host_eig_and_truncate`) takes the same branch: same bits."""
+    var h_cov = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.enqueue_copy(dst_ptr=h_cov.unsafe_ptr(), src_buf=cov)
+    ctx.synchronize()
+    var diag = List[Float64]()
+    diag.append(Float64(h_cov.unsafe_ptr().unsafe_load(0)))
+    var vecs = List[Float64]()
+    vecs.append(1.0)
+    _ = h_cov^
+    return order_truncate_spectrum(diag, vecs, 1, n_components, singular_scale)
 
 
 def pca_transform(
