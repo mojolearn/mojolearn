@@ -3996,6 +3996,43 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda est: (est.predict(Xh),))
 
 
+
+def _querywise_pointwise_identity(ml, X, yr, Xh, loss):
+    # FAIRNESS FIX (2026-10-13 audit): separate lanes preserve the accepted
+    # greedy-searcher records. These exercise CatBoost GPU's DocParallel
+    # searcher with grouped derivatives, Bayesian bootstrap and score noise.
+    # Two score modes cover PairLogit's row-weight/Hessian plane selection.
+    groups, relevance = _rank_groups(X.shape[0]), _relevance(yr)
+    parts = {}
+    first = None
+    for score in ("Cosine", "NewtonCosine"):
+        model = ml.GradientBoosting(
+            n_estimators=5, max_depth=4, loss=loss, random_state=19,
+            boosting_type="Plain", use_pointwise_searcher=True,
+            score_function=score, bootstrap_type="Bayesian",
+            bagging_temperature=.5, random_strength=1.,
+            learning_rate=.1, leaf_estimation_method="Newton",
+            leaf_estimation_iterations=1,
+        ).fit(X, relevance, group_id=groups)
+        parts[score + "_predict"] = _h(model.predict(X))
+        parts[score + "_loss_curve"] = _h(np.asarray(model.loss_curve_, dtype=np.float64))
+        if first is None:
+            first = model
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-pair-logit-pointwise")
+def _(ml, X, yc, yr, Xh=None):
+    """PairLogit grouped targets on the doc-parallel pointwise searcher."""
+    return _querywise_pointwise_identity(ml, X, yr, Xh, "PairLogit")
+
+
+@lane("gbdt-yeti-rank-pointwise")
+def _(ml, X, yc, yr, Xh=None):
+    """YetiRank grouped targets on the doc-parallel pointwise searcher."""
+    return _querywise_pointwise_identity(ml, X, yr, Xh, "YetiRank")
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -9337,6 +9374,7 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank", "gbdt-ranking-defaults",
+            "gbdt-pair-logit-pointwise", "gbdt-yeti-rank-pointwise",
             "par-forest-reg", "par-boosting-reg", "gbdt-border-types",
             "gbdt-ordered-bayesian-noise", "par-ordered", "gbdt-bfa-quantile",
             "gbdt-catboost-defaults", "par-border-types", "gbdt-stochastic-arms")
