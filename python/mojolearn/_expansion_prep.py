@@ -4968,6 +4968,10 @@ class SplineTransformer(_PrepBase):
         self.handle_missing = handle_missing
         self.sparse_output = sparse_output
 
+
+    def _mojolearn_allows_nan(self):
+        """handle_missing='zeros' takes NaN (its rows' spline features are 0)."""
+        return self.handle_missing == "zeros"
     def _no_nan(self, pr, st, d, n):
         if self.handle_missing == "error" and any(int(v) != n for v in pr.values(st, d)):  # glue: raises on a NaN count from the device (d-sized: feature count)
             raise ValueError("mojolearn: Input X contains NaN values and `SplineTransformer` is configured to "

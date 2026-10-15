@@ -9501,10 +9501,9 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "pca", "pca-whiten", "pc
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "ols", "ridge", "ols-no-intercept",
             "ols-weighted", "ridge-no-intercept", "par-gram", "svr", "svr-linear",
             "par-gram-ols", "par-svm-svr")
-# The coordinate descent predict refuses one row BY NAME, mirroring cuML's
-# cdPredict (cd.cuh:341); see _BatchRows. Its rows are asked in windows of two.
-CD_PREDICT_REFUSAL = "Parameter n_rows: number of rows cannot be less than two"
-_batch_decl(_rows_calls("predict", sl=slice(0, 256), min_batch=2, refusal=CD_PREDICT_REFUSAL),
+# The coordinate descent predict takes any batch, one row included (0.8.47:
+# the two-row floor cuML's cdPredict keeps, cd.cuh:341, is on fit only).
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)),
             "lasso", "elasticnet", "elasticnet-l2end-no-intercept", "par-cd", "par-cd-elasticnet")
 _batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "logistic", "logistic-l1", "logistic-elasticnet",
             "logistic-unpenalized-no-intercept", "par-logistic")

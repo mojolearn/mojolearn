@@ -137,6 +137,14 @@ def _input_tag(cls, name, default):
     return input_tag_overrides(cls).get(name, default)
 
 
+def _allows_nan_now(est):
+    """An estimator whose NaN handling is a parameter (SplineTransformer's
+    handle_missing='zeros') says so through `_mojolearn_allows_nan()`; the
+    class tag alone cannot."""
+    hook = getattr(est, "_mojolearn_allows_nan", None)
+    return bool(hook()) if hook is not None else False
+
+
 def _target_tag(cls, name, default):
     return getattr(cls, "_sklearn_target_tags", {}).get(name, default)
 
@@ -352,6 +360,7 @@ def _check_X(est, X, fitting=True):
                              f"minimum of 1 is required by {name}.")
     if (container in ("buffer", "list") and kind == "float"
             and not _input_tag(cls, "allow_nan", False)
+            and not _allows_nan_now(est)
             and _scans_x(cls, fitting) and not _all_finite(X)):
         raise ValueError(f"Input X contains NaN or infinity ({name}).")
     return info
