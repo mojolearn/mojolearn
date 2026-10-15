@@ -3026,7 +3026,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
 
     Follows scikit-learn's LogisticRegressionCV with an L2 penalty, binary
     or multinomial, solved by L-BFGS. Each candidate ``C`` is scored by
-    accuracy on stratified folds, and the model is refit on all rows with
+    accuracy (weighted by ``sample_weight``) on the held-out folds
+    (stratified folds by default), and the model is refit on all rows with
     the best one. Only ``penalty='l2'`` (primal), ``scoring=None`` and
     ``refit=True`` are supported; other values raise ValueError.
 
@@ -3037,9 +3038,12 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         values log-spaced between 1e-4 and 1e4.
     fit_intercept : bool, default True
         Whether to fit an intercept.
-    cv : int or None, default None
-        Number of stratified folds, from 2 to the size of the largest
-        class; None means 5.
+    cv : int, cross-validation splitter, iterable or None, default None
+        None means 5 stratified folds; an int is the number of stratified
+        folds, from 2 to the size of the largest class; a splitter (an
+        object with ``split``) or an iterable of ``(train, test)`` index
+        arrays gives the folds, whose test sets must cover every row exactly
+        once.
     dual : bool, default False
         Only False is supported.
     penalty : {'l2'}, default 'l2'
@@ -3131,8 +3135,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         Raises
         ------
         ValueError
-            On an unsupported option, a single class, invalid weights, or a
-            ``cv`` outside [2, the size of the largest class].
+            On an unsupported option, a single class, invalid weights, or an
+            int ``cv`` outside [2, the size of the largest class].
         """
         if self.penalty != "l2" or self.dual or self.l1_ratios is not None:
             raise ValueError("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
@@ -3150,7 +3154,14 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
             Cs = [_pm.powr(10.0, -4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]  # glue: builds the Cs parameter grid (m-sized: Cs grid size)
         else:
             Cs = [float(c) for c in self.Cs]  # glue: converts the Cs argument
-        folds = 5 if self.cv is None else self.cv
+        explicit = not (self.cv is None or _is_int_cv(self.cv))
+        if explicit:
+            # a splitter or explicit (train, test) splits (scikit-learn's
+            # check_cv): their row fold ids ride in y, and ip[6] = 1 tells
+            # the bindings not to build StratifiedKFold ids over them
+            fold_ids, folds = _cv_fold_ids_f32(_cv_splits(self.cv, X, y), n, "LogisticRegressionCV")
+        else:
+            folds = 5 if self.cv is None else int(self.cv)
         # lane cpu2-l10-linear: the class counts, the 'balanced' weights
         # (theirs: from the weighted counts of all of y) and the row weights
         # in the binding (x_linear/class_prep.mojo); y is assembled by byte
@@ -3160,8 +3171,9 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         weigh = sample_weight is not None or self.class_weight is not None
         _, fitw, largest = _class_prep(self, self.class_weight, classes, icodes, raw, weighted=True,
                                        rows=self.class_weight is not None)
-        _check_stratified_folds(largest, folds)
-        parts = [icodes.astype("<f4"), zeros((n,), "<f4")]
+        if not explicit:
+            _check_stratified_folds(largest, folds)
+        parts = [icodes.astype("<f4"), fold_ids if explicit else zeros((n,), "<f4")]
         has_sw = 0
         if weigh:
             if raw is None:
@@ -3171,7 +3183,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         yy = _concat_f32_parts(parts)
         p = kp * (d + 1)
         nc = len(Cs)
-        vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds, has_sw],
+        vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds, has_sw]
+                    + ([1] if explicit else []),
                     [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + _lbfgs_work(p), 5)
         self.classes_ = classes
         self.coef_ = Array.from_list(_rows(vals, kp, d), "<f4")

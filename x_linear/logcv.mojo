@@ -82,6 +82,14 @@ def lcv_fold_of(table: IP, c: Int, k: Int, rank: Int) -> Int:
     return f
 
 
+def lcv_caller_folds(n_ip: Int, ip6: Int) -> Bool:
+    """ip[6] = 1 (sent only then, so the int-cv calls keep their 6 words):
+    the caller's y already holds the row fold ids of an explicit cv
+    (a splitter or (train, test) splits, python `_cv_fold_ids`), and no
+    binding builds StratifiedKFold ids over them."""
+    return n_ip > 6 and ip6 != 0
+
+
 def logcv_fold_ids(y: FP, n: Int, ip: IP):
     """The host column's fold ids into y[n, 2n) (ip[2] = K', ip[4] = k)."""
     var K = max(ldi(ip, 2), 2)

@@ -72,6 +72,7 @@ from x_linear.glm import (
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad, chain_fmad
 from std.os import getenv
 from x_linear.logcv_grid import logcv_fit_grid, lcv_fold_ids_device
+from x_linear.logcv import lcv_caller_folds
 from x_linear.huber_grid import huber_fit_grid
 from x_linear.huber_fast import HUBER_DEVICE_LBFGS, huber_fit_fast
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
@@ -5269,8 +5270,10 @@ def fit_device(
     comptime if XLIN_IDN_DEV_FINITE:
         xlin_finite_device(ctx, dx, n_x, y, n_y)
     if algo == ALGO_LOGCV and n > 0:
-        # the StratifiedKFold ids from the device labels (x_linear/logcv_grid.mojo)
-        lcv_fold_ids_device(ctx.copy(), FP(unsafe_from_address=Int(dy.unsafe_ptr())), n, max(Int(ip[2]), 2), Int(ip[4]))
+        # the StratifiedKFold ids from the device labels (x_linear/logcv_grid.mojo),
+        # unless an explicit cv's fold ids came in y (ip[6] = 1)
+        if not lcv_caller_folds(len(ip), Int(ip[6]) if len(ip) > 6 else 0):
+            lcv_fold_ids_device(ctx.copy(), FP(unsafe_from_address=Int(dy.unsafe_ptr())), n, max(Int(ip[2]), 2), Int(ip[4]))
     if len(hip) > 0:
         ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
     if len(hfp) > 0:

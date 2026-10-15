@@ -19,7 +19,7 @@ from x_linear.ridgecv import ridge_best_alpha
 from x_linear.dispatch import fit_dispatch, decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
 from x_linear.dispatch import ALGO_GLM
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_host
-from x_linear.logcv import logcv_fold_ids
+from x_linear.logcv import logcv_fold_ids, lcv_caller_folds
 from x_linear.class_prep import class_prep_host
 from x_linear.isotonic_host import isotonic_fit_host
 from x_linear.team import team_work, solo
@@ -144,7 +144,9 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
         for i in range(ny):
             ycopy[i] = y.unsafe_load(i)
         y = FP(unsafe_from_address=Int(ycopy.unsafe_ptr()))
-        logcv_fold_ids(y, n, IP(unsafe_from_address=Int(ipl.unsafe_ptr())))
+        # an explicit cv's fold ids came in y (ip[6] = 1): kept as sent
+        if not lcv_caller_folds(n_ip, Int(ipl[6]) if n_ip > 6 else 0):
+            logcv_fold_ids(y, n, IP(unsafe_from_address=Int(ipl.unsafe_ptr())))
     # RidgeClassifier: ip[4] == 1 means y holds the n int32 class codes (then
     # the n weights when ip[3]); the +-1 targets as the device builds them
     # (`c1_codes_targets_kernel`), the weights after them
