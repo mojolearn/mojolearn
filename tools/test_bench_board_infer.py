@@ -155,12 +155,14 @@ def test_dry_run_counts_inference_cells(env, capsys):
     # races: a race with a GPU opponent drops its CPU ones (Oct 2 2026), so on Apple
     # pca/ols keep only torch-gpu, kmeans (no GPU opponent since the 2026-10-13 audit) and svc
     # their CPU opponent (3 arms each: 24 cells); trees keep their
-    # CPU opponents (no GPU one) for 164 cells. Never an ours-cpu cell.
+    # CPU opponents (no GPU one). The task fairness repair removed
+    # mismatched opponents; depthwise/lossguide each add one own pairing
+    # on two datasets, in both inference batches. Never an ours-cpu cell.
     trees = sum(2 * (2 + len(bb.gpu_opponents_first(v))) * len(bb.tree_task_datasets(l, bb.DATASETS))
-                for l, v in bb.TREE_OPPONENTS["apple"].items())
+                for l, v in bb.TREE_OPPONENTS["apple"].items()) + 8
     classical = sum(2 + len(bb.gpu_opponents_first(bb.CLASSICAL_OPPONENTS["apple"][l]))
                     for l in inf.CLASSICAL_INFER_LANES) * 2
-    assert (trees, classical) == (164, 24)
+    assert (trees, classical) == (154, 24)
     assert "INFER cells=%d (classical %d, trees %d;" % (trees + classical, classical, trees) in text
     assert bb.main(["--dry-run", "--vendor", "apple", "--no-infer"] + env["base"]) == 0
     assert "INFER cells" not in capsys.readouterr().out
@@ -179,7 +181,11 @@ def test_run_infer_cells_ratios_and_board(ienv):
     ic = {(c["arm"], c["batch"]): c for c in rf["infer_cells"]}
     assert len(ic) == 8
     for c in ic.values():
-        assert c["phase"] == "infer" and c["status"] == "ok" and len(c["times_ms"]) == 3
+        # The stub emits labelled quality only for test, and an agreement
+        # metric for ours-ab on both batches. Missing quality is annotated;
+        # the times and ratios below must still be retained.
+        expected_status = "not-scored" if c["batch"] == "large" and c["arm"] != "ours-ab" else "ok"
+        assert c["phase"] == "infer" and c["status"] == expected_status and len(c["times_ms"]) == 3
         assert c["hash_stable"] is True and c["call"].startswith("stub ")
     # median ours = 100/10+2 = 12, ours-ab 10, opponents 22 on `test`; x2 on `large`
     assert ic[("sklearn-rf-cpu", "test")]["ratio_ours_identical_over"] == pytest.approx(12 / 22)
@@ -201,7 +207,7 @@ def test_run_infer_cells_ratios_and_board(ienv):
     assert kc["ours-fast"]["quality"]["bits_equal_vs_ours"] is True
     board = (ienv["out"] / "BOARD.md").read_text()
     # rf: 4 arms x 2 batches; kmeans: ours, ours-fast, sklearn-cpu; each on taxi and Istella
-    assert "## Inference at a glance" in board and "Inference cells: 22 (ok 22)." in board
+    assert "## Inference at a glance" in board and "Inference cells: 22 (not-scored 6, ok 16)." in board
     assert "inference call, sklearn-rf-cpu: stub sklearn-rf-cpu predict_proba(X), column 1" in board
     assert not bbt.BANNED.search(board)
 
