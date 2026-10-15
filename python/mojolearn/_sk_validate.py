@@ -463,18 +463,40 @@ class Check:
         self.X, self.info, self.fitting = X, info, fitting
 
 
+def _array_like(obj):
+    """An `__array__`-only object (scikit-learn's _NotAnArray, a pandas object:
+    no buffer, not a sequence) as the array it exports, else `obj` itself, so
+    X, y and sample_weight take the same paths as their arrays. Glue: one
+    conversion call, no per-element work (the rule `_buffer._materialize`
+    applies to X)."""
+    if (obj is None or isinstance(obj, (list, tuple, str, bytes))
+            or not callable(getattr(obj, "__array__", None))):
+        return obj
+    try:
+        memoryview(obj).release()
+        return obj
+    except TypeError:
+        return obj.__array__()
+
+
 def before_fit(est, method, slots, args, kwargs):
     """Validate a fit's X and y; return `(args, kwargs, check)`."""
     ix, iy, yname = slots
     X = _get(args, kwargs, ix, "X")
     if X is _MISSING:
         return args, kwargs, None
+    X2 = _array_like(X)
+    if X2 is not X:
+        args, kwargs = _put(args, kwargs, ix, "X", X2)
+        X = X2
+    if "sample_weight" in kwargs:
+        kwargs = dict(kwargs, sample_weight=_array_like(kwargs["sample_weight"]))
     info = _check_X(est, X)
     if method == "partial_fit" and "n_features_in_" in vars(est):
         _check_width(est, X, info)
     y = _get(args, kwargs, iy, yname)
     if y is not _MISSING:
-        y2 = _check_y(est, y)
+        y2 = _check_y(est, _array_like(y))
         if y2 is not y:
             args, kwargs = _put(args, kwargs, iy, yname, y2)
         _check_lengths(info, y2)
@@ -482,17 +504,22 @@ def before_fit(est, method, slots, args, kwargs):
 
 
 def before_call(est, method, slots, args, kwargs):
-    """Validate the X of a predict, transform or score call; return a check."""
+    """Validate the X of a predict, transform or score call; return
+    `(args, kwargs, check)` (X unwrapped when it is an `__array__`-only object)."""
     ix = slots[0]
     X = _get(args, kwargs, ix, "X")
     if X is _MISSING or X is None:
-        return None
+        return args, kwargs, None
+    X2 = _array_like(X)
+    if X2 is not X:
+        args, kwargs = _put(args, kwargs, ix, "X", X2)
+        X = X2
     info = _check_X(est, X, fitting=False)
     # inverse_transform takes the transformed space (n_components columns), not
     # the fit's features; scikit-learn checks n_features_in_ only on the latter.
     if method != "inverse_transform":
         _check_width(est, X, info)
-    return Check(X, info, False)
+    return args, kwargs, Check(X, info, False)
 
 
 def after_fit(est, check):

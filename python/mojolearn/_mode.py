@@ -192,7 +192,7 @@ def _needs_fit(method, name, require_fit=True):
                 f"appropriate arguments before using {name}.")
         if vars(self).get("_mojolearn_fitting"):
             return method(self, *args, **kwargs)
-        check = _sk_validate.before_call(self, name, slots, args, kwargs)
+        args, kwargs, check = _sk_validate.before_call(self, name, slots, args, kwargs)
         if check is None:
             return method(self, *args, **kwargs)
         try:
