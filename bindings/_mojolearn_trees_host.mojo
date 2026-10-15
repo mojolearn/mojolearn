@@ -331,8 +331,13 @@ def _et_fit[
                 tree_start, w^,
             )
         else:
+            # lane sk-final: the per-row weights (0: none)
+            var wr = List[Float32]()
+            if weights_addr != 0:
+                wr = read_f32(weights_addr, n_rows)
             result = fit_extra_trees_regressor_host_exact(
-                x, y, Int32(n_rows), Int32(n_features), config, tree_start
+                x, y, Int32(n_rows), Int32(n_features), config, tree_start,
+                wr^,
             )
     comptime if EXPORT:
         return _retain_et_export(result^)
@@ -427,6 +432,73 @@ def et_regressor_fit_rowmajor_export_binding(
     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     return _et_fit[False, True, True](x_addr, y_addr, params)
+
+
+def _et_regressor_fit_weighted[EXPORT: Bool, ROWMAJOR: Bool](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_trees.mojo::et_regressor_fit_weighted_binding`."""
+    var address = _index(weights_addr)
+    if address == 0:
+        raise Error("et_regressor_fit_weighted requires a nonzero float32 weight pointer")
+    return _et_fit[False, EXPORT, ROWMAJOR](
+        x_addr, y_addr, params, weights_addr=address
+    )
+
+
+def et_regressor_fit_weighted_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    return _et_regressor_fit_weighted[False, False](x_addr, y_addr, params, weights_addr)
+
+
+def et_regressor_fit_weighted_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    return _et_regressor_fit_weighted[True, False](x_addr, y_addr, params, weights_addr)
+
+
+def et_regressor_fit_weighted_rowmajor_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    return _et_regressor_fit_weighted[False, True](x_addr, y_addr, params, weights_addr)
+
+
+def et_regressor_fit_weighted_rowmajor_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    return _et_regressor_fit_weighted[True, True](x_addr, y_addr, params, weights_addr)
+
+
+def et_classifier_fit_weighted_shard_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject, tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_trees.mojo::et_classifier_fit_weighted_shard_binding`."""
+    var address = _index(weights_addr)
+    if address == 0:
+        raise Error("et_classifier_fit_weighted_shard requires a nonzero float32 weight pointer")
+    return _et_fit[True, False, False](
+        x_addr, y_addr, params, _index(tree_start), weights_addr=address
+    )
+
+
+def et_regressor_fit_weighted_shard_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject, tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_trees.mojo::et_regressor_fit_weighted_shard_binding`."""
+    var address = _index(weights_addr)
+    if address == 0:
+        raise Error("et_regressor_fit_weighted_shard requires a nonzero float32 weight pointer")
+    return _et_fit[False, False, False](
+        x_addr, y_addr, params, _index(tree_start), weights_addr=address
+    )
 
 
 def et_classifier_fit_shard_binding(
@@ -611,6 +683,12 @@ def PyInit__mojolearn_trees_host() abi("C") -> PythonObject:
         module.def_function[et_forest_export_release_binding]("forest_export_release")
         module.def_function[et_classifier_fit_shard_binding]("et_classifier_fit_shard")
         module.def_function[et_regressor_fit_shard_binding]("et_regressor_fit_shard")
+        module.def_function[et_classifier_fit_weighted_shard_binding]("et_classifier_fit_weighted_shard")
+        module.def_function[et_regressor_fit_weighted_shard_binding]("et_regressor_fit_weighted_shard")
+        module.def_function[et_regressor_fit_weighted_binding]("et_regressor_fit_weighted")
+        module.def_function[et_regressor_fit_weighted_export_binding]("et_regressor_fit_weighted_export")
+        module.def_function[et_regressor_fit_weighted_rowmajor_binding]("et_regressor_fit_weighted_rowmajor")
+        module.def_function[et_regressor_fit_weighted_rowmajor_export_binding]("et_regressor_fit_weighted_rowmajor_export")
         module.def_function[et_predict_binding]("et_predict")
         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
         module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
