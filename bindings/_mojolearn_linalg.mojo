@@ -125,6 +125,13 @@ from gemm.checks.gemm_int15 import (
 from gemm.contract import INT15_MAX_K, INT15_PROFILE_VERSION, OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from bindings.apple_fast_bf16_public import (
+    initialize_fast_bf16_boundary,
+    fast_bf16_available_binding,
+    fast_to_bf16_binding,
+    fast_from_bf16_binding,
+    fast_matmul_bf16_binding,
+)
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -980,6 +987,14 @@ def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
         m.def_function[linalg_numerical_profile_binding]("linalg_numerical_profile")
         m.def_function[lowbit_profile_version_binding]("lowbit_profile_version")
         m.def_function[gemm_bf16_binding]("gemm_bf16")
+        initialize_fast_bf16_boundary()
+        m.def_function[fast_bf16_available_binding]("fast_bf16_available")
+        m.def_function[fast_to_bf16_binding]("fast_to_bf16",
+            "Convert a float32 buffer to uint16 BF16 bits using round-to-nearest-even; return a same-shaped mojolearn.Array. Apple fast mode only.")
+        m.def_function[fast_from_bf16_binding]("fast_from_bf16",
+            "Widen uint16 BF16 bits exactly to a same-shaped float32 mojolearn.Array. Apple fast mode only.")
+        m.def_py_function[fast_matmul_bf16_binding]("fast_matmul_bf16",
+            "Multiply float32 or BF16-bits a by BF16-bits b with float32 accumulation on Apple in fast mode. Keyword arguments transpose_a=False, transpose_b=False and out=None support NN, NT and TN products. Return a float32 mojolearn.Array, or out when supplied.")
         m.def_function[gemm_int8_binding]("gemm_int8")
         comptime if AFN_GEMM_EPILOGUE:
             m.def_function[gemm_fused_binding]("gemm_fused")

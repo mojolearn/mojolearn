@@ -1,0 +1,61 @@
+{
+  "at": 1792033126.1748302,
+  "hardware": {
+    "cpu": "Apple M4",
+    "memory_bytes": 17179869184,
+    "logical_cpus": 10
+  },
+  "candidate_commit": "6cec6320d1d76b5ef3569794115ffe525a5df98d",
+  "native_binary": {
+    "path": "/Users/andrewhendel/CascadeProjects/mojolearn-apple-fast-bf16/python/mojolearn/_mojolearn_linalg.so",
+    "sha256": "b2c32bea3eea8321f9909d10e8f497b4f15529dd8d51cb1340751e836cf41565",
+    "bytes": 2250168,
+    "commit": "6cec6320d1d76b5ef3569794115ffe525a5df98d"
+  },
+  "controller_sha256": "c861085ff1790ca5b6d26ce59a54320101c54fa34573cf9435b5aa3a78c334d2",
+  "correctness": "22tests passed,0skipped;35coldonehotcases passed;all3arms all3benchmarkcases accuracy pass",
+  "complete": true,
+  "rows": [
+    {
+      "shape_m_n_k": [
+        256,
+        384,
+        320
+      ],
+      "existing_identical_ms": 0.9685,
+      "candidate_fast_ms": 1.037833,
+      "torch_mps_ms": 1.922959,
+      "candidate_over_identical": 1.0715880227155394,
+      "candidate_over_torch": 0.5397062547875435,
+      "scored_samples_each": 5
+    },
+    {
+      "shape_m_n_k": [
+        768,
+        1024,
+        640
+      ],
+      "existing_identical_ms": 6.62575,
+      "candidate_fast_ms": 5.703375,
+      "torch_mps_ms": 14.11925,
+      "candidate_over_identical": 0.8607893446024979,
+      "candidate_over_torch": 0.4039431981160473,
+      "scored_samples_each": 5
+    },
+    {
+      "shape_m_n_k": [
+        769,
+        1025,
+        641
+      ],
+      "existing_identical_ms": 7.287042,
+      "candidate_fast_ms": 6.659166,
+      "torch_mps_ms": 6.010375,
+      "candidate_over_identical": 0.9138366431811427,
+      "candidate_over_torch": 1.1079451781294845,
+      "scored_samples_each": 5
+    }
+  ],
+  "decision": "keep experimental switch off; local medium operation screening shows modest shape-dependent benefit, not full-workload/default-promotion evidence",
+  "scope": "sameprepackedBF16hostvalues;FP32accum/output;wholeoperation includescopies,synchronization,materializedhostoutput;5samples1excludedwarmup;systemcachecoldnessnotclaimed;no crossvendoridentityclaim"
+}
