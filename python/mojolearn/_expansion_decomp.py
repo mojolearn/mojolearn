@@ -4649,7 +4649,8 @@ class DictionaryLearning(_SparseCoding):
     """
     _parameters = ("n_components", "alpha", "max_iter", "tol", "fit_algorithm", "transform_algorithm",
                    "transform_n_nonzero_coefs", "transform_alpha", "split_sign", "random_state",
-                   "positive_code", "positive_dict", "transform_max_iter", "numeric_mode")
+                   "positive_code", "positive_dict", "transform_max_iter", "numeric_mode",
+                   "callback", "code_init", "dict_init", "n_jobs", "verbose")
 
     def __init__(self, n_components=None, *, alpha=1, max_iter=1000, tol=1e-8, fit_algorithm="lars",
                  transform_algorithm="omp", transform_n_nonzero_coefs=None, transform_alpha=None, n_jobs=None,
@@ -4794,7 +4795,8 @@ class MiniBatchDictionaryLearning(_SparseCoding):
     _parameters = ("n_components", "alpha", "max_iter", "fit_algorithm", "batch_size", "shuffle",
                    "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha", "split_sign",
                    "random_state", "positive_code", "positive_dict", "transform_max_iter", "tol",
-                   "max_no_improvement", "numeric_mode")
+                   "max_no_improvement", "numeric_mode",
+                   "callback", "dict_init", "n_jobs", "verbose")
 
     def __init__(self, n_components=None, *, alpha=1, max_iter=1000, fit_algorithm="lars", n_jobs=None,
                  batch_size=256, shuffle=True, dict_init=None, transform_algorithm="omp",
@@ -4988,7 +4990,8 @@ class SparsePCA(_BaseSparsePCA):
     >>> Z = spca.transform(X)
     """
     _parameters = ("n_components", "alpha", "ridge_alpha", "max_iter", "tol", "method", "random_state",
-                   "numeric_mode")
+                   "numeric_mode",
+                   "U_init", "V_init", "n_jobs", "verbose")
 
     def __init__(self, n_components=None, *, alpha=1, ridge_alpha=0.01, max_iter=1000, tol=1e-8, method="lars",
                  n_jobs=None, U_init=None, V_init=None, verbose=False, random_state=None, numeric_mode=None):
@@ -5088,7 +5091,8 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
     >>> spca = mojolearn.MiniBatchSparsePCA(n_components=3, max_iter=5, random_state=0).fit(X)
     """
     _parameters = ("n_components", "alpha", "ridge_alpha", "max_iter", "batch_size", "shuffle", "method",
-                   "random_state", "tol", "max_no_improvement", "numeric_mode")
+                   "random_state", "tol", "max_no_improvement", "numeric_mode",
+                   "callback", "n_jobs", "verbose")
 
     def __init__(self, n_components=None, *, alpha=1, ridge_alpha=0.01, max_iter=1000, callback=None,
                  batch_size=3, verbose=False, shuffle=True, n_jobs=None, method="lars", random_state=None,
@@ -5230,7 +5234,8 @@ class LatentDirichletAllocation(_Base):
     _sklearn_input_tags = {"positive_only": True}
     _parameters = ("n_components", "doc_topic_prior", "topic_word_prior", "learning_method", "learning_decay",
                    "learning_offset", "max_iter", "batch_size", "evaluate_every", "total_samples", "perp_tol",
-                   "mean_change_tol", "max_doc_update_iter", "random_state", "numeric_mode")
+                   "mean_change_tol", "max_doc_update_iter", "random_state", "numeric_mode",
+                   "n_jobs", "verbose")
 
     def __init__(self, n_components=10, *, doc_topic_prior=None, topic_word_prior=None, learning_method="batch",
                  learning_decay=0.7, learning_offset=10.0, max_iter=10, batch_size=128, evaluate_every=-1,
@@ -5794,7 +5799,8 @@ class Isomap(_Base):
     >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
     >>> Y = mojolearn.Isomap(n_neighbors=10, n_components=2).fit_transform(X)
     """
-    _parameters = ("n_neighbors", "radius", "n_components", "eigen_solver", "path_method", "metric", "p", "numeric_mode")
+    _parameters = ("n_neighbors", "radius", "n_components", "eigen_solver", "path_method", "metric", "p", "numeric_mode",
+                   "max_iter", "metric_params", "n_jobs", "neighbors_algorithm", "tol")
 
     def __init__(self, *, n_neighbors=5, radius=None, n_components=2, eigen_solver="auto", tol=0, max_iter=None,
                  path_method="auto", neighbors_algorithm="auto", n_jobs=None, metric="minkowski", p=2,
@@ -6005,7 +6011,8 @@ class ClassicalMDS(_Base):
     >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
     >>> Y = mojolearn.ClassicalMDS(n_components=2).fit_transform(X)
     """
-    _parameters = ("n_components", "metric", "numeric_mode")
+    _parameters = ("n_components", "metric", "numeric_mode",
+                   "metric_params")
 
     def __init__(self, n_components=2, *, metric="euclidean", metric_params=None, numeric_mode=None):
         self.n_components, self.metric, self.metric_params, self.numeric_mode = n_components, metric, metric_params, numeric_mode
@@ -6130,7 +6137,8 @@ class MDS(_Base):
     >>> Y = mojolearn.MDS(n_components=2, random_state=0).fit_transform(X)
     """
     _parameters = ("n_components", "metric_mds", "n_init", "init", "max_iter", "eps", "random_state", "metric",
-                   "normalized_stress", "numeric_mode")
+                   "normalized_stress", "numeric_mode",
+                   "metric_params", "n_jobs", "verbose")
 
     def __init__(self, n_components=2, *, metric_mds=True, n_init=1, init="random", max_iter=300, verbose=0,
                  eps=1e-6, n_jobs=None, random_state=None, metric="euclidean", metric_params=None,
@@ -6485,7 +6493,8 @@ class LocallyLinearEmbedding(_Base):
     >>> X = np.random.default_rng(0).random((500, 8), dtype=np.float32)
     >>> Y = mojolearn.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit_transform(X)
     """
-    _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode")
+    _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode",
+                   "hessian_tol", "max_iter", "modified_tol", "n_jobs", "neighbors_algorithm", "tol")
 
     def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
                  method="standard", hessian_tol=1e-4, modified_tol=1e-12, neighbors_algorithm="auto",
@@ -7393,7 +7402,8 @@ class SparseCoder(_SparseCoding):
     # stateless: the dictionary is a constructor parameter, so transform needs no fit
     _sklearn_requires_fit = False
     _parameters = ("dictionary", "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha",
-                   "split_sign", "positive_code", "transform_max_iter", "numeric_mode")
+                   "split_sign", "positive_code", "transform_max_iter", "numeric_mode",
+                   "n_jobs")
 
     def __init__(self, dictionary, *, transform_algorithm="omp", transform_n_nonzero_coefs=None, transform_alpha=None,
                  split_sign=False, n_jobs=None, positive_code=False, transform_max_iter=1000, numeric_mode=None):
