@@ -589,7 +589,8 @@ class NearestNeighbors(NumericModeMixin):
         self.algorithm = algorithm
         self.p = p
         self._index = None
-        self.used_query_tile_ = None
+        # `used_query_tile_` is set by the first query, not here: a public
+        # attribute ending in an underscore marks a fitted estimator.
 
     # The knn host inference lane, 2026-09-14: the file holds what
     # `kneighbors` reads and nothing else.
