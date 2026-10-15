@@ -39,6 +39,7 @@ transforms from a saved model on a CPU without a GPU.
 from . import _backend, _serialize
 from ._scale_gamma import scale_gamma, scale_gamma_x
 from ._array import Array
+from ._sample_weight import check_sample_weight
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, full
 from ._lazy_out import _empty_out, _mapped_out
 from ._mode import NumericModeMixin
@@ -171,19 +172,9 @@ def _sqrt_weights(sample_weight, n, where):
     unweighted."""
     if sample_weight is None:
         return None
-    if isinstance(sample_weight, (int, float)) and not isinstance(sample_weight, bool):
-        w = full((n,), float(sample_weight), "<f8")
-    else:
-        w, _ = as_f64_c(sample_weight, ndim=1, name="sample_weight")
-        if w.shape[0] != n:
-            raise ValueError(
-                f"mojolearn {where}: sample_weight has {w.shape[0]} entries, X has {n} rows"
-            )
-    if n and (not all_finite(w) or w.min() < 0.0):
-        raise ValueError(
-            f"mojolearn {where}: sample_weight must be finite and >= 0"
-        )
-    return w
+    # scikit-learn's _check_sample_weight: shape, finite, >= 0, not all zero
+    # (its wording), by the base binding's reductions; read only
+    return check_sample_weight(sample_weight, n, dtype="<f8")
 
 
 class _KernelMethodBase(NumericModeMixin):
@@ -509,7 +500,8 @@ class Nystroem(_KernelMethodBase):
     coef0 : float, default 1.0
         Independent term of the 'poly' and 'sigmoid' kernels.
     n_components : int, default 100
-        Number of basis rows. Must be positive and at most `n_samples`.
+        Number of basis rows. Must be positive; a value above `n_samples`
+        warns and uses `n_samples` (the full kernel).
     random_state : int, default 0
         Seed of the basis selection.
     numeric_mode : {'identical', 'fast'} or None, default None
@@ -577,6 +569,17 @@ class Nystroem(_KernelMethodBase):
         q = int(self.n_components)
         if q < 1:
             raise ValueError(f"mojolearn {self._WHERE}: n_components must be positive, got {q}")
+        if q > n:
+            # scikit-learn's rule and warning (kernel_approximation.py,
+            # Nystroem.fit): the basis cannot hold more rows than X has, so
+            # n_components becomes n_samples (the full kernel)
+            import warnings
+            warnings.warn(
+                "n_components > n_samples. This is not possible.\n"
+                "n_components was set to n_samples, which results"
+                " in inefficient evaluation of the full kernel."
+            )
+            q = n
         gamma = _gamma_for(self.gamma, d, self._WHERE, kernel)
         _check_chi2_input(x, kernel, self._WHERE)
         coef0 = _real(self.coef0, "coef0", self._WHERE)
