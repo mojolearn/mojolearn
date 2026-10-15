@@ -360,9 +360,13 @@ def _expected_failed_checks(estimator):
 
 
 def _checked_estimators():
+    # MOJOLEARN_SKLEARN_CHECKS_ONLY=Name[,Name]: exact class names, so a runner can
+    # give each estimator its own process (tools/sklearn_checks_per_estimator.sh).
+    only = os.environ.get("MOJOLEARN_SKLEARN_CHECKS_ONLY")
+    only = set(only.split(",")) if only else None
     out = []
     for name in SHARED_NAMES:
-        if name in FLOAT32_ONLY:
+        if name in FLOAT32_ONLY or (only is not None and name not in only):
             continue
         try:
             out.append(_make(name))
