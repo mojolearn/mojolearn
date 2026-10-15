@@ -3643,14 +3643,14 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
         self._fitted = True
         return self
 
-    def fit(self, X, Y, sample_weight=None):
-        """Fit one clone of ``estimator`` per column of ``Y``.
+    def fit(self, X, y, sample_weight=None):
+        """Fit one clone of ``estimator`` per column of ``y``.
 
         Parameters
         ----------
         X : array of shape (n_samples, n_features)
             Training data, converted to float32.
-        Y : array of shape (n_samples, n_outputs)
+        y : array of shape (n_samples, n_outputs)
             Numeric targets, converted to float32. A row count that differs from
             ``X`` raises ``ValueError``.
         sample_weight : array of shape (n_samples,), default None
@@ -3662,10 +3662,10 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
         """
         self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
-        _trees_multioutput_y(Y)
-        Ya, _ = as_f32_c(Y, ndim=2, name="Y")
+        _trees_multioutput_y(y)
+        Ya, _ = as_f32_c(y, ndim=2, name="y")
         if Ya.shape[0] != Xa.shape[0]:
-            raise ValueError(f"Y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
+            raise ValueError(f"y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
         sample_weight = _trees_member_weights([(None, self.estimator)], sample_weight, Xa.shape[0])
         self._multi_ridge = None
         b = _multiout_ridge_entry(self.estimator, sample_weight)
@@ -3753,14 +3753,14 @@ class MultiOutputClassifier(_TreesWrapperBase):
         if self.n_jobs is not None:
             _refuse("n_jobs", "the columns fit one after another.")
 
-    def fit(self, X, Y, sample_weight=None):
-        """Fit one clone of ``estimator`` per label column of ``Y``.
+    def fit(self, X, y, sample_weight=None):
+        """Fit one clone of ``estimator`` per label column of ``y``.
 
         Parameters
         ----------
         X : array of shape (n_samples, n_features)
             Training data, converted to float32.
-        Y : array of shape (n_samples, n_outputs)
+        y : array of shape (n_samples, n_outputs)
             Class labels, one column per output. A row count that differs from
             ``X`` raises ``ValueError``.
         sample_weight : array of shape (n_samples,), default None
@@ -3772,28 +3772,28 @@ class MultiOutputClassifier(_TreesWrapperBase):
         """
         self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
-        if getattr(Y, "ndim", None) == 1:
+        if getattr(y, "ndim", None) == 1:
             raise ValueError("y must have at least two dimensions for multi-output "
                              "classification but has only one.")
-        _trees_multioutput_y(Y)
+        _trees_multioutput_y(y)
         sample_weight = _trees_member_weights([(None, self.estimator)], sample_weight, Xa.shape[0])
-        W = _trees_label_words(Y)
+        W = _trees_label_words(y)
         if W is not None:
             return self._fit_words(Xa, W, sample_weight)
         Ya = None
-        if _trees_float_dtype(Y):
-            # a float Y: each column natively (x_trees_column_f64), the same
+        if _trees_float_dtype(y):
+            # a float y: each column natively (x_trees_column_f64), the same
             # float labels its `tolist()` rows hold
-            Ya, _ = as_f64_c(Y, ndim=2, name="Y")
+            Ya, _ = as_f64_c(y, ndim=2, name="y")
             rows = None
             if Ya.shape[0] != Xa.shape[0]:
-                raise ValueError(f"Y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
+                raise ValueError(f"y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
             m = Ya.shape[1]
         else:
             # glue: label objects (str, mixed) no Array holds, per output column
-            rows = Y.tolist() if hasattr(Y, "tolist") else [list(r) for r in Y]  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
+            rows = y.tolist() if hasattr(y, "tolist") else [list(r) for r in y]  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
             if len(rows) != Xa.shape[0]:
-                raise ValueError(f"Y has {len(rows)} rows, X has {Xa.shape[0]}")
+                raise ValueError(f"y has {len(rows)} rows, X has {Xa.shape[0]}")
             if rows and not hasattr(rows[0], "__len__"):
                 raise ValueError("y must have at least two dimensions for multi-output "
                                  "classification but has only one.")
@@ -3803,7 +3803,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             if Ya is not None:
                 n = Ya.shape[0]
                 col = empty((n,), "<f8")
-                self._bind().x_trees_column_f64(addr_ro(Ya, name="Y"), addr(col, name="column"), [n, m, j])  # cpu-route: label column extracted for encode_labels at API entry
+                self._bind().x_trees_column_f64(addr_ro(Ya, name="y"), addr(col, name="column"), [n, m, j])  # cpu-route: label column extracted for encode_labels at API entry
                 classes, codes = encode_labels(col)
             else:
                 classes, codes = encode_labels([r[j] for r in rows])  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
