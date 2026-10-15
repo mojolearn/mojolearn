@@ -118,6 +118,15 @@ def _component_count(n_components, shape):
 # division (cuML's threshold), keeping the sample-count scale. The whitened
 # pair is an additive binding export: an older extension needs a rebuild.
 # Options measured row by row by tools/e2u_matrix_fit.py.
+def _too_small(shape, who):
+    """scikit-learn's check_array wording for a block below the 2 x 2 the
+    PCA/TruncatedSVD kernels need (its min-samples / min-features refusals)."""
+    n, d = shape
+    if n < 2:
+        return f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required by {who}."
+    return f"Found array with {d} feature(s) (shape=({n}, {d})) while a minimum of 2 is required by {who}."
+
+
 class PCA(NumericModeMixin):
     """Principal component analysis.
 
@@ -364,7 +373,7 @@ class PCA(NumericModeMixin):
         if self.whiten and not all_finite(x):
             raise ValueError("mojolearn PCA whitening requires finite X")
         if x.shape[0] < 2 or x.shape[1] < 2:
-            raise ValueError("mojolearn PCA requires at least 2 rows and 2 features")
+            raise ValueError(_too_small(x.shape, "PCA"))
         if dense and x.shape[0] < x.shape[1] and self.numeric_mode_used() != "identical":
             # DEVIATION 593, raised HERE as well as in the Mojo validator so
             # legacy modes retain their previous refusal. IDENTICAL uses
@@ -451,7 +460,7 @@ class PCA(NumericModeMixin):
         from ._expansion_decomp import _randomized_decompose
         x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
         if x.shape[0] < 2 or x.shape[1] < 2:
-            raise ValueError("mojolearn PCA requires at least 2 rows and 2 features")
+            raise ValueError(_too_small(x.shape, "PCA"))
         nc = _component_count(self.n_components, x.shape)
         if nc >= min(x.shape):  # glue: smaller of two shape dims
             raise ValueError("svd_solver='randomized' needs n_components < min(n_samples, n_features)")
@@ -788,7 +797,7 @@ class TruncatedSVD(NumericModeMixin):
             from ._expansion_decomp import _randomized_decompose
             x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
             if x.shape[0] < 2 or x.shape[1] < 2:
-                raise ValueError("mojolearn TruncatedSVD requires at least 2 rows and 2 features")
+                raise ValueError(_too_small(x.shape, "TruncatedSVD"))
             nc = _component_count(self.n_components, x.shape)
             got = _randomized_decompose(
                 x, nc, center=False, n_oversamples=self.n_oversamples, n_iter=self.n_iter,
@@ -813,7 +822,7 @@ class TruncatedSVD(NumericModeMixin):
             )
         x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
         if x.shape[0] < 2 or x.shape[1] < 2:
-            raise ValueError("mojolearn TruncatedSVD requires at least 2 rows and 2 features")
+            raise ValueError(_too_small(x.shape, "TruncatedSVD"))
         nc = _component_count(self.n_components, x.shape)
         # lane/apple-fast-q-linalg TSVD_QFIX (FAST default; -D
         # MOJOLEARN_TSVD_QOLD restores the Gram): the TSQR R's right singular
