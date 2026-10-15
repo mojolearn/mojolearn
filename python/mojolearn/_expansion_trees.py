@@ -1651,6 +1651,15 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
             raise ValueError("y has fewer than 2 classes")
         seed = _trees_seed(self.random_state)
         base = self.estimator if self.estimator is not None else DecisionTreeClassifier(max_depth=1)
+        # scikit-learn's AdaBoostClassifier refusal: SAMME hands every member
+        # row weights (glue: one signature lookup)
+        import inspect
+        try:
+            takes = "sample_weight" in inspect.signature(base.fit).parameters
+        except (TypeError, ValueError):
+            takes = False
+        if not takes:
+            raise ValueError(f"{type(base).__name__} doesn't support sample_weight.")
         w = _trees_normalized_weights(sample_weight, n, self)
         stats = zeros((4,), "<f8")
         self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
