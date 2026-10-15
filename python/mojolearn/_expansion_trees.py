@@ -3520,6 +3520,8 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
     (5, 2)
     """
     _estimator_type = "regressor"
+    # scikit-learn's multi-output-only target tags: its checks pass a 2-D y.
+    _sklearn_target_tags = {"single_output": False, "multi_output": True}
 
     def __init__(self, estimator, *, n_jobs=None):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
@@ -3665,6 +3667,8 @@ class MultiOutputClassifier(_TreesWrapperBase):
     (5, 2)
     """
     _estimator_type = "classifier"
+    # scikit-learn's multi-output-only target tags: its checks pass a 2-D y.
+    _sklearn_target_tags = {"single_output": False, "multi_output": True}
 
     def __init__(self, estimator, *, n_jobs=None):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
@@ -3694,6 +3698,9 @@ class MultiOutputClassifier(_TreesWrapperBase):
         """
         self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
+        if getattr(Y, "ndim", None) == 1:
+            raise ValueError("y must have at least two dimensions for multi-output "
+                             "classification but has only one.")
         W = _trees_label_words(Y)
         if W is not None:
             return self._fit_words(Xa, W, sample_weight)
@@ -3711,6 +3718,9 @@ class MultiOutputClassifier(_TreesWrapperBase):
             rows = Y.tolist() if hasattr(Y, "tolist") else [list(r) for r in Y]  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
             if len(rows) != Xa.shape[0]:
                 raise ValueError(f"Y has {len(rows)} rows, X has {Xa.shape[0]}")
+            if rows and not hasattr(rows[0], "__len__"):
+                raise ValueError("y must have at least two dimensions for multi-output "
+                                 "classification but has only one.")
             m = len(rows[0])
         self.estimators_, self.classes_ = [], []
         for j in range(m):  # glue: one member fit per estimator
