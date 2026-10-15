@@ -2,6 +2,32 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.47 (published 2026-10-15)
+
+- scikit-learn's own estimator checks (`sklearn.utils.estimator_checks`) pass for every public estimator, except the checks
+  scikit-learn itself excuses for its estimator of the same name, and float32 results compared at float64 tolerance.
+- Input is checked the way scikit-learn checks it, with scikit-learn's messages: sparse, complex, empty and 1-D input, NaN or
+  infinity in `X` or `y`, a missing `y`, a column-vector `y`, a continuous target passed to a classifier, and a feature count that
+  differs from the one seen in `fit`. `n_features_in_` and `feature_names_in_` are set by `fit`. pandas DataFrames and Series are
+  accepted wherever arrays are.
+- Results are NumPy arrays: `predict`, `predict_proba`, `decision_function`, `transform` and the fitted attributes (`coef_`,
+  `labels_`, ...) return `numpy.ndarray`. Methods that only exist for some settings (for example `predict` on `DBSCAN` without
+  stored prediction data, or `predict_proba` on `SVC` without `probability=True`) are absent, as in scikit-learn.
+- `sample_weight` works, and fitting with weights is equivalent to repeating or removing rows, on `LogisticRegression`,
+  `LinearSVC`, `LinearSVR`, `ElasticNet`, `Lasso`, `LassoCV`, `ElasticNetCV`, `Ridge`, `RandomForestClassifier`,
+  `RandomForestRegressor`, `ExtraTreesClassifier`, `ExtraTreesRegressor`, the decision trees, `SVC`, `SVR`, `Bagging`, `Voting`
+  and `Stacking`. `class_weight` works on `LogisticRegression`, `LinearSVC` and the tree ensembles.
+- Class labels can be strings on every classifier, including `KNeighborsClassifier`.
+- New defaults match scikit-learn: `SVC(decision_function_shape='ovr')` and `AgglomerativeClustering(connectivity=None)`.
+  `SGDClassifier`, `SGDRegressor`, `Perceptron` and `PassiveAggressiveClassifier` choose their minibatch size from the number of
+  rows (`batch_size='auto'`), so small datasets fit as well as large ones.
+- Fixes: `DecisionTreeClassifier` and `DecisionTreeRegressor` fit again; `Ridge`, `PCA` and `TSNE` accept one feature or one
+  component; `ElasticNet` and `Lasso` predict a single row; `SpectralClustering`, `IncrementalPCA` and `GaussianProcessRegressor`
+  fit small or poorly conditioned data that scikit-learn fits; `LabelPropagation` and `LabelSpreading` work under
+  `cross_val_score`; `MultiOutputClassifier` has `score`; the CV estimators accept scikit-learn's CV splitters.
+- In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. Results change in this release for
+  `QuantileRegressor`, and for weighted fits of the trees and `GaussianProcessRegressor`, on every GPU and the CPU together.
+
 ## 0.8.46 (published 2026-10-15)
 
 - Every public estimator works with scikit-learn's tools: `get_params`, `set_params`, `clone`, tags,
