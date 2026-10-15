@@ -2960,7 +2960,11 @@ def _leaf_body[
 ):
     """`leafKernel`, `builder_kernels_impl.cuh:391-417`. WEIGHTED
     (classification, lane sk-kernels): each row adds its fixed-point weight
-    to its class tally, so the leaf vector is the weighted class share."""
+    to its class tally, so the leaf vector is the weighted class share.
+    WEIGHTED regression (lane sk-final): `labels_q` holds the quantized
+    `w * y`; the leaf is `Float32(Z) / Float32(W) * inv_scale`, Z the sum of
+    those units, W the sum of `row_w` units and `inv_scale` the power of two
+    `weight scale / label scale` (0 when the leaf holds no weight)."""
     var node_id = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var k = Int(num_outputs_in)
@@ -2991,7 +2995,7 @@ def _leaf_body[
     var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
     var count = Int(instance_ranges[unsafe_offset=node_id].count)
 
-    comptime if T14 and not T14_EXACT and not CLASSIFICATION:
+    comptime if T14 and not T14_EXACT and not CLASSIFICATION and not WEIGHTED:
         # V1: exact row-ID keyed partials, shared portable binary64 pair tree.
         # Same logical 128 slots as host regardless of TPB/warp width.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
@@ -3030,6 +3034,7 @@ def _leaf_body[
     for c in range(MAX_OUT):
         priv[unsafe_offset=c] = Int32(0)
     var seen = Int32(0)
+    var w_seen = Int32(0)
 
     var i = begin + tid
     while i < begin + count:
@@ -3045,11 +3050,17 @@ def _leaf_body[
                     priv[unsafe_offset=lab] += Int32(1)
         else:
             priv[unsafe_offset=0] += Int32(lab)
+            comptime if WEIGHTED:
+                w_seen += row_w[unsafe_offset=row]
         seen += 1
         i += TPB
 
     var blk_seen = block_sum[block_size=TPB](seen)
     barrier()
+    var blk_w = Int32(0)
+    comptime if WEIGHTED and not CLASSIFICATION:
+        blk_w = block_sum[block_size=TPB](w_seen)
+        barrier()
 
     var tot = stack_allocation[MAX_OUT, Scalar[DType.int32]]()
     for c in range(MAX_OUT):
@@ -3079,13 +3090,19 @@ def _leaf_body[
                     Int(total)
                 )
     else:
+        var den = blk_seen
+        comptime if WEIGHTED:
+            den = blk_w
         for c in range(k):
             var num = Float32(Int(tot[unsafe_offset=c]))
             if sabotage == LEAF_SAB_NO_NORMALIZE:
                 out_leaves[unsafe_offset = base + c] = num * inv_scale
+            elif den == Int32(0):
+                # lane sk-final: a weighted leaf holding no weight
+                out_leaves[unsafe_offset = base + c] = Float32(0.0)
             else:
                 out_leaves[unsafe_offset = base + c] = ftz(
-                    num / Float32(Int(blk_seen)) * inv_scale
+                    num / Float32(Int(den)) * inv_scale
                 )
 
     out_visit[unsafe_offset=node_id] = LEAF_VISIT_PUBLISHED
@@ -3134,6 +3151,34 @@ def leaf_weighted_kernel[TPB: Int, MAX_OUT: Int, zero_fill: Bool = False](
 ):
     """The classification leaf pass with row weights (lane sk-kernels)."""
     _leaf_body[TPB, MAX_OUT, True, zero_fill, True](
+        out_leaves,
+        out_visit,
+        nodes,
+        instance_ranges,
+        row_ids,
+        labels_q,
+        num_outputs_in,
+        inv_scale,
+        sabotage_in,
+        row_w,
+    )
+
+
+def leaf_weighted_reg_kernel[TPB: Int, MAX_OUT: Int, zero_fill: Bool = False](
+    out_leaves: MutPointer[Float32, MutAnyOrigin],
+    out_visit: MutPointer[Int32, MutAnyOrigin],
+    nodes: MutPointer[SparseTreeNode[DType.float32], MutAnyOrigin],
+    instance_ranges: MutPointer[InstanceRange, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    num_outputs_in: Int32,
+    inv_scale: Float32,
+    sabotage_in: Int32,
+    row_w: MutPointer[Int32, MutAnyOrigin],
+):
+    """The regression leaf pass with row weights (lane sk-final): the
+    weighted mean `Z / W` of each leaf, rescaled by `inv_scale`."""
+    _leaf_body[TPB, MAX_OUT, False, zero_fill, True](
         out_leaves,
         out_visit,
         nodes,
