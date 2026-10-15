@@ -106,6 +106,13 @@ def _factories():
             [("rf", ml.RandomForestClassifier()), ("dt", ml.DecisionTreeClassifier())], voting="soft"),
         "VotingRegressor": lambda: ml.VotingRegressor(
             [("rf", ml.RandomForestRegressor()), ("dt", ml.DecisionTreeRegressor())]),
+        # scikit-learn's own test settings for these two (its
+        # _test_common/instance_generator.py INIT_PARAMS): with the default
+        # 'omp' transform, or NMF's default 200 iterations, fit_transform and
+        # transform answer differently by design and its
+        # check_transformer_general fails for scikit-learn too.
+        "DictionaryLearning": lambda: ml.DictionaryLearning(max_iter=20, transform_algorithm="lasso_lars"),
+        "NMF": lambda: ml.NMF(max_iter=500),
         # statsmodels-style: the series is the first constructor argument
         "AutoARIMA": lambda: ml.AutoARIMA(series),
         "STL": lambda: ml.STL(series, period=7),
