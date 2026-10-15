@@ -107,6 +107,7 @@ from ensemble.randomforest import (
     fit_forest,
     fit_forest_prepared,
     launch_gather_rows_colmajor,
+    n_sampled_rows_for,
 )
 
 comptime DT = DType.float32
@@ -155,6 +156,11 @@ names the same order in the same words:
     13  seed
     14  n_streams             (cuML's python default is 4; DEVIATION 117)
     15  max_batch_size        (cuML default 4096)
+    16  min_weight_fraction_leaf  OPTIONAL (float in [0, 0.5]; scikit-
+                               learn's; a 16-slot call is 0). Read by
+                               `rf_classifier_fit*` (session included)
+                               and `rf_regressor_fit*`; see
+                               `_rf_min_weight_fraction` below.
 
 The split criterion is NOT a slot: it crosses as its own integer argument
 (`criterion`, the `CRITERION` enumerator value from `decisiontree.mojo`)
@@ -269,6 +275,62 @@ def _rf_batch_size(params: PythonObject) raises -> Int:
             if wide > batch:
                 batch = wide
     return batch
+
+
+def _rf_params_len_ok(params: PythonObject) raises -> Bool:
+    """16 slots, or 17 with the optional `min_weight_fraction_leaf`."""
+    var n = len(params)
+    return n == N_RF_FIT_PARAMS or n == N_RF_FIT_PARAMS + 1
+
+
+def _rf_min_weight_fraction(params: PythonObject) raises -> Float64:
+    """Slot 16, scikit-learn's `min_weight_fraction_leaf` (lane
+    sk-kernels): 0 for a 16-slot call; refused outside [0, 0.5] in
+    scikit-learn's words (its `_parameter_constraints`)."""
+    if len(params) <= N_RF_FIT_PARAMS:
+        return 0.0
+    var f = Float64(py=params[N_RF_FIT_PARAMS])
+    if not (f >= 0.0 and f <= 0.5):
+        raise Error(
+            "The 'min_weight_fraction_leaf' parameter must be a float in the"
+            " range [0.0, 0.5]. Got " + String(f) + " instead."
+        )
+    return f
+
+
+def _rf_fold_min_weight_count(
+    mut rf_params: RF_params, frac: Float64, n_rows: Int
+):
+    """scikit-learn's `min_weight_leaf = frac * total weight` on a COUNT
+    objective (no row weights reach the bins: unweighted, all-unit, or
+    weighted bootstrap, where the weights drive the draw and every drawn
+    row counts once). A tree's total weight is then its row count -- the
+    bootstrap draw `n_sampled_rows_for` sizes, else n_rows -- and an
+    integer child count c satisfies c >= frac * total exactly when
+    c >= ceil(frac * total), so the bound is `min_samples_leaf` raised to
+    that ceiling. frac == 0 leaves the params, and every bit, unchanged."""
+    if not (frac > 0.0):
+        return
+    var n_tree = n_sampled_rows_for(
+        rf_params.bootstrap,
+        rf_params.max_samples if rf_params.bootstrap else Float32(1.0),
+        n_rows,
+    )
+    var bound = frac * Float64(n_tree)
+    var need = Int(bound)
+    if Float64(need) < bound:
+        need += 1
+    if need > Int(rf_params.tree_params.min_samples_leaf):
+        rf_params.tree_params.min_samples_leaf = Int32(need)
+
+
+def _rf_min_weight_leaf(frac: Float64, weight_total: Float64) -> Float32:
+    """scikit-learn's `min_weight_leaf` on a WEIGHTED objective (no
+    bootstrap, non-unit row weights): `frac * total weight`, read by the
+    weighted bins' `GainPerSplit` (`ObjectiveLike.SetMinWeightLeaf`)."""
+    if not (frac > 0.0):
+        return Float32(0)
+    return Float32(frac * weight_total)
 
 
 def _rf_params_from(params: PythonObject, criterion: Int) raises -> RF_params:
@@ -428,11 +490,11 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     `y` is int32 class CODES in [0, n_classes). See `N_RF_FIT_PARAMS`.
     `criterion` is GINI (0) or ENTROPY (1); anything else is refused by
     name (DEVIATION 407)."""
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _rf_params_len_ok(params):
         raise Error(
             "rf_classifier_fit: params must hold "
             + String(N_RF_FIT_PARAMS)
-            + " values, got "
+            + " values (17 with min_weight_fraction_leaf), got "
             + String(len(params))
         )
     var n_rows = Int(py=params[0])
@@ -445,6 +507,7 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var crit = Int(py=criterion)
     _check_criterion("rf_classifier_fit", crit, _cls_criteria())
     var rf_params = _rf_params_from(params, crit)
+    var mw_frac = _rf_min_weight_fraction(params)
 
     # cpu3-bindings: the weights are one memcpy here; their refusals, the
     # all-ones test and the total run on the device after the upload
@@ -521,8 +584,10 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
             forest = fit_forest[WeightedClsObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
                 scales, sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
+                min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
             )
         else:
+            _rf_fold_min_weight_count(rf_params, mw_frac, n_rows)
             forest = fit_forest[ClsObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
                 sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
@@ -829,7 +894,7 @@ def rf_regressor_fit_session_binding(
 ) raises -> PythonObject:
     """`rf_regressor_fit_export` on a data session's X: same params, same
     checks, same export descriptor."""
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit_session: params must hold "
             + String(N_RF_FIT_PARAMS)
@@ -844,6 +909,7 @@ def rf_regressor_fit_session_binding(
     var crit = Int(py=criterion)
     _check_criterion("rf_regressor_fit_session", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
+    _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
     var session_id = Int(py=handle)
     var reg = RF_SESSIONS.get_or_create_ptr()
     var si = reg[].find(session_id)
@@ -909,7 +975,7 @@ def rf_regressor_fit_dart_binding(
     out column-major at them and the target gathered at the rows on the
     device (`ensemble/dart_member.mojo`). Same params, checks and export
     descriptor as `rf_regressor_fit_session_export`."""
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit_dart: params must hold "
             + String(N_RF_FIT_PARAMS)
@@ -923,6 +989,7 @@ def rf_regressor_fit_dart_binding(
     var crit = Int(py=criterion)
     _check_criterion("rf_regressor_fit_dart", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
+    _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
     var hid = Int(py=dart_handle)
     var c = Int(py=cls)
     var rows_a = Int(py=rows_addr)
@@ -1015,7 +1082,7 @@ def rf_regressor_fit_session_rows_binding(
     into a fresh column-major matrix, the bytes a host gather of the same
     rows stages, and the fit is `fit_forest` on it with its own quantile
     table."""
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit_session_rows: params must hold "
             + String(N_RF_FIT_PARAMS)
@@ -1033,6 +1100,7 @@ def rf_regressor_fit_session_rows_binding(
     var crit = Int(py=criterion)
     _check_criterion("rf_regressor_fit_session_rows", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
+    _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
     var session_id = Int(py=handle)
     var reg = RF_SESSIONS.get_or_create_ptr()
     var si = reg[].find(session_id)
@@ -1096,11 +1164,11 @@ def rf_classifier_fit_weighted_session_binding(
     """`rf_classifier_fit_weighted_export` on a data session's X (its
     COLUMN-major stage): same params, same weight checks, same export
     descriptor."""
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _rf_params_len_ok(params):
         raise Error(
             "rf_classifier_fit_weighted_session: params must hold "
             + String(N_RF_FIT_PARAMS)
-            + " values, got "
+            + " values (17 with min_weight_fraction_leaf), got "
             + String(len(params))
         )
     var n_rows = Int(py=params[0])
@@ -1112,6 +1180,7 @@ def rf_classifier_fit_weighted_session_binding(
     var crit = Int(py=criterion)
     _check_criterion("rf_classifier_fit_weighted_session", crit, _cls_criteria())
     var rf_params = _rf_params_from(params, crit)
+    var mw_frac = _rf_min_weight_fraction(params)
     var weights_address = Int(py=weights_addr)
     if weights_address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
@@ -1164,8 +1233,10 @@ def rf_classifier_fit_weighted_session_binding(
                 ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
                 prep, share_tables, scales, sample_weight_host=weights,
                 host_x_addr=host_x,
+                min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
             )
         else:
+            _rf_fold_min_weight_count(rf_params, mw_frac, n_rows)
             forest = fit_forest_prepared[ClsObj](
                 ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
                 prep, share_tables, sample_weight_host=weights,
@@ -1213,11 +1284,11 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     GAMMA (5) or INVERSE_GAUSSIAN (6); anything else is refused by name
     (DEVIATION 407). The log criteria are DEVIATION 406's: they RUN in
     both numeric modes, comparable to cuML in neither."""
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit: params must hold "
             + String(N_RF_FIT_PARAMS)
-            + " values, got "
+            + " values (17 with min_weight_fraction_leaf), got "
             + String(len(params))
         )
     if Int(py=params[2]) != 0:
@@ -1229,6 +1300,7 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var crit = Int(py=criterion)
     _check_criterion("rf_regressor_fit", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
+    var mw_frac = _rf_min_weight_fraction(params)
     # sk-edges: the row weights of `rf_regressor_fit_weighted` (0: none), one
     # memcpy as in the classifier; their checks run on the device below.
     var weights = List[Float32]()
@@ -1316,8 +1388,10 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
                 ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params,
                 BinScales(Float32(lscale), Float32(wscale)), sample_weight_host=weights,
                 host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
+                min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
             )
         else:
+            _rf_fold_min_weight_count(rf_params, mw_frac, n_rows)
             forest = fit_forest[RegObj](
                 ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
                 sample_weight_host=weights,

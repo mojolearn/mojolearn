@@ -644,9 +644,10 @@ def host_order_truncate_spectrum(
 
 
 def host_pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
-    """`pca_validate`, the four refusals in their order and words."""
-    if n_cols <= 1:
-        raise Error("Parameter n_cols: number of columns cannot be less than two")
+    """`pca_validate`, the four refusals in their order and words (one
+    column admitted, as on the device)."""
+    if n_cols < 1:
+        raise Error("Parameter n_cols: number of columns cannot be less than one")
     if n_rows <= 1:
         raise Error("Parameter n_rows: number of rows cannot be less than two")
     if n_components <= 0:
@@ -666,7 +667,16 @@ def host_eig_and_truncate(
     the round-robin Jacobi's rounds (`host_eigh_rr`, the device driver's
     order and tests) in place of the cyclic replay. Both take the device's
     power-of-two range scale (x_decomp/eigh_scale.mojo) and unscale the
-    diagonal after the solve."""
+    diagonal after the solve. One column: the device's
+    `_eig_and_truncate_one` (the entry is the eigenvalue, [1] the vector)."""
+    if n_cols == 1:
+        var odiag = List[Float64]()
+        odiag.append(Float64(cov[0]))
+        var ovecs = List[Float64]()
+        ovecs.append(1.0)
+        return host_order_truncate_spectrum(
+            odiag, ovecs, 1, n_components, singular_scale
+        )
     var fac = host_es_scale(cov, n_cols)
     comptime if PCA_RR_EIGH:
         var rv = List[Float32](length=n_cols * n_cols, fill=Float32(0.0))

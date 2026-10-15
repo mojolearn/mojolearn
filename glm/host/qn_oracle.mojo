@@ -119,8 +119,8 @@ and `glm_softmax.mojo`:
   `evaluate`               Tikhonov over the first `C*D` entries, the bias
                            column left alone.
 
-WHAT IS REFUSED BY NAME. `sample_weight`: it raises with the sentence
-naming it.
+SAMPLE WEIGHTS (lane sk-kernels): `HostGLM.sw`, the device's
+`qn_row_weight_kernel` row for row (term and dZ times the weight).
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` reaches this file
 through `host_pinned_cell` (every forward product's feature chain walked
@@ -434,6 +434,8 @@ struct HostGLM(Movable):
     var y: List[Float32]
     var z: List[Float32]
     var loss_terms: List[Float32]
+    #: per-row sample weights (lane sk-kernels); empty when unweighted
+    var sw: List[Float32]
     var n_evals: Int
 
     def __init__(
@@ -460,6 +462,7 @@ struct HostGLM(Movable):
         self.y = y^
         self.z = List[Float32](length=n_rows * n_targets, fill=Float32(0.0))
         self.loss_terms = List[Float32](length=n_rows, fill=Float32(0.0))
+        self.sw = List[Float32]()
         self.n_evals = 0
 
     def linear_fwd(mut self, w: List[Float32]):
@@ -523,6 +526,15 @@ struct HostGLM(Movable):
                     host_one_target_lz(self.loss, yi, zi, self.svr_eps) * normalization
                 )
                 self.z[i] = host_one_target_dlz(self.loss, yi, zi, self.svr_eps)
+        if len(self.sw) > 0:
+            # `qn_row_weight_kernel` (lane sk-kernels): the term and every
+            # class's dZ times the row's weight, one rounding each
+            var C1 = self.c
+            for i in range(n):
+                var wi = self.sw[i]
+                self.loss_terms[i] = ftz(self.loss_terms[i] * wi)
+                for c in range(C1):
+                    self.z[c + C1 * i] = ftz(self.z[c + C1 * i] * wi)
         # lane/apple-fast-purity2: every loss sum (softmax too, and with
         # QN_TILED off) is the device's tile order (`qn_tile_sum`).
         return host_qnt_sum(self.loss_terms, n)
@@ -1216,6 +1228,7 @@ def host_qn_fit(
     penalty_normalized: Bool,
     has_sample_weight: Bool,
     loss: Int,
+    sw: List[Float32],
     mut coef: List[Float32],
     svr_eps: Float64 = 0.0,
 ) raises -> HostQNFit:
@@ -1250,11 +1263,11 @@ def host_qn_fit(
             "qn_fit: svr_eps is read by the two SVR losses only; loss "
             + String(loss) + " must be given 0"
         )
-    if has_sample_weight:
+    # lane sk-kernels: `sw` holds n_rows per-row weights when weighted
+    if has_sample_weight and len(sw) < n_rows:
         raise Error(
-            "qn: sample_weight is NOT IMPLEMENTED (GLMBase::add_sample_weights,"
-            " glm_base.cuh:115-122, and the weighted arm of getLossAndDZ);"
-            " refused by name. See glm/NOT_IMPLEMENTED.tsv"
+            "qn: has_sample_weight needs n_rows = " + String(n_rows)
+            + " weights, got " + String(len(sw))
         )
     if loss == QN_LOSS_SOFTMAX and not (n_classes > 2):
         raise Error("qn.h: softmax invalid C")
@@ -1280,6 +1293,8 @@ def host_qn_fit(
         x.copy(), y.copy(), n_rows, n_features, fit_intercept, l2, n_targets,
         loss, Float32(svr_eps),
     )
+    if has_sample_weight:
+        f.sw = sw.copy()
     # `qn_minimize`: L-BFGS when `l1 == 0` (exact), OWL-QN otherwise, with
     # `pg_limit = D * C` (C == 1 on the binary logistic loss).
     if l1 != Float32(0.0):

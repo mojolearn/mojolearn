@@ -235,6 +235,21 @@ def _refuse(name, why):
     )
 
 
+def _min_weight_fraction(value, who):
+    """scikit-learn's `min_weight_fraction_leaf` check, its wording
+    (`Interval(Real, 0.0, 0.5, closed="both")`). The bound itself is
+    applied by the fit binding (slot 16 of `_fit_params`)."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        f = None
+    if isinstance(value, bool) or f is None or not 0.0 <= f <= 0.5:
+        raise ValueError(
+            f"The 'min_weight_fraction_leaf' parameter of {who} must be a float"
+            f" in the range [0.0, 0.5]. Got {value!r} instead.")
+    return f
+
+
 def _criterion_code(criterion, table, who):
     """A criterion NAME into the engine's `CRITERION` enumerator, or a
     refusal by name (DEVIATION 407)."""
@@ -469,9 +484,11 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
         n_rows, n_cols, n_classes, n_trees, max_depth, max_leaves,
         max_features_fraction, max_n_bins, min_samples_leaf,
         min_samples_split, min_impurity_decrease, bootstrap, max_samples,
-        seed, n_streams, max_batch_size."""
+        seed, n_streams, max_batch_size; then, only when it is not 0, the
+        optional 17th, min_weight_fraction_leaf (a 16-slot call keeps every
+        other fit entry's contract)."""
         cfg = self._cfg
-        return [
+        params = [
             int(n_rows),
             int(n_features),
             int(n_classes),
@@ -489,6 +506,10 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
             cfg["n_streams"],
             cfg["max_batch_size"],
         ]
+        mwf = cfg.get("min_weight_fraction_leaf", 0.0)
+        if mwf:
+            params.append(mwf)
+        return params
 
     def _fit_arrays(self, X, y_arr, n_classes, fit_fn, rowmajor_fit_fn=None):
         # Column-major is the builder's layout (cuML's `data` is
@@ -657,7 +678,8 @@ class RandomForestClassifier(_RandomForestBase):
     min_samples_leaf : int, default 1
         Minimum rows in a leaf.
     min_weight_fraction_leaf : float, default 0.0
-        Only 0.0 is accepted; any other value raises `NotImplementedError`.
+        Minimum fraction of the total sample weight (of all rows when no
+        weights are given) required in each leaf, in [0.0, 0.5].
     max_features : {'sqrt', 'log2'}, int, float or None, default 'sqrt'
         Features considered per split: a name, a count in [1, n_features],
         a fraction in (0, 1], or None for all features.
@@ -766,9 +788,7 @@ class RandomForestClassifier(_RandomForestBase):
         inference_engine="auto",
     ):
         code = _criterion_code(criterion, _CLS_CRITERIA, "classifier")
-        if min_weight_fraction_leaf:
-            _refuse("min_weight_fraction_leaf",
-                    "sample weights do not cross this boundary yet.")
+        mwf = _min_weight_fraction(min_weight_fraction_leaf, type(self).__name__)
         super().__init__(
             n_estimators, max_depth, max_leaf_nodes, max_leaves,
             max_features, n_bins,
@@ -778,6 +798,7 @@ class RandomForestClassifier(_RandomForestBase):
             n_jobs, verbose, device, code,
         )
         self.criterion = criterion
+        self._cfg["min_weight_fraction_leaf"] = mwf
 
     def fit(self, X, y, *, feature_importances=False):
         """Fit the forest.
@@ -948,7 +969,8 @@ class RandomForestRegressor(_RandomForestBase):
     min_samples_leaf : int, default 1
         Minimum rows in a leaf.
     min_weight_fraction_leaf : float, default 0.0
-        Only 0.0 is accepted.
+        Minimum fraction of the total sample weight (of all rows when no
+        weights are given) required in each leaf, in [0.0, 0.5].
     max_features : {'sqrt', 'log2'}, int, float or None, default 1.0
         Features considered per split: a name, a count, a fraction in
         (0, 1], or None for all features.
@@ -1046,9 +1068,7 @@ class RandomForestRegressor(_RandomForestBase):
         inference_engine="auto",
     ):
         code = _criterion_code(criterion, _REG_CRITERIA, "regressor")
-        if min_weight_fraction_leaf:
-            _refuse("min_weight_fraction_leaf",
-                    "sample weights do not cross this boundary yet.")
+        mwf = _min_weight_fraction(min_weight_fraction_leaf, type(self).__name__)
         super().__init__(
             n_estimators, max_depth, max_leaf_nodes, max_leaves,
             max_features, n_bins,
@@ -1058,6 +1078,7 @@ class RandomForestRegressor(_RandomForestBase):
             n_jobs, verbose, device, code,
         )
         self.criterion = criterion
+        self._cfg["min_weight_fraction_leaf"] = mwf
 
     def fit(self, X, y, *, feature_importances=False):
         """Fit the forest.

@@ -1479,6 +1479,7 @@ def _node_best_split(
     sample_offset: Int,
     weights: List[Float32] = List[Float32](),
     wscale: Float32 = Float32(0),
+    min_weight_leaf: Float32 = Float32(0),
 ) raises -> HostSplit:
     """One node of one sampling round: `phase_setup_kernel`'s column sample,
     then per sampled column `build_histograms_kernel`, `pdf_to_cdf`,
@@ -1547,7 +1548,16 @@ def _node_best_split(
                     n_left = Int64(Int(counts[i]))
                 var n_right = global_sample_count - n_left
                 var msl = Int64(p.min_samples_leaf)
-                if n_left >= msl and n_right >= msl:
+                # scikit-learn's min_weight_leaf on the weighted bin, the
+                # device's `GainPerSplit` test (`objectives.mojo`, lane
+                # sk-kernels): the same `WeightAt` sums, compared in Float32.
+                var mw_ok = True
+                if classification and weighted and min_weight_leaf > Float32(0):
+                    var mw_total = _wcls_weight_at(wraw, nb - 1, nb, n_classes, wscale)
+                    var mw_left = _wcls_weight_at(wraw, i, nb, n_classes, wscale)
+                    var mw_right = mw_total - mw_left
+                    mw_ok = not (mw_left < min_weight_leaf or mw_right < min_weight_leaf)
+                if n_left >= msl and n_right >= msl and mw_ok:
                     var gain: Float32
                     if classification and weighted:
                         if criterion == RF_ENTROPY:
@@ -1624,8 +1634,12 @@ def rf_host_fit(
     tree_start: Int = 0,
     weights: List[Float32] = List[Float32](),
     retain_importance: Bool = False,
+    min_weight_leaf: Float32 = Float32(0),
 ) raises -> RfHostForest:
     """`fit_forest`, `ensemble/randomforest.mojo:2299-2849`, on the host.
+
+    `min_weight_leaf` is scikit-learn's least summed weight per child on
+    the weighted objective (`fit_forest`'s keyword); 0 checks nothing.
 
     `x` is COLUMN-major float32 (the GPU binding's stage), `labels_i` the
     int32 class codes (classification) and `labels_f` the float32 targets
@@ -1767,13 +1781,14 @@ def rf_host_fit(
                 n_unique_labels, n_classes, classification, p, criterion,
                 label_scale, tree_start, n_sampled, original_cols, max_rounds,
                 weight_qcdf=weight_qcdf, retain_importance=retain_importance,
+                min_weight_leaf=min_weight_leaf,
             )
     else:
         var tree_chunk = host_predict_chunk(p.n_trees, tree_tasks)
         var failed = List[Bool](length=tree_tasks, fill=False)
         var messages = List[String](length=tree_tasks, fill=String(""))
         var n_trees = p.n_trees
-        def _tree_task(task: Int) {mut trees, mut failed, mut messages, imm x, imm q, imm labels_i, imm labels_f, imm weights, imm weight_cdf, imm weight_qcdf, imm weighted_rows, imm weighted_obj, imm wscale, imm n_rows, imm n_cols, imm n_unique_labels, imm n_classes, imm classification, imm p, imm criterion, imm label_scale, imm tree_start, imm n_sampled, imm original_cols, imm max_rounds, imm tree_chunk, imm n_trees, imm retain_importance}:
+        def _tree_task(task: Int) {mut trees, mut failed, mut messages, imm x, imm q, imm labels_i, imm labels_f, imm weights, imm weight_cdf, imm weight_qcdf, imm weighted_rows, imm weighted_obj, imm wscale, imm n_rows, imm n_cols, imm n_unique_labels, imm n_classes, imm classification, imm p, imm criterion, imm label_scale, imm tree_start, imm n_sampled, imm original_cols, imm max_rounds, imm tree_chunk, imm n_trees, imm retain_importance, imm min_weight_leaf}:
             var lo = task * tree_chunk
             var hi = min(lo + tree_chunk, n_trees)
             try:
@@ -1785,6 +1800,7 @@ def rf_host_fit(
                         criterion, label_scale, tree_start, n_sampled,
                         original_cols, max_rounds,
                         weight_qcdf=weight_qcdf, retain_importance=retain_importance,
+                        min_weight_leaf=min_weight_leaf,
                     )
             except e:
                 failed[task] = True
@@ -1847,6 +1863,7 @@ def _rf_host_tree(
     max_rounds: Int,
     weight_qcdf: List[UInt64] = List[UInt64](),
     retain_importance: Bool = False,
+    min_weight_leaf: Float32 = Float32(0),
 ) raises -> _RfHostTree:
     """Tree `t` of `rf_host_fit`: its row sample, `NodeQueue` walk, splits,
     partitions and leaves (`fit_forest`'s per-tree body,
@@ -1912,7 +1929,7 @@ def _rf_host_tree(
                     items[orig], row_ids, q, labels_i, labels_f,
                     classification, n_classes, n_rows, n_cols, p.max_n_bins,
                     p, criterion, label_scale, tree_id, k, sample_offset,
-                    weights, wscale,
+                    weights, wscale, min_weight_leaf,
                 )
                 # `_read_splits_host` (`builder.mojo:1733-1763`): a pure node
                 # is a leaf whatever its slot holds.

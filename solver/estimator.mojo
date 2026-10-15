@@ -52,13 +52,15 @@ kernel without it), so the deviation is free.
 WHAT IS REFUSED, AND WHERE
 --------------------------
 Every refusal below is `cd.mojo`'s, reached from here, not re-implemented:
-`loss != SQRD_LOSS`, `sample_weight`, `shuffle=true` (`selection='random'`;
+`loss != SQRD_LOSS`, `shuffle=true` (`selection='random'`;
 DEVIATION 611 reserved, not spent), `n_cols <= 0`, `n_rows <= 1`,
 `alpha < 0`, `l1_ratio` outside `[0, 1]`, and DEVIATION 613's non-finite
-`alpha` / NaN `l1_ratio` / NaN `tol`. `has_sample_weight` and `shuffle`
-are plumbed through as parameters SO THAT those two refusals are reachable
-from this surface -- a refusal only the Python layer can raise is a
-refusal the Mojo entry never proves it still has.
+`alpha` / NaN `l1_ratio` / NaN `tol`. `shuffle` is plumbed through as a
+parameter SO THAT its refusal is reachable from this surface -- a refusal
+only the Python layer can raise is a refusal the Mojo entry never proves it
+still has. `has_sample_weight` with `sw_ptr` (lane sk-kernels) runs the
+weighted fit of `solver/impl/cd_weighted.mojo`; `sw_ptr` is not read when
+it is False (callers pass any valid float pointer).
 
 THE IDENTITY CARD
 -----------------
@@ -76,6 +78,7 @@ from core.identity_trace import IdentityTrace
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from solver.impl.cd import CD_FAST_ROWMAJOR, CdLaunch, cd_fast_rowmajor_serves, cd_fit_traced, cd_predict
 from solver.impl.solvers.params import LOSS_SQRD_LOSS
+from solver.impl.cd_weighted import cd_fit_weighted
 
 
 def cd_fit_host(
@@ -93,6 +96,7 @@ def cd_fit_host(
     tol: Float32,
     shuffle: Bool,
     has_sample_weight: Bool,
+    sw_ptr: MutPointer[Float32, MutUntrackedOrigin],
     row_major: Bool = False,
 ) raises -> Int:
     """`cdFit` over host pointers. Returns `n_iter` (the epochs actually run).
@@ -136,7 +140,11 @@ def cd_fit_host(
 
     var rm_grid = False
     comptime if CD_FAST_ROWMAJOR:
-        rm_grid = row_major and cd_fast_rowmajor_serves(n_rows, n_cols)
+        # the weighted fit scales column-major rows; it never takes the grid
+        rm_grid = (
+            row_major and not has_sample_weight
+            and cd_fast_rowmajor_serves(n_rows, n_cols)
+        )
     if rm_grid:
         # lane/apple-fast-linear: the C-order design goes up AS IT IS and the
         # FAST Apple grid Gram reads its row-major tiles (no transpose pass)
@@ -175,14 +183,41 @@ def cd_fit_host(
     # not; the two are not the same shape and copying that line would put
     # two headers on one card).
     var trace = IdentityTrace()
-    var out = cd_fit_traced(
-        ctx, x, n_rows, n_cols, y, coef,
-        fit_intercept, epochs, LOSS_SQRD_LOSS, alpha, l1_ratio, shuffle,
-        tol, has_sample_weight, trace, "cd", CdLaunch.default(),
-        residual_out, False, rm_grid,
-    )
-    var n_iter = out[0]
-    var intercept = out[1]
+    var n_iter = 0
+    var intercept = Float32(0.0)
+    if has_sample_weight:
+        # lane sk-kernels: `sw_ptr` holds n_rows checked weights
+        # (`solver/impl/cd_weighted.mojo`); the guards `cd_fit_traced` owns
+        # (shuffle, alpha, l1_ratio, tol) run inside it on the transformed
+        # problem, shuffle refused here first in its words.
+        if shuffle:
+            raise Error(
+                "Parameter shuffle: REFUSED BY NAME (cuML selection='random')."
+                " std::shuffle's algorithm is unspecified by the C++ standard,"
+                " so cuML's permutation is not a pure function of its seed; only"
+                " the cyclic order (shuffle=false, selection='cyclic') is implemented."
+                " See solver/impl/shuffle.mojo"
+            )
+        var sw = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        ctx.enqueue_copy(dst_buf=sw, src_ptr=sw_ptr)
+        ctx.synchronize()
+        var wout = cd_fit_weighted(
+            ctx, x, n_rows, n_cols, y, coef, sw, fit_intercept, epochs,
+            LOSS_SQRD_LOSS, alpha, l1_ratio, tol, trace, "cd",
+            CdLaunch.default(),
+        )
+        n_iter = wout[0]
+        intercept = wout[1]
+        _ = sw^
+    else:
+        var out = cd_fit_traced(
+            ctx, x, n_rows, n_cols, y, coef,
+            fit_intercept, epochs, LOSS_SQRD_LOSS, alpha, l1_ratio, shuffle,
+            tol, has_sample_weight, trace, "cd", CdLaunch.default(),
+            residual_out, False, rm_grid,
+        )
+        n_iter = out[0]
+        intercept = out[1]
 
     var hc = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
     ctx.synchronize()

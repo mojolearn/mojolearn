@@ -1406,7 +1406,7 @@ def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[
     var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
     var has_sw = Int(ip[10]) != 0
     var has_cw = Int(ip[11]) != 0
-    var batch = sgd_batch(Int(ip[12]), k)
+    var batch = sgd_batch(Int(ip[12]), k, n)
     var bsum = len(ip) > 13 and Int(ip[13]) != 0
     var alpha = fp[0]
     var l1r = fp[1]
@@ -1691,7 +1691,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
     var has_sw = Int(ip[10]) != 0
     var has_cw = Int(ip[11]) != 0
-    var batch = sgd_batch(Int(ip[12]), Int(ip[0]))
+    var batch = sgd_batch(Int(ip[12]), Int(ip[0]), n)
     var bsum = len(ip) > 13 and Int(ip[13]) != 0
     var alpha = fp[0]
     var l1r = fp[1]
@@ -5149,7 +5149,7 @@ def fit_device(
         # (x_linear/quantile_grid.mojo), no longer the one-block fit kernel
         quantile_fit_grid(linear_ctx(), x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
-    if algo == ALGO_SGD and len(ip) > 12 and sgd_mb_on(sgd_batch(Int(ip[12]), Int(ip[0])), Int(ip[0]), Int(ip[3])):
+    if algo == ALGO_SGD and len(ip) > 12 and sgd_mb_on(sgd_batch(Int(ip[12]), Int(ip[0]), n), Int(ip[0]), Int(ip[3])):
         _sgd_mb_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
     if algo == ALGO_SGD:

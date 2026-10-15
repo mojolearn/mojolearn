@@ -1805,6 +1805,32 @@ def linear_bwd(
         )
 
 
+def qn_row_weight_kernel(
+    loss_terms: MutPointer[Float32, MutAnyOrigin],
+    z: MutPointer[Float32, MutAnyOrigin],
+    sw: MutPointer[Float32, MutAnyOrigin],
+    n_classes_in: Int32,
+    n_in: Int32,
+):
+    """The weighted arm of `GLMBase::getLossAndDZ` (`glm_base.cuh`): row
+    i's loss term and every class's dZ multiplied by its sample weight,
+    after the unweighted map wrote them. One thread per row, one rounding
+    per product (a plain multiply, no contraction), so every vendor and the
+    host column (`glm/host/qn_oracle.mojo::HostGLM`) store the same bits.
+    The normalization stays `1/N` (not cuML's `1/sum(w)`): with the penalty
+    also divided by N the minimizer is scikit-learn's
+    `sum_i w_i l_i + penalty` (lane sk-kernels)."""
+    var n = Int(n_in)
+    var C = Int(n_classes_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var wi = sw.unsafe_load(i)
+    loss_terms.unsafe_store(i, ftz(loss_terms.unsafe_load(i) * wi))
+    for c in range(C):
+        z.unsafe_store(c + C * i, ftz(z.unsafe_load(c + C * i) * wi))
+
+
 struct GLMWithData(Movable):
     """`GLMWithData<T, Objective>` (`glm_base.cuh:200-240`), with the
     objective's two shapes -- the loss alone, or `RegularizedGLM<Loss,
@@ -1828,6 +1854,10 @@ struct GLMWithData(Movable):
     var xtdz_ws: DeviceBuffer[DType.float32]
     var w_weights: DeviceBuffer[DType.float32]
     var scalar: DeviceBuffer[DType.float32]
+    #: per-row sample weights (lane sk-kernels); one unread float until
+    #: `set_sample_weight` installs `n_rows` of them and sets `weighted`
+    var sw: DeviceBuffer[DType.float32]
+    var weighted: Bool
     var n_evals: Int
     # Diagnostic physical pricing count; logical n_evals retains line-search semantics.
     var speculative_evals: Int
@@ -1894,6 +1924,8 @@ struct GLMWithData(Movable):
         self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
+        self.sw = ctx.enqueue_create_buffer[DType.float32](1)
+        self.weighted = False
         self.n_evals = 0
         self.speculative_evals = 0
         var n_slots = 4
@@ -1905,6 +1937,19 @@ struct GLMWithData(Movable):
         self.gnorm_raw = Float32(0.0)
         self.last_pen = Float32(0.0)
         ctx.synchronize()
+
+    def set_sample_weight(mut self, var sw: DeviceBuffer[DType.float32]) raises:
+        """Install `n_rows` per-row sample weights (lane sk-kernels). Every
+        evaluation then takes the unfused objective (the map, the weight
+        multiply `qn_row_weight_kernel`, the backward); the fused, blocked
+        and batched passes compute dZ in registers and never see it."""
+        if len(sw) < self.n_rows:
+            raise Error(
+                "qn: sample_weight holds " + String(len(sw)) + " floats, needs n_rows = "
+                + String(self.n_rows)
+            )
+        self.sw = sw^
+        self.weighted = True
 
     def get_loss_and_dz(mut self, ctx: DeviceContext) raises -> Float32:
         """The loss into `scalar`, read back (one synchronize)."""
@@ -1982,6 +2027,14 @@ struct GLMWithData(Movable):
                 "qn: loss id " + String(self.loss) + " has no getLossAndDZ"
                 " here (glm/NOT_IMPLEMENTED.tsv)"
             )
+        if self.weighted:
+            # the weighted arm (`glm_base.cuh`, `add_sample_weights`): the
+            # row's term and dZ times its weight; unweighted fits never launch it
+            ctx.enqueue_function[qn_row_weight_kernel](
+                self.loss_terms.unsafe_ptr(), self.z.unsafe_ptr(),
+                self.sw.unsafe_ptr(), Int32(self.dims.C), Int32(n),
+                grid_dim=(grid, 1, 1), block_dim=(VEC_ELEM_TPB, 1, 1),
+            )
         if not with_sum:
             return  # the tiled objective folds the terms itself
         qn_tile_sum(
@@ -2054,9 +2107,11 @@ struct GLMWithData(Movable):
         var s1 = self.slots.create_sub_buffer[DType.float32](1, 1)
         var s2 = self.slots.create_sub_buffer[DType.float32](2, 1)
         var s3 = self.slots.create_sub_buffer[DType.float32](3, 1)
-        var blocks = qn_blocks_applies(self.dims.D, self.dims.C)
+        # weighted fits (lane sk-kernels) take the unfused objective: the
+        # blocked and fused passes form dZ in registers
+        var blocks = qn_blocks_applies(self.dims.D, self.dims.C) and not self.weighted
         var tiled = qn_tiled_applies(self.dims.D, self.dims.C)
-        var fused = qn_fused_applies(self.dims.D, self.dims.C)
+        var fused = qn_fused_applies(self.dims.D, self.dims.C) and not self.weighted
         # lane/apple-fast-linsvr: QN_FAST_SLIM leaves the Tikhonov half, the
         # norm and the l1 term to qn_slim_epilogue_kernel after the fold
         var slim = False
@@ -2267,7 +2322,7 @@ struct GLMWithData(Movable):
     def ls_batch_applies(self) -> Bool:
         """QN_FAST_LS_BATCH serves this objective: the fused pass holds it."""
         comptime if QN_FAST_LS_BATCH:
-            return qn_fused_applies(self.dims.D, self.dims.C)
+            return qn_fused_applies(self.dims.D, self.dims.C) and not self.weighted
         return False
 
     def batch_fx(self, c: Int) -> Float32:
@@ -2351,6 +2406,7 @@ struct GLMWithData(Movable):
         comptime if QN_FAST_DCONV:
             return (
                 qn_fused_applies(self.dims.D, self.dims.C)
+                and not self.weighted
                 and (not QN_ALL_LEGACY_WIDTH or self.dims.D <= QN_ALL_MAX_D)
                 and self.dims.n_param <= STATS_TPB
             )
@@ -2472,38 +2528,39 @@ struct GLMWithData(Movable):
         var tiles = qnt_tiles(n)
         var cells = tiles * (d + 2)
         comptime if QN_IDN_FUSED:
-            # lane fam2-linear: the forward, the loss map and the tile
-            # partials as one launch (same chains, same bits)
-            var launched = False
-            comptime if QN_IDN_FUSED_MULTI:
-                # QNI_G tiles a block, QNI_G * (d + 2) <= QNT_ROWS
-                var per = QNT_ROWS // (d + 2)
-                if per >= 8:
-                    self._fused_multi[8](ctx, w, n, d, tiles)
-                    launched = True
-                elif per >= 4:
-                    self._fused_multi[4](ctx, w, n, d, tiles)
-                    launched = True
-                elif per >= 2:
-                    self._fused_multi[2](ctx, w, n, d, tiles)
-                    launched = True
-            if not launched:
-                ctx.enqueue_function[qn_idn_fused_kernel](
-                    self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(), self.y.unsafe_ptr(),
-                    w.unsafe_ptr(), self.z.unsafe_ptr(), self.loss_terms.unsafe_ptr(),
-                    Int32(n), Int32(d), Int32(tiles), Int32(self.loss),
+            if not self.weighted:
+                # lane fam2-linear: the forward, the loss map and the tile
+                # partials as one launch (same chains, same bits)
+                var launched = False
+                comptime if QN_IDN_FUSED_MULTI:
+                    # QNI_G tiles a block, QNI_G * (d + 2) <= QNT_ROWS
+                    var per = QNT_ROWS // (d + 2)
+                    if per >= 8:
+                        self._fused_multi[8](ctx, w, n, d, tiles)
+                        launched = True
+                    elif per >= 4:
+                        self._fused_multi[4](ctx, w, n, d, tiles)
+                        launched = True
+                    elif per >= 2:
+                        self._fused_multi[2](ctx, w, n, d, tiles)
+                        launched = True
+                if not launched:
+                    ctx.enqueue_function[qn_idn_fused_kernel](
+                        self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(), self.y.unsafe_ptr(),
+                        w.unsafe_ptr(), self.z.unsafe_ptr(), self.loss_terms.unsafe_ptr(),
+                        Int32(n), Int32(d), Int32(tiles), Int32(self.loss),
+                        Int32(1) if self.dims.fit_intercept else Int32(0),
+                        Float32(1.0 / Float64(n)), self.svr_eps,
+                        grid_dim=(tiles, 1, 1), block_dim=(QNT_ROWS, 1, 1),
+                    )
+                ctx.enqueue_function[qnt_fold_kernel](
+                    g.unsafe_ptr(), self.slots.unsafe_ptr(), self.xtdz_ws.unsafe_ptr(),
+                    Int32(n), Int32(d), Int32(tiles), Float32(1.0 / Float64(n)),
+                    Int32(0) if set_zero else Int32(1),
                     Int32(1) if self.dims.fit_intercept else Int32(0),
-                    Float32(1.0 / Float64(n)), self.svr_eps,
-                    grid_dim=(tiles, 1, 1), block_dim=(QNT_ROWS, 1, 1),
+                    grid_dim=(d + 2, 1, 1), block_dim=(STATS_TPB, 1, 1),
                 )
-            ctx.enqueue_function[qnt_fold_kernel](
-                g.unsafe_ptr(), self.slots.unsafe_ptr(), self.xtdz_ws.unsafe_ptr(),
-                Int32(n), Int32(d), Int32(tiles), Float32(1.0 / Float64(n)),
-                Int32(0) if set_zero else Int32(1),
-                Int32(1) if self.dims.fit_intercept else Int32(0),
-                grid_dim=(d + 2, 1, 1), block_dim=(STATS_TPB, 1, 1),
-            )
-            return
+                return
         linear_fwd(ctx, self.z, self.x, w, self.w_weights, n, self.dims)
         self.enqueue_loss_and_dz(
             ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False
