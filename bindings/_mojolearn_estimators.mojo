@@ -1049,9 +1049,11 @@ def qn_fit_binding(
     losses (3, 4; `n_classes == 2`, y in {0, 1}) and the regression losses
     (squared 1, absolute 7, SVR 5 and 6; `n_classes == 1`), and an
     OPTIONAL 15th is `svr_eps`, the SVR sensitivity (0 when absent).
+    Lane sk-kernels: with has_sample_weight = 1 a 16th field is required,
+    the address of `n_rows` float32 per-row weights.
     Returns num_iters; info[0] = objective, info[1] = retcode."""
-    if len(params) < 13 or len(params) > 15:
-        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, and an optional 15th, svr_eps")
+    if len(params) < 13 or len(params) > 16:
+        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, an optional 15th, svr_eps, and a 16th, the sample_weight address, when has_sample_weight is 1")
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var wp = _f32_ptr(Int(py=coef_addr))
@@ -1070,14 +1072,17 @@ def qn_fit_binding(
     var normalized = Int(py=params[11]) != 0
     var has_sw = Int(py=params[12]) != 0
     var loss = Int(py=params[13]) if len(params) >= 14 else 0
-    var svr_eps = Float64(py=params[14]) if len(params) == 15 else 0.0
+    var svr_eps = Float64(py=params[14]) if len(params) >= 15 else 0.0
+    if has_sw and len(params) != 16:
+        raise Error("qn_fit: has_sample_weight = 1 needs the 16th field, the sample_weight address")
+    var swp = _f32_ptr(Int(py=params[15])) if has_sw else yp
     var iters = 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         iters = qn_fit_host(
             ctx, xp, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol, change_tol,
-            max_iter, ls_max, mem, fit_intercept, normalized, has_sw, loss,
-            svr_eps,
+            max_iter, ls_max, mem, fit_intercept, normalized, has_sw, swp,
+            loss, svr_eps,
         )
         ctx.synchronize()
     return PythonObject(iters)
@@ -1093,11 +1098,12 @@ def qn_fit_ovr_binding(
     """One-vs-rest `qnFit` with X uploaded once (lane fam2-linear). params:
     n_rows, n_features, first_class, n_fits, penalty_l1, penalty_l2,
     grad_tol, change_tol, max_iter, linesearch_max_iter, lbfgs_memory,
-    fit_intercept, penalty_normalized, loss (an SVC or the logistic id).
-    codes: int32 dense class codes. coef: n_fits rows of n_features +
+    fit_intercept, penalty_normalized, loss (an SVC or the logistic id),
+    and (lane sk-kernels) an OPTIONAL 15th, the address of `n_rows` float32
+    per-row sample weights. codes: int32 dense class codes. coef: n_fits rows of n_features +
     fit_intercept floats. info: per fit objective, retcode, num_iters."""
-    if len(params) != 14:
-        raise Error("qn_fit_ovr: params must carry 14 fields (see the docstring)")
+    if len(params) != 14 and len(params) != 15:
+        raise Error("qn_fit_ovr: params must carry 14 fields and an optional 15th, the sample_weight address (see the docstring)")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _i32_ptr(Int(py=codes_addr))
     var wp = _f32_ptr(Int(py=coef_addr))
@@ -1116,11 +1122,14 @@ def qn_fit_ovr_binding(
     var fit_intercept = Int(py=params[11]) != 0
     var normalized = Int(py=params[12]) != 0
     var loss = Int(py=params[13])
+    var has_sw = len(params) == 15
+    var swp = _f32_ptr(Int(py=params[14])) if has_sw else wp
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         qn_fit_ovr_host(
             ctx, xp, cp, wp, ip, nr, nf, first, n_fits, l1, l2, grad_tol,
             change_tol, max_iter, ls_max, mem, fit_intercept, normalized, loss,
+            has_sw, swp,
         )
         ctx.synchronize()
     return PythonObject(0)

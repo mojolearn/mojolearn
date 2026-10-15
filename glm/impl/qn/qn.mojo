@@ -98,16 +98,19 @@ def qn_fit_x(
     has_sample_weight: Bool,
     mut trace: IdentityTrace,
     svr_eps: Float32 = Float32(0.0),
+    var sample_weight: Optional[DeviceBuffer[DType.float32]] = None,
 ) raises -> Int:
     """`qn_fit_x`, `qn.cuh:89-174`: the loss switch. Every arm is their
     `ASSERT` on `C`, the objective with `n_targets` (`:106`), `qn_fit`, and
-    the three closing card stages (`qn.coef`, `qn.n_iter`, `qn.retcode`)."""
-    if has_sample_weight:
-        raise Error(
-            "qn: sample_weight is NOT IMPLEMENTED (GLMBase::add_sample_weights,"
-            " glm_base.cuh:115-122, and the weighted arm of getLossAndDZ);"
-            " refused by name. See glm/NOT_IMPLEMENTED.tsv"
-        )
+    the three closing card stages (`qn.coef`, `qn.n_iter`, `qn.retcode`).
+
+    `has_sample_weight` (lane sk-kernels): `sample_weight` holds `n_rows`
+    per-row weights on the device, installed into the objective
+    (`GLMWithData.set_sample_weight`, the weighted arm of `getLossAndDZ`)."""
+    if has_sample_weight and not sample_weight:
+        raise Error("qn: has_sample_weight is set but no sample_weight buffer was given")
+    if not has_sample_weight and sample_weight:
+        raise Error("qn: a sample_weight buffer was given with has_sample_weight unset")
     # `qn.cuh:54-59` -- here rather than in `qn_fit` because the objective
     # struct carries it.
     var l2 = Float32(pams.penalty_l2)
@@ -121,6 +124,8 @@ def qn_fit_x(
             raise Error("qn.h: logistic loss invalid C")
         var dims = GLMDims.make(1, n_cols, pams.fit_intercept)
         var obj = GLMWithData(ctx, x^, y^, n_rows, dims, QN_LOSS_LOGISTIC, l2)
+        if sample_weight:
+            obj.set_sample_weight(sample_weight.take())
         var ret = qn_fit(ctx, pams, obj, w0, fx, num_iters, trace)
         trace.record_device[DType.float32](ctx, "qn.coef", w0, dims.n_param)
         var ints = List[Int32]()
@@ -135,49 +140,49 @@ def qn_fit_x(
             raise Error("qn.h: squared loss invalid C")
         return _qn_fit_loss(
             ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
-            trace, QN_LOSS_SQUARED, "QN_LOSS_SQUARED", l2, svr_eps,
+            trace, QN_LOSS_SQUARED, "QN_LOSS_SQUARED", l2, svr_eps, sample_weight^,
         )
     elif pams.loss == QN_LOSS_SOFTMAX:
         if not (n_classes > 2):
             raise Error("qn.h: softmax invalid C")
         return _qn_fit_loss(
             ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
-            trace, QN_LOSS_SOFTMAX, "QN_LOSS_SOFTMAX", l2, svr_eps,
+            trace, QN_LOSS_SOFTMAX, "QN_LOSS_SOFTMAX", l2, svr_eps, sample_weight^,
         )
     elif pams.loss == QN_LOSS_SVC_L1:
         if n_classes != 2:
             raise Error("qn.h: SVC-L1 loss invalid C")
         return _qn_fit_loss(
             ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
-            trace, QN_LOSS_SVC_L1, "QN_LOSS_SVC_L1", l2, svr_eps,
+            trace, QN_LOSS_SVC_L1, "QN_LOSS_SVC_L1", l2, svr_eps, sample_weight^,
         )
     elif pams.loss == QN_LOSS_SVC_L2:
         if n_classes != 2:
             raise Error("qn.h: SVC-L2 loss invalid C")
         return _qn_fit_loss(
             ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
-            trace, QN_LOSS_SVC_L2, "QN_LOSS_SVC_L2", l2, svr_eps,
+            trace, QN_LOSS_SVC_L2, "QN_LOSS_SVC_L2", l2, svr_eps, sample_weight^,
         )
     elif pams.loss == QN_LOSS_SVR_L1:
         if n_classes != 1:
             raise Error("qn.h: SVR-L1 loss invalid C")
         return _qn_fit_loss(
             ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
-            trace, QN_LOSS_SVR_L1, "QN_LOSS_SVR_L1", l2, svr_eps,
+            trace, QN_LOSS_SVR_L1, "QN_LOSS_SVR_L1", l2, svr_eps, sample_weight^,
         )
     elif pams.loss == QN_LOSS_SVR_L2:
         if n_classes != 1:
             raise Error("qn.h: SVR-L2 loss invalid C")
         return _qn_fit_loss(
             ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
-            trace, QN_LOSS_SVR_L2, "QN_LOSS_SVR_L2", l2, svr_eps,
+            trace, QN_LOSS_SVR_L2, "QN_LOSS_SVR_L2", l2, svr_eps, sample_weight^,
         )
     elif pams.loss == QN_LOSS_ABS:
         if n_classes != 1:
             raise Error("qn.h: abs loss (L1) invalid C")
         return _qn_fit_loss(
             ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
-            trace, QN_LOSS_ABS, "QN_LOSS_ABS", l2, svr_eps,
+            trace, QN_LOSS_ABS, "QN_LOSS_ABS", l2, svr_eps, sample_weight^,
         )
     else:
         raise Error(
@@ -201,6 +206,7 @@ def _qn_fit_loss(
     loss_name: StaticString,
     l2: Float32,
     svr_eps: Float32,
+    var sample_weight: Optional[DeviceBuffer[DType.float32]],
 ) raises -> Int:
     """One `case` of the switch for the seven non-logistic losses: the
     objective at `n_targets`, `qn_fit`, the closing card stages -- the
@@ -216,6 +222,8 @@ def _qn_fit_loss(
             + ", dims = " + String(dims.dims) + "), got " + String(len(w0))
         )
     var obj = GLMWithData(ctx, x^, y^, n_rows, dims, loss_id, l2, svr_eps)
+    if sample_weight:
+        obj.set_sample_weight(sample_weight.take())
     var ret = qn_fit(ctx, pams, obj, w0, fx, num_iters, trace)
     trace.record_device[DType.float32](ctx, "qn.coef", w0, dims.n_param)
     var ints = List[Int32]()

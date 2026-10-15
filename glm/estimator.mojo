@@ -657,6 +657,7 @@ def qn_fit_host(
     fit_intercept: Bool,
     penalty_normalized: Bool,
     has_sample_weight: Bool,
+    sw_ptr: MutPointer[Float32, MutUntrackedOrigin],
     loss: Int = QN_LOSS_LOGISTIC,
     svr_eps: Float64 = 0.0,
 ) raises -> Int:
@@ -674,7 +675,11 @@ def qn_fit_host(
     initialized here as `solvers/qn.pyx:552-554` does (no warm start).
     `info_ptr[0]` receives the final objective, `info_ptr[1]` the
     `OPT_RETCODE`; the return value is `num_iters`. Carries the identity
-    card (`qn.*`); the logistic header line is the string it always was."""
+    card (`qn.*`); the logistic header line is the string it always was.
+
+    `has_sample_weight` (lane sk-kernels): `sw_ptr` holds `n_rows` per-row
+    weights, uploaded here and installed into the objective; unset, `sw_ptr`
+    is never read (any valid pointer will do)."""
     qn_check_loss_args(loss, n_classes, svr_eps)
     var n_targets = 1 if n_classes == 2 else n_classes
     var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
@@ -686,6 +691,11 @@ def qn_fit_host(
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
     ctx.enqueue_memset(w, Float32(0.0))
+    var sw = Optional[DeviceBuffer[DType.float32]]()
+    if has_sample_weight:
+        var swb = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        ctx.enqueue_copy(dst_buf=swb, src_ptr=sw_ptr)
+        sw = Optional[DeviceBuffer[DType.float32]](swb^)
     ctx.synchronize()
     var pams = QNParams.default()
     pams.loss = loss
@@ -708,7 +718,7 @@ def qn_fit_host(
     var iters = 0
     var ret = qn_fit_x(
         ctx, pams, x^, y^, n_rows, n_features, n_classes, w, fx, iters,
-        has_sample_weight, trace, Float32(svr_eps),
+        has_sample_weight, trace, Float32(svr_eps), sw^,
     )
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_param)
     ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
@@ -768,13 +778,18 @@ def qn_fit_ovr_host(
     fit_intercept: Bool,
     penalty_normalized: Bool,
     loss: Int,
+    has_sample_weight: Bool,
+    sw_ptr: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
     """One-vs-rest `qnFit` for the binary classification losses: `n_fits`
     independent fits, fit `k` on the target `codes == first_class + k`, each
     exactly `qn_fit_host(..., n_classes=2, loss)` on that target. X and the
     codes cross the bus once. `coef_ptr` receives `n_fits` rows of
     `n_features + fit_intercept` floats (row k = fit k); `info_ptr` receives
-    three floats per fit: objective, OPT_RETCODE, num_iters."""
+    three floats per fit: objective, OPT_RETCODE, num_iters.
+    `has_sample_weight` (lane sk-kernels): `sw_ptr` holds `n_rows` per-row
+    weights, uploaded once; every fit gets a device copy. Unset, `sw_ptr`
+    is never read."""
     qn_check_loss_args(loss, 2, 0.0)
     if n_fits <= 0 or n_rows <= 0:
         raise Error("qn_fit_ovr: n_rows and n_fits must be positive")
@@ -783,6 +798,9 @@ def qn_fit_ovr_host(
     var codes = ctx.enqueue_create_buffer[DType.int32](n_rows)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=codes, src_ptr=codes_ptr)
+    var sw_all = ctx.enqueue_create_buffer[DType.float32](n_rows if has_sample_weight else 1)
+    if has_sample_weight:
+        ctx.enqueue_copy(dst_buf=sw_all, src_ptr=sw_ptr)
     ctx.synchronize()
     var pams = QNParams.default()
     pams.loss = loss
@@ -808,6 +826,11 @@ def qn_fit_ovr_host(
             grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
         )
         ctx.enqueue_memset(w, Float32(0.0))
+        var swk = Optional[DeviceBuffer[DType.float32]]()
+        if has_sample_weight:
+            var swb = ctx.enqueue_create_buffer[DType.float32](n_rows)
+            ctx.enqueue_copy(dst_buf=swb, src_buf=sw_all)
+            swk = Optional[DeviceBuffer[DType.float32]](swb^)
         ctx.synchronize()
         var trace = IdentityTrace()
         if trace.enabled:
@@ -819,7 +842,7 @@ def qn_fit_ovr_host(
         var iters = 0
         var ret = qn_fit_x(
             ctx, pams, xk^, yk^, n_rows, n_features, 2, w, fx, iters,
-            False, trace, Float32(0.0),
+            has_sample_weight, trace, Float32(0.0), swk^,
         )
         ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
         ctx.synchronize()
@@ -830,6 +853,7 @@ def qn_fit_ovr_host(
         info_ptr.unsafe_store(3 * k + 2, Float32(iters))
         _ = w^
     _ = hw^
+    _ = sw_all^
     _ = codes^
     _ = x^
 
