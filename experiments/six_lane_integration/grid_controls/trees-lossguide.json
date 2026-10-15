@@ -4,52 +4,8 @@
   "branch": "lane/trees-lossguide",
   "head": "a4f3506a2",
   "mode": "IDENTICAL",
-  "controls": {
-    "hist_packed_gh": {
-      "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_TREES_HIST_PACKED_GH"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "gbdt/trees_hist_switches.mojo:31",
-        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:105",
-        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:146",
-        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:249"
-      ],
-      "binding": "_mojolearn_gbdt",
-      "bits_change": false,
-      "status": "new",
-      "reach": "every fused 8-bit two-stat histogram launch (>128 folds, stat_count 2): symmetric, depthwise, lossguide, rank; NVIDIA/AMD only",
-      "note": "F4 (ideas-all-gaps-20261011): zero code, existing opt-in; integer atomics are order-free, bits unchanged; raced here on the lossguide and categorical cells. Original entry: trees-hist-ideas.json."
-    },
-    "hist_warp_agg": {
-      "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_TREES_HIST_WARP_AGG"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "gbdt/trees_hist_switches.mojo:36",
-        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:193",
-        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:549",
-        "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:815"
-      ],
-      "binding": "_mojolearn_gbdt",
-      "bits_change": false,
-      "status": "new",
-      "reach": "body loop of the fused 8-bit kernels (direct + gather); whole-wave same-bin aggregation only; NVIDIA/AMD only",
-      "note": "F4 (ideas-all-gaps-20261011): zero code, existing opt-in; integer atomics are order-free, bits unchanged; raced here on the lossguide and categorical cells. Original entry: trees-hist-ideas.json."
-    }
-  },
+  "controls_note": "hist_packed_gh and hist_warp_agg (F4, ideas-all-gaps-20261011: zero code, existing opt-in; integer atomics are order-free, bits unchanged) are declared once, in trees-hist-ideas.json; this file adds their lossguide and categorical routes. A control key is declared in one grid_controls file only (six_lane_grid.load_controls).",
+  "controls": {},
   "algorithms": {
     "trees:gbdt-lossguide": {
       "binding": "_mojolearn_gbdt",

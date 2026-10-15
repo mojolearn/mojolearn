@@ -1504,7 +1504,6 @@
    "binding": "_mojolearn_mamba",
    "route": "forward: modeling_mamba -> selective_scan_interface (neural_scan_profile)",
    "controls": [
-    "m1_elementwise_fused",
     "nn35_conv_pair",
     "nn40_owned_weights",
     "nn40_ws_headroom",

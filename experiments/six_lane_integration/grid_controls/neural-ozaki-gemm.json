@@ -8,9 +8,7 @@
   "neural:cnn-clf": {
    "binding": "_mojolearn_x_cnn",
    "route": "fit: CNNClassifier -> x_cnn/device.mojo:539 device_gemm (NEURAL_GEMM_EXPERIMENT_ENABLED) -> gemm/neural_dispatch.mojo identical_gemm_into -> neural_ozaki_into; bias grads x_cnn/device.mojo:805 -> device_gemm; predict: same device_gemm",
-   "controls": [
-    "neural_gemm_ozaki_slices"
-   ],
+   "controls": [],
    "interaction_groups": []
   }
  },

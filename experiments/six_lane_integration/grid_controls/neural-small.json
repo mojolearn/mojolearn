@@ -251,7 +251,6 @@
     "attn_fwd_tq_rule",
     "attn_tile_rule_off",
     "grouped_projections_v2",
-    "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4"
@@ -285,7 +284,6 @@
     "attn_tile_order",
     "attn_fwd_tq_rule",
     "grouped_projections_v2",
-    "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4"
@@ -317,7 +315,6 @@
     "attn_tile_order",
     "attn_fwd_tq_rule",
     "grouped_projections_v2",
-    "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4"
@@ -351,7 +348,6 @@
     "grouped_projections_v2",
     "m3_angle_parallel",
     "m3_angle_block",
-    "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4",
@@ -385,7 +381,6 @@
     "m3_angle_parallel",
     "m3_angle_block",
     "m3_s17_tail",
-    "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4",
@@ -420,7 +415,6 @@
    "binding": "_mojolearn_training",
    "route": "_mojolearn_training mlp step -> training/mlp_ops.mojo mlp_train_step_host -> _gemm -> neural_dispatch.identical_gemm_into",
    "controls": [
-    "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4"
@@ -448,7 +442,6 @@
     "neural_gemm_schedule",
     "gemm_leaf",
     "neural_gemm_chains",
-    "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4"
@@ -476,7 +469,6 @@
     "neural_gemm_schedule",
     "gemm_leaf",
     "neural_gemm_chains",
-    "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4"
@@ -504,7 +496,6 @@
     "neural_gemm_schedule",
     "gemm_leaf",
     "neural_gemm_chains",
-    "neural_gemm_ozaki_slices",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4",
