@@ -140,6 +140,26 @@ comptime AFN_GEMM_EPILOGUE = AFN_GEMM_ALL or (
 #: The fp32 entry points take this kernel whenever any fp32 candidate is on
 #: (SPLITK and TILESHAPE are policies of the same kernel).
 comptime AFN_GEMM_FP32_MMA = AFN_GEMM_SIMDGROUP or AFN_GEMM_SPLITK or AFN_GEMM_TILESHAPE
+#: lane/identical-gemm-ktail (2026-10-15), A/B define, default OFF:
+#: `-D MOJOLEARN_GEMM_FAST_RAGGED_K`. FAST Apple fp32 GEMMs whose `k` is not
+#: a whole number of this kernel's windows (`k % AFN_GEMM_KB != 0`) run on
+#: the simdgroup kernel below instead of MAX's `linalg.matmul`. Cause:
+#: public `mojolearn.linalg.matmul` fp32 FAST on an Apple M4 (one warmup,
+#: one scored call; ~/mojolearn-evidence/bf16-vs-fp32fast-20261015/run2):
+#: 3072x5120x2560 66.8 ms but 3000x5000x2500 1102.4 ms, 4096x4096x4096
+#: 119.4 ms but 4096x4096x2500 1210.1 ms, while ragged N (4096x5000x4096,
+#: 239.0 ms) is fine; the BF16 calls, already on this kernel, ran 94.8 and
+#: 112.0 ms at the two k = 2500 shapes. MAX's GPU matmul leaves its fast
+#: kernel when `k` is not a multiple of its K block. This kernel costs a
+#: ragged `k` at most one zero-padded window (`_afn_gload` reads +0.0 past
+#: `chunk`), so the rule keys on this kernel's own window, not on a board
+#: dimension: every `k` that is whole windows keeps the vendor matmul
+#: (faster there: 4096^3 MAX fp32 119.4 ms vs this kernel's BF16 152.5 ms).
+#: Full fp32 products and fp32 accumulation, so no precision cut. FAST only;
+#: IDENTICAL never compiles it. The A/B owed: arm A off, arm B on, k in
+#: {2496, 2500, 2504, 2512, 2560} at m = n = 4096 and 3000 x 5000, plus one
+#: non-board estimator fit that reaches `gemm_nt` with a ragged feature count.
+comptime AFN_GEMM_FAST_RAGGED_K = AFN_GEMM_APPLE and is_defined["MOJOLEARN_GEMM_FAST_RAGGED_K"]()
 
 #: The window: steps staged per barrier. 32 stages one 64x64 page of
 #: 17,920 bytes (one page on Apple's 32 KB); 16 stages two pages of 9,472.
@@ -781,6 +801,33 @@ def afn_gemm_fp32_into(
         var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         return _afn_dispatch[DType.float32, DType.float32, AFN_EPI_NONE](
             ctx, cp, a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), cp, cp, m, n, k, op
+        )
+
+
+def afn_gemm_fp32_ragged_k_ptr_into(
+    ctx: DeviceContext,
+    c: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises -> Bool:
+    """`C = op(A) . op(B)`, fp32, on the simdgroup kernel when `k` is not a
+    whole number of `AFN_GEMM_KB` windows (AFN_GEMM_FAST_RAGGED_K). True when
+    served; False (nothing enqueued) otherwise, and the caller keeps its own
+    route. `a` may equal `b` (a Gram product reads it twice); `c` must not
+    alias either. Asynchronous; every buffer is the caller's."""
+    comptime if not AFN_GEMM_FAST_RAGGED_K:
+        return False
+    else:
+        if k <= 0 or k % AFN_GEMM_KB == 0:
+            return False
+        if c == a or c == b:
+            return False
+        return _afn_dispatch[DType.float32, DType.float32, AFN_EPI_NONE](
+            ctx, c, a, b, c, c, m, n, k, op
         )
 
 

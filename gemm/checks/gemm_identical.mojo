@@ -136,7 +136,7 @@ from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
 from std.sys.defines import get_defined_int
 from std.sys.info import is_amd_gpu
 from core.apple_air import simdgroup_load_legacy_air
-from gemm.afn_apple_fast import AFN_GEMM_FP32_MMA, afn_gemm_fp32_into
+from gemm.afn_apple_fast import AFN_GEMM_FP32_MMA, afn_gemm_fp32_into, afn_gemm_fp32_ragged_k_ptr_into
 from std.ffi import _Global, external_call
 from std.time import perf_counter_ns
 
@@ -9798,6 +9798,20 @@ def _fast_vendor_gemm(
     that failure is this precision cut arriving at a bit-exactness
     assertion, not a regression in the block.
     """
+    # lane/identical-gemm-ktail (2026-10-15), MOJOLEARN_GEMM_FAST_RAGGED_K
+    # (default OFF, A/B owed; reasoning and evidence at the define in
+    # gemm/afn_apple_fast.mojo): on a FAST Apple build, a `k` that is not
+    # whole simdgroup-kernel windows leaves MAX's matmul for that kernel,
+    # which costs a ragged `k` one padded window. NN and NT only (the two
+    # ops this route already serves); the NT matrix-vector case keeps
+    # `gemv_gpu`. Compiles to nothing when the define is off.
+    if (op == OP_NN or op == OP_NT) and not (op == OP_NT and n == 1):
+        if afn_gemm_fp32_ragged_k_ptr_into(
+            ctx, c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            m, n, k, op,
+        ):
+            return True
     if op == OP_NT:
         if n == 1:
             # `z[m] = a[m x k] . b[k]`: b is a contiguous k-vector whether
