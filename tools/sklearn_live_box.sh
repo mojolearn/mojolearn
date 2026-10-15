@@ -27,6 +27,8 @@ SITE=$("$V/bin/python" -c "import mojolearn,os;print(os.path.dirname(mojolearn._
 # Python files only: the binaries stay the published wheel's.
 (cd "$ROOT/python/mojolearn" && find . -name '*.py' -o -name '*.tsv' -o -name '*.json' | grep -v '/verify_reference/' \
     | while read -r f; do mkdir -p "$SITE/$(dirname "$f")"; cp "$f" "$SITE/$f"; done)
+# A box checkout can be sparse without the tests: take them from the commit itself.
+git -C "$ROOT" archive HEAD python/mojolearn/tests | tar -x --strip-components=1 -C "$(dirname "$SITE")"
 "$V/bin/python" -c "import mojolearn,sklearn;print('mojolearn',mojolearn.__version__,'sklearn',sklearn.__version__)" | tee "$OUT/versions.txt"
 cd "$OUT"
 "$V/bin/python" "$ROOT/tools/sklearn_practice.py" "$OUT/practice.tsv" > "$OUT/practice.log" 2>&1
