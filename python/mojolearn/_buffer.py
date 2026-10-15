@@ -425,6 +425,14 @@ def _materialize(obj, name):
             "Copy it yourself first: cupy `x.get()`, torch `x.cpu()`, "
             "numba `x.copy_to_host()`." % (name, kind, name)
         )
+    if (not isinstance(obj, (list, tuple, str, bytes)) and not _has_buffer(obj)
+            and callable(getattr(obj, "__array__", None))):
+        # A pandas DataFrame / Series (or any `__array__` exporter) has no
+        # buffer, and iterating a DataFrame yields its COLUMN NAMES. Its own
+        # `__array__` hands back the host block (an exporter needs NumPy,
+        # so NumPy is already loaded); that block takes the buffer path.
+        # Glue: one conversion call, no per-element Python work.
+        obj = obj.__array__()
     if isinstance(obj, (list, tuple)) or not _has_buffer(obj):
         if isinstance(obj, (str, bytes)):
             raise TypeError(
