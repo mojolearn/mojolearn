@@ -1159,7 +1159,10 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
                 f"mojolearn: y has {shape[0]} rows, X has "
                 f"{self.n_samples_fit_}"
             )
-        if not _is_integer_labels(y):
+        from ._sk_validate import whole_float_labels
+        # whole-number float labels (scikit-learn's callers pass 0.0/1.0)
+        # convert exactly to the integer labels below
+        if not _is_integer_labels(y) and not whole_float_labels(y):
             raise ValueError(
                 f"mojolearn: y must be integer class labels, got "
                 f"{_dtype_name(y)}; cuML converts to int32 "

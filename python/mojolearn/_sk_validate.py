@@ -268,6 +268,16 @@ def _integral(obj):
                                        _REDUCE_INTEGRAL))
 
 
+def whole_float_labels(y):
+    """True when `y` is a float buffer whose every value is a finite whole
+    number (class labels scikit-learn's callers pass as floats, such as
+    `[0.0, 1.0, ...]`); both scans are native."""
+    info = describe(y)
+    if info is None or info[0] != "buffer" or info[2] != "float":
+        return False
+    return _all_finite(y) and _integral(y)
+
+
 # ------------------------------------------------------------------ X
 
 
