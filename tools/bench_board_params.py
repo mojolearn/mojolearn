@@ -724,6 +724,10 @@ def _read_params_object(obj):
             got = dict(got)
             del got["max_leaf_nodes"]
             return lib, "get_params without the refusal-only max_leaf_nodes=None", got
+        recurrent = _recurrent_effective_options(obj, lib, got)
+        if recurrent is not None:
+            # smoke-mappings (2026-10-15): ours' recurrent models (get_params from ParamsMixin)
+            return lib, "get_params + " + recurrent[0], recurrent[1]
         if lib == "cuml" and type(obj).__name__ == "MinMaxScaler" and "clip" not in got:
             # The pinned cuML 26.08 transform only scales and translates. Its
             # documented out-of-range example returns 1.5, not 1.0:
@@ -743,22 +747,38 @@ def _read_params_object(obj):
     got = {n: getattr(obj, n) for n in names if hasattr(obj, n)}
     if not got:
         got = {k: v for k, v in vars(obj).items() if not k.startswith("_") and _scalar(v)}
-    if lib == "mojolearn" and type(obj).__name__ in _OURS_RECURRENT and "optimizer" in got:
-        # smoke-fixes (2026-10-14; algos/lstm-*/gru-*/rnn-*: "betas, eps, weight_decay missing from ours
-        # (ours-fast) read-back"): ours' recurrent models hand the trainer the optimizer's PyTorch
-        # defaults updated by optimizer_options (python/mojolearn/_x_sequence_rnn.py optimizer_arguments:
-        # o = dict(_OPT_DEFAULTS[name]); o.update(options); _RecurrentBase._fit passes its slots to
-        # rnn_fit). Read those effective values from the model's own module; optimizer_options stays as
-        # given. An unknown optimizer or option adds nothing (the trainer itself raises on them).
-        mod = sys.modules.get(type(obj).__module__)
-        defaults = getattr(mod, "_OPT_DEFAULTS", {}).get(got["optimizer"])
-        options = got.get("optimizer_options") or {}
-        if isinstance(defaults, dict) and isinstance(options, dict) and set(options) <= set(defaults):
-            effective = dict(defaults, **options)
-            recovered = sorted(n for n in effective if n not in got)
-            got.update({n: effective[n] for n in recovered})
-            return lib, "attributes + effective optimizer options " + ",".join(recovered), got
+    recurrent = _recurrent_effective_options(obj, lib, got)
+    if recurrent is not None:
+        return lib, "attributes + " + recurrent[0], recurrent[1]
     return lib, "attributes", got
+
+
+def _recurrent_effective_options(obj, lib, got):
+    """(source note, read-back) with ours' recurrent model's effective optimizer settings, or None.
+
+    smoke-fixes (2026-10-14; algos/lstm-*/gru-*/rnn-*: "betas, eps, weight_decay missing from ours
+    (ours-fast) read-back"): ours' recurrent models hand the trainer the optimizer's PyTorch
+    defaults updated by optimizer_options (python/mojolearn/_x_sequence_rnn.py optimizer_arguments:
+    o = dict(_OPT_DEFAULTS[name]); o.update(options); _RecurrentBase._fit passes its slots, the
+    values the Mojo trainer receives, to rnn_fit). Read those effective values from the model's own
+    module; optimizer_options stays as given. An unknown optimizer or option adds nothing (the
+    trainer itself raises on them).
+    smoke-mappings (2026-10-15; 12 smoke lines algos/{rnn,lstm,gru}-{clf,reg}: "betas missing from
+    ours read-back", the same for eps): the recurrent models get get_params from ParamsMixin
+    (python/mojolearn/_mode.py), so read_params took the get_params branch and returned before the
+    attribute fallback that held this read-back. Both branches now call this helper."""
+    if lib != "mojolearn" or type(obj).__name__ not in _OURS_RECURRENT or "optimizer" not in got:
+        return None
+    mod = sys.modules.get(type(obj).__module__)
+    defaults = getattr(mod, "_OPT_DEFAULTS", {}).get(got["optimizer"])
+    options = got.get("optimizer_options") or {}
+    if not (isinstance(defaults, dict) and isinstance(options, dict) and set(options) <= set(defaults)):
+        return None
+    effective = dict(defaults, **options)
+    recovered = sorted(n for n in effective if n not in got)
+    got = dict(got)
+    got.update({n: effective[n] for n in recovered})
+    return "effective optimizer options " + ",".join(recovered), got
 
 
 #: ours' recurrent estimators (python/mojolearn/_x_sequence_rnn.py), read by read_params above
@@ -1097,6 +1117,18 @@ def _semantic_r5(lane, param, arm, ours, theirs, library):
             return "gamma parameterizes only the RBF affinity; both use the compared nearest_neighbors affinity"
         if param == "prediction_data" and ours.get(param) is False:
             return "no prediction data kept: ours prediction_data=False; cuML SpectralClustering has no predict"
+        # smoke-mappings (2026-10-15; classical2/spectral/{istella,taxi}: "coef0 missing from cuml-gpu
+        # read-back", the same for degree). degree, coef0 and kernel_params parameterize only scikit-learn's
+        # polynomial/sigmoid/callable kernel affinities. Ours python/mojolearn/_spectral_impl.py
+        # SpectralClustering refuses any value but None for all three (lines 414-425: "it parameterizes an
+        # RBF or polynomial affinity"); cuML 26.08 cluster/spectral_clustering.pyx takes none of them and
+        # builds only the nearest_neighbors/precomputed affinity (lines 161-164). Fires only when ours holds
+        # None and both arms run the compared nearest_neighbors affinity.
+        if param in ("degree", "coef0", "kernel_params") and param in ours and ours[param] is None \
+                and ours.get("affinity") == theirs.get("affinity") == "nearest_neighbors":
+            return ("%s parameterizes only polynomial/sigmoid kernel affinities: ours holds None (any value is "
+                    "refused), cuML SpectralClustering has none; both use the compared nearest_neighbors "
+                    "affinity" % param)
         return None
     # smoke-fixes (2026-10-14; tsvd: "n_oversamples, power_iteration_normalizer missing from cuml-gpu
     # read-back"). Ours python/mojolearn/decomposition.py:785-796 reads both only when
