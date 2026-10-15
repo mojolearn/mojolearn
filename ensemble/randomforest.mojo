@@ -2676,6 +2676,7 @@ def fit_forest[
     host_x_addr: Int = 0,
     tree_start: Int = 0,
     feature_importances: Bool = False,
+    min_weight_leaf: Float32 = Float32(0),
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
@@ -2687,6 +2688,7 @@ def fit_forest[
         ctx, x, y, sample_weight, n_rows, n_cols, n_unique_labels,
         rf_params, prep, False, scales, sample_weight_host, row_major,
         oob_score, host_x_addr, tree_start, feature_importances,
+        min_weight_leaf,
     )
 
 
@@ -2710,10 +2712,15 @@ def fit_forest_prepared[
     host_x_addr: Int = 0,
     tree_start: Int = 0,
     feature_importances: Bool = False,
+    min_weight_leaf: Float32 = Float32(0),
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
     """`RandomForest::fit`, `randomforest.cuh:286-370`. THE FOREST LOOP.
+
+    `min_weight_leaf` (lane sk-kernels) is scikit-learn's least summed
+    sample weight per child, read by the weighted objectives only
+    (`ObjectiveLike.SetMinWeightLeaf`); 0 checks nothing.
 
     GENERIC OVER THE OBJECTIVE, as `Builder<ObjectiveT>` is, so a
     REGRESSION forest and a classification forest are the same code with a
@@ -3098,6 +3105,7 @@ def fit_forest_prepared[
                 scales,
             )
         )
+        builders[len(builders) - 1].min_weight_leaf = min_weight_leaf
 
     # DEVIATION 1908: ONE splits staging for all K slots, so the cycle
     # below reads every in-flight tree's split results back in a single
