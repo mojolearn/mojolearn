@@ -29,6 +29,9 @@ def test_binary_probability_zero_column_survives_native_call(monkeypatch):
             pass
 
     model = trees.DARTClassifier()
+    # predict_proba refuses an unfitted instance; this one stands for a
+    # completed binary fit (its raw scores and binding are faked below).
+    vars(model)["_mojolearn_fitted"] = True
     monkeypatch.setattr(trees, "zeros", tracked_zeros)
     monkeypatch.setattr(model, "_raw", lambda X: Array((len(X),), "<f8"))
     monkeypatch.setattr(model, "_bind", lambda: Native())
