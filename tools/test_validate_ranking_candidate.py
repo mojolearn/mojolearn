@@ -148,3 +148,57 @@ def test_all_queued_campaigns_must_acknowledge_boundary(tmp_path):
     V.write(ack, a)
     with pytest.raises(ValueError, match='neither paused between cells nor fully finished'):
         V.check_boundary(ack, 'nvidia', 90, proc)
+
+
+def failed_boundary(tmp_path):
+    ack, proc = boundary(tmp_path)
+    (tmp_path / 'PAUSE').unlink()
+    campaign = tmp_path / 'campaign.json'
+    data = V.read(campaign)
+    data.update(status='stopped', expected=1, recorded=1,
+                recipes={'one': {'status': 'failed', 'returncode': 1}},
+                stop_reason='timed driver failed rc1')
+    V.write(campaign, data)
+    exit_path = tmp_path / 'controller.exit'; exit_path.write_text('1\n')
+    failure = tmp_path / 'timed-driver.log'; failure.write_text('retained actual failure\n')
+    a = V.read(ack)
+    a.update(no_pending_queue_launch=True, campaigns=[dict(path=str(campaign), controller_exit=str(exit_path),
+             failure_acknowledged=True, failure_evidence=[str(failure)])])
+    V.write(ack, a)
+    return ack, proc
+
+
+def test_acknowledged_stopped_failure_releases_without_claiming_success(tmp_path):
+    ack, proc = failed_boundary(tmp_path)
+    result = V.check_boundary(ack, 'nvidia', 90, proc)
+    item = result['campaigns'][0]
+    assert item['gate'] == 'stopped'
+    assert item['controller_exit_status'] == 1
+    assert item['state']['recipes']['one']['status'] == 'failed'
+    assert item['failure_evidence'][0]['sha256'] == V.sha(tmp_path / 'timed-driver.log')
+    assert V.boundary_still_held(result)
+
+
+@pytest.mark.parametrize('missing', ['failure_acknowledged', 'no_pending_queue_launch', 'failure_evidence', 'nonzero_exit'])
+def test_stopped_failure_requires_explicit_retained_acknowledgement(tmp_path, missing):
+    ack, proc = failed_boundary(tmp_path)
+    a = V.read(ack)
+    if missing == 'no_pending_queue_launch':
+        a.pop(missing)
+    elif missing == 'nonzero_exit':
+        (tmp_path / 'controller.exit').write_text('0\n')
+    else:
+        a['campaigns'][0].pop(missing)
+    V.write(ack, a)
+    with pytest.raises(ValueError):
+        V.check_boundary(ack, 'nvidia', 90, proc)
+
+
+def test_acknowledged_stopped_failure_still_refuses_live_workers(tmp_path):
+    ack, proc = failed_boundary(tmp_path)
+    session = tmp_path / 'measured/cell/timed-session'; session.mkdir(parents=True)
+    V.write(session / 'session.json', dict(status='finished', remaining_workers=[], session='failed-worker', pid=4321))
+    process = proc / '4321'; process.mkdir()
+    (process / 'environ').write_bytes(b'MOJOLEARN_BOARD_SESSION=failed-worker\0')
+    with pytest.raises(ValueError, match='measurement workers still active'):
+        V.check_boundary(ack, 'nvidia', 90, proc)

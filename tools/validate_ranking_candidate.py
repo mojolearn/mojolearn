@@ -74,6 +74,8 @@ def check_boundary(ack_path, vendor, seconds, proc_root=Path('/proc')):
         required(state.get('vendor') == vendor, 'measurement vendor differs')
         required(time.time() + seconds + 900 < state['provider_deadline'], 'insufficient window plus 900s retention reserve')
         status = state.get('status')
+        failure_evidence = []
+        controller_exit_status = None
         if status == 'paused between cells':
             required((campaign.parent / 'PAUSE').is_file(), 'measurement PAUSE marker missing')
             required(time.time() - state.get('heartbeat', 0) < 30, 'measurement pause heartbeat is stale')
@@ -86,8 +88,22 @@ def check_boundary(ack_path, vendor, seconds, proc_root=Path('/proc')):
             required(exit_path and Path(exit_path).read_text().strip() == '0',
                      'finished campaign requires retained controller exit status 0')
             required(not state.get('final_retention_error'), 'finished campaign retention failed')
+            controller_exit_status = 0
+        elif status in ('stopped', 'failed'):
+            required(entry.get('failure_acknowledged') is True and ack.get('no_pending_queue_launch') is True,
+                     'stopped campaign requires explicit failure acknowledgement and no pending queue launch')
+            exit_path = entry.get('controller_exit')
+            required(exit_path and Path(exit_path).is_file(), 'stopped campaign requires retained controller exit status')
+            controller_exit_status = int(Path(exit_path).read_text().strip())
+            required(controller_exit_status != 0, 'stopped failed campaign must retain its nonzero exit')
+            required(bool(state.get('stop_reason') or state.get('failure')), 'stopped campaign failure reason missing')
+            evidence = entry.get('failure_evidence', [])
+            required(evidence and all(Path(path).is_file() and Path(path).stat().st_size > 0 for path in evidence),
+                     'stopped campaign requires retained failure evidence files')
+            failure_evidence = [dict(path=str(Path(path).resolve()), sha256=sha(path), bytes=Path(path).stat().st_size)
+                                for path in evidence]
         else:
-            raise ValueError('measurement is neither paused between cells nor fully finished')
+            raise ValueError('measurement is neither paused between cells nor fully finished nor an acknowledged stopped failure')
         for path in sorted(campaign.parent.glob('measured/*/*-session/session.json')):
             item = read(path)
             required(item.get('status') == 'finished' and item.get('remaining_workers') == [],
@@ -98,10 +114,11 @@ def check_boundary(ack_path, vendor, seconds, proc_root=Path('/proc')):
         if entry.get('controller_pid'):
             # Paused campaign controllers intentionally remain alive; finished
             # controllers must have exited before ownership is released.
-            if status == 'finished':
+            if status in ('finished', 'stopped', 'failed'):
                 recorded_pids.append(int(entry['controller_pid']))
         campaigns.append(dict(path=str(campaign), state=state, gate=status,
-                              controller_exit=entry.get('controller_exit')))
+                              controller_exit=entry.get('controller_exit'), controller_exit_status=controller_exit_status,
+                              failure_evidence=failure_evidence))
     # Retain only the relevant marker, never unrelated /proc environment secrets.
     markers = {(b'MOJOLEARN_BOARD_SESSION=' + item['session'].encode()) for item in sessions}
     workers = []
@@ -130,7 +147,7 @@ def boundary_still_held(boundary):
             return False
         if entry['gate'] == 'paused between cells' and not (campaign.parent / 'PAUSE').is_file():
             return False
-        if entry['gate'] == 'finished' and Path(entry['controller_exit']).read_text().strip() != '0':
+        if entry['gate'] in ('finished', 'stopped', 'failed') and int(Path(entry['controller_exit']).read_text().strip()) != entry['controller_exit_status']:
             return False
     return True
 
@@ -368,6 +385,15 @@ def run(args):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         boundary = check_boundary(args.boundary_ack, args.vendor, args.seconds)
         write(out / 'boundary-check.json', boundary)
+        state['measurement_campaigns'] = [dict(path=item['path'], status=item['gate'],
+             controller_exit_status=item['controller_exit_status'],
+             preserved_failure=bool(item['failure_evidence'])) for item in boundary['campaigns']]
+        retained_failures = out / 'prior-campaign-failures'; retained_failures.mkdir()
+        for index, item in enumerate(boundary['campaigns']):
+            for file_index, row in enumerate(item['failure_evidence']):
+                target = retained_failures / (str(index) + '-' + str(file_index) + '-' + Path(row['path']).name)
+                shutil.copy2(row['path'], target)
+                required(sha(target) == row['sha256'], 'prior campaign failure evidence changed during retention')
         cfg = dict(out=str(out), binary=str(binary), binary_sha256=sha(binary),
                    vendor=args.vendor, checker=str(out / 'querywise-checker.py'), fixture=str(out / 'querywise-fixture.npz'))
         write(out / 'worker-config.json', cfg)
