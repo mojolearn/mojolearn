@@ -71,6 +71,7 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
     ClassificationBin,
     WeightedClassificationBin,
     RegressionBin,
+    WeightedRegressionBin,
 )
 from checks.fixed_point import choose_scale
 from core.abs_sum_blocked import (
@@ -116,6 +117,7 @@ comptime WeightedClsObj = ClassificationObjectiveFunction[
     DT, CLT, WeightedClassificationBin
 ]
 comptime RegObj = RegressionObjectiveFunction[DT, RLT, RegressionBin]
+comptime WeightedRegObj = RegressionObjectiveFunction[DT, RLT, WeightedRegressionBin]
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -666,6 +668,23 @@ def rf_regressor_fit_binding[EXPORT: Bool = False](
     return _rf_regressor_fit[EXPORT](x_addr, y_addr, params, criterion)
 
 
+def rf_regressor_fit_weighted_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+    weight_max: PythonObject,
+) raises -> PythonObject:
+    """`rf_regressor_fit` with Float32 row weights (scikit-learn's
+    `sample_weight`; sk-edges). `weight_max` is the largest weight (the
+    caller's native max reduction), which sizes the label_sum plane."""
+    var address = Int(py=weights_addr)
+    if address == 0:
+        raise Error("weighted RF requires a nonzero Float32 weight pointer")
+    return _rf_regressor_fit[EXPORT](
+        x_addr, y_addr, params, criterion,
+        weights_addr=address, weight_max=Float64(py=weight_max),
+    )
+
+
 # ---------------------------------------------------------------------------
 # THE DATA SESSION (trees-apple3). A boosted ensemble (DART, AdaBoost) fits
 # one small forest per member on the SAME X: each member's fit scanned X for
@@ -1186,6 +1205,8 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     oob_addr: Int = 0,
     oob_score_addr: Int = 0,
     importance_addr: Int = 0,
+    weights_addr: Int = 0,
+    weight_max: Float64 = 0,
 ) raises -> PythonObject:
     """Fit the cuML-implementation RandomForest regressor. Same contract; slot 2
     MUST be 0 and `y` is float32. `criterion` is MSE (2), POISSON (4),
@@ -1208,6 +1229,13 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var crit = Int(py=criterion)
     _check_criterion("rf_regressor_fit", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
+    # sk-edges: the row weights of `rf_regressor_fit_weighted` (0: none), one
+    # memcpy as in the classifier; their checks run on the device below.
+    var weights = List[Float32]()
+    var weight_total = Float64(0)
+    var weighted = weights_addr != 0
+    if weighted:
+        weights = list_f32(_f32_ptr(weights_addr), n_rows)
 
     var forest: RandomForestMetaData[DT, RLT]
     # DEVIATION 2510 -- as in the classifier: the binding's own host stamps.
@@ -1238,7 +1266,7 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         var host_x = 0 if ROWMAJOR else Int(xp)
         var dy = ctx.enqueue_create_buffer[RLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
-        var dsw = ctx.enqueue_create_buffer[DT](1)
+        var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
         comptime if FOREST_DEVICE_FINITE:
             var fscan = ForestFiniteScan(ctx)
             fscan.enqueue(ctx, dx, n_rows * n_cols)
@@ -1247,6 +1275,17 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         else:
             ctx.synchronize()
         bt.stop_host("bind_h2d", t_s)
+        if weighted:
+            # the classifier's weight checks and all-unit test, on the device
+            ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
+            var wscan = device_scan_weights(ctx, dsw, n_rows)
+            if wscan.bad:
+                raise Error("sample weights must be finite and nonnegative")
+            if wscan.total <= 0:
+                raise Error("sample weights must have positive total")
+            weight_total = wscan.total
+            if wscan.all_unit:
+                weights = List[Float32]()
         # THE LABEL SCALE IS NOT OPTIONAL. `RegressionBin` accumulates
         # `label_sum` in fixed point through `BinScales.label_scale`
         # (DEVIATION 101b), and the host chooses the scale once per fit
@@ -1263,10 +1302,27 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         )
         # `n_unique_labels` is 1 for regression, exactly what
         # `rf_regressor_fit`'s cuML counterpart passes.
-        forest = fit_forest[RegObj](
-            ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
-            host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
-        )
+        if len(weights) > 0 and not rf_params.bootstrap:
+            # sk-edges: the weighted objective (cuML dispatches it only
+            # without bootstrap, as for the classifier). `label_sum` holds
+            # label * weight, so its scale bounds sum |y| * max w, which is
+            # >= sum |y * w| for non-negative weights; the weight plane takes
+            # the classifier's scale from the weight total.
+            var lscale = choose_scale(mag * max(weight_max, Float64(0)), n_rows)
+            var wscale = choose_scale(weight_total, n_rows)
+            if wscale < Float64(1.1754943508222875e-38) or wscale > Float64(3.4028234663852886e38):
+                raise Error("sample weights exceed Float32 fixed-point scale range")
+            forest = fit_forest[WeightedRegObj](
+                ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params,
+                BinScales(Float32(lscale), Float32(wscale)), sample_weight_host=weights,
+                host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
+            )
+        else:
+            forest = fit_forest[RegObj](
+                ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
+                sample_weight_host=weights,
+                host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
+            )
         t_s = bt.start()
         ctx.synchronize()
         _ = dx^
@@ -1651,6 +1707,8 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_classifier_fit_weighted_binding[True]]("rf_classifier_fit_weighted_export")
         m.def_function[rf_regressor_fit_binding[False]]("rf_regressor_fit")
         m.def_function[rf_regressor_fit_binding[True]]("rf_regressor_fit_export")
+        m.def_function[rf_regressor_fit_weighted_binding[False]]("rf_regressor_fit_weighted")
+        m.def_function[rf_regressor_fit_weighted_binding[True]]("rf_regressor_fit_weighted_export")
         m.def_function[rf_regressor_fit_rowmajor_binding[False]]("rf_regressor_fit_rowmajor")
         m.def_function[rf_regressor_fit_rowmajor_binding[True]]("rf_regressor_fit_rowmajor_export")
         m.def_function[rf_predict_proba_binding]("rf_predict_proba")

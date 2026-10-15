@@ -417,8 +417,8 @@ def _dt_tier_bins(est):
     return int(query()) if callable(query) else 128
 
 
-# sample_weight is refused by name: the regressor fit entry carries no row
-# weights. n_bins=None resolves at fit through `_dt_tier_bins`.
+# sample_weight goes through the weighted regressor entry
+# (rf_regressor_fit_weighted). n_bins=None resolves at fit through `_dt_tier_bins`.
 @forest_estimator("regressor")
 class DecisionTreeRegressor(RandomForestRegressor):
     """A single regression tree (CART).
@@ -426,8 +426,8 @@ class DecisionTreeRegressor(RandomForestRegressor):
     Follows scikit-learn's ``DecisionTreeRegressor``: one tree grown on every
     row (no bootstrap) and, by default, every feature. Split thresholds are
     searched over per-feature quantile bins (cuML's rule) rather than every
-    midpoint, so thresholds can differ from scikit-learn's. ``fit`` accepts
-    no ``sample_weight``. ``X`` and ``y`` are read as float32.
+    midpoint, so thresholds can differ from scikit-learn's. ``X`` and ``y``
+    are read as float32.
 
     Parameters
     ----------
@@ -542,20 +542,19 @@ class DecisionTreeRegressor(RandomForestRegressor):
             Training data, read as float32.
         y : array-like of shape (n_samples,)
             Target values.
-        sample_weight : None
-            Must be None; row weights raise ``NotImplementedError``.
+        sample_weight : array-like of shape (n_samples,), default=None
+            Per-row weights. Not accepted with ``splitter="random"``.
 
         Returns
         -------
         self
         """
-        if sample_weight is not None:
-            _refuse("DecisionTreeRegressor sample_weight", "the regressor fit entry"
-                    " carries no row weights.")
         if self.splitter == "random":
+            if sample_weight is not None:
+                _refuse("splitter='random' with weights", "the ExtraTrees builder takes no row weights.")
             self._refresh_config()
             return _dt_random_fit(self, ExtraTreesRegressor, X, y)
-        return self._fit_with_tree_start(X, y)
+        return self._fit_with_tree_start(X, y, sample_weight=sample_weight)
 
     def get_depth(self):
         """Return the depth of the fitted tree."""

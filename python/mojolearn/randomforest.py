@@ -79,6 +79,7 @@ from ._labels import (
     encode_labels, flat_view, flatten_labels, is_bool, sorted_classes,
 )
 from ._mode import NumericModeMixin
+from ._sample_weight import check_sample_weight
 from ._forest_protocol import (ForestProtocol, forest_estimator,
                                _forest_fit_function, _forest_fit_arrays,
                                _rowmajor_fit_function, _export_fit_result)
@@ -1132,7 +1133,8 @@ class RandomForestRegressor(_RandomForestBase):
         self._num_outputs = int(meta[1])
         return self
 
-    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False):
+    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
+                             sample_weight=None):
         if not is_bool(feature_importances):
             raise ValueError("feature_importances must be a boolean fit-output request")
         self._refresh_config()
@@ -1166,6 +1168,31 @@ class RandomForestRegressor(_RandomForestBase):
         self.__dict__.pop("oob_prediction_", None)
         self.__dict__.pop("oob_score_", None)
         self.__dict__.pop("feature_importances_", None)
+        if sample_weight is not None:
+            # sk-edges: scikit-learn's sample_weight through the weighted
+            # regressor entry (bindings/_mojolearn_rf.mojo
+            # rf_regressor_fit_weighted). The checked weights are float32
+            # (`_sample_weight.check_sample_weight`); their max, a native
+            # reduction, sizes the label_sum plane's fixed-point scale.
+            if tree_start is not None or self._cfg["oob_score"] or feature_importances:
+                raise NotImplementedError(
+                    "sample_weight is not implemented together with oob_score, feature "
+                    "importances or a tree-ID shard")
+            try:
+                has_weighted = callable(getattr(binding, "rf_regressor_fit_weighted_export", None))
+            except ImportError:  # a host facade refuses an absent export
+                has_weighted = False
+            if not has_weighted:
+                raise NotImplementedError(
+                    "sample_weight for a regression forest needs the GPU forest binding "
+                    "(rf_regressor_fit_weighted); this install's binding does not export it")
+            w = check_sample_weight(sample_weight, len(y32))
+            w_max = float(w.max())  # glue: native max reduction of the weights
+            weighted = _forest_fit_function(binding, "rf_regressor_fit_weighted")
+
+            def fit_fn(x_addr, y_addr, params, criterion):
+                return weighted(x_addr, y_addr, params, criterion, addr_ro(w, name="sample_weight"), w_max)
+            return self._fit_arrays(X, y32, 0, fit_fn)
         if self._cfg["oob_score"] or feature_importances:
             # T15 consumes native fit-owned OOB and importance buffers.
             # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
