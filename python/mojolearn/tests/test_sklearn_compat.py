@@ -89,23 +89,37 @@ def _factories():
     """Constructors for the classes whose `__init__` has required arguments."""
     ml = mojolearn
     rng = np.random.default_rng(0)
-    dictionary = rng.random((5, 8), dtype=np.float32)
+    # scikit-learn's SparseCoder check dictionary: 5 atoms over 3 features
+    sparse_dictionary = rng.normal(size=(5, 3)).astype(np.float32)
     series = rng.random(42, dtype=np.float32)
     series2d = rng.random((42, 2), dtype=np.float32)
+    # The meta-estimators and the classes whose defaults need more rows or
+    # features than the checks' small data take scikit-learn's own test
+    # parameters (sklearn/utils/_test_common/instance_generator.py,
+    # INIT_PARAMS): the same instances scikit-learn checks itself with.
+    def trees(cls):
+        return [("est1", cls(max_depth=3, random_state=0)), ("est2", cls(max_depth=3, random_state=1))]
     return {
-        "MultiOutputClassifier": lambda: ml.MultiOutputClassifier(ml.DecisionTreeClassifier()),
+        "MultiOutputClassifier": lambda: ml.MultiOutputClassifier(ml.LogisticRegression(C=1)),
         "MultiOutputRegressor": lambda: ml.MultiOutputRegressor(ml.Ridge()),
-        "OneVsRestClassifier": lambda: ml.OneVsRestClassifier(ml.LogisticRegression()),
-        "RFE": lambda: ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=2),
-        "SparseCoder": lambda: ml.SparseCoder(dictionary, transform_n_nonzero_coefs=2),
-        "StackingClassifier": lambda: ml.StackingClassifier(
-            [("rf", ml.RandomForestClassifier()), ("dt", ml.DecisionTreeClassifier())]),
-        "StackingRegressor": lambda: ml.StackingRegressor(
-            [("rf", ml.RandomForestRegressor()), ("dt", ml.DecisionTreeRegressor())]),
-        "VotingClassifier": lambda: ml.VotingClassifier(
-            [("rf", ml.RandomForestClassifier()), ("dt", ml.DecisionTreeClassifier())], voting="soft"),
-        "VotingRegressor": lambda: ml.VotingRegressor(
-            [("rf", ml.RandomForestRegressor()), ("dt", ml.DecisionTreeRegressor())]),
+        "OneVsRestClassifier": lambda: ml.OneVsRestClassifier(ml.LogisticRegression(C=1)),
+        "RFE": lambda: ml.RFE(ml.LogisticRegression(C=1)),
+        "CalibratedClassifierCV": lambda: ml.CalibratedClassifierCV(ml.LogisticRegression(C=1), cv=3),
+        "SparseCoder": lambda: ml.SparseCoder(sparse_dictionary, transform_n_nonzero_coefs=2),
+        "StackingClassifier": lambda: ml.StackingClassifier(trees(ml.DecisionTreeClassifier), cv=3),
+        "StackingRegressor": lambda: ml.StackingRegressor(trees(ml.DecisionTreeRegressor), cv=3),
+        "VotingClassifier": lambda: ml.VotingClassifier(trees(ml.DecisionTreeClassifier)),
+        "VotingRegressor": lambda: ml.VotingRegressor(trees(ml.DecisionTreeRegressor)),
+        "CCA": lambda: ml.CCA(n_components=1, max_iter=5),
+        "PLSCanonical": lambda: ml.PLSCanonical(n_components=1, max_iter=5),
+        "PLSRegression": lambda: ml.PLSRegression(n_components=1, max_iter=5),
+        "GaussianRandomProjection": lambda: ml.GaussianRandomProjection(n_components=2),
+        "SparseRandomProjection": lambda: ml.SparseRandomProjection(n_components=2),
+        "SelectKBest": lambda: ml.SelectKBest(k=1),
+        "TSNE": lambda: ml.TSNE(perplexity=2),
+        "TruncatedSVD": lambda: ml.TruncatedSVD(n_components=1, n_iter=5),
+        "MeanShift": lambda: ml.MeanShift(bandwidth=1.0, max_iter=5),
+        "HDBSCAN": lambda: ml.HDBSCAN(min_samples=1),
         # statsmodels-style: the series is the first constructor argument
         "AutoARIMA": lambda: ml.AutoARIMA(series),
         "STL": lambda: ml.STL(series, period=7),
