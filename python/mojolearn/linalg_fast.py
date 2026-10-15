@@ -13,7 +13,8 @@ blocks call ``gemm.afn_apple_fast.afn_gemm_fused_into`` directly; this
 wrapper is the Python face of the same entry for tests and the quality
 judge). Nothing in the tree calls it this round.
 """
-from ._buffer import addr, addr_ro, empty, probe
+from ._buffer import addr, addr_ro, empty
+from ._bufcheck import probe
 from ._linalg_impl import _OPS, _load, _operand, numeric_mode
 
 EPILOGUES = {None: 0, "bias": 1, "bias_residual": 2, "bias_silu": 3, "bias_gelu": 4}
