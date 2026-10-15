@@ -4693,8 +4693,6 @@ class Normalizer(_PrepBase):
     >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
     >>> Xt = mojolearn.Normalizer(norm="l1").fit_transform(X)
     """
-    # stateless: scikit-learn may call transform without fit
-    _sklearn_requires_fit = False
     _parameters = ("norm", "copy")
 
     def __init__(self, norm="l2", *, copy=True):
@@ -5141,8 +5139,6 @@ class Binarizer(_PrepBase):
     >>> X = np.array([[-1.0, 0.5], [2.0, 0.0]], dtype=np.float32)
     >>> mojolearn.Binarizer(threshold=0.25).fit_transform(X)
     """
-    # stateless: scikit-learn may call transform without fit
-    _sklearn_requires_fit = False
     _parameters = ("threshold", "copy")
 
     def __init__(self, *, threshold=0.0, copy=True):

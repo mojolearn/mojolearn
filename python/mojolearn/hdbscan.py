@@ -147,6 +147,8 @@ class HDBSCAN(NumericModeMixin):
     >>> labels = model.labels_
     >>> new_labels, strengths = mojolearn.hdbscan.approximate_predict(model, X[:10])
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "clusterer"
 
     _BINDING = "_mojolearn_hdbscan"
 

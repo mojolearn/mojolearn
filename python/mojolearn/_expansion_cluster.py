@@ -345,6 +345,8 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
     >>> model = mojolearn.MiniBatchKMeans(n_clusters=4, random_state=0).fit(X)
     >>> labels = model.predict(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "clusterer"
 
     def __init__(self, n_clusters=8, *, init="k-means++", max_iter=100, batch_size=1024,
                  verbose=0, compute_labels=True, random_state=None, tol=0.0,
@@ -595,6 +597,8 @@ class BisectingKMeans(_CentersMixin, _XCluster):
     >>> model = mojolearn.BisectingKMeans(n_clusters=4, random_state=0).fit(X)
     >>> labels = model.predict(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "clusterer"
 
     def __init__(self, n_clusters=8, *, init="random", n_init=1, random_state=None, max_iter=300,
                  verbose=0, tol=1e-4, copy_x=True, algorithm="lloyd", bisecting_strategy="biggest_inertia"):
@@ -755,6 +759,8 @@ class MeanShift(_XCluster):
     >>> model = mojolearn.MeanShift(bin_seeding=True).fit(X)
     >>> labels = model.labels_
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "clusterer"
 
     def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1,
                  cluster_all=True, n_jobs=None, max_iter=300):
@@ -931,6 +937,8 @@ class OPTICS(_XCluster):
     >>> X = np.random.default_rng(0).random((500, 4), dtype=np.float32)
     >>> labels = mojolearn.OPTICS(min_samples=10).fit_predict(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "clusterer"
 
     def __init__(self, *, min_samples=5, max_eps=float("inf"), metric="minkowski", p=2,
                  metric_params=None, cluster_method="xi", eps=None, xi=0.05,
@@ -1126,6 +1134,8 @@ class AffinityPropagation(_XCluster):
     >>> model = mojolearn.AffinityPropagation(random_state=0).fit(X)
     >>> labels = model.predict(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "clusterer"
 
     def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True,
                  preference=None, affinity="euclidean", verbose=False, random_state=None):
@@ -1355,6 +1365,8 @@ class BayesianGaussianMixture(_XCluster):
     >>> model = mojolearn.BayesianGaussianMixture(n_components=5, random_state=0).fit(X)
     >>> proba = model.predict_proba(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "density_estimator"
 
     def __init__(self, *, n_components=1, covariance_type="full", tol=1e-3, reg_covar=1e-6,
                  max_iter=100, n_init=1, init_params="kmeans",

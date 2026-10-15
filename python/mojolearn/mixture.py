@@ -134,6 +134,8 @@ class GaussianMixture(NumericModeMixin):
     >>> proba = gmm.predict_proba(X)
     >>> X_new, y_new = gmm.sample(100)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "density_estimator"
 
     _BINDING = "_mojolearn_mixture"
 

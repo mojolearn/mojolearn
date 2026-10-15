@@ -176,6 +176,8 @@ class DBSCAN(NumericModeMixin):
     >>> model = mojolearn.DBSCAN(eps=0.5, min_samples=5).fit(X)
     >>> labels = model.labels_
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "clusterer"
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"

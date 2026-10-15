@@ -150,6 +150,8 @@ class IsolationForest(NumericModeMixin):
     >>> model = mojolearn.IsolationForest(n_estimators=100).fit(X)
     >>> labels = model.predict(X)  # -1 anomaly, 1 inlier
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "outlier_detector"
 
     #: The binding `_run` asks through `NumericModeMixin._bind`, which is
     #: `_svm_impl._extension`'s own `_backend.binding` call; a host subclass

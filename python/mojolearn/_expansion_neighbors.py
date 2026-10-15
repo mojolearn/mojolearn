@@ -432,6 +432,8 @@ class LocalOutlierFactor(_XNeighbors):
     >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
     >>> labels = mojolearn.LocalOutlierFactor(n_neighbors=20).fit_predict(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "outlier_detector"
 
     def __init__(self, n_neighbors=20, *, algorithm="auto", leaf_size=30, metric="minkowski", p=2,
                  metric_params=None, contamination="auto", novelty=False, n_jobs=None):
@@ -669,6 +671,8 @@ class NearestCentroid(_XNeighbors):
     >>> clf = mojolearn.NearestCentroid().fit(X, y)
     >>> pred = clf.predict(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "classifier"
 
     def __init__(self, metric="euclidean", *, shrink_threshold=None, priors="uniform"):
         self.metric = metric
@@ -1006,6 +1010,8 @@ class OneClassSVM(_XNeighbors):
     >>> model = mojolearn.OneClassSVM(nu=0.1).fit(X)
     >>> labels = model.predict(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "outlier_detector"
 
     def __init__(self, *, kernel="rbf", degree=3, gamma="scale", coef0=0.0, tol=1e-3, nu=0.5,
                  shrinking=True, cache_size=200, verbose=False, max_iter=-1):
@@ -1786,6 +1792,9 @@ class AdditiveChi2Sampler(_XNeighbors):
     >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
     >>> Z = mojolearn.AdditiveChi2Sampler(sample_steps=2).fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`: stateless, non-negative input
+    _sklearn_input_tags = {"positive_only": True}
+    _sklearn_requires_fit = False
 
     def __init__(self, *, sample_steps=2, sample_interval=None):
         self.sample_steps = sample_steps
@@ -2129,6 +2138,8 @@ class SkewedChi2Sampler(_XNeighbors):
 # where theirs is float64; the neighbor ties go to the lower index.
 class _LabelPropagationBase(_XNeighbors):
     """Shared implementation of LabelPropagation and LabelSpreading."""
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "classifier"
 
     _variant = None
 
@@ -2582,6 +2593,8 @@ class KNNImputer(_XNeighbors):
     >>> X[::7, 3] = np.nan
     >>> X_filled = mojolearn.KNNImputer(n_neighbors=5).fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True}
 
     def __init__(self, *, missing_values=float("nan"), n_neighbors=5, weights="uniform",
                  metric="nan_euclidean", copy=True, add_indicator=False, keep_empty_features=False):
@@ -3303,6 +3316,8 @@ class SVGP(_XNeighbors):
     >>> model = mojolearn.SVGP(n_inducing=32, lengthscale=0.3, noise_variance=0.01).fit(X, y)
     >>> mean, var = model.predict_y(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "regressor"
 
     def __init__(self, n_inducing=32, *, inducing_points=None, kernel_variance=1.0, lengthscale=1.0,
                  noise_variance=1.0, jitter=1e-6):
