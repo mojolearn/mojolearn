@@ -5002,7 +5002,8 @@ class SplineTransformer(_PrepBase):
         arr = _x2d(X)
         n, d = arr.shape
         if n < 2:
-            raise ValueError("mojolearn: SplineTransformer needs at least 2 samples")
+            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 "
+                             "is required by SplineTransformer.")
         w = wl = None
         if sample_weight is not None:
             w, wl = _check_weights(sample_weight, n, "SplineTransformer")
@@ -6636,7 +6637,11 @@ class VarianceThreshold(_SelectorMixin):
         self.variances_ = pr.get(var, d)
         self._mask = _mask_list(pr, mask, d)
         if not any(self._mask):
-            raise ValueError(f"mojolearn: No feature in X meets the variance threshold {self.threshold:.5f}")
+            # scikit-learn's wording, with its one-sample note
+            msg = f"No feature in X meets the variance threshold {self.threshold:.5f}"
+            if n == 1:
+                msg += " (X contains only one sample)"
+            raise ValueError(msg)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
