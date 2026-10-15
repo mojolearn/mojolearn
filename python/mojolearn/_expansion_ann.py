@@ -655,6 +655,10 @@ class TSNE(NumericModeMixin):
         np = require_numpy('_expansion_ann')
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input
+        if n < 2:
+            # scikit-learn's TSNE validates X with ensure_min_samples=2
+            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 "
+                             "is required by TSNE.")
         if self.n_components != 2:
             raise ValueError("mojolearn TSNE: n_components must be 2 (the only arm implemented)")
         max_iter = _ann_int("TSNE", "max_iter", self.max_iter)
