@@ -7468,7 +7468,13 @@ class SparseCoder(_SparseCoding):
         -------
         self
         """
+        # scikit-learn's SparseCoder.fit: X is validated (2-D, non-empty) and
+        # must have the dictionary's number of features
+        x, _ = as_f32_c(X, ndim=2, name="X")
         D = self._prepare()
+        if x.shape[1] != D.c:
+            raise ValueError("Dictionary and X have different numbers of features:"
+                             f"dictionary.shape: {(D.r, D.c)} X.shape: {tuple(x.shape)}")
         self.numeric_mode_ = _mode(self.numeric_mode)
         self.components_ = D.out()
         self.n_components_, self.n_features_in_ = D.r, D.c
