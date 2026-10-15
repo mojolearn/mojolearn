@@ -1787,6 +1787,9 @@ class IncrementalPCA(_Base):
         if hasattr(self, "components_") and self.components_m_.c != d:
             raise ValueError("Number of input features has changed from the previous batch")
         seen = getattr(self, "n_samples_seen_", 0)
+        if seen + n < 2:
+            # the explained variance divides by n_samples_seen - 1
+            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required.")
         if seen == 0:
             last_mean, last_var = _M.zeros(1, d), _M.zeros(1, d)
         else:
