@@ -7489,10 +7489,35 @@ def independent_reference_arm(lane):
     return arm
 
 
-def independent_quality_reference(lane, D, outs, directory, fit_calls=1):
+class _ReferenceDeadline(Exception):
+    pass
+
+
+def _alarm(seconds):
+    """A SIGALRM deadline on the main thread (a no-op elsewhere or without SIGALRM): the reference is
+    one untimed library call on the race's inputs, bounded by the race's own per-round deadline, so a
+    reference that is slow (an opponent arm that timed out in its own race) cannot hold the box job."""
+    import signal
+    import threading
+    if not seconds or not hasattr(signal, "SIGALRM") or threading.current_thread() is not threading.main_thread():
+        return lambda: None
+
+    def fire(signum, frame):
+        raise _ReferenceDeadline("independent reference exceeded %ss" % seconds)
+    previous = signal.signal(signal.SIGALRM, fire)
+    signal.alarm(int(max(1, seconds)))
+
+    def cancel():
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+    return cancel
+
+
+def independent_quality_reference(lane, D, outs, directory, fit_calls=1, timeout=None):
     """Run the lane's reference arm untimed when a race of ours holds no such arm. Returns its receipt
-    (None when not needed); the reference outputs go into `outs`. A reference that cannot run is
-    recorded in the receipt and leaves quality as before (INSUFFICIENT, never a failure of ours)."""
+    (None when not needed); the reference outputs go into `outs`. A reference that cannot run (or runs
+    past `timeout` seconds) is recorded in the receipt and leaves quality as before (INSUFFICIENT,
+    never a failure of ours)."""
     arm = independent_reference_arm(lane)
     if arm is None or arm in outs or not any(a in OURS_ARMS for a in outs):
         return None
@@ -7500,7 +7525,8 @@ def independent_quality_reference(lane, D, outs, directory, fit_calls=1):
     root = Path(directory)
     root.mkdir(parents=True, exist_ok=True)
     receipt = dict(role="untimed independent quality reference; never a timed race arm", arm=arm,
-                   lane=lane, fit_calls=fit_calls)
+                   lane=lane, fit_calls=fit_calls, timeout_s=timeout)
+    cancel = _alarm(timeout)
     try:
         runner = build(lane, arm, D)
         if LANES[lane]["kind"] in ("layer", "optim"):
@@ -7516,8 +7542,10 @@ def independent_quality_reference(lane, D, outs, directory, fit_calls=1):
         receipt.update(status="ok", info=runner.info, parameters=getattr(runner, "record", None),
                        output=str(path), output_sha256=hashlib.sha256(path.read_bytes()).hexdigest())
         outs[arm] = reference
-    except Exception as exc:  # noqa: BLE001  (missing library, refused arm, no device)
+    except Exception as exc:  # noqa: BLE001  (missing library, refused arm, no device, deadline)
         receipt.update(status="failed", error=repr(exc)[:600])
+    finally:
+        cancel()
     (root / "receipt.json").write_text(json.dumps(receipt, sort_keys=True, indent=2, default=str) + "\n")
     return receipt
 
@@ -8293,7 +8321,8 @@ def race(args):
         reference_arm = independent_reference_arm(lane)
         result["independent_quality_reference"] = independent_quality_reference(
             lane, D, outs, os.path.join(args.work, tag + "-independent-quality"),
-            fit_calls=args.rounds + (0 if external_warmup else 1))
+            fit_calls=args.rounds + (0 if external_warmup else 1),
+            timeout=args.round_seconds * (args.rounds + (0 if external_warmup else 1)))
         result["quality"] = quality(lane, D, outs)
         if result["independent_quality_reference"] and result["independent_quality_reference"].get("status") == "ok":
             result["quality"].pop(reference_arm, None)        # the reference is not a raced arm

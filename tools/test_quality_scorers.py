@@ -273,3 +273,25 @@ def test_torch_reference_failure_never_raises(tmp_path):
     receipt, out = N.torch_reference_outputs(args, "transformer-forward", "small",
                                              str(tmp_path / "in.npz"), "t")
     assert out is None and receipt["status"] == "failed"
+
+
+def test_independent_reference_is_bounded_by_the_race_deadline(monkeypatch, tmp_path):
+    import time
+
+    class Slow:
+        info, record = {}, {}
+
+        def fit(self):
+            for _ in range(300):
+                time.sleep(.01)
+
+        def infer(self):
+            pass
+
+        def outputs(self):
+            return {"labels": np.zeros(3)}
+    monkeypatch.setattr(A, "build", lambda lane, arm, D: Slow())
+    t0 = time.perf_counter()
+    receipt = A.independent_quality_reference("lof", {}, {"ours": {"pred": np.ones(3)}}, str(tmp_path), timeout=1)
+    assert receipt["status"] == "failed" and "exceeded" in receipt["error"]
+    assert time.perf_counter() - t0 < 2.5
