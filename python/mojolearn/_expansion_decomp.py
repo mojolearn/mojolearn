@@ -4103,7 +4103,7 @@ class _PLS(RegressorScoreMixin, _Base):
         k = self._kit()
         M, Ym, vec = self._xy(X, Y)
         if Ym is None:
-            raise ValueError("Y is required")
+            raise ValueError(f"{type(self).__name__} requires y to be passed, but the target y is None.")
         n, p, q = M.r, M.c, Ym.c
         # scikit-learn's check_X_y / check_array(ensure_min_samples=2) wording,
         # before the 1 / (n - 1) of the scaling
