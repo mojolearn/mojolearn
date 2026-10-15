@@ -82,7 +82,7 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from gemm.host.identical_gemm import contract_leaf_size
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_sqrt
 from solver.host.profile_dot_host import (
     column_as_list,
     profile_dot_host,
@@ -505,6 +505,64 @@ def cd_oracle_fit(
         out.y_after = y^
     out.intercept = intercept
     out.n_iter = n_iter
+    return out^
+
+
+def cd_oracle_fit_weighted(
+    x_in: List[Float32],
+    y_in: List[Float32],
+    w_in: List[Float32],
+    n: Int,
+    d: Int,
+    fit_intercept: Bool,
+    epochs: Int,
+    alpha: Float32,
+    l1_ratio: Float32,
+    tol: Float32,
+    gram: Bool = False,
+) -> CdOracleResult:
+    """The host column of `solver/impl/cd_weighted.mojo::cd_fit_weighted`,
+    step for step (lane sk-kernels): w' = w * (n / sum w); under
+    `fit_intercept` the weighted means (the profile dot against w', times
+    1/n) and the centering; every row scaled by sqrt(w'); then
+    `cd_oracle_fit` without an intercept; the intercept mu_y - mu_x . coef.
+    `x_in` is column-major `n x d`; `w_in` holds `n` checked weights."""
+    var x = x_in.copy()
+    var y = y_in.copy()
+    var w = w_in.copy()
+    var ones = List[Float32](length=n, fill=Float32(1.0))
+    var wsum = profile_dot_host(w, ones, n)
+    var ratio = ftz(identical_div(Float32(n), ftz(wsum)))
+    for i in range(n):
+        w[i] = ftz(identical_mul(ftz(w[i]), ratio))
+    var inv_n = Float32(1.0) / Float32(n)
+    var mu_input = List[Float32]()
+    var mu_labels = Float32(0.0)
+    if fit_intercept:
+        for j in range(d):
+            var sj = _col_dot(x, j, d, w, 0, 1, n, True)
+            mu_input.append(ftz(sj * inv_n))
+        mu_labels = ftz(profile_dot_host(y, w, n) * inv_n)
+        for j in range(d):
+            var m = ftz(mu_input[j])
+            for i in range(n):
+                x[j * n + i] = ftz(identical_mul_add(Float32(-1.0), m, ftz(x[j * n + i])))
+        var ml = ftz(mu_labels)
+        for i in range(n):
+            y[i] = ftz(identical_mul_add(Float32(-1.0), ml, ftz(y[i])))
+    for i in range(n):
+        var sc = ftz(identical_sqrt(ftz(w[i])))
+        for j in range(d):
+            x[j * n + i] = ftz(identical_mul(ftz(x[j * n + i]), sc))
+        y[i] = ftz(identical_mul(ftz(y[i]), sc))
+    var out = cd_oracle_fit(
+        x, y, n, d, False, epochs, alpha, l1_ratio, tol, True, False, gram
+    )
+    if fit_intercept:
+        var dot_mu = profile_dot_host(mu_input, out.coef, d)
+        out.intercept = ftz(ftz(mu_labels) - ftz(dot_mu))
+        out.mu_input = mu_input^
+        out.mu_labels = mu_labels
     return out^
 
 
