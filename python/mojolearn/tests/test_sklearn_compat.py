@@ -425,12 +425,62 @@ def _checked_estimators():
     return out
 
 
+#: SparseCoder's dictionary is fixed, so the width of X is set by it. For a
+#: check whose X has another width, scikit-learn checks its own SparseCoder
+#: with a dictionary of that width (instance_generator.py,
+#: PER_ESTIMATOR_CHECK_PARAMS[SparseCoder]: 5 atoms, these widths); these
+#: are exactly its entries, no more.
+SPARSE_CODER_CHECK_WIDTHS = {
+    "check_array_api_input": 10,
+    "check_estimators_dtypes": 5,
+    "check_dtype_object": 10,
+    "check_transformers_unfitted_stateless": 5,
+    "check_fit_idempotent": 2,
+    "check_transformer_preserve_dtypes": 3,
+    "check_set_output_transform": 5,
+    "check_global_output_transform_pandas": 5,
+    "check_set_output_transform_pandas": 5,
+    "check_set_output_transform_polars": 5,
+    "check_global_set_output_transform_polars": 5,
+    "check_dataframe_column_names_consistency": 8,
+    "check_estimators_overwrite_params": 2,
+    "check_estimators_fit_returns_self": 2,
+    "check_readonly_memmap_input": 2,
+    "check_n_features_in_after_fitting": 4,
+    "check_fit_check_is_fitted": 2,
+    "check_n_features_in": 2,
+    "check_positive_only_tag_during_fit": 4,
+    "check_fit2d_1sample": 10,
+    "check_fit2d_1feature": 1,
+}
+
+
+def _check_function_name(check):
+    while hasattr(check, "__wrapped__") or hasattr(check, "func"):
+        check = getattr(check, "__wrapped__", None) or check.func
+    return check.__name__
+
+
+def _instance_for_check(estimator, check):
+    """scikit-learn's `_yield_instances_for_check` for the estimators it
+    gives per-check parameters (SparseCoder)."""
+    if type(estimator).__name__ != "SparseCoder":
+        return estimator
+    width = SPARSE_CODER_CHECK_WIDTHS.get(_check_function_name(check))
+    if width is None:
+        return estimator
+    est = clone(estimator)
+    rng = np.random.default_rng(0)
+    est.set_params(dictionary=rng.normal(size=(5, width)).astype(np.float32))
+    return est
+
+
 if RUN_FITS:
     from sklearn.utils.estimator_checks import parametrize_with_checks
 
     @parametrize_with_checks(_checked_estimators(), expected_failed_checks=_expected_failed_checks)
     def test_scikit_learn_estimator_checks(estimator, check):
-        check(estimator)
+        check(_instance_for_check(estimator, check))
 else:
     @pytest.mark.skip(reason=FIT_REASON)
     def test_scikit_learn_estimator_checks():

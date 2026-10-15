@@ -57,7 +57,7 @@ KNeighborsRegressor KernelDensity KernelPCA KernelRidge LatentDirichletAllocatio
 LocalOutlierFactor LocallyLinearEmbedding MDS MinCovDet MiniBatchDictionaryLearning
 MiniBatchSparsePCA MultinomialNB NMF NearestCentroid NearestNeighbors OneClassSVM
 PCA PLSRegression PolynomialCountSketch RBFSampler SVC SVR SkewedChi2Sampler
-SparseCoder SparsePCA TruncatedSVD
+SparsePCA TruncatedSVD
 """.split())
 
 #: Estimators whose kernels do not scan X for NaN or infinity themselves, so
