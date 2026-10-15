@@ -442,6 +442,38 @@ WEIGHT_EQUIVALENCE_FLOAT32 = {
                      "4 of 45 entries; same counts (float32 log-likelihood of magnitude ~50)",
     "ComplementNB": "float32 fit: predict_proba max relative gap 3.8e-6 (0.46678317 vs 0.46678495), "
                     "17 of 45 entries; same counts (float32 log-likelihood of magnitude ~50)",
+    # weighted means over sum(w), centering, sqrt(w) row scaling, then the
+    # solve (linear_model.py, x_linear/ridge.mojo, x_linear/bayes.mojo):
+    # scikit-learn's _preprocess_data / _rescale_data construction. With 15
+    # rows and 30 features the fits interpolate y in {0, 1, 2}, so entries
+    # near 0 are decided by atol=1e-9.
+    "LinearRegression": "float32 fit: predict gap 1.8e-7 relative at 1.0 (0.99999982 vs 1.0), "
+                        "2.2e-6 absolute near 0 (-3.2e-6 vs -1.0e-6); same weighted problem",
+    "Ridge": "float32 fit: predict max relative gap 4.3e-7 (0.27755547 vs 0.27755535); same weighted problem",
+    "RidgeClassifier": "float32 fit: decision_function relative gap 2.6e-7 (0.68100601 vs 0.68100584); "
+                       "same weighted problem and labels",
+    "BayesianRidge": "float32 fit: predict gap 7.7e-7 at 1.0 (0.99999923 vs 1.0), 2.4e-7 absolute near 0; "
+                     "same weighted problem (sum(w) in the alpha update)",
+    # sqrt(w)-scaled kernel and targets, dual times sqrt(w) (scikit-learn's
+    # _solve_cholesky_kernel); a float32 Cholesky of a weighted 15 x 15 kernel
+    # with condition ~2e2 sets the gap
+    "KernelRidge": "float32 fit: predict max relative gap 4.4e-6 (0.25874203 vs 0.25874317); "
+                   "same weighted problem (float32 Cholesky, condition ~2e2)",
+    # deviance divided by sum(w); one float32 ulp apart (x_linear/glm.mojo)
+    "PoissonRegressor": "float32 fit: predict gap 1 ulp, 1.0e-7 relative (2.31454301 vs 2.31454277); "
+                        "same weighted problem",
+    "GammaRegressor": "float32 fit: predict gap 1 ulp, 1.0e-7 relative (2.34169173 vs 2.34169197); "
+                      "same weighted problem",
+    "TweedieRegressor": "float32 fit: predict gap 1 ulp, 1.6e-7 relative (1.50056839 vs 1.50056815); "
+                        "same weighted problem",
+    # counts sum(w) and sum(w over outliers) (x_linear/huber.mojo); a flat
+    # objective (30 features, 15 rows, alpha 1e-4) leaves float32 optimizer
+    # rounding. scikit-learn's own HuberRegressor fails this check at its
+    # defaults too (its suite runs it with max_iter=5).
+    "HuberRegressor": "float32 fit: predict gaps of float32 optimizer rounding (2.98e-8 vs -7.45e-8 near 0); "
+                      "same weighted problem; scikit-learn's own fails at default params too",
+    # one Ridge per output column (MultiOutputRegressor(Ridge()), _factories)
+    "MultiOutputRegressor": "float32 fit of its Ridge members: the gap of Ridge's entry; same weighted problem",
 }
 
 
