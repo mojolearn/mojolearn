@@ -155,15 +155,35 @@ def loaded_runtime(manifest, maps_path='/proc/self/maps'):
     return rows
 
 
+def _pinned_uuid(variable):
+    """The one GPU UUID a visibility variable pins this process to, else None
+    (unset, an index, or more than one device)."""
+    value = os.environ.get(variable, '').strip()
+    if not value or ',' in value or not value.lower().startswith('gpu-'):
+        return None
+    return value.lower()
+
+
 def hardware_receipt(vendor):
     if vendor == 'cuda':
         rows = subprocess.check_output(['nvidia-smi', '--query-gpu=uuid,name,compute_cap,driver_version', '--format=csv,noheader,nounits'], text=True, timeout=20).strip().splitlines()
+        # A multi-GPU box qualifies only when this process is pinned to exactly one
+        # GPU by UUID (CUDA_VISIBLE_DEVICES=GPU-...): that card is the one recorded.
+        pin = _pinned_uuid('CUDA_VISIBLE_DEVICES')
+        if len(rows) > 1 and pin:
+            rows = [r for r in rows if r.split(',')[0].strip().lower() == pin]
         if len(rows) != 1:
             raise ValueError('Guarded board requires one unambiguous physical GPU')
         return rows[0]
     if vendor == 'hip':
         data = json.loads(subprocess.check_output(['/opt/rocm/bin/rocm-smi', '--showuniqueid', '--showproductname', '--showdriverversion', '--json'], text=True, timeout=20))
         cards = [name for name in data if name.startswith('card')]
+        # A multi-GPU box qualifies only when this process is pinned to exactly one
+        # GPU by UUID (ROCR_VISIBLE_DEVICES=GPU-<hex>, the rocm-smi Unique ID 0x<hex>).
+        pin = _pinned_uuid('ROCR_VISIBLE_DEVICES')
+        if len(cards) > 1 and pin and pin.startswith('gpu-'):
+            cards = [c for c in cards if isinstance(data[c], dict)
+                     and str(data[c].get('Unique ID', '')).lower() == '0x' + pin[4:]]
         if len(cards) != 1 or not isinstance(data[cards[0]], dict):
             raise ValueError('Guarded board requires one unambiguous ROCm GPU')
         values = data[cards[0]]
