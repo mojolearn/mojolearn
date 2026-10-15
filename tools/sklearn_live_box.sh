@@ -34,7 +34,6 @@ cd "$OUT"
 "$V/bin/python" "$ROOT/tools/sklearn_practice.py" "$OUT/practice.tsv" > "$OUT/practice.log" 2>&1
 echo "practice rc=$?" | tee "$OUT/practice.exit"
 tail -n 1 "$OUT/practice.log"
-MOJOLEARN_RUN_SKLEARN_CHECKS=1 "$V/bin/python" -m pytest -q -rfE -p no:cacheprovider --timeout=120 \
-    --timeout-method=signal "$SITE/tests/test_sklearn_compat.py" > "$OUT/checks.log" 2>&1
+bash "$ROOT/tools/sklearn_checks_per_estimator.sh" "$V/bin/python" "$SITE/tests" "$OUT/checks" 900 "${PAR:-6}" > "$OUT/checks.log" 2>&1
 echo "checks rc=$?" | tee "$OUT/checks.exit"
 tail -n 1 "$OUT/checks.log"
