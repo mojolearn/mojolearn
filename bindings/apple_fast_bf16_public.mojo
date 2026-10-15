@@ -214,17 +214,26 @@ def fast_matmul_bf16_binding(
     var transpose_a = False
     var transpose_b = False
     var out = PythonObject(None)
-    if kwargs is not PythonObject(None):
-        var keys = _BOUNDARY.get_or_create_ptr()[].builtins.tuple(kwargs.keys())
+    # CPython passes a null kwargs pointer when no keyword arguments were
+    # supplied. A raw def_py_function exposes that as a nullable object,
+    # which is distinct from Python None. Normalize using PythonObject's
+    # documented ownership API before asking it for attributes.
+    var owned_keywords = PythonObject(copy=kwargs)
+    var keyword_pointer = owned_keywords.steal_data()
+    var keywords = PythonObject(None)
+    if keyword_pointer:
+        keywords = PythonObject(from_owned=keyword_pointer)
+    if keywords is not PythonObject(None):
+        var keys = _BOUNDARY.get_or_create_ptr()[].builtins.tuple(keywords.keys())
         for index in range(len(keys)):
             var key = keys[index]
             var name = String(key)
             if name == "transpose_a":
-                transpose_a = Bool(kwargs[key])
+                transpose_a = Bool(keywords[key])
             elif name == "transpose_b":
-                transpose_b = Bool(kwargs[key])
+                transpose_b = Bool(keywords[key])
             elif name == "out":
-                out = kwargs[key]
+                out = keywords[key]
             else:
                 raise Error("fast matmul_bf16: unknown keyword " + name)
     if transpose_a and transpose_b:
