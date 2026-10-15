@@ -12,7 +12,7 @@ export MOJOLEARN_RUN_SKLEARN_CHECKS=1 PY T OUT LIM
 run() {  # name ("_non_parametrized" runs every other test once)
     local name=$1 log="$OUT/per/$1.log" expr="test_scikit_learn_estimator_checks" only=$1
     [ "$name" = _non_parametrized ] && { expr="not test_scikit_learn_estimator_checks"; only=""; }
-    MOJOLEARN_SKLEARN_CHECKS_ONLY=$only "$PY" -m pytest -q -rfE -p no:cacheprovider --timeout=120 \
+    MOJOLEARN_SKLEARN_CHECKS_ONLY=$only "$PY" -m pytest -q -rfEX -p no:cacheprovider --timeout=120 \
         --timeout-method=signal -k "$expr" "$T/test_sklearn_compat.py" > "$log" 2>&1 &
     local pid=$! t=0
     while kill -0 $pid 2>/dev/null; do sleep 5; t=$((t+5)); [ $t -ge "$LIM" ] && { kill -9 $pid; echo "HUNG over ${LIM}s" >> "$log"; break; }; done
