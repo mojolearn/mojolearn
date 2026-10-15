@@ -678,6 +678,23 @@ class GaussianProcessRegressor(NumericModeMixin):
         n_targets=None,
         random_state=None,
     ):
+        # Stored verbatim, as scikit-learn requires; `_validate_params`
+        # checks them when `fit` (or `load`) runs.
+        self.kernel = kernel
+        self.alpha = alpha
+        self.optimizer = optimizer
+        self.n_restarts_optimizer = n_restarts_optimizer
+        self.normalize_y = normalize_y
+        self.copy_X_train = copy_X_train
+        self.n_targets = n_targets
+        self.random_state = random_state
+
+    def _validate_params(self):
+        """The constructor checks, run first in `fit` and `load`; the
+        resolved and converted values go to private attributes."""
+        kernel, alpha, optimizer = self.kernel, self.alpha, self.optimizer
+        n_restarts_optimizer, normalize_y, copy_X_train = self.n_restarts_optimizer, self.normalize_y, self.copy_X_train
+        n_targets, random_state = self.n_targets, self.random_state
         if kernel is None:
             # sklearn's documented default, `_gpr.py:229-231`, bounds
             # "fixed" as there, so the default kernel is never optimized.
@@ -748,18 +765,16 @@ class GaussianProcessRegressor(NumericModeMixin):
                 "scikit-learn's None (the global NumPy generator) has no "
                 "identical counterpart"
             )
-        self.kernel = kernel
+        self._kernel = kernel
         # CONVERSION, NOT POLICY (the SVR epsilon rule): a non-number still
         # raises here, and every value that IS a number goes down unclamped
         # so gp_validate_alpha's refusals -- NaN, negative, +inf, and the
         # identical tier's two-value pin -- stay reachable from Python.
-        self.alpha = float(alpha)
-        self.optimizer = optimizer
-        self.n_restarts_optimizer = n_restarts_optimizer
-        self.normalize_y = bool(normalize_y)
-        self.copy_X_train = True
-        self.n_targets = None
-        self.random_state = None if random_state is None else int(random_state)
+        self._alpha = float(alpha)
+        self._optimizer = optimizer
+        self._n_restarts_optimizer = n_restarts_optimizer
+        self._normalize_y = bool(normalize_y)
+        self._random_state = None if random_state is None else int(random_state)
 
     # -- the binding, and the tier it really is -----------------------------
 
@@ -793,7 +808,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         constructor refusal stays reachable from this surface). The kernel
         is the FITTED `kernel_` once there is one, else `kernel`."""
         if kernel is None:
-            kernel = getattr(self, "kernel_", None) or self.kernel
+            kernel = getattr(self, "kernel_", None) or self._kernel
         nodes = kernel._nodes()
         # `Array.from_list(..., '<f4')` rounds each Python float to binary32
         # exactly as `np.array(dtype=np.float32)` did (DEVIATION 2376).
@@ -833,6 +848,7 @@ class GaussianProcessRegressor(NumericModeMixin):
             The fitted model. Check ``info_ == 0``: a failed Cholesky
             factorization is reported there rather than raised.
         """
+        self._validate_params()
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         shape = _shape_of(y)
@@ -852,7 +868,7 @@ class GaussianProcessRegressor(NumericModeMixin):
                 f"mojolearn GaussianProcessRegressor: y has {targets.shape[0]} "
                 f"entries, X has {n_rows} rows"
             )
-        if self.normalize_y:
+        if self._normalize_y:
             # sklearn `_gpr.py:275-280`. StandardScaler's pinned folds in
             # this estimator's tier; for 1-D y scikit-learn's
             # `_handle_zeros_in_scale` takes its scalar arm (`std == 0 -> 1`),
@@ -864,9 +880,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             targets = scaler.transform(column).reshape((n_rows,))
         else:
             y_mean, y_std = 0.0, 1.0
-        kernel_ = self.kernel
+        kernel_ = self._kernel
         self._optimizer_runs = []
-        if self.optimizer is not None and self.kernel.n_dims > 0:
+        if self._optimizer is not None and self._kernel.n_dims > 0:
             kernel_ = self._optimize(x, targets, n_rows, n_cols)
         kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays(kernel_)
 
@@ -898,13 +914,13 @@ class GaussianProcessRegressor(NumericModeMixin):
             ],
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
             # n_train, n_features, n_nodes, n_ls, alpha
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha],
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._alpha],
         )
         self.X_train_ = x
         self.y_train_ = targets
         self._y_train_mean = y_mean
         self._y_train_std = y_std
-        self.normalize_y_ = bool(self.normalize_y)
+        self.normalize_y_ = bool(self._normalize_y)
         self.kernel_ = kernel_
         self.n_features_in_ = n_cols
         self.L_ = l_out.reshape((n_rows, n_rows))
@@ -933,7 +949,7 @@ class GaussianProcessRegressor(NumericModeMixin):
              addr_ro(kparams, name="kparams"), addr_ro(ls_len, name="ls_len"), addr_ro(ls, name="ls"),
              addr_ro(free, name="free"), addr(grad, name="grad"), addr(scalars, name="scalars")],
             # n_train, n_features, n_nodes, n_ls, alpha
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha],
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._alpha],
         )
         return int(info), float(scalars[1]), [float(grad[i]) for i in range(n_free)]  # glue: reads the gradient of kernel hyperparameters (n_dims entries)
 
@@ -946,18 +962,18 @@ class GaussianProcessRegressor(NumericModeMixin):
         Python only hands the kernel over and reads the answer. Returns the
         fitted kernel, whose `theta` is the winning run's. Every run is
         recorded in `_optimizer_runs` as `(n_iter, n_eval, stop, -f)`."""
-        base = self.kernel
+        base = self._kernel
         kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays(base)
         free = Array.from_list(base._free_flags(), "<i4")
         n_theta = base.n_dims
         bounds = Array.from_list([float(v) for b in base._free_bounds() for v in (b[0], b[1])], "<f4")  # glue: packs bounds of free kernel hyperparameters (n_dims entries)
-        n_runs = 1 + int(self.n_restarts_optimizer)
+        n_runs = 1 + int(self._n_restarts_optimizer)
         theta_out = empty((n_theta,), "<f8")
         values_out = empty((n_theta,), "<f8")
         runs_out = empty((n_runs * 4,), "<f8")
         # random_state may be None only with no restarts (checked in __init__);
         # the kernel then draws no restart point and ignores the seed.
-        seed = 0 if self.random_state is None else int(self.random_state)
+        seed = 0 if self._random_state is None else int(self._random_state)
         self._extension().gpr_optimize(
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_optimize_binding.
             # x, y, kinds, kparams, ls_len, ls, free, bounds, theta_out,
@@ -967,7 +983,7 @@ class GaussianProcessRegressor(NumericModeMixin):
              addr_ro(free, name="free"), addr_ro(bounds, name="bounds"), addr(theta_out, name="theta_out"),
              addr(values_out, name="values_out"), addr(runs_out, name="runs_out")],
             # n_train, n_features, n_nodes, n_ls, alpha, n_restarts, seed_lo, seed_hi
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha, n_runs - 1,
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._alpha, n_runs - 1,
              seed & 0xFFFFFFFF, (seed >> 32) & 0xFFFFFFFF],
         )
         for r in range(n_runs):  # glue: one record per optimizer restart
@@ -1184,7 +1200,7 @@ class GaussianProcessRegressor(NumericModeMixin):
             "ls": Array.from_list(table if table else [1.0], "<f8"),
             "ints": Array.from_list([int(self.n_features_in_), int(self.info_),
                                      1 if getattr(self, "normalize_y_", False) else 0, len(table)], "<i8"),
-            "reals": Array.from_list([float(self.alpha), float(getattr(self, "_y_train_mean", 0.0)),
+            "reals": Array.from_list([float(self._alpha), float(getattr(self, "_y_train_mean", 0.0)),
                                       float(getattr(self, "_y_train_std", 1.0)),
                                       float(self.log_marginal_likelihood_value_)], "<f8"),
         })
@@ -1238,9 +1254,10 @@ class GaussianProcessRegressor(NumericModeMixin):
             nodes.append((int(kinds[i]), float(params[i]), [float(ls[off + j]) for j in range(lens[i])]))  # glue: rebuilds the kernel's postfix nodes
             off += lens[i]
         obj = cls(kernel=_SavedKernel(nodes), alpha=float(reals[0]), normalize_y=bool(norm))
+        obj._validate_params()
         _restore_mode(obj, arrays)
         obj.X_train_ = x
-        obj.kernel_ = obj.kernel
+        obj.kernel_ = obj._kernel
         obj.n_features_in_ = d
         obj.L_ = l_flat.reshape((n, n))
         obj.alpha_ = dual

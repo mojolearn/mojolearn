@@ -212,6 +212,26 @@ class AgglomerativeClustering(ParamsMixin):
                  memory=None, compute_full_tree="auto",
                  distance_threshold=None, compute_distances=False,
                  prediction_data=False):
+        # Stored verbatim, as scikit-learn requires; `_validate_params`
+        # checks them when `fit` runs.
+        self.n_clusters = n_clusters
+        self.metric = metric
+        self.connectivity = connectivity
+        self.linkage = linkage
+        self.c = c
+        self.memory = memory
+        self.compute_full_tree = compute_full_tree
+        self.distance_threshold = distance_threshold
+        self.compute_distances = compute_distances
+        self.prediction_data = prediction_data
+
+    def _validate_params(self):
+        """The constructor checks, run first in `fit` and `load`. The
+        normalized `connectivity` ('pairwise' for None) and
+        `compute_distances` (a bool) go to private attributes."""
+        n_clusters, metric, connectivity, linkage = self.n_clusters, self.metric, self.connectivity, self.linkage
+        c, memory, compute_full_tree = self.c, self.memory, self.compute_full_tree
+        distance_threshold = self.distance_threshold
         # scikit-learn's linkages (lane/algos-cluster option parity,
         # 2026-09-27). 'single' with the euclidean metric, no connectivity
         # matrix and no per-merge distances stays on cuML's Boruvka route
@@ -279,23 +299,15 @@ class AgglomerativeClustering(ParamsMixin):
         if distance_threshold is not None and not compute_full_tree:
             raise ValueError(
                 "compute_full_tree must be True if distance_threshold is set.")
-        self.n_clusters = n_clusters
-        self.metric = metric
-        self.connectivity = connectivity
-        self.linkage = linkage
-        self.c = 15
-        self.memory = None
-        self.compute_full_tree = compute_full_tree
-        self.distance_threshold = distance_threshold
-        self.compute_distances = bool(compute_distances)
-        self.prediction_data = prediction_data
+        self._connectivity = connectivity
+        self._compute_distances = bool(self.compute_distances)
 
     def _legacy_route(self):
         """cuML's single-linkage Boruvka route: the recorded `agglomerative`
         lanes' bits. Everything else is the x_cluster route."""
         return (self.linkage == "single" and self.metric in _METRICS
-                and isinstance(self.connectivity, str)
-                and self.distance_threshold is None and not self.compute_distances)
+                and isinstance(self._connectivity, str)
+                and self.distance_threshold is None and not self._compute_distances)
 
     def _bind(self, name=None):
         return _backend.binding(name or self._BINDING, getattr(self, "numeric_mode", None))
@@ -338,6 +350,7 @@ class AgglomerativeClustering(ParamsMixin):
         UserWarning
             If a connectivity matrix has more than one connected component.
         """
+        self._validate_params()
         if not isinstance(self.prediction_data, bool):
             raise TypeError(
                 "mojolearn AgglomerativeClustering: prediction_data must be a "
@@ -393,7 +406,7 @@ class AgglomerativeClustering(ParamsMixin):
             # n_rows, n_cols, n_clusters, metric, use_knn
             [
                 n_rows, n_cols, k, _METRICS[self.metric],
-                _CONNECTIVITIES[self.connectivity],
+                _CONNECTIVITIES[self._connectivity],
             ],
         )
         self.labels_ = labels
@@ -423,7 +436,7 @@ class AgglomerativeClustering(ParamsMixin):
         (aux, count, edge_mode), mode 1 the dense n x n float32 matrix
         (count n * n), mode 2 the COO rows, columns and values as float32,
         concatenated (count nnz)."""
-        conn = self.connectivity
+        conn = self._connectivity
         if callable(conn):
             conn = conn(X)
         tocoo = getattr(conn, "tocoo", None)
@@ -485,7 +498,7 @@ class AgglomerativeClustering(ParamsMixin):
                 raise ValueError(
                     f"Cannot extract more clusters than samples: {k} clusters "
                     f"were given for a tree with {n} leaves.")
-        constrained = not isinstance(self.connectivity, str)
+        constrained = not isinstance(self._connectivity, str)
         full = True
         if constrained:
             full = self.compute_full_tree
@@ -518,7 +531,7 @@ class AgglomerativeClustering(ParamsMixin):
                 f"is {self.n_connected_components_} > 1. Completing it to avoid "
                 "stopping the tree early.", stacklevel=2)
         distances = f[0]
-        if self.distance_threshold is not None or self.compute_distances:
+        if self.distance_threshold is not None or self._compute_distances:
             self.distances_ = Array._from_flat(distances, (n_merges,), "<f4")
         else:
             self.__dict__.pop("distances_", None)
@@ -705,6 +718,7 @@ class AgglomerativeClustering(ParamsMixin):
             raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
         k, nf, n_leaves = (int(v) for v in meta.tolist())  # glue: unpacks the fixed meta vector
         obj = cls(n_clusters=k, metric=_serialize.scalar_str(arrays, "metric"), prediction_data=True)
+        obj._validate_params()
         _restore_mode(obj, arrays)
         x = _serialize.exact(arrays, "x", "<f4")
         labels = _serialize.exact(arrays, "labels", "<i4")

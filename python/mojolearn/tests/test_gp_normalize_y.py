@@ -41,7 +41,7 @@ def _fit_or_skip(x, y, normalize_y=True):
 
 def test_non_bool_is_refused_by_name():
     with pytest.raises(TypeError, match="normalize_y must be a bool"):
-        GaussianProcessRegressor(normalize_y="yes")
+        GaussianProcessRegressor(normalize_y="yes").fit([[0.0], [1.0]], [0.0, 1.0])
 
 
 def test_the_absence_row_and_the_refusal_are_gone():

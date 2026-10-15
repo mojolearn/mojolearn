@@ -4045,6 +4045,9 @@ class _PLS(RegressorScoreMixin, _Base):
             Ym = _M.from_input(_row_of(Y), "Y").T if vec else _M.from_input(Y, "Y")
         return M, Ym, vec
 
+    def _validate_params(self):
+        """Parameter checks, run at the start of `fit` (none here)."""
+
     def _center_scale(self, k, A):
         n = A.r
         mean = k.colmean(A)
@@ -4074,6 +4077,7 @@ class _PLS(RegressorScoreMixin, _Base):
         ValueError
             If Y is missing or ``n_components`` is out of range.
         """
+        self._validate_params()
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
         M, Ym, vec = self._xy(X, Y)
@@ -4333,10 +4337,12 @@ class PLSCanonical(_PLS):
 
     def __init__(self, n_components=2, *, scale=True, algorithm="nipals", max_iter=500, tol=1e-06, copy=True,
                  numeric_mode=None):
-        if algorithm not in ("nipals", "svd"):
-            raise ValueError("PLSCanonical: algorithm must be 'nipals' or 'svd'")
         self.algorithm = algorithm
         super().__init__(n_components, scale=scale, max_iter=max_iter, tol=tol, copy=copy, numeric_mode=numeric_mode)
+
+    def _validate_params(self):
+        if self.algorithm not in ("nipals", "svd"):
+            raise ValueError("PLSCanonical: algorithm must be 'nipals' or 'svd'")
 
 
 # NIPALS, mode B (the pseudo-inverses of X and Y), canonical deflation.
@@ -7367,7 +7373,8 @@ class SparseCoder(_SparseCoding):
     dictionary : array-like of shape (n_components, n_features)
         Dictionary atoms, one per row.
     transform_algorithm : {"omp", "lasso_lars", "lasso_cd", "lars", "threshold"}, default "omp"
-        Coding method. An unknown value raises ValueError at construction.
+        Coding method. An unknown value raises ValueError at ``fit`` or
+        ``transform``.
     transform_n_nonzero_coefs : int or None, default None
         Nonzero coefficients for ``"omp"`` and ``"lars"``.
     transform_alpha : float or None, default None
@@ -7411,19 +7418,44 @@ class SparseCoder(_SparseCoding):
         self.transform_n_nonzero_coefs, self.transform_alpha = transform_n_nonzero_coefs, transform_alpha
         self.split_sign, self.n_jobs, self.positive_code = split_sign, n_jobs, positive_code
         self.transform_max_iter, self.numeric_mode = transform_max_iter, numeric_mode
-        _check_sparse_algos("lars", transform_algorithm)
-        self.numeric_mode_ = _mode(numeric_mode)
-        self.components_m_ = _M.from_input(dictionary, "dictionary")
-        self.components_ = self.components_m_.out()
-        self.n_components_, self.n_features_in_ = self.components_m_.r, self.components_m_.c
+
+    # Nothing is learned: `transform` works without `fit` (scikit-learn tags
+    # SparseCoder requires_fit=False). The parameters are checked and the
+    # dictionary uploaded at the first use, not in `__init__`, which stores
+    # them verbatim; the upload is kept for the same dictionary object.
+    def _validate_params(self):
+        _check_sparse_algos("lars", self.transform_algorithm)
+
+    def _prepare(self):
+        self._validate_params()
+        cached = self.__dict__.get("_dictionary_m")
+        if cached is None or cached[0] is not self.dictionary:
+            cached = (self.dictionary, _M.from_input(self.dictionary, "dictionary"))
+            self._dictionary_m = cached
+        return cached[1]
+
+    @property
+    def components_m_(self):
+        return self._prepare()
+
+    def _check(self, attr="components_"):
+        self._prepare()
+
+    def _kit(self):
+        return _Kit(_mode(self.numeric_mode))
 
     def fit(self, X, y=None):
-        """Do nothing and return self (the dictionary is fixed).
+        """Check the parameters, record the dictionary's shape and return self
+        (the dictionary is fixed; nothing is learned).
 
         Returns
         -------
         self
         """
+        D = self._prepare()
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        self.components_ = D.out()
+        self.n_components_, self.n_features_in_ = D.r, D.c
         return self
 
     def fit_transform(self, X, y=None):

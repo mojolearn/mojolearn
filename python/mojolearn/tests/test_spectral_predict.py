@@ -132,7 +132,8 @@ def arm_nearest_neighbors(rep):
                SpectralClustering(prediction_data=1).fit, x)
     rep.check("NN", SpectralClustering(affinity="rbf").affinity == "rbf",
               "RBF affinity is accepted for fitting")
-    rep.raises("NN", ValueError, "refused", "unknown affinity is refused", SpectralClustering, affinity="unknown")
+    rep.raises("NN", ValueError, "refused", "unknown affinity is refused",
+               SpectralClustering(affinity="unknown").fit, x)
     odd = SpectralClustering(prediction_data=True, **kw).fit(x)
     odd.affinity = "rbf"
     rep.raises("NN", ValueError, "no out-of-sample rule", "an unsupported affinity refused by name at predict", odd.predict, x)

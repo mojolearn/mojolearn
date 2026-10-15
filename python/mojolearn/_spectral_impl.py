@@ -352,6 +352,33 @@ class SpectralClustering(ParamsMixin):
         verbose=False,
         prediction_data=False,
     ):
+        # Stored verbatim, as scikit-learn requires; `_validate_params`
+        # checks them when `fit` (or `load`) runs.
+        self.n_clusters = n_clusters
+        self.n_components = n_components
+        self.random_state = random_state
+        self.n_neighbors = n_neighbors
+        self.n_init = n_init
+        self.eigen_tol = eigen_tol
+        self.affinity = affinity
+        self.gamma = gamma
+        self.assign_labels = assign_labels
+        self.prediction_data = prediction_data
+        self.eigen_solver = eigen_solver
+        self.degree = degree
+        self.coef0 = coef0
+        self.kernel_params = kernel_params
+        self.n_jobs = n_jobs
+        self.verbose = verbose
+
+    def _validate_params(self):
+        """The constructor checks, run first in `fit` and `load`; the
+        converted values go to private attributes, which the fit reads."""
+        n_clusters, n_components, random_state = self.n_clusters, self.n_components, self.random_state
+        n_neighbors, n_init, eigen_tol, affinity = self.n_neighbors, self.n_init, self.eigen_tol, self.affinity
+        assign_labels, eigen_solver, gamma, degree = self.assign_labels, self.eigen_solver, self.gamma, self.degree
+        coef0, kernel_params, n_jobs, verbose = self.coef0, self.kernel_params, self.n_jobs, self.verbose
+        prediction_data = self.prediction_data
         if affinity not in _CLUSTER_AFFINITIES:
             raise ValueError(
                 f"mojolearn SpectralClustering: affinity={affinity!r} is "
@@ -452,27 +479,14 @@ class SpectralClustering(ParamsMixin):
                 "mojolearn SpectralClustering: n_components must be at least "
                 "1, or None to follow n_clusters"
             )
-        self.n_clusters = int(n_clusters)
-        self.n_components = n_components
-        self.random_state = random_state
-        self.n_neighbors = int(n_neighbors)
-        self.n_init = int(n_init)
-        self.eigen_tol = eigen_tol
-        self.affinity = affinity
+        self._n_clusters = int(n_clusters)
+        self._n_neighbors = int(n_neighbors)
+        self._n_init = int(n_init)
+        self._eigen_tol = eigen_tol
         #: scikit-learn's SpectralClustering default gamma is 1.0 (its
         #: SpectralEmbedding's is 1 / n_features).
-        self.gamma = (1.0 if gamma is None else float(gamma)) if affinity == "rbf" else None
-        self.assign_labels = assign_labels
+        self._gamma = (1.0 if gamma is None else float(gamma)) if affinity == "rbf" else None
         self._seed = seed
-        self.prediction_data = prediction_data
-        # Refused unless at their defaults (checked above), stored so that
-        # get_params / clone report every constructor parameter.
-        self.eigen_solver = eigen_solver
-        self.degree = degree
-        self.coef0 = coef0
-        self.kernel_params = kernel_params
-        self.n_jobs = n_jobs
-        self.verbose = verbose
 
     #: The binding `predict` asks; a host subclass answers the metrics host
     #: binding, which ships in the inference wheel.
@@ -483,12 +497,12 @@ class SpectralClustering(ParamsMixin):
 
     def _state_arrays(self, n, k):
         return (empty((k,), "<f4"), empty((n, k), "<f4"), empty((n,), "<f4"),
-                empty((self.n_clusters, k), "<f4"))
+                empty((self._n_clusters, k), "<f4"))
 
     def _n_components(self):
         """cuML's rule: `n_components` defaults to `n_clusters` when None
         (`spectral_clustering.pyx`)."""
-        return self.n_clusters if self.n_components is None else int(
+        return self._n_clusters if self.n_components is None else int(
             self.n_components
         )
 
@@ -518,6 +532,7 @@ class SpectralClustering(ParamsMixin):
         TypeError
             If ``prediction_data`` is not a bool.
         """
+        self._validate_params()
         if not isinstance(self.prediction_data, bool):
             raise TypeError(
                 "mojolearn SpectralClustering: prediction_data must be a bool, "
@@ -538,7 +553,7 @@ class SpectralClustering(ParamsMixin):
                 X = _dense_square(X, "SpectralClustering")
         elif self.affinity == "rbf":
             # scikit-learn's affinity='rbf' (cluster/_spectral.py:
-            # pairwise_kernels(X, metric='rbf', gamma=self.gamma)), which
+            # pairwise_kernels(X, metric='rbf', gamma=self._gamma)), which
             # cuML does not carry: the dense exp(-gamma ||x_i - x_j||^2) by
             # the decomp lane's identical cells, SpectralEmbedding's rbf
             # route exactly (x_decomp/cells.mojo `sqdist_cell`, `exp_c`),
@@ -546,7 +561,7 @@ class SpectralClustering(ParamsMixin):
             xm = _M.from_input(X)
             mode = _backend.default_mode()
             kit = _Kit(mode, _backend.binding("_mojolearn_x_decomp", mode))
-            aff = kit.ew("exp", kit.ew("scale", kit.sqdist(xm, xm), s=-self.gamma))
+            aff = kit.ew("exp", kit.ew("scale", kit.sqdist(xm, xm), s=-self._gamma))
             self.affinity_matrix_ = aff.out()
             self.n_features_in_ = xm.c
             X = aff if dense_fn is not None else _DenseCOO(aff)
@@ -569,8 +584,8 @@ class SpectralClustering(ParamsMixin):
             embedding = empty((n, k), "<f4")
             # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
             # spectral_fit_predict_dense_binding.
-            params = [n, self.n_clusters, k, self.n_init, self.n_neighbors,
-                      self.eigen_tol, self._seed]
+            params = [n, self._n_clusters, k, self._n_init, self._n_neighbors,
+                      self._eigen_tol, self._seed]
             addrs = [dense_addr, addr(labels, name="labels"), addr(embedding, name="embedding")]
             if self.prediction_data:
                 state = self._state_arrays(n, k)
@@ -627,11 +642,11 @@ class SpectralClustering(ParamsMixin):
             params = [
                 n,
                 int(vals.shape[0]),
-                self.n_clusters,
+                self._n_clusters,
                 k,
-                self.n_init,
-                self.n_neighbors,
-                self.eigen_tol,
+                self._n_init,
+                self._n_neighbors,
+                self._eigen_tol,
                 self._seed,
             ]
             if self.prediction_data:
@@ -667,10 +682,10 @@ class SpectralClustering(ParamsMixin):
                 )
             n = int(x.shape[0])
             self._check_shape(n, k)
-            if self.n_neighbors > n:
+            if self._n_neighbors > n:
                 raise ValueError(
                     f"mojolearn SpectralClustering: n_neighbors="
-                    f"{self.n_neighbors} exceeds n_samples={n}"
+                    f"{self._n_neighbors} exceeds n_samples={n}"
                 )
             labels = empty((n,), "<i4")
             embedding = empty((n, k), "<f4")
@@ -681,11 +696,11 @@ class SpectralClustering(ParamsMixin):
             params = [
                 n,
                 int(x.shape[1]),
-                self.n_clusters,
+                self._n_clusters,
                 k,
-                self.n_init,
-                self.n_neighbors,
-                self.eigen_tol,
+                self._n_init,
+                self._n_neighbors,
+                self._eigen_tol,
                 self._seed,
             ]
             if self.prediction_data:
@@ -744,12 +759,12 @@ class SpectralClustering(ParamsMixin):
 
     def _resolved_neighbors(self, n):
         """`SpectralEmbedding._precomputed_knn_affinity` reads this."""
-        return self.n_neighbors
+        return self._n_neighbors
 
     def _check_shape(self, n, k):
-        if self.n_clusters > n:
+        if self._n_clusters > n:
             raise ValueError(
-                f"mojolearn SpectralClustering: n_clusters={self.n_clusters} "
+                f"mojolearn SpectralClustering: n_clusters={self._n_clusters} "
                 f"exceeds n_samples={n}"
             )
         if k >= n:
@@ -910,7 +925,7 @@ class SpectralClustering(ParamsMixin):
              addr(labels, name="labels"), addr(emb, name="embedding")],
             # n_train, n_queries, n_features, n_components, n_clusters,
             # n_neighbors, affinity
-            [n_train, nq, n_features, k, int(self.n_clusters), int(self.n_neighbors), affinity],
+            [n_train, nq, n_features, k, int(self._n_clusters), int(self._n_neighbors), affinity],
         )
         return labels, emb
 
@@ -958,10 +973,10 @@ class SpectralClustering(ParamsMixin):
             "diag": self._pd_diag,
             "centroids": self._pd_centroids,
             "labels": self.labels_,
-            "eigen_tol": Array.from_list([float(self.eigen_tol)], "<f8"),
+            "eigen_tol": Array.from_list([float(self._eigen_tol)], "<f8"),
             "meta": Array.from_list(
-                [int(self.n_clusters), int(self.n_components_), int(self.n_neighbors),
-                 int(self.n_init), int(self._seed), 1 if self.random_state is None else 0,
+                [int(self._n_clusters), int(self.n_components_), int(self._n_neighbors),
+                 int(self._n_init), int(self._seed), 1 if self.random_state is None else 0,
                  n_train, int(self.n_features_in_) if nn else 0],
                 "<i8",
             ),
@@ -1008,6 +1023,7 @@ class SpectralClustering(ParamsMixin):
             random_state=None if seed_none else seed, eigen_tol=float(tol[0]),
             affinity=affinity, prediction_data=True,
         )
+        obj._validate_params()
         _restore_mode(obj, arrays)
         ev = _serialize.exact(arrays, "eigenvalues", "<f4")
         evec = _serialize.exact(arrays, "eigenvectors", "<f4")
@@ -1158,6 +1174,20 @@ class SpectralEmbedding(ParamsMixin):
         n_jobs=None,
         verbose=False,
     ):
+        # Stored verbatim, as scikit-learn requires; `_validate_params`
+        # checks them when `fit` runs.
+        self.n_components = n_components
+        self.affinity = affinity
+        self.random_state = random_state
+        self.n_neighbors = n_neighbors
+        self.gamma = gamma
+        self.eigen_solver, self.eigen_tol, self.n_jobs, self.verbose = eigen_solver, eigen_tol, n_jobs, verbose
+
+    def _validate_params(self):
+        """The constructor checks, run first in `fit`; the converted values
+        go to private attributes, which the fit reads."""
+        n_components, affinity, random_state = self.n_components, self.affinity, self.random_state
+        n_neighbors, gamma, eigen_solver, eigen_tol = self.n_neighbors, self.gamma, self.eigen_solver, self.eigen_tol
         if affinity not in _EMBED_AFFINITIES:
             raise ValueError(
                 f"mojolearn SpectralEmbedding: affinity={affinity!r} is "
@@ -1196,7 +1226,6 @@ class SpectralEmbedding(ParamsMixin):
                 )
         # n_jobs sizes scikit-learn's neighbor search; the kNN graph here is
         # exact, so the value changes no result. verbose prints nothing.
-        self.eigen_solver, self.eigen_tol, self.n_jobs, self.verbose = eigen_solver, eigen_tol, n_jobs, verbose
         if int(n_components) < 1:
             raise ValueError(
                 "mojolearn SpectralEmbedding: n_components must be at least 1"
@@ -1215,15 +1244,13 @@ class SpectralEmbedding(ParamsMixin):
                     "mojolearn SpectralEmbedding: random_state must satisfy "
                     f"0 <= random_state < 2**32, got {random_state!r}"
                 )
-        self.n_components = int(n_components)
-        self.affinity = affinity
-        self.random_state = random_state
-        self.n_neighbors = None if n_neighbors is None else int(n_neighbors)
+        self._n_components = int(n_components)
+        self._n_neighbors = None if n_neighbors is None else int(n_neighbors)
         self._seed = seed
-        self.gamma = None if gamma is None else float(gamma)
+        self._gamma = None if gamma is None else float(gamma)
 
     def _resolved_neighbors(self, n):
-        return self.n_neighbors if self.n_neighbors is not None else max(n // 10, 1)
+        return self._n_neighbors if self._n_neighbors is not None else max(n // 10, 1)
 
     def fit(self, X, y=None):
         """Compute the embedding of ``X``.
@@ -1248,7 +1275,8 @@ class SpectralEmbedding(ParamsMixin):
             a negative or repeated entry, or ``n_components`` needs as many
             eigenpairs as there are samples.
         """
-        k = self.n_components
+        self._validate_params()
+        k = self._n_components
         drop_first = bool(self._drop_first)
         norm_laplacian = bool(self._norm_laplacian)
         # The one piece of arithmetic the reference keeps in Python
@@ -1274,7 +1302,7 @@ class SpectralEmbedding(ParamsMixin):
             # precomputed route below unchanged: the dense matrix through COO,
             # exact zeros dropped, the diagonal dropped.
             xm = _M.from_input(X)
-            gamma = self.gamma if self.gamma is not None else 1.0 / xm.c
+            gamma = self._gamma if self._gamma is not None else 1.0 / xm.c
             self.gamma_ = gamma
             mode = _backend.default_mode()
             kit = _Kit(mode, _backend.binding("_mojolearn_x_decomp", mode))
@@ -1448,7 +1476,7 @@ class SpectralEmbedding(ParamsMixin):
     def _check_shape(self, n, n_lanczos):
         if n_lanczos >= n:
             raise ValueError(
-                f"mojolearn SpectralEmbedding: n_components={self.n_components} "
+                f"mojolearn SpectralEmbedding: n_components={self._n_components} "
                 f"needs {n_lanczos} eigenpairs, which must be below "
                 f"n_samples={n}"
             )

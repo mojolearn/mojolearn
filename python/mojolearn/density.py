@@ -672,6 +672,24 @@ class KernelDensity(NumericModeMixin):
         leaf_size=40,
         metric_params=None,
     ):
+        # Stored verbatim, as scikit-learn requires; `_validate_params`
+        # checks them when `fit` (or `load`) runs.
+        self.bandwidth = bandwidth
+        self.kernel = kernel
+        self.metric = metric
+        self.algorithm = algorithm
+        self.atol = atol
+        self.rtol = rtol
+        self.breadth_first = breadth_first
+        self.leaf_size = leaf_size
+        self.metric_params = metric_params
+
+    def _validate_params(self):
+        """The constructor checks, run first in `fit` and `load`. Every
+        read site converts `bandwidth` with `float()`."""
+        bandwidth, algorithm, kernel, metric = self.bandwidth, self.algorithm, self.kernel, self.metric
+        atol, rtol, breadth_first, leaf_size = self.atol, self.rtol, self.breadth_first, self.leaf_size
+        metric_params = self.metric_params
         if isinstance(bandwidth, str):
             raise NotImplementedError(
                 "mojolearn KernelDensity: bandwidth='%s' is refused; compute "
@@ -679,8 +697,6 @@ class KernelDensity(NumericModeMixin):
                 "n ** (-1/(d+4)), silverman is (n (d+2) / 4) ** (-1/(d+4)))"
                 % bandwidth
             )
-        # The caller's own object when it already is a float, so
-        # `get_params` hands `clone` back the object it was given.
         bandwidth = bandwidth if type(bandwidth) is float else float(bandwidth)
         if not (bandwidth > 0.0) or bandwidth != bandwidth:
             raise ValueError(
@@ -724,17 +740,6 @@ class KernelDensity(NumericModeMixin):
                     "or apply the two-line binding change in "
                     "kde/README.md's HAND-OFF." % (metric_params, p)
                 )
-        self.bandwidth = bandwidth
-        self.kernel = kernel
-        self.metric = metric
-        self.algorithm = "auto"
-        # Stored under their own names so `get_params` / `clone` see every
-        # constructor parameter (they only ever hold the accepted values).
-        self.atol = atol
-        self.rtol = rtol
-        self.breadth_first = breadth_first
-        self.leaf_size = leaf_size
-        self.metric_params = metric_params
 
     def _resident_fit_handle(self, binding):
         """The handle of the device-resident copy of the fit set (DEVIATION
@@ -757,7 +762,8 @@ class KernelDensity(NumericModeMixin):
         if cached is not None and cached[0] == key:
             return cached[1]
         if cached is not None:
-            self._release_resident_fit()
+            self._validate_params()
+        self._release_resident_fit()
         handle = int(prepare(
             key[0], key[2],
             # ORDER MATCHES bindings/_mojolearn_estimators.mojo::kde_fit_prepare_binding.
@@ -1023,6 +1029,7 @@ class KernelDensity(NumericModeMixin):
             kernel=_serialize.scalar_str(arrays, "kernel"),
             metric=_serialize.scalar_str(arrays, "metric"),
         )
+        obj._validate_params()
         _restore_mode(obj, arrays)
         nf, n_fit, has_weights = int(meta[0]), int(meta[1]), int(meta[2])
         x = _serialize.exact(arrays, "x", "<f4")

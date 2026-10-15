@@ -57,7 +57,10 @@ def _raises(exc, needle, fn, *a, **kw):
 
 
 def test_constructor_refuses_by_name():
-    G = GaussianProcessClassifier
+    # The constructor stores its parameters verbatim (scikit-learn's rule);
+    # `fit` checks them first, before X is read.
+    def G(**kw):
+        return GaussianProcessClassifier(**kw).fit([[0.0], [1.0]], [0, 1])
     _raises(NotImplementedError, "DEVIATION 1761", G, optimizer="fmin_l_bfgs_b")
     _raises(NotImplementedError, "n_restarts_optimizer", G, n_restarts_optimizer=2)
     _raises(NotImplementedError, "warm_start", G, warm_start=True)
@@ -69,7 +72,7 @@ def test_constructor_refuses_by_name():
     _raises(ValueError, "at least 1", G, max_iter_predict=0)
     _raises(TypeError, "max_iter_predict", G, max_iter_predict=True)
     _raises(TypeError, "kernel", G, kernel="rbf")
-    m = G()
+    m = GaussianProcessClassifier()
     assert m.optimizer is None and m.max_iter_predict == 100 and m.multi_class == "one_vs_rest"
     assert "GaussianProcessClassifier" in ml.__all__
 
@@ -185,7 +188,7 @@ def test_degenerate_classes():
         # max_iter_predict=1 stops after one Newton step
         m1 = GaussianProcessClassifier(max_iter_predict=1, numeric_mode="identical").fit(X, y2)
         assert m1.n_iter_ == 1
-    _raises(ValueError, "call fit() or load() first", GaussianProcessClassifier().predict, X)
+    _raises(ValueError, "not fitted yet", GaussianProcessClassifier().predict, X)
 
 
 def test_repeat_batch_save_load_and_host_model():

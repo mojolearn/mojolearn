@@ -20,13 +20,18 @@ def _validate(estimator):
         raise TypeError('requires mojolearn.GaussianProcessClassifier')
     if (getattr(estimator, 'numeric_mode', None) or _backend.default_mode()) != 'identical':
         raise ValueError('parallel GPC requires IDENTICAL numeric mode')
+    estimator._validate_params()
 
 
 def _fresh(estimator):
     from ._gpc_impl import GaussianProcessClassifier
-    return GaussianProcessClassifier(kernel=estimator.kernel,
-                                     max_iter_predict=estimator.max_iter_predict,
-                                     numeric_mode="identical")
+    fresh = GaussianProcessClassifier(kernel=estimator.kernel,
+                                      max_iter_predict=estimator.max_iter_predict,
+                                      numeric_mode="identical")
+    # the constructor stores its parameters verbatim; this checks them and
+    # resolves the kernel the class fits read (`_kernel`), as `fit` does
+    fresh._validate_params()
+    return fresh
 
 
 def _run(requests, devices):
