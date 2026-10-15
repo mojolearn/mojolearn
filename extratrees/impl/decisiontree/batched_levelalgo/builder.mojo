@@ -1237,6 +1237,8 @@ def _exact_candidate(
     min_samples_leaf: Int32,
     seed: UInt64,
     tree_id: Int32,
+    row_w_addr: Int = 0,
+    min_weight_units: Int64 = 0,
 ) -> SplitExact:
     """One (node, feature) cell as the device's reduction receives it:
     `node_feature_score_host` then `score_to_candidate_kernel`'s policy (a
@@ -1262,9 +1264,23 @@ def _exact_candidate(
         is_classification,
         Int(min_samples_leaf),
         True,
+        row_w_addr,
+        min_weight_units,
     )
     if cell.status != SCORE_STATUS_SCORED:
         return SplitExact()
+    # lane sk-kernels: the weighted classifier's gains over the weight
+    # totals (`score_to_candidate_weighted_kernel`'s arguments).
+    var g_len = cell.n_total
+    var g_left = cell.n_left
+    var g_msl = min_samples_leaf
+    if is_classification and row_w_addr != 0:
+        g_len = Int32(0)
+        g_left = Int32(0)
+        for kw in range(n_acc):
+            g_len += cell.acc_total[kw]
+            g_left += cell.acc_left[kw]
+        g_msl = Int32(0)
     var acc_left = cell.acc_left.copy()
     var acc_total = cell.acc_total.copy()
     var left_p = acc_left.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
@@ -1274,7 +1290,7 @@ def _exact_candidate(
     var den: Int64
     if is_classification and criterion == CRITERION_ENTROPY:
         metric = entropy_gain_per_split(
-            left_p, total_p, 0, n_acc, cell.n_total, cell.n_left, min_samples_leaf
+            left_p, total_p, 0, n_acc, g_len, g_left, g_msl
         )
         num = float_gain_key(metric)
         den = Int64(1)
@@ -1287,7 +1303,7 @@ def _exact_candidate(
         den = Int64(1)
     else:
         metric = gain_per_split(
-            left_p, total_p, 0, n_acc, cell.n_total, cell.n_left, min_samples_leaf
+            left_p, total_p, 0, n_acc, g_len, g_left, g_msl
         )
         comptime if T14 and not T14_EXACT:
             if not is_classification and criterion == CRITERION_MSE:
@@ -1312,6 +1328,8 @@ def _exact_node_split(
     min_samples_leaf: Int32,
     seed: UInt64,
     tree_id: Int32,
+    row_w_addr: Int = 0,
+    min_weight_units: Int64 = 0,
 ) -> Split:
     """The device's per-node winner: the candidates of `colids` reduced by
     `SplitExact.update` under `split_tie_salt_for(tree, node)`, then the
@@ -1322,7 +1340,8 @@ def _exact_node_split(
     for ci in range(len(colids)):
         var cand = _exact_candidate(
             dataset, labels_q, item, colids[ci], n_acc, is_classification,
-            criterion, min_samples_leaf, seed, tree_id,
+            criterion, min_samples_leaf, seed, tree_id, row_w_addr,
+            min_weight_units,
         )
         _ = acc.update(cand, SPLIT_SAB_NONE, tie_salt)
     var out = acc.split
@@ -1374,6 +1393,7 @@ def set_leaf_predictions_exact_host(
     node_instances: List[InstanceRange],
     inv_scale: Float32,
     is_classification: Bool,
+    row_w_addr: Int = 0,
 ) raises:
     """`leaf_kernel`'s arithmetic on the host, per leaf (`leaf_values_host`
     is the same pass over pointers): integer class counts or the integer
@@ -1407,7 +1427,13 @@ def set_leaf_predictions_exact_host(
             var lab = Int(labels_q[unsafe_offset=row])
             if is_classification:
                 if lab >= 0 and lab < k:
-                    acc[lab] += Int32(1)
+                    if row_w_addr != 0:
+                        # lane sk-kernels: `leaf_weighted_kernel`'s tally
+                        acc[lab] += MutPointer[Int32, MutAnyOrigin](
+                            unsafe_from_address=row_w_addr
+                        )[unsafe_offset=row]
+                    else:
+                        acc[lab] += Int32(1)
             else:
                 acc[0] += Int32(lab)
             seen += 1
@@ -1436,12 +1462,16 @@ def train_tree_exact(
     is_classification: Bool,
     n_acc: Int,
     inv_scale: Float32,
+    row_w_addr: Int = 0,
+    min_weight_units: Int64 = 0,
 ) raises -> TreeMetaDataNode[DType.float32]:
     """cpu4-forest: the HOST COLUMN body lives in `train_tree_exact_host` (the checker's
-    host-column naming); this name is kept for its callers."""
+    host-column naming); this name is kept for its callers. `row_w_addr`
+    (lane sk-kernels, 0: none) is the classifier's fixed-point row-weight
+    plane, `min_weight_units` its min_weight_leaf (`DeviceDataset`)."""
     return train_tree_exact_host(
         dataset, labels_q, params, tree_id, seed, is_classification, n_acc,
-        inv_scale,
+        inv_scale, row_w_addr, min_weight_units,
     )
 
 
@@ -1454,6 +1484,8 @@ def train_tree_exact_host(
     is_classification: Bool,
     n_acc: Int,
     inv_scale: Float32,
+    row_w_addr: Int = 0,
+    min_weight_units: Int64 = 0,
 ) raises -> TreeMetaDataNode[DType.float32]:
     """One tree grown as the device grows it, on the host: the block comment
     above. `labels_q` is the device's label plane (class ids for a
@@ -1465,7 +1497,7 @@ def train_tree_exact_host(
         # (et-clf-entropy-bestfirst, 2026-09-15): see the function below.
         return train_tree_exact_bestfirst(
             dataset, labels_q, params, tree_id, seed, is_classification,
-            n_acc, inv_scale,
+            n_acc, inv_scale, row_w_addr, min_weight_units,
         )
     if Int(dataset.num_outputs) != n_acc:
         raise Error(
@@ -1495,6 +1527,7 @@ def train_tree_exact_host(
             var split = _exact_node_split(
                 dataset, labels_q, item, my_colids, n_acc, is_classification,
                 params.split_criterion, params.min_samples_leaf, seed, tree_id,
+                row_w_addr, min_weight_units,
             )
             # DEVIATION 205 as the device loop keys it: every sampled column
             # constant on a non-empty node, then one non-constant column
@@ -1519,7 +1552,7 @@ def train_tree_exact_host(
                     split = _exact_node_split(
                         dataset, labels_q, item, one, n_acc, is_classification,
                         params.split_criterion, params.min_samples_leaf, seed,
-                        tree_id,
+                        tree_id, row_w_addr, min_weight_units,
                     )
             splits.append(split)
             if not split_not_valid(
@@ -1532,7 +1565,8 @@ def train_tree_exact_host(
         queue.push(work_items, splits)
     var tree = queue.get_tree()
     set_leaf_predictions_exact_host(
-        dataset, labels_q, tree, queue.node_instances, inv_scale, is_classification
+        dataset, labels_q, tree, queue.node_instances, inv_scale, is_classification,
+        row_w_addr,
     )
     return tree^
 
@@ -1547,6 +1581,8 @@ def _exact_search_one(
     is_classification: Bool,
     n_acc: Int,
     k: Int32,
+    row_w_addr: Int = 0,
+    min_weight_units: Int64 = 0,
 ) raises -> Split:
     """One node's search as `search_batch` answers it for member `i` of any
     batch, on the host: the column sample keyed by (seed, tree, node)
@@ -1561,6 +1597,7 @@ def _exact_search_one(
     var split = _exact_node_split(
         dataset, labels_q, item, colids, n_acc, is_classification,
         params.split_criterion, params.min_samples_leaf, seed, tree_id,
+        row_w_addr, min_weight_units,
     )
     if item.instances.count > 0 and _exact_all_constant_host(
         dataset, item, colids, is_classification
@@ -1577,6 +1614,7 @@ def _exact_search_one(
             split = _exact_node_split(
                 dataset, labels_q, item, one, n_acc, is_classification,
                 params.split_criterion, params.min_samples_leaf, seed, tree_id,
+                row_w_addr, min_weight_units,
             )
     return split
 
@@ -1590,6 +1628,8 @@ def train_tree_exact_bestfirst(
     is_classification: Bool,
     n_acc: Int,
     inv_scale: Float32,
+    row_w_addr: Int = 0,
+    min_weight_units: Int64 = 0,
 ) raises -> TreeMetaDataNode[DType.float32]:
     """One tree grown BEST-FIRST as the device grows it (DEVIATION 466), on
     the host and on the exact key (the CPU training lane,
@@ -1635,7 +1675,7 @@ def train_tree_exact_bestfirst(
         for i in range(len(pending)):
             var split = _exact_search_one(
                 dataset, labels_q, pending[i], params, tree_id, seed,
-                is_classification, n_acc, k,
+                is_classification, n_acc, k, row_w_addr, min_weight_units,
             )
             _ = queue.bestfirst_admit(pending[i], split, tree_id)
         if not queue.bestfirst_can_pop():
@@ -1645,7 +1685,8 @@ def train_tree_exact_bestfirst(
         pending = queue.bestfirst_expand(rec.item, rec.split)
     var tree = queue.get_tree()
     set_leaf_predictions_exact_host(
-        dataset, labels_q, tree, queue.node_instances, inv_scale, is_classification
+        dataset, labels_q, tree, queue.node_instances, inv_scale, is_classification,
+        row_w_addr,
     )
     return tree^
 

@@ -1332,8 +1332,18 @@ def node_feature_score_host(
     is_classification: Bool,
     min_samples_leaf: Int,
     device_draw: Bool = True,
+    row_w_addr: Int = 0,
+    min_weight_units: Int64 = 0,
 ) -> ScoredCandidate:
-    """Steps 2, 3 and 4 of DEVIATION 137 for ONE (node, feature), sequentially."""
+    """Steps 2, 3 and 4 of DEVIATION 137 for ONE (node, feature), sequentially.
+
+    lane sk-kernels: `row_w_addr` (0: unweighted) is the classifier's Int32
+    fixed-point row-weight plane; the host restatement of
+    `node_feature_score_weighted_kernel` + the finalize pass's WEIGHTED arm
+    (class tallies in weight units, the key over the weight totals, the
+    empty-weight / `min_weight_units` rejection, weighted purity)."""
+    var weighted = is_classification and row_w_addr != 0
+    var row_w = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=row_w_addr if row_w_addr != 0 else Int(labels_q))
     if extent.n_missing != Int32(0):
         return empty_scored_candidate(SCORE_STATUS_MISSING_REFUSED, n_acc)
     if node_feature_is_constant(extent, Int32(range_len)):
@@ -1359,9 +1369,12 @@ def node_feature_score_host(
         var goes_left = v <= threshold
         if is_classification:
             if lab >= 0 and lab < n_acc:
-                acc_total[lab] += 1
+                var wq = Int32(1)
+                if weighted:
+                    wq = row_w[unsafe_offset=row]
+                acc_total[lab] += wq
                 if goes_left:
-                    acc_left[lab] += 1
+                    acc_left[lab] += wq
         else:
             acc_total[0] += Int32(lab)
             if goes_left:
@@ -1378,7 +1391,26 @@ def node_feature_score_host(
         or n_right == 0
     ):
         status = SCORE_STATUS_REJECTED_MIN_SAMPLES_LEAF
-    if status == SCORE_STATUS_SCORED and is_classification and n_total > 0:
+    var w_total = Int64(0)
+    var w_left = Int64(0)
+    if weighted:
+        for kc in range(n_acc):
+            w_total += Int64(Int(acc_total[kc]))
+            w_left += Int64(Int(acc_left[kc]))
+    if status == SCORE_STATUS_SCORED and weighted:
+        var w_right = w_total - w_left
+        if (
+            w_left <= Int64(0)
+            or w_right <= Int64(0)
+            or w_left < min_weight_units
+            or w_right < min_weight_units
+        ):
+            status = SCORE_STATUS_REJECTED_MIN_SAMPLES_LEAF
+        else:
+            for kc in range(n_acc):
+                if Int64(Int(acc_total[kc])) == w_total:
+                    status = SCORE_STATUS_PURE_NODE
+    elif status == SCORE_STATUS_SCORED and is_classification and n_total > 0:
         for kc in range(n_acc):
             if Int(acc_total[kc]) == n_total:
                 status = SCORE_STATUS_PURE_NODE
@@ -1396,6 +1428,10 @@ def node_feature_score_host(
         var nl = Int64(n_left)
         var nr = Int64(n_right)
         var cs = Int64(classification_key_shift(range_len))
+        if weighted:
+            nl = w_left
+            nr = w_total - w_left
+            cs = Int64(classification_key_shift(Int(w_total)))
         num = (sq_left >> cs) * nr + (sq_right >> cs) * nl
         den = nl * nr
     elif status == SCORE_STATUS_SCORED:
