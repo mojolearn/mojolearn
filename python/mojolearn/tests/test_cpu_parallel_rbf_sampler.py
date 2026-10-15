@@ -52,15 +52,17 @@ def test_cpu_rbf_shards_preserve_exact_rows_and_fitted_state(shard_rows, monkeyp
     offsets = np.asarray(model.random_offset_).tobytes()
     expected = np.asarray(model.transform(X))
     seen = []
-    call = DevicePool._call
+    # `DevicePool.map` writes requests with `_send` and reads replies with
+    # `_receive` (dd0b63678); `_call` is no longer on its path.
+    send = DevicePool._send
 
     def observe(worker, request):
         inner = request[2] if request[0] == "cpu_reference" else request
         assert inner[0] == "rbf_sampler_rows"
         seen.append(np.asarray(inner[2][0]).copy())
-        return call(worker, request)
+        return send(worker, request)
 
-    monkeypatch.setattr(DevicePool, "_call", staticmethod(observe))
+    monkeypatch.setattr(DevicePool, "_send", staticmethod(observe))
     # One worker executes multiple logical shards without introducing a second
     # local numerical worker. The public inference path needs no training scope.
     actual = transform_rbf_sampler(model, X, devices=(0,), rows_per_shard=shard_rows)
@@ -79,12 +81,12 @@ def test_cpu_rbf_reordered_worker_rows_are_detectable(monkeypatch):
     with reference_training():
         model = RBFSampler(n_components=13, random_state=11).fit(X)
     expected = np.asarray(model.transform(X))
-    call = DevicePool._call
+    receive = DevicePool._receive
 
-    def reorder(worker, request):
-        return np.asarray(call(worker, request))[::-1].copy()
+    def reorder(worker):
+        return np.asarray(receive(worker))[::-1].copy()
 
-    monkeypatch.setattr(DevicePool, "_call", staticmethod(reorder))
+    monkeypatch.setattr(DevicePool, "_receive", staticmethod(reorder))
     broken = transform_rbf_sampler(model, X, devices=(0,), rows_per_shard=5)
     # The identity lane compares this ordered output against the ordinary
     # transform; equal shapes or repeated stable hashes alone are insufficient.
