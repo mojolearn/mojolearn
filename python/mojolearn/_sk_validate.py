@@ -421,6 +421,19 @@ def _check_y(est, y):
     return y
 
 
+def _check_lengths(info, y):
+    """scikit-learn's `check_consistent_length` over X and y, from their
+    shapes."""
+    if info is None or y is None or not info[1]:
+        return
+    yinfo = describe(y)
+    if yinfo is None or not yinfo[1]:
+        return
+    if yinfo[1][0] != info[1][0]:
+        raise ValueError("Found input variables with inconsistent numbers of samples: "
+                         f"[{info[1][0]}, {yinfo[1][0]}]")
+
+
 # ------------------------------------------------------------- the hooks
 
 
@@ -447,6 +460,7 @@ def before_fit(est, method, slots, args, kwargs):
         y2 = _check_y(est, y)
         if y2 is not y:
             args, kwargs = _put(args, kwargs, iy, yname, y2)
+        _check_lengths(info, y2)
     return args, kwargs, Check(X, info, True)
 
 
