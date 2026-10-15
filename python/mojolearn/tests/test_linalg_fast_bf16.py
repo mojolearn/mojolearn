@@ -16,6 +16,17 @@ import pytest
 
 @pytest.fixture(scope="module")
 def fast():
+    import mojolearn
+
+    # The BF16 entries exist only in the Apple (Metal) linalg binding: a CUDA or
+    # HIP set does not carry them, and a CPU-only install (vendor "cpu") has no
+    # host entry for them by design, so `linalg_fast` refuses them by name at
+    # import there. Decide from the vendor the loaded binaries report.
+    loaded = mojolearn.vendor()
+    if loaded != "metal":
+        if os.environ.get("MOJOLEARN_REQUIRE_FAST_BF16") == "1":
+            pytest.fail(f"Apple fast BF16 was required but the loaded binaries are {loaded!r}, not 'metal'")
+        pytest.skip(f"Apple fast BF16 is Apple-only; the loaded binaries are {loaded!r}")
     from mojolearn import linalg_fast
 
     if not linalg_fast.has_bf16():

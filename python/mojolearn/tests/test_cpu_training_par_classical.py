@@ -165,7 +165,9 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert "proba, codes32 = _ovr_combine(estimator._extension(), arrays, int(q.shape[0]))" in gpc
     assert "MOJOLEARN_" not in gpc
     assert "    if operation == 'gpc_class_fit':\n" in worker
-    assert "        return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state.kernel))\n" in worker
+    # the kernel is the fit-time working copy (`_kernel`, 2c44cf25d: the
+    # constructor stores its parameters verbatim)
+    assert "        return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state._kernel))\n" in worker
     assert "    if operation == 'gpc_class_predict':\n" in worker
     assert "        mean, _, probability = state._latent(ext, fit, q, want_proba)\n" in worker
     wanted.update(("gpc_class_fit", "gpc_class_predict"))
@@ -246,21 +248,15 @@ def test_refusals_come_before_any_worker():
         assert pool._workers == [], "a worker started before the refusal"
 
 
-def test_the_gpc_class_fit_worker_refuses_outside_the_verifier():
-    """THE HOLE ADMITTING `gpc_class_fit` OPENED, AND THE GUARD THAT CLOSES IT
-    (lane/unlaned-public-algorithms, 2026-09-20).
-
-    Every other admitted fit operation runs its estimator's PUBLIC `fit`, so
-    it inherits `_mode._guard_cpu_training` and refuses on a CPU-only install
-    outside `reference_training()` -- which is what
-    `_parallel_pool.CPU_OPERATIONS`'s docstring promises of the whole set.
-    The GPC shard calls `_fit_binary`, which sits BELOW that decorator.
-    MEASURED before the guard was added: the plain
-    `GaussianProcessClassifier(...).fit(X, y)` raised "fit/training is
-    reserved for the internal bitwise verifier" and
-    `fit_gaussian_process_classifier` on the same data, in the same process,
-    trained and returned a fitted model. The two must refuse with the SAME
-    words, which is what this asserts."""
+def test_the_gpc_class_fit_worker_follows_the_public_fit_guard():
+    """THE GPC SHARD CARRIES THE PUBLIC FIT'S GUARD (lane/unlaned-public-
+    algorithms, 2026-09-20). The other admitted fit operations run their
+    estimator's PUBLIC `fit` and inherit `_mode._guard_cpu_training`; the GPC
+    shard calls `_fit_binary`, below that decorator, so the worker calls
+    `_cpu_reference.require_training` itself. The two routes must answer
+    the same way on a CPU-only install. Since dac6e4d15 (CPU training is
+    public) that answer is "train": the plain fit and the driver both fit,
+    outside `reference_training()`, and agree byte for byte."""
     if not _cpu_only_with("_mojolearn_gp_host"):
         return
     import numpy as np
@@ -268,22 +264,12 @@ def test_the_gpc_class_fit_worker_refuses_outside_the_verifier():
     X = np.ascontiguousarray(np.random.default_rng(11).standard_normal((48, 3)).astype(np.float32))
     y = (X[:, 0] > 0).astype(np.int64)
     kernel = mojolearn.ConstantKernel(1.0) * mojolearn.RBF(1.0)
-    words = "fit/training is reserved for the internal bitwise verifier"
-    try:
-        mojolearn.GaussianProcessClassifier(kernel=kernel).fit(X, y)
-    except NotImplementedError as exc:
-        assert words in str(exc), str(exc)
-    else:
-        raise AssertionError("the plain CPU fit did not refuse; this box is not the CPU-only route")
-    try:
-        fit_gaussian_process_classifier(mojolearn.GaussianProcessClassifier(kernel=kernel), X, y,
-                                        devices=(0,))
-    except Exception as exc:
-        assert words in str(exc), str(exc)
-    else:
-        raise AssertionError(
-            "fit_gaussian_process_classifier TRAINED on a CPU-only install outside "
-            "reference_training(); the _fit_binary shard bypassed the public fit's guard")
+    plain = mojolearn.GaussianProcessClassifier(kernel=kernel).fit(X, y)
+    par = fit_gaussian_process_classifier(mojolearn.GaussianProcessClassifier(kernel=kernel), X, y,
+                                          devices=(0,))
+    for name in ("L_", "pi_", "W_sr_"):
+        assert (np.asarray(getattr(par.estimators_[0], name)).tobytes()
+                == np.asarray(getattr(plain.estimators_[0], name)).tobytes()), name
 
 
 @reference_training()
@@ -304,22 +290,24 @@ def test_sharded_gpc_equals_the_plain_fit_when_built():
     q = np.ascontiguousarray(rng.standard_normal((16, 3)).astype(np.float32))
     kernel = mojolearn.ConstantKernel(1.0) * mojolearn.RBF(1.0)
     sent = []
-    call = _parallel_pool.DevicePool._call
+    # `DevicePool.map` writes each wave's requests with `_send` and reads the
+    # replies with `_receive` (dd0b63678); `_call` is no longer on its path.
+    send = _parallel_pool.DevicePool._send
 
     def spy(worker, request):
         sent.append(request[2][0] if request[0] == "cpu_reference" else request[0])
-        return call(worker, request)
+        return send(worker, request)
 
     for labels, n_fits in (((X[:, 0] > 0).astype(np.int64), 1),
                            ((X[:, 0] > 0).astype(np.int64) + (X[:, 1] > 0).astype(np.int64), 3)):
         sent.clear()
-        _parallel_pool.DevicePool._call = staticmethod(spy)
+        _parallel_pool.DevicePool._send = staticmethod(spy)
         try:
             par = fit_gaussian_process_classifier(
                 mojolearn.GaussianProcessClassifier(kernel=kernel), X, labels, devices=(0,))
             proba = predict_gaussian_process_classifier(par, q, devices=(0,), method="predict_proba")
         finally:
-            _parallel_pool.DevicePool._call = staticmethod(call)
+            _parallel_pool.DevicePool._send = staticmethod(send)
         assert sent == ["gpc_class_fit"] * n_fits + ["gpc_class_predict"] * n_fits, sent
         plain = mojolearn.GaussianProcessClassifier(kernel=kernel).fit(X, labels)
         assert len(par.estimators_) == n_fits, len(par.estimators_)
@@ -338,18 +326,20 @@ def test_sharded_scaler_equals_the_plain_fit_when_built():
     from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
     X = np.random.default_rng(5).standard_normal((40, 10)).astype(np.float32)
     sent = []
-    call = _parallel_pool.DevicePool._call
+    # `DevicePool.map` writes each wave's requests with `_send` and reads the
+    # replies with `_receive` (dd0b63678); `_call` is no longer on its path.
+    send = _parallel_pool.DevicePool._send
 
     def spy(worker, request):
         sent.append(request[2][0] if request[0] == "cpu_reference" else request[0])
-        return call(worker, request)
+        return send(worker, request)
 
-    _parallel_pool.DevicePool._call = staticmethod(spy)
+    _parallel_pool.DevicePool._send = staticmethod(spy)
     try:
         par = fit_scaler(mojolearn.StandardScaler(), X, columns_per_shard=4)
         t = transform_scaler(par, X, columns_per_shard=4)
     finally:
-        _parallel_pool.DevicePool._call = staticmethod(call)
+        _parallel_pool.DevicePool._send = staticmethod(send)
     assert sent == ["scaler_fit"] * 3 + ["scaler_transform"] * 3, sent
     plain = mojolearn.StandardScaler().fit(X)
     for name in ("mean_", "var_", "scale_"):
@@ -384,17 +374,24 @@ def test_sharded_samba_sends_two_gradients_and_one_ordered_update_when_built():
     model = mojolearn.SambaStack(config, generator=mojolearn.training.Generator(1), lr=1e-3)
     ids = np.arange(4 * 17, dtype=np.int32).reshape(4, 17) % 256
     sent, shard_gradients = [], []
-    call = _parallel_pool.DevicePool._call
+    # `DevicePool.map` writes each wave's requests with `_send` and reads the
+    # replies with `_receive` (dd0b63678); `_call` is no longer on its path.
+    # One worker (devices=(0,)), so every wave is one request and each
+    # `_receive` answers the `_send` just before it.
+    send, receive = _parallel_pool.DevicePool._send, _parallel_pool.DevicePool._receive
 
-    def spy(worker, request):
-        operation = request[2][0] if request[0] == "cpu_reference" else request[0]
-        sent.append(operation)
-        result = call(worker, request)
-        if operation == "samba_gradient":
+    def spy_send(worker, request):
+        sent.append(request[2][0] if request[0] == "cpu_reference" else request[0])
+        return send(worker, request)
+
+    def spy_receive(worker):
+        result = receive(worker)
+        if sent and sent[-1] == "samba_gradient":
             shard_gradients.append(result[1])
         return result
 
-    _parallel_pool.DevicePool._call = staticmethod(spy)
+    _parallel_pool.DevicePool._send = staticmethod(spy_send)
+    _parallel_pool.DevicePool._receive = staticmethod(spy_receive)
     try:
         with ParallelNeuralTrainer(model, devices=(0,), logical_shards=2) as trainer:
             trainer.train_step([(ids[2 * k: 2 * k + 2, :-1], ids[2 * k: 2 * k + 2, 1:])
@@ -403,7 +400,8 @@ def test_sharded_samba_sends_two_gradients_and_one_ordered_update_when_built():
         assert sent == ["samba_gradient", "samba_gradient", "samba_update"], sent
         assert len(shard_gradients) == 2
     finally:
-        _parallel_pool.DevicePool._call = staticmethod(call)
+        _parallel_pool.DevicePool._send = staticmethod(send)
+        _parallel_pool.DevicePool._receive = staticmethod(receive)
     first, second = shard_gradients
     # The oracle is NOT ordered_sum_gradients: checking the published
     # gradient against the very function that produced it passes even when

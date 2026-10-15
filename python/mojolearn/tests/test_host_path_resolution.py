@@ -149,8 +149,28 @@ def _mirror(tmp_path):
     if "_mojolearn_byte_lm_host" not in built:
         pytest.skip("no _mojolearn_byte_lm_host.so built; "
                     "build it with bindings/build_byte_lm_host.sh")
-    mirror = tmp_path / "host-mirror"
+    # The mirror sits in a package-shaped directory whose runtime-library
+    # directories link to the package's own: a wheel's host bindings find the
+    # Mojo runtime (libKGENCompilerRTShared.so and the rest) through
+    # `$ORIGIN/../.libs` (tools/release_ubuntu22_build.sh), and Linux resolves
+    # `$ORIGIN` from the symlink's directory, not its target's. A bare mirror
+    # therefore failed to load on the Linux wheel layout only.
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    own = os.path.dirname(_backend.host_module_path(built[0]))
+    mirror = pkg / "host-mirror"
     mirror.mkdir()
+    # every rpath entry: $ORIGIN/../.libs, $ORIGIN/../{cuda,hip}/.libs and
+    # $ORIGIN/.libs (and the macOS .dylibs beside them)
+    for rel in (".libs", ".dylibs", "cuda/.libs", "hip/.libs"):
+        source = os.path.join(os.path.dirname(own), rel)
+        if os.path.isdir(source):
+            (pkg / rel).parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(source, pkg / rel)
+    for rel in (".libs", ".dylibs"):
+        source = os.path.join(own, rel)
+        if os.path.isdir(source):
+            os.symlink(source, mirror / rel)
     for basename in built:
         os.symlink(_backend.host_module_path(basename), mirror / (basename + ".so"))
     return mirror

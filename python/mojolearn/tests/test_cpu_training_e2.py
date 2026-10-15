@@ -270,8 +270,9 @@ def test_manifest_covers_logistic():
     assert "from glm.host.glm_oracle import host_xty" in text
     assert "from decomposition.host.pca_oracle import STATS_TPB, host_halving_sum" in text
     # The softmax loss and OWL-QN train on the host since
-    # lane/cpu-training-batch3; sample_weight still refuses by name.
-    for named in ("QN_LOSS_SOFTMAX", "def host_min_owlqn", "sample_weight is NOT IMPLEMENTED"):
+    # lane/cpu-training-batch3, and sample_weight (the weighted arm of
+    # getLossAndDZ) since lane sk-kernels (db17ac6cc).
+    for named in ("QN_LOSS_SOFTMAX", "def host_min_owlqn", "has_sample_weight: Bool"):
         assert named in text, f"{named} is not in {QN_ORACLE}"
     assert "comptime if QN_ORACLE_HOST_SABOTAGE:" in text
     assert "QN_ORACLE_HOST_SABOTAGE" in src

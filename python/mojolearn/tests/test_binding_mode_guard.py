@@ -4,6 +4,16 @@ import pytest
 from mojolearn import _backend
 
 
+@pytest.fixture(autouse=True)
+def _gpu_set_choke_point(monkeypatch):
+    # These tests exercise the GPU-set choke point (`binding` -> `load_set` and
+    # the compiled-mode read-back) against a stubbed `load_set`. On a CPU-only
+    # install `binding` answers from the host set before `load_set` is reached
+    # (`_backend._cpu_only_binding`, tested in test_byte_lm_host.py), so the
+    # GPU-set path is selected explicitly here.
+    monkeypatch.setattr(_backend, '_CPU_ONLY', None)
+
+
 @pytest.mark.parametrize('name', ['_mojolearn', '_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees', '_mojolearn_estimators', '_mojolearn_svm'])
 @pytest.mark.parametrize('mode,code', [('fast', 0), ('identical', 1)])
 def test_actual_module_mode(monkeypatch, name, mode, code):
