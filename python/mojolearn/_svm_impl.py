@@ -57,6 +57,7 @@ from . import _backend
 from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
+from ._sample_weight import check_sample_weight
 from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes, threshold_codes
 from ._mode import NumericModeMixin, is_fitted as _is_fitted
 from ._scale_gamma import scale_gamma, scale_gamma_x
@@ -233,14 +234,9 @@ def _c_rows(binding, C, n_rows, sample_weight, class_weight=None, y=None, who="S
         return None
     sw = None
     if sample_weight is not None:
-        sw, _ = as_f64_c(sample_weight, ndim=1, name="sample_weight")
-        if sw.shape[0] != n_rows:
-            raise ValueError(
-                f"mojolearn {who}: sample_weight has {sw.shape[0]} entries, X has {n_rows} rows"
-            )
-        # finiteness and sign by the base binding (all_finite_f64, reduce_stat min)
-        if n_rows and (not all_finite(sw) or sw.min() < 0.0):
-            raise ValueError(f"mojolearn {who}: sample_weight must be finite and >= 0")
+        # scikit-learn's checks and wording (shape, finite, >= 0, not all
+        # zero) through the base binding's reductions; read only, never written
+        sw = check_sample_weight(sample_weight, n_rows, dtype="<f8")
     codes = cwa = None
     n_classes = 0
     if class_weight is not None:
