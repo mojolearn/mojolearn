@@ -4180,7 +4180,11 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
         b.x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
         return acc
 
-    def fit(self, X, y, sample_weight=None):
+    # sk-edges: no `sample_weight` parameter. scikit-learn weights the
+    # calibrators too, and the platt / isotonic fits here (x_trees_platt_fit,
+    # x_trees_isotonic_fit) take no row weights, so an advertised parameter
+    # could only refuse; it is left out until those kernels take weights.
+    def fit(self, X, y):
         """Fit the classifier and its calibrators over the cross-validation folds.
 
         Parameters
@@ -4189,8 +4193,6 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
             Training data, converted to float32.
         y : array of shape (n_samples,)
             Class labels; fewer than two classes raise ``ValueError``.
-        sample_weight : None
-            Only None is accepted; weights raise ``NotImplementedError``.
 
         Returns
         -------
@@ -4202,8 +4204,6 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
             When ``cv`` asks for more folds than some class has members.
         """
         self._validate_params()
-        if sample_weight is not None:
-            _refuse("CalibratedClassifierCV sample_weight", "not carried in pass 1.")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n, d = Xa.shape
         self.classes_, codes = encode_labels(y)
@@ -4214,7 +4214,7 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
             from .svm import LinearSVC
             base = LinearSVC()
         self._cal_fast = None
-        consts = _cal_fast_consts(base, self.method, self.ensemble, self.cv, sample_weight)
+        consts = _cal_fast_consts(base, self.method, self.ensemble, self.cv, None)
         if consts is not None:
             return self._fit_fast(Xa, codes, base, consts)
         nat = _trees_native_glue(self)
