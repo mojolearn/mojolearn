@@ -344,59 +344,63 @@ def arm_refusals(rep):
     arm = "REFUSALS"
     x, y, _, _ = planted()
 
-    # --- the Python-side constructor guards
+    def _svr_fit(**kw):
+        # the parameter checks run when fit does (scikit-learn's convention)
+        return SVR(**kw).fit(x, y)
+
+    # --- the Python-side parameter guards
     rep.check(arm, SVR(kernel="poly", degree=2, coef0=1.0).kernel == "poly",
               "kernel='poly' is accepted (the SVC Gram and epilogue)")
     rep.check(arm, SVR(kernel="sigmoid", coef0=-0.5).kernel == "sigmoid",
               "kernel='sigmoid' is accepted (the TANH epilogue)")
     rep.raises(arm, NotImplementedError, "'sigmoid'",
                "kernel='tanh' is refused, naming cuML's spelling",
-               SVR, kernel="tanh")
+               _svr_fit, kernel="tanh")
     rep.check(arm, SVR(kernel="precomputed").kernel == "precomputed",
               "precomputed kernel control is accepted (its arithmetic has a dedicated identity lane)")
     rep.raises(arm, ValueError, "square", "precomputed fit requires a square kernel matrix",
                SVR(kernel="precomputed").fit, x, y)
     rep.raises(arm, ValueError, "not a kernel name",
                "an unknown kernel name is refused",
-               SVR, kernel="cosine")
+               _svr_fit, kernel="cosine")
     rep.check(arm, SVR(gamma="scale").gamma == "scale",
               "gamma='scale' is accepted (DEVIATION 870: resolved exactly at fit)")
     rep.raises(arm, ValueError, "not a name",
                "an unknown gamma name is refused",
-               SVR, gamma="median")
+               _svr_fit, gamma="median")
     rep.raises(arm, ValueError, "finite and >= 0",
                "a negative gamma is refused",
-               SVR, gamma=-1.0)
+               _svr_fit, gamma=-1.0)
     rep.raises(arm, NotImplementedError, "kernel='poly'",
                "degree is refused with rbf, naming the kernel that would read it",
-               SVR, degree=4)
+               _svr_fit, degree=4)
     rep.raises(arm, NotImplementedError, "kernel='sigmoid'",
                "coef0 is refused with rbf, naming the kernels that would read it",
-               SVR, coef0=1.0)
+               _svr_fit, coef0=1.0)
     rep.raises(arm, ValueError, "C must be positive",
                "a non-positive C is refused",
-               SVR, C=0.0)
+               _svr_fit, C=0.0)
     rep.raises(arm, ValueError, "C must be finite",
                "a non-finite C is refused",
-               SVR, C=float("inf"))
+               _svr_fit, C=float("inf"))
     rep.raises(arm, ValueError, "tol must be positive",
                "a non-positive tol is refused",
-               SVR, tol=0.0)
+               _svr_fit, tol=0.0)
     rep.raises(arm, ValueError, "cache_size",
                "a non-positive cache_size is refused",
-               SVR, cache_size=0.0)
+               _svr_fit, cache_size=0.0)
     rep.raises(arm, ValueError, "max_iter",
                "max_iter=0 is refused",
-               SVR, max_iter=0)
+               _svr_fit, max_iter=0)
     rep.raises(arm, ValueError, "nochange_steps",
                "a negative nochange_steps is refused",
-               SVR, nochange_steps=-1)
+               _svr_fit, nochange_steps=-1)
     rep.raises(arm, NotImplementedError, "CUML_LOG_DEBUG",
                "verbose is refused, naming what it would have selected",
-               SVR, verbose=True)
+               _svr_fit, verbose=True)
     rep.raises(arm, NotImplementedError, "output_type",
                "output_type is refused",
-               SVR, output_type="numpy")
+               _svr_fit, output_type="numpy")
     rep.raises(arm, TypeError, "shrinking",
                "shrinking is not a parameter of this class and says so",
                SVR, shrinking=True)

@@ -91,11 +91,125 @@ def sklearn_tags(est):
     return tags
 
 
+#: The methods that need a fitted estimator. Called before `fit` they raise
+#: `mojolearn.exceptions.NotFittedError`, as scikit-learn's estimators do.
+_NEEDS_FIT = ("predict", "predict_proba", "predict_log_proba", "decision_function", "transform",
+              "inverse_transform", "score", "score_samples")
+
+#: The methods that fit. A completed call marks the instance fitted.
+_FITS = ("fit", "partial_fit", "fit_predict", "fit_transform", "_fit_with_tree_start")
+
+#: The constructors of a fitted instance from a saved model.
+_LOADS = ("load", "from_checkpoint")
+
+
+def is_fitted(est):
+    """True once `fit` (or a loader) has completed on `est`.
+
+    The flag is set by the `fit` wrapper below. An instance without it (one
+    pickled before the flag existed, or assembled from parts) counts as
+    fitted when it carries a public attribute ending in an underscore that
+    is not None (scikit-learn's `check_is_fitted` rule; a constructor that
+    sets `model_ = None` placeholders does not count). While a `fit` is running on the
+    instance, its own calls to `predict` or `transform` are let through.
+    """
+    state = vars(est)
+    if state.get("_mojolearn_fitted") or state.get("_mojolearn_fitting"):
+        return True
+    return any(k.endswith("_") and not k.startswith("_") and v is not None for k, v in state.items())  # glue: scans fitted attribute names
+
+
+def _track_fit(method):
+    if getattr(method, "_mojolearn_tracks_fit", False):
+        return method
+
+    @functools.wraps(method)
+    def tracked(self, *args, **kwargs):
+        state = vars(self)
+        state["_mojolearn_fitting"] = state.get("_mojolearn_fitting", 0) + 1
+        try:
+            out = method(self, *args, **kwargs)
+        finally:
+            # `vars(self)` again: `set_params` inside a fit replaces the dict's contents
+            state = vars(self)
+            depth = state.get("_mojolearn_fitting", 1) - 1
+            if depth > 0:
+                state["_mojolearn_fitting"] = depth
+            else:
+                state.pop("_mojolearn_fitting", None)
+        state["_mojolearn_fitted"] = True
+        return out
+
+    tracked._mojolearn_tracks_fit = True
+    return tracked
+
+
+def _needs_fit(method, name):
+    if getattr(method, "_mojolearn_needs_fit", False):
+        return method
+
+    @functools.wraps(method)
+    def guarded(self, *args, **kwargs):
+        if not is_fitted(self):
+            from .exceptions import not_fitted_error
+            raise not_fitted_error(
+                f"This {type(self).__name__} instance is not fitted yet. Call 'fit' with "
+                f"appropriate arguments before using {name}.")
+        return method(self, *args, **kwargs)
+
+    guarded._mojolearn_needs_fit = True
+    return guarded
+
+
+def _loader(method):
+    @functools.wraps(method)
+    def load(cls, *args, **kwargs):
+        out = method(cls, *args, **kwargs)
+        if isinstance(out, cls):
+            vars(out)["_mojolearn_fitted"] = True
+        return out
+
+    return classmethod(load)
+
+
+def install_fit_tracking(cls):
+    """Mark `cls` fitted after its fits and loaders; refuse its predict,
+    transform and score methods before that (see `is_fitted`). A class with
+    `_sklearn_requires_fit = False` (a stateless transformer) is not guarded.
+    """
+    for name in _FITS:  # glue: wraps the fit method names
+        method = cls.__dict__.get(name)
+        if inspect.isfunction(method):
+            setattr(cls, name, _track_fit(method))
+    for name in _LOADS:  # glue: wraps the loader method names
+        method = cls.__dict__.get(name)
+        if isinstance(method, classmethod):
+            setattr(cls, name, _loader(method.__func__))
+    if not getattr(cls, "_sklearn_requires_fit", True):
+        for name in _NEEDS_FIT:  # glue: unwraps the method names that need a fit
+            method = getattr(cls, name, None)
+            if getattr(method, "_mojolearn_needs_fit", False):  # guarded on a stateful base
+                setattr(cls, name, method.__wrapped__)
+        return
+    for name in _NEEDS_FIT:  # glue: wraps the method names that need a fit
+        method = getattr(cls, name, None)
+        if inspect.isfunction(method) and not getattr(method, "_mojolearn_needs_fit", False):
+            setattr(cls, name, _needs_fit(method, name))
+
+
 class SklearnTagsMixin:
-    """`__sklearn_tags__` for an estimator: see `sklearn_tags`."""
+    """`__sklearn_tags__` for an estimator: see `sklearn_tags`. Subclasses
+    get fit tracking and `NotFittedError` (see `install_fit_tracking`)."""
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        install_fit_tracking(cls)
 
     def __sklearn_tags__(self):
         return sklearn_tags(self)
+
+    def __sklearn_is_fitted__(self):
+        return is_fitted(self)
 
 
 class ClassifierScoreMixin:
@@ -277,6 +391,15 @@ class NumericModeMixin(ParamsMixin):
             if numeric_mode is not None or not hasattr(self, "numeric_mode"):
                 self.numeric_mode = numeric_mode
 
+        # The signature scikit-learn reads (`_get_param_names`, its
+        # `check_no_attributes_set_in_init`) names `numeric_mode` too.
+        sig = inspect.signature(orig)
+        if "numeric_mode" not in sig.parameters:
+            params = list(sig.parameters.values())
+            at = next((i for i, p in enumerate(params) if p.kind is p.VAR_KEYWORD), len(params))  # glue: signature parameter position
+            params.insert(at, inspect.Parameter("numeric_mode", inspect.Parameter.KEYWORD_ONLY, default=None))
+            sig = sig.replace(parameters=params)
+        __init__.__signature__ = sig
         cls.__init__ = __init__
 
     #: The binding this estimator family talks to. Subclasses that use more

@@ -42,8 +42,9 @@ def _bytes(a):
     (dict(random_state=-1), ValueError),
 ])
 def test_unsupported_options_are_refused_by_name(kwargs, exc):
+    # The parameters are checked at fit, before X is read.
     with pytest.raises(exc, match="mojolearn SpectralEmbedding"):
-        SpectralEmbedding(**kwargs)
+        SpectralEmbedding(**kwargs).fit([[0.0, 1.0], [1.0, 0.0], [0.5, 0.5]])
 
 
 def test_public_names():

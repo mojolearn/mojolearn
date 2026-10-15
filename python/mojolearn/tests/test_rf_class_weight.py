@@ -28,8 +28,9 @@ def test_invalid_weights(weights):
 
 @pytest.mark.parametrize('value', ['balanced_subsample', 'unknown', [], 3])
 def test_invalid_option(value):
+    # checked at fit, before any binding is touched (scikit-learn's convention)
     with pytest.raises(ValueError, match='class_weight'):
-        RandomForestClassifier(class_weight=value)
+        RandomForestClassifier(class_weight=value).fit([[0.0], [1.0]], [0, 1])
 
 
 def test_fit_dispatch(monkeypatch):

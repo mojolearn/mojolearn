@@ -181,13 +181,13 @@ def arm_reference(rep):
 def arm_refuse(rep):
     x, y = _data(8, n=24)
     rep.raises("REFUSE", NotImplementedError, "callable optimizer", "a callable optimizer",
-               GaussianProcessRegressor, optimizer=lambda f, t, bounds: (t, 0.0))
+               lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), optimizer=lambda f, t, bounds: (t, 0.0))
     rep.raises("REFUSE", ValueError, "not one of", "an unknown optimizer name",
-               GaussianProcessRegressor, optimizer="adam")
+               lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), optimizer="adam")
     rep.raises("REFUSE", ValueError, "random_state", "restarts with random_state=None",
-               GaussianProcessRegressor, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=1)
+               lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), optimizer="fmin_l_bfgs_b", n_restarts_optimizer=1)
     rep.raises("REFUSE", ValueError, "non-negative", "a negative n_restarts_optimizer",
-               GaussianProcessRegressor, n_restarts_optimizer=-1)
+               lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), n_restarts_optimizer=-1)
     rep.raises("REFUSE", ValueError, "bound", "a non-positive bound", RBF, 1.0, (0.0, 1.0))
     rep.raises("REFUSE", ValueError, "bounds must be", "a scalar bound (Matern's old positional nu)",
                Matern, 1.0, 2.5)

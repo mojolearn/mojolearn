@@ -58,7 +58,7 @@ from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
 from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes, threshold_codes
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin, is_fitted as _is_fitted
 from ._scale_gamma import scale_gamma, scale_gamma_x
 from .linear_model import (
     _accuracy_host,
@@ -764,6 +764,52 @@ class SVC(NumericModeMixin):
         probability=False,
         break_ties=False,
     ):
+        # Stored verbatim (scikit-learn's convention); `_validate_params`
+        # checks them when `fit` (or `load`) runs and keeps the checked
+        # values the solver reads as `_hp_<name>`.
+        self.C = C
+        self.kernel = kernel
+        self.degree = degree
+        self.gamma = gamma
+        self.coef0 = coef0
+        self.tol = tol
+        self.cache_size = cache_size
+        self.max_iter = max_iter
+        self.nochange_steps = nochange_steps
+        self.verbose = verbose
+        self.output_type = output_type
+        self.random_state = random_state
+        self.class_weight = class_weight
+        self.decision_function_shape = decision_function_shape
+        self.probability = probability
+        self.break_ties = break_ties
+
+    def __setstate__(self, state):
+        # A model pickled before the parameter checks moved to fit carries
+        # no `_hp_*` working values: derive them from its stored parameters.
+        self.__dict__.update(state)
+        if "_hp_C" not in state and _is_fitted(self):
+            self._validate_params()
+
+    def _validate_params(self):
+        """The constructor checks, run at the start of `fit` and in `load`."""
+        C = self.C
+        kernel = self.kernel
+        degree = self.degree
+        gamma = self.gamma
+        coef0 = self.coef0
+        tol = self.tol
+        cache_size = self.cache_size
+        max_iter = self.max_iter
+        nochange_steps = self.nochange_steps
+        verbose = self.verbose
+        output_type = self.output_type
+        random_state = self.random_state
+        class_weight = self.class_weight
+        decision_function_shape = self.decision_function_shape
+        probability = self.probability
+        break_ties = self.break_ties
+
         if not isinstance(kernel, str):
             raise ValueError("mojolearn SVC: kernel is a name")
         # The caller's own string object when it is already lower case, so
@@ -913,22 +959,18 @@ class SVC(NumericModeMixin):
                 "mojolearn SVC: break_ties must be False when "
                 "decision_function_shape is 'ovo' (scikit-learn's rule)"
             )
-        self.C = C
-        self.kernel = k
-        self.degree = degree
-        self.gamma = gamma
-        self.coef0 = coef0
-        self.tol = tol
-        self.cache_size = cache_size
-        self.max_iter = max_iter
-        self.nochange_steps = nochange_steps
-        self.verbose = False
-        self.output_type = None
-        self.random_state = None if random_state is None else int(random_state)
-        self.class_weight = class_weight
-        self.decision_function_shape = decision_function_shape
-        self.probability = probability
-        self.break_ties = break_ties
+        self._hp_C = C
+        self._hp_kernel = k
+        self._hp_degree = degree
+        self._hp_gamma = gamma
+        self._hp_coef0 = coef0
+        self._hp_tol = tol
+        self._hp_cache_size = cache_size
+        self._hp_max_iter = max_iter
+        self._hp_nochange_steps = nochange_steps
+        self._hp_random_state = None if random_state is None else int(random_state)
+        self._hp_probability = probability
+        self._hp_break_ties = break_ties
 
     def _resolve_gamma(self, x):
         """cuML's `_get_gamma`. 'auto' is `1 / n_cols`, exact for every
@@ -936,11 +978,11 @@ class SVC(NumericModeMixin):
         'scale' is `1 / (n_cols * X.var())` from the EXACT variance of the
         float32 cells, rounded once (`_scale_gamma.scale_gamma`, DEVIATION
         870). Both are the same bits on every host."""
-        if self.gamma == "auto":
+        if self._hp_gamma == "auto":
             return 1.0 / float(x.shape[1])
-        if self.gamma == "scale":
+        if self._hp_gamma == "scale":
             return scale_gamma_x(self._bind(_EXT_NAME), x, x.shape[1])
-        return float(self.gamma)
+        return float(self._hp_gamma)
 
     def _solve(self, x, labels, gamma, c_rows):
         """ONE binary C-SVC solve through the binding: `labels` float32 with
@@ -963,8 +1005,8 @@ class SVC(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_fit_binding.
             # n_rows, n_features, kernel, gamma, C, tol, max_iter,
             # nochange_steps, degree, coef0[, the per-row bounds' address]
-            [n_rows, n_cols, _SVC_KERNELS[self.kernel], gamma, self.C, self.tol,
-             self.max_iter, self.nochange_steps, int(self.degree), float(self.coef0)] + tail,
+            [n_rows, n_cols, _SVC_KERNELS[self._hp_kernel], gamma, self._hp_C, self._hp_tol,
+             self._hp_max_iter, self._hp_nochange_steps, int(self._hp_degree), float(self._hp_coef0)] + tail,
         )
         return int(n_support), dual, support, sv, info
 
@@ -987,6 +1029,7 @@ class SVC(NumericModeMixin):
         self : SVC
             The fitted estimator.
         """
+        self._validate_params()
         x, self.input_copied_ = as_f32_dense_c(X, ndim=2, name="X")
         labels, classes, pair = _as_labels(y)
         n_rows, n_cols = x.shape
@@ -995,13 +1038,13 @@ class SVC(NumericModeMixin):
             raise ValueError(
                 f"mojolearn SVC: y has {n_y} entries, X has {n_rows} rows"
             )
-        if self.kernel == "precomputed" and n_cols != n_rows:
+        if self._hp_kernel == "precomputed" and n_cols != n_rows:
             raise ValueError(
                 "mojolearn SVC: kernel='precomputed' needs the square n x n "
                 f"kernel matrix as X, got {n_rows} x {n_cols}"
             )
         gamma = self._resolve_gamma(x)
-        c_rows = _c_rows(self._bind(_EXT_NAME), self.C, n_rows, sample_weight,
+        c_rows = _c_rows(self._bind(_EXT_NAME), self._hp_C, n_rows, sample_weight,
                          getattr(self, "class_weight", None), y, "SVC")
         if labels is None:
             return self._fit_ovo(x, classes, pair, gamma, c_rows)
@@ -1038,7 +1081,7 @@ class SVC(NumericModeMixin):
         self._gamma = gamma
         self._label0 = label0
         self._label1 = label1
-        if self.probability:
+        if self._hp_probability:
             self._fit_probability(
                 x, threshold_codes(labels, float(label0), strict=True).astype("<i4"),
                 gamma, c_rows)
@@ -1060,11 +1103,11 @@ class SVC(NumericModeMixin):
         and log, one written order, so the same bits on every column.
         Sets `probA_` and `probB_` (one per pair, float64)."""
         self.__dict__.pop("_prob_ab", None)
-        if not self.probability:
+        if not self._hp_probability:
             return
         k = len(self.classes_)
-        seed = 0 if self.random_state is None else int(self.random_state)
-        precomputed = self.kernel == "precomputed"
+        seed = 0 if self._hp_random_state is None else int(self._hp_random_state)
+        precomputed = self._hp_kernel == "precomputed"
         native = self._bind(_EXT_NAME)
         ab = []
         pair_no = 0
@@ -1161,7 +1204,7 @@ class SVC(NumericModeMixin):
                 # bounds, selected in the binding (a device compaction on a
                 # GPU install), then their X rows gathered there
                 idx_a, lab, sub_c = _pair_select(native, codes, i, j, c_rows)
-                if self.kernel == "precomputed":
+                if self._hp_kernel == "precomputed":
                     # the pair's kernel matrix: its rows AND its columns
                     sub = _gather(native, x, idx_a, idx_a)
                 else:
@@ -1176,7 +1219,7 @@ class SVC(NumericModeMixin):
                 sv_rows = sv[:n_sv * sub_cols].reshape((n_sv, sub_cols))
                 # the pair's support in X's row numbers, gathered in the binding
                 pair_support = _gather_i32(native, idx_a, support[:n_sv])
-                if self.kernel == "precomputed":
+                if self._hp_kernel == "precomputed":
                     # the support rows of the WHOLE kernel matrix, as the
                     # binary fit keeps them (predict reads support_ only)
                     sv_rows = _gather(native, x, pair_support)
@@ -1300,7 +1343,7 @@ class SVC(NumericModeMixin):
         """
         if not hasattr(self, "dual_coef_"):
             raise AttributeError("mojolearn SVC: call fit() first")
-        if self.kernel != "linear":
+        if self._hp_kernel != "linear":
             raise AttributeError(
                 "mojolearn SVC: coef_ is only available for kernel='linear'"
             )
@@ -1336,7 +1379,7 @@ class SVC(NumericModeMixin):
         n_rows = q.shape[0]
         out = empty((n_rows,), "<f4") if out_addr is None else None
         n_features = self.n_features_in_
-        if self.kernel == "precomputed" and n_support > 0:
+        if self._hp_kernel == "precomputed" and n_support > 0:
             # X is the cross-kernel against the TRAINING rows; the decision
             # reads its columns at the support vectors and no support rows.
             q = _precomputed_columns(self._bind(_EXT_NAME), q, support)
@@ -1354,9 +1397,9 @@ class SVC(NumericModeMixin):
             # kernel, gamma, predict_class, cache_size_mib, degree, coef0
             [n_rows, n_features, n_support,
              float(b), float(label0), float(label1),
-             _SVC_KERNELS[self.kernel], self._gamma,
-             1 if predict_class else 0, self.cache_size,
-             int(self.degree), float(self.coef0)],
+             _SVC_KERNELS[self._hp_kernel], self._gamma,
+             1 if predict_class else 0, self._hp_cache_size,
+             int(self._hp_degree), float(self._hp_coef0)],
         )
         return out
 
@@ -1466,7 +1509,7 @@ class SVC(NumericModeMixin):
         dec = self._pair_decisions(X)
         n_rows = dec.shape[1]
         k = len(self.classes_)
-        if self.break_ties:
+        if self._hp_break_ties:
             return decode_labels(self.classes_, argmax_rows(
                 self._epilogue(_EPI_OVR, dec, self._pair_codes(), (n_rows, k), "<f8")))
         return decode_labels(self.classes_,
@@ -1595,8 +1638,8 @@ class SVC(NumericModeMixin):
             "format": _SVC_FORMAT,
             "estimator": type(self).__name__,
             "numeric_mode": _saved_mode(self),
-            "kernel": str(self.kernel),
-            "gamma": str(self.gamma),
+            "kernel": str(self._hp_kernel),
+            "gamma": str(self._hp_gamma),
             "dual_coef": self.dual_coef_,
             "support_vectors": self.support_vectors_,
             "support": self.support_,
@@ -1604,19 +1647,19 @@ class SVC(NumericModeMixin):
             "classes": classes_member(self.classes_),
             "labels": Array.from_list([float(self._label0), float(self._label1)], "<f8"),
             "hyper": Array.from_list(
-                [float(self.C), float(self.tol), float(self.cache_size), float(self._gamma)],
+                [float(self._hp_C), float(self._hp_tol), float(self._hp_cache_size), float(self._gamma)],
                 "<f8",
             ),
         }
         if self.__dict__.get("_pairs") is None:
             arrays["meta"] = Array.from_list(
                 [int(self.n_features_in_), int(self.n_support_), int(self.n_iter_),
-                 int(self.max_iter), int(self.nochange_steps), int(self.degree)],
+                 int(self._hp_max_iter), int(self._hp_nochange_steps), int(self._hp_degree)],
                 "<i8",
             )
-        if self.kernel in ("poly", "sigmoid"):
+        if self._hp_kernel in ("poly", "sigmoid"):
             # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
-            arrays["coef0"] = Array.from_list([float(self.coef0)], "<f8")
+            arrays["coef0"] = Array.from_list([float(self._hp_coef0)], "<f8")
         ab = self.__dict__.get("_prob_ab")
         if ab is not None:
             # probability=True only, so every other file keeps its bytes:
@@ -1631,10 +1674,10 @@ class SVC(NumericModeMixin):
             nf = int(self.n_features_in_)
             arrays["meta"] = Array.from_list(
                 [nf, len(self.support_.tolist()), sum(p["n_iter"] for p in pairs),  # glue: saved per-pair metadata words
-                 int(self.max_iter), int(self.nochange_steps), int(self.degree)], "<i8")
+                 int(self._hp_max_iter), int(self._hp_nochange_steps), int(self._hp_degree)], "<i8")
             arrays["labels"] = Array.from_list([0.0, 1.0], "<f8")
             arrays["shape"] = str(self.decision_function_shape)
-            arrays["break_ties"] = Array.from_list([1 if self.break_ties else 0], "<i8")
+            arrays["break_ties"] = Array.from_list([1 if self._hp_break_ties else 0], "<i8")
             arrays["pair_meta"] = Array.from_list(
                 [v for p in pairs for v in (p["i"], p["j"], p["dual"].shape[1], p["n_iter"])], "<i8")  # glue: saved per-pair metadata words
             arrays["pair_b"] = Array.from_list([p["b"] for p in pairs], "<f4")  # glue: saved per-pair metadata words
@@ -1692,10 +1735,12 @@ class SVC(NumericModeMixin):
             coef0=coef0,
         )
         _restore_mode(obj, arrays)
+        obj._validate_params()
         nf, n_support = int(meta[0]), int(meta[1])
         if "prob_ab" in arrays:
             flat = _serialize.exact(arrays, "prob_ab", "<f8").tolist()
             obj.probability = True
+            obj._hp_probability = True
             obj._prob_ab = [(flat[2 * i], flat[2 * i + 1]) for i in range(len(flat) // 2)]  # glue: saved per-pair metadata words
             obj.probA_ = Array.from_list(flat[0::2], "<f8")
             obj.probB_ = Array.from_list(flat[1::2], "<f8")
@@ -1747,7 +1792,7 @@ class SVC(NumericModeMixin):
         # the per-pair blocks stay Arrays, cut by copying slices (lane
         # py-runtime-b: no Python list of every saved value)
         ps = _serialize.exact(arrays, "pair_support", "<i4").reshape((-1,))
-        if obj.kernel == "precomputed":
+        if obj._hp_kernel == "precomputed":
             _check_support_bounds(ps, nf, path)
         pd = _serialize.exact(arrays, "pair_dual", "<f4").reshape((-1,))
         pv = _serialize.exact(arrays, "pair_sv", "<f4").reshape((-1,))
@@ -1771,6 +1816,7 @@ class SVC(NumericModeMixin):
         ties = bool(_serialize.exact(arrays, "break_ties", "<i8").tolist()[0])
         obj.decision_function_shape = "ovo" if shape == "ovo" else "ovr"
         obj.break_ties = ties and obj.decision_function_shape == "ovr"
+        obj._hp_break_ties = obj.break_ties
         obj._set_ovo(classes, pairs, None, nf)
         obj._gamma = float(hyper[3])
         obj._label0 = 0.0
@@ -2090,6 +2136,44 @@ class SVR(NumericModeMixin):
         nochange_steps=1000,
         output_type=None,
     ):
+        # Stored verbatim (scikit-learn's convention); `_validate_params`
+        # checks them when `fit` (or `load`) runs and keeps the checked
+        # values the solver reads as `_hp_<name>`.
+        self.kernel = kernel
+        self.degree = degree
+        self.gamma = gamma
+        self.coef0 = coef0
+        self.tol = tol
+        self.C = C
+        self.epsilon = epsilon
+        self.cache_size = cache_size
+        self.verbose = verbose
+        self.max_iter = max_iter
+        self.nochange_steps = nochange_steps
+        self.output_type = output_type
+
+    def __setstate__(self, state):
+        # A model pickled before the parameter checks moved to fit carries
+        # no `_hp_*` working values: derive them from its stored parameters.
+        self.__dict__.update(state)
+        if "_hp_C" not in state and _is_fitted(self):
+            self._validate_params()
+
+    def _validate_params(self):
+        """The constructor checks, run at the start of `fit` and in `load`."""
+        kernel = self.kernel
+        degree = self.degree
+        gamma = self.gamma
+        coef0 = self.coef0
+        tol = self.tol
+        C = self.C
+        epsilon = self.epsilon
+        cache_size = self.cache_size
+        verbose = self.verbose
+        max_iter = self.max_iter
+        nochange_steps = self.nochange_steps
+        output_type = self.output_type
+
         if not isinstance(kernel, str):
             raise ValueError("mojolearn SVR: kernel is a name")
         # The caller's own string object when it is already lower case, so
@@ -2203,18 +2287,16 @@ class SVR(NumericModeMixin):
                 "mojolearn SVR: output_type is a cuML-internal array-type "
                 "selector; this package returns mojolearn Arrays"
             )
-        self.kernel = k
-        self.degree = degree
-        self.gamma = gamma
-        self.coef0 = coef0
-        self.tol = tol
-        self.C = C
-        self.epsilon = epsilon
-        self.cache_size = cache_size
-        self.verbose = False
-        self.max_iter = max_iter
-        self.nochange_steps = nochange_steps
-        self.output_type = None
+        self._hp_kernel = k
+        self._hp_degree = degree
+        self._hp_gamma = gamma
+        self._hp_coef0 = coef0
+        self._hp_tol = tol
+        self._hp_C = C
+        self._hp_epsilon = epsilon
+        self._hp_cache_size = cache_size
+        self._hp_max_iter = max_iter
+        self._hp_nochange_steps = nochange_steps
 
     _resolve_gamma = SVC._resolve_gamma
     _dual_times_sv = SVC._dual_times_sv
@@ -2223,8 +2305,8 @@ class SVR(NumericModeMixin):
         """degree and coef0 as the bindings' optional trailing params: only
         for 'poly' and 'sigmoid', so every linear and rbf call keeps its
         exact params list."""
-        if self.kernel in ("poly", "sigmoid"):
-            return [int(self.degree), float(self.coef0)]
+        if self._hp_kernel in ("poly", "sigmoid"):
+            return [int(self._hp_degree), float(self._hp_coef0)]
         return []
 
     def _fit_tail(self, c_rows):
@@ -2255,16 +2337,17 @@ class SVR(NumericModeMixin):
         self : SVR
             The fitted estimator.
         """
+        self._validate_params()
         x, self.input_copied_ = as_f32_dense_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         targets = _as_targets(y, n_rows)
-        if self.kernel == "precomputed" and n_cols != n_rows:
+        if self._hp_kernel == "precomputed" and n_cols != n_rows:
             raise ValueError(
                 "mojolearn SVR: kernel='precomputed' needs the square n x n "
                 f"kernel matrix as X, got {n_rows} x {n_cols}"
             )
         gamma = self._resolve_gamma(x)
-        c_rows = _c_rows(self._bind(_EXT_NAME), self.C, n_rows, sample_weight, who="SVR")
+        c_rows = _c_rows(self._bind(_EXT_NAME), self._hp_C, n_rows, sample_weight, who="SVR")
 
         # WORST-CASE OUTPUT BUFFERS, AND `n_rows` IS THE WORST CASE.
         # The solver's domain is `2 * n_rows` (alpha+ and alpha-), but
@@ -2288,8 +2371,8 @@ class SVR(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_fit_binding.
             # n_rows, n_features, kernel, gamma, C, epsilon, tol, max_iter,
             # nochange_steps[, the per-row bounds' address]
-            [n_rows, n_cols, _SVR_KERNELS[self.kernel], gamma, self.C,
-             self.epsilon, self.tol, self.max_iter, self.nochange_steps] + self._fit_tail(c_rows),
+            [n_rows, n_cols, _SVR_KERNELS[self._hp_kernel], gamma, self._hp_C,
+             self._hp_epsilon, self._hp_tol, self._hp_max_iter, self._hp_nochange_steps] + self._fit_tail(c_rows),
         )
         n_support = int(n_support)
         b = _round_f32(info[0])
@@ -2315,7 +2398,7 @@ class SVR(NumericModeMixin):
         """
         if not hasattr(self, "dual_coef_"):
             raise AttributeError("mojolearn SVR: call fit() first")
-        if self.kernel != "linear":
+        if self._hp_kernel != "linear":
             raise AttributeError(
                 "mojolearn SVR: coef_ is only available for kernel='linear'"
             )
@@ -2356,7 +2439,7 @@ class SVR(NumericModeMixin):
         dual = self.dual_coef_
         sv = self.support_vectors_
         n_features = self.n_features_in_
-        if self.kernel == "precomputed" and self.n_support_ > 0:
+        if self._hp_kernel == "precomputed" and self.n_support_ > 0:
             # the cross-kernel's columns at the support vectors (SVC's rule)
             q = _precomputed_columns(self._bind(_EXT_NAME), q, self.support_)
             n_features = self.n_support_
@@ -2370,8 +2453,8 @@ class SVR(NumericModeMixin):
             # n_rows, n_features, n_support, b, kernel, gamma,
             # cache_size_mib
             [n_rows, n_features, self.n_support_,
-             float(self.intercept_[0]), _SVR_KERNELS[self.kernel], self._gamma,
-             self.cache_size] + self._kernel_tail(),
+             float(self.intercept_[0]), _SVR_KERNELS[self._hp_kernel], self._gamma,
+             self._hp_cache_size] + self._kernel_tail(),
         )
         return out
 
@@ -2448,25 +2531,25 @@ class SVR(NumericModeMixin):
             "format": _SVR_FORMAT,
             "estimator": type(self).__name__,
             "numeric_mode": _saved_mode(self),
-            "kernel": str(self.kernel),
-            "gamma": str(self.gamma),
+            "kernel": str(self._hp_kernel),
+            "gamma": str(self._hp_gamma),
             "dual_coef": self.dual_coef_,
             "support_vectors": self.support_vectors_,
             "support": self.support_,
             "intercept": self.intercept_,
             "hyper": Array.from_list(
-                [float(self.C), float(self.epsilon), float(self.tol),
-                 float(self.cache_size), float(self._gamma)],
+                [float(self._hp_C), float(self._hp_epsilon), float(self._hp_tol),
+                 float(self._hp_cache_size), float(self._gamma)],
                 "<f8",
             ),
             "meta": Array.from_list(
                 [int(self.n_features_in_), int(self.n_support_), int(self.n_iter_),
-                 int(self.max_iter), int(self.nochange_steps)],
+                 int(self._hp_max_iter), int(self._hp_nochange_steps)],
                 "<i8",
             ),
             # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
-            **({"kernel_params": Array.from_list([float(self.degree), float(self.coef0)], "<f8")}
-               if self.kernel in ("poly", "sigmoid") else {}),
+            **({"kernel_params": Array.from_list([float(self._hp_degree), float(self._hp_coef0)], "<f8")}
+               if self._hp_kernel in ("poly", "sigmoid") else {}),
         })
 
     @classmethod
@@ -2519,6 +2602,7 @@ class SVR(NumericModeMixin):
             nochange_steps=int(meta[4]),
         )
         _restore_mode(obj, arrays)
+        obj._validate_params()
         nf, n_support = int(meta[0]), int(meta[1])
         dual = _serialize.exact(arrays, "dual_coef", "<f4")
         if dual.ndim != 2 or tuple(dual.shape) != (1, n_support):

@@ -92,14 +92,14 @@ def test_manifest_covers_the_lane():
 ])
 def test_refusals_by_name(kw, error, match):
     with pytest.raises(error, match=match):
-        SVC(**kw)
+        SVC(**kw).fit([[0.0], [1.0]], [0, 1])
 
 
 def test_svr_carries_poly_and_sigmoid():
     assert SVR(kernel="poly", degree=2).degree == 2
     assert SVR(kernel="sigmoid", coef0=-0.5).coef0 == -0.5
     with pytest.raises(NotImplementedError, match="poly"):
-        SVR(kernel="polynomial")
+        SVR(kernel="polynomial").fit([[0.0], [1.0]], [0.0, 1.0])
 
 
 def test_poly_fit_repeats_bitwise_and_tracks_sklearn():

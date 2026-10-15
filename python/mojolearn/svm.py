@@ -46,31 +46,40 @@ class _LinearSVMBase(NumericModeMixin):
     _BINDING = "_mojolearn_estimators"
     _LOSSES = {}
 
+    # QN(...) default the Python door does not expose (a class constant, so
+    # the instance carries only its constructor parameters)
+    penalty_normalized = True
+
     def _init_common(self, penalty, loss, C, fit_intercept, penalized_intercept,
                      tol, max_iter, linesearch_max_iter, lbfgs_memory):
+        # Stored verbatim (scikit-learn's convention); `_check_common`
+        # checks them when `fit` runs.
+        self.penalty = penalty
+        self.loss = loss
+        self.C = C
+        self.fit_intercept = fit_intercept
+        self.penalized_intercept = penalized_intercept
+        self.tol = tol
+        self.max_iter = max_iter
+        self.linesearch_max_iter = linesearch_max_iter
+        self.lbfgs_memory = lbfgs_memory
+
+    def _check_common(self):
         name = type(self).__name__
+        penalty, loss, C = self.penalty, self.loss, self.C
         if penalty not in ("l1", "l2"):
             raise ValueError(f"Expected penalty to be one of ['l1', 'l2'], got {penalty!r}")
         if loss not in self._LOSSES:
             raise ValueError(f"Expected loss to be one of {list(self._LOSSES)}, got {loss!r}")
         if not C > 0:
             raise ValueError(f"mojolearn {name}: C must be positive, got {C}")
-        if penalized_intercept:
+        if self.penalized_intercept:
             raise NotImplementedError(
                 f"mojolearn {name}: penalized_intercept=True is not implemented "
                 "(the reference appends a column of ones to X and fits without "
                 "a bias, linear.cu:150-163); the intercept is never penalized here")
-        _check_qn_solver_fields(name, tol, max_iter, linesearch_max_iter, lbfgs_memory)
-        self.penalty = penalty
-        self.loss = loss
-        self.C = C
-        self.fit_intercept = fit_intercept
-        self.penalized_intercept = False
-        self.tol = tol
-        self.max_iter = max_iter
-        self.linesearch_max_iter = linesearch_max_iter
-        self.lbfgs_memory = lbfgs_memory
-        self.penalty_normalized = True
+        _check_qn_solver_fields(name, self.tol, self.max_iter, self.linesearch_max_iter,
+                                self.lbfgs_memory)
 
     def _strengths(self):
         """`linear.cu:151,174-175`: `iC = 1 / C` on the chosen penalty."""
@@ -167,18 +176,23 @@ class LinearSVC(_LinearSVMBase):
                  fit_intercept=True, penalized_intercept=False,
                  class_weight=None, tol=1e-4, max_iter=1000,
                  linesearch_max_iter=100, lbfgs_memory=5, multi_class="ovr"):
+        self._init_common(penalty, loss, C, fit_intercept, penalized_intercept,
+                          tol, max_iter, linesearch_max_iter, lbfgs_memory)
+        self.class_weight = class_weight
+        self.multi_class = multi_class
+
+    def _validate_params(self):
+        """The constructor checks, run at the start of `fit`."""
+        multi_class = self.multi_class
         if multi_class != "ovr":
             raise ValueError(
                 f"mojolearn LinearSVC: multi_class must be 'ovr', got {multi_class!r}")
-        if class_weight is not None:
+        if self.class_weight is not None:
             raise NotImplementedError(
                 "mojolearn LinearSVC: class_weight is not implemented (it becomes "
                 "a sample_weight in the reference, and sample_weight is not "
                 "implemented; glm/NOT_IMPLEMENTED.tsv)")
-        self._init_common(penalty, loss, C, fit_intercept, penalized_intercept,
-                          tol, max_iter, linesearch_max_iter, lbfgs_memory)
-        self.class_weight = None
-        self.multi_class = multi_class
+        self._check_common()
 
     def fit(self, X, y, sample_weight=None):
         """Fit the classifier.
@@ -198,6 +212,7 @@ class LinearSVC(_LinearSVMBase):
         self : LinearSVC
             The fitted estimator.
         """
+        self._validate_params()
         self._refuse_sample_weight(sample_weight)
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape
@@ -444,12 +459,17 @@ class LinearSVR(_LinearSVMBase):
                  C=1.0, fit_intercept=True, penalized_intercept=False,
                  tol=1e-4, max_iter=1000, linesearch_max_iter=100,
                  lbfgs_memory=5):
-        if not (0.0 <= epsilon < float("inf")):
-            raise ValueError(
-                f"mojolearn LinearSVR: epsilon must be finite and non-negative, got {epsilon}")
         self._init_common(penalty, loss, C, fit_intercept, penalized_intercept,
                           tol, max_iter, linesearch_max_iter, lbfgs_memory)
         self.epsilon = epsilon
+
+    def _validate_params(self):
+        """The constructor checks, run at the start of `fit`."""
+        epsilon = self.epsilon
+        if not (0.0 <= epsilon < float("inf")):
+            raise ValueError(
+                f"mojolearn LinearSVR: epsilon must be finite and non-negative, got {epsilon}")
+        self._check_common()
 
     def fit(self, X, y, sample_weight=None):
         """Fit the regressor.
@@ -469,6 +489,7 @@ class LinearSVR(_LinearSVMBase):
         self : LinearSVR
             The fitted estimator.
         """
+        self._validate_params()
         self._refuse_sample_weight(sample_weight)
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape

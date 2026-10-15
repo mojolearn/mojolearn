@@ -282,6 +282,24 @@ class GaussianProcessClassifier(NumericModeMixin):
         multi_class="one_vs_rest",
         n_jobs=None,
     ):
+        # Stored verbatim, as scikit-learn requires; `_validate_params`
+        # checks them when `fit` (or `load`) runs.
+        self.kernel = kernel
+        self.optimizer = optimizer
+        self.n_restarts_optimizer = n_restarts_optimizer
+        self.max_iter_predict = max_iter_predict
+        self.warm_start = warm_start
+        self.copy_X_train = copy_X_train
+        self.random_state = random_state
+        self.multi_class = multi_class
+        self.n_jobs = n_jobs
+
+    def _validate_params(self):
+        """The constructor checks, run first in `fit` and `load`; the
+        resolved kernel and the iteration cap go to private attributes."""
+        kernel, optimizer, n_restarts_optimizer = self.kernel, self.optimizer, self.n_restarts_optimizer
+        max_iter_predict, warm_start, copy_X_train = self.max_iter_predict, self.warm_start, self.copy_X_train
+        random_state, multi_class, n_jobs = self.random_state, self.multi_class, self.n_jobs
         if kernel is None:
             # scikit-learn's default, `_gpc.py:186-189`, bounds "fixed"
             # there; there is no optimizer here, so the two coincide.
@@ -349,15 +367,8 @@ class GaussianProcessClassifier(NumericModeMixin):
                 f"{_NAME}: n_jobs={n_jobs!r} is refused; the one-vs-rest "
                 "binary fits run one after another on one device"
             )
-        self.kernel = kernel
-        self.optimizer = None
-        self.n_restarts_optimizer = 0
-        self.max_iter_predict = int(max_iter_predict)
-        self.warm_start = False
-        self.copy_X_train = True
-        self.random_state = None
-        self.multi_class = "one_vs_rest"
-        self.n_jobs = None
+        self._kernel = kernel
+        self._max_iter_predict = int(max_iter_predict)
 
     # -- the binding ----------------------------------------------------------
 
@@ -398,6 +409,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         -------
         self : GaussianProcessClassifier
         """
+        self._validate_params()
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         classes, codes = encode_labels(y)
@@ -409,7 +421,7 @@ class GaussianProcessClassifier(NumericModeMixin):
                 f"{_NAME} requires 2 or more distinct classes; got 1 class "
                 f"(only class {classes[0]!r} is present)"
             )
-        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self.kernel)
+        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self._kernel)
         ext = self._extension()
         columns = [1] if n_classes == 2 else list(range(n_classes))
         codes32 = Array.from_list(codes, "<i4")
@@ -457,7 +469,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         ext.gpc_fit_all(
             addrs,
             # n_train, n_features, n_nodes, n_ls, max_iter_predict, n_fits, then the classes
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.max_iter_predict, len(columns)]
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._max_iter_predict, len(columns)]
             + [int(k) for k in columns],  # glue: the class of each binary fit
         )
         return [
@@ -498,7 +510,7 @@ class GaussianProcessClassifier(NumericModeMixin):
                 addr(scalars, name="scalars_out"),
             ] + extra_addrs,
             # n_train, n_features, n_nodes, n_ls, max_iter_predict (+ k)
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.max_iter_predict] + extra_params,
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._max_iter_predict] + extra_params,
         )
         return _BinaryLaplace(y01, l_out.reshape((n_rows, n_rows)), pi, wsr,
                               float(scalars[0]), int(n_iter), int(scalars[2]))
@@ -509,7 +521,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         self.classes_ = list(classes)
         self.n_classes_ = len(classes)
         self.estimators_ = fits
-        self.kernel_ = self.kernel
+        self.kernel_ = self._kernel
         if self.n_classes_ == 2:
             only = fits[0]
             self.y_train_ = only.y_train_
@@ -545,7 +557,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         the binding (`gaussian_process/unnorm.mojo::gpc_binary_out`)."""
         n_star = int(q.shape[0])
         n_train, n_features = self.X_train_.shape
-        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self.kernel)
+        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self._kernel)
         mean = empty((n_star,), "<f4")
         var = empty((n_star,), "<f4")
         proba = empty((n_star,), "<f8")
@@ -646,7 +658,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         `predict`, 2 the float64 `predict_proba` rows."""
         n_star = int(q.shape[0])
         n_train, n_features = self.X_train_.shape
-        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self.kernel)
+        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self._kernel)
         fits = self.estimators_
         k = len(fits)
         if out_kind == 1:
@@ -786,7 +798,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
         if not isinstance(mode, str) or mode.strip().lower() not in _MODE_CODE:
             raise ValueError(f"{_NAME}: cannot save invalid numeric_mode {mode!r}")
-        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self.kernel)
+        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self._kernel)
         n_train, n_features = self.X_train_.shape
         fits = self.estimators_
         arrays = {
@@ -801,7 +813,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             "ls": ls,
             # n_train, n_features, n_estimators, max_iter_predict, n_ls, n_classes
             "meta": Array.from_list([int(n_train), int(n_features), len(fits),
-                                     int(self.max_iter_predict), int(n_ls),
+                                     int(self._max_iter_predict), int(n_ls),
                                      int(self.n_classes_)], "<i8"),
             "y": _stacked([e.y_train_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
             "L": _stacked([e.L_ for e in fits], "<f4", (n_train * n_train,)),  # glue: one buffer per class fit
@@ -854,6 +866,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             nodes.append((k, p, table[off:off + ln]))
             off += ln
         obj = cls(kernel=_SavedKernel(nodes), max_iter_predict=max_iter)
+        obj._validate_params()
         obj.numeric_mode = mode
         x = _serialize.exact(arrays, "x", "<f4")
         if tuple(x.shape) != (n_train, n_features):

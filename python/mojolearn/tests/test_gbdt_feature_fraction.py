@@ -63,8 +63,11 @@ def test_adapter_reuses_validation_and_preserves_raw_parameter(cls):
     model = cls(feature_fraction=fraction)
     assert model.get_params()['feature_fraction'] is fraction
     assert model._new_learner('identical').feature_fraction == float(fraction)
+    # checked at fit (scikit-learn's convention), before any binding is touched
+    model.set_params(feature_fraction=False)
     with pytest.raises(ValueError, match='feature_fraction'):
-        model.set_params(feature_fraction=False)
+        model.fit([[0.0], [1.0]], [0.0, 1.0])
+    model.set_params(feature_fraction=fraction)
     assert model.feature_fraction is fraction
     model.set_params(feature_fraction=.25)
     assert model._new_learner('fast')._params(32, 8, 0)[-1] == .25

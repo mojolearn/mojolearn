@@ -155,7 +155,7 @@ def test_set_params_rebuilds_through_the_constructor():
     with pytest.raises(ValueError, match="Invalid parameter"):
         est.set_params(nope=1)
     with pytest.raises(NotImplementedError):
-        mojolearn.Lasso().set_params(positive=True)
+        mojolearn.Lasso().set_params(positive=True).fit([[0.0], [1.0]], [0.0, 1.0])
 
 
 def test_estimator_type_picks_stratified_default_folds():

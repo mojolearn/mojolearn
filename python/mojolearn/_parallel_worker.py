@@ -222,9 +222,9 @@ def execute(request):
         if len(args) == 3:
             # (x, int32 class codes, k): the targets are built in the binding
             x, codes, k = args
-            return state._fit_binary(state._extension(), x, codes, *_kernel_arrays(state.kernel), k=k)
+            return state._fit_binary(state._extension(), x, codes, *_kernel_arrays(state._kernel), k=k)
         x, y01 = args
-        return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state.kernel))
+        return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state._kernel))
     if operation == 'gpc_class_predict':
         fit, q, want_proba = args[:3]
         out_kind = args[3] if len(args) > 3 else 0

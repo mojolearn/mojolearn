@@ -173,6 +173,34 @@ class IsolationForest(NumericModeMixin):
         verbose=False,
         output_type=None,
     ):
+        # scikit-learn's convention: the constructor stores its parameters
+        # verbatim; `_validate_params` (run by `fit` and `load`) checks them.
+        self.n_estimators = n_estimators
+        self.max_samples = max_samples
+        self.max_depth = max_depth
+        self.max_features = max_features
+        self.bootstrap = bootstrap
+        self.contamination = contamination
+        self.random_state = random_state
+        self.warm_start = warm_start
+        self.n_jobs = n_jobs
+        self.verbose = verbose
+        self.output_type = output_type
+
+    def _validate_params(self):
+        """The parameter checks and the native knobs they resolve to, run at
+        fit. The parameters themselves stay as given."""
+        n_estimators = self.n_estimators
+        max_samples = self.max_samples
+        max_depth = self.max_depth
+        max_features = self.max_features
+        bootstrap = self.bootstrap
+        contamination = self.contamination
+        random_state = self.random_state
+        warm_start = self.warm_start
+        n_jobs = self.n_jobs
+        verbose = self.verbose
+        output_type = self.output_type
         n_estimators = int(n_estimators)
         if n_estimators < 1:
             raise ValueError(
@@ -308,18 +336,9 @@ class IsolationForest(NumericModeMixin):
                 "array-type selector; this package returns mojolearn Arrays"
             )
 
-        self.n_estimators = n_estimators
-        self.max_samples = max_samples
-        self.max_depth = max_depth
-        self.max_features = max_features
-        self.bootstrap = bool(bootstrap)
-        self.contamination = contamination
-        self.random_state = random_state
+        self._n_estimators = n_estimators
+        self._bootstrap = bool(bootstrap)
         self._seed = seed
-        self.warm_start = False
-        self.n_jobs = None
-        self.verbose = False
-        self.output_type = None
 
     def _params(self, n_train, n_features, n_query, want):
         # ORDER MATCHES bindings/_mojolearn_svm.mojo::iforest_run_binding.
@@ -327,11 +346,13 @@ class IsolationForest(NumericModeMixin):
         # max_samples_int, max_samples_frac, max_depth, max_features_mode,
         # max_features_int, max_features_frac, bootstrap, random_state,
         # contamination_auto, contamination, want
+        if "_seed" not in self.__dict__:  # an instance assembled without fit or load
+            self._validate_params()
         return [
             n_train,
             n_features,
             n_query,
-            self.n_estimators,
+            self._n_estimators,
             self._max_samples_mode,
             self._max_samples_int,
             self._max_samples_frac,
@@ -339,7 +360,7 @@ class IsolationForest(NumericModeMixin):
             self._max_features_mode,
             self._max_features_int,
             self._max_features_frac,
-            1 if self.bootstrap else 0,
+            1 if self._bootstrap else 0,
             self._seed,
             1 if self._contamination_auto else 0,
             self._contamination,
@@ -447,6 +468,7 @@ class IsolationForest(NumericModeMixin):
         -------
         self
         """
+        self._validate_params()
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn IsolationForest: sample_weight is not supported "
@@ -526,6 +548,8 @@ class IsolationForest(NumericModeMixin):
         """
         if not hasattr(self, "_x"):
             raise RuntimeError("this estimator is not fitted yet")
+        if "_seed" not in self.__dict__:  # an instance assembled without fit or load
+            self._validate_params()
         from .linear_model import _saved_mode
         return _serialize.write_npz(path, {
             "format": _IFOREST_FORMAT,
@@ -533,9 +557,9 @@ class IsolationForest(NumericModeMixin):
             "numeric_mode": _saved_mode(self),
             "x": self._x,
             "ints": Array.from_list([
-                int(self.n_estimators), self._max_samples_mode, self._max_samples_int,
+                int(self._n_estimators), self._max_samples_mode, self._max_samples_int,
                 self._max_depth, self._max_features_mode, self._max_features_int,
-                1 if self.bootstrap else 0, self._seed, 1 if self._contamination_auto else 0,
+                1 if self._bootstrap else 0, self._seed, 1 if self._contamination_auto else 0,
                 int(self.n_features_in_), int(self.max_samples_),
             ], "<i8"),
             "reals": Array.from_list([
@@ -575,6 +599,7 @@ class IsolationForest(NumericModeMixin):
             contamination="auto" if c_auto else contamination,
             random_state=seed,
         )
+        obj._validate_params()
         _restore_mode(obj, arrays)
         x = _serialize.exact(arrays, "x", "<f4")
         if x.ndim != 2 or x.shape[1] != nf or x.shape[0] < 1:

@@ -49,13 +49,21 @@ def test_set_params_refreshes_native_config_atomically(cls):
     model._offsets = np.array([0, 1])
     with pytest.raises(ValueError):
         model.set_params(unknown=1)
-    with pytest.raises(ValueError):
-        model.set_params(device='invalid')
-    with pytest.raises(ValueError, match='numeric_mode'):
-        model.set_params(numeric_mode='typo')
-    assert model._cfg['max_depth'] == 3 and model.__sklearn_is_fitted__()
+    # The parameter checks run at fit (`_refresh_config`), as in
+    # scikit-learn; a refused value leaves the fitted state in place.
+    for bad, match in ((dict(device='invalid'), 'device'), (dict(numeric_mode='typo'), 'numeric_mode')):
+        model.__dict__.update(bad)
+        with pytest.raises(ValueError, match=match):
+            model._refresh_config()
+        assert model.__sklearn_is_fitted__()
+        model.__dict__.update(device='gpu', numeric_mode='fast')
+    model._refresh_config()
+    assert model._cfg['max_depth'] == 3
+    model._offsets = np.array([0, 1])
     assert model.set_params(max_depth=2, numeric_mode='identical') is model
-    assert model._cfg['max_depth'] == 2 and not model.__sklearn_is_fitted__()
+    assert not model.__sklearn_is_fitted__()
+    model._refresh_config()
+    assert model._cfg['max_depth'] == 2
     assert model.numeric_mode == 'identical'
     model.max_depth = 4
     model._refresh_config()
