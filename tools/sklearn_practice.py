@@ -75,7 +75,11 @@ def _twin(name, ours):
                 continue
             v = tw
         elif isinstance(v, (list, tuple)) and v and all(isinstance(p, tuple) and len(p) == 2 for p in v):
-            v = [(n, _twin(type(e).__name__, e) or e) for n, e in v]  # Voting/Stacking members
+            members = []
+            for n, e in v:  # Voting/Stacking members (never `twin or e`: an ensemble's len() needs a fit)
+                tw = _twin(type(e).__name__, e)
+                members.append((n, e if tw is None else tw))
+            v = members
         shared[k] = v
     import re
     for _ in range(len(shared) + 1):  # drop each shared value scikit-learn's own validation refuses
@@ -180,6 +184,8 @@ def run_one(name):
         row["kind"] = "classifier" if is_classifier(est) else "regressor" if is_regressor(est) else "other"
         if name in LABEL_ONLY:
             y = load_iris().target
+            if name == "MultiLabelBinarizer":
+                y = [(int(c),) if c else (0, 2) for c in y]  # label sets
             out = clone(est).fit(y).transform(y)
             pickle.loads(pickle.dumps(clone(est).fit(y)))
             row.update(data="iris-labels", output=f"shape={np.shape(out)}")
