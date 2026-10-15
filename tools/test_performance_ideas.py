@@ -34,8 +34,10 @@ def recipe(root, idea="I01", **overrides):
 
 
 def test_modes_cover_exact_requested_partition():
-    assert len(p.EXPECTED) == 114
-    assert sum(p.mode_for(x) == "identical" for x in p.EXPECTED) == 40
+    # bd4c36dbe added the C01-C60 identical cards and the 54 AFCL fast cards
+    # (L14 G14 T12 P14): identical = I24 + A8 + N8 + C60, fast = F20 + AFCL54.
+    assert len(p.EXPECTED) == 174
+    assert sum(p.mode_for(x) == "identical" for x in p.EXPECTED) == 100
     assert sum(p.mode_for(x) == "fast" for x in p.EXPECTED) == 74
 
 

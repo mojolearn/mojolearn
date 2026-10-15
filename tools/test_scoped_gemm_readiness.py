@@ -16,7 +16,9 @@ class ReadinessTest(unittest.TestCase):
     def test_spec_complete(self):
         spec = make_spec(H, C, 'scoped-r2-q-v1', 'all')
         self.assertEqual(spec['args'], [C, 'scoped-r2-q-v1', 'all'])
-        self.assertEqual(len(spec['cases']), 28)
+        # 787d78337 replaced the window-edge cases with a generic spread:
+        # 18 GEMM cases + 5 PCA covariance cases.
+        self.assertEqual(len(spec['cases']), 23)
         self.assertTrue(all(c['requires'] == ['probe'] for c in spec['cases']))
         artifact = spec['artifacts'][0]
         self.assertEqual(artifact['compiled_source'], C)
