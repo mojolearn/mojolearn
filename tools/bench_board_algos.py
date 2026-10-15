@@ -7429,6 +7429,99 @@ def transform_quality_reference(lane, D, outs, directory):
     return receipt
 
 
+def pagerank_l1_bound(lane, n):
+    """The L1 distance two PageRank arms may lie apart under the lane's shared stopping rule.
+
+    Every arm stops when the L1 change of the scores falls below n x tol (the lane note). For the
+    damped power iteration that change bounds the distance to the fixed point by alpha / (1 - alpha)
+    times itself, so two arms that each stop there lie within 2 alpha / (1 - alpha) n tol of each
+    other. It follows from the lane's own parameters and node count, not from any board shape."""
+    p = LANES[lane]["params"]
+    alpha, tol = float(p["alpha"]), float(p["tol"])
+    if not 0 < alpha < 1 or tol <= 0 or n <= 0:
+        raise ValueError("pagerank bound needs 0 < alpha < 1, tol > 0 and nodes")
+    return 2.0 * alpha / (1.0 - alpha) * n * tol
+
+
+def partition_disagreement(reference, labels, ari=None):
+    """0.0 when two labelings are the same partition up to relabeling, else 1 - ARI (> 0)."""
+    np = _np()
+    a, b = np.asarray(reference).reshape(-1), np.asarray(labels).reshape(-1)
+    if a.shape != b.shape:
+        raise ValueError("labelings of different lengths")
+    _, ca = np.unique(a, return_inverse=True)
+    _, cb = np.unique(b, return_inverse=True)
+    # the same partition iff the label pairs form a bijection: as many distinct pairs as labels on each side
+    pairs = np.unique(np.stack([ca.reshape(-1), cb.reshape(-1)], axis=1), axis=0).shape[0]
+    if pairs == ca.max(initial=-1) + 1 == cb.max(initial=-1) + 1:
+        return 0.0
+    if ari is None:
+        ari = _tool("bench_board_more").adjusted_rand(a, b)
+    return max(float(1.0 - ari), float(np.finfo(np.float64).tiny))
+
+
+# SCORER GAPS (lane quality-scorers, 2026-10-15). The board races ours alone (opponents are stored,
+# never re-raced), so a metric that measures each arm against one named reference arm was never
+# recorded for ours: gcn, graphsage, moe and resnet-block had only their own-host distance, pagerank
+# only the score sum, connected-components only a component count, the outlier lanes no flag
+# agreement, kpss and select-d no agreement with statsmodels. The reference below runs untimed after
+# every timed worker has stopped, on the race's own inputs (the layer lanes' torch arm rebuilds the
+# same fixture tensors and checks them, _neural_fixture_drift_check), exactly as the scikit-learn
+# oracle of transform_quality_reference. It is never a timed arm and moves no clock.
+INDEPENDENT_REFERENCE = {"layer": "torch-eager-fp32", "optim": "torch-eager-fp32",
+                         "outlier": "sklearn-cpu", "pagerank": "networkx-cpu",
+                         "components": "networkx-cpu", "x-kpss": "statsmodels-cpu",
+                         "x-selectd": "statsmodels-cpu"}
+
+
+def independent_reference_arm(lane):
+    """The untimed reference arm this lane's quality measures ours against, or None."""
+    s = LANES[lane]
+    arm = INDEPENDENT_REFERENCE.get(quality_kind(lane))
+    if arm is None or arm in s.get("refused", {}):
+        return None
+    if s["kind"] == "optim" and not s.get("torch_opt"):
+        return None                   # lion, lamb: torch has no such optimizer (no opponent at all)
+    if arm == "sklearn-cpu" and not s.get("sk"):
+        return None
+    if arm in ("networkx-cpu", "statsmodels-cpu") and arm not in s.get("other", {}):
+        return None
+    return arm
+
+
+def independent_quality_reference(lane, D, outs, directory, fit_calls=1):
+    """Run the lane's reference arm untimed when a race of ours holds no such arm. Returns its receipt
+    (None when not needed); the reference outputs go into `outs`. A reference that cannot run is
+    recorded in the receipt and leaves quality as before (INSUFFICIENT, never a failure of ours)."""
+    arm = independent_reference_arm(lane)
+    if arm is None or arm in outs or not any(a in OURS_ARMS for a in outs):
+        return None
+    from pathlib import Path
+    root = Path(directory)
+    root.mkdir(parents=True, exist_ok=True)
+    receipt = dict(role="untimed independent quality reference; never a timed race arm", arm=arm,
+                   lane=lane, fit_calls=fit_calls)
+    try:
+        runner = build(lane, arm, D)
+        if LANES[lane]["kind"] in ("layer", "optim"):
+            # replay the race's warm-up and scored calls: stateful layers see the same history
+            reference = _tool("bench_board_host_quality").run_reference(runner, fit_calls)
+        else:
+            runner.fit()
+            runner.infer()
+            reference = runner.outputs()
+        reference = {k: _np().asarray(v) for k, v in reference.items()}
+        path = root / "reference.npz"
+        _np().savez(path, **reference)
+        receipt.update(status="ok", info=runner.info, parameters=getattr(runner, "record", None),
+                       output=str(path), output_sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+        outs[arm] = reference
+    except Exception as exc:  # noqa: BLE001  (missing library, refused arm, no device)
+        receipt.update(status="failed", error=repr(exc)[:600])
+    (root / "receipt.json").write_text(json.dumps(receipt, sort_keys=True, indent=2, default=str) + "\n")
+    return receipt
+
+
 def dropout_quality(x, y, probability):
     """Score a saved NCHW output without requiring identical random masks."""
     np = _np()
@@ -7638,12 +7731,22 @@ def quality(lane, D, outs):
                 nx_ = outs.get("networkx-cpu")
                 e["sum"] = float(o["scores"].sum())
                 if nx_ is not None and arm != "networkx-cpu":
+                    if nx_["scores"].shape != o["scores"].shape:
+                        raise ValueError("pagerank scores shape differs from networkx's")
                     e["l1_vs_networkx"] = float(np.abs(o["scores"] - nx_["scores"]).sum())
+                    # SCORER GAPS (lane quality-scorers, 2026-10-15): the distance in units of what the
+                    # shared stopping rule allows (tools/board_quality.py REFERENCE, bound 1)
+                    e["l1_vs_networkx_over_stop_bound"] = e["l1_vs_networkx"] / pagerank_l1_bound(
+                        lane, o["scores"].shape[0])
             elif qk == "components":
                 e["n_components"] = int(np.unique(o["labels"]).shape[0])
                 nx_ = outs.get("networkx-cpu")
                 if nx_ is not None and arm != "networkx-cpu":
                     e["ari_vs_networkx"] = more.adjusted_rand(nx_["labels"], o["labels"])
+                    # SCORER GAPS (2026-10-15): connected components are exact, so the contract is the
+                    # same partition up to relabeling (0), else 1 - ARI (tools/board_quality.py, bound 0)
+                    e["partition_disagreement_vs_networkx"] = partition_disagreement(
+                        nx_["labels"], o["labels"], e["ari_vs_networkx"])
             elif qk == "louvain":
                 e["n_communities"] = int(np.unique(o["labels"]).shape[0])
                 _, lab = np.unique(o["labels"], return_inverse=True)
@@ -8182,12 +8285,21 @@ def race(args):
         else:
             result["quality_reference_receipt"] = transform_quality_reference(
                 lane, D, outs, os.path.join(args.work, tag + "-sklearn-quality"))
+        # the host-quality child and the torch reference rebuild the lane through board.build() with _DATASET unset;
+        # the layer lanes key their fixtures by (lane, dataset, variant), so without this the child asked for
+        # "<lane>/None/nb64" (nv2 v0137, amd a1719)
+        os.environ["MOJOLEARN_BOARD_DATASET"] = ds
+        # SCORER GAPS (2026-10-15): the lane's reference arm, untimed, when this race holds none
+        reference_arm = independent_reference_arm(lane)
+        result["independent_quality_reference"] = independent_quality_reference(
+            lane, D, outs, os.path.join(args.work, tag + "-independent-quality"),
+            fit_calls=args.rounds + (0 if external_warmup else 1))
         result["quality"] = quality(lane, D, outs)
+        if result["independent_quality_reference"] and result["independent_quality_reference"].get("status") == "ok":
+            result["quality"].pop(reference_arm, None)        # the reference is not a raced arm
+            outs.pop(reference_arm, None)
         hq = _tool("bench_board_host_quality")
         hq_dir = os.path.join(args.work, tag + "-host-quality")
-        # the host-quality child rebuilds the lane through board.build() with _DATASET unset; the layer lanes key their
-        # fixtures by (lane, dataset, variant), so without this the child asked for "<lane>/None/nb64" (nv2 v0137, amd a1719)
-        os.environ["MOJOLEARN_BOARD_DATASET"] = ds
         result["host_quality_receipt"] = hq.enrich(
             lane, D, outs, result["quality"], args.ours_python, hq_dir, args.round_seconds,
             fit_calls=args.rounds + (0 if external_warmup else 1), precomputed=scorer_pre.get("host"))

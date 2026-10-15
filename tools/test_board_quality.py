@@ -58,7 +58,10 @@ class QualityParity(unittest.TestCase):
         a, b = dict(max_rel_err_vs_fp64=2.4e-7), dict(max_rel_err_vs_fp64=.00376)
         self.assertEqual(pair(a, b)["verdict"], "PASS")
         self.assertEqual(pair(a, dict(max_rel_err_vs_fp64=.1))["verdict"], "FAIL")
-        self.assertEqual(pair(dict(rmse=1, error="scorer crashed"), dict(rmse=1))["verdict"], "FAIL")
+        # A scorer crash is "quality not scored" (lane harness-evidence, 2026-10-14), never a pass;
+        # a scored output failure (nonfinite output) is a failure of the arm.
+        self.assertEqual(pair(dict(rmse=1, error="scorer crashed"), dict(rmse=1))["verdict"], "INSUFFICIENT")
+        self.assertEqual(pair(dict(rmse=1, error="nonfinite output"), dict(rmse=1))["verdict"], "FAIL")
 
     def test_reference_quality_limits_and_missing_optimizer_step(self):
         for metric, margin in (("rel_diff_vs_sklearn", 1e-4),

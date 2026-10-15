@@ -2315,7 +2315,9 @@ class TorchArm:
         # which is not an opponent; race() refuses these arms before a worker starts, and the
         # worker refuses too (a direct `worker` call). mamba_ssm's kernels are MambaSsmArm. Results
         # raced before this change were wrong for this lane; apply extra scrutiny.
-        if self.lane in REFERENCE_TWIN_LANES:
+        # SCORER GAPS (2026-10-15): the one exception is the untimed quality reference
+        # (torch_reference_outputs), which is never an arm or an opponent.
+        if self.lane in REFERENCE_TWIN_LANES and os.environ.get(QUALITY_REFERENCE_ENV) != "1":
             raise RuntimeError("REFUSED: " + REFERENCE_TWIN_LANES[self.lane])
         model = MODEL_OF[self.lane]
         call = self._mamba_call(model)
@@ -3167,6 +3169,89 @@ def forward_host_quality(lane, shape, data, outs):
     return result
 
 
+# SCORER GAPS (lane quality-scorers, 2026-10-15). The forward lanes' quality columns were each arm's
+# distance to OURS (max_abs_diff_vs_ours), which is only recorded when ours and the opponent share one
+# race, and the board races ours alone: transformer-forward and mamba1/2/3-forward had no metric on
+# ours or on the torch arms. Every arm is now also measured against the eager FP32 torch twin's
+# output on the same weights and inputs (rel_fro_vs_torch_eager_fp32, declared in
+# tools/board_quality.py; the stored torch-eager-fp32 cell reads 0 there). On the Mamba lanes that
+# twin is the pure-PyTorch reference implementation: refused as an OPPONENT (REFERENCE_TWIN_LANES),
+# it is exactly what a quality reference should be.
+TORCH_REFERENCE_ARM = "torch-eager-fp32"
+#: set only in the untimed reference worker's environment: lets the pure-PyTorch Mamba twin run as the reference
+QUALITY_REFERENCE_ENV = "MOJOLEARN_BOARD_QUALITY_REFERENCE"
+TORCH_REFERENCE_LANES = ("transformer-forward", "mamba1-forward", "mamba2-forward", "mamba3-forward")
+
+
+def torch_reference_quality(outs, reference):
+    """{arm: {max_rel_diff_vs_torch_eager_fp32, rel_fro_vs_torch_eager_fp32}} for every arm whose y
+    matches the reference's shape (the same two metrics as tools/bench_board_algos.py's layer lanes)."""
+    import numpy as np
+    r = np.asarray(reference["y"], dtype=np.float64)
+    if not np.isfinite(r).all():
+        raise ValueError("nonfinite torch reference output")
+    rn = float(np.linalg.norm(r)) or 1e-30
+    den = np.maximum(np.abs(r), 1e-6)
+    q = {}
+    for arm, o in outs.items():
+        if "y" not in o:
+            continue
+        y = np.asarray(o["y"], dtype=np.float64)
+        if y.shape != r.shape:
+            q[arm] = {"shape_mismatch_vs_torch_eager_fp32": "%s vs %s" % (list(y.shape), list(r.shape))}
+            continue
+        if not np.isfinite(y).all():
+            q[arm] = {"nonfinite_output": True}
+            continue
+        q[arm] = {"max_rel_diff_vs_torch_eager_fp32": float(np.max(np.abs(y - r) / den)),
+                  "rel_fro_vs_torch_eager_fp32": float(np.linalg.norm(y - r)) / rn}
+    return q
+
+
+def torch_reference_outputs(args, lane, shape, data_path, tag):
+    """Run the eager FP32 torch twin UNTIMED, after every timed worker has stopped, when a race of ours
+    holds no such arm: one worker, the same protocol and inputs, one forward (round 0, whose time is
+    discarded), its saved output. Returns (receipt, outputs or None); never raises."""
+    import numpy as np
+    arm = TORCH_REFERENCE_ARM
+    receipt = {"role": "untimed independent quality reference; never a timed race arm", "arm": arm,
+               "lane": lane}
+    w = None
+    try:
+        ctd = _load("classical_two_datasets")
+        cmd = shlex.split(args.theirs_python) + [os.path.abspath(__file__), "worker", "--arm", arm,
+                                                 "--lane", lane, "--shape", shape, "--data", data_path]
+        env = _worker_env(arm)
+        env[QUALITY_REFERENCE_ENV] = "1"
+        w = ctd.start_worker(arm, cmd, env,
+                             os.path.join(args.out, "%s-%s-reference.log" % (tag, arm)), REPO)
+        msg = _worker_message(w, args.ready_seconds, "reference ready")
+        if msg.get("event") != "ready":
+            raise RuntimeError("reference worker not ready: %s" % json.dumps(msg, default=str)[:400])
+        receipt["info"] = msg.get("info")
+        msg = _worker_message(w, warmup_deadline(arm, args), "reference forward", "round 0")
+        if msg.get("event") != "round":
+            raise RuntimeError("reference forward failed: %s" % json.dumps(msg, default=str)[:400])
+        path = os.path.join(args.out, "%s-%s.reference.npz" % (tag, arm))
+        msg = _worker_message(w, args.round_seconds, "reference save", "save %s" % path)
+        if msg.get("event") != "saved":
+            raise RuntimeError("reference save failed: %s" % json.dumps(msg, default=str)[:400])
+        with np.load(path) as z:
+            out = {k: z[k] for k in z.files}
+        with open(path, "rb") as fh:
+            receipt.update(status="ok", output=path, output_sha256=hashlib.sha256(fh.read()).hexdigest())
+        return receipt, out
+    except Exception as exc:  # noqa: BLE001  (no torch, no device, a refused twin)
+        receipt.update(status="failed", error=repr(exc)[:600])
+        return receipt, None
+    finally:
+        if w is not None:
+            try:
+                w.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+
 SCORER_REFUSED = "quality scorer unavailable: "
 #: the input arrays each scorer reads (quality() below)
 _NLL_LANES = ("lm-forward", "lm-infer", "samba-forward", "samba-infer", "samba-decode")
@@ -3297,6 +3382,10 @@ def quality(lane, data, outs, *, shape="full"):
         scale = float(np.abs(c64).max()) or 1.0
         for arm, o in outs.items():
             q[arm]["max_rel_err_vs_fp64"] = float(np.abs(o["y"].astype(np.float64) - c64).max()) / scale
+    if lane in TORCH_REFERENCE_LANES and TORCH_REFERENCE_ARM in outs:
+        for arm, extra in torch_reference_quality(outs, outs[TORCH_REFERENCE_ARM]).items():
+            if arm != TORCH_REFERENCE_ARM:        # its own distance is 0 by definition
+                q[arm].update(extra)
     ref = outs.get("ours", {}).get("y")
     if ref is not None:
         r64 = ref.astype(np.float64)
@@ -3620,7 +3709,17 @@ def race(args):
                 if row.get("status") == "ok":
                     row["status"] = "unqualified_experimental_operation"
         else:
-            result["quality"] = quality(lane, data, outs, shape=args.shape)
+            scored = outs
+            if (lane in TORCH_REFERENCE_LANES and TORCH_REFERENCE_ARM not in outs
+                    and any(a in OUR_ARMS for a in outs)):
+                # SCORER GAPS (2026-10-15): the untimed torch reference, after the timed workers stopped
+                result["torch_quality_reference"], reference = torch_reference_outputs(
+                    args, lane, args.shape, data_path, tag)
+                if reference is not None:
+                    scored = dict(outs, **{TORCH_REFERENCE_ARM: reference})
+            result["quality"] = quality(lane, data, scored, shape=args.shape)
+            if scored is not outs:
+                result["quality"].pop(TORCH_REFERENCE_ARM, None)    # the reference is not a raced arm
         if operation in ("transformer_forward_vjp_tape", "mamba_forward_vjp"):
             result["experimental_quality"] = {
                 "forward": "ordinary host forward comparator only",
