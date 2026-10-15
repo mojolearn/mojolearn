@@ -1482,6 +1482,26 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
+@lane("et-clf-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    """sample_weight through the weighted ExtraTrees classifier (lane
+    sk-kernels): fixed-point row weights in the class tallies."""
+    w = _hw((X.shape[0],), "et-clf-weighted:sample_weight", 0.5, 1.5)
+    m = ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc, sample_weight=w)
+    predict, proba = m._predict_with_proba(X)
+    return _fit(dict(predict=_h(predict), proba=_h(proba)),
+                m, lambda e: e._predict_with_proba(Xh))
+
+
+@lane("et-reg-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    """sample_weight through the weighted ExtraTrees regressor (lane
+    sk-final): the quantized w*y and weight sums, leaves Z / W."""
+    w = _hw((X.shape[0],), "et-reg-weighted:sample_weight", 0.5, 1.5)
+    m = ml.ExtraTreesRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X, yr, sample_weight=w)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
 @lane("gbdt-symmetric")
 def _(ml, X, yc, yr, Xh=None):
     """Plus `borders254` (lane/ordered-speed, 2026-09-29): the same fit at
