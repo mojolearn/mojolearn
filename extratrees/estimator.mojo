@@ -139,6 +139,7 @@ from extratrees.impl.randomforest.randomforest import (
 )
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
+from core.weight_compact_device import device_count_nonzero_weights
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
@@ -653,8 +654,17 @@ def fit_extra_trees_classifier_device(
     therefore possible, is named when it happens, and is what
     `device_forest_check` uses to prove this arm reaches the device at all.
     """
+    # lane sk-weq-trees: without bootstrap the fit drops its zero-weight
+    # rows (`DeviceDataset.drop_zero_weight_rows`); the plan (its
+    # unlimited-depth cap) is resolved from the kept count, as the host
+    # column's plan is after its own drop. Every weight nonzero: n_rows.
+    var plan_rows = n_rows
+    if weights_addr != 0 and not config.bootstrap:
+        var kept = device_count_nonzero_weights(ctx, weights_addr, Int(n_rows))
+        if kept > 0:
+            plan_rows = Int32(kept)
     var plan = classifier_plan(
-        config, n_rows, n_features, fold_min_weight=weights_addr == 0
+        config, plan_rows, n_features, fold_min_weight=weights_addr == 0
     )
     var forest = fit_classification_device(
         ctx,
@@ -752,8 +762,14 @@ def fit_extra_trees_regressor_device(
     the device at all: an arm that silently served the host fit would return
     bit-equal leaves, and the check requires at least one to differ.
     """
+    # lane sk-weq-trees: the plan from the kept rows, as in the classifier
+    var plan_rows = n_rows
+    if weights_addr != 0 and not config.bootstrap:
+        var kept = device_count_nonzero_weights(ctx, weights_addr, Int(n_rows))
+        if kept > 0:
+            plan_rows = Int32(kept)
     var plan = regressor_plan(
-        config, n_rows, n_features, fold_min_weight=weights_addr == 0
+        config, plan_rows, n_features, fold_min_weight=weights_addr == 0
     )
     # cpu3-trees: the labels are quantized on the device (the scale's sum and
     # the per-row truncation), `quantize_labels_host`'s Int32s and scale

@@ -151,3 +151,26 @@ def device_gather_rows_colmajor(
         )
     return dst^
 
+
+
+def device_count_nonzero_weights(
+    ctx: DeviceContext, weights_addr: Int, n: Int
+) raises -> Int:
+    """How many of the caller's `n` Float32 weights (borrowed through this
+    call) are not zero: one upload, the flag pass, one Int back. ExtraTrees
+    resolves its plan (the unlimited-depth cap) from the rows the fit will
+    keep, as the host column does after its own drop."""
+    if weights_addr == 0 or n <= 0:
+        return n
+    var dw = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(
+        dst_buf=dw,
+        src_ptr=MutPointer[Float32, MutUntrackedOrigin](
+            unsafe_from_address=weights_addr
+        ),
+    )
+    var rows = ctx.enqueue_create_buffer[DType.int32](n)
+    var kept = device_nonzero_weight_rows(ctx, dw, n, rows)
+    _ = rows^
+    _ = dw^
+    return kept
