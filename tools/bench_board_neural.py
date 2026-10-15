@@ -179,7 +179,9 @@ import json
 import os
 import platform
 import shlex
+import signal
 import statistics
+import subprocess
 import sys
 import time
 
@@ -2844,10 +2846,8 @@ def build_runner(lane, arm, shape, data, ab_config=None):
     return TorchArm(lane, shape, data, arm)
 
 
-def worker_ready(args):
-    """The worker's ready stage: load the inputs, construct the arm, read its record back. Returns
-    (runner, message): the ready message, or an error message with runner None. The worker subprocess and the
-    smoke's in-process probe (probe_ready) both run exactly this."""
+def _prepare_worker(args):
+    """Construct the arm and retain the preparation context used by round receipts."""
     try:
         ab_config = _read_neural_ab_config(getattr(args, "neural_ab_config", None))
         _apply_neural_ab_environment(ab_config)
@@ -2861,7 +2861,7 @@ def worker_ready(args):
     except (Exception, SystemExit) as exc:  # noqa: BLE001  (a twin's refuse() exits)
         import traceback
         traceback.print_exc()
-        return None, {"event": "error", "stage": "ready", "error": repr(exc)[:2000]}
+        return None, {"event": "error", "stage": "ready", "error": repr(exc)[:2000]}, None
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_load("bench_board_probe").library_identity(runner.info))
     record = getattr(runner, "record", None)
@@ -2869,9 +2869,19 @@ def worker_ready(args):
         # Resolve callable identity BEFORE JSON transport; default=str would
         # erase the actual library function and leave an unusable repr.
         record = _load("bench_board_params").arm_record(record)
-    return runner, {"event": "ready", "info": runner.info, "pid": os.getpid(),
-                    "params_record": record,
-                    "neural_ab": _neural_ab_receipt(runner, ab_config)}
+    return (runner, {"event": "ready", "info": runner.info, "pid": os.getpid(),
+                     "params_record": record,
+                     "neural_ab": _neural_ab_receipt(runner, ab_config)},
+            {"ab_config": ab_config, "preparation_ms": preparation_ms})
+
+
+def worker_ready(args):
+    """The worker's ready stage, shared with the smoke's parameter-only probe.
+
+    Return (runner, message), with runner None on preparation failure.
+    """
+    runner, message, _ = _prepare_worker(args)
+    return runner, message
 
 
 #: True only inside probe_ready (the smoke's parameter probe, in process or in its arm server): the arm is
@@ -2890,6 +2900,7 @@ def probe_ready(argv):
 
 
 def worker(args):
+    import numpy as np
     # fd 1 is the protocol; everything a library prints goes to the log.
     proto = os.fdopen(os.dup(1), "w", buffering=1)
     os.dup2(2, 1)
@@ -2899,10 +2910,14 @@ def worker(args):
         proto.write(json.dumps(obj, sort_keys=True, default=str) + "\n")
         proto.flush()
 
-    runner, msg = worker_ready(args)
+    # The ready probe returns only its public protocol pair. Timed workers also
+    # need its local configuration and preparation clock; neither is a global.
+    runner, msg, preparation = _prepare_worker(args)
     say(msg)
     if runner is None:
         return 1
+    ab_config = preparation["ab_config"]
+    preparation_ms = preparation["preparation_ms"]
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
@@ -2932,6 +2947,13 @@ def worker(args):
                 digest = runner.digest()
                 from bench_board_state import scored_receipt
                 state_receipt = scored_receipt(outputs, runner) if r > 0 else None
+                round_message = {"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m,
+                    "state_receipt": state_receipt, "compiles": compiles_now,
+                    "neural_ab": _neural_ab_receipt(runner, ab_config, executed=True),
+                    "operation": {"ms": operation_ms, "preparation_ms": preparation_ms if r == 0 else 0.0,
+                                  "scope": (_neural_ab_operation(ab_config) if ab_config else "training-step-or-forward-consume"),
+                                  "dataset_load_included": False,
+                                  "cold_total_ms": preparation_ms + operation_ms if r == 0 else None}}
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -2941,12 +2963,7 @@ def worker(args):
                          args.arm, where, r, " (compile happens here)"
                          if r == 0 and "compile" in args.arm else "", repr(exc)[:2000])})
                 return 1
-            say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
-                 "compiles": compiles_now,
-                 "neural_ab": _neural_ab_receipt(runner, ab_config, executed=True),
-                 "operation": {"ms": operation_ms, "preparation_ms": preparation_ms if r == 0 else 0.0,
-                               "scope": (_neural_ab_operation(ab_config) if ab_config else "training-step-or-forward-consume"), "dataset_load_included": False,
-                               "cold_total_ms": preparation_ms + operation_ms if r == 0 else None}})
+            say(round_message)
         elif parts[0] == "save":
             try:
                 path = parts[1]
@@ -3203,6 +3220,64 @@ SPAN = {"input_home": "host", "pre_clock_fit": False,
         "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized"}
 
 
+def _worker_message(worker, seconds, stage, command=None):
+    """Keep protocol EOF/exit distinct from a deadline, including child diagnostics."""
+    send_error = None
+    if command is not None:
+        try:
+            worker.send(command)
+        except OSError as exc:
+            send_error = repr(exc)
+    # A broken pipe can follow a final error message: drain it before classifying
+    # the process failure. The shared reader retains its existing None interface.
+    message = worker.read(min(seconds, 0.2) if send_error else seconds)
+    if message is not None:
+        return message
+    failure = dict(getattr(worker, "read_failure", None) or {"reason": "unknown"})
+    proc = getattr(worker, "proc", None)
+    returncode = proc.poll() if proc is not None else None
+    if proc is not None and returncode is None and (failure["reason"] == "eof" or send_error):
+        # A closed pipe can reach the reader just before waitpid observes exit.
+        # Bound this reap grace; an alive child that closed stdout is still EOF,
+        # never a claim that the operation consumed its full allowed time.
+        try:
+            returncode = proc.wait(timeout=0.2)
+        except subprocess.TimeoutExpired:
+            pass
+    reason = ("worker_exited" if returncode is not None else "worker_io_error" if send_error
+              else "timeout" if failure["reason"] == "deadline" else "worker_eof"
+              if failure["reason"] == "eof" else "worker_protocol_failure")
+    signal_number = -returncode if returncode is not None and returncode < 0 else None
+    try:
+        signal_name = signal.Signals(signal_number).name if signal_number else None
+    except ValueError:
+        signal_name = "signal_%d" % signal_number  # e.g. unnamed POSIX realtime signals
+    return {"event": "error", "stage": stage, "reason": reason,
+            "error": "worker returned no protocol message: " + reason,
+            "returncode": returncode, "signal": signal_number,
+            "signal_name": signal_name,
+            "read_failure": failure, "send_error": send_error,
+            "worker_log": getattr(getattr(worker, "log", None), "name", None)}
+
+
+def _stop_failed_worker(worker, status, message, row):
+    """Retain observation before cleanup and distinguish a controller's SIGKILL."""
+    proc = getattr(worker, "proc", None)
+    before = proc.poll() if proc is not None else None
+    if proc is not None and before is None and message.get("event") == "error" and not message.get("reason"):
+        # A structured worker error is followed by exit(1). Give that normal
+        # teardown the same short reap grace before recording forced cleanup.
+        try:
+            before = proc.wait(timeout=0.2)
+        except subprocess.TimeoutExpired:
+            pass
+    worker.kill(status, message)
+    if proc is not None:
+        row["worker_process"] = {"returncode_after_cleanup": proc.poll(),
+                                 "returncode_before_cleanup": before,
+                                 "controller_cleanup_requested": True}
+
+
 def race(args):
     ab_config = _read_neural_ab_config(getattr(args, "neural_ab_config", None))
     _apply_neural_ab_environment(ab_config)
@@ -3304,10 +3379,11 @@ def race(args):
     for arm, w in workers.items():
         if arm in refused_before:
             continue
-        msg = w.read(args.ready_seconds)
-        if msg is None or msg.get("event") != "ready":
-            w.kill("not_ready", msg)
-            result["arms"][arm].update(status="not_ready", error=msg)
+        msg = _worker_message(w, args.ready_seconds, "ready")
+        if msg.get("event") != "ready":
+            row = result["arms"][arm]
+            row.update(status="not_ready", error=msg)
+            _stop_failed_worker(w, "not_ready", msg, row)
             print("NEURAL-REFUSED lane=%s arm=%s stage=ready detail=%s" % (lane, arm, json.dumps(msg)),
                   flush=True)
             continue
@@ -3349,12 +3425,13 @@ def race(args):
         shift = r % len(live)
         for arm in live[shift:] + live[:shift]:
             w = workers[arm]
-            w.send("round %d" % r)
-            msg = w.read(warmup_deadline(arm, args) if r == 0 else args.round_seconds)
-            if msg is None or msg.get("event") != "round":
-                status = "timeout" if msg is None else "error"
-                w.kill(status, msg)
-                result["arms"][arm].update(status=status, error=msg, failed_round=r)
+            msg = _worker_message(w, warmup_deadline(arm, args) if r == 0 else args.round_seconds,
+                                  "round %d" % r, "round %d" % r)
+            if msg.get("event") != "round":
+                status = "timeout" if msg.get("reason") == "timeout" else "error"
+                row = result["arms"][arm]
+                row.update(status=status, error=msg, failed_round=r)
+                _stop_failed_worker(w, status, msg, row)
                 if r == 0 and status == "timeout":
                     result["arms"][arm]["warmup_deadline_s"] = warmup_deadline(arm, args)
                 print("NEURAL-REFUSED lane=%s arm=%s stage=round%d detail=%s"
@@ -3390,9 +3467,8 @@ def race(args):
         w = workers[arm]
         if w.alive and len(result["arms"][arm]["ms"]) == args.rounds:
             path = os.path.join(args.work, "%s-%s.npz" % (tag, arm))
-            w.send("save %s" % path)
-            msg = w.read(args.round_seconds)
-            if msg is not None and msg.get("event") == "saved":
+            msg = _worker_message(w, args.round_seconds, "save", "save %s" % path)
+            if msg.get("event") == "saved":
                 with np.load(path) as z:
                     outs[arm] = {k: z[k] for k in z.files}
                 result["arms"][arm]["outputs_digest"] = outputs_digest(outs[arm])
@@ -3407,7 +3483,9 @@ def race(args):
                 else:
                     os.remove(path)
             else:
-                result["arms"][arm].update(status="save_failed", error=msg)
+                row = result["arms"][arm]
+                row.update(status="save_failed", error=msg)
+                _stop_failed_worker(w, "save_failed", msg, row)
         w.close()
     try:
         with np.load(data_path) as z:
