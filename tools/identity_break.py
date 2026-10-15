@@ -8422,7 +8422,16 @@ def _(ml, X, yc, yr, Xh=None):
 #: of recording a REFUSED cell that reads like coverage in a column total.
 #: The bar to add one is the question these four did not get asked: is the
 #: thing that refuses the thing the lane hashes?
-GPU_ONLY_LANES = {}
+GPU_ONLY_LANES = {
+    # f63ef2235 (2026-10-14): the querywise losses on the pointwise searcher.
+    # The thing that refuses IS the thing the lane hashes: the gbdt host
+    # binding's pointwise arm (`_gbdt_fit_pointwise_arm`) restates Logloss
+    # only and refuses PairLogit and YetiRank by name (`_refuse_pointwise`).
+    "gbdt-pair-logit-pointwise": "the gbdt host binding's pointwise arm trains Logloss only; "
+                                 "PairLogit under use_pointwise_searcher=True refuses by name",
+    "gbdt-yeti-rank-pointwise": "the gbdt host binding's pointwise arm trains Logloss only; "
+                                "YetiRank under use_pointwise_searcher=True refuses by name",
+}
 
 
 def _decode_session_probe(blk, state_fn, rows, length, dm, Xh):
