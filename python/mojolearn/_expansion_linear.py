@@ -2578,7 +2578,9 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         a, n, d = _matrix(X)
         yv = _vector(y, n)
         if self.cv is not None:
-            if _is_int_cv(self.cv) and sample_weight is None:
+            # a k-fold with one-row test folds (n // k < 2) takes the split
+            # walk, which scores such a fold NaN as scikit-learn does
+            if _is_int_cv(self.cv) and sample_weight is None and int(self.cv) >= 2 and n // int(self.cv) >= 2:
                 return self._fit_kfold(a, n, d, yv, alphas, sample_weight)
             return self._fit_splits(X, y, a, n, d, yv, alphas, sample_weight)
         vals = _ridge_run(self, a, n, d, yv, 1, alphas, sample_weight)
@@ -2656,9 +2658,18 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
 
         self.n_features_in_ = d
         rows = [[] for _ in alphas]  # glue: one score list per alpha (alpha-grid sized)
+        undefined = False
         for tr, te in splits:  # glue: one native gather, fit, predict and score per split and alpha
             if not tr.size or not te.size:
                 raise ValueError("mojolearn RidgeCV: every cv split needs training and test rows")
+            if te.size < 2:
+                # scikit-learn's r2_score: NaN, with its warning, for fewer
+                # than two test rows; every alpha's mean is then NaN, and
+                # GridSearchCV ranks all-NaN means equal (the first alpha wins)
+                from ._expansion_metrics import _undefined_warning
+                _undefined_warning("R^2 score is not well-defined with less than two samples.")
+                undefined = True
+                continue
             xtr, ytr, xte, yte = take(a, tr, d), take(yv, tr, 1), take(a, te, d), take(yv, te, 1)
             wtr = None if w is None else take(w, tr, 1)
             wte = None if w is None else take(w, te, 1)
@@ -2666,13 +2677,17 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
                 vals = _ridge_run(self, xtr, tr.size, d, ytr, 1, [alpha], wtr)
                 pred = _decision(self, xte, Array.from_list(vals[:d], "<f4"), float(vals[d]))
                 rows[i].append(float(r2_score(yte, pred.reshape((te.size,)), sample_weight=wte)))
-        means = Array.from_list(_row_means(rows), "<f8")
-        best = int(_native("reduce_stat")(addr_ro(means, name="scores"), 1, len(alphas), 3))
+        if undefined:
+            best, best_score = 0, float("nan")
+        else:
+            means = Array.from_list(_row_means(rows), "<f8")
+            best = int(_native("reduce_stat")(addr_ro(means, name="scores"), 1, len(alphas), 3))
+            best_score = float(means[best])  # one element of the mean-score Array
         vals = _ridge_run(self, a, n, d, yv, 1, [alphas[best]], w)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.alpha_ = alphas[best]
-        self.best_score_ = float(means[best])  # one element of the mean-score Array
+        self.best_score_ = best_score
         return self
 
 
