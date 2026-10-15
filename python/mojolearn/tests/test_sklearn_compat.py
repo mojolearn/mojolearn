@@ -116,11 +116,6 @@ def _factories():
         "GaussianRandomProjection": lambda: ml.GaussianRandomProjection(n_components=2),
         "SparseRandomProjection": lambda: ml.SparseRandomProjection(n_components=2),
         "SelectKBest": lambda: ml.SelectKBest(k=1),
-        # SVC's decision_function_shape defaults to cuML's 'ovo' (pairwise
-        # columns); scikit-learn's checks read the multiclass decision as
-        # one column per class, scikit-learn's default 'ovr', which ours
-        # implements and which this instance selects explicitly.
-        "SVC": lambda: ml.SVC(decision_function_shape="ovr"),
         "TSNE": lambda: ml.TSNE(perplexity=2),
         "TruncatedSVD": lambda: ml.TruncatedSVD(n_components=1, n_iter=5),
         "MeanShift": lambda: ml.MeanShift(bandwidth=1.0, max_iter=5),

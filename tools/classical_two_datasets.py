@@ -337,6 +337,10 @@ SVC_CACHE_MB = 2000.0
 SVC_DEGREE = 3
 SVC_COEF0 = 0.0
 SVC_MAX_ITER = -1
+#: Set explicitly on every SVC arm so the parameter audit compares like for like: cuML's SVC
+#: default is 'ovo' (pairwise decision columns); ours and scikit-learn's default 'ovr'. The
+#: fit is the same one-vs-one machines either way; only the multiclass decision_function differs.
+SVC_DFS = "ovo"
 TORCH_CHUNK_ROWS = 1 << 20
 TORCH_KNN_QUERY_CHUNK = 1024
 
@@ -1239,7 +1243,8 @@ class OursSVC:
         # random_state stays None: ours refuses it without probability=True.
         return self.ml.SVC(C=SVC_C, kernel="rbf", gamma=self.gamma, tol=SVC_TOL,
                            degree=SVC_DEGREE, coef0=SVC_COEF0, max_iter=SVC_MAX_ITER,
-                           cache_size=SVC_CACHE_MB, class_weight=None)
+                           cache_size=SVC_CACHE_MB, class_weight=None,
+                           decision_function_shape=SVC_DFS)
 
     def call(self):
         est = self.make()
@@ -1463,13 +1468,15 @@ class SkSVC:
         self.info = _sklearn_info()
         self.info["config"] = ("SVC(C=1.0, kernel='rbf', gamma=1/d, tol=1e-3, degree=3, coef0=0.0, "
                                "max_iter=-1, cache_size=2000, shrinking=True, class_weight=None, "
-                               "random_state=%d); fit timed; libsvm is single-threaded" % SEED)
+                               "random_state=%d, decision_function_shape='ovo'); fit timed; "
+                               "libsvm is single-threaded" % SEED)
         self.params_obj = self.make()
 
     def make(self):
         return self.SVC(C=SVC_C, kernel="rbf", gamma=self.gamma, tol=SVC_TOL, degree=SVC_DEGREE,
                         coef0=SVC_COEF0, max_iter=SVC_MAX_ITER, cache_size=SVC_CACHE_MB,
-                        shrinking=True, class_weight=None, random_state=SEED)
+                        shrinking=True, class_weight=None, random_state=SEED,
+                        decision_function_shape=SVC_DFS)
 
     def call(self):
         est = self.make()
@@ -2065,10 +2072,11 @@ class CumlSVC:
         self.params_obj, self.kw = construct_tolerant(
             SVC, dict(C=SVC_C, kernel="rbf", gamma=self.gamma, tol=SVC_TOL, degree=SVC_DEGREE,
                       coef0=SVC_COEF0, max_iter=SVC_MAX_ITER, cache_size=SVC_CACHE_MB,
-                      class_weight=None, random_state=SEED, output_type="cupy"), self.info)
+                      class_weight=None, random_state=SEED, decision_function_shape=SVC_DFS,
+                      output_type="cupy"), self.info)
         self.info["config"] = ("cuml.svm.SVC(C=1.0, kernel='rbf', gamma=1/d, tol=1e-3, degree=3, coef0=0.0, "
                                "max_iter=-1, cache_size=2000, class_weight=None, random_state=%d, "
-                               "output_type='cupy'); fit timed" % SEED)
+                               "decision_function_shape='ovo', output_type='cupy'); fit timed" % SEED)
         self.est = None
 
     def call(self):

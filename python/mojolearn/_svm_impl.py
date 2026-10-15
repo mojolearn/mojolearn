@@ -608,8 +608,7 @@ class SVC(NumericModeMixin):
     numeric modes; `'fast'` is available on Apple GPUs only.
 
     Defaults that differ from scikit-learn: `gamma='auto'` (scikit-learn
-    uses 'scale'); `decision_function_shape='ovo'` (scikit-learn uses
-    'ovr'); `cache_size` is the prediction buffer in MiB and does not
+    uses 'scale'); `cache_size` is the prediction buffer in MiB and does not
     affect training. There is no `shrinking` parameter. Every parameter is
     keyword-only. A parameter that would be ignored is refused rather than
     accepted: `degree` with any kernel but 'poly', `coef0` with any kernel
@@ -661,10 +660,10 @@ class SVC(NumericModeMixin):
     class_weight : dict, 'balanced' or None, default None
         Per-class weights; row i's penalty becomes
         `C * class_weight[y_i] * sample_weight_i`.
-    decision_function_shape : {'ovo', 'ovr'}, default 'ovo'
+    decision_function_shape : {'ovr', 'ovo'}, default 'ovr'
         With more than two classes, `decision_function` returns the
-        pairwise (n, K(K-1)/2) form ('ovo') or scikit-learn's voted
-        (n, K) form ('ovr'). No effect with two classes.
+        voted (n, K) form ('ovr') or the pairwise (n, K(K-1)/2) form
+        ('ovo'). No effect with two classes.
     probability : bool, default False
         Fit Platt scaling (libsvm's method: a seeded 5-fold
         cross-validation per class pair, then a sigmoid fit and, for more
@@ -756,7 +755,7 @@ class SVC(NumericModeMixin):
         output_type=None,
         random_state=None,
         class_weight=None,
-        decision_function_shape="ovo",
+        decision_function_shape="ovr",
         probability=False,
         break_ties=False,
     ):
