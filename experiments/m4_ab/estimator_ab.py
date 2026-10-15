@@ -38,7 +38,7 @@ def prepare(root, rows, features):
 def make(name):
     if name == 'kmeans':
         from mojolearn.cluster import KMeans
-        return KMeans(n_clusters=16, n_init=1, max_iter=20, tol=0.0, random_state=0)
+        return KMeans(n_clusters=16, n_init=1, max_iter=20, tol=1e-12, random_state=0)
     if name == 'pca':
         from mojolearn.decomposition import PCA
         return PCA(n_components=16)
@@ -48,7 +48,7 @@ def make(name):
 def quality(name, model, x):
     if name == 'kmeans':
         return dict(inertia=float(model.inertia_))
-    return dict(explained_variance_ratio_sum=float(np.sum(model.explained_variance_ratio_)))
+    return dict(explained_variance_ratio_sum=float(np.asarray(model.explained_variance_ratio_).sum()))
 
 
 def run(root, rows, features, name, arm, out):
