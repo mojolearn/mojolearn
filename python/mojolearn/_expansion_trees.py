@@ -2586,19 +2586,20 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
             _refuse("n_jobs/verbose/warm_start", "not carried in pass 1.")
         _trees_seed(self.random_state)
 
-    def fit(self, X, y=None, sample_weight=None):
+    # sk-edges: no `sample_weight` parameter. The totally random trees here
+    # take no row weights (scikit-learn drops zero-weight rows from every node
+    # and weighs the leaf limits), so an advertised parameter could only
+    # refuse; it is left out until the builder takes weights.
+    def fit(self, X, y=None):
         """Fit the random trees on ``X`` (n_samples, n_features).
 
-        ``y`` is ignored. ``sample_weight`` must be None; row weights raise
-        ``NotImplementedError``.
+        ``y`` is ignored.
 
         Returns
         -------
         self
         """
         self._validate_params()
-        if sample_weight is not None:
-            _refuse("RandomTreesEmbedding sample_weight", "the members take none.")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n, d = Xa.shape
         seed = _trees_seed(self.random_state)
@@ -2659,10 +2660,10 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
                                            [n, self.n_trees_, self.n_output_features_])
         return out.reshape((n, self.n_output_features_))
 
-    def fit_transform(self, X, y=None, sample_weight=None):
+    def fit_transform(self, X, y=None):
         """Fit on ``X``, then return ``transform(X)``."""
         self._validate_params()
-        return self.fit(X, y, sample_weight).transform(X)
+        return self.fit(X, y).transform(X)
 
 
 # ------------------------------------------------------ wrappers: helpers
