@@ -109,8 +109,9 @@ def forest_estimator(kind):
         original = cls.__init__
         signature = inspect.signature(original)
         parameters = list(signature.parameters.values())
-        parameters.append(inspect.Parameter("numeric_mode", inspect.Parameter.KEYWORD_ONLY,
-                                            default=None))
+        if "numeric_mode" not in signature.parameters:  # NumericModeMixin may have named it already
+            parameters.append(inspect.Parameter("numeric_mode", inspect.Parameter.KEYWORD_ONLY,
+                                                default=None))
         signature = signature.replace(parameters=parameters)
 
         @functools.wraps(original)
