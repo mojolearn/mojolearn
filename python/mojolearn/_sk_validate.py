@@ -256,16 +256,19 @@ def _all_finite(obj):
 
 
 def _integral(obj):
-    """True when every value of a float buffer is a whole number (the core
-    helper `reduce_stat` over a zero-copy `Array` view)."""
+    """True when every value of a float label vector is a whole number. The
+    device `unique_inverse` (`_labels`) finds the k distinct values and the
+    core helper `reduce_stat` tests only those k, so no host pass runs over
+    the rows. A y that is not a float vector answers True (not tested)."""
     from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
     from ._buffer import _materialize, _native, addr_ro
+    from ._labels import unique_inverse
     a, _ = _materialize(obj, "y")
-    if a.dtype not in ("<f4", "<f8") or a.size == 0:
+    if a.dtype not in ("<f4", "<f8") or a.size == 0 or a.size != max(a.shape):  # glue: largest axis of the shape
         return True
-    flat = a._as_c()
-    return bool(_native("reduce_stat")(addr_ro(flat, name="y"), _NATIVE_CODE[flat.dtype], flat.size,
-                                       _REDUCE_INTEGRAL))
+    classes, _ = unique_inverse(a._as_c().reshape((a.size,)))
+    return bool(_native("reduce_stat")(addr_ro(classes, name="classes"), _NATIVE_CODE[classes.dtype],
+                                       int(classes.size), _REDUCE_INTEGRAL))
 
 
 def whole_float_labels(y):
