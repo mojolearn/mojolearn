@@ -74,8 +74,8 @@ _IFOREST_REALS = 4
 # Maintainer notes (moved from the docstring): the GPU implementation is
 # `isolation_forest/` (DEVIATIONS 680-686 and 750-751). max_depth=None is
 # cuML's auto, ceil(log2(max_samples_)) computed in integers rather than
-# through libm log2 (DEVIATION 684). warm_start and sample_weight raise
-# UnsupportedOnGPU in cuML too (isolation_forest.pyx:592-595). estimators_ is
+# through libm log2 (DEVIATION 684). warm_start raises and sample_weight is not a fit
+# parameter (UnsupportedOnGPU in cuML too) (isolation_forest.pyx:592-595). estimators_ is
 # absent: the forest is flat device arrays (DEVIATION 685). as_treelite() /
 # as_nvforest() are not implemented (isolation_forest/NOT_IMPLEMENTED.tsv).
 # Non-finite X is refused inside the Mojo entry (DEVIATION 680); cuML accepts
@@ -453,7 +453,11 @@ class IsolationForest(NumericModeMixin):
         state.pop("_if_finalizer", None)
         return state
 
-    def fit(self, X, y=None, sample_weight=None):
+    # sk-edges: no `sample_weight` parameter. The forest builder
+    # (isolation_forest/) draws its subsamples unweighted, as cuML's does
+    # (UnsupportedOnGPU, isolation_forest.pyx:592-595); an advertised
+    # parameter could only refuse.
+    def fit(self, X, y=None):
         """Fit the isolation forest.
 
         Parameters
@@ -461,19 +465,12 @@ class IsolationForest(NumericModeMixin):
         X : array-like of shape (n_samples, n_features)
             Training data, converted to float32.
         y : ignored
-        sample_weight : None, default None
-            Only None is accepted; other values raise `NotImplementedError`.
 
         Returns
         -------
         self
         """
         self._validate_params()
-        if sample_weight is not None:
-            raise NotImplementedError(
-                "mojolearn IsolationForest: sample_weight is not supported "
-                "(cuML raises UnsupportedOnGPU for it too)"
-            )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         # A binary that scans the uploaded matrix on the device refuses a
         # non-finite X inside the fit, so the host scan here would be the same
@@ -536,9 +533,9 @@ class IsolationForest(NumericModeMixin):
         """
         return self._run(X, _WANT_PREDICT)
 
-    def fit_predict(self, X, y=None, sample_weight=None):
+    def fit_predict(self, X, y=None):
         """Fit on `X` and return `predict(X)`."""
-        return self.fit(X, y=y, sample_weight=sample_weight).predict(X)
+        return self.fit(X, y=y).predict(X)
 
     def save(self, path):
         """Write the fitted model to `path` as an npz file.
