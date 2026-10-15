@@ -1147,6 +1147,12 @@ class GradientBoosting(NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_gbdt"
 
+    def _sklearn_instance_target_tags(self):
+        # loss='MultiRMSE' fits a 2-D y (n_samples, n_targets): scikit-learn's
+        # multi_output tag, so a column y is not raveled before the fit
+        # refuses it by name (n_targets >= 2)
+        return {"multi_output": getattr(self, "loss", None) in MULTI_REGRESSION_LOSSES}
+
     def __init__(
         self,
         loss="RMSE",

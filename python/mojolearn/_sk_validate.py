@@ -145,7 +145,15 @@ def _allows_nan_now(est):
     return bool(hook()) if hook is not None else False
 
 
-def _target_tag(cls, name, default):
+def _target_tag(cls, name, default, est=None):
+    """A target tag of `cls`; with `est`, its parameter-dependent override
+    (`_sklearn_instance_target_tags`, the same one its scikit-learn tags read)
+    wins."""
+    own = getattr(est, "_sklearn_instance_target_tags", None) if est is not None else None
+    if callable(own):
+        tags = own()
+        if name in tags:
+            return tags[name]
     return getattr(cls, "_sklearn_target_tags", {}).get(name, default)
 
 
@@ -414,7 +422,7 @@ def _check_y(est, y):
     if vkind == "complex":
         raise ValueError(f"Complex data not supported: {name} got a complex y.")
     if (len(shape) == 2 and shape[1] == 1 and container != "list"
-            and not _target_tag(cls, "multi_output", False) and hasattr(y, "reshape")):
+            and not _target_tag(cls, "multi_output", False, est) and hasattr(y, "reshape")):
         warnings.warn(
             "A column-vector y was passed when a 1d array was expected. Please change "
             "the shape of y to (n_samples, ), for example using ravel().",

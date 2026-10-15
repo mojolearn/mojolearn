@@ -51,7 +51,10 @@ def test_class_weight_count_checked_before_native(loss):
 
 @pytest.mark.parametrize("weights", [[1, np.nan], [1, np.inf], [-1, 1], [0, 0]])
 def test_invalid_sample_weight_never_enters_native(weights):
-    with pytest.raises(ValueError, match="sample_weight"):
+    # scikit-learn's _check_sample_weight wording: "Input sample_weight
+    # contains NaN ...", "Negative values in data passed to sample_weight",
+    # "Sample weights must contain at least one non-zero number."
+    with pytest.raises(ValueError, match=r"[Ss]ample[_ ]weight"):
         guarded().fit(np.zeros((2, 2), np.float32), [0, 1], sample_weight=weights)
 
 
