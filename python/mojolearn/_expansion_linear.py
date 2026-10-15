@@ -2639,6 +2639,80 @@ def _kfold_ids_f32(n, k):
     return out
 
 
+def _is_int_cv(cv):
+    """An integer fold count (not a bool): the kernels' own KFold /
+    StratifiedKFold folds."""
+    import numbers
+    return isinstance(cv, numbers.Integral) and not isinstance(cv, bool)
+
+
+def _cv_splits(cv, X, y):
+    """scikit-learn's check_cv for a cv that is not None or an int: a
+    splitter object (anything with `split`, called as ``cv.split(X, y)``) or
+    an iterable of (train, test) index arrays, as a list of int64 Array
+    pairs. Iterating the handful of splits is glue; each index array is
+    converted natively (`as_index_i64`)."""
+    from ._buffer import as_index_i64
+    if hasattr(cv, "split"):
+        pairs = cv.split(X, y)
+    elif isinstance(cv, (str, bytes)) or not hasattr(cv, "__iter__"):
+        # scikit-learn's check_cv wording
+        raise ValueError("Expected cv as an integer, cross-validation object (from sklearn.model_selection) "
+                         f"or an iterable. Got {cv!r}.")
+    else:
+        pairs = cv
+    splits = []
+    for train, test in pairs:  # glue: one (train, test) pair of index arrays per split
+        splits.append((as_index_i64(train, name="train"), as_index_i64(test, name="test")))
+    if not splits:
+        raise ValueError("mojolearn: cv produced no (train, test) split")
+    return splits
+
+
+def _cv_fold_ids(splits, n, name):
+    """Row -> fold id (an int32 Array) of explicit cv splits, checked by the
+    base binding's helpers (no per-row Python; TargetEncoder's
+    `_splitter_folds` rule): the test sets cover every row exactly once and
+    each split's training rows are every other row, which is the form the
+    LassoCV / ElasticNetCV / LogisticRegressionCV kernels take (a fold's
+    training rows are the rows with another fold id). KFold, StratifiedKFold,
+    GroupKFold, LeaveOneGroupOut and LeaveOneOut splits all have it."""
+    from ._buffer import _native
+    refuse = NotImplementedError(
+        f"mojolearn {name}: cv splits whose test sets do not cover every row exactly once, with the "
+        "training rows every other row (for example ShuffleSplit), are not implemented")
+    fold = full((n,), -1, "<i4")
+    assign = _native("assign_fold_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
+    covered = 0
+    for k, (_, te) in enumerate(splits):  # glue: one native scatter per split
+        if int(assign(addr_ro(te, name="test") if te.size else 0, te.size, n, k, addr(fold, name="folds"))) != 0:
+            raise refuse
+        covered += te.size  # glue: one count per split (distinct rows: assign refuses a repeat)
+    if covered != n:
+        raise refuse
+    check = _native("check_indices_i64")
+    hits = _native("count_fold_hits_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
+    for k, (tr, te) in enumerate(splits):  # glue: one native check per split
+        # every row outside fold k exactly once: as many as there are,
+        # distinct, in range and none in fold k
+        if (tr.size != n - te.size
+                or tr.size and (int(check(addr_ro(tr, name="train"), tr.size, n)) != 0
+                                or int(hits(addr_ro(tr, name="train"), tr.size, addr_ro(fold, name="folds"),
+                                            n, k)) != 0)):
+            raise refuse
+    return fold, len(splits)
+
+
+def _cv_fold_ids_f32(splits, n, name):
+    """`_cv_fold_ids` as float32 (the kernels' y layout carries the ids as
+    float32; `cast_elements`, as `_kfold_ids_f32`)."""
+    from ._buffer import _native
+    ids, folds = _cv_fold_ids(splits, n, name)
+    out = empty((n,), "<f4")
+    _native("cast_elements")(addr_ro(ids, name="folds"), 2, addr(out, name="folds"), 0, n)
+    return out, folds
+
+
 def _enetcv_fit(est, X, y, l1_ratios, sample_weight=None):
     name = type(est).__name__
     if est.selection != "cyclic":
@@ -2647,8 +2721,13 @@ def _enetcv_fit(est, X, y, l1_ratios, sample_weight=None):
         raise ValueError(f"mojolearn {name}: l1_ratio must be in (0, 1]")
     a, n, d = _matrix(X)
     yv = _vector(y, n)
-    folds = 5 if est.cv is None else est.cv
-    ids = _kfold_ids_f32(n, folds)
+    if est.cv is None or _is_int_cv(est.cv):
+        folds = 5 if est.cv is None else int(est.cv)
+        ids = _kfold_ids_f32(n, folds)
+    else:
+        # a splitter or explicit (train, test) splits (scikit-learn's
+        # check_cv): their folds as row ids, which the kernels already take
+        ids, folds = _cv_fold_ids_f32(_cv_splits(est.cv, X, y), n, name)
     alphas = est.alphas
     n_alphas = getattr(est, "n_alphas", None)
     if isinstance(alphas, int) and not isinstance(alphas, bool):
