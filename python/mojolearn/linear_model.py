@@ -1351,8 +1351,10 @@ class LogisticRegression(NumericModeMixin):
         Inverse regularization strength, > 0; otherwise ``ValueError``.
     fit_intercept : bool, default True
         Whether to fit an (unpenalized) intercept.
-    class_weight : None
-        Must be None; anything else raises ``NotImplementedError``.
+    class_weight : dict, 'balanced' or None, default None
+        Weights per class: row ``i`` of class ``c`` has its loss multiplied
+        by ``class_weight[c]`` (times its ``sample_weight``). ``'balanced'``
+        uses ``n_samples / (n_classes * count(c))``.
     max_iter : int, default 1000
         Maximum number of L-BFGS iterations. scikit-learn's default is
         100.
@@ -1438,12 +1440,6 @@ class LogisticRegression(NumericModeMixin):
         if solver != "qn":
             raise ValueError(
                 "Only quasi-newton `qn` solver is supported, not %s" % solver)
-        if class_weight is not None:
-            raise NotImplementedError(
-                "mojolearn LogisticRegression: class_weight is not implemented "
-                "(it becomes a sample_weight upstream, logistic_regression.py"
-                ":400-436, and sample_weight is not implemented; glm/NOT_IMPLEMENTED.tsv)"
-            )
         if C <= 0:
             raise ValueError(f"C must be positive, got {C}")
         # `logistic_regression.py:310-316`, copied including the two
@@ -1477,12 +1473,10 @@ class LogisticRegression(NumericModeMixin):
         strength = 1.0 / self.C
         return self._l1_ratio * strength, (1.0 - self._l1_ratio) * strength
 
-    # sample_weight is not a fit parameter: the quasi-Newton solver has no
-    # weighted loss (cuML's is GLMBase::add_sample_weights, glm_base.cuh:115;
-    # the qn_fit binding refuses has_sample_weight by name;
-    # glm/NOT_IMPLEMENTED.tsv). Advertising it only to raise would tell
-    # scikit-learn's has_fit_parameter it works (lane sk-edges).
-    def fit(self, X, y):
+    # sample_weight and class_weight are the solver's per-row weights (the
+    # weighted arm of getLossAndDZ, glm_base.mojo::qn_row_weight_kernel;
+    # lane sk-kernels).
+    def fit(self, X, y, sample_weight=None):
         """Fit the classifier.
 
         Parameters
@@ -1492,6 +1486,9 @@ class LogisticRegression(NumericModeMixin):
         y : array-like of shape (n_samples,)
             Class labels, at least two distinct values. A 2-D ``y``, a
             single class or a length mismatch raises ``ValueError``.
+        sample_weight : array-like of shape (n_samples,) or None
+            Per-sample weights; each row's loss is multiplied by its
+            weight. None weighs every row 1.
 
         Returns
         -------
@@ -1531,17 +1528,22 @@ class LogisticRegression(NumericModeMixin):
                 "multinomial_check.mojo gates l2 and no penalty); refused by "
                 "name until it is gated (CONTRIBUTING.md (Non-default paths))"
             )
+        sw = _qn_row_weights(self, sample_weight, self.class_weight,
+                             self.classes_, codes, rows)
+        has_sw, sw_addr = _qn_weight_fields(sw)
         n_param = cols + (1 if self.fit_intercept else 0)
         w = zeros((n_param * n_targets,), "<f4")
         info = zeros((2,), "<f4")
+        params = [rows, cols, n_classes,
+                  float(l1), float(l2), float(self.tol), float(self.tol * 0.01),
+                  int(self.max_iter), int(self.linesearch_max_iter),
+                  int(self.lbfgs_memory), 1 if self.fit_intercept else 0,
+                  1 if self.penalty_normalized else 0, has_sw, loss]
+        if has_sw:
+            params += [0.0, sw_addr]  # field 15 svr_eps (0), field 16 the weights
         n_iter = self._bind("_mojolearn_estimators").qn_fit(
             addr_ro(x, name="X"), addr_ro(y_enc, name="y"),
-            addr(w, name="coef_"), addr(info, name="info"),
-            [rows, cols, n_classes,
-             float(l1), float(l2), float(self.tol), float(self.tol * 0.01),
-             int(self.max_iter), int(self.linesearch_max_iter),
-             int(self.lbfgs_memory), 1 if self.fit_intercept else 0,
-             1 if self.penalty_normalized else 0, 0, loss],
+            addr(w, name="coef_"), addr(info, name="info"), params,
         )
         self._w = w
         self.coef_, self.intercept_ = _coef_from_w(w, cols, n_targets, self.fit_intercept)
@@ -1826,22 +1828,68 @@ class LogisticRegression(NumericModeMixin):
         return obj
 
 
+def _qn_row_weights(est, sample_weight, class_weight, classes, codes, n):
+    """The quasi-Newton solver's per-row float32 weights, or None for an
+    unweighted fit: `sample_weight` checked with scikit-learn's rules and
+    wording (`check_sample_weight`), times each row's class weight when
+    `class_weight` is a dict or 'balanced' (scikit-learn multiplies the two
+    the same way). The class weights per row and the product are the trees
+    binding's native helpers (`_class_weight_rows`, `x_trees_mul_f32`)."""
+    if sample_weight is None and class_weight is None:
+        return None
+    sw = check_sample_weight(sample_weight, n)
+    if class_weight is None:
+        return sw
+    if isinstance(class_weight, str):
+        if class_weight != "balanced":
+            raise ValueError(
+                f"The 'class_weight' parameter of {type(est).__name__} must be an "
+                "instance of 'dict', a str among {'balanced'} or None. "
+                f"Got {class_weight!r} instead.")
+    elif not isinstance(class_weight, dict):
+        raise ValueError(
+            f"The 'class_weight' parameter of {type(est).__name__} must be an "
+            "instance of 'dict', a str among {'balanced'} or None. "
+            f"Got {class_weight!r} instead.")
+    from ._expansion_trees import _trees_x_bind
+    from .randomforest import _class_weight_rows
+    xb = _trees_x_bind(est)
+    codes32 = codes if codes.dtype == "<i4" else codes.astype("<i4")
+    cw = _class_weight_rows(class_weight, list(classes), codes32, xb)
+    if cw is None:  # every class weight is 1
+        return sw
+    out = empty((n,), "<f4")
+    xb.x_trees_mul_f32(addr_ro(sw, name="sample_weight"), addr_ro(cw, name="class_weight"),
+                       addr(out, name="weights"), [n])
+    return out
+
+
+def _qn_weight_fields(sw):
+    """The `qn_fit` params from field 13 on that carry the row weights:
+    has_sample_weight, and with weights the address (field 16)."""
+    return (0, None) if sw is None else (1, addr_ro(sw, name="sample_weight"))
+
+
 def _qn_fit_one_target(est, x, y_enc, n_classes, loss, l1, l2, grad_tol,
-                       change_tol, svr_eps=0.0):
-    """One `qn_fit` call on a one-target loss (the 15-field form): the
-    fitted `(n_features + fit_intercept,)` float32 block, `num_iters`, the
-    objective and the OPT_RETCODE. `est` supplies the solver fields."""
+                       change_tol, svr_eps=0.0, sw=None):
+    """One `qn_fit` call on a one-target loss (the 15-field form, 16 with
+    row weights `sw`): the fitted `(n_features + fit_intercept,)` float32
+    block, `num_iters`, the objective and the OPT_RETCODE. `est` supplies
+    the solver fields."""
     rows, cols = x.shape
     w = zeros((cols + (1 if est.fit_intercept else 0),), "<f4")
     info = zeros((2,), "<f4")
+    has_sw, sw_addr = _qn_weight_fields(sw)
+    params = [rows, cols, n_classes,
+              float(l1), float(l2), float(grad_tol), float(change_tol),
+              int(est.max_iter), int(est.linesearch_max_iter),
+              int(est.lbfgs_memory), 1 if est.fit_intercept else 0,
+              1 if est.penalty_normalized else 0, has_sw, int(loss), float(svr_eps)]
+    if has_sw:
+        params.append(sw_addr)
     n_iter = est._bind("_mojolearn_estimators").qn_fit(
         addr_ro(x, name="X"), addr_ro(y_enc, name="y"),
-        addr(w, name="coef_"), addr(info, name="info"),
-        [rows, cols, n_classes,
-         float(l1), float(l2), float(grad_tol), float(change_tol),
-         int(est.max_iter), int(est.linesearch_max_iter),
-         int(est.lbfgs_memory), 1 if est.fit_intercept else 0,
-         1 if est.penalty_normalized else 0, 0, int(loss), float(svr_eps)],
+        addr(w, name="coef_"), addr(info, name="info"), params,
     )
     return w, int(n_iter), float(info[0]), int(info[1])
 
@@ -1992,9 +2040,7 @@ class QNRegressor(NumericModeMixin):
         self.warm_start = False
         self.penalty_normalized = penalty_normalized
 
-    # No sample_weight parameter: the quasi-Newton solver has no weighted loss
-    # (GLMBase::add_sample_weights, glm_base.cuh:115; glm/NOT_IMPLEMENTED.tsv).
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         """Fit the model.
 
         Parameters
@@ -2004,6 +2050,9 @@ class QNRegressor(NumericModeMixin):
         y : array-like of shape (n_samples,)
             Target values. A 2-D ``y`` or a length mismatch raises
             ``ValueError``.
+        sample_weight : array-like of shape (n_samples,) or None
+            Per-sample weights; each row's loss is multiplied by its
+            weight. None weighs every row 1.
 
         Returns
         -------
@@ -2015,9 +2064,10 @@ class QNRegressor(NumericModeMixin):
         t = _target_1d(y, rows, "mojolearn QNRegressor requires a 1-D y",
                        "mojolearn QNRegressor X and y lengths differ")
         change_tol = self.delta if self.delta is not None else self.tol * 0.01
+        sw = None if sample_weight is None else check_sample_weight(sample_weight, rows)
         w, n_iter, self.objective_, self.retcode_ = _qn_fit_one_target(
             self, x, t, 1, self._LOSSES[self.loss], self.l1_strength,
-            self.l2_strength, self.tol, change_tol)
+            self.l2_strength, self.tol, change_tol, sw=sw)
         self._w = w
         self.coef_ = w[:cols]
         self.intercept_ = float(w[cols]) if self.fit_intercept else 0.0
