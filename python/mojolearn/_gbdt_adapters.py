@@ -10,7 +10,7 @@ import inspect
 
 from ._array import Array
 from ._buffer import all_finite, empty, as_f32_c
-from ._labels import decode_labels
+from ._labels import decode_labels, encode_labels
 
 from . import _backend, _metrics_impl as metrics
 from ._arrays import _addr, _addr_ro
@@ -218,10 +218,20 @@ class GradientBoostingClassifier(_GBDTAdapter):
         """
         self._validate_params()
         self._clear_fit()
+        # scikit-learn's class-count refusals and words, before the label
+        # vocabulary below (whose type rules are stricter): the native
+        # encoder counts the distinct labels of any numeric or str y.
+        n_seen = len(encode_labels(y)[0])
+        if n_seen < 2:
+            raise ValueError("Classifier can't train when only one class is present.")
+        if n_seen > 2:
+            raise ValueError('Only binary classification is supported. The type of the target '
+                             'is multiclass.')
         target, kind = metrics._classification_encoded(y, 'y')
         classes = sorted(metrics._label_set(target))  # glue: orders the binary class labels (two expected)
         if len(classes) != 2:
-            raise ValueError('GradientBoostingClassifier requires exactly two training classes')
+            raise ValueError('Only binary classification is supported. The type of the target '
+                             'is multiclass.')
         vocabulary = {label: i for i, label in enumerate(classes)}  # glue: two-label binary vocabulary
         encoded = metrics._label_map(target, vocabulary.__getitem__).astype('<f4')
         if eval_set is not None:
