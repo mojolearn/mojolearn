@@ -75,6 +75,23 @@ QuadraticDiscriminantAnalysis RBFSampler RFE RandomTreesEmbedding Ridge SelectKB
 SkewedChi2Sampler SparseCoder SparseRandomProjection SplineTransformer TruncatedSVD
 """.split())
 
+#: Estimators whose FIT kernels refuse a non-finite X but whose predict,
+#: transform and decision kernels do not: the scan runs here on every call
+#: after the fit (scikit-learn's check_estimators_nan_inf). Fits on a
+#: non-finite X (and y) are refused by the fit kernels themselves.
+_SCANS_X_AFTER_FIT = frozenset("""
+ARDRegression BayesianRidge ElasticNetCV GammaRegressor HuberRegressor Lars LassoCV
+LassoLars LinearRegression LogisticRegressionCV PassiveAggressiveClassifier
+PassiveAggressiveRegressor Perceptron PoissonRegressor QuantileRegressor RidgeCV
+RidgeClassifier SGDClassifier SGDOneClassSVM SGDRegressor TweedieRegressor
+""".split())
+
+#: Estimators whose fit takes a non-finite X without refusing it: the scan
+#: runs here on the fit as well (and on every later call).
+_SCANS_X_AT_FIT = frozenset("""
+LabelPropagation LabelSpreading
+""".split())
+
 #: A binding's refusal of non-finite input, raised as a plain `Exception`.
 _NONFINITE = re.compile(r"NaN|[Ii]nfinit|non-?finite|not finite|requires finite|must be finite")
 #: A device fault is never an input refusal, whatever the input looked like.
@@ -289,7 +306,15 @@ def _precomputed(est):
     return any(getattr(est, k, None) == "precomputed" for k in keys)  # glue: four parameter names
 
 
-def _check_X(est, X):
+def _scans_x(cls, fitting):
+    """True when the X finiteness scan runs here for this call."""
+    names = _names(cls)
+    if names & _SCANS_X_HERE or names & _SCANS_X_AT_FIT:
+        return True
+    return not fitting and bool(names & _SCANS_X_AFTER_FIT)
+
+
+def _check_X(est, X, fitting=True):
     """Refuse X as scikit-learn's `validate_data` does; return its
     description (or None when X is not tabular numeric input)."""
     info = describe(X)
@@ -324,7 +349,7 @@ def _check_X(est, X):
                              f"minimum of 1 is required by {name}.")
     if (container in ("buffer", "list") and kind == "float"
             and not _input_tag(cls, "allow_nan", False)
-            and _names(cls) & _SCANS_X_HERE and not _all_finite(X)):
+            and _scans_x(cls, fitting) and not _all_finite(X)):
         raise ValueError(f"Input X contains NaN or infinity ({name}).")
     return info
 
@@ -428,7 +453,7 @@ def before_call(est, method, slots, args, kwargs):
     X = _get(args, kwargs, ix, "X")
     if X is _MISSING or X is None:
         return None
-    info = _check_X(est, X)
+    info = _check_X(est, X, fitting=False)
     _check_width(est, X, info)
     return Check(X, info, False)
 
@@ -450,6 +475,11 @@ def after_fit(est, check):
         from ._optional_numpy import require_numpy
         np = require_numpy("feature_names_in_")
         est.feature_names_in_ = np.asarray(names, dtype=object)
+    if _kind(est) == "classifier" and type(state.get("classes_")) is list:
+        # `classes_[codes]` with an integer array, as scikit-learn's
+        # callers index an ndarray `classes_` (`_labels.ClassLabels`).
+        from ._labels import ClassLabels
+        state["classes_"] = ClassLabels(state["classes_"])
 
 
 def reraise(est, check, err):
@@ -462,7 +492,11 @@ def reraise(est, check, err):
         return
     name = type(est).__name__
     if type(err) is Exception and _NONFINITE.search(text):
-        raise ValueError(text) from err
+        # scikit-learn's callers match "NaN" or "inf" in the message
+        # ("requires finite values" holds neither), so it leads with
+        # scikit-learn's own wording.
+        what = "Input" if check.fitting else "Input X"
+        raise ValueError(f"{what} contains NaN or infinity ({name}: {text})") from err
     info = check.info
     if not check.fitting or info is None or len(info[1]) != 2:
         return
