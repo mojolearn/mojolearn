@@ -117,6 +117,7 @@ import struct
 # cache that does not key on it, and the basename never mattered.
 from . import _backend, _mojolearn_gbdt, _serialize
 from ._mode import NumericModeMixin
+from ._sample_weight import check_sample_weight
 from ._array import Array
 from ._buffer import (
     as_f32_forest_layout,
@@ -2018,22 +2019,9 @@ class GradientBoosting(NumericModeMixin):
             wa = Xa  # unread while params[2] == 0; any live buffer stands in
             n_weights = 0
         else:
-            wa, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-            if wa.shape[0] != n_rows:
-                raise ValueError(
-                    f"mojolearn: sample_weight has {wa.shape[0]} entries "
-                    f"for {n_rows} rows"
-                )
-            # DEVIATION 2331: the sign and positivity scans are builtin
-            # `min`/`max` over the storage view -- C-driven, O(rows), no
-            # Python loop body, but a host scan all the same; a native
-            # min/max helper would retire them.
-            if not all_finite(wa) or wa.min() < 0:
-                raise ValueError(
-                    "mojolearn: sample_weight must have finite nonnegative entries"
-                )
-            if not wa.max() > 0:
-                raise ValueError("mojolearn: sample_weight must have positive total weight")
+            # scikit-learn's _check_sample_weight and wording (sk-edges): the
+            # shared helper's native reductions, no Python pass over rows
+            wa = check_sample_weight(sample_weight, n_rows)
             n_weights = n_rows
 
         Xea, ea, n_eval_rows = self._eval_arrays(eval_set, n_features)
