@@ -60,7 +60,7 @@ TMPD=""; CURLRC=""
 make_curlrc() {
     local perm tok
     [ -f "$TOKFILE" ] || die "token file $TOKFILE missing" 2
-    perm=$(stat -f '%OLp' "$TOKFILE" 2>/dev/null || stat -c '%a' "$TOKFILE" 2>/dev/null)
+    perm=$(stat -c '%a' "$TOKFILE" 2>/dev/null || stat -f '%OLp' "$TOKFILE" 2>/dev/null)
     [ "$perm" = 600 ] || die "token file $TOKFILE is mode $perm, must be 600" 2
     TMPD="$(mktemp -d "${TMPDIR:-/tmp}/trees-amd.XXXXXX")"; chmod 700 "$TMPD"
     CURLRC="$TMPD/curlrc"

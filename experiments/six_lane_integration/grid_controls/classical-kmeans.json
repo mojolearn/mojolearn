@@ -203,7 +203,6 @@
    "binding": "_mojolearn",
    "route": "knn_brute_force (pinned tile / stream top-k) ; host twin knn_host_predict",
    "controls": [
-    "knn_direct",
     "c06_norms"
    ],
    "interaction_groups": []
@@ -221,23 +220,13 @@
   "classical:dbscan": {
    "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
    "route": "density.py:371 -> _mojolearn_estimators dbscan_fit_core -> dbscan/impl/runner.mojo -> epsilon_neighborhood (brute) or RBC eps (knn primitive)",
-   "controls": [
-    "dbscan_direct",
-    "knn_direct"
-   ],
-   "interaction_groups": [
-    [
-     "dbscan_direct",
-     "knn_direct"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   },
   "classical:hdbscan": {
    "binding": "_mojolearn_hdbscan",
    "route": "kNN core distances (knn primitive) -> sparse_mr_mst / linkage",
-   "controls": [
-    "knn_direct"
-   ],
+   "controls": [],
    "interaction_groups": []
   }
  },

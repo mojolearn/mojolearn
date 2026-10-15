@@ -143,26 +143,49 @@ def test_owed_json_still_demands_an_explicit_count(tmp_path):
     assert "--owed-json needs an EXPLICIT --require-columns" in out
 
 
-@pytest.mark.parametrize("record,columns,require,want_rc,token", [
+def _comparable_train_cells(base, columns):
+    """The record's train cells the harness still compares: the union over
+    the columns minus every lane whose LANE_REVISIONS entry the record
+    predates (identity_break.stale_revision_lanes). A revision bump moves this
+    count by design (cf09f7f09 pinned it by hand and it went stale again)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("identity_break_floor_test", IB)
+    ib = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ib)
+    keys = set()
+    for c in columns:
+        with open(os.path.join(base, c)) as fh:
+            j = json.load(fh)
+        stale = set(ib.stale_revision_lanes(j))
+        keys |= {k for k in j["cells"] if k.split("/")[0] not in stale}
+    return len(keys)
+
+
+@pytest.mark.parametrize("record,columns,require,want_rc,divergent", [
+    # the one recorded DIVERGENT cell: kmeans-sqrt/wide, where the H100 inertia stands alone
     ("2026-09-14_166-lanes",
      ("apple-m4.json", "nvidia-h100-sm_90a.json", "amd-mi325x-gfx942.json"),
-     "3", 1, "summary: DIVERGENT=1, IDENTICAL=1304"),
+     "3", 1, 1),
     ("2026-09-14_kmeans-sqrt-fix",
      ("apple-m4.json", "nvidia-h100-sm_90a.json", "amd-mi325x-gfx942.json"),
-     "3", 0, "summary: IDENTICAL=72"),
+     "3", 0, 0),
 ])
-def test_no_committed_record_moved(record, columns, require, want_rc, token):
+def test_no_committed_record_moved(record, columns, require, want_rc, divergent):
     """NO COMMITTED CELL MOVED. The two comparisons the CPU identity gate
-    makes over committed columns, with the counts it greps for."""
+    makes over committed columns: every comparable train cell IDENTICAL but
+    the recorded DIVERGENT ones."""
     base = os.path.join(ROOT, "bench", "results", "identity_break", record)
     if not os.path.isdir(base):
         pytest.skip(f"{base} is not in this checkout")
+    identical = _comparable_train_cells(base, columns) - divergent
+    token = ("summary: DIVERGENT=%d, IDENTICAL=%d" % (divergent, identical) if divergent
+             else "summary: IDENTICAL=%d" % identical)
     r = subprocess.run([sys.executable, IB, "--diff"]
                        + [os.path.join(base, c) for c in columns]
                        + ["--require-columns", require],
                        capture_output=True, text=True)
     assert r.returncode == want_rc, r.stdout[-2000:]
-    assert token in r.stdout
+    assert token in r.stdout, r.stdout[-2000:]
     assert f"require-columns {require} over" in r.stdout
 
 

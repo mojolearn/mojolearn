@@ -8,40 +8,20 @@
   "neural:transformer-forward": {
    "binding": "_mojolearn_transformer",
    "route": "transformer session forward -> _transformer_run_session -> llama_decoder_layer_forward -> fused attention forward",
-   "controls": [
-    "attn_defer_regime",
-    "tf_session_lean"
-   ],
-   "interaction_groups": [
-    [
-     "attn_defer_regime",
-     "tf_session_lean"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   },
   "neural:lm-forward": {
    "binding": "_mojolearn_byte_lm",
    "route": "byte_lm forward (forward_only) -> modeling_llama attention estash gate",
-   "controls": [
-    "attn_defer_regime"
-   ],
-   "interaction_groups": [
-    [
-     "attn_defer_regime"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   },
   "neural:lm-train-step": {
    "binding": "_mojolearn_byte_lm",
    "route": "byte_lm train step: no arming, no forward_only; expected neutral (control)",
-   "controls": [
-    "attn_defer_regime"
-   ],
-   "interaction_groups": [
-    [
-     "attn_defer_regime"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   }
  },
  "removed": [

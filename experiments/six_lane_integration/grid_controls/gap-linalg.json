@@ -29,25 +29,19 @@
   "algos:cholesky": {
    "binding": "_mojolearn_gp",
    "route": "fit: python/mojolearn/_cholesky_impl.py Cholesky -> bindings/_mojolearn_gp.mojo cholesky_factor_binding -> cholesky/estimator.mojo cholesky_factor_poolio -> cholesky/checks/potrf.mojo potrf_lower -> _potrf_lower_blocked (on) | _potrf_lower_strips (off)",
-   "controls": [
-    "chol_nb128"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "algos:lu-factor": {
    "binding": "_mojolearn_x_decomp",
    "route": "python/mojolearn/_expansion_decomp.py lu_factor -> x_decomp/api.mojo lu_py -> x_decomp/device.mojo DevExec.lu -> launch_lu (nb = 128 on, 32 off)",
-   "controls": [
-    "lu_nb128"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "expanded:lu-solve": {
    "binding": "_mojolearn_x_decomp",
    "route": "python/mojolearn/_expansion_decomp.py solve -> x_decomp/api.mojo lu_gesv_py -> DevExec.lu_gesv -> launch_lu + launch_lu_solve -> launch_trs_tri (GEMM feed on at nrhs >= 32)",
-   "controls": [
-    "lu_nb128"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "algos:eigh": {

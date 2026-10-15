@@ -36,7 +36,7 @@ say() { printf '[%s trees-leg] %s\n' "$(date +%T)" "$*"; }
 load_key() {
     _kf="${MOJOLEARN_RUNPOD_KEY_FILE:-$HOME/.mojolearn_runpod_key}"
     [ -f "$_kf" ] || die "key file $_kf does not exist"
-    _perm=$(stat -f '%OLp' "$_kf" 2>/dev/null || stat -c '%a' "$_kf" 2>/dev/null || echo "?")
+    _perm=$(stat -c '%a' "$_kf" 2>/dev/null || stat -f '%OLp' "$_kf" 2>/dev/null || echo "?")
     [ "$_perm" = "600" ] || die "key file $_kf is mode $_perm, must be 600"
     RUNPOD_API_KEY=$(cat "$_kf")
     [ -n "$RUNPOD_API_KEY" ] || die "key file is empty"

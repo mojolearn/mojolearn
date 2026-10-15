@@ -224,7 +224,9 @@ def load_controls(directory=CONTROLS_DIR):
                 raise ValueError('Duplicate control key ' + key)
             controls[key] = dict(c, key=key, file=name,
                                  arms={a: [norm_define(x) for x in ds] for a, ds in c['arms'].items()})
-        for wid, a in doc['algorithms'].items():
+        # A file written after the grid pass (a switch's record, not a planned grid entry) may carry no
+        # 'algorithms' map: its controls are listed by no algorithm and generate() reports them as excluded.
+        for wid, a in doc.get('algorithms', {}).items():
             algorithms.setdefault(normalize_algorithm_id(wid), []).append(dict(a, file=name, raw_id=wid))
         rem = doc.get('removed', [])
         removed[name] = len(rem)
