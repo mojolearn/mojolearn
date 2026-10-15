@@ -24,6 +24,7 @@ metrics functions and is loaded through `_metrics_impl._get_binding`.
 """
 
 from . import _backend, _serialize
+from ._mode import ParamsMixin
 from ._array import Array
 from ._buffer import (
     _native, addr, addr_ro, all_finite, as_f32_c, as_f64_c, as_i32_c, empty,
@@ -232,7 +233,7 @@ _DENSE_EMPTY, _DENSE_NONFINITE, _DENSE_NEGATIVE = -1, -2, -3
 # float64, a Jacobi SVD for LAPACK's (DEVIATION 5119); discretize draws its
 # start row from the splitmix64 stream seeded by random_state.
 # predict: DEVIATION 2860 (see the notes above `predict`).
-class SpectralClustering:
+class SpectralClustering(ParamsMixin):
     """Spectral clustering on a nearest-neighbor or precomputed affinity graph.
 
     Builds an affinity graph, forms the normalized graph Laplacian, takes its
@@ -328,6 +329,8 @@ class SpectralClustering:
     >>> model = mojolearn.SpectralClustering(n_clusters=4, random_state=0).fit(X)
     >>> labels = model.labels_
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "clusterer"
 
     def __init__(
         self,
@@ -462,6 +465,14 @@ class SpectralClustering:
         self.assign_labels = assign_labels
         self._seed = seed
         self.prediction_data = prediction_data
+        # Refused unless at their defaults (checked above), stored so that
+        # get_params / clone report every constructor parameter.
+        self.eigen_solver = eigen_solver
+        self.degree = degree
+        self.coef0 = coef0
+        self.kernel_params = kernel_params
+        self.n_jobs = n_jobs
+        self.verbose = verbose
 
     #: The binding `predict` asks; a host subclass answers the metrics host
     #: binding, which ships in the inference wheel.
@@ -1064,7 +1075,7 @@ class _DenseCOO:
 # are refused: 'arpack', 'lobpcg' and 'amg' are other algorithms, and running
 # the Lanczos under their names would be a silent substitution
 # (spectral/NOT_IMPLEMENTED.tsv).
-class SpectralEmbedding:
+class SpectralEmbedding(ParamsMixin):
     """Spectral embedding (Laplacian eigenmaps) for nonlinear dimensionality reduction.
 
     Builds an affinity graph, forms the normalized graph Laplacian and returns

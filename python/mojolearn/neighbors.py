@@ -21,6 +21,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from ._labels import encode_labels, sorted_classes
 from ._mode import NumericModeMixin
+from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 from .linear_model import (
     _check_saved_by, _dtype_name, _is_integer_labels, _restore_mode,
     _saved_mode, _shape_of,
@@ -964,7 +965,7 @@ class NearestNeighbors(NumericModeMixin):
 # - classes_: the pyx's `cp.unique`; `_labels.sorted_classes`, DEVIATION
 #   2340 (a list rather than an ndarray). The Mojo side recomputes the set
 #   with `getUniquelabels` and `predict` asserts the two agree.
-class KNeighborsClassifier(NearestNeighbors):
+class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
     """Classifier that votes among the k nearest training points.
 
     For each query, the classes of its `n_neighbors` nearest training points
@@ -1361,7 +1362,7 @@ class KNeighborsClassifier(NearestNeighbors):
 # in both numeric modes, with the seams flushed under NUMERIC_IDENTICAL
 # (DEVIATION 542). weights='distance' is DEVIATION 556. float64 targets are
 # cast to float32 as cuML does (convert_to_dtype=np.float32).
-class KNeighborsRegressor(NearestNeighbors):
+class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
     """Regressor that averages the targets of the k nearest training points.
 
     Each prediction is the mean of the `n_neighbors` nearest targets, or with
@@ -1974,3 +1975,10 @@ class RadiusNeighbors(NumericModeMixin):
         if return_distance:
             return dst, ind
         return ind
+
+
+# scikit-learn keeps more estimators in this module than it defines; they resolve from
+# the package at first use (`_sklearn_modules`), so `from mojolearn.neighbors import ...`
+# takes the same names as scikit-learn's module.
+from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
+__getattr__ = _lazy_exports("neighbors")

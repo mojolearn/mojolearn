@@ -134,6 +134,8 @@ class GaussianMixture(NumericModeMixin):
     >>> proba = gmm.predict_proba(X)
     >>> X_new, y_new = gmm.sample(100)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "density_estimator"
 
     _BINDING = "_mojolearn_mixture"
 
@@ -592,3 +594,11 @@ class GaussianMixture(NumericModeMixin):
 
 
 __all__ = ["GaussianMixture"]
+
+
+# scikit-learn keeps more estimators in this module than it defines; they resolve from
+# the package at first use (`_sklearn_modules`), so `from mojolearn.mixture import ...`
+# takes the same names as scikit-learn's module.
+from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
+__getattr__ = _lazy_exports("mixture")
+__all__ += _SKLEARN_LAYOUT["mixture"]

@@ -42,6 +42,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, full
 from ._lazy_out import _empty_out, _mapped_out
 from ._mode import NumericModeMixin
+from ._mode import RegressorScoreMixin
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
 #: `mojolearn.host_model(path)` predicts or transforms from each on a CPU.
@@ -213,7 +214,7 @@ class _KernelMethodBase(NumericModeMixin):
 # non-positive gamma are refused on the Mojo host. The cosine and chi2 kernels
 # are each cell one pinned chain. `info_` is LAPACK's info from the
 # factorization.
-class KernelRidge(_KernelMethodBase):
+class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
     """Kernel ridge regression.
 
     Follows `sklearn.kernel_ridge.KernelRidge` (and cuML's). Fitting forms

@@ -53,7 +53,110 @@ def _guard_cpu_training(method):
     return guarded
 
 
-class ParamsMixin:
+def sklearn_tags(est):
+    """scikit-learn's tag protocol (1.6+) for a mojolearn estimator, read only
+    by scikit-learn, so importing it here needs no dependency.
+
+    One answer for every public estimator, built from class attributes:
+
+    - `_estimator_type`: 'classifier', 'regressor', 'clusterer',
+      'outlier_detector', 'density_estimator' or None, as scikit-learn's
+      mixins set it. It picks stratified folds and the default scorer in
+      scikit-learn's `cross_val_score` and answers `is_classifier`.
+    - a `transform` method gives transformer tags. `_sklearn_preserves_dtype`
+      names the dtypes `transform` keeps (default: none claimed).
+    - `_sklearn_input_tags` / `_sklearn_target_tags`: overrides of the
+      matching scikit-learn tag fields (allow_nan, positive_only,
+      one_d_array, ...), set where the estimator's contract differs from
+      the defaults.
+    - `_sklearn_requires_fit = False` for a stateless transformer.
+    """
+    from sklearn.utils import (ClassifierTags, InputTags, RegressorTags,  # glue: sklearn tag protocol, imported only when sklearn asks
+                               Tags, TargetTags, TransformerTags)
+    cls = type(est)
+    kind = getattr(est, "_estimator_type", None)
+    tags = Tags(estimator_type=kind,
+                target_tags=TargetTags(required=kind in ("classifier", "regressor")),
+                input_tags=InputTags(),
+                classifier_tags=ClassifierTags() if kind == "classifier" else None,
+                regressor_tags=RegressorTags() if kind == "regressor" else None,
+                requires_fit=getattr(cls, "_sklearn_requires_fit", True))
+    if callable(getattr(est, "transform", None)):
+        tags.transformer_tags = TransformerTags(
+            preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ())))
+    for name, value in getattr(cls, "_sklearn_input_tags", {}).items():  # glue: sklearn tag field overrides by name
+        setattr(tags.input_tags, name, value)
+    for name, value in getattr(cls, "_sklearn_target_tags", {}).items():  # glue: sklearn tag field overrides by name
+        setattr(tags.target_tags, name, value)
+    return tags
+
+
+class SklearnTagsMixin:
+    """`__sklearn_tags__` for an estimator: see `sklearn_tags`."""
+
+    def __sklearn_tags__(self):
+        return sklearn_tags(self)
+
+
+class ClassifierScoreMixin:
+    """scikit-learn's `ClassifierMixin.score` for a classifier without its own:
+    the default scorer of `GridSearchCV` and `cross_val_score`."""
+
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        # The match count and weight total are the x_metrics binding's sums.
+        from ._expansion_metrics import accuracy_fraction
+        return accuracy_fraction(y, self.predict(X), sample_weight,
+                                 getattr(self, "numeric_mode", None))
+
+
+class RegressorScoreMixin:
+    """scikit-learn's `RegressorMixin.score` for a regressor without its own:
+    the default scorer of `GridSearchCV` and `cross_val_score`."""
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        # R^2 is the metrics binding's pinned-sum r2_score, in float32.
+        from ._buffer import as_f32_c
+        from ._metrics_impl import r2_score
+        truth, _ = as_f32_c(y, ndim=None, name="y")
+        pred, _ = as_f32_c(self.predict(X), ndim=None, name="prediction")
+        return r2_score(truth, pred, sample_weight=sample_weight,
+                        numeric_mode=getattr(self, "numeric_mode", None))
+
+
+class ParamsMixin(SklearnTagsMixin):
     """`get_params` / `set_params` read off the constructor's signature.
 
     scikit-learn's convention (base.py `BaseEstimator.get_params`): every
@@ -121,18 +224,6 @@ class ParamsMixin:
         self.__dict__.clear()
         self.__dict__.update(replacement.__dict__)
         return self
-
-    def __sklearn_tags__(self):
-        """scikit-learn's tag protocol (1.6+), read only by scikit-learn,
-        so importing it here needs no dependency: `_estimator_type` says
-        classifier or regressor, which picks stratified folds and the
-        default scorer in scikit-learn's own `cross_val_score`."""
-        from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags  # glue: sklearn tag protocol, imported only when sklearn asks
-        kind = getattr(self, "_estimator_type", None)
-        return Tags(estimator_type=kind,
-                    target_tags=TargetTags(required=kind in ("classifier", "regressor")),
-                    classifier_tags=ClassifierTags() if kind == "classifier" else None,
-                    regressor_tags=RegressorTags() if kind == "regressor" else None)
 
 
 class NumericModeMixin(ParamsMixin):

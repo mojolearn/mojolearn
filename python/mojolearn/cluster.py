@@ -174,6 +174,8 @@ class KMeans(NumericModeMixin):
     >>> labels = model.predict(X)
     >>> distances = model.transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "clusterer"
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn"
@@ -642,3 +644,11 @@ class KMeans(NumericModeMixin):
 
 
 __all__ = ["KMeans"]
+
+
+# scikit-learn keeps more estimators in this module than it defines; they resolve from
+# the package at first use (`_sklearn_modules`), so `from mojolearn.cluster import ...`
+# takes the same names as scikit-learn's module.
+from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
+__getattr__ = _lazy_exports("cluster")
+__all__ += _SKLEARN_LAYOUT["cluster"]

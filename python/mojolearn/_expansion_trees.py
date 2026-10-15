@@ -36,6 +36,7 @@ from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_c
 from ._buffer import memory_at
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin
+from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit_function,
                                forest_data_session_choice, open_forest_data_session)
 from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
@@ -1131,7 +1132,7 @@ class _BaggingBase(_TreesEnsembleBase):
         return self._gather(Xa, rows_all, cols)
 
 
-class BaggingClassifier(_BaggingBase):
+class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     """A bagging ensemble of classifiers.
 
     Follows scikit-learn's ``BaggingClassifier``: each member is fitted on a
@@ -1296,7 +1297,7 @@ class BaggingClassifier(_BaggingBase):
         return decode_labels(self.classes_, self._argmax(p, p.shape[0], self.n_classes_))
 
 
-class BaggingRegressor(_BaggingBase):
+class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     """A bagging ensemble of regressors.
 
     Follows scikit-learn's ``BaggingRegressor``: each member is fitted on a
@@ -1513,7 +1514,7 @@ class _AdaBoostBase(_TreesEnsembleBase):
         return Xa
 
 
-class AdaBoostClassifier(_AdaBoostBase):
+class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
     """An AdaBoost classifier (SAMME).
 
     Follows scikit-learn's ``AdaBoostClassifier`` with the SAMME algorithm:
@@ -1720,7 +1721,7 @@ class AdaBoostClassifier(_AdaBoostBase):
         return decode_labels(self.classes_, codes)
 
 
-class AdaBoostRegressor(_AdaBoostBase):
+class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     """An AdaBoost regressor (AdaBoost.R2).
 
     Follows scikit-learn's ``AdaBoostRegressor``: each member is fitted on a
@@ -2184,7 +2185,7 @@ class _DARTBase(_TreesEnsembleBase):
         return out.reshape((n, K))
 
 
-class DARTRegressor(_DARTBase):
+class DARTRegressor(RegressorScoreMixin, _DARTBase):
     """Gradient boosting with DART dropout, squared-error loss.
 
     Follows LightGBM's ``boosting="dart"`` with the L2 objective: in each
@@ -2295,7 +2296,7 @@ class DARTRegressor(_DARTBase):
         return self._raw(X)
 
 
-class DARTClassifier(_DARTBase):
+class DARTClassifier(ClassifierScoreMixin, _DARTBase):
     """Gradient boosting with DART dropout, classification.
 
     Follows LightGBM's ``boosting="dart"``: binary log loss for two classes,
@@ -2775,7 +2776,7 @@ class _TreesWrapperBase(_TreesEnsembleBase):
 # 'soft' = weighted np.average of predict_proba --, VotingRegressor :500 --
 # weighted np.average of predict). Members are cloned, never refitted in
 # place; n_jobs and verbose are refused by name.
-class VotingClassifier(_TreesWrapperBase):
+class VotingClassifier(ClassifierScoreMixin, _TreesWrapperBase):
     """Combine classifiers by a weighted majority vote or averaged probabilities.
 
     Follows scikit-learn's ``VotingClassifier``. ``fit`` clones every estimator
@@ -2951,7 +2952,7 @@ class VotingClassifier(_TreesWrapperBase):
         return out.reshape((n, width))
 
 
-class VotingRegressor(_TreesWrapperBase):
+class VotingRegressor(RegressorScoreMixin, _TreesWrapperBase):
     """Average the predictions of several regressors.
 
     Follows scikit-learn's ``VotingRegressor``. ``fit`` clones every estimator
@@ -3174,7 +3175,7 @@ class _StackingBase(_TreesWrapperBase):
         return as_f32_c(self.transform(X), ndim=2, name="meta")[0]
 
 
-class StackingClassifier(_StackingBase):
+class StackingClassifier(ClassifierScoreMixin, _StackingBase):
     """Stack classifiers and train a final classifier on their cross-validated outputs.
 
     Follows scikit-learn's ``StackingClassifier``. ``fit`` refits every member on
@@ -3305,7 +3306,7 @@ class StackingClassifier(_StackingBase):
         return acc.reshape((n, k))
 
 
-class StackingRegressor(_StackingBase):
+class StackingRegressor(RegressorScoreMixin, _StackingBase):
     """Stack regressors and train a final regressor on their cross-validated outputs.
 
     Follows scikit-learn's ``StackingRegressor``. ``fit`` refits every member on
@@ -3426,7 +3427,7 @@ def _multiout_ridge_entry(est, sample_weight):
         return None
 
 
-class MultiOutputRegressor(_TreesWrapperBase):
+class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
     """Fit one regressor per target column.
 
     Follows scikit-learn's ``MultiOutputRegressor``: ``fit`` clones
@@ -3746,7 +3747,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
 # predict_proba :470 each class's positive probability, rows normalised in
 # the multiclass case). DEVIATION: a row whose scores sum to 0 is uniform,
 # where sklearn divides 0 / 0.
-class OneVsRestClassifier(_TreesWrapperBase):
+class OneVsRestClassifier(ClassifierScoreMixin, _TreesWrapperBase):
     """Multiclass classification with one binary classifier per class.
 
     Follows scikit-learn's ``OneVsRestClassifier``: ``fit`` trains one clone of
@@ -3942,7 +3943,7 @@ def _cal_fast_consts(base, method, ensemble, cv, sample_weight):
     return [int(v) for v in entry()]  # glue: binding constants as integers
 
 
-class CalibratedClassifierCV(_TreesWrapperBase):
+class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
     """Calibrate a classifier's probabilities with cross-validation.
 
     Follows scikit-learn's ``CalibratedClassifierCV``. The calibrator reads the

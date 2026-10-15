@@ -52,6 +52,7 @@ from ._buffer import as_f32_c, as_i32_c, addr_ro, addr as _addr_rw, _as_typed, e
 from . import _labels
 from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
+from ._mode import SklearnTagsMixin
 
 __all__ = ["f_classif", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
@@ -723,8 +724,8 @@ def _x2d(X, name="X"):
     return arr
 
 
-class _PrepBase:
-    """sklearn's parameter protocol and fit_transform for the lane's classes."""
+class _PrepBase(SklearnTagsMixin):
+    """sklearn's parameter protocol, tags and fit_transform for the lane's classes."""
     _parameters = ()
 
     def get_params(self, deep=True):
@@ -834,6 +835,8 @@ class RobustScaler(_PrepBase):
     >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
     >>> Xt = mojolearn.RobustScaler().fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance")
 
     def __init__(self, *, with_centering=True, with_scaling=True, quantile_range=(25.0, 75.0), copy=True,
@@ -920,6 +923,8 @@ class MaxAbsScaler(_PrepBase):
     >>> X = np.random.default_rng(0).standard_normal((1000, 8)).astype(np.float32)
     >>> Xt = mojolearn.MaxAbsScaler().fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("copy",)
 
     def __init__(self, *, copy=True):
@@ -1362,6 +1367,8 @@ class OrdinalEncoder(_PrepBase):
     >>> X = np.array([[3.0, 10.0], [1.0, 20.0], [3.0, 10.0]], dtype=np.float32)
     >>> mojolearn.OrdinalEncoder().fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _parameters = ("categories", "dtype", "handle_unknown", "unknown_value", "encoded_missing_value",
                    "min_frequency", "max_categories")
 
@@ -1536,6 +1543,8 @@ class OneHotEncoder(_PrepBase):
     >>> X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 0.0]], dtype=np.float32)
     >>> mojolearn.OneHotEncoder(drop="first").fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _parameters = ("categories", "drop", "sparse_output", "dtype", "handle_unknown", "min_frequency",
                    "max_categories", "feature_name_combiner")
 
@@ -1959,6 +1968,9 @@ class TargetEncoder(_PrepBase):
     >>> y = rng.random(1000).astype(np.float32)
     >>> Xt = mojolearn.TargetEncoder().fit_transform(X, y)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True, "categorical": True}
+    _sklearn_target_tags = {"required": True}
     _parameters = ("categories", "target_type", "smooth", "cv", "shuffle", "random_state")
 
     def __init__(self, categories="auto", target_type="auto", smooth="auto", cv=5, shuffle=True,
@@ -2248,6 +2260,8 @@ class SimpleImputer(_PrepBase):
     >>> X = np.array([[1.0, np.nan], [3.0, 4.0], [np.nan, 8.0]], dtype=np.float32)
     >>> mojolearn.SimpleImputer(strategy="median").fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features")
 
     def __init__(self, *, missing_values=float("nan"), strategy="mean", fill_value=None, copy=True,
@@ -2630,6 +2644,7 @@ def _proba64_on(mode):
 class _Classifier(_PrepBase):
     """predict / predict_proba / predict_log_proba from a subclass's joint
     log likelihood stages (`_jll_stages`), normalised on the device."""
+    _estimator_type = "classifier"
     #: lane cpu4-misc: fit and every scoring method take a
     #: `_arena_io.DeviceRows` (a cross-validation fold's X on the device):
     #: X reaches the arena only through `_x2d` -> `_Prog.put`, so the fold
@@ -3616,6 +3631,8 @@ class MultinomialNB(_DiscreteNB):
     >>> y = rng.integers(0, 3, 1000)
     >>> model = mojolearn.MultinomialNB().fit(X, y)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"positive_only": True}
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
     _csr_ok = True
     _needs_min = True
@@ -4357,6 +4374,8 @@ class QuantileTransformer(_PrepBase):
     >>> X = np.random.default_rng(0).exponential(size=(1000, 4)).astype(np.float32)
     >>> Xt = mojolearn.QuantileTransformer(output_distribution="normal").fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("n_quantiles", "output_distribution", "ignore_implicit_zeros", "subsample", "random_state",
                    "copy")
 
@@ -4503,6 +4522,8 @@ class PowerTransformer(_PrepBase):
     >>> X = np.random.default_rng(0).lognormal(size=(1000, 4)).astype(np.float32)
     >>> Xt = mojolearn.PowerTransformer().fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("method", "standardize", "copy")
 
     def __init__(self, method="yeo-johnson", *, standardize=True, copy=True):
@@ -5464,6 +5485,9 @@ class LabelEncoder(_PrepBase):
     >>> enc.transform(np.array([30, 10]))
     >>> enc.inverse_transform(np.array([0, 2]))
     """
+    # scikit-learn tags: transforms a 1-D label vector, not an X matrix
+    _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
+    _sklearn_target_tags = {"one_d_labels": True}
     _parameters = ()
 
     def fit(self, y):
@@ -5627,6 +5651,9 @@ class LabelBinarizer(_PrepBase):
     >>> lb = mojolearn.LabelBinarizer().fit(np.array([1, 2, 6, 4, 2]))
     >>> lb.transform(np.array([1, 6]))
     """
+    # scikit-learn tags: transforms a 1-D label vector, not an X matrix
+    _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
+    _sklearn_target_tags = {"one_d_labels": True}
     _parameters = ("neg_label", "pos_label", "sparse_output")
 
     def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False):
@@ -5834,6 +5861,9 @@ class MultiLabelBinarizer(_PrepBase):
     >>> mlb = mojolearn.MultiLabelBinarizer()
     >>> mlb.fit_transform([[1, 2], [3], [2, 3]])
     """
+    # scikit-learn tags: transforms label collections, not an X matrix
+    _sklearn_input_tags = {"two_d_array": False}
+    _sklearn_target_tags = {"two_d_labels": True}
     _parameters = ("classes", "sparse_output")
 
     def __init__(self, *, classes=None, sparse_output=False):
@@ -6034,6 +6064,8 @@ class IterativeImputer(_PrepBase):
     >>> X[rng.random(X.shape) < 0.1] = np.nan
     >>> Xt = mojolearn.IterativeImputer(max_iter=5).fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("estimator", "missing_values", "sample_posterior", "max_iter", "tol", "n_nearest_features",
                    "initial_strategy", "fill_value", "imputation_order", "skip_complete", "min_value",
                    "max_value", "verbose", "random_state", "add_indicator", "keep_empty_features")
@@ -6575,6 +6607,8 @@ class VarianceThreshold(_SelectorMixin):
     >>> X = np.array([[0, 2, 0, 3], [0, 1, 4, 3], [0, 1, 1, 3]], dtype=np.float32)
     >>> mojolearn.VarianceThreshold().fit_transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("threshold",)
 
     def __init__(self, threshold=0.0):
@@ -7298,6 +7332,8 @@ class ComplementNB(_DiscreteNB):
     >>> y = rng.integers(0, 3, 1000)
     >>> model = mojolearn.ComplementNB().fit(X, y)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"positive_only": True}
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
     _csr_ok = True
     _needs_min = True
@@ -7386,6 +7422,8 @@ class CategoricalNB(_DiscreteNB):
     >>> y = rng.integers(0, 2, 1000)
     >>> model = mojolearn.CategoricalNB().fit(X, y)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"positive_only": True, "categorical": True}
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "min_categories")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, min_categories=None):

@@ -18,6 +18,7 @@ whoever owns that file decides the public namespace.
 import sys
 
 from . import _backend, _expansion_cluster, _mojolearn_solver, _serialize
+from ._mode import ParamsMixin
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, frombytes, zeros
 from .density import _check_queries
@@ -107,7 +108,7 @@ PAIRWISE_MAX_ROWS = 46340
 # same entry that driver calls; it does not itself emit a card.
 #
 # predict is DEVIATION 2740 (neither cuML nor scikit-learn has one).
-class AgglomerativeClustering:
+class AgglomerativeClustering(ParamsMixin):
     """Agglomerative hierarchical clustering.
 
     Builds a merge tree bottom-up and cuts it into `n_clusters` clusters or
@@ -198,6 +199,8 @@ class AgglomerativeClustering:
     >>> model = mojolearn.AgglomerativeClustering(n_clusters=4, prediction_data=True).fit(X)
     >>> labels = model.predict(X[:10])
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "clusterer"
 
     #: The binding `predict` calls. The FIT is `_mojolearn_solver`'s, a
     #: training-only family; the prediction entry lives in the estimators
