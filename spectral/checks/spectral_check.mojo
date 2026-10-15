@@ -767,6 +767,9 @@ def _ncv_for(n: Int, k: Int) -> Int:
     var ncv = n - k
     if hi < ncv:
         ncv = hi
+    # the small-n full space (spectral_embedding.mojo)
+    if ncv <= k + 1 and n > k + 1:
+        ncv = n
     return ncv
 
 

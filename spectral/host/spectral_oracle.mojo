@@ -658,6 +658,12 @@ def oracle_embedding[
     var ncv = n - k
     if ncv_hi < ncv:
         ncv = ncv_hi
+    # Small n: cuVS's min(n - k, max(2k + 1, 20)) leaves no Krylov room
+    # past k + 1 when n <= 2k + 1 (cuVS refuses those shapes). The full
+    # space, ncv = n, is exact after one build and takes every n > k + 1,
+    # as scikit-learn's eigensolvers do on a handful of rows.
+    if ncv <= k + 1 and n > k + 1:
+        ncv = n
     var L = host_laplacian[dt](g, norm_laplacian)
     var res = OracleResult[dt]()
     res.diag = L.diag.copy()
@@ -1009,6 +1015,12 @@ def host_validate_connectivity_coo(
         var ncv = n_samples - k
         if ncv_hi < ncv:
             ncv = ncv_hi
+        # Small n: cuVS's min(n - k, max(2k + 1, 20)) leaves no Krylov room
+        # past k + 1 when n <= 2k + 1 (cuVS refuses those shapes). The full
+        # space, ncv = n, is exact after one build and takes every n > k + 1,
+        # as scikit-learn's eigensolvers do on a handful of rows.
+        if ncv <= k + 1 and n_samples > k + 1:
+            ncv = n_samples
         if k < 1:
             raise Error(
                 "lanczos: need 1 <= n_components < n, got " + String(k)
