@@ -3143,6 +3143,8 @@ class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
 
     _BINDING = _BINDING
     _estimator_type = "regressor"
+    # scikit-learn's IsotonicRegression tags: X is one feature, 1-D
+    _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
 
     def __init__(self, *, y_min=None, y_max=None, increasing=True, out_of_bounds="nan"):
         self.y_min, self.y_max, self.increasing, self.out_of_bounds = y_min, y_max, increasing, out_of_bounds
