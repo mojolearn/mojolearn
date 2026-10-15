@@ -526,7 +526,7 @@ def gemm_nt_gram(
     # True alias Gram retains its original lifetime and plain NT epilogue.
     var scoped_xt = xt  # mutable view; shared buffer remains caller-owned
     var xp = scoped_xt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    # MOJOLEARN_GEMM_FAST_RAGGED_K (default OFF; see gemm_nt above): the
+    # MOJOLEARN_GEMM_FAST_RAGGED_K (FAST default, _OFF to disable; see gemm_nt above): the
     # self-Gram reads `xt` as both operands; the kernel only reads them.
     if afn_gemm_fp32_ragged_k_ptr_into(
         ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xp, xp, m, n, k, OP_NT

@@ -140,8 +140,8 @@ comptime AFN_GEMM_EPILOGUE = AFN_GEMM_ALL or (
 #: The fp32 entry points take this kernel whenever any fp32 candidate is on
 #: (SPLITK and TILESHAPE are policies of the same kernel).
 comptime AFN_GEMM_FP32_MMA = AFN_GEMM_SIMDGROUP or AFN_GEMM_SPLITK or AFN_GEMM_TILESHAPE
-#: lane/identical-gemm-ktail (2026-10-15), A/B define, default OFF:
-#: `-D MOJOLEARN_GEMM_FAST_RAGGED_K`. FAST Apple fp32 GEMMs whose `k` is not
+#: lane/identical-gemm-ktail (2026-10-15), FAST default (was A/B define
+#: `-D MOJOLEARN_GEMM_FAST_RAGGED_K`; off switch `_OFF`). FAST Apple fp32 GEMMs whose `k` is not
 #: a whole number of this kernel's windows (`k % AFN_GEMM_KB != 0`) run on
 #: the simdgroup kernel below instead of MAX's `linalg.matmul`. Cause:
 #: public `mojolearn.linalg.matmul` fp32 FAST on an Apple M4 (one warmup,
@@ -159,7 +159,10 @@ comptime AFN_GEMM_FP32_MMA = AFN_GEMM_SIMDGROUP or AFN_GEMM_SPLITK or AFN_GEMM_T
 #: IDENTICAL never compiles it. The A/B owed: arm A off, arm B on, k in
 #: {2496, 2500, 2504, 2512, 2560} at m = n = 4096 and 3000 x 5000, plus one
 #: non-board estimator fit that reaches `gemm_nt` with a ragged feature count.
-comptime AFN_GEMM_FAST_RAGGED_K = AFN_GEMM_APPLE and is_defined["MOJOLEARN_GEMM_FAST_RAGGED_K"]()
+#: FAST DEFAULT since 2026-10-15 (A/B on Apple M4, one run per arm, run3; arm A MAX matmul, arm B this kernel):
+#: 4096x4096x2500 1974.6 -> 97.7 ms, 3000x5000x2500 1780.5 -> 86.1 ms; relative RMS error vs FP64 equal
+#: (9.0e-7, 8.9e-7). Aligned k keeps MAX. `-D MOJOLEARN_GEMM_FAST_RAGGED_K_OFF` restores arm A.
+comptime AFN_GEMM_FAST_RAGGED_K = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_GEMM_FAST_RAGGED_K_OFF"]()
 
 #: The window: steps staged per barrier. 32 stages one 64x64 page of
 #: 17,920 bytes (one page on Apple's 32 KB); 16 stages two pages of 9,472.

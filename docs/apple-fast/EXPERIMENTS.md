@@ -2109,4 +2109,4 @@ A/B on main c8ef6c66d, same box, one run per arm, NV L40S nv2 / AMD MI325X, dige
 
 | define | algorithm / dataset | branch@sha | A/B tag | before -> after (ratio B/A) | verdict | reason |
 |---|---|---|---|---|---|---|
-| `MOJOLEARN_GEMM_FAST_RAGGED_K` | linalg.matmul fp32 FAST Apple; every FAST Apple caller of `_fast_vendor_gemm`, `gemm_nt`, `gemm_nt_gram` | lane/identical-gemm-ktail@caed6d50a | owed (Apple FAST box) | M4 arm A only: 3000x5000x2500 1102.4 ms, 4096x4096x2500 1210.1 ms vs k=2560/4096 66.8/119.4 ms (bf16 on the same simdgroup kernel 94.8/112.0 ms at k=2500) | OPEN, default OFF | `k % AFN_GEMM_KB != 0` leaves MAX's `linalg.matmul` for the simdgroup kernel, which costs a ragged `k` one zero-padded window; full fp32, FAST only, IDENTICAL untouched |
+| `MOJOLEARN_GEMM_FAST_RAGGED_K` | linalg.matmul fp32 FAST Apple (all FAST Apple `_fast_vendor_gemm`, `gemm_nt`, `gemm_nt_gram` callers) | lane/identical-gemm-ktail @ 42dfb8458 | bf16-vs-fp32fast-20261015/run3 (local M4, one run per arm) | 4096x4096x2500 1974.6 -> 97.7; 3000x5000x2500 1780.5 -> 86.1 | KEPT, FAST default (`_OFF`) | ragged k left MAX fast kernel; quality equal (rel RMS 9.0e-7/8.9e-7) |
