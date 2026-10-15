@@ -282,11 +282,14 @@ def _caller_outside(frame):
 
 def _ndarray(value, np):
     """`value` as a NumPy array when it is an `Array` (a zero-copy view of
-    the same memory, `Array.__array__`); a tuple's Array members likewise."""
+    the same memory, `Array.__array__`); the Array members of a tuple, or
+    of a list of per-output Arrays, likewise."""
     if type(value) is _Array:
         return value.__array__()
     if type(value) is tuple:
         return tuple(_ndarray(v, np) for v in value)  # glue: converts the members of a result tuple
+    if type(value) is list and value and type(value[0]) is _Array:
+        return [_ndarray(v, np) for v in value]  # glue: one array per output (multi-output predict_proba)
     return value
 
 
