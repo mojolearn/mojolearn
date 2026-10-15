@@ -2,6 +2,25 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.46 (published 2026-10-15)
+
+- Every public estimator works with scikit-learn's tools: `get_params`, `set_params`, `clone`, tags,
+  `Pipeline`, `GridSearchCV` and `cross_val_score`. Classifiers and regressors without a `score` method now have
+  one (accuracy and R²). `MLPClassifier`, `MLPRegressor`, the LSTM and GRU models and the forecasting models
+  (`AutoARIMA`, `ETS`, the Theta and Croston models, `GARCH`) are included.
+- scikit-learn's import paths work: for example `from mojolearn.linear_model import Lasso`, and the new modules
+  `mojolearn.naive_bayes`, `discriminant_analysis`, `cross_decomposition`, `isotonic`, `semi_supervised`,
+  `kernel_approximation`, `kernel_ridge`, `gaussian_process`, `covariance`, `impute`, `feature_selection`,
+  `random_projection`, `tree`, `calibration`, `multiclass`, `multioutput` and `neural_network`.
+- The naive Bayes classifiers, `LinearDiscriminantAnalysis`, `QuadraticDiscriminantAnalysis`, `LabelPropagation`,
+  `LabelSpreading` and `NearestCentroid` are classifiers to scikit-learn, so `cross_val_score` splits their folds
+  by class, as scikit-learn does.
+- `ARDRegression` retries a failed float32 factorization with a stabilized one instead of continuing with it.
+  `KNNImputer` averages all donors tied at the k-th distance. `CagraIndex` searches with a minimum seed and
+  iteration budget. These change results in `identical` mode on every GPU and the CPU together.
+- In `fast` mode on Apple GPUs, `mojolearn.linalg.matmul_bf16` runs, and float32 matrix products whose inner
+  dimension is not a multiple of the kernel's block run up to 20 times faster.
+
 ## 0.8.45 (published 2026-10-14)
 
 - `TSNE` takes `post_exaggeration_learning_rate_factor` (default 1.0): the step size after the early exaggeration
