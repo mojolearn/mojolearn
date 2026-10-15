@@ -568,6 +568,54 @@ def previous_observations(prev):
     return [o for o in out if o.get("column")]
 
 
+def retained_opponent_problems(race, ours, opponent):
+    """Validate an immutable store hit without inventing current provenance."""
+    bad = []
+    own = ours.get("measurement") or {}
+    measured = opponent.get("measurement") or {}
+    if measured.get("completeness") != "complete" or not measured.get("id"):
+        bad.append("incomplete retained measurement")
+    for name in ("source", "artifacts"):
+        ref = measured.get(name) or {}
+        digest = ref.get("sha256") or ""
+        if (ref.get("status") != "verified" or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                or not ref.get("r2_bucket") or not (ref.get("r2_key") or "").endswith("/" + digest + ".tar.gz")):
+            bad.append("retained %s lacks a verified content-addressed archive" % name)
+    def gpu_kind(cell):
+        m = cell.get("measurement") or {}
+        worker = m.get("hardware") or {}
+        gpu = (m.get("controller_hardware") or {}).get("gpu") or {}
+        model = HW.canonical_model(gpu.get("name"))
+        # The old worker's UUID, host and driver may differ. Its recorded
+        # vendor/model must still identify the same kind of timing GPU.
+        if worker.get("status") != "verified" or not model or worker.get("vendor") != gpu.get("vendor"):
+            return None
+        for text in (worker.get("gpu_driver_identity"), cell.get("device_name"), cell.get("hardware")):
+            other = HW.canonical_model(text)
+            if other is not None and other != model:
+                return None
+        return gpu.get("vendor"), model
+    if gpu_kind(ours) is None or gpu_kind(ours) != gpu_kind(opponent):
+        bad.append("retained worker GPU kind is missing or differs")
+    for cell in (ours, opponent):
+        params = (cell.get("measurement") or {}).get("parameters") or {}
+        impl = params.get("implementation") or {}
+        if not params.get("params") or not impl.get("module") or not impl.get("name"):
+            bad.append("effective settings or library implementation missing")
+        if params != cell.get("params"):
+            bad.append("cell parameters differ from retained worker readback")
+    po, pt = (own.get("parameters") or {}).get("params") or {}, (measured.get("parameters") or {}).get("params") or {}
+    exceptions = list((race.get("params") or {}).get("exceptions") or []) + list(measured.get("parameter_exceptions") or [])
+    allowed = {e.get("param") for e in exceptions if e.get("arm") == opponent.get("arm") and e.get("reason")}
+    if (set(po) ^ set(pt)) - {"seed"} - allowed:
+        bad.append("work-changing parameter coverage differs")
+    problems, missing, readback = RF._pair_problems(race, ours, opponent)
+    bad.extend(problems + missing)
+    if not readback:
+        bad.append("no comparable effective settings")
+    return sorted(set(bad))
+
+
 def paired_observations(BB, specs, resolve, skips):
     """Import an actual paired session, retaining its opponents across rebuilds.
 
@@ -578,14 +626,27 @@ def paired_observations(BB, specs, resolve, skips):
     for box, path in _pairs(specs or []):
         board = BB.load_result(path)
         for rid, rr in (board.get("races") or {}).items():
+            rr = copy.deepcopy(rr)
             cells = rr.get("cells") or []
             ours = next((c for c in cells if c.get("library") == "mojolearn" and c.get("mode") == "identical"), None)
-            measured = [c for c in cells if c.get("status") == "ok"]
+            measured = [c for c in cells if c.get("status") in ("ok", "not-scored", "recompiled-in-clock")]
             if not ours or ours.get("rows_tag") not in (None, "full") or rr.get("params_check") != "MATCHED":
                 raise ValueError("paired board lacks a full-recipe, parameter-checked own arm: " + rid)
             m = ours.get("measurement") or {}
             for c in measured:
                 cm = c.get("measurement") or {}
+                if c.get("mode") == "opponent" and c.get("stored"):
+                    # FAIRNESS FIX (2026-10-13 audit): valid historical store
+                    # hits were rejected because their source/host/UUID was
+                    # not ours. Retain their actual bytes and provenance;
+                    # compare settings, GPU kind and derivable clocks instead.
+                    problems = retained_opponent_problems(rr, ours, c)
+                    if problems:
+                        ex = rr.setdefault("opponents_excluded", {"arms": [], "why": {}})
+                        ex["arms"] = sorted(set(ex.get("arms", [])) | {c["arm"]})
+                        ex.setdefault("why", {})[c["arm"]] = "; ".join(problems)
+                        ex["reason"] = "; ".join("%s: %s" % item for item in sorted(ex["why"].items()))
+                    continue
                 if (cm.get("completeness") != "complete" or not cm.get("id")
                         or any((cm.get(k) or {}).get("status") != "verified" for k in ("source", "artifacts"))
                         or cm.get("hardware") != m.get("hardware") or cm.get("source") != m.get("source")):
