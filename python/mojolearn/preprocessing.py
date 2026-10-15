@@ -380,7 +380,7 @@ class MinMaxScaler(_ScalerProtocol):
         self.copy = copy
         self.clip = clip
         self.numeric_mode = numeric_mode
-        self._configuration()
+        # Stored as given; fit and partial_fit check them (`_configuration`), scikit-learn's convention.
 
     def _configuration(self):
         if not is_bool(self.copy):
@@ -767,7 +767,7 @@ class StandardScaler(_ScalerProtocol):
         self.with_mean = with_mean
         self.with_std = with_std
         self.numeric_mode = numeric_mode
-        self._configuration()
+        # Stored as given; fit and partial_fit check them (`_configuration`), scikit-learn's convention.
 
     def _configuration(self):
         if not is_bool(self.copy):
@@ -931,6 +931,7 @@ class StandardScaler(_ScalerProtocol):
         _require_training(self)
         if not self.__sklearn_is_fitted__():
             return self.fit(X, y, sample_weight=sample_weight)
+        self._configuration()
         if (bool(self.with_mean), bool(self.with_std)) != (self.with_mean_, self.with_std_):
             raise ValueError('StandardScaler partial_fit: with_mean / with_std changed since the first batch')
         batch = StandardScaler(with_mean=self.with_mean_, with_std=self.with_std_,

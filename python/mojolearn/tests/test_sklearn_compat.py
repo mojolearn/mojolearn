@@ -224,6 +224,72 @@ def test_pipeline_and_grid_search_construct(name):
     assert type(clone(grid).estimator.named_steps["est"]) is type(est)
 
 
+# ------------------------------------------------- before fit (no binding)
+
+#: scikit-learn's estimator checks that never fit: parameters are stored
+#: verbatim by the constructor and checked at fit, and every predict,
+#: transform and score called before fit raises NotFittedError.
+NO_FIT_CHECKS = ("check_no_attributes_set_in_init", "check_do_not_raise_errors_in_init_or_set_params",
+                 "check_parameters_default_constructible", "check_get_params_invariance", "check_set_params",
+                 "check_estimators_unfitted", "check_transformers_unfitted")
+
+#: The methods that need a fitted estimator.
+NEEDS_FIT = ("predict", "predict_proba", "predict_log_proba", "decision_function", "transform",
+             "inverse_transform", "score", "score_samples")
+
+
+@pytest.mark.parametrize("check", NO_FIT_CHECKS)
+@pytest.mark.parametrize("name", SHARED_NAMES)
+def test_scikit_learn_checks_that_need_no_fit(name, check):
+    from sklearn.utils import estimator_checks
+    est = _make(name)
+    if check == "check_transformers_unfitted" and not (
+            callable(getattr(est, "transform", None)) and get_tags(est).requires_fit):
+        pytest.skip("not a transformer that needs a fit")
+    getattr(estimator_checks, check)(name, est)
+
+
+#: Not scikit-learn estimators, and their constructors set public attributes
+#: ending in an underscore, which scikit-learn's fitted-state rule reads as
+#: fitted. Each says which.
+UNFITTED_EXEMPT = {
+    # cuML's ARIMA: k_, n_exog_ and complexity_ resolve from order and trend in the constructor
+    "ARIMA",
+}
+
+
+@pytest.mark.parametrize("name", sorted(set(ESTIMATOR_NAMES) - UNFITTED_EXEMPT))
+def test_unfitted_calls_raise_not_fitted_error(name):
+    from sklearn.exceptions import NotFittedError as SklearnNotFittedError
+    from sklearn.utils.validation import check_is_fitted
+
+    from mojolearn.exceptions import NotFittedError
+    est = _make(name)
+    if not get_tags(est).requires_fit:
+        pytest.skip("stateless: usable without fit")
+    with pytest.raises(SklearnNotFittedError):
+        check_is_fitted(est)
+    X = np.ones((4, 3), dtype=np.float32)
+    y = np.zeros(4, dtype=np.float32)
+    for method in NEEDS_FIT:
+        if not callable(getattr(est, method, None)):
+            continue
+        args = (X, y) if method == "score" else (X,)
+        with pytest.raises(NotFittedError) as caught:
+            getattr(est, method)(*args)
+        assert isinstance(caught.value, (SklearnNotFittedError, ValueError, AttributeError)), (name, method)
+
+
+def test_not_fitted_error_needs_no_scikit_learn():
+    import subprocess
+    import sys
+    root = os.path.dirname(os.path.dirname(mojolearn.__file__))
+    code = ("import sys; sys.path.insert(0, %r); import mojolearn.exceptions as E; "
+            "assert 'sklearn' not in sys.modules; "
+            "assert issubclass(E.NotFittedError, ValueError) and issubclass(E.NotFittedError, AttributeError)" % root)
+    subprocess.run([sys.executable, "-c", code], check=True)
+
+
 # ------------------------------------------------------------------ fitting
 
 def _small_problem():

@@ -185,6 +185,10 @@ def install_fit_tracking(cls):
         if isinstance(method, classmethod):
             setattr(cls, name, _loader(method.__func__))
     if not getattr(cls, "_sklearn_requires_fit", True):
+        for name in _NEEDS_FIT:  # glue: unwraps the method names that need a fit
+            method = getattr(cls, name, None)
+            if getattr(method, "_mojolearn_needs_fit", False):  # guarded on a stateful base
+                setattr(cls, name, method.__wrapped__)
         return
     for name in _NEEDS_FIT:  # glue: wraps the method names that need a fit
         method = getattr(cls, name, None)
