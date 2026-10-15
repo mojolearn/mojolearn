@@ -34,6 +34,17 @@ C = "c" * 40
 WF = ROOT / ".github/workflows/release-linux-build.yml"
 
 
+def ptx_shipped():
+    """Whether a release ships the NVIDIA PTX slot: gpu_plugins `ptx_shipped`
+    (off since 0.8.39 while PyPI's 100 MiB mojolearn-nvidia limit stands)."""
+    from verify_linux_surface_qualification import load_gpu_plugins
+    return load_gpu_plugins().PLUGINS["cuda"].get("ptx_shipped", True)
+
+
+#: The release's Linux legs in release_reuse.LINUX_SETS order, read from the registry.
+RELEASE_LEGS = ["cuda-sm_89"] + (["cuda-sm_80"] if ptx_shipped() else []) + ["hip-gfx942"]
+
+
 class Workflow(unittest.TestCase):
     def test_manual_only_and_never_interpolates_the_map_url(self):
         text = WF.read_text()
@@ -156,8 +167,8 @@ class Backend(unittest.TestCase):
         self.assertIn('ap.add_argument("--build-backend", default="github"', (HERE / "release.py").read_text())
         ctx = argparse.Namespace(rel=Path(tempfile.mkdtemp()), commit=C)
         legs = rel.github_legs(ctx)
-        # sm_80 is the PTX slot, built like any arch (Andrew 2026-10-10)
-        self.assertEqual([l.name for l in legs], ["cuda-sm_89", "cuda-sm_80", "hip-gfx942"])
+        # sm_80 is the PTX slot, built like any arch (Andrew 2026-10-10), while the release ships it
+        self.assertEqual([l.name for l in legs], RELEASE_LEGS)
         for l in legs:
             self.assertEqual(l.command[:3], ["python3", "tools/release_github_build.py", "run"])
             out = Path(l.command[l.command.index("--out") + 1])

@@ -296,7 +296,10 @@ def test_waiting_log_names_the_reason(env, tmp_path):
     assert "waiting" in err and "(load " in err
 
 
-def test_a_gpu_job_alone_does_not_stall_one_cpu_job(env):
+def test_a_gpu_job_alone_does_not_stall_one_cpu_job(env, monkeypatch):
+    # 10 cores: the load limit is 8.0, under the 99.0 below on any host (a 128-core
+    # Linux pod's limit of 102.4 would admit the second CPU job)
+    monkeypatch.setattr(mac_slot.os, "cpu_count", lambda: 10)
     e = room_env(env)
     gpu = Scheduler(e, loadavg=lambda: 99.0, available=lambda: None)
     cpu1 = Scheduler(e, loadavg=lambda: 99.0, available=lambda: None)

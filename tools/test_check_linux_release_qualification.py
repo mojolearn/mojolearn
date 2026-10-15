@@ -57,7 +57,7 @@ class ReleaseAdmissionTests(unittest.TestCase):
             extensions, sets = gate.inspect_wheel(wheel, root)
             per_arch = sum(len(gate.surface.expected_bindings(m)) for m in gate.surface.MODES)
             self.assertEqual(len(extensions), 2 * per_arch)
-            self.assertEqual(len(sets), 6)
+            self.assertEqual(len(sets), 2 * len(gate.surface.MODES))  # 2 arches x {fast, identical}
             self.assertEqual(sorted(sets.values()), sorted(len(gate.surface.expected_bindings(m))
                                                            for m in gate.surface.MODES for _ in 'ab'))
 
@@ -161,7 +161,7 @@ class ReleaseAdmissionTests(unittest.TestCase):
                             gate.check_vendor(*args, arch='gfx942')
                     else:
                         result = gate.check_vendor(*args, arch='gfx942')
-                        self.assertEqual(len(result['installed_records']), 11)
+                        self.assertEqual(len(result['installed_records']), 10)  # smoke x 2 modes, 7 identical surfaces, byte-lm
 
     def test_stale_hash_inventory_and_missing_job_refuse(self):
         for defect in ('wheel', 'native', 'missing_job', 'build_proof'):
@@ -199,7 +199,7 @@ class ReleaseAdmissionTests(unittest.TestCase):
                 args = (out, 'cuda', gate.digest_file(wheel), gate.native_inventory(root), extensions, sets)
                 if accepted:
                     result = gate.check_vendor(*args, arch=arch)
-                    self.assertEqual(len(result['installed_records']), 11)
+                    self.assertEqual(len(result['installed_records']), 10)  # smoke x 2 modes, 7 identical surfaces, byte-lm
                 else:
                     with self.assertRaisesRegex(ValueError, 'claimed native architecture'):
                         gate.check_vendor(*args, arch=arch)
@@ -261,7 +261,7 @@ class ReleaseAdmissionTests(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             gate.check(wheel, root / 'qualification', root)
                     else:
-                        self.assertEqual(gate.check(wheel, root / 'qualification', root)['jobs_per_vendor'], 10)
+                        self.assertEqual(gate.check(wheel, root / 'qualification', root)['jobs_per_vendor'], 9)  # smoke x 2 modes, 7 identical surfaces (no byte-lm off the release profile)
                     umap.assert_called_once()
                     ordered.assert_called_once()
 

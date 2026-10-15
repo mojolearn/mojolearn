@@ -1,9 +1,21 @@
 """Main-only resource controls; stub commands, no compiler or GPU."""
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
+
+
+#: The guards build_sets.sh runs before its job check: ptx_baseline.py
+#: validate-config (the CUDA code format) and the modules it imports.
+GUARD_HELPERS = ('ptx_baseline.py', 'ptx_contract.py', 'device_glue.py')
+
+
+def stage_guards(root, path):
+    """Copy the pre-build guards' helper scripts beside the staged prefix."""
+    for name in GUARD_HELPERS:
+        shutil.copyfile(root / 'packaging/linux' / name, path / name)
 
 
 class BuildLimitsTests(unittest.TestCase):
@@ -19,6 +31,7 @@ class BuildLimitsTests(unittest.TestCase):
             path.mkdir(parents=True)
             script = path / 'build_sets.sh'
             script.write_text(prefix + '\nexit 99\n')
+            stage_guards(root, path)
             for jobs in ('17', '0', '-1', 'garbage', '1.5'):
                 result = subprocess.run(['bash', str(script), tmp + '/out'],
                     env=dict(os.environ, MOJOLEARN_BUILD_JOBS=jobs),
@@ -40,6 +53,7 @@ class BuildLimitsTests(unittest.TestCase):
             path.mkdir(parents=True)
             script = path / 'build_sets.sh'
             script.write_text(prefix + '\nexit 99\n')
+            stage_guards(root, path)
             env = dict(os.environ)
             env.pop('MOJOLEARN_BUILD_JOBS', None)
             result = subprocess.run(['bash', str(script), tmp + '/out'], env=env,

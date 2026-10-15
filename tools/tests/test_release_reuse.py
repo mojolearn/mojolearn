@@ -31,6 +31,15 @@ CUR_COMMIT = "c" * 40
 
 PTX_REASON = "the PTX set's manifest binds this release's source commit"
 
+#: Whether a release ships the PTX slot (release_reuse.LINUX_SETS, gpu_plugins `ptx_shipped`).
+#: 0.8.39 (2026-10-12) took it out of the Linux sets while PyPI's 100 MiB mojolearn-nvidia
+#: limit stands; it goes back with the limit. The tests read the registry, so they assert
+#: the contract of whichever state the registry is in.
+SHIPS_PTX = rr.PTX_SET in rr.LINUX_SETS
+PTX_LEG = "%s-%s" % rr.PTX_SET
+PTX_LEGS = [PTX_LEG] if SHIPS_PTX else []
+ALL_LEGS = ["%s-%s" % s for s in rr.LINUX_SETS]
+
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
@@ -197,10 +206,12 @@ class DecisionTests(unittest.TestCase):
         plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
         # THE PTX SET IS BUILT EVERY RELEASE (its manifest binds the source commit):
         # its leg is the only one a Python-only release launches, and it needs no GPU.
-        self.assertEqual(plan["legs"], ["cuda-sm_80"])
+        # Without the PTX slot in the release, a Python-only release launches nothing.
+        self.assertEqual(plan["legs"], PTX_LEGS)
         ptx = [r for r in plan["rows"] if (r["vendor"], r["arch"]) == rr.PTX_SET]
-        self.assertTrue(ptx)
-        self.assertEqual({(r["decision"], r["reason"]) for r in ptx}, {("BUILD", PTX_REASON)})
+        self.assertEqual(bool(ptx), SHIPS_PTX)
+        if SHIPS_PTX:
+            self.assertEqual({(r["decision"], r["reason"]) for r in ptx}, {("BUILD", PTX_REASON)})
         self.assertEqual({r["decision"] for r in plan["rows"] if (r["vendor"], r["arch"]) != rr.PTX_SET}, {"REUSE"})
         self.assertEqual(plan["runtime"]["decision"], "REUSE")
         text = rr.render(plan, full=True)
@@ -213,7 +224,7 @@ class DecisionTests(unittest.TestCase):
             return ident
         prev = self.record(self.cur, dict(xcode="16"), mutate)
         plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
-        self.assertEqual(plan["legs"], ["cuda-sm_80", "hip-gfx942"])
+        self.assertEqual(plan["legs"], PTX_LEGS + ["hip-gfx942"])
         builds = [r for r in rr.plan_rows(plan, decision="BUILD") if (r["vendor"], r["arch"]) != rr.PTX_SET]
         self.assertEqual([(r["vendor"], r["arch"], r["tier"], r["name"]) for r in builds],
                          [("hip", "gfx942", "identical", "_mojolearn_gbdt")])
@@ -231,12 +242,12 @@ class DecisionTests(unittest.TestCase):
         prev = self.record(self.cur, dict(xcode="16"))
         plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
         base = {s: rr.set_identity(plan, *s)["digest"] for s in rr.LINUX_SETS}
-        self.assertEqual(len(set(base.values())), 3, "each set has its own identity")
+        self.assertEqual(len(set(base.values())), len(rr.LINUX_SETS), "each set has its own identity")
         moved = copy.deepcopy(plan)
         for r in moved["rows"]:
             if (r["target"], r["vendor"], r["arch"], r["name"]) == (rr.LINUX, "hip", "gfx942", "_mojolearn_gbdt"):
                 r["identity_digest"] = "9" * 64
-        self.assertEqual(rr.set_identity(moved, "cuda", "sm_80")["digest"], base[("cuda", "sm_80")])
+        self.assertEqual(rr.set_identity(moved, "cuda", "sm_89")["digest"], base[("cuda", "sm_89")])
         self.assertNotEqual(rr.set_identity(moved, "hip", "gfx942")["digest"], base[("hip", "gfx942")])
         host = copy.deepcopy(plan)
         for r in host["rows"]:
@@ -251,7 +262,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(over["builders_override"], {"tools/release061_remote_build.sh": "7" * 64})
         for s in rr.LINUX_SETS:
             self.assertNotEqual(rr.set_identity(over, *s)["digest"], base[s])
-        self.assertEqual(over["legs"], ["cuda-sm_89", "cuda-sm_80", "hip-gfx942"], "and it rebuilds")
+        self.assertEqual(over["legs"], ALL_LEGS, "and it rebuilds")
         with self.assertRaises(SystemExit):
             rr.make_plan(self.cur, self.cache, self.repo, prev=prev, builders_override={"tools/unknown.sh": "1" * 64})
         # an unreadable binding identity makes a set unreusable
@@ -264,8 +275,9 @@ class DecisionTests(unittest.TestCase):
             return dict(ident, flags=dict(ident["flags"], compile_jobs="9")) if b.name == "_mojolearn_core_host" else ident
         prev = self.record(self.cur, dict(xcode="16"), mutate)
         plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
-        # the PTX leg runs every release and every leg builds the host bindings
-        self.assertEqual(plan["legs"], ["cuda-sm_80"])
+        # the PTX leg runs every release and every leg builds the host bindings;
+        # without the PTX slot no set builds, so the cheapest leg (HOST_LEG) builds them
+        self.assertEqual(plan["legs"], PTX_LEGS or ["%s-%s" % rr.HOST_LEG])
         n_ptx = sum(1 for b in rr.bindings(rr.LINUX) if (b.vendor, b.arch) == rr.PTX_SET)
         self.assertEqual(len(rr.plan_rows(plan, rr.LINUX, "BUILD")), 1 + n_ptx)
         self.assertEqual(len(rr.plan_rows(plan, rr.MACOS, "BUILD")), 1)
@@ -273,13 +285,13 @@ class DecisionTests(unittest.TestCase):
     def test_no_record_or_unknown_apple_toolchain_builds(self):
         plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=None)
         self.assertEqual({r["decision"] for r in plan["rows"]}, {"BUILD"})
-        self.assertEqual(plan["legs"], ["cuda-sm_89", "cuda-sm_80", "hip-gfx942"])
+        self.assertEqual(plan["legs"], ALL_LEGS)
         prev = self.record(self.cur, None)
         plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
         self.assertEqual({r["decision"] for r in rr.plan_rows(plan, rr.LINUX)
                           if (r["vendor"], r["arch"]) != rr.PTX_SET}, {"REUSE"})
         self.assertEqual({r["decision"] for r in rr.plan_rows(plan, rr.MACOS)}, {"BUILD"})
-        self.assertEqual(plan["legs"], ["cuda-sm_80"])
+        self.assertEqual(plan["legs"], PTX_LEGS)
 
 
 def elf_stub(needed=()):
@@ -401,7 +413,16 @@ def ptx_leg(tmp, plan, new_hosts=()):
     return leg, build_proof(tmp / "cuda-sm_80.json", ext)
 
 
-#: Every set a split release packs (cuda sm_89 + the PTX slot sm_80, hip gfx942).
+def ptx_legs(tmp, plan, new_hosts=()):
+    """({"cuda-sm_80": leg dir}, [its proof]) when the release ships the PTX
+    slot (every release builds it), else ({}, [])."""
+    if not SHIPS_PTX:
+        return {}, []
+    leg, proof = ptx_leg(tmp, plan, new_hosts)
+    return {PTX_LEG: leg}, [proof]
+
+
+#: Every set a split release packs (cuda sm_89 + the PTX slot sm_80 while shipped, hip gfx942).
 SPLIT_SETS = pack_wheel.split_release_slots({"cuda", "hip"})
 
 
@@ -423,18 +444,19 @@ class AssemblyTests(unittest.TestCase):
 
     def legs(self, plan, **others):
         """`others` ("vendor-arch": dir) plus the PTX leg every release runs."""
-        leg, _ = ptx_leg(self.tmp, plan)
-        return dict(others, **{"cuda-sm_80": leg})
+        legs, _ = ptx_legs(self.tmp, plan)
+        return dict(others, **legs)
 
     def test_everything_reused_synthesizes_every_set_with_a_record(self):
         plan = self.plan()
         out = rr.assemble_linux(plan, self.whl, self.legs(plan), self.tmp / "sets", say=lambda *_: None)
-        self.assertEqual(set(out), {"cuda/sm_89", "cuda/sm_80", "hip/gfx942"})
-        # the PTX set is its leg's, whole, manifest included; it reuses only the host bindings and runtime
-        ptx = out.pop("cuda/sm_80")
-        self.assertTrue((ptx / pack_wheel.gpu_plugins.BASELINE_MANIFEST).is_file())
-        ptx_doc = json.loads((ptx / "reuse.json").read_text())
-        self.assertEqual(len(ptx_doc["files"]), len(pack_wheel.HOST_NAMES) + 1)
+        self.assertEqual(set(out), {"%s/%s" % s for s in rr.LINUX_SETS})
+        if SHIPS_PTX:
+            # the PTX set is its leg's, whole, manifest included; it reuses only the host bindings and runtime
+            ptx = out.pop("%s/%s" % rr.PTX_SET)
+            self.assertTrue((ptx / pack_wheel.gpu_plugins.BASELINE_MANIFEST).is_file())
+            ptx_doc = json.loads((ptx / "reuse.json").read_text())
+            self.assertEqual(len(ptx_doc["files"]), len(pack_wheel.HOST_NAMES) + 1)
         for key, sdir in out.items():
             doc = json.loads((sdir / "reuse.json").read_text())
             self.assertEqual(doc["schema"], rr.REUSE_SCHEMA)
@@ -563,26 +585,30 @@ class PayloadTests(unittest.TestCase):
             tmp = pathlib.Path(d)
             whl, prev = published_wheel_fixture(tmp)
             plan = linux_plan(prev)
-            leg, ptx_proof = ptx_leg(tmp, plan)
-            rr.assemble_linux(plan, whl, {"cuda-sm_80": leg}, tmp / "sets", say=lambda *_: None)
+            legs, ptx_proofs = ptx_legs(tmp, plan)
+            rr.assemble_linux(plan, whl, legs, tmp / "sets", say=lambda *_: None)
             sets = [s for vendor in ("cuda", "hip") for s in pack_wheel.load_set(tmp / "sets" / vendor, True)]
             version = pack_wheel.read_version()
-            # the PTX set is built every release: its leg's proof is the one proof
-            inv = pack_wheel.release_inventory(sets, [ptx_proof], version, ROOT, required=SPLIT_SETS)
+            # the PTX set (while shipped) is built every release: its leg's proof is the one proof;
+            # without it every set is reused and no proof is owed
+            inv = pack_wheel.release_inventory(sets, ptx_proofs, version, ROOT, required=SPLIT_SETS)
             per_set = sum(len(pack_wheel.tier_names(t, True)) for t in pack_wheel.TIERS)
-            self.assertEqual(inv["reuse"]["built"], per_set)
+            self.assertEqual(inv["reuse"]["built"], per_set if SHIPS_PTX else 0)
+            # cuda/sm_89 and hip/gfx942 reused whole, the host bindings once
             self.assertEqual(inv["reuse"]["reused"], 2 * per_set + len(pack_wheel.HOST_NAMES))
             self.assertEqual({k: v["origin"] for k, v in inv["sets"].items()},
-                             {"cuda/sm_89": "reused", "hip/gfx942": "reused", "cuda/sm_80": "mixed"})
+                             dict({"cuda/sm_89": "reused", "hip/gfx942": "reused"},
+                                  **({"%s/%s" % rr.PTX_SET: "mixed"} if SHIPS_PTX else {})))
             self.assertEqual(inv["sets"]["hip/gfx942"]["from_release"]["version"], "0.8.15")
             self.assertEqual(inv["binding_origin"]["mojolearn/host/_mojolearn_core_host.so"]["origin"], "reused")
             self.assertEqual(inv["binding_origin"]["mojolearn/cuda/sm_89/_mojolearn_gbdt.so"]["from_release"]["version"], "0.8.15")
             self.assertEqual(inv["host_native"]["_mojolearn_core_host"]["origin"], "reused")
             self.assertTrue(inv["source_inventory"])
             self.assertEqual(len(inv["source_commit"]), 40)
-            with self.assertRaises(SystemExit) as cm:
-                pack_wheel.release_inventory(sets, [], version, ROOT, required=SPLIT_SETS)
-            self.assertIn("one complete build proof per set a leg built", str(cm.exception))
+            if SHIPS_PTX:
+                with self.assertRaises(SystemExit) as cm:
+                    pack_wheel.release_inventory(sets, [], version, ROOT, required=SPLIT_SETS)
+                self.assertIn("one complete build proof per set a leg built", str(cm.exception))
 
     def test_a_mixed_set_needs_its_proof_and_records_both_digests(self):
         from check_linux_release_qualification import tracked_native_inventory, inventory_digest
@@ -619,10 +645,10 @@ class PayloadTests(unittest.TestCase):
             proof.write_text(json.dumps(dict(schema="mojolearn.linux.build-provenance.v1", complete=True, build_exit=0,
                                              action="build", source_commit=commit, source_inventory=inventory,
                                              source_sha256=inventory_digest(inventory), extensions=proof_ext)))
-            ptx, ptx_proof = ptx_leg(tmp, plan)
-            rr.assemble_linux(plan, whl, {"hip-gfx942": leg, "cuda-sm_80": ptx}, tmp / "sets", say=lambda *_: None)
+            ptx, ptx_proofs = ptx_legs(tmp, plan)
+            rr.assemble_linux(plan, whl, dict(ptx, **{"hip-gfx942": leg}), tmp / "sets", say=lambda *_: None)
             sets = [s for vendor in ("cuda", "hip") for s in pack_wheel.load_set(tmp / "sets" / vendor, True)]
-            inv = pack_wheel.release_inventory(sets, [proof, ptx_proof], pack_wheel.read_version(), ROOT,
+            inv = pack_wheel.release_inventory(sets, [proof] + ptx_proofs, pack_wheel.read_version(), ROOT,
                                                required=SPLIT_SETS)
             self.assertEqual(inv["source_commit"], commit)
             self.assertEqual(inv["sets"]["hip/gfx942"]["origin"], "mixed")
@@ -635,10 +661,11 @@ class PayloadTests(unittest.TestCase):
             self.assertEqual(inv["extensions"]["mojolearn/hip/gfx942/identical/_mojolearn_gbdt.so"],
                              proof_ext["mojolearn/hip/gfx942/identical/_mojolearn_gbdt.so"])
             per_set = sum(len(pack_wheel.tier_names(t, True)) for t in pack_wheel.TIERS)
-            self.assertEqual(inv["reuse"]["built"], 1 + per_set)  # gbdt, and the whole PTX set
+            # gbdt, and the whole PTX set while the release ships it
+            self.assertEqual(inv["reuse"]["built"], 1 + (per_set if SHIPS_PTX else 0))
             # a proof for a set whose every binding is reused is refused
             with self.assertRaises(SystemExit) as cm:
-                pack_wheel.release_inventory(sets, [proof, proof, ptx_proof], pack_wheel.read_version(), ROOT,
+                pack_wheel.release_inventory(sets, [proof, proof] + ptx_proofs, pack_wheel.read_version(), ROOT,
                                              required=SPLIT_SETS)
             self.assertIn("one complete build proof per set a leg built", str(cm.exception))
 
@@ -675,8 +702,8 @@ class PayloadTests(unittest.TestCase):
                                                    + "".join(f"host {n} NONE-BY-DESIGN\n" for n in pack_wheel.HOST_NAMES))
             origin = dict(source_commit="e" * 40, leg="hip-gfx942", proof_sha256="p" * 64, admitted_for=CUR_COMMIT,
                           set_identity_digest="d" * 64, tooling_digest="t" * 64)
-            ptx, ptx_proof = ptx_leg(tmp, plan)
-            out = rr.assemble_linux(plan, whl, {"cuda-sm_80": ptx}, tmp / "sets", say=lambda *_: None,
+            ptx, ptx_proofs = ptx_legs(tmp, plan)
+            out = rr.assemble_linux(plan, whl, ptx, tmp / "sets", say=lambda *_: None,
                                     leg_reuse={"hip-gfx942": dict(dir=old, origin=origin)})
             doc = json.loads((out["hip/gfx942"] / "reuse.json").read_text())
             self.assertEqual(doc["from_legs"]["hip-gfx942"], origin)
@@ -684,13 +711,13 @@ class PayloadTests(unittest.TestCase):
             self.assertEqual((gbdt["source"], gbdt["leg"]), ("leg", "hip-gfx942"))
             self.assertNotIn("source", doc["files"]["host/_mojolearn_core_host.so"], "a REUSE row is the published copy")
             sets = [s for vendor in ("cuda", "hip") for s in pack_wheel.load_set(tmp / "sets" / vendor, True)]
-            inv = pack_wheel.release_inventory(sets, [ptx_proof], pack_wheel.read_version(), ROOT, required=SPLIT_SETS)
+            inv = pack_wheel.release_inventory(sets, ptx_proofs, pack_wheel.read_version(), ROOT, required=SPLIT_SETS)
             o = inv["binding_origin"]["mojolearn/hip/gfx942/identical/_mojolearn_gbdt.so"]
             self.assertEqual((o["origin"], o["from_leg"]["source_commit"], o["from_release"]), ("reused", "e" * 40, None))
             self.assertEqual(inv["sets"]["hip/gfx942"]["from_legs"]["hip-gfx942"]["admitted_for"], CUR_COMMIT)
             self.assertIn("hip-gfx942", inv["reuse"]["from_legs"])
             per_set = sum(len(pack_wheel.tier_names(t, True)) for t in pack_wheel.TIERS)
-            self.assertEqual(inv["reuse"]["built"], per_set)  # the PTX set, built every release
+            self.assertEqual(inv["reuse"]["built"], per_set if SHIPS_PTX else 0)  # the PTX set, built every release
             target = out["hip/gfx942"] / "identical" / "_mojolearn_gbdt.so"
             target.write_bytes(target.read_bytes() + b"\0")
             with self.assertRaises(SystemExit) as cm:
@@ -742,9 +769,8 @@ class HostBuiltIntoReusedSets(unittest.TestCase):
                                           + "".join(f"host {n} cpu\n" for n in pack_wheel.HOST_NAMES))
         (leg / "arch_readback.txt").write_text("".join(f"{t} {n} sm_89\n" for t, n in rows)
                                                + "".join(f"host {n} NONE-BY-DESIGN\n" for n in pack_wheel.HOST_NAMES))
-        ptx, ptx_proof = ptx_leg(tmp, plan, new_hosts={"_mojolearn_training_host"})
-        self.ptx_proof = ptx_proof
-        rr.assemble_linux(plan, whl, {"cuda-sm_89": leg, "cuda-sm_80": ptx}, tmp / "sets", say=lambda *_: None)
+        ptx, self.ptx_proofs = ptx_legs(tmp, plan, new_hosts={"_mojolearn_training_host"})
+        rr.assemble_linux(plan, whl, dict(ptx, **{"cuda-sm_89": leg}), tmp / "sets", say=lambda *_: None)
         if tamper:
             p = tmp / "sets" / "hip" / "gfx942" / "host" / "_mojolearn_training_host.so"
             p.write_bytes(p.read_bytes() + b"x")
@@ -768,18 +794,21 @@ class HostBuiltIntoReusedSets(unittest.TestCase):
             proof.write_text(json.dumps(dict(schema="mojolearn.linux.build-provenance.v1", complete=True, build_exit=0,
                                              action="build", source_commit=commit, source_inventory=inventory,
                                              source_sha256=inventory_digest(inventory), extensions=proof_ext)))
-            # The PTX set is built every release (release_reuse.PTX_SET), so its leg is the one
-            # that built and read back the host bindings: its proof is the only one owed.
-            inv = pack_wheel.release_inventory(sets, [self.ptx_proof], pack_wheel.read_version(), ROOT,
+            # While the release ships the PTX set (release_reuse.PTX_SET) it is built every release,
+            # so its leg is the one that built and read back the host bindings: its proof is the only
+            # one owed. Without it, the cheapest leg (cuda-sm_89) built them and owes the proof.
+            owed = self.ptx_proofs if SHIPS_PTX else [proof]
+            inv = pack_wheel.release_inventory(sets, owed, pack_wheel.read_version(), ROOT,
                                                required=SPLIT_SETS)
             host = inv["host_native"]["_mojolearn_training_host"]
             self.assertEqual(host["origin"], "built")
             self.assertEqual(host["sha256"], witnesses["_mojolearn_training_host"].hex())
             self.assertEqual(inv["host_native"]["_mojolearn_forest_host"]["origin"], "reused")
-            # with a proof for a set no leg built, the host build is not accounted for
-            with self.assertRaises(SystemExit):
-                pack_wheel.release_inventory(sets, [proof, self.ptx_proof], pack_wheel.read_version(), ROOT,
-                                             required=SPLIT_SETS)
+            # without the owed proof, or with one for a set no leg built, the host build is not accounted for
+            for wrong in ([], [proof] + owed if SHIPS_PTX else [proof, proof]):
+                with self.assertRaises(SystemExit):
+                    pack_wheel.release_inventory(sets, wrong, pack_wheel.read_version(), ROOT,
+                                                 required=SPLIT_SETS)
 
     def test_a_host_build_without_a_witness_of_the_same_bytes_is_refused(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1140,7 +1169,8 @@ class IdentityUpgradeTests(unittest.TestCase):
         self.assertEqual({r["decision"] for r in plan["rows"] if (r["vendor"], r["arch"]) != rr.PTX_SET}, {"REUSE"})
         # the runtime keeps every list whole, so it builds, on the PTX leg that runs every release
         self.assertEqual(plan["runtime"]["decision"], "BUILD")
-        self.assertEqual(plan["legs"], ["cuda-sm_80"])
+        # (without the PTX slot in the release, on the cheapest leg)
+        self.assertEqual(plan["legs"], PTX_LEGS or ["%s-%s" % rr.HOST_LEG])
 
         # one recorded identity that the commit does not reproduce
         def tamper(b, ident):

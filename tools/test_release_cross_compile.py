@@ -58,6 +58,17 @@ def args(**kw):
     return argparse.Namespace(**base)
 
 
+def ptx_shipped():
+    """Whether a release ships the NVIDIA PTX slot: gpu_plugins `ptx_shipped`
+    (off since 0.8.39 while PyPI's 100 MiB mojolearn-nvidia limit stands)."""
+    from verify_linux_surface_qualification import load_gpu_plugins
+    return load_gpu_plugins().PLUGINS["cuda"].get("ptx_shipped", True)
+
+
+#: The release's Linux legs in release_reuse.LINUX_SETS order, read from the registry.
+RELEASE_LEGS = ["cuda-sm_89"] + (["cuda-sm_80"] if ptx_shipped() else []) + ["hip-gfx942"]
+
+
 class CrossCompileStep(unittest.TestCase):
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()
@@ -102,7 +113,7 @@ class CrossCompileStep(unittest.TestCase):
         self.assertEqual(run[:4], ["workflow", "run", "cross-compile-check.yml", "--ref"])
         self.assertIn(f"ref={BASE}", run)
         self.assertIn(f"commit={FROZEN}", run)
-        self.assertIn("archs=sm_89,sm_80,gfx942", run)
+        self.assertIn("archs=" + ",".join(leg.split("-", 1)[1] for leg in RELEASE_LEGS), run)
         watch = [c for c in calls if c[:2] == ["run", "watch"]]
         self.assertEqual(watch[0][2], "42", "it waits on ITS run, found by token, not the newest")
         self.assertIn("--exit-status", watch[0])

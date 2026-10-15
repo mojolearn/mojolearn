@@ -29,6 +29,19 @@ require = surface.require
 # (Andrew 2026-10-10: PTX is a normal target; no flag).
 EXTENSION = re.compile(r'mojolearn/(cuda|hip)(?:_native|_ptx)?/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
                        r'(?:(identical)/)?(_mojolearn[^/]*)\.so')
+
+
+def set_key(member):
+    """'vendor/arch' of an architecture extension member in either layout."""
+    match = EXTENSION.fullmatch(member)
+    return match[1] + '/' + match[2] if match else None
+
+
+def build_layout_member(member):
+    """An architecture extension member at the build layout
+    (mojolearn/<vendor>/<arch>/...), whichever package directory it sits in."""
+    match = EXTENSION.fullmatch(member)
+    return '/'.join(('mojolearn', match[1], match[2], member.split('/', 3)[3]))
 # DEVIATION 2680: the CPU TRAINING binding. One vendor-neutral copy per wheel,
 # beside the architecture trees rather than inside one, because it targets no
 # GPU and reads back vendor 'cpu'.
@@ -251,9 +264,15 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
             and audit.get('source_sha256') == source_sha
             and qualification.get('source_sha256') == source_sha,
             'Native source inventory/hash disagreement')
-    expected_extensions = {'mojolearn/' + p: h for p, h in extensions.items()
-                           if p.startswith(vendor + '/' + (arch + '/' if arch else ''))}
-    require(proof.get('extensions') == expected_extensions,
+    # Read at the build layout, as in release_audit: a split set carries the bytes at the
+    # vendor package's directory (cuda_native/...), the leg's proof at mojolearn/cuda/....
+    expected_extensions = {build_layout_member('mojolearn/' + p): h for p, h in extensions.items()
+                           if (set_key('mojolearn/' + p) == vendor + '/' + arch if arch
+                               else set_key('mojolearn/' + p).split('/')[0] == vendor)}
+    proved = proof.get('extensions')
+    proved = ({build_layout_member(m): h for m, h in proved.items()} if isinstance(proved, dict)
+              and all(EXTENSION.fullmatch(m) for m in proved) else proved)
+    require(proved == expected_extensions,
             'Final wheel vendor binaries differ from qualified build proof')
     expected_records = {s + '-' + m for s, m in surface.expected_jobs(audit)}
     require(set(qualification.get('installed_records', {})) == expected_records,
@@ -376,8 +395,16 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
         require(proof.get('source_inventory') == inventory and proof.get('source_sha256') == source_sha
                 and re.fullmatch('[0-9a-f]{40}', proof.get('source_commit', ''))
                 and proof['source_commit'] == payload.get('source_commit'), 'Different architecture source')
-        expected = {'mojolearn/' + n: h for n, h in extensions.items() if n.startswith(key + '/')}
-        require(len(expected) == sum(len(surface.expected_bindings(mode, True)) for mode in surface.MODES) and proof.get('extensions') == expected, 'Architecture build bytes differ')
+        # A leg's proof names its bytes at the build layout (mojolearn/cuda/sm_89/...); a split
+        # set's wheels carry them at the vendor package's equal-depth directory
+        # (mojolearn/cuda_native/sm_89/..., gpu_plugins.installed_member). Both sides are read
+        # at the build layout so the same bytes compare equal in either wheel shape.
+        expected = {build_layout_member('mojolearn/' + n): h for n, h in extensions.items()
+                    if set_key('mojolearn/' + n) == key}
+        proved = proof.get('extensions')
+        proved = ({build_layout_member(m): h for m, h in proved.items()} if isinstance(proved, dict)
+                  and all(EXTENSION.fullmatch(m) for m in proved) else proved)
+        require(len(expected) == sum(len(surface.expected_bindings(mode, True)) for mode in surface.MODES) and proved == expected, 'Architecture build bytes differ')
         proof_hashes[key] = digest_file(proof_path)
         expected_link = {'sha256': proof_hashes[key], 'source_sha256': source_sha}
         from staged_native_admission import SCHEMA as STAGED_SCHEMA

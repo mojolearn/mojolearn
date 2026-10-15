@@ -17,12 +17,12 @@ class InstalledLaneTests(unittest.TestCase):
         (directory / 'results.tsv').write_text(text)
 
     def test_unrelated_failure_retained_in_all_rows(self):
-        # DEVIATION 2490: smoke in three tiers plus seven identical-only surfaces.
+        # DEVIATION 2490: smoke in both tiers (fast, identical) plus seven identical-only surfaces.
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             self.statuses(directory)
             rows = gate.status_rows(directory, {})
-            self.assertEqual(len(rows), 10)
+            self.assertEqual(len(rows), 9)
             self.assertEqual([r for r in rows if r['exit_code']],
                              [{'surface': 'mamba', 'mode': 'identical', 'exit_code': 134}])
 
@@ -65,7 +65,7 @@ class InstalledLaneTests(unittest.TestCase):
         self.assertIs(result['overall_release_eligible'], False)
         self.assertEqual([c['candidate_status']['status'] for c in result['candidates']],
                          ['FAILED', 'FAILED'])
-        self.assertTrue(all(len(c['installed_exit_rows']) == 10 for c in result['candidates']))
+        self.assertTrue(all(len(c['installed_exit_rows']) == 9 for c in result['candidates']))
 
     def test_source_umap_and_ordered_mismatches_refused(self):
         for mutation, needle in (

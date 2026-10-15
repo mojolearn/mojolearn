@@ -87,7 +87,11 @@ class Admission(unittest.TestCase):
     def refused(self):self.assertFalse(a.complete_native_proof(self.proof))
 
     def test_full_inventory_and_legacy_build_are_distinct(self):
-        self.assertTrue(a.validate_staged(self.proof));self.assertEqual(len(self.proof['extensions']),68);self.assertEqual(len(self.proof['host_extension']),42)
+        # the full inventory: every binding the manifest ships, counted from it (never a literal: the
+        # binding lists move, e.g. the deterministic tier's removal and later binding merges)
+        tiers=list(a.expected_outputs().values())
+        self.assertTrue(a.validate_staged(self.proof));self.assertEqual(len(self.proof['extensions']),len(tiers)-tiers.count('host'))
+        self.assertEqual(len(self.proof['host_extension']),tiers.count('host'));self.assertGreater(tiers.count('host'),0)
         legacy=dict(schema=a.BUILD_SCHEMA,action='build',complete=True,build_exit=0)
         self.assertTrue(a.complete_native_proof(legacy))
         self.proof['build_exit']=0;self.refused()
@@ -134,7 +138,8 @@ class Admission(unittest.TestCase):
         self.proof['native_source_admission']=dict(schema='mojolearn.native-source-equivalence.v1',
             original_staged_source_commit='c'*40,admitted_source_commit='9'*40,
             stage_witness_sha256=original['sha256'],original_source_sha256=self.proof['source_sha256'],
-            source_sha256=self.proof['source_sha256'],changed_python_inventory=[],closure_output_count=110)
+            source_sha256=self.proof['source_sha256'],changed_python_inventory=[],
+            closure_output_count=len(a.expected_outputs()))  # every GPU tier binding and host binding
         self.assertTrue(a.validate_staged(self.proof))
         self.assertEqual(self.proof['stage_witness'],original)
         self.proof['native_source_admission']['original_staged_source_commit']='8'*40
