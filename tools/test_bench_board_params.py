@@ -535,3 +535,31 @@ def test_ets_heuristic_start_maps_to_cuml_and_estimated_does_not():
     assert M.ets_initialization({"race_arms": ["ours", "cuml-gpu"]}) == "heuristic"
     assert M.ets_initialization({"race_arms": ["ours", "statsmodels-cpu"]}) == "estimated"
     assert M.ets_initialization({}) == "estimated"
+
+
+@pytest.mark.parametrize('lane,loss', [('gbdt-rank-pairlogit', 'PairLogit'), ('gbdt-rank-yetirank', 'YetiRank')])
+def test_querywise_gpu_searcher_equivalence_requires_actual_matching_algorithm(lane, loss):
+    ours = dict(loss=loss, grow_policy='SymmetricTree', boosting_type='Plain',
+                leaf_estimation_method='Newton', cat_features=None, use_pointwise_searcher=True)
+    theirs = dict(loss=loss, grow_policy='SymmetricTree', boosting_type='Plain',
+                  leaf_estimation_method='Newton', data_partition='DocParallel')
+    for param in ['use_pointwise_searcher', 'data_partition']:
+        assert BP._semantic_querywise_pointwise(lane, param, 'catboost-gpu', ours, theirs, 'catboost')
+        assert BP._semantic_querywise_pointwise(lane, param, 'catboost-cpu', ours, theirs, 'catboost') is None
+        assert BP._semantic_querywise_pointwise(lane, param, 'catboost-gpu', dict(ours, use_pointwise_searcher=False), theirs, 'catboost') is None
+        assert BP._semantic_querywise_pointwise(lane, param, 'catboost-gpu', ours, dict(theirs, data_partition='FeatureParallel'), 'catboost') is None
+        assert BP._semantic_querywise_pointwise(lane, param, 'catboost-gpu', dict(ours, leaf_estimation_method='Simple'), dict(theirs, leaf_estimation_method='Simple'), 'catboost') is None
+        assert BP._semantic_querywise_pointwise(lane, param, 'catboost-gpu', dict(ours, cat_features=[0]), theirs, 'catboost') is None
+
+
+@pytest.mark.parametrize('lane,loss', [('gbdt-rank-pairlogit', 'PairLogit'), ('gbdt-rank-yetirank', 'YetiRank')])
+def test_querywise_preflight_records_equivalence_and_refuses_old_false_route(lane, loss):
+    ours = dict(__library__='mojolearn', loss=loss, grow_policy='SymmetricTree', boosting_type='Plain',
+                leaf_estimation_method='Newton', cat_features=None, use_pointwise_searcher=True)
+    theirs = dict(__library__='catboost', loss=loss, grow_policy='SymmetricTree', boosting_type='Plain',
+                  leaf_estimation_method='Newton', data_partition='DocParallel')
+    result = BP.check(lane, {'ours': ours, 'catboost-gpu': theirs})
+    assert result['verdict'] == 'MATCHED'
+    assert {'data_partition', 'use_pointwise_searcher'} <= {row['param'] for row in result['exceptions']}
+    assert BP.check(lane, {'ours': dict(ours, use_pointwise_searcher=False), 'catboost-gpu': theirs})['verdict'] == 'REFUSED'
+    assert BP.check(lane, {'ours': ours, 'catboost-gpu': dict(theirs, data_partition='FeatureParallel')})['verdict'] == 'REFUSED'

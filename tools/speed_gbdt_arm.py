@@ -2320,6 +2320,17 @@ def lane_config(lane, size):
                     "gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM "
                     "min_split_gain 0",
                 ]
+        # FAIRNESS FIX (2026-10-13 audit, completed 2026-10-15): CatBoost GPU
+        # querywise.cpp registers PairLogit/YetiRank through train_template_pointwise.h.
+        # Plain DocParallel uses TDocParallelObliviousTreeSearcher, including its
+        # split-score noise. Previously these two lanes used our different greedy
+        # subsets searcher and correctly refused. Native freeze f63ef223 adds the
+        # grouped target statistics to the actual pointwise searcher (24 numerical
+        # cases / 207 output+model members identical on Apple, NVIDIA and AMD).
+        # Pin only the algorithm choices here; library defaults and all other
+        # recipe settings stay unchanged. Released 0.8.45 cannot execute this route.
+        if lane in ("gbdt-rank-pairlogit", "gbdt-rank-yetirank"):
+            cfg.update(use_pointwise_searcher=True, data_partition="DocParallel")
         if lane in R7_SEARCHER_LANES:
             cfg.update(R7_SEARCHER_LANES[lane])
             # smoke-fixes (2026-10-14; gbdt-symmetric/-1000, gbdt-multiclass, gbdt-ordered:
