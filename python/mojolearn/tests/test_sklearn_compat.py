@@ -120,6 +120,13 @@ def _factories():
         "TruncatedSVD": lambda: ml.TruncatedSVD(n_components=1, n_iter=5),
         "MeanShift": lambda: ml.MeanShift(bandwidth=1.0, max_iter=5),
         "HDBSCAN": lambda: ml.HDBSCAN(min_samples=1),
+        # scikit-learn's own test settings for these two (its
+        # _test_common/instance_generator.py INIT_PARAMS): with the default
+        # 'omp' transform, or NMF's default 200 iterations, fit_transform and
+        # transform answer differently by design and its
+        # check_transformer_general fails for scikit-learn too.
+        "DictionaryLearning": lambda: ml.DictionaryLearning(max_iter=20, transform_algorithm="lasso_lars"),
+        "NMF": lambda: ml.NMF(max_iter=500),
         # statsmodels-style: the series is the first constructor argument
         "AutoARIMA": lambda: ml.AutoARIMA(series),
         "STL": lambda: ml.STL(series, period=7),
@@ -369,8 +376,21 @@ EXPECTED_FAILED_CHECKS = {
 }
 
 
+#: Per estimator: the checks scikit-learn's own test suite expects to fail
+#: for the same estimator (sklearn/utils/_test_common/instance_generator.py,
+#: PER_ESTIMATOR_XFAIL_CHECKS), with scikit-learn's reason.
+PER_ESTIMATOR_EXPECTED_FAILED_CHECKS = {
+    # A direct Cholesky solve has no iteration count; scikit-learn's
+    # RidgeClassifier reports n_iter_ = None for it and xfails the check.
+    "RidgeClassifier": {"check_non_transformer_estimators_n_iter": "n_iter_ cannot be easily accessed "
+                                                                   "(scikit-learn xfails it too)"},
+}
+
+
 def _expected_failed_checks(estimator):
-    return dict(EXPECTED_FAILED_CHECKS)
+    out = dict(EXPECTED_FAILED_CHECKS)
+    out.update(PER_ESTIMATOR_EXPECTED_FAILED_CHECKS.get(type(estimator).__name__, {}))
+    return out
 
 
 def _checked_estimators():

@@ -59,7 +59,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
 from ._sample_weight import check_sample_weight
 from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes, threshold_codes
-from ._mode import NumericModeMixin, is_fitted as _is_fitted
+from ._mode import NumericModeMixin, available_if, is_fitted as _is_fitted
 from ._scale_gamma import scale_gamma, scale_gamma_x
 from .linear_model import (
     _accuracy_host,
@@ -1511,6 +1511,7 @@ class SVC(NumericModeMixin):
 
     # Maintainer note: libsvm's `svm_predict_probability`; the coupling is
     # `_multiclass_probability`.
+    @available_if(lambda self: bool(self.probability))
     def predict_proba(self, X):
         """Class probabilities from the fitted Platt scaling.
 
@@ -1555,6 +1556,7 @@ class SVC(NumericModeMixin):
     # Maintainer note: the portable binary64 log (its Mojo twin, `pm_log`, in
     # the same epilogue call); a probability <= 0 raises as
     # `_portable_math.log` does.
+    @available_if(lambda self: bool(self.probability))
     def predict_log_proba(self, X):
         """Natural log of `predict_proba(X)`.
 

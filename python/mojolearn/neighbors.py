@@ -773,7 +773,56 @@ class NearestNeighbors(NumericModeMixin):
         index. The copy uploads its own index at its first call."""
         state = self.__dict__.copy()
         state.pop("_resident", None)
+        state.pop("_resident_holder", None)
         return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.__dict__["_resident_holder"] = {}
+
+    # The device-resident index handle lives in a holder dict the fit
+    # creates, not in an attribute of its own: the first query changes the
+    # holder's contents, never `__dict__` (scikit-learn's
+    # check_dict_unchanged compares `__dict__` around predict).
+    @property
+    def _resident(self):
+        holder = self.__dict__.get("_resident_holder")
+        return holder.get("index") if holder else None
+
+    @_resident.setter
+    def _resident(self, value):
+        holder = self.__dict__.get("_resident_holder")
+        if holder is None:
+            holder = self.__dict__["_resident_holder"] = {}
+        holder["index"] = value
+
+    # The per-query reports live in the same holder: a query sets them
+    # without changing `__dict__`. Each reads as it did as an attribute
+    # (AttributeError before the first query that sets it).
+    def _query_report(name):
+        def get(self):
+            holder = self.__dict__.get("_resident_holder")
+            if not holder or name not in holder:
+                raise AttributeError(name)
+            return holder[name]
+
+        def put(self, value):
+            holder = self.__dict__.get("_resident_holder")
+            if holder is None:
+                holder = self.__dict__["_resident_holder"] = {}
+            holder[name] = value
+
+        return property(get, put)
+
+    used_query_tile_ = _query_report("used_query_tile_")
+    n_candidate_distances_ = _query_report("n_candidate_distances_")
+    del _query_report
+
+    def _mojolearn_after_fit(self):
+        """After every fit: release the last fit's device index and give
+        the instance an empty holder for the next one."""
+        self._release_resident_index()
+        self.__dict__["_resident_holder"] = {}
 
     def fit(self, X, y=None):
         """Store the points to search.

@@ -27,7 +27,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, full, zeros
 from ._bufcheck import memcopy
 from ._labels import decode_labels, encode_labels
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin, available_if
 from ._sample_weight import check_sample_weight
 from ._mode import RegressorScoreMixin
 
@@ -629,6 +629,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
             sample_weight, self.class_weight, classes, icodes, batch_size=self.batch_size)
         return self
 
+    @available_if(lambda self: self.loss == "log_loss")
     def predict_proba(self, X):
         """Class probabilities, available with ``loss='log_loss'`` only.
 

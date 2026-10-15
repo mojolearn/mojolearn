@@ -35,7 +35,7 @@ from ._array import Array
 from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f64_c, as_i32_c, empty, frombytes, full, zeros
 from ._buffer import memory_at
 from ._labels import decode_labels, encode_labels, is_bool
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin, available_if
 from ._sample_weight import ZERO_WEIGHTS_MSG, check_sample_weight
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit_function,
@@ -2830,6 +2830,30 @@ def _trees_output_2d(x, n):
     return a
 
 
+class _FitTransformMixin:
+    """scikit-learn's `TransformerMixin.fit_transform` for the ensembles
+    with a `transform` (voting and stacking)."""
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit, then return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : array-like of shape (n_samples,)
+            Targets.
+        **fit_params
+            Passed to ``fit`` (``sample_weight``).
+
+        Returns
+        -------
+        array of shape (n_samples, n_output_features), float64
+            The transformed training data.
+        """
+        return self.fit(X, y, **fit_params).transform(X)
+
+
 class _TreesWrapperBase(_TreesEnsembleBase):
     def _check_X(self, X):
         if not getattr(self, "_fitted", False):
@@ -2857,7 +2881,7 @@ class _TreesWrapperBase(_TreesEnsembleBase):
 # 'soft' = weighted np.average of predict_proba --, VotingRegressor :500 --
 # weighted np.average of predict). Members are cloned, never refitted in
 # place; n_jobs and verbose are refused by name.
-class VotingClassifier(ClassifierScoreMixin, _TreesWrapperBase):
+class VotingClassifier(ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBase):
     """Combine classifiers by a weighted majority vote or averaged probabilities.
 
     Follows scikit-learn's ``VotingClassifier``. ``fit`` clones every estimator
@@ -2980,6 +3004,7 @@ class VotingClassifier(ClassifierScoreMixin, _TreesWrapperBase):
         self._scale(acc, math.fsum(w))  # glue: the native fsum (core fsum_f64) of the k estimator weights
         return acc
 
+    @available_if(lambda self: self.voting != "hard")
     def predict_proba(self, X):
         """Weighted average of the members' class probabilities.
 
@@ -3038,7 +3063,7 @@ class VotingClassifier(ClassifierScoreMixin, _TreesWrapperBase):
         return out.reshape((n, width))
 
 
-class VotingRegressor(RegressorScoreMixin, _TreesWrapperBase):
+class VotingRegressor(RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase):
     """Average the predictions of several regressors.
 
     Follows scikit-learn's ``VotingRegressor``. ``fit`` clones every estimator
@@ -3170,7 +3195,7 @@ class VotingRegressor(RegressorScoreMixin, _TreesWrapperBase):
 # partition the rows (`_trees_splits`).
 # DEVIATION: the default final estimators are this library's
 # LogisticRegression and Ridge (sklearn: LogisticRegression, RidgeCV).
-class _StackingBase(_TreesWrapperBase):
+class _StackingBase(_FitTransformMixin, _TreesWrapperBase):
     def __init__(self, estimators, final_estimator, cv, stack_method, n_jobs, passthrough, verbose):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimators = estimators
@@ -3564,6 +3589,8 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
     (5, 2)
     """
     _estimator_type = "regressor"
+    # scikit-learn's multi-output-only target tags: its checks pass a 2-D y.
+    _sklearn_target_tags = {"single_output": False, "multi_output": True}
 
     def __init__(self, estimator, *, n_jobs=None):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
@@ -3711,6 +3738,8 @@ class MultiOutputClassifier(_TreesWrapperBase):
     (5, 2)
     """
     _estimator_type = "classifier"
+    # scikit-learn's multi-output-only target tags: its checks pass a 2-D y.
+    _sklearn_target_tags = {"single_output": False, "multi_output": True}
 
     def __init__(self, estimator, *, n_jobs=None):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
@@ -3740,6 +3769,9 @@ class MultiOutputClassifier(_TreesWrapperBase):
         """
         self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
+        if getattr(Y, "ndim", None) == 1:
+            raise ValueError("y must have at least two dimensions for multi-output "
+                             "classification but has only one.")
         _trees_multioutput_y(Y)
         sample_weight = _trees_member_weights([(None, self.estimator)], sample_weight, Xa.shape[0])
         W = _trees_label_words(Y)
@@ -3759,6 +3791,9 @@ class MultiOutputClassifier(_TreesWrapperBase):
             rows = Y.tolist() if hasattr(Y, "tolist") else [list(r) for r in Y]  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
             if len(rows) != Xa.shape[0]:
                 raise ValueError(f"Y has {len(rows)} rows, X has {Xa.shape[0]}")
+            if rows and not hasattr(rows[0], "__len__"):
+                raise ValueError("y must have at least two dimensions for multi-output "
+                                 "classification but has only one.")
             m = len(rows[0])
         self.estimators_, self.classes_ = [], []
         for j in range(m):  # glue: one member fit per estimator
@@ -3855,6 +3890,42 @@ class MultiOutputClassifier(_TreesWrapperBase):
             self._acc_cols(acc, e.predict_proba(Xa), _trees_sub_cols(e), n, len(c))
             out.append(acc.reshape((n, len(c))))
         return out
+
+    def score(self, X, y, sample_weight=None):
+        """Subset accuracy: the fraction of rows whose every output is
+        predicted correctly, as scikit-learn's ``MultiOutputClassifier.score``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples, n_outputs)
+            True labels, numeric.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of rows with all outputs correct (weighted when
+            ``sample_weight`` is given).
+        """
+        pred = self.predict(X)
+        truth, _ = _materialize(y, "y")
+        if truth.shape != pred.shape:
+            raise ValueError(f"y has shape {truth.shape}, the predictions have shape {pred.shape}")
+        n, m = pred.shape
+        # One mismatch flag per cell (the native elementwise compare), one
+        # all-match flag per row (x_neighbors `xn_row_all_zero` over the
+        # mismatch flags), then the metrics binding's (weighted) accuracy of
+        # those flags against 1.
+        miss = (truth != pred).astype("<i4")
+        hit = empty((n,), "<i4")
+        self._bind("_mojolearn_x_neighbors").xn_row_all_zero(
+            [addr_ro(miss, name="mismatch flags"), addr(hit, name="row matches")], [n, m], [])
+        from ._expansion_metrics import accuracy_fraction
+        return accuracy_fraction(full((n,), 1, "<i4"), hit, sample_weight,
+                                 getattr(self, "numeric_mode", None))
 
 
 # --------------------------------------------------------------- OneVsRest
