@@ -328,7 +328,10 @@ def _caller_outside(frame):
     if frame is None:
         return True
     mod = frame.f_globals.get("__name__") or ""
-    return mod != _PKG and not mod.startswith(_PKG_DOT)
+    # The verifier loads its harness by path as `mojolearn_verify_all_*`
+    # (_verify_all._load_by_path): it is mojolearn's own code and must see the
+    # native results the identity records hash, not the widened public ones.
+    return mod != _PKG and not mod.startswith(_PKG_DOT) and not mod.startswith("mojolearn_verify_all_")
 
 
 def _ndarray(value, np):
