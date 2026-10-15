@@ -1113,16 +1113,30 @@ def test_no_docstring_is_read_back_at_run_time():
     That is an absence claim, so it is checked rather than assumed: the only
     `__doc__` in the package and the harness are ASSIGNMENTS in the kde, knn,
     radius, gp and gmm registration loops, which are code and survive the
-    strip, plus argparse help."""
+    strip, plus argparse help. A docstring copied straight into another
+    docstring (exceptions.py builds the scikit-learn NotFittedError bridge
+    with `type(..., {"__doc__": NotFittedError.__doc__})`, f436729ea) stays
+    documentation: it is read only to become a `__doc__`, never a value."""
+    def doc_to_doc(node, parents):
+        parent = parents.get(node)
+        if isinstance(parent, ast.Dict):
+            return any(v is node and isinstance(k, ast.Constant) and k.value == "__doc__"
+                       for k, v in zip(parent.keys, parent.values))
+        if isinstance(parent, ast.Assign) and parent.value is node:
+            return all(isinstance(t, ast.Attribute) and t.attr == "__doc__" for t in parent.targets)
+        return False
+
     bad = []
     pkg = os.path.join(lane_select.ROOT, lane_select.PKG)
     paths = [os.path.join(pkg, n) for n in sorted(os.listdir(pkg)) if n.endswith(".py")]
     paths.append(os.path.join(lane_select.ROOT, lane_select.HARNESS))
     for path in paths:
         tree = lane_select._parse(os.path.relpath(path, lane_select.ROOT))
-        for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+        tree = tree or ast.Module(body=[], type_ignores=[])
+        parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+        for node in ast.walk(tree):
             if isinstance(node, ast.Attribute) and node.attr == "__doc__" \
-                    and isinstance(node.ctx, ast.Load):
+                    and isinstance(node.ctx, ast.Load) and not doc_to_doc(node, parents):
                 bad.append(f"{os.path.relpath(path, lane_select.ROOT)}:{node.lineno}")
     assert not bad, ("a docstring is READ as a value, so a docstring-only change can reach it: "
                      f"{bad[:5]}")
@@ -1647,12 +1661,26 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      they carry the forest host binding and
                                      host_helpers.mojo (both still every lane)
                                      but no forest predict code they never run;
-                                     no lane gained"""
+                                     no lane gained
+
+    REMEASURED 2026-10-15 (lane/tools-green-c, main f8b3c45e7): every move is
+    a NEW LANE, attributed by name; no existing lane gained or dropped
+      gbdt_host_predict    53 -> 55  gbdt-pair-logit-pointwise and
+                                     gbdt-yeti-rank-pointwise (f63ef2235,
+                                     2026-10-14)
+      forest_host_predict  88 -> 92  the same two, plus et-clf-weighted and
+                                     et-reg-weighted (aa385caad, 2026-10-15)
+      forest_inference     50 -> 52  et-clf-weighted and et-reg-weighted
+    The same tree before the own-walk fixes of that day answered 135 and 95:
+    linear_model.py's LogisticRegression weight helper imports
+    `_trees_x_bind` and `_class_weight_rows` from the trees doors inside its
+    body (e9608596a), and every linear lane took the forest trees
+    (`_region_import_edges`, `_extender_fires`)."""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 83),
-                      ("core/gbdt_host_predict.mojo", 53),
-                      ("core/forest_host_predict.mojo", 88),
-                      ("core/forest_inference.mojo", 50),
+                      ("core/gbdt_host_predict.mojo", 55),
+                      ("core/forest_host_predict.mojo", 92),
+                      ("core/forest_inference.mojo", 52),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
@@ -1692,8 +1720,12 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     # package symbol named `np`, which almost every lane spec uses (251 -> 235
     # -> 42). What remains is the buffer helpers, the base/core-host/byte-LM-
     # host/forest-host bindings and their shared Mojo closure.
-    assert len(every) <= 42, \
-        f"{len(every)} files now select every lane, against 42 measured on 2026-10-10"
+    # REMEASURED 2026-10-15 (lane/tools-green-c): 43. The one new file is
+    # core/package_profile.mojo (c0f1e1e97, 2026-10-14), a REAL import of
+    # checks/numerics.mojo, which every lane already compiles (the numeric
+    # mode default reads `identical_mode_enabled`).
+    assert len(every) <= 43, \
+        f"{len(every)} files now select every lane, against 43 measured on 2026-10-15"
 
 
 # --------------------------------------------------------------------------

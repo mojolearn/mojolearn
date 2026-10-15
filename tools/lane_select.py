@@ -769,7 +769,8 @@ def _import_dotted(rel, node):
 
 @_by_path
 def _import_edges(rel):
-    """file -> the NAMES `rel` imports from it, or None for the whole module.
+    """file -> the NAMES `rel` imports from it, or None for the whole module,
+    over the whole file (`_region_import_edges` with `wanted` None).
 
     THE SYMBOL-LEVEL IMPORT GRAPH (2026-09-23). `_hierarchy_impl.py` writes
     `from .linear_model import _check_saved_by, _restore_mode, _saved_mode`:
@@ -779,7 +780,32 @@ def _import_edges(rel):
     through a door it imported BY NAME is what those names do (`_region_nodes`).
     `from . import x`, `import mojolearn.x` and `from .x import *` are the
     whole module (None)."""
-    out = {}
+    return _region_import_edges(rel, None)
+
+
+_REGION_EDGES = {}
+_CACHES.append(_REGION_EDGES)
+
+
+def _region_import_edges(rel, wanted):
+    """`_import_edges` over the REGION of `rel` a lane runs (`_region_nodes`):
+    the module-level imports always, a function-local import only when its
+    def or class is in the region.
+
+    A FUNCTION-LOCAL IMPORT RUNS WHEN ITS FUNCTION DOES (2026-10-15). The
+    LogisticRegression weight helper in linear_model.py imports
+    `_trees_x_bind` from `_expansion_trees.py` inside its body (e9608596a).
+    Read over the whole file, that edge reached `_expansion_trees.py` for
+    every lane that imports linear_model.py for a save-format helper, through
+    it `randomforest.py`, whose extender `_expansion_trees.py` then ran whole:
+    492 of 517 lanes were declared for the estimators host binding and the
+    narrow answers (glm/host/qn_oracle.mojo, core/forest_host_predict.mojo)
+    selected nearly every lane. A def outside the region does not run for the
+    lane, so neither does the import inside it."""
+    key = (rel, None if wanted is None else frozenset(wanted))
+    if key in _REGION_EDGES:
+        return _REGION_EDGES[key]
+    out = _REGION_EDGES[key] = {}
 
     def merge(files, names):
         for f in files:
@@ -790,11 +816,34 @@ def _import_edges(rel):
             else:
                 out.setdefault(f, set()).update(names)
 
-    tree = _parse(rel)
-    if tree is None:
+    if _parse(rel) is None:
         return out
     listing = set(_python_files())
-    for node in ast.walk(tree):
+    region = _region_nodes(rel, wanted)
+    # A NAME A MODULE-LEVEL IMPORT BINDS IS ASKED FOR ONLY WHEN THE REGION
+    # USES IT (2026-10-15). The import statement runs, so the module is still
+    # reached, but `_expansion_trees.py` imports RandomForestClassifier and the
+    # ExtraTrees classes at module level for its own estimators; reached for
+    # `_trees_x_bind` (a one-line binding accessor), those classes entered the
+    # region of randomforest.py and extratrees.py and every linear lane became
+    # a caller of rf_classifier_fit. A name is used when the region names it
+    # (a Name, an attribute, an identifier-shaped string) outside the import
+    # statements, or when the lane asked this file for it (a re-export).
+    used = None
+    if wanted is not None:
+        used = set(wanted)
+        for top in region:
+            if isinstance(top, (ast.Import, ast.ImportFrom)):
+                continue
+            for sub in ast.walk(top):
+                if isinstance(sub, ast.Name):
+                    used.add(sub.id)
+                elif isinstance(sub, ast.Attribute):
+                    used.add(sub.attr)
+                elif isinstance(sub, ast.Constant) and isinstance(sub.value, str) and sub.value.isidentifier():
+                    used.add(sub.value)
+    module_level = {id(top) for top in region if isinstance(top, ast.ImportFrom)}
+    for node in (sub for top in region for sub in ast.walk(top)):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name.startswith("mojolearn."):
@@ -812,6 +861,10 @@ def _import_edges(rel):
                 sub = _module_paths(".".join(p for p in (dotted, alias.name) if p), listing)
                 if sub:
                     merge(sub, None)             # a module imported whole
+                    continue
+                if used is not None and id(node) in module_level \
+                        and (alias.asname or alias.name) not in used:
+                    merge(mod_files, set())      # the module runs; the name is unused
                     continue
                 merge(mod_files, {alias.name})
                 if registry in _reexport_registries() and registry != rel:
@@ -881,34 +934,125 @@ def _names_in_nodes(nodes):
 def _own_walk(seeds, stop, follow=frozenset()):
     """file -> the names a lane reaches it for (None: whole file), walking
     the symbol-level import graph from `seeds` and entering, not following,
-    the files in `stop`. A file that subclasses or patches a class reached
-    runs whole (the backward edge of `_python_closure`)."""
-    wanted, stack = {}, [(s, None) for s in seeds]
+    the files in `stop`. A file that subclasses or patches a class the lane
+    reaches runs whole (the backward edge of `_python_closure`,
+    `_extender_fires`)."""
+    wanted, stack = {}, [(s, None, None) for s in seeds]
     edges = extenders()
-    while stack:
-        rel, names = stack.pop()
-        first = rel not in wanted
-        if first:
-            wanted[rel] = None if names is None else set(names)
-        elif wanted[rel] is not None:
-            wanted[rel] = None if names is None else wanted[rel] | names
-        # A LANE'S OWN DOOR IS FOLLOWED EVEN WHEN EVERY LANE REACHES IT
-        # (2026-09-28). `_expansion_decomp.py` is in every closure
-        # (`_linalg_impl.py` imports its kit), so as a seed it was entered and
-        # not followed, and what the lane's own door imports was lost:
-        # DictionaryLearning's transform runs the linear lane's Lars, the
-        # x_linear binding was never named for x-decomp-dict-learning, and a
-        # clean steward Mac never built it (every cell REFUSED, request
-        # 1790542293472 on m4pro-a). A registry seed (`__init__.py`) is still
-        # entered only: `_own_walk(seeds, stop, follow=seeds - sinks)`.
-        if not first or (rel in stop and rel not in follow):
-            continue
-        for f, n in _import_edges(rel).items():
-            stack.append((f, n))
+    walked = {}                  # file -> the `wanted` its imports were last read for
+    asked = {}                   # file -> {importer: the names it asks for, None whole}
+    while True:
+        while stack:
+            rel, names, src = stack.pop()
+            first = rel not in wanted
+            if first:
+                wanted[rel] = None if names is None else set(names)
+            elif wanted[rel] is not None:
+                wanted[rel] = None if names is None else wanted[rel] | names
+            by = asked.setdefault(rel, {})
+            if src in by and by[src] is not None:
+                by[src] = None if names is None else by[src] | names
+            elif src not in by:
+                by[src] = None if names is None else set(names)
+            # A LANE'S OWN DOOR IS FOLLOWED EVEN WHEN EVERY LANE REACHES IT
+            # (2026-09-28). `_expansion_decomp.py` is in every closure
+            # (`_linalg_impl.py` imports its kit), so as a seed it was entered and
+            # not followed, and what the lane's own door imports was lost:
+            # DictionaryLearning's transform runs the linear lane's Lars, the
+            # x_linear binding was never named for x-decomp-dict-learning, and a
+            # clean steward Mac never built it (every cell REFUSED, request
+            # 1790542293472 on m4pro-a). A registry seed (`__init__.py`) is still
+            # entered only: `_own_walk(seeds, stop, follow=seeds - sinks)`.
+            if rel in stop and rel not in follow:
+                continue
+            # THE IMPORTS OF THE REGION THE LANE RUNS (`_region_import_edges`),
+            # read again whenever the names it is reached for grow.
+            region = None if wanted[rel] is None else frozenset(wanted[rel])
+            if not first and walked.get(rel, ()) == region:
+                continue
+            walked[rel] = region
+            for f, n in _region_import_edges(rel, region).items():
+                stack.append((f, n, rel))
+        # THE EXTENDERS OF WHAT WAS REACHED, to a fixed point: a file reached
+        # for more names can wake an extender, which runs whole and reaches more.
         for ext, targets in edges.items():
-            if rel in targets:
-                stack.append((ext, None))
-    return wanted
+            if ext in wanted and wanted[ext] is None:
+                continue
+            for target in targets:
+                if target in walked and _extender_fires(ext, target, asked.get(target, {}), wanted):
+                    stack.append((ext, None, target))
+                    break
+        if not stack:
+            return wanted
+
+
+def _extender_fires(ext, target, asked, wanted):
+    """Does `ext`, which subclasses or patches classes of `target`, run for a
+    lane that reached `target` as `asked` ({importer: names, None whole})?
+    `wanted` is the walk so far (file -> names, None whole).
+
+    WHEN THE LANE USES WHAT IT EXTENDS (2026-10-15). It fires for `target`
+    reached whole, or for one of the classes `ext` extends there asked for by
+    an importer OTHER THAN `ext` itself. Before this any reach fired it: the
+    LogisticRegression weight helper in linear_model.py imports
+    `_class_weight_rows` from randomforest.py (e9608596a), so every linear lane
+    ran `_expansion_trees.py` (which subclasses RandomForestClassifier) whole
+    and was declared for the rf, trees and x_trees bindings, and
+    core/forest_host_predict.mojo selected ols. And `_expansion_trees.py`
+    imports RandomForestClassifier by name to subclass it, so its own import
+    woke itself. A helper is a helper: the region rule (`_region_nodes`)
+    already says a function naming a class does not run its methods.
+
+    A BASE IMPORTED TO BE SUBCLASSED IS USED ONLY THROUGH THE SUBCLASS.
+    randomforest.py and extratrees.py both subclass `ForestProtocol`
+    (_forest_protocol.py) and import it to do so; reaching either one woke
+    the other through that import. An importer's ask for a class it
+    subclasses counts when one of those subclasses is in the importer's
+    region (reached whole, or asked for by name), since the subclass then
+    inherits whatever `ext` patches on the base."""
+    names = _extender_names(ext, target)
+    for importer, got in asked.items():
+        if importer == ext:
+            continue
+        if got is None:
+            return True
+        subclasses = _subclasses_by_base(importer) if importer else {}
+        region = wanted.get(importer)
+        for name in names & got:
+            mine = subclasses.get(name)
+            if not mine or region is None or mine & region:
+                return True
+    return False
+
+
+@_by_path
+def _subclasses_by_base(rel):
+    """base name -> the top-level classes of `rel` that subclass it."""
+    out = {}
+    tree = _parse(rel)
+    for node in (tree.body if tree is not None else ()):
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                name = getattr(base, "id", None) or getattr(base, "attr", None)
+                if name:
+                    out.setdefault(name, set()).add(node.name)
+    return out
+
+
+_EXTENDER_NAMES = {}
+_CACHES.append(_EXTENDER_NAMES)
+
+
+def _extender_names(ext, target):
+    """The names `ext` subclasses or patches that resolve to `target`
+    (`_extends` through the symbol index `extenders` uses)."""
+    key = (ext, target)
+    if key not in _EXTENDER_NAMES:
+        if None not in _EXTENDER_NAMES:
+            _EXTENDER_NAMES[None] = _python_symbols(_python_files())
+        symbols = _EXTENDER_NAMES[None]
+        _EXTENDER_NAMES[key] = {n for n in _extends(ext) if target in symbols.get(n, ())}
+    return _EXTENDER_NAMES[key]
 
 
 def _resolve_python_import(rel, node, listing):
