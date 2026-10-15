@@ -479,7 +479,8 @@ class LocalOutlierFactor(_XNeighbors):
         X = _f32(X)
         n, d = X.shape
         if n < 2:
-            raise ValueError("LocalOutlierFactor needs at least 2 samples")
+            # scikit-learn's check_array wording (ensure_min_samples=2)
+            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required.")
         k = min(int(self.n_neighbors), n - 1)
         dist, idx = self._knn(X, X, k, True)
         lrd = _empty_out((n,), "<f4")

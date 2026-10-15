@@ -367,9 +367,10 @@ class AgglomerativeClustering(ParamsMixin):
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         if n_rows < 2:
+            # scikit-learn's check_array wording (ensure_min_samples=2)
             raise ValueError(
-                f"mojolearn AgglomerativeClustering: n_rows={n_rows} < 2; "
-                "single linkage needs at least two points"
+                f"Found array with {n_rows} sample(s) (shape=({n_rows}, {n_cols})) "
+                "while a minimum of 2 is required."
             )
         # FAST on Apple builds the Euclidean MST from Boruvka rounds without
         # the dense graph (hierarchy/impl/cluster/detail/fast_boruvka.mojo,

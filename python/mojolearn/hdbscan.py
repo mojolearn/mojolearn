@@ -215,6 +215,10 @@ class HDBSCAN(NumericModeMixin):
         """
         x, copied = as_f32_c(X, ndim=2, name="X")
         n, d = x.shape
+        if n < 2:
+            # scikit-learn's check_array wording (ensure_min_samples=2); the
+            # mutual-reachability tree needs two points
+            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required.")
         for name in ("min_cluster_size", "max_cluster_size"):  # glue: checks two parameter names
             v = getattr(self, name)
             if isinstance(v, bool) or not isinstance(v, int):
