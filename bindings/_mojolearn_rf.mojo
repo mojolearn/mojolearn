@@ -894,7 +894,7 @@ def rf_regressor_fit_session_binding(
 ) raises -> PythonObject:
     """`rf_regressor_fit_export` on a data session's X: same params, same
     checks, same export descriptor."""
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit_session: params must hold "
             + String(N_RF_FIT_PARAMS)
@@ -909,6 +909,7 @@ def rf_regressor_fit_session_binding(
     var crit = Int(py=criterion)
     _check_criterion("rf_regressor_fit_session", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
+    _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
     var session_id = Int(py=handle)
     var reg = RF_SESSIONS.get_or_create_ptr()
     var si = reg[].find(session_id)
@@ -974,7 +975,7 @@ def rf_regressor_fit_dart_binding(
     out column-major at them and the target gathered at the rows on the
     device (`ensemble/dart_member.mojo`). Same params, checks and export
     descriptor as `rf_regressor_fit_session_export`."""
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit_dart: params must hold "
             + String(N_RF_FIT_PARAMS)
@@ -988,6 +989,7 @@ def rf_regressor_fit_dart_binding(
     var crit = Int(py=criterion)
     _check_criterion("rf_regressor_fit_dart", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
+    _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
     var hid = Int(py=dart_handle)
     var c = Int(py=cls)
     var rows_a = Int(py=rows_addr)
@@ -1080,7 +1082,7 @@ def rf_regressor_fit_session_rows_binding(
     into a fresh column-major matrix, the bytes a host gather of the same
     rows stages, and the fit is `fit_forest` on it with its own quantile
     table."""
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit_session_rows: params must hold "
             + String(N_RF_FIT_PARAMS)
@@ -1098,6 +1100,7 @@ def rf_regressor_fit_session_rows_binding(
     var crit = Int(py=criterion)
     _check_criterion("rf_regressor_fit_session_rows", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
+    _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
     var session_id = Int(py=handle)
     var reg = RF_SESSIONS.get_or_create_ptr()
     var si = reg[].find(session_id)

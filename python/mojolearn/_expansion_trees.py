@@ -211,7 +211,8 @@ class DecisionTreeClassifier(RandomForestClassifier):
     min_samples_leaf : int, default=1
         Minimum number of rows in each leaf.
     min_weight_fraction_leaf : float, default=0.0
-        Only 0.0 is accepted; any other value raises ``NotImplementedError``.
+        Minimum fraction of the total sample weight (of all rows when no
+        ``sample_weight`` is given) required in each leaf, in [0.0, 0.5].
     max_features : int, float, {"sqrt", "log2"} or None, default=None
         Number of features considered per split: an int count, a fraction in
         (0, 1], ``"sqrt"``, ``"log2"``, or None for every feature.
@@ -451,7 +452,8 @@ class DecisionTreeRegressor(RandomForestRegressor):
     min_samples_leaf : int, default=1
         Minimum number of rows in each leaf.
     min_weight_fraction_leaf : float, default=0.0
-        Only 0.0 is accepted; any other value raises ``NotImplementedError``.
+        Minimum fraction of the total sample weight (of all rows when no
+        ``sample_weight`` is given) required in each leaf, in [0.0, 0.5].
     max_features : int, float, {"sqrt", "log2"} or None, default=None
         Number of features considered per split: an int count, a fraction in
         (0, 1], ``"sqrt"``, ``"log2"``, or None for every feature.

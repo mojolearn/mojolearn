@@ -699,13 +699,11 @@ def _session_params[CLASSIFIER: Bool](
     entry: String, params: PythonObject, criterion: PythonObject
 ) raises -> RfHostParams:
     """The GPU session entries' slot checks, in their words."""
-    var allowed = N_RF_FIT_PARAMS
-    comptime if CLASSIFIER:
-        allowed = N_RF_FIT_PARAMS + 1  # the weighted session reads slot 16
-    if len(params) != N_RF_FIT_PARAMS and len(params) != allowed:
+    if not _params_len_ok(params):
         raise Error(
             entry + ": params must hold " + String(N_RF_FIT_PARAMS)
-            + " values, got " + String(len(params))
+            + " values (17 with min_weight_fraction_leaf), got "
+            + String(len(params))
         )
     comptime if CLASSIFIER:
         if _index(params[2]) < 2:
@@ -715,7 +713,14 @@ def _session_params[CLASSIFIER: Bool](
             raise Error(entry + ": n_classes (slot 2) must be 0")
     var crit = _index(criterion)
     _check_criterion(entry, crit, CLASSIFIER)
-    return _params_from(params, crit)
+    var p = _params_from(params, crit)
+    comptime if not CLASSIFIER:
+        # the regressor sessions fit unweighted: slot 16 is a count bound
+        # (the weighted classifier session applies it with its weights)
+        _ = _apply_min_weight_fraction(
+            p, _min_weight_fraction(params), List[Float32](), _index(params[0])
+        )
+    return p
 
 
 def _session_x(entry: String, session_id: Int, n_rows: Int, n_cols: Int) raises -> List[Float32]:
