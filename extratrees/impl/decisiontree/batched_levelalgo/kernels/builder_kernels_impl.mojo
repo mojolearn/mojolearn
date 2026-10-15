@@ -2168,8 +2168,9 @@ def node_feature_score_reg_tiled_kernel[
         _publish_add(out_acc_total, slot, bt, single)
 
 
-def node_feature_score_finalize_kernel[
-    MAX_ACC: Int, CLASSIFICATION: Bool
+@always_inline
+def _node_feature_score_finalize_body[
+    MAX_ACC: Int, CLASSIFICATION: Bool, WEIGHTED: Bool
 ](
     out_status: MutPointer[Int32, MutAnyOrigin],
     out_threshold: MutPointer[Float32, MutAnyOrigin],
@@ -2191,8 +2192,18 @@ def node_feature_score_finalize_kernel[
     seed: UInt64,
     min_samples_leaf_in: Int32,
     sabotage_in: Int32,
+    min_weight_units: Int64,
 ):
-    """Publish each cell's status, threshold and score."""
+    """Publish each cell's status, threshold and score.
+
+    WEIGHTED (classification, lane sk-kernels): the class accumulators hold
+    fixed-point weight units, so the score's left / right sizes are their
+    sums (WL, WR) and the node-uniform shift is taken over the node's total
+    W, which keeps DEVIATION 175's Int64 bound (WL^2 WR + WR^2 WL <= W^3/4);
+    a node is pure when one class holds all of W; a split is rejected when
+    a side holds no weight or less than `min_weight_units` (scikit-learn's
+    min_weight_leaf in units; 0 checks only the empty side). The row-count
+    `min_samples_leaf` test is unchanged."""
     var n_cells = Int(n_cells_in)
     var n_sampled_cols = Int(n_sampled_cols_in)
     var n_acc = Int(n_acc_in)
@@ -2260,7 +2271,33 @@ def node_feature_score_finalize_kernel[
             slot += stride
             continue
 
-        comptime if CLASSIFICATION:
+        comptime if CLASSIFICATION and WEIGHTED:
+            var w_total = Int64(0)
+            var w_left = Int64(0)
+            for kc in range(n_acc):
+                w_total += Int64(Int(out_acc_total[unsafe_offset = slot * n_acc + kc]))
+                w_left += Int64(Int(out_acc_left[unsafe_offset = slot * n_acc + kc]))
+            var w_right = w_total - w_left
+            if (
+                w_left <= Int64(0)
+                or w_right <= Int64(0)
+                or w_left < min_weight_units
+                or w_right < min_weight_units
+            ):
+                out_status[unsafe_offset=slot] = (
+                    SCORE_STATUS_REJECTED_MIN_SAMPLES_LEAF
+                )
+                slot += stride
+                continue
+            var w_pure = False
+            for kc in range(n_acc):
+                if Int64(Int(out_acc_total[unsafe_offset = slot * n_acc + kc])) == w_total:
+                    w_pure = True
+            if w_pure:
+                out_status[unsafe_offset=slot] = SCORE_STATUS_PURE_NODE
+                slot += stride
+                continue
+        elif CLASSIFICATION:
             var pure = False
             for kc in range(n_acc):
                 if (
@@ -2292,6 +2329,14 @@ def node_feature_score_finalize_kernel[
             var nl = Int64(n_left)
             var nr = Int64(n_right)
             var cs = Int64(classification_key_shift(range_len))
+            comptime if WEIGHTED:
+                var w_sum = Int64(0)
+                nl = Int64(0)
+                for kw in range(n_acc):
+                    w_sum += Int64(Int(out_acc_total[unsafe_offset = slot * n_acc + kw]))
+                    nl += Int64(Int(out_acc_left[unsafe_offset = slot * n_acc + kw]))
+                nr = w_sum - nl
+                cs = Int64(classification_key_shift(Int(w_sum)))
             out_gini_num[unsafe_offset=slot] = (
                 (sq_left >> cs) * nr + (sq_right >> cs) * nl
             )
@@ -2316,6 +2361,107 @@ def node_feature_score_finalize_kernel[
             out_gini_num[unsafe_offset=slot] = key_num
             out_gini_den[unsafe_offset=slot] = key_den
         slot += stride
+
+
+def node_feature_score_finalize_kernel[
+    MAX_ACC: Int, CLASSIFICATION: Bool
+](
+    out_status: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
+    out_gini_num: MutPointer[Int64, MutAnyOrigin],
+    out_gini_den: MutPointer[Int64, MutAnyOrigin],
+    out_n_left: MutPointer[Int32, MutAnyOrigin],
+    out_n_total: MutPointer[Int32, MutAnyOrigin],
+    out_acc_left: MutPointer[Int32, MutAnyOrigin],
+    out_acc_total: MutPointer[Int32, MutAnyOrigin],
+    in_min: MutPointer[Float32, MutAnyOrigin],
+    in_max: MutPointer[Float32, MutAnyOrigin],
+    in_n_missing: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
+    n_cells_in: Int32,
+    n_sampled_cols_in: Int32,
+    n_acc_in: Int32,
+    seed: UInt64,
+    min_samples_leaf_in: Int32,
+    sabotage_in: Int32,
+):
+    """Publish each cell's status, threshold and score
+    (`_node_feature_score_finalize_body`, unweighted)."""
+    _node_feature_score_finalize_body[MAX_ACC, CLASSIFICATION, False](
+        out_status,
+        out_threshold,
+        out_gini_num,
+        out_gini_den,
+        out_n_left,
+        out_n_total,
+        out_acc_left,
+        out_acc_total,
+        in_min,
+        in_max,
+        in_n_missing,
+        work_items,
+        colids,
+        tree_ids,
+        n_cells_in,
+        n_sampled_cols_in,
+        n_acc_in,
+        seed,
+        min_samples_leaf_in,
+        sabotage_in,
+        Int64(0),
+    )
+
+
+def node_feature_score_finalize_weighted_kernel[MAX_ACC: Int](
+    out_status: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
+    out_gini_num: MutPointer[Int64, MutAnyOrigin],
+    out_gini_den: MutPointer[Int64, MutAnyOrigin],
+    out_n_left: MutPointer[Int32, MutAnyOrigin],
+    out_n_total: MutPointer[Int32, MutAnyOrigin],
+    out_acc_left: MutPointer[Int32, MutAnyOrigin],
+    out_acc_total: MutPointer[Int32, MutAnyOrigin],
+    in_min: MutPointer[Float32, MutAnyOrigin],
+    in_max: MutPointer[Float32, MutAnyOrigin],
+    in_n_missing: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
+    n_cells_in: Int32,
+    n_sampled_cols_in: Int32,
+    n_acc_in: Int32,
+    seed: UInt64,
+    min_samples_leaf_in: Int32,
+    sabotage_in: Int32,
+    min_weight_units: Int64,
+):
+    """The classification finalize pass over weighted accumulators (lane
+    sk-kernels; `_node_feature_score_finalize_body`'s WEIGHTED arm)."""
+    _node_feature_score_finalize_body[MAX_ACC, True, True](
+        out_status,
+        out_threshold,
+        out_gini_num,
+        out_gini_den,
+        out_n_left,
+        out_n_total,
+        out_acc_left,
+        out_acc_total,
+        in_min,
+        in_max,
+        in_n_missing,
+        work_items,
+        colids,
+        tree_ids,
+        n_cells_in,
+        n_sampled_cols_in,
+        n_acc_in,
+        seed,
+        min_samples_leaf_in,
+        sabotage_in,
+        min_weight_units,
+    )
 
 
 # ============================================================================
