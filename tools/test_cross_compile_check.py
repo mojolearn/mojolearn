@@ -237,3 +237,104 @@ def test_list_json_and_summarize_name_every_non_pass(tmp_path):
     assert xcc.summarize(str(plan), str(res)) == 1, "a planned job with no result is never a pass"
     xcc.write_matrix(plan, "v0.8.22", jobs[:2])
     assert xcc.summarize(str(plan), str(res)) == 0
+
+
+# Retained diagnostic builds keep complete negative evidence and native bytes.
+def test_retained_run_preserves_complete_stdout_stderr_and_exit(tmp_path):
+    compiler = tmp_path / "retained_fake.py"
+    compiler.write_text("import pathlib,sys\nprint('first stdout')\nprint('middle stderr',file=sys.stderr)\nprint('last stdout')\npathlib.Path(sys.argv[1]).write_bytes(b'partial native bytes')\nsys.exit(7)\n")
+    out = tmp_path / "native.so"
+    kept = tmp_path / "kept"
+    verdict, _, _ = xcc.run_one([PY, str(compiler), str(out)], out, 10, 0,
+                               retain=kept, poll=.05)
+    assert verdict == "FAIL"
+    record = json_mod.loads((kept / "execution.json").read_text())
+    assert record["exit_status"] == 7 and record["output_exists"]
+    assert record["complete"] is True
+    log = (kept / "build.log").read_text()
+    assert all(s in log for s in ('first stdout', 'middle stderr', 'last stdout'))
+    assert out.read_bytes() == b'partial native bytes'
+
+
+def test_retained_timeout_records_signal_and_keeps_log(tmp_path):
+    cmd, out = fake(tmp_path, "sleep")
+    kept = tmp_path / "kept"
+    verdict, _, _ = xcc.run_one(cmd, out, .1, 0, retain=kept, poll=.02)
+    record = json_mod.loads((kept / "execution.json").read_text())
+    assert verdict == record["verdict"] == "TIMEOUT"
+    assert record["exit_status"] < 0
+    assert (kept / "build.log").is_file()
+
+
+def test_retained_build_uses_canonical_script_and_portable_flags(tmp_path):
+    cmd, out, env = xcc.retained_build_command(tmp_path, "build_gbdt.sh", "_mojolearn_gbdt", "identical", "gfx942")
+    assert cmd == ["bash", "-x", str(tmp_path / "bindings/build_gbdt.sh")]
+    assert env["MOJOLEARN_COMPILE_JOBS"] == "1"
+    assert env["MOJOLEARN_LINUX_CPU"] == "x86-64-v3"
+    assert env["MOJOLEARN_NUMERIC_MODE"] == "identical"
+    assert env["MOJOLEARN_TARGET_COLUMN"] == "amd"
+    assert env["MOJOLEARN_GPU_ARCHS"] == "gfx942"
+    assert out == tmp_path / "python/mojolearn/identical/_mojolearn_gbdt.so"
+
+
+def test_retained_source_archive_contains_actual_bytes(tmp_path, monkeypatch):
+    import bincache
+    import subprocess
+    import tarfile
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=fixture", "-c", "user.email=fixture@example.test",
+                    "commit", "--allow-empty", "-qm", "fixture"], check=True)
+    (repo / "source.mojo").write_text("actual source bytes\n")
+    monkeypatch.setattr(bincache, "source_digest", lambda *a: ({"scope": "closure"}, ["source.mojo"]))
+    destination = tmp_path / "source-artifact"
+    record = xcc.retain_sources(repo, "build_gbdt.sh", destination)
+    with tarfile.open(destination / "source.tar.gz") as archive:
+        assert archive.extractfile("source.mojo").read() == b"actual source bytes\n"
+    assert record["files"][0]["sha256"] == xcc.file_sha(repo / "source.mojo")
+
+
+def test_main_retains_binary_even_when_linkage_retention_fails(tmp_path, monkeypatch, capsys):
+    _patch(monkeypatch)
+    monkeypatch.setattr(xcc.sys, "platform", "linux")
+    compiler = tmp_path / "fake_mojo.py"
+    compiler.write_text(FAKE)
+    out = tmp_path / "fresh.so"
+    monkeypatch.setattr(xcc, "retained_build_command", lambda *a: ([PY, str(compiler), "pass", "-o", str(out)], out, {}))
+    def sources(root, script, directory):
+        directory.mkdir(parents=True)
+        return {"source_commit": "f" * 40}
+    monkeypatch.setattr(xcc, "retain_sources", sources)
+    def broken_linkage(*a):
+        raise RuntimeError("fixture missing runtime")
+    monkeypatch.setattr(xcc, "retain_linkage", broken_linkage)
+    report = tmp_path / "result.json"
+    rc = xcc.main(["--ref", "REF", "--archs", "sm_89", "--tiers", "identical", "--stall", "0",
+                   "--cache", str(tmp_path), "--keep-artifacts", str(tmp_path / "artifacts"), "--json", str(report)])
+    assert rc == 1
+    record = json_mod.loads(report.read_text())["results"][0]
+    assert record["verdict"] == "RETENTION_FAILED"
+    evidence = Path(record["evidence"])
+    assert (evidence / "_mojolearn_svm.so").read_bytes() == b"so"
+    assert json_mod.loads((evidence / "execution.json").read_text())["exit_status"] == 0
+    assert (evidence / "retention-error.txt").read_text() == "fixture missing runtime\n"
+
+
+
+def test_linkage_retains_loader_basename_and_exact_bytes(tmp_path, monkeypatch):
+    import subprocess
+    real = tmp_path / "libExample.so.1.2"
+    real.write_bytes(b"exact runtime bytes")
+    alias = tmp_path / "libExample.so.1"
+    alias.symlink_to(real.name)
+    destination = tmp_path / "artifact"
+    destination.mkdir()
+    def run(cmd, **kwargs):
+        output = f"libExample.so.1 => {alias} (0x1234)\n" if cmd[0] == "ldd" else "diagnostic\n"
+        return subprocess.CompletedProcess(cmd, 0, output, "")
+    monkeypatch.setattr(xcc.subprocess, "run", run)
+    record = xcc.retain_linkage(tmp_path / "candidate.so", tmp_path, destination)
+    assert (destination / "runtime/libExample.so.1").read_bytes() == real.read_bytes()
+    assert record["ldd"]["runtime"][0]["sha256"] == xcc.file_sha(real)
+    assert record["ldd"]["unresolved"] == []
