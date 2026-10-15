@@ -1423,6 +1423,43 @@ def count_fold_hits_i64_binding(
     return PythonObject(hits)
 
 
+def mark_split_roles_f32_binding(
+    idx_addr: PythonObject, m: PythonObject, n: PythonObject, split: PythonObject, role: PythonObject,
+    roles_addr: PythonObject,
+) raises -> PythonObject:
+    """roles[split * n + idx[i]] = role (1 training, 2 test) for the m int64
+    indices of one side of one cv split, over a float32 roles array of
+    (splits, n) zeros: the per-split roles of LassoCV / ElasticNetCV /
+    LogisticRegressionCV for splits that are not a partition
+    (x_linear/cv_roles.mojo). Returns 0, 1 when an index is outside [0, n),
+    2 when a row already has a role in this split (a duplicate, or a row on
+    both sides); nothing is written past the first refusal."""
+    var count = Int(py=m)
+    var rows = Int(py=n)
+    var k = Int(py=split)
+    var r = Int(py=role)
+    if count < 0 or rows < 1 or k < 0 or (r != 1 and r != 2):
+        raise Error("mark_split_roles_f32: m >= 0, n >= 1, split >= 0, role 1 or 2")
+    if count == 0:
+        return PythonObject(0)
+    var ip = _ptr[DType.int64](Int(py=idx_addr))
+    var rp = _ptr[DType.float32](Int(py=roles_addr))
+    var base = k * rows
+    var value = Float32(r)
+    var status = 0
+    with GILReleased(Python()):
+        for i in range(count):
+            var row = Int(ip.unsafe_load(i))
+            if row < 0 or row >= rows:
+                status = 1
+                break
+            if rp.unsafe_load(base + row) != Float32(0):
+                status = 2
+                break
+            rp.unsafe_store(base + row, value)
+    return PythonObject(status)
+
+
 def split_table_i32_binding(
     perm_addr: PythonObject, m: PythonObject, n_test: PythonObject, n_train: PythonObject,
     counts_addr: PythonObject, table_addr: PythonObject, sums_addr: PythonObject,

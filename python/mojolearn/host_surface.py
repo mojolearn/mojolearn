@@ -1745,7 +1745,7 @@ FAMILIES = (
             "next_combination_i64", "ic_running_min_f64", "ic_running_min_f32",
             "fold_pair_f32", "threshold_labels_i64", "scale_shift_ftz_f32",
             "bincount_i64", "compact_notnan_f32", "gather_keep_neg_i32",
-            "dot_rows_f32", "assign_fold_i64", "count_fold_hits_i64",
+            "dot_rows_f32", "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
             "split_table_i32", "scatter_rows_bytes", "uniform_init_f32",
             "normal_init_f32", "epoch_order_i32", "adam_hyper_f64",
             "mean_std_f32", "first_seen_i32", "strat_fold_assign_i32",
