@@ -45,7 +45,10 @@ def test_parallel_causal_batch_closes_worker_without_garbage_collection(monkeypa
 
     class ParallelModel:
         @classmethod
-        def load(cls, root, layer_devices):
+        def load(cls, root, layer_devices, numeric_profile):
+            # the identity lane pins fp32_v1 since fixed15_v1 became the
+            # transformer inference default (9567aaa50)
+            assert numeric_profile == 'fp32_v1'
             model = cls()
             model.closed = 0
             model.cycle = model
@@ -73,7 +76,7 @@ def test_parallel_causal_batch_closes_worker_without_garbage_collection(monkeypa
     monkeypatch.setattr(identity, '_par_devices', lambda: (0,))
     ml = SimpleNamespace(Array=SimpleNamespace(from_buffer=np.asarray),
         models=SimpleNamespace(causal_lm=SimpleNamespace(CausalLM=SimpleNamespace(
-            load=lambda _: SimpleNamespace(plan=SimpleNamespace(n_layers=2))))))
+            load=lambda _, numeric_profile: SimpleNamespace(plan=SimpleNamespace(n_layers=2))))))
     was_enabled = gc.isenabled()
     gc.disable()
     try:
