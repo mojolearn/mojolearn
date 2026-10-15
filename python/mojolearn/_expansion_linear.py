@@ -1980,7 +1980,7 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.n_jobs, self.random_state, self.warm_start = n_jobs, random_state, warm_start
         self.class_weight, self.average = class_weight, average
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y):
         """Fit the model.
 
         Parameters
@@ -1989,8 +1989,6 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
             Training data, converted to float32; values must be finite.
         y : array-like of shape (n_samples,)
             Class labels; at least two classes.
-        sample_weight : array-like of shape (n_samples,) or float, optional
-            Non-negative weights with a positive sum.
 
         Returns
         -------
@@ -2001,7 +1999,8 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
         ------
         ValueError
             On an unsupported option or loss, ``C <= 0``, a single class,
-            invalid weights, or a floating-point overflow during training.
+            invalid class weights, or a floating-point overflow during
+            training.
         """
         _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
         if self.loss not in ("hinge", "squared_hinge"):
@@ -2013,11 +2012,15 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
         codes = icodes.astype("<f4")
         self.classes_ = classes
         lr = "pa1" if self.loss == "hinge" else "pa2"
+        # scikit-learn's PassiveAggressive*.fit takes no sample_weight (its
+        # signature is fit(X, y, coef_init, intercept_init)), so neither does
+        # this one: the shuffled online PA step cannot make a weight-w row
+        # equal w repeated rows (scikit-learn xfails the same check on SGD).
         self.coef_, self.intercept_ = _sgd_fit(
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["hinge"], None, lr,
             1.0, 0.0, self.C, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, icodes, batch_size=self.batch_size,
+            None, self.class_weight, classes, icodes, batch_size=self.batch_size,
             auto_cap=256)
         return self
 
@@ -2103,7 +2106,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
         self.epsilon, self.random_state, self.warm_start, self.average = epsilon, random_state, warm_start, average
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y):
         """Fit the model.
 
         Parameters
@@ -2112,8 +2115,6 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
             Training data, converted to float32; values must be finite.
         y : array-like of shape (n_samples,)
             Targets.
-        sample_weight : array-like of shape (n_samples,) or float, optional
-            Non-negative weights with a positive sum.
 
         Returns
         -------
@@ -2123,8 +2124,8 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
         Raises
         ------
         ValueError
-            On an unsupported option or loss, ``C <= 0``, invalid weights, or
-            a floating-point overflow during training.
+            On an unsupported option or loss, ``C <= 0``, or a
+            floating-point overflow during training.
         """
         _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
         if self.loss not in ("epsilon_insensitive", "squared_epsilon_insensitive"):
@@ -2139,7 +2140,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
             self, Xm, yv, 0, _SGD_REG_LOSS["epsilon_insensitive"], None, lr,
             1.0, 0.0, self.C, 0.5, self.epsilon, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, batch_size=self.batch_size, auto_cap=256)
+            None, batch_size=self.batch_size, auto_cap=256)
         self.coef_ = coef.reshape((Xm[2],))
         self.intercept_ = intercept
         return self
