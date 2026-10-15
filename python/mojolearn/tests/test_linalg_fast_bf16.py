@@ -7,6 +7,7 @@ These are correctness tests, not full-workload promotion evidence. NumPy and
 Python tracing are independent test oracles, never part of product execution.
 """
 import os
+import subprocess
 import sys
 
 import numpy as np
@@ -50,6 +51,26 @@ def _rne(values):
 
 def _wide(bits):
     return (np.asarray(bits, dtype=np.uint32) << 16).view(np.float32)
+
+
+def test_cold_matmul_entry_keeps_packed_uploads_alive(fast):
+    # A fresh process enters matmul before any conversion has initialized
+    # its device context; one-hot contributions expose lost upload words.
+    source = """
+import numpy as np
+from mojolearn import linalg_fast as g
+assert g.has_bf16()
+for m,n,k in [(1,9,7),(4,5,3),(1,9,8),(1,9,9),(4,5,8)]:
+    for p in range(k):
+        a=np.zeros((m,k),np.float32); a[:,p]=1
+        b=np.zeros((k,n),np.uint16); b[p,:]=0x3f80
+        print('calling', m,n,k,p, flush=True)
+        actual=np.asarray(g.matmul_bf16(a,b))
+        np.testing.assert_array_equal(actual,np.ones((m,n),np.float32))
+print('35 cold/one-hot checks passed', flush=True)
+"""
+    result = subprocess.run([sys.executable, "-c", source], text=True, capture_output=True)
+    assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
 
 
 def test_conversion_rounding_native_boundary_and_owned_lifetime(fast):

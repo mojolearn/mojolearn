@@ -174,6 +174,10 @@ def fast_to_bf16_binding(value: PythonObject) raises -> PythonObject:
         _ = src^
         _ = dst^
         ctx.synchronize()
+    # Host copies enqueue asynchronously. Mojo's last-use destruction must
+    # not free the packed array immediately after its address is consumed.
+    # Keep its owner through the final wait, on every shape.
+    _ = source^
     return result
 
 
@@ -193,6 +197,7 @@ def fast_from_bf16_binding(value: PythonObject) raises -> PythonObject:
         _ = src^
         _ = dst^
         ctx.synchronize()
+    _ = source^
     return result
 
 
@@ -273,6 +278,11 @@ def fast_matmul_bf16_binding(
         _ = db^
         _ = dc^
         ctx.synchronize()
+    # These own the host-pointer upload bytes. Explicit destruction after
+    # the wait prevents last-use release at enqueue_copy (a particularly
+    # visible use-after-free for small allocator bins, not a shape rule).
+    _ = left^
+    _ = right^
     if out is not PythonObject(None):
         var bytes_view = out_view.cast("B")
         bytes_view[:] = result._mv.cast("B")
