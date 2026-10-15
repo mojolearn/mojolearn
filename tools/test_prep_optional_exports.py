@@ -16,14 +16,16 @@ import pytest
 def program():
     path = Path(__file__).resolve().parents[1] / 'python/mojolearn/_expansion_prep.py'
     tree = ast.parse(path.read_text())
-    constants = {'_MAP_MIN_WORDS', '_R3_NAMES', '_R3_DEFAULT'}
+    constants = {'_MAP_MIN_WORDS', '_R3_NAMES', '_R3_DEFAULT', '_NONE', '_II_CH', '_PARAMS', '_OPS'}
     classes = [n for n in tree.body if (isinstance(n, ast.ClassDef) and n.name in ('_Prog', '_Scratch'))
                or (isinstance(n, ast.FunctionDef) and n.name in
-                   ('_optional_prep_entry', '_native_folds', '_zero_words', '_r3'))
+                   ('_optional_prep_entry', '_native_folds', '_zero_words', '_r3',
+                    '_stage_folds', '_refuse_folds', '_seed_words', '_p2m_chunks'))
                or (isinstance(n, ast.Assign) and any(
                    isinstance(t, ast.Name) and t.id in constants for t in n.targets))]
     arena = SimpleNamespace(**runpy.run_path(str(path.with_name('_arena_io.py'))))
-    scope = dict(array=array, ctypes=ctypes, os=os, mmap=mmap, time=time, _arena_io=arena)
+    array_type = runpy.run_path(str(path.with_name('_array.py')))['Array']
+    scope = dict(array=array, ctypes=ctypes, os=os, mmap=mmap, time=time, _arena_io=arena, Array=array_type)
     exec(compile(ast.Module(body=classes, type_ignores=[]), str(path), 'exec'), scope)
     return scope
 
@@ -61,15 +63,16 @@ def test_missing_mandatory_entry_is_not_hidden(program):
 
 @pytest.mark.parametrize('codes', [None, [0, 1, 0, 1]])
 def test_missing_native_folds_is_not_hidden(program, codes):
-    """The fold entries are mandatory on both columns (lane cgr4-py-compute
-    deleted the Python fold route): a binding without them raises."""
+    """The folds have no Python route (lane cgr4-py-compute deleted it) and,
+    since lane cpu2-l3-prep (8ea273ef2), no separate host fold entries either:
+    they are stages of the one prep program (c2_kfold, c2_strat_*), so a
+    binding without the mandatory program entry raises instead of folding."""
     class Binding:
-        x_prep_run = staticmethod(lambda *args: None)
         def __getattr__(self, name):
             raise ImportError('host has no ' + name)
     program['_prep_binding'] = lambda mode: Binding()
     program['_mode'] = lambda: 'identical'
-    with pytest.raises(ImportError, match='host has no x_prep_'):
+    with pytest.raises(ImportError, match='host has no x_prep_run'):
         program['_native_folds'](4, 2, 3, True, codes, 2)
 
 
