@@ -2578,7 +2578,9 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         a, n, d = _matrix(X)
         yv = _vector(y, n)
         if self.cv is not None:
-            if _is_int_cv(self.cv) and sample_weight is None:
+            # a k-fold with one-row test folds (n // k < 2) takes the split
+            # walk, which scores such a fold NaN as scikit-learn does
+            if _is_int_cv(self.cv) and sample_weight is None and int(self.cv) >= 2 and n // int(self.cv) >= 2:
                 return self._fit_kfold(a, n, d, yv, alphas, sample_weight)
             return self._fit_splits(X, y, a, n, d, yv, alphas, sample_weight)
         vals = _ridge_run(self, a, n, d, yv, 1, alphas, sample_weight)
@@ -2656,9 +2658,18 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
 
         self.n_features_in_ = d
         rows = [[] for _ in alphas]  # glue: one score list per alpha (alpha-grid sized)
+        undefined = False
         for tr, te in splits:  # glue: one native gather, fit, predict and score per split and alpha
             if not tr.size or not te.size:
                 raise ValueError("mojolearn RidgeCV: every cv split needs training and test rows")
+            if te.size < 2:
+                # scikit-learn's r2_score: NaN, with its warning, for fewer
+                # than two test rows; every alpha's mean is then NaN, and
+                # GridSearchCV ranks all-NaN means equal (the first alpha wins)
+                from ._expansion_metrics import _undefined_warning
+                _undefined_warning("R^2 score is not well-defined with less than two samples.")
+                undefined = True
+                continue
             xtr, ytr, xte, yte = take(a, tr, d), take(yv, tr, 1), take(a, te, d), take(yv, te, 1)
             wtr = None if w is None else take(w, tr, 1)
             wte = None if w is None else take(w, te, 1)
@@ -2666,13 +2677,17 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
                 vals = _ridge_run(self, xtr, tr.size, d, ytr, 1, [alpha], wtr)
                 pred = _decision(self, xte, Array.from_list(vals[:d], "<f4"), float(vals[d]))
                 rows[i].append(float(r2_score(yte, pred.reshape((te.size,)), sample_weight=wte)))
-        means = Array.from_list(_row_means(rows), "<f8")
-        best = int(_native("reduce_stat")(addr_ro(means, name="scores"), 1, len(alphas), 3))
+        if undefined:
+            best, best_score = 0, float("nan")
+        else:
+            means = Array.from_list(_row_means(rows), "<f8")
+            best = int(_native("reduce_stat")(addr_ro(means, name="scores"), 1, len(alphas), 3))
+            best_score = float(means[best])  # one element of the mean-score Array
         vals = _ridge_run(self, a, n, d, yv, 1, [alphas[best]], w)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.alpha_ = alphas[best]
-        self.best_score_ = float(means[best])  # one element of the mean-score Array
+        self.best_score_ = best_score
         return self
 
 
@@ -2731,27 +2746,25 @@ def _cv_splits(cv, X, y):
     return splits
 
 
-def _cv_fold_ids(splits, n, name):
+def _cv_fold_ids(splits, n):
     """Row -> fold id (an int32 Array) of explicit cv splits, checked by the
     base binding's helpers (no per-row Python; TargetEncoder's
-    `_splitter_folds` rule): the test sets cover every row exactly once and
-    each split's training rows are every other row, which is the form the
-    LassoCV / ElasticNetCV / LogisticRegressionCV kernels take (a fold's
-    training rows are the rows with another fold id). KFold, StratifiedKFold,
-    GroupKFold, LeaveOneGroupOut and LeaveOneOut splits all have it."""
+    `_splitter_folds` rule), or None when the splits are not a partition:
+    the test sets cover every row exactly once and each split's training
+    rows are every other row (a fold's training rows are the rows with
+    another fold id). KFold, StratifiedKFold, GroupKFold, LeaveOneGroupOut
+    and LeaveOneOut splits all have it; ShuffleSplit, repeated and
+    overlapping splits take per-split roles (`_cv_roles_f32`)."""
     from ._buffer import _native
-    refuse = NotImplementedError(
-        f"mojolearn {name}: cv splits whose test sets do not cover every row exactly once, with the "
-        "training rows every other row (for example ShuffleSplit), are not implemented")
     fold = full((n,), -1, "<i4")
     assign = _native("assign_fold_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
     covered = 0
     for k, (_, te) in enumerate(splits):  # glue: one native scatter per split
         if int(assign(addr_ro(te, name="test") if te.size else 0, te.size, n, k, addr(fold, name="folds"))) != 0:
-            raise refuse
+            return None
         covered += te.size  # glue: one count per split (distinct rows: assign refuses a repeat)
     if covered != n:
-        raise refuse
+        return None
     check = _native("check_indices_i64")
     hits = _native("count_fold_hits_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
     for k, (tr, te) in enumerate(splits):  # glue: one native check per split
@@ -2761,18 +2774,48 @@ def _cv_fold_ids(splits, n, name):
                 or tr.size and (int(check(addr_ro(tr, name="train"), tr.size, n)) != 0
                                 or int(hits(addr_ro(tr, name="train"), tr.size, addr_ro(fold, name="folds"),
                                             n, k)) != 0)):
-            raise refuse
-    return fold, len(splits)
+            return None
+    return fold
+
+
+def _cv_roles_f32(splits, n, name):
+    """The per-split roles of cv splits that are not a partition
+    (x_linear/cv_roles.mojo): the fold words (every one -(n + 1), which
+    tells the kernels to read roles) and the (splits, n) roles, 1 for a
+    training row, 2 for a test row, 0 for a row the split leaves out, written
+    by the base binding (`mark_split_roles_f32`) from the index arrays."""
+    from ._buffer import _native
+    if n + 1 > 1 << 24:
+        # the fold words carry n as an exact float32
+        raise NotImplementedError(
+            f"mojolearn {name}: cv splits that are not a partition are limited to 16,777,215 rows")
+    mark = _native("mark_split_roles_f32")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
+    roles = zeros((len(splits) * n,), "<f4")
+    for k, (tr, te) in enumerate(splits):  # glue: one native scatter per side of each split
+        for side, role in ((tr, 1), (te, 2)):  # glue: the two sides of one split, one native scatter each
+            status = int(mark(addr_ro(side, name="cv") if side.size else 0, side.size, n, k, role,
+                              addr(roles, name="cv")))
+            if status == 1:
+                raise ValueError(f"mojolearn {name}: a cv split holds an index outside [0, n_samples)")
+            if status == 2:
+                raise ValueError(f"mojolearn {name}: a cv split repeats a row, or puts a row on both sides")
+        if not tr.size or not te.size:
+            raise ValueError(f"mojolearn {name}: every cv split needs training and test rows")
+    return full((n,), -float(n + 1), "<f4"), roles
 
 
 def _cv_fold_ids_f32(splits, n, name):
-    """`_cv_fold_ids` as float32 (the kernels' y layout carries the ids as
-    float32; `cast_elements`, as `_kfold_ids_f32`)."""
+    """The fold description the kernels read after the targets, as float32
+    (the kernels' y layout; `cast_elements`, as `_kfold_ids_f32`):
+    (fold ids, None) for a partition, else (fold words, roles)
+    (`_cv_roles_f32`); the roles ride after the weights."""
     from ._buffer import _native
-    ids, folds = _cv_fold_ids(splits, n, name)
+    ids = _cv_fold_ids(splits, n)
+    if ids is None:
+        return _cv_roles_f32(splits, n, name)
     out = empty((n,), "<f4")
     _native("cast_elements")(addr_ro(ids, name="folds"), 2, addr(out, name="folds"), 0, n)
-    return out, folds
+    return out, None
 
 
 def _enetcv_fit(est, X, y, l1_ratios, sample_weight=None):
@@ -2783,13 +2826,17 @@ def _enetcv_fit(est, X, y, l1_ratios, sample_weight=None):
         raise ValueError(f"mojolearn {name}: l1_ratio must be in (0, 1]")
     a, n, d = _matrix(X)
     yv = _vector(y, n)
+    roles = None
     if est.cv is None or _is_int_cv(est.cv):
         folds = 5 if est.cv is None else int(est.cv)
         ids = _kfold_ids_f32(n, folds)
     else:
         # a splitter or explicit (train, test) splits (scikit-learn's
-        # check_cv): their folds as row ids, which the kernels already take
-        ids, folds = _cv_fold_ids_f32(_cv_splits(est.cv, X, y), n, name)
+        # check_cv): a partition's folds as row ids, any other splits as
+        # per-split roles (x_linear/cv_roles.mojo)
+        splits = _cv_splits(est.cv, X, y)
+        folds = len(splits)
+        ids, roles = _cv_fold_ids_f32(splits, n, name)
     alphas = est.alphas
     n_alphas = getattr(est, "n_alphas", None)
     if isinstance(alphas, int) and not isinstance(alphas, bool):
@@ -2808,7 +2855,12 @@ def _enetcv_fit(est, X, y, l1_ratios, sample_weight=None):
     import numbers
     if isinstance(sample_weight, numbers.Number):
         sample_weight = None
-    if sample_weight is None:
+    if roles is not None:
+        # per-split roles ride the weighted arm, after the weights (unit
+        # weights without a sample_weight: the same objective and scores)
+        w = full((n,), 1.0, "<f4") if sample_weight is None else _weights_f32(sample_weight, n)
+        yy, weighted = _concat_f32_parts([yv, ids, w, roles]), 1
+    elif sample_weight is None:
         yy, weighted = _concat_f32(yv, ids), 0
     else:
         yy, weighted = _concat_f32_parts([yv, ids, _weights_f32(sample_weight, n)]), 1
@@ -2867,8 +2919,8 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
     cv : int, cross-validation splitter, iterable or None, default None
         None means 5 folds; an int is the number of unshuffled K-fold folds;
         a splitter (an object with ``split``) or an iterable of
-        ``(train, test)`` index arrays gives the folds, whose test sets must
-        cover every row exactly once.
+        ``(train, test)`` index arrays gives the splits (for example
+        ``ShuffleSplit`` or ``RepeatedKFold``).
     verbose : bool, default False
         Accepted for compatibility; ignored.
     n_jobs : int or None, default None
@@ -2980,8 +3032,8 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
     cv : int, cross-validation splitter, iterable or None, default None
         None means 5 folds; an int is the number of unshuffled K-fold folds;
         a splitter (an object with ``split``) or an iterable of
-        ``(train, test)`` index arrays gives the folds, whose test sets must
-        cover every row exactly once.
+        ``(train, test)`` index arrays gives the splits (for example
+        ``ShuffleSplit`` or ``RepeatedKFold``).
     copy_X : bool, default True
         Accepted for compatibility; ``X`` is never modified.
     verbose : int, default 0
@@ -3104,8 +3156,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         None means 5 stratified folds; an int is the number of stratified
         folds, from 2 to the size of the largest class; a splitter (an
         object with ``split``) or an iterable of ``(train, test)`` index
-        arrays gives the folds, whose test sets must cover every row exactly
-        once.
+        arrays gives the splits (for example ``ShuffleSplit`` or
+        ``RepeatedStratifiedKFold``).
     dual : bool, default False
         Only False is supported.
     penalty : {'l2'}, default 'l2'
@@ -3217,11 +3269,14 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         else:
             Cs = [float(c) for c in self.Cs]  # glue: converts the Cs argument
         explicit = not (self.cv is None or _is_int_cv(self.cv))
+        roles = None
         if explicit:
             # a splitter or explicit (train, test) splits (scikit-learn's
             # check_cv): their row fold ids ride in y, and ip[6] = 1 tells
             # the bindings not to build StratifiedKFold ids over them
-            fold_ids, folds = _cv_fold_ids_f32(_cv_splits(self.cv, X, y), n, "LogisticRegressionCV")
+            splits = _cv_splits(self.cv, X, y)
+            folds = len(splits)
+            fold_ids, roles = _cv_fold_ids_f32(splits, n, "LogisticRegressionCV")
         else:
             folds = 5 if self.cv is None else int(self.cv)
         # lane cpu2-l10-linear: the class counts, the 'balanced' weights
@@ -3231,6 +3286,11 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         # the labels) | fit weights n | raw weights n
         raw = None if sample_weight is None else _weights_f32(sample_weight, n)
         weigh = sample_weight is not None or self.class_weight is not None
+        if roles is not None:
+            # per-split roles (x_linear/cv_roles.mojo) sit after both weight
+            # blocks, so such a fit always sends them (unit weights: the
+            # same objective and accuracy)
+            weigh = True
         _, fitw, largest = _class_prep(self, self.class_weight, classes, icodes, raw, weighted=True,
                                        rows=self.class_weight is not None)
         if not explicit:
@@ -3242,6 +3302,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
                 raw = full((n,), 1.0, "<f4")
             parts += [raw if fitw is None else fitw, raw]
             has_sw = 1
+        if roles is not None:
+            parts.append(roles)
         yy = _concat_f32_parts(parts)
         p = kp * (d + 1)
         nc = len(Cs)

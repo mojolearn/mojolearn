@@ -30,6 +30,17 @@ from x_linear.ops import (
 from std.sys.info import is_gpu
 from x_linear.lbfgs import lbfgs, lbfgs_work, Objective
 from x_linear.team import Team, team_at
+from x_linear.cv_roles import cv_train, cv_test
+
+comptime LCV_ROLES_AFTER = 3
+"""n-word blocks between the fold words (y + n) and the per-split roles of
+a cv that is not a partition (x_linear/cv_roles.mojo, lane sk-last): the fit
+weights and the raw weights (y: labels n | fold words n | fit weights n |
+raw weights n | roles F*n; Python sends unit weights when there are none,
+so such a fit always has sample_weight set). A held-out row is a split's
+test row; a training row its training row; any other row is skipped by
+both. C13_LOGCV_WEIGHTS (an opt-in define) sums the other folds' weights,
+which holds for a partition only."""
 from x_linear.vfold import vwsq
 from std.gpu import WARP_SIZE
 from x_linear.tops import fold_fa, fold_fa_ix, chain_fmad, chain_fmad_ix, fold_parts, fold_blocks, FOLD_BLOCK
@@ -128,7 +139,7 @@ def lcv_score_part(y: FP, hitr: FP, n: Int, f: Int, weighted: Bool, lo: Int, cnt
     var a = Float32(0)
     var b = Float32(0)
     for i in range(lo, lo + cnt):
-        if Int(ld(y, n + i)) == f:
+        if cv_test(y + n, i, f, LCV_ROLES_AFTER):
             var wi = ld(y, 3 * n + i) if weighted else Float32(1)
             b = fa(b, wi)
             if ld(hitr, i) != 0:
@@ -165,7 +176,7 @@ def logcv_rows(t: Team, y: FP, n: Int, fold: Int, kp: Int) -> Int:
     var cnt = 0
     if t.lead():
         for i in range(n):
-            if Int(ld(y, n + i)) != fold:
+            if cv_train(y + n, i, fold, LCV_ROLES_AFTER):
                 ix.unsafe_store(cnt, Int32(i))
                 cnt += 1
     return t.bcast_int(cnt, 5)
@@ -400,7 +411,7 @@ def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
                 for i in range(lo, hi):
                     st(sr, i * kp + k, fa(ld(sl, i), ld(th, toff + k * stride + d) if fi else Float32(0)))
         for i in range(lo, hi):
-            if fold >= 0 and Int(ld(y, n + i)) == fold:
+            if fold >= 0 and not cv_train(y + n, i, fold, LCV_ROLES_AFTER):
                 continue
             var wi = ld(y, 2 * n + i) if sw else Float32(1)
             var label = Int(ld(y, i))
@@ -448,7 +459,7 @@ def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
     var pacc = Float32(0)
     var pw = Float32(0)
     for i in range(n):
-        if fold >= 0 and Int(ld(y, n + i)) == fold:
+        if fold >= 0 and not cv_train(y + n, i, fold, LCV_ROLES_AFTER):
             continue
         if rows > 0 and rows % FOLD_BLOCK == 0:
             for o in range(p):
@@ -515,7 +526,7 @@ def lcv_hits_default(t: Team, x: FP, y: FP, n: Int, d: Int, kpp: Int, fi: Bool, 
     """Across the team on a device; on the host in row blocks (lane linear-cpu)."""
     comptime if is_gpu():
         for i in range(t.tid, n, t.nt):
-            if Int(ld(y, n + i)) == f:
+            if cv_test(y + n, i, f, LCV_ROLES_AFTER):
                 var hit = _predict_code(x, i, d, kpp, fi, fw, th) == Int(ld(y, i))
                 st(hitr, i, Float32(1) if hit else Float32(0))
     else:
@@ -524,7 +535,7 @@ def lcv_hits_default(t: Team, x: FP, y: FP, n: Int, d: Int, kpp: Int, fi: Bool, 
         def rows_hit(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm kpp, imm fi, imm fwp, imm th,
                                         imm hitr, imm f}:
             for i in range(lo, hi):
-                if Int(ld(y, n + i)) == f:
+                if cv_test(y + n, i, f, LCV_ROLES_AFTER):
                     var hit = _predict_code(x, i, d, kpp, fi, fwp, th) == Int(ld(y, i))
                     st(hitr, i, Float32(1) if hit else Float32(0))
 

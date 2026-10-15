@@ -330,9 +330,10 @@ def _apply_min_weight_fraction(
     return Float32(0)
 
 
-def _read_weights(weights_addr: Int, n_rows: Int) raises -> List[Float32]:
-    """The weighted classifier's Float32 row weights (0: none), with the GPU
-    binding's checks in its words (`bindings/_mojolearn_rf.mojo:363-380`);
+def _read_weights(weights_addr: Int, n_rows: Int, noun: String = "class") raises -> List[Float32]:
+    """The weighted fit's Float32 row weights (0: none), with the GPU
+    binding's checks in its words (`bindings/_mojolearn_rf.mojo:363-380`;
+    `noun` "sample" for the regressor's, as its device scan says);
     all-unit weights fit unweighted (an empty list)."""
     var weights = List[Float32]()
     if weights_addr == 0:
@@ -343,12 +344,12 @@ def _read_weights(weights_addr: Int, n_rows: Int) raises -> List[Float32]:
     for i in range(n_rows):
         var w = wp[i]
         if not (w >= 0 and w <= Float32(3.4028234663852886e38)):
-            raise Error("class weights must be finite and nonnegative")
+            raise Error(noun + " weights must be finite and nonnegative")
         weights.append(w)
         total += Float64(w)
         all_unit = all_unit and w == Float32(1)
     if total <= 0:
-        raise Error("class weights must have positive total")
+        raise Error(noun + " weights must have positive total")
     if all_unit:
         return List[Float32]()
     return weights^
@@ -383,6 +384,31 @@ def _host_drop_zero_weight_rows(
     return len(rows)
 
 
+def _host_drop_zero_weight_rows_reg(
+    mut x: List[Float32],
+    mut weights: List[Float32],
+    mut y_kept: List[Float32],
+    y_address: Int,
+    n_rows: Int,
+    n_cols: Int,
+    bootstrap: Bool,
+) raises -> Int:
+    """`_host_drop_zero_weight_rows` for the weighted regressor (lane
+    sk-last): the device's `_rf_drop_zero_weight_rows[RLT]` on the host
+    column, the float32 targets gathered with the kept rows."""
+    if len(weights) == 0 or bootstrap:
+        return n_rows
+    var rows = host_nonzero_weight_rows(weights)
+    if len(rows) >= n_rows or len(rows) == 0:
+        return n_rows
+    x = host_gather_colmajor(x, n_rows, n_cols, rows)
+    y_kept = host_gather_f32(read_f32(y_address, n_rows), rows)
+    weights = host_gather_f32(weights, rows)
+    if host_all_unit(weights):
+        weights = List[Float32]()
+    return len(rows)
+
+
 def _rf_fit[
     CLASSIFIER: Bool, EXPORT: Bool, ROWMAJOR: Bool
 ](
@@ -395,11 +421,14 @@ def _rf_fit[
     oob_addr: Int = 0,
     oob_score_addr: Int = 0,
     importance_addr: Int = 0,
+    weight_max: Float64 = 0,
 ) raises -> PythonObject:
     """`_rf_classifier_fit` / `_rf_regressor_fit` of the GPU binding: the same
     slot checks in the same words, then the host fit. `weights_addr` is the
-    weighted classifier's Float32 row weights (0: none); `tree_start` the
-    GPU binding's global tree ID offset (the shard fits below)."""
+    weighted fit's Float32 row weights (0: none; the regressor's with
+    `weight_max`, their largest, as `rf_regressor_fit_weighted`);
+    `tree_start` the GPU binding's global tree ID offset (the shard fits
+    below)."""
     comptime entry = "rf_classifier_fit" if CLASSIFIER else "rf_regressor_fit"
     if not _params_len_ok(params):
         raise Error(
@@ -425,29 +454,40 @@ def _rf_fit[
         raise Error("RF OOB requires bootstrap, score storage, and an unsharded forest")
     # `bindings/_mojolearn_rf.mojo:363-380`: the weights' checks in their
     # words; all-unit weights fit unweighted.
-    var weights = _read_weights(weights_addr, n_rows)
+    var weights = _read_weights(weights_addr, n_rows, String("class") if CLASSIFIER else String("sample"))
     var x_address = _index(x_addr)
     var y_address = _index(y_addr)
     # sk-weq-trees: a weighted classifier fit without bootstrap drops its
     # zero-weight rows (`_host_drop_zero_weight_rows`); n_fit is the kept count
     var x = _read_x_col_major(x_address, n_rows, n_cols, ROWMAJOR)
     var y_kept = List[Int32]()
+    var y_kept_f = List[Float32]()
     var n_fit = n_rows
     comptime if CLASSIFIER:
         n_fit = _host_drop_zero_weight_rows(
             x, weights, y_kept, y_address, n_rows, n_cols, p.bootstrap
         )
-    var y_fit = y_address if n_fit == n_rows else Int(y_kept.unsafe_ptr())
+    else:
+        n_fit = _host_drop_zero_weight_rows_reg(
+            x, weights, y_kept_f, y_address, n_rows, n_cols, p.bootstrap
+        )
+    var y_fit = y_address
+    if n_fit != n_rows:
+        comptime if CLASSIFIER:
+            y_fit = Int(y_kept.unsafe_ptr())
+        else:
+            y_fit = Int(y_kept_f.unsafe_ptr())
     var mwl = _apply_min_weight_fraction(p, _min_weight_fraction(params), weights, n_fit)
     var forest: RfHostForest
     with GILReleased(Python()):
         forest = _rf_fit_colmajor[CLASSIFIER](
             x^, y_fit, n_fit, n_cols, n_classes, p, weights, tree_start, importance_addr != 0,
-            mwl,
+            mwl, weight_max,
         )
         if oob_addr != 0:
             rf_host_oob[CLASSIFIER](forest,p,f32_ptr(x_address),y_address,weights,n_rows,n_cols,oob_addr,oob_score_addr)
     _ = y_kept^
+    _ = y_kept_f^
     if importance_addr != 0:
         rf_host_importance(forest,n_cols,importance_addr)
     comptime if EXPORT:
@@ -467,6 +507,7 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
     tree_start: Int,
     retain_importance: Bool = False,
     min_weight_leaf: Float32 = Float32(0),
+    weight_max: Float64 = 0,
 ) raises -> RfHostForest:
     """The host fit on a COLUMN-major X already read: the one body `_rf_fit`
     and the data session entries below share, so a session member's forest
@@ -486,9 +527,15 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
         # order the device uses (`core/abs_sum_blocked`, cpu2-l6-bindings).
         var mag = host_abs_sum_blocked(Int(y.unsafe_ptr()), n_rows)
         var scale = Float32(choose_scale(mag, n_rows))
+        if len(weights) > 0 and not p.bootstrap:
+            # the weighted objective (lane sk-last; `rf_regressor_fit_weighted`):
+            # `label_sum` holds label * weight, its scale sized by
+            # sum |y| * max w, as the device binding chooses it
+            scale = Float32(choose_scale(mag * max(weight_max, Float64(0)), n_rows))
         forest = rf_host_fit(
             x^, List[Int32](), y, n_rows, n_cols, 1, False, p, scale,
-            tree_start, retain_importance=retain_importance,
+            tree_start, weights, retain_importance=retain_importance,
+            min_weight_leaf=min_weight_leaf,
         )
     return forest^
 
@@ -611,6 +658,39 @@ def rf_regressor_fit_export_binding(
     params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
     return _rf_fit[False, True, False](x_addr, y_addr, params, criterion)
+
+
+def _rf_regressor_fit_weighted[EXPORT: Bool](
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+    weight_max: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_rf.mojo::rf_regressor_fit_weighted_binding` on the
+    host column (lane sk-last): Float32 row weights (scikit-learn's
+    `sample_weight`) and their largest value (the caller's native max),
+    which sizes the label_sum plane."""
+    var address = _index(weights_addr)
+    if address == 0:
+        raise Error("weighted RF requires a nonzero Float32 weight pointer")
+    return _rf_fit[False, EXPORT, False](
+        x_addr, y_addr, params, criterion, address, weight_max=Float64(py=weight_max)
+    )
+
+
+def rf_regressor_fit_weighted_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+    weight_max: PythonObject,
+) raises -> PythonObject:
+    return _rf_regressor_fit_weighted[False](x_addr, y_addr, params, criterion, weights_addr, weight_max)
+
+
+def rf_regressor_fit_weighted_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+    weight_max: PythonObject,
+) raises -> PythonObject:
+    return _rf_regressor_fit_weighted[True](x_addr, y_addr, params, criterion, weights_addr, weight_max)
 
 
 def rf_regressor_fit_rowmajor_binding(
@@ -1160,6 +1240,8 @@ def PyInit__mojolearn_rf_host() abi("C") -> PythonObject:
         module.def_function[rf_predict_reg_binding]("rf_predict_reg")
         module.def_function[rf_classifier_fit_weighted_binding]("rf_classifier_fit_weighted")
         module.def_function[rf_classifier_fit_weighted_export_binding]("rf_classifier_fit_weighted_export")
+        module.def_function[rf_regressor_fit_weighted_binding]("rf_regressor_fit_weighted")
+        module.def_function[rf_regressor_fit_weighted_export_binding]("rf_regressor_fit_weighted_export")
         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
         module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
         module.def_function[resident_release_binding]("forest_release_gpu")

@@ -141,6 +141,7 @@ from bindings.hotpath_helpers import (
     dot_rows_f32_binding,
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
+    mark_split_roles_f32_binding,
     split_table_i32_binding,
     scatter_rows_bytes_host_binding,
     uniform_init_f32_binding,
@@ -1525,6 +1526,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[dot_rows_f32_binding]("dot_rows_f32")
         module.def_function[assign_fold_i64_binding]("assign_fold_i64")
         module.def_function[count_fold_hits_i64_binding]("count_fold_hits_i64")
+        module.def_function[mark_split_roles_f32_binding]("mark_split_roles_f32")
         module.def_function[split_table_i32_binding]("split_table_i32")
         module.def_function[scatter_rows_bytes_host_binding]("scatter_rows_bytes")
         module.def_function[uniform_init_f32_binding]("uniform_init_f32")

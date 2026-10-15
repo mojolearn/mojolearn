@@ -1055,6 +1055,76 @@ def host_mse_gain(
     return gain
 
 
+def host_weighted_reg_gain(
+    criterion: Int, wraw: List[Int32], label_sums: List[Int32], i: Int, n_bins: Int,
+    scale: Float32, wscale: Float32,
+) -> Float32:
+    """The weighted regression gains (`WeightedRegressionBin`, the device's
+    `RegressionObjectiveFunction[..., WeightedRegressionBin]`: `MSEGain`,
+    `PoissonGain`, `GammaGain`, `InverseGaussianGain`, `objectives.mojo`)
+    on the host column (lane sk-last): the statements of the count gains
+    above with the weights the dequantized Float32 weight plane
+    (`Weight()`), the right weight their Float32 difference, as the device
+    computes it. `label_sums` holds the fixed-point label * weight sums."""
+    var parent_weight = _dequantize(wraw[n_bins - 1], wscale)
+    var left_weight = _dequantize(wraw[i], wscale)
+    var right_weight = parent_weight - left_weight
+    if parent_weight <= 0 or left_weight <= 0 or right_weight <= 0:
+        return RF_SPLIT_MIN
+    var label_sum = ftz(_dequantize(label_sums[n_bins - 1], scale))
+    var left_label_sum = ftz(_dequantize(label_sums[i], scale))
+    if criterion == RF_POISSON or criterion == RF_GAMMA or criterion == RF_INVERSE_GAUSSIAN:
+        var right_label_sum = ftz(_dequantize_wide(
+            Int64(Int(label_sums[n_bins - 1])) - Int64(Int(label_sums[i])), scale
+        ))
+        if label_sum <= RF_REG_EPS or left_label_sum <= RF_REG_EPS or right_label_sum <= RF_REG_EPS:
+            return RF_SPLIT_MIN
+        if criterion == RF_INVERSE_GAUSSIAN:
+            var psq = ftz(-parent_weight * parent_weight)
+            var parent_obj = ftz(psq / label_sum)
+            var lsq = ftz(-left_weight * left_weight)
+            var left_obj = ftz(lsq / left_label_sum)
+            var rsq = ftz(-right_weight * right_weight)
+            var right_obj = ftz(rsq / right_label_sum)
+            var lr = ftz(left_obj + right_obj)
+            var gain = ftz(parent_obj - lr)
+            var denom = ftz(Float32(2) * parent_weight)
+            return ftz(gain / denom)
+        var inv_len = ftz(Float32(1) / parent_weight)
+        var parg = ftz(label_sum * inv_len)
+        var larg = ftz(left_label_sum / left_weight)
+        var rarg = ftz(right_label_sum / right_weight)
+        var parent_obj: Float32
+        var left_obj: Float32
+        var right_obj: Float32
+        if criterion == RF_POISSON:
+            parent_obj = ftz(-label_sum * identical_log(parg))
+            left_obj = ftz(-left_label_sum * identical_log(larg))
+            right_obj = ftz(-right_label_sum * identical_log(rarg))
+        else:
+            parent_obj = ftz(parent_weight * identical_log(parg))
+            left_obj = ftz(left_weight * identical_log(larg))
+            right_obj = ftz(right_weight * identical_log(rarg))
+        var lr = ftz(left_obj + right_obj)
+        var gain = ftz(parent_obj - lr)
+        return ftz(gain * inv_len)
+    # MSE
+    var inv_len = ftz(Float32(1.0) / parent_weight)
+    comptime if T14 and not T14_EXACT:
+        return balanced_mse_gain(parent_weight, left_weight, label_sum, left_label_sum)
+    var p1 = ftz(-label_sum * label_sum)
+    var parent_obj = ftz(p1 * inv_len)
+    var lsq = ftz(left_label_sum * left_label_sum)
+    var left_obj = ftz((-lsq) / left_weight)
+    var right_label_sum = ftz(label_sum - left_label_sum)
+    var rsq = ftz(right_label_sum * right_label_sum)
+    var right_obj = ftz((-rsq) / right_weight)
+    var lr = ftz(left_obj + right_obj)
+    var gain = ftz(parent_obj - lr)
+    var half_inv = ftz(Float32(0.5) * inv_len)
+    return ftz(gain * half_inv)
+
+
 # ===========================================================================
 # THE QUANTILES AND THE BINNED MATRIX, once per forest.
 # ===========================================================================
@@ -1511,6 +1581,12 @@ def _node_best_split(
                 if weighted:
                     # `_quantize` (`bins.mojo:251-260`): a Float32 product, truncated.
                     wraw[off] = wraw[off] + Int32(weights[row] * wscale)
+            elif weighted:
+                # `WeightedRegressionBin.IncrementHistogram`: the Float32
+                # product label * weight quantized, the count, the weight
+                label_sums[b] = label_sums[b] + Int32((labels_f[row] * weights[row]) * label_scale)
+                counts[b] = counts[b] + UInt32(1)
+                wraw[b] = wraw[b] + Int32(weights[row] * wscale)
             else:
                 label_sums[b] = label_sums[b] + Int32(labels_f[row] * label_scale)
                 counts[b] = counts[b] + UInt32(1)
@@ -1557,6 +1633,11 @@ def _node_best_split(
                     var mw_left = _wcls_weight_at(wraw, i, nb, n_classes, wscale)
                     var mw_right = mw_total - mw_left
                     mw_ok = not (mw_left < min_weight_leaf or mw_right < min_weight_leaf)
+                elif weighted and min_weight_leaf > Float32(0):
+                    var mw_total = _dequantize(wraw[nb - 1], wscale)
+                    var mw_left = _dequantize(wraw[i], wscale)
+                    var mw_right = mw_total - mw_left
+                    mw_ok = not (mw_left < min_weight_leaf or mw_right < min_weight_leaf)
                 if n_left >= msl and n_right >= msl and mw_ok:
                     var gain: Float32
                     if classification and weighted:
@@ -1569,6 +1650,8 @@ def _node_best_split(
                             gain = host_entropy_gain(counts, i, nb, n_classes)
                         else:
                             gain = host_gini_gain(counts, i, nb, n_classes)
+                    elif weighted:
+                        gain = host_weighted_reg_gain(criterion, wraw, label_sums, i, nb, label_scale, wscale)
                     elif criterion == RF_POISSON:
                         gain = host_poisson_gain(counts, label_sums, i, nb, label_scale)
                     elif criterion == RF_GAMMA:
@@ -1672,9 +1755,10 @@ def rf_host_fit(
         raise Error(RF_NAN_REFUSAL)
     # The weighted objective: class weights WITHOUT bootstrap
     # (`bindings/_mojolearn_rf.mojo:437-447`, classifier only).
+    # Regression too (lane sk-last): `WeightedRegressionBin`, the GPU
+    # binding's `rf_regressor_fit_weighted` arm; its `label_scale` is the
+    # caller's, sized by the largest weight.
     var weighted_obj = len(weights) > 0 and not p.bootstrap
-    if weighted_obj and not classification:
-        raise Error("rf host: row weights reach the classifier only")
     # `Builder.__init__`'s criterion resolution (`builder.mojo:1224-1228`).
     var criterion = p.criterion
     if criterion == RF_CRITERION_END:
@@ -1738,7 +1822,9 @@ def rf_host_fit(
         _ = len(weights)
         var scale = choose_scale(total, n_rows)
         if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
-            raise Error("class weights exceed Float32 fixed-point scale range")
+            raise Error(
+                (String("class") if classification else String("sample")) + " weights exceed Float32 fixed-point scale range"
+            )
         wscale = Float32(scale)
         # `prepare_weights`' copy_if (`randomforest.mojo:2084-2100`): the
         # nonzero-weight rows in order, at most n_sampled of them.
@@ -2061,6 +2147,18 @@ def _rf_host_tree(
                 vleaf[node * n_out + c] = ftz(
                     Int64(Int(hist[c])).cast[DType.float32]() / total.cast[DType.float32]()
                 )
+        elif weighted_obj:
+            # `leaf_kernel` over `WeightedRegressionBin`, then `SetLeafVector`
+            # (`objectives.mojo`): label * weight sum over the weight sum
+            var wlabel_sum = Int32(0)
+            var wsum = Int32(0)
+            for j in range(begin, begin + count):
+                var row = Int(row_ids[j])
+                wlabel_sum = wlabel_sum + Int32((labels_f[row] * weights[row]) * label_scale)
+                wsum = wsum + Int32(weights[row] * wscale)
+            var wleaf = _dequantize(wsum, wscale)
+            if wleaf > 0:
+                vleaf[node * n_out] = ftz(_dequantize(wlabel_sum, label_scale) / wleaf)
         else:
             var label_sum = Int32(0)
             var cnt = UInt32(0)
