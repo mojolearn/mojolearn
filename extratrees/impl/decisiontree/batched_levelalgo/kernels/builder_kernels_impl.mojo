@@ -1351,7 +1351,7 @@ def node_feature_score_host(
     `regression_key` over (Z, W)."""
     var weighted = is_classification and row_w_addr != 0
     var weighted_reg = (not is_classification) and row_w_addr != 0
-    var n_slots = 2 if weighted_reg else n_acc
+    var n_slots = Int(2) if weighted_reg else n_acc
     var row_w = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=row_w_addr if row_w_addr != 0 else Int(labels_q))
     if extent.n_missing != Int32(0):
         return empty_scored_candidate(SCORE_STATUS_MISSING_REFUSED, n_slots)

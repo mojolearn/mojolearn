@@ -8087,7 +8087,7 @@ def train_forest_regression_device_timed(
             Int(params.max_batch_size),
             Int32(total_rows),
             n_cols,
-            2 if dataset.weighted else 1,  # lane sk-final: (Z, W) slots
+            Int32(2) if dataset.weighted else Int32(1),  # lane sk-final: (Z, W) slots
             Int(k),
             TPB,
         )
