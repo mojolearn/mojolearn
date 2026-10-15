@@ -1664,8 +1664,9 @@ def shared_class_counts_mask() -> Int:
     )
 
 
-def node_feature_score_kernel[
-    TPB: Int, MAX_ACC: Int, CLASSIFICATION: Bool, ROW_MAJOR: Bool = False
+@always_inline
+def _node_feature_score_body[
+    TPB: Int, MAX_ACC: Int, CLASSIFICATION: Bool, ROW_MAJOR: Bool, WEIGHTED: Bool
 ](
     out_n_left: MutPointer[Int32, MutAnyOrigin],
     out_n_total: MutPointer[Int32, MutAnyOrigin],
@@ -1688,8 +1689,12 @@ def node_feature_score_kernel[
     seed: UInt64,
     sabotage_in: Int32,
     n_cols_in: Int32,
+    row_w: MutPointer[Int32, MutAnyOrigin],
 ):
-    """Steps 2, 3 and 4 of DEVIATION 137: skip, draw, and accumulate."""
+    """Steps 2, 3 and 4 of DEVIATION 137: skip, draw, and accumulate.
+    WEIGHTED (classification only, lane sk-kernels): each row adds its
+    fixed-point weight `row_w[row]` to its class accumulators in place of 1
+    (`n_left` / `n_total` stay row counts); unweighted, `row_w` is unread."""
     var wb = Int(block_idx.x)
     var fslot = Int(block_idx.y)
     comptime if ROW_MAJOR:
@@ -1795,6 +1800,9 @@ def node_feature_score_kernel[
         else:
             v = data[unsafe_offset = col_offset + row]
         var lab = Int(labels_q[unsafe_offset=row])
+        var wq = Int32(1)
+        comptime if WEIGHTED:
+            wq = row_w[unsafe_offset=row]
         n_seen += 1
 
         var goes_left: Bool
@@ -1815,15 +1823,15 @@ def node_feature_score_kernel[
                     var acc_slot = (Int(thread_idx.x) // 32) * MAX_ACC + lab
                     if counts_total:
                         _ = Atomic.fetch_add(
-                            shared_counts.unsafe_offset(SHARED_PLANE + acc_slot), Int32(1)
+                            shared_counts.unsafe_offset(SHARED_PLANE + acc_slot), wq
                         )
                     if goes_left:
-                        _ = Atomic.fetch_add(shared_counts.unsafe_offset(acc_slot), Int32(1))
+                        _ = Atomic.fetch_add(shared_counts.unsafe_offset(acc_slot), wq)
                 else:
                     if counts_total:
-                        priv_total[unsafe_offset=lab] += Int32(1)
+                        priv_total[unsafe_offset=lab] += wq
                     if goes_left:
-                        priv_left[unsafe_offset=lab] += Int32(1)
+                        priv_left[unsafe_offset=lab] += wq
         else:
             var q = Int32(lab)
             if sabotage == SCORE_SAB_SCALE_X2:
@@ -1900,6 +1908,115 @@ def node_feature_score_kernel[
         if Int(thread_idx.x) == 0 and publishes:
             _publish_add(out_acc_left, slot * n_acc + k, bl, single)
             _publish_add(out_acc_total, slot * n_acc + k, bt, single)
+
+
+def node_feature_score_kernel[
+    TPB: Int, MAX_ACC: Int, CLASSIFICATION: Bool, ROW_MAJOR: Bool = False
+](
+    out_n_left: MutPointer[Int32, MutAnyOrigin],
+    out_n_total: MutPointer[Int32, MutAnyOrigin],
+    out_acc_left: MutPointer[Int32, MutAnyOrigin],
+    out_acc_total: MutPointer[Int32, MutAnyOrigin],
+    out_n_blocks: MutPointer[Int32, MutAnyOrigin],
+    in_min: MutPointer[Float32, MutAnyOrigin],
+    in_max: MutPointer[Float32, MutAnyOrigin],
+    in_n_missing: MutPointer[Int32, MutAnyOrigin],
+    data: MutPointer[Float32, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    n_sampled_cols_in: Int32,
+    n_acc_in: Int32,
+    seed: UInt64,
+    sabotage_in: Int32,
+    n_cols_in: Int32,
+):
+    """Steps 2, 3 and 4 of DEVIATION 137: skip, draw, and accumulate.
+    The unweighted kernel: `_node_feature_score_body` with WEIGHTED off
+    (`labels_q` stands in for the unread weight pointer)."""
+    _node_feature_score_body[TPB, MAX_ACC, CLASSIFICATION, ROW_MAJOR, False](
+        out_n_left,
+        out_n_total,
+        out_acc_left,
+        out_acc_total,
+        out_n_blocks,
+        in_min,
+        in_max,
+        in_n_missing,
+        data,
+        row_ids,
+        labels_q,
+        work_items,
+        workload_info,
+        colids,
+        tree_ids,
+        m_in,
+        n_sampled_cols_in,
+        n_acc_in,
+        seed,
+        sabotage_in,
+        n_cols_in,
+        labels_q,
+    )
+
+
+def node_feature_score_weighted_kernel[
+    TPB: Int, MAX_ACC: Int, ROW_MAJOR: Bool = False
+](
+    out_n_left: MutPointer[Int32, MutAnyOrigin],
+    out_n_total: MutPointer[Int32, MutAnyOrigin],
+    out_acc_left: MutPointer[Int32, MutAnyOrigin],
+    out_acc_total: MutPointer[Int32, MutAnyOrigin],
+    out_n_blocks: MutPointer[Int32, MutAnyOrigin],
+    in_min: MutPointer[Float32, MutAnyOrigin],
+    in_max: MutPointer[Float32, MutAnyOrigin],
+    in_n_missing: MutPointer[Int32, MutAnyOrigin],
+    data: MutPointer[Float32, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    n_sampled_cols_in: Int32,
+    n_acc_in: Int32,
+    seed: UInt64,
+    sabotage_in: Int32,
+    n_cols_in: Int32,
+    row_w: MutPointer[Int32, MutAnyOrigin],
+):
+    """The classification score pass with row weights (lane sk-kernels):
+    `row_w[row]` is the row's fixed-point weight (`DeviceDataset.d_weights`),
+    added to its class accumulators in place of 1."""
+    _node_feature_score_body[TPB, MAX_ACC, True, ROW_MAJOR, True](
+        out_n_left,
+        out_n_total,
+        out_acc_left,
+        out_acc_total,
+        out_n_blocks,
+        in_min,
+        in_max,
+        in_n_missing,
+        data,
+        row_ids,
+        labels_q,
+        work_items,
+        workload_info,
+        colids,
+        tree_ids,
+        m_in,
+        n_sampled_cols_in,
+        n_acc_in,
+        seed,
+        sabotage_in,
+        n_cols_in,
+        row_w,
+    )
 
 
 def node_feature_score_reg_tiled_kernel[
