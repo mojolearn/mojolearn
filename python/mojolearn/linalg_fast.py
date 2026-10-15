@@ -112,9 +112,9 @@ def matmul_fused(a, b, *, bias=None, residual=None, activation=None,
 
 # Import-time binding only. All BF16 argument handling, packing, allocations,
 # launches, synchronization and consumed-output construction run in Mojo.
-# This opt-in candidate has no identical fallback, and does not change the
-# default-off MOJOLEARN_AFN_GEMM_BF16_MMA experiment switch. A missing/newer
-# binding is an installation error; never fall back to the Python wrapper.
+# Apple FAST BF16 defaults on through MOJOLEARN_AFN_GEMM_BF16_MMA=1;
+# explicit =0 disables it. No identical fallback is used. A missing native
+# export is an installation error; never fall back to the Python wrapper.
 _bf16_binding = _load()
 has_bf16 = _bf16_binding.fast_bf16_available
 to_bf16 = _bf16_binding.fast_to_bf16

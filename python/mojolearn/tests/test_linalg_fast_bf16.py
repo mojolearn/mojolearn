@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Apple fast BF16 candidate correctness, ownership and boundary tests.
 
-Run after the orchestrator builds the opt-in Apple fast linalg binding, with
+Run after the orchestrator builds the default Apple fast linalg binding, with
 MOJOLEARN_REQUIRE_FAST_BF16=1 so a missing candidate is a failure, not a skip.
 These are correctness tests, not full-workload promotion evidence. NumPy and
 Python tracing are independent test oracles, never part of product execution.

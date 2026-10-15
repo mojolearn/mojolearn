@@ -1,0 +1,33 @@
+{
+  "scope": "existing saved first scored full4096 output; no new measurements",
+  "shape": [
+    4096,
+    4096
+  ],
+  "dtype": "float32",
+  "elements": 16777216,
+  "fast_vs_identical": {
+    "bitwise_equal": false,
+    "different_elements": 15768413,
+    "max_abs_difference": 0.0007781982421875
+  },
+  "fast_vs_torch": {
+    "bitwise_equal": true
+  },
+  "cross_vendor_fast_identity": "not measured or promised",
+  "inputs": "same retained BF16 input bits",
+  "files": {
+    "identical": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/local-full-4096/released-identical/output-4096-4096-4096-0.npy",
+      "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7"
+    },
+    "fast": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/local-full-4096/candidate-fast/output-4096-4096-4096-0.npy",
+      "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5"
+    },
+    "torch": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/local-full-4096/torch-mps/output-4096-4096-4096-0.npy",
+      "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5"
+    }
+  }
+}

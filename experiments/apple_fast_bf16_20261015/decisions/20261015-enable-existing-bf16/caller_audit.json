@@ -1,0 +1,18 @@
+{
+  "audit_base": "d76a63de47db581b301b2f5504a2ac8cf349eab2",
+  "native_callers": {
+    "bindings/apple_fast_bf16_public.mojo": "public BF16 operations via native FAST aliases; explicit BF16 B and BF16 or unquantized FP32 A",
+    "bindings/_mojolearn_linalg.mojo": "raw BF16-only pointer binding; no ordinary FP32 GEMM caller",
+    "gemm/checks/gemm_lowbit.mojo": "BF16 helper used by raw linalg binding; remaining callers are tests/benchmarks"
+  },
+  "production_estimator_bf16_gemm_callers": [],
+  "model_paths_unchanged": {
+    "python/mojolearn/_transformer_impl.py": "lowbit.unpack materializes packed weights to FP32",
+    "python/mojolearn/_mamba_impl.py": "lowbit.unpack materializes packed weights to FP32",
+    "python/mojolearn/lowbit.py": "imports _linalg_impl directly, not newly selected public FAST aliases"
+  },
+  "fp32_dispatch": "AFN_GEMM_FP32_MMA does not depend on BF16 switch; models/training precision unchanged",
+  "search_log": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-default-lane/caller-search.log",
+  "search_scope": "rg -n afn_gemm_bf16_|identical_gemm_bf16w gemm bindings; Python public matmul_bf16 and model unpack callers inspected separately",
+  "performance_scope": "BF16 x BF16 NN public operation measured; FP32 x BF16 and transposes have correctness evidence only"
+}

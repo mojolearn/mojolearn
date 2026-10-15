@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native public boundary for the opt-in Apple fast BF16 candidate.
+"""Native public boundary for Apple fast BF16 operations.
 
 The BF16 simdgroup kernel already exists in gemm.afn_apple_fast. This
 boundary owns validation, host packing, output allocation, upload, dispatch,
@@ -15,7 +15,8 @@ read-only buffers without trusting an arbitrary __array_interface__ address.
 Those copies are INSIDE the public operation and must stay in its measured
 clock. A future zero-copy boundary is separate work, not assumed evidence.
 
-The candidate remains default-off through AFN_GEMM_BF16_MMA. It refuses
+The BF16 route defaults on only for Apple fast bindings; the numeric
+MOJOLEARN_AFN_GEMM_BF16_MMA=0 build define disables it explicitly. It refuses
 instead of silently routing to the identical product when unavailable.
 No numerical source or dispatch of the identical tier changes here.
 """
@@ -69,7 +70,7 @@ def fast_bf16_available_binding() raises -> PythonObject:
 
 def _require_candidate() raises:
     comptime if not AFN_GEMM_BF16_MMA:
-        raise Error("Apple fast BF16 requires a fast Apple binding built with MOJOLEARN_AFN_GEMM_BF16_MMA; no identical fallback is used")
+        raise Error("Apple fast BF16 requires a fast Apple GPU binding with MOJOLEARN_AFN_GEMM_BF16_MMA enabled (default 1; explicit 0 disables it); no identical fallback is used")
 
 
 def _shape_size(shape: PythonObject) raises -> Int:

@@ -64,7 +64,8 @@ from ._cholesky_impl import Cholesky
 # Import-time aliases only: FAST BF16 selection, argument handling, packing,
 # launches and completion are compiled native operations. Keep IDENTICAL's
 # existing surface and low-bit profile guard unchanged. The native capability
-# remains false unless the Apple experiment was explicitly compiled on.
+# defaults on in Apple FAST; a binding compiled with the explicit BF16=0
+# switch reports unavailable. Other vendors and IDENTICAL stay gated out.
 from . import _backend as _linalg_backend
 
 if _linalg_backend.default_mode() == "fast":

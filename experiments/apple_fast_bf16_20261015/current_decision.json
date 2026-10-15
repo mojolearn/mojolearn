@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "id": "apple-fast-bf16-existing-public-default-20261015",
+  "date": "2026-10-15",
+  "status": "source_default_enabled_pending_root_build_qualification",
+  "authorization": "Andrew explicitly requested making Apple BF16 the fast path after reviewing full4096 results; scope restricted to existing explicit BF16 operations",
+  "source_change_base": "d76a63de47db581b301b2f5504a2ac8cf349eab2",
+  "default_enabled": true,
+  "mode": "fast",
+  "vendor": "apple",
+  "gpu_only": true,
+  "build_define": "MOJOLEARN_AFN_GEMM_BF16_MMA",
+  "define_default": 1,
+  "define_off": 0,
+  "off_precedence": "Explicit =0 overrides BF16 enablement even with aggregate ALL/GEMM2 experiments enabled",
+  "off_behavior": "capability false and public FAST BF16 refusal; no IDENTICAL/Python fallback",
+  "scope": "existing explicit BF16 operations and BF16-only native helpers; no implicit FP32 quantization, estimator wiring, training changes, dimension selection or IDENTICAL change",
+  "caller_audit": "decisions/20261015-enable-existing-bf16/caller_audit.json",
+  "historical_measured_summaries_unchanged": true,
+  "performance_evidence": {
+    "full_result": "results/20261015-full-4096/comparison.json",
+    "source_commit": "30b9c0f3d65ceb5cdd5769b0a63df99d1d1d326a",
+    "candidate_binary_sha256": "68fe7c24d2dd496ab65591741fa76d0a79041144a19e71c64f086e14103d8633",
+    "shape_m_n_k": [
+      4096,
+      4096,
+      4096
+    ],
+    "scored_samples_per_arm": 5,
+    "first_calls_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "median_ms": {
+      "released-identical": 158.5845,
+      "candidate-fast": 133.247791,
+      "torch-mps": 356.609042
+    },
+    "candidate_time_change_vs_identical_percent": -15.976787769296486,
+    "quality_passes": 21,
+    "quality_limit": "candidate error larger than IDENTICAL but within recorded FP64 bound; all errors retained",
+    "prior_three_case_summary": "result_summary.json",
+    "prior_small_time_change_percent": 7.158802271553943,
+    "prior_medium_time_change_percent": -13.92106553975021,
+    "prior_neighbor_time_change_percent": -8.616335681885733,
+    "scope_limit": "owner-directed public-operation default; not same-source promotion A/B, full-estimator campaign or full-board result; significance not established"
+  },
+  "nonidentity_evidence": {
+    "receipt": "decisions/20261015-enable-existing-bf16/saved-output-comparison.json",
+    "sha256": "01f336aa6dc3732cbb421e64ee472093a38f2781992ad74f05ae2f4e77ba1125",
+    "different_elements": 15768413,
+    "elements": 16777216,
+    "max_abs_difference": 0.0007781982421875,
+    "matches_torch_bitwise_on_this_case": true,
+    "scope": "existing saved first scored full4096 output; no new measurements",
+    "cross_vendor_fast_identity": "not measured or promised"
+  },
+  "reused_qualification": {
+    "source_commit": "30b9c0f3d65ceb5cdd5769b0a63df99d1d1d326a",
+    "enabled_apple_linalg_compile": {
+      "exit_code": 0,
+      "elapsed_s": 35.861682176589966,
+      "receipt": "validation/compile-06.result.json"
+    },
+    "gpu_correctness": {
+      "tests": 23,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 23,
+      "exit_code": 0,
+      "junit": "validation/correctness-06.xml"
+    },
+    "other_targets": "pending",
+    "candidate_off_and_identical_current_source_builds": "pending"
+  },
+  "durable_artifacts": {
+    "full_primitive": {
+      "bytes": 1595961388,
+      "r2_bucket": "mojolearn-data",
+      "r2_key": "measurements/records/v1/7f44cb98392244faad9795b85783ce60ed421df94da819a27f1db5082a8664b2.tar.gz",
+      "sha256": "7f44cb98392244faad9795b85783ce60ed421df94da819a27f1db5082a8664b2",
+      "status": "verified",
+      "verification": "GET sha256"
+    },
+    "released_binary": {
+      "bytes": 1408608,
+      "r2_bucket": "mojolearn-data",
+      "r2_key": "measurements/records/v1/67ca42cd622efde5c3658c2e67e1aee2b6d88df1315d4291a1e5aa178b22250b.tar.gz",
+      "sha256": "67ca42cd622efde5c3658c2e67e1aee2b6d88df1315d4291a1e5aa178b22250b",
+      "status": "verified",
+      "verification": "GET sha256"
+    }
+  },
+  "pending": [
+    "root default FAST build and existing 23 GPU tests",
+    "root explicit BF16=0 build/capability check",
+    "root IDENTICAL build/check or qualified unchanged-arithmetic reuse",
+    "other target and installed release qualification",
+    "full-estimator recipes and measurements before broader model precision/wiring changes",
+    "Apple FAST board opponent contract and effective readback; no board run here"
+  ],
+  "lane_actions": {
+    "compiles": 0,
+    "gpu_runs": 0,
+    "publications": 0
+  }
+}

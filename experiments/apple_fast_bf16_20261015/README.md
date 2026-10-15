@@ -1,6 +1,12 @@
 # Apple FAST BF16 public-operation screening
 
-The native `mojolearn.linalg_fast` BF16 candidate remains disabled by default.
+The existing explicit BF16 operations now default on in Apple FAST source,
+following Andrew's 2026-10-15 instruction. `current_decision.json` records the
+scope, caller audit and pending root build qualification. Explicit
+`MOJOLEARN_BUILD_DEFINES=MOJOLEARN_AFN_GEMM_BF16_MMA=0` disables the route,
+including when aggregate experimental switches are on. Historical measurement
+summaries retain their original default-off decision unchanged.
+
 Its public operation uses the existing Apple simdgroup kernel with BF16 input
 bits widened exactly and FP32 accumulation/output. It does not silently
 quantize FP32 callers or change IDENTICAL dispatch.
@@ -48,10 +54,18 @@ against a BF16-output Torch multiply. CPU fallback is disabled.
 
 This completes a full-size primitive screen, not an estimator measurement or
 full-board run. It compares a shipped IDENTICAL arm with candidate FAST, not
-the same-source baseline/candidate configuration required for default
-promotion. The switch remains off. See
+the same-source baseline/candidate configuration of a general promotion
+campaign. The historical decision kept the switch off; the subsequent owner
+instruction enables only existing explicit BF16 operations. See
 `results/20261015-full-4096/comparison.json` for all samples, source/binary/input
 hashes, process exit status, qualification and durable artifact references.
+
+Root compared the actual first scored 4096 output arrays: FAST differs bitwise
+from shipped IDENTICAL in 15,768,413 of 16,777,216 FP32 elements, with maximum
+absolute difference 0.0007781982421875. FAST equals the matched Torch output
+bitwise in this one saved local case. This does not establish or promise
+cross-vendor FAST identity. The original comparison receipt is retained under
+`decisions/20261015-enable-existing-bf16/saved-output-comparison.json`.
 
 ## Select an arm
 
@@ -76,8 +90,10 @@ then run the same three arm commands against that new output directory. It
 selects the board's 4096-cubed GEMM shape and seed-7 standard-normal inputs; it
 does not run a full estimator or full board. The original screening inputs and
 results remain untouched. Build owners use
-`MOJOLEARN_BUILD_DEFINES=MOJOLEARN_AFN_GEMM_BF16_MMA=1` when building the FAST
-linalg binding; setting `MOJOLEARN_BUILD_DEFINE_FLAGS` directly is insufficient.
+`MOJOLEARN_BUILD_DEFINES=MOJOLEARN_AFN_GEMM_BF16_MMA=1` to explicitly enable
+the FAST linalg route; omission now uses that same default. Explicit `=0`
+disables the BF16 capability. Setting `MOJOLEARN_BUILD_DEFINE_FLAGS` directly
+is insufficient.
 Builds remain the orchestrator's responsibility.
 
 The clock starts with the same prepacked BF16 host operands and ends with a
@@ -127,6 +143,10 @@ GET/SHA256-verified archive referenced by the full-primitive comparison record.
 Both summaries and archive inventories are portable repository artifacts;
 original absolute paths remain in the byte-for-byte historical receipts.
 
-Keep the candidate off until the applicable whole-workload evidence supports
-promotion. A Mac-only new-version release is technically possible, but no
-release or public documentation is authorized here.
+The enabled source is scoped to explicit BF16 public operations. Float32-A /
+BF16-B and transpose variants have correctness evidence but no timing claim.
+No estimator has been wired to BF16, and any broader model change still needs
+its full-workload evidence. Root owns default-on, explicit-off and IDENTICAL
+build qualification; the historical compile06 evidence does not claim those
+new builds have completed. A Mac-only new-version release is technically
+possible, but no release or public documentation is authorized here.

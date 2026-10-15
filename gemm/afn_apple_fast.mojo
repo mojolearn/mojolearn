@@ -3,7 +3,8 @@
 """lane/apple-fast-neural-gemm (2026-10-03): the Apple FAST GEMM candidates.
 
 Every symbol here is compiled only under `AFN_GEMM_APPLE` (the FAST tier on
-an Apple GPU build) AND one of the `MOJOLEARN_AFN_GEMM_*` defines below;
+an Apple GPU build), with BF16 enabled by default and other routes enabled
+by their `MOJOLEARN_AFN_GEMM_*` defines below;
 IDENTICAL compiles main's code unchanged (`gemm/checks/gemm_identical.mojo`
 reads `AFN_GEMM_FP32_MMA`, which is False there, so no line of this file is
 instantiated under IDENTICAL).
@@ -28,7 +29,8 @@ buffer widened on the way into threadgroup memory (`bits << 16`, exact,
 contract L-1), so the bf16 profile's product runs from the bits with no
 widen launch and no float32 image of either operand (`AFN_GEMM_BF16_MMA`).
 
-THE DEFINES (each default OFF; `MOJOLEARN_AFN_GEMM_ALL` turns on every one):
+THE DEFINES (BF16 defaults ON in Apple FAST; the others default OFF;
+`MOJOLEARN_AFN_GEMM_ALL` enables the others but does not override BF16=0):
 
   MOJOLEARN_AFN_GEMM_SIMDGROUP  fp32 products on this kernel at the 64x64
       tile, ahead of the vendor route, from every fp32 entry point
@@ -49,6 +51,7 @@ THE DEFINES (each default OFF; `MOJOLEARN_AFN_GEMM_ALL` turns on every one):
       smaller tile first, then a split if the grid is still short).
   MOJOLEARN_AFN_GEMM_BF16_MMA   `identical_gemm_bf16w_into` (float32 A, bf16
       B) and the binding's bf16 x bf16 call run this kernel from the bits.
+      Default 1 on Apple FAST; explicitly set to 0 to disable this route.
   MOJOLEARN_AFN_GEMM_INT8_MMA   `identical_gemm_int8_into` runs the exact
       chunked matrix-unit kernel (`gemm_int8_apple_chunk.mojo`: every chunk
       sum below 2^24 is a float32, Int32 between chunks, the flat kernel's
@@ -109,23 +112,24 @@ comptime AFN_GEMM_SPLITK = AFN_GEMM_ALL or (
 comptime AFN_GEMM_TILESHAPE = AFN_GEMM_ALL or (
     AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_TILESHAPE"]()
 )
-# Default remains OFF. Apple M4 local screening at 6cec6320d (2026-10-15),
-# experiments/apple_fast_bf16_20261015/result_summary.json: whole-operation
-# BF16 host -> consumed FP32 host, 5 scored samples + 1 excluded warmup.
-# Versus shipped 0.8.45 IDENTICAL, medium/neighbor cases took 13.9%/8.6% less
-# time; small took 7.2% more. All 3 arms/3 cases passed the FP64 error bound;
-# native tests: 22 passed, no skips, plus 35 cold one-hot probes. Shape-dependent
-# preliminary operation screening, not full-workload/default-promotion evidence;
-# no cross-vendor identity claim. Other builds and estimator coverage pending.
-# Follow-up frozen 30b9c0f3d: full 4096^3 primitive, 5 scored samples/arm,
-# 133.247791 ms candidate vs 158.584500 ms shipped IDENTICAL (16.0% less time),
-# and 356.609042 ms real Torch MPS with matching BF16-input/FP32-output contract.
-# All 21 outputs passed the FP64 bound, with larger error than IDENTICAL;
-# enabled Apple compile06 and 23 GPU tests passed with no skips. Separate
-# results/20261015-full-4096/comparison.json retains errors, samples and hashes.
-# Still OFF: no same-source promotion A/B or full-estimator qualification.
-comptime AFN_GEMM_BF16_MMA = AFN_GEMM_ALL or AFN_GEMM2_ON or (
-    AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_BF16_MMA"]()
+# Owner-directed default (2026-10-15), scoped to existing explicit BF16 calls;
+# no FP32 quantization or model wiring. Caller audit and decision:
+# experiments/apple_fast_bf16_20261015/current_decision.json.
+# Apple M4, frozen 30b9c0f3d, full 4096^3 public BF16xBF16 NN operation:
+# 5 scored samples + first call + 1 excluded warmup per arm, whole BF16 host
+# -> consumed FP32 host. Medians: 133.247791 ms FAST, 158.584500 ms shipped
+# 0.8.45 IDENTICAL (16.0% less time), 356.609042 ms matched FP32-output Torch.
+# All 21 outputs passed the FP64 bound; error is larger than IDENTICAL.
+# 15,768,413/16,777,216 output elements differ bitwise from IDENTICAL in the
+# first scored case. FAST has no cross-vendor identity guarantee.
+# Retained compile06 and 23 GPU tests passed with no skips. Prior 6cec6320d
+# screen: 5 scored/case, medium/neighbor 13.9%/8.6% less time, small 7.2% MORE.
+# Float32-A/BF16-B and transposes have correctness, not performance evidence.
+# This owner choice is not a same-source promotion A/B, estimator campaign,
+# full-board result or qualification of all targets. Other builds pending.
+# Explicit =0 wins over ALL/GEMM2 for BF16; no dimension-dependent selection.
+comptime AFN_GEMM_BF16_MMA = AFN_GEMM_APPLE and (
+    get_defined_int["MOJOLEARN_AFN_GEMM_BF16_MMA", 1]() != 0
 )
 comptime AFN_GEMM_INT8_MMA = AFN_GEMM_ALL or (
     AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_INT8_MMA"]()
