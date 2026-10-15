@@ -31,6 +31,13 @@ from ._buffer import addr as _addr, empty as _empty
 from ._mode import SklearnTagsMixin
 from ._mode import RegressorScoreMixin
 
+
+def _min_samples(n, d, who, minimum=2):
+    """scikit-learn's check_array(ensure_min_samples=...) refusal and wording."""
+    if n < minimum:
+        raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of "
+                         f"{minimum} is required by {who}.")
+
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
            "lu_factor", "lu_solve", "solve", "lstsq", "randomized_svd",
@@ -6847,7 +6854,10 @@ class MinCovDet(_Base):
 
     def _fast_mcd(self, k, X):
         n, p = X.r, X.c
-        h = int(math.ceil(0.5 * (n + p + 1))) if self.support_fraction is None else int(self.support_fraction * n)
+        # scikit-learn's fast_mcd: the default support size is capped at n
+        # (n <= p otherwise asks for more support points than rows)
+        h = (min(int(math.ceil(0.5 * (n + p + 1))), n) if self.support_fraction is None
+             else int(self.support_fraction * n))
         if p == 1:
             return self._mcd_1d(k, X, h)
         return self._fast_mcd_native(k, X, h)
@@ -6868,6 +6878,7 @@ class MinCovDet(_Base):
         k = self._kit()
         M = _M.from_input(X)
         n, p = M.r, M.c
+        _min_samples(n, p, "MinCovDet")
         self._seed = _seed_of(self.random_state)
         self._draws = 0
         loc, cov, support, dist = self._fast_mcd(k, M)
