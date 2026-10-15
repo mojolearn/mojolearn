@@ -3495,6 +3495,8 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
     (5, 2)
     """
     _estimator_type = "regressor"
+    # scikit-learn's MultiOutput tags: Y is 2-D, one column per output
+    _sklearn_target_tags = {"multi_output": True, "single_output": False}
 
     def __init__(self, estimator, *, n_jobs=None):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
@@ -3640,6 +3642,8 @@ class MultiOutputClassifier(_TreesWrapperBase):
     (5, 2)
     """
     _estimator_type = "classifier"
+    # scikit-learn's MultiOutput tags: Y is 2-D, one column per output
+    _sklearn_target_tags = {"multi_output": True, "single_output": False}
 
     def __init__(self, estimator, *, n_jobs=None):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
