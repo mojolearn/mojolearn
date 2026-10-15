@@ -2479,11 +2479,11 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
     """Ridge regression with built-in selection of ``alpha``.
 
     Follows scikit-learn's RidgeCV. With ``cv=None`` the alpha is chosen by
-    efficient leave-one-out cross-validation; with ``cv=k`` (an int) by
-    unshuffled K-fold cross-validation scored by R^2, after which the model
-    is refit on all rows with the best alpha (the first one on a tie).
-    Cross-validation objects for ``cv``, ``scoring``, ``alpha_per_target``
-    and a 2-D ``y`` are not supported.
+    efficient leave-one-out cross-validation; otherwise by cross-validation
+    over ``cv`` scored by R^2 (weighted by ``sample_weight`` when given),
+    after which the model is refit on all rows with the best alpha (the
+    first one on a tie). ``scoring``, ``alpha_per_target`` and a 2-D ``y``
+    are not supported.
 
     Parameters
     ----------
@@ -2493,8 +2493,10 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         Whether to fit an intercept.
     scoring : None, default None
         Only None is supported; anything else raises ValueError.
-    cv : int or None, default None
-        None for leave-one-out, or the number of folds (2 to n_samples).
+    cv : int, cross-validation splitter, iterable or None, default None
+        None for leave-one-out; an int for that many unshuffled K-fold folds
+        (2 to n_samples); a splitter (an object with ``split``) or an
+        iterable of ``(train, test)`` index arrays for those splits.
     gcv_mode : str or None, default None
         Accepted for compatibility; ignored.
     store_cv_results : bool, default False
@@ -2512,7 +2514,7 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         Selected alpha.
     best_score_ : float
         Score of the selected alpha: minus its mean squared leave-one-out
-        error with ``cv=None``, its mean K-fold R^2 with ``cv=k``.
+        error with ``cv=None``, otherwise its mean R^2 over the splits.
     coef_ : float32 array of shape (n_features,)
         Weights.
     intercept_ : float
@@ -2550,7 +2552,9 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         y : array-like of shape (n_samples,)
             Targets (1-D).
         sample_weight : array-like of shape (n_samples,) or float, optional
-            Non-negative weights with a positive sum; only with ``cv=None``.
+            Non-negative weights with a positive sum. With ``cv`` set, each
+            split's fit uses its training rows' weights and its R^2 its test
+            rows' weights.
 
         Returns
         -------
@@ -2561,8 +2565,8 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         ------
         ValueError
             On an unsupported option, a non-positive alpha, an invalid
-            ``cv``, ``sample_weight`` or ``store_cv_results`` with ``cv``
-            set, or when ``X'X + alpha I`` cannot be factored.
+            ``cv``, ``store_cv_results`` with ``cv`` set, or when
+            ``X'X + alpha I`` cannot be factored.
         """
         if self.scoring is not None or self.alpha_per_target:
             raise ValueError("mojolearn RidgeCV: only scoring=None, alpha_per_target=False are implemented")
@@ -2572,7 +2576,9 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         a, n, d = _matrix(X)
         yv = _vector(y, n)
         if self.cv is not None:
-            return self._fit_kfold(a, n, d, yv, alphas, sample_weight)
+            if _is_int_cv(self.cv) and sample_weight is None:
+                return self._fit_kfold(a, n, d, yv, alphas, sample_weight)
+            return self._fit_splits(X, y, a, n, d, yv, alphas, sample_weight)
         vals = _ridge_run(self, a, n, d, yv, 1, alphas, sample_weight)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
@@ -2587,13 +2593,9 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         """cv = k (lane/neural-pass91): their GridSearchCV over the alphas with
         KFold(k) (no shuffle) and Ridge.score, then Ridge refit on every row
         with the first best alpha (x_linear/ridgecv.mojo)."""
-        cv = self.cv
-        if not isinstance(cv, int) or isinstance(cv, bool):
-            raise ValueError("mojolearn RidgeCV: cv must be None or an int (KFold)")
+        cv = int(self.cv)
         if not 2 <= cv <= n:
             raise ValueError("mojolearn RidgeCV: cv must be in [2, n_samples]")
-        if sample_weight is not None:
-            raise ValueError("mojolearn RidgeCV: sample_weight with cv is not implemented")
         if self.store_cv_results:
             raise ValueError("cv!=None and store_cv_results=True are incompatible")
         A = len(alphas)
@@ -2612,6 +2614,63 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         self.alpha_ = alphas[best]
         self.best_score_ = float(scores[best])  # one element of the score Array
         self.n_features_in_ = d
+        return self
+
+    def _fit_splits(self, X, y, a, n, d, yv, alphas, sample_weight):
+        """cv = a splitter, explicit (train, test) splits, or an int with
+        sample_weight: scikit-learn's GridSearchCV over the alphas, each
+        split's Ridge fit on its training rows with their weights, scored by
+        Ridge.score on its test rows (r2_score weighted by the test rows'
+        weights, as GridSearchCV routes sample_weight to a scorer that takes
+        it), the mean over splits ranked, the first best alpha refit on every
+        row with every weight. Python only walks the handful of splits and
+        alphas: the row gathers (`gather_rows_bytes`), the fits (`_ridge_run`),
+        the predictions (`_decision`), the scores (`r2_score`), the means
+        (`row_means_f64`) and the choice (`reduce_stat` argmax) are native.
+        A weight-w row is w repeated rows and a weight-0 row a removed one in
+        every fit and every score."""
+        from ._buffer import _native
+        from ._metrics_impl import r2_score
+        from .model_selection import _row_means
+        if self.store_cv_results:
+            raise ValueError("cv!=None and store_cv_results=True are incompatible")
+        if _is_int_cv(self.cv):
+            from .model_selection import KFold
+            cv = int(self.cv)
+            if not 2 <= cv <= n:
+                raise ValueError("mojolearn RidgeCV: cv must be in [2, n_samples]")
+            splits = _cv_splits(KFold(n_splits=cv), a, yv)
+        else:
+            splits = _cv_splits(self.cv, X, y)
+        w = None if sample_weight is None else _weights_f32(sample_weight, n)
+        gather = _native("gather_rows_bytes")
+
+        def take(src, idx, width):
+            # rows idx of src (width float32 words a row) as a new Array
+            out = empty((idx.size, width) if width > 1 else (idx.size,), "<f4")
+            gather(addr_ro(src, name="rows"), addr(out, name="rows"), addr_ro(idx, name="rows"), n, idx.size,
+                   4 * width)
+            return out
+
+        self.n_features_in_ = d
+        rows = [[] for _ in alphas]  # glue: one score list per alpha (alpha-grid sized)
+        for tr, te in splits:  # glue: one native gather, fit, predict and score per split and alpha
+            if not tr.size or not te.size:
+                raise ValueError("mojolearn RidgeCV: every cv split needs training and test rows")
+            xtr, ytr, xte, yte = take(a, tr, d), take(yv, tr, 1), take(a, te, d), take(yv, te, 1)
+            wtr = None if w is None else take(w, tr, 1)
+            wte = None if w is None else take(w, te, 1)
+            for i, alpha in enumerate(alphas):  # glue: one native fit per alpha
+                vals = _ridge_run(self, xtr, tr.size, d, ytr, 1, [alpha], wtr)
+                pred = _decision(self, xte, Array.from_list(vals[:d], "<f4"), float(vals[d]))
+                rows[i].append(float(r2_score(yte, pred.reshape((te.size,)), sample_weight=wte)))
+        means = Array.from_list(_row_means(rows), "<f8")
+        best = int(_native("reduce_stat")(addr_ro(means, name="scores"), 1, len(alphas), 3))
+        vals = _ridge_run(self, a, n, d, yv, 1, [alphas[best]], w)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.alpha_ = alphas[best]
+        self.best_score_ = float(means[best])  # one element of the mean-score Array
         return self
 
 
@@ -2640,6 +2699,80 @@ def _kfold_ids_f32(n, k):
     return out
 
 
+def _is_int_cv(cv):
+    """An integer fold count (not a bool): the kernels' own KFold /
+    StratifiedKFold folds."""
+    import numbers
+    return isinstance(cv, numbers.Integral) and not isinstance(cv, bool)
+
+
+def _cv_splits(cv, X, y):
+    """scikit-learn's check_cv for a cv that is not None or an int: a
+    splitter object (anything with `split`, called as ``cv.split(X, y)``) or
+    an iterable of (train, test) index arrays, as a list of int64 Array
+    pairs. Iterating the handful of splits is glue; each index array is
+    converted natively (`as_index_i64`)."""
+    from ._buffer import as_index_i64
+    if hasattr(cv, "split"):
+        pairs = cv.split(X, y)
+    elif isinstance(cv, (str, bytes)) or not hasattr(cv, "__iter__"):
+        # scikit-learn's check_cv wording
+        raise ValueError("Expected cv as an integer, cross-validation object (from sklearn.model_selection) "
+                         f"or an iterable. Got {cv!r}.")
+    else:
+        pairs = cv
+    splits = []
+    for train, test in pairs:  # glue: one (train, test) pair of index arrays per split
+        splits.append((as_index_i64(train, name="train"), as_index_i64(test, name="test")))
+    if not splits:
+        raise ValueError("mojolearn: cv produced no (train, test) split")
+    return splits
+
+
+def _cv_fold_ids(splits, n, name):
+    """Row -> fold id (an int32 Array) of explicit cv splits, checked by the
+    base binding's helpers (no per-row Python; TargetEncoder's
+    `_splitter_folds` rule): the test sets cover every row exactly once and
+    each split's training rows are every other row, which is the form the
+    LassoCV / ElasticNetCV / LogisticRegressionCV kernels take (a fold's
+    training rows are the rows with another fold id). KFold, StratifiedKFold,
+    GroupKFold, LeaveOneGroupOut and LeaveOneOut splits all have it."""
+    from ._buffer import _native
+    refuse = NotImplementedError(
+        f"mojolearn {name}: cv splits whose test sets do not cover every row exactly once, with the "
+        "training rows every other row (for example ShuffleSplit), are not implemented")
+    fold = full((n,), -1, "<i4")
+    assign = _native("assign_fold_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
+    covered = 0
+    for k, (_, te) in enumerate(splits):  # glue: one native scatter per split
+        if int(assign(addr_ro(te, name="test") if te.size else 0, te.size, n, k, addr(fold, name="folds"))) != 0:
+            raise refuse
+        covered += te.size  # glue: one count per split (distinct rows: assign refuses a repeat)
+    if covered != n:
+        raise refuse
+    check = _native("check_indices_i64")
+    hits = _native("count_fold_hits_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
+    for k, (tr, te) in enumerate(splits):  # glue: one native check per split
+        # every row outside fold k exactly once: as many as there are,
+        # distinct, in range and none in fold k
+        if (tr.size != n - te.size
+                or tr.size and (int(check(addr_ro(tr, name="train"), tr.size, n)) != 0
+                                or int(hits(addr_ro(tr, name="train"), tr.size, addr_ro(fold, name="folds"),
+                                            n, k)) != 0)):
+            raise refuse
+    return fold, len(splits)
+
+
+def _cv_fold_ids_f32(splits, n, name):
+    """`_cv_fold_ids` as float32 (the kernels' y layout carries the ids as
+    float32; `cast_elements`, as `_kfold_ids_f32`)."""
+    from ._buffer import _native
+    ids, folds = _cv_fold_ids(splits, n, name)
+    out = empty((n,), "<f4")
+    _native("cast_elements")(addr_ro(ids, name="folds"), 2, addr(out, name="folds"), 0, n)
+    return out, folds
+
+
 def _enetcv_fit(est, X, y, l1_ratios, sample_weight=None):
     name = type(est).__name__
     if est.selection != "cyclic":
@@ -2648,8 +2781,13 @@ def _enetcv_fit(est, X, y, l1_ratios, sample_weight=None):
         raise ValueError(f"mojolearn {name}: l1_ratio must be in (0, 1]")
     a, n, d = _matrix(X)
     yv = _vector(y, n)
-    folds = 5 if est.cv is None else est.cv
-    ids = _kfold_ids_f32(n, folds)
+    if est.cv is None or _is_int_cv(est.cv):
+        folds = 5 if est.cv is None else int(est.cv)
+        ids = _kfold_ids_f32(n, folds)
+    else:
+        # a splitter or explicit (train, test) splits (scikit-learn's
+        # check_cv): their folds as row ids, which the kernels already take
+        ids, folds = _cv_fold_ids_f32(_cv_splits(est.cv, X, y), n, name)
     alphas = est.alphas
     n_alphas = getattr(est, "n_alphas", None)
     if isinstance(alphas, int) and not isinstance(alphas, bool):
@@ -2704,8 +2842,7 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
     Follows scikit-learn's LassoCV, solved by coordinate descent: each fold
     fits the regularization path, the alpha with the lowest mean squared
     error across folds is chosen, and the model is refit on all rows.
-    ``cv`` must be None or an int (unshuffled K-fold); ``selection='random'``
-    raises ValueError.
+    ``selection='random'`` raises ValueError.
 
     Parameters
     ----------
@@ -2725,8 +2862,11 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
         Coordinate-descent stopping tolerance.
     copy_X : bool, default True
         Accepted for compatibility; ``X`` is never modified.
-    cv : int or None, default None
-        Number of folds; None means 5.
+    cv : int, cross-validation splitter, iterable or None, default None
+        None means 5 folds; an int is the number of unshuffled K-fold folds;
+        a splitter (an object with ``split``) or an iterable of
+        ``(train, test)`` index arrays gives the folds, whose test sets must
+        cover every row exactly once.
     verbose : bool, default False
         Accepted for compatibility; ignored.
     n_jobs : int or None, default None
@@ -2802,8 +2942,8 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
         Raises
         ------
         ValueError
-            If ``selection`` is not 'cyclic', ``cv`` is not None or an int
-            in [2, n_samples], or no alpha is given.
+            If ``selection`` is not 'cyclic', an int ``cv`` is outside
+            [2, n_samples], or no alpha is given.
         """
         _enetcv_fit(self, X, y, [1.0], sample_weight)
         return self
@@ -2815,8 +2955,7 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
     Follows scikit-learn's ElasticNetCV, solved by coordinate descent: for
     each ``l1_ratio`` every fold fits the regularization path, the pair with
     the lowest mean squared error across folds is chosen, and the model is
-    refit on all rows. ``cv`` must be None or an int (unshuffled K-fold);
-    ``selection='random'`` raises ValueError.
+    refit on all rows. ``selection='random'`` raises ValueError.
 
     Parameters
     ----------
@@ -2836,8 +2975,11 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
         Maximum number of coordinate-descent passes per alpha.
     tol : float, default 1e-4
         Coordinate-descent stopping tolerance.
-    cv : int or None, default None
-        Number of folds; None means 5.
+    cv : int, cross-validation splitter, iterable or None, default None
+        None means 5 folds; an int is the number of unshuffled K-fold folds;
+        a splitter (an object with ``split``) or an iterable of
+        ``(train, test)`` index arrays gives the folds, whose test sets must
+        cover every row exactly once.
     copy_X : bool, default True
         Accepted for compatibility; ``X`` is never modified.
     verbose : int, default 0
@@ -2918,8 +3060,8 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
         ------
         ValueError
             If an ``l1_ratio`` is outside (0, 1], ``selection`` is not
-            'cyclic', ``cv`` is not None or an int in [2, n_samples], or no
-            alpha is given.
+            'cyclic', an int ``cv`` is outside [2, n_samples], or no alpha
+            is given.
         """
         ratios = list(self.l1_ratio) if hasattr(self.l1_ratio, "__len__") else [self.l1_ratio]
         self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios], sample_weight)  # glue: converts the l1_ratio argument
@@ -2944,7 +3086,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
 
     Follows scikit-learn's LogisticRegressionCV with an L2 penalty, binary
     or multinomial, solved by L-BFGS. Each candidate ``C`` is scored by
-    accuracy on stratified folds, and the model is refit on all rows with
+    accuracy (weighted by ``sample_weight``) on the held-out folds
+    (stratified folds by default), and the model is refit on all rows with
     the best one. Only ``penalty='l2'`` (primal), ``scoring=None`` and
     ``refit=True`` are supported; other values raise ValueError.
 
@@ -2955,9 +3098,12 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         values log-spaced between 1e-4 and 1e4.
     fit_intercept : bool, default True
         Whether to fit an intercept.
-    cv : int or None, default None
-        Number of stratified folds, from 2 to the size of the largest
-        class; None means 5.
+    cv : int, cross-validation splitter, iterable or None, default None
+        None means 5 stratified folds; an int is the number of stratified
+        folds, from 2 to the size of the largest class; a splitter (an
+        object with ``split``) or an iterable of ``(train, test)`` index
+        arrays gives the folds, whose test sets must cover every row exactly
+        once.
     dual : bool, default False
         Only False is supported.
     penalty : {'l2'}, default 'l2'
@@ -3049,8 +3195,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         Raises
         ------
         ValueError
-            On an unsupported option, a single class, invalid weights, or a
-            ``cv`` outside [2, the size of the largest class].
+            On an unsupported option, a single class, invalid weights, or an
+            int ``cv`` outside [2, the size of the largest class].
         """
         if self.penalty != "l2" or self.dual or self.l1_ratios is not None:
             raise ValueError("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
@@ -3068,7 +3214,14 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
             Cs = [_pm.powr(10.0, -4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]  # glue: builds the Cs parameter grid (m-sized: Cs grid size)
         else:
             Cs = [float(c) for c in self.Cs]  # glue: converts the Cs argument
-        folds = 5 if self.cv is None else self.cv
+        explicit = not (self.cv is None or _is_int_cv(self.cv))
+        if explicit:
+            # a splitter or explicit (train, test) splits (scikit-learn's
+            # check_cv): their row fold ids ride in y, and ip[6] = 1 tells
+            # the bindings not to build StratifiedKFold ids over them
+            fold_ids, folds = _cv_fold_ids_f32(_cv_splits(self.cv, X, y), n, "LogisticRegressionCV")
+        else:
+            folds = 5 if self.cv is None else int(self.cv)
         # lane cpu2-l10-linear: the class counts, the 'balanced' weights
         # (theirs: from the weighted counts of all of y) and the row weights
         # in the binding (x_linear/class_prep.mojo); y is assembled by byte
@@ -3078,8 +3231,9 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         weigh = sample_weight is not None or self.class_weight is not None
         _, fitw, largest = _class_prep(self, self.class_weight, classes, icodes, raw, weighted=True,
                                        rows=self.class_weight is not None)
-        _check_stratified_folds(largest, folds)
-        parts = [icodes.astype("<f4"), zeros((n,), "<f4")]
+        if not explicit:
+            _check_stratified_folds(largest, folds)
+        parts = [icodes.astype("<f4"), fold_ids if explicit else zeros((n,), "<f4")]
         has_sw = 0
         if weigh:
             if raw is None:
@@ -3089,7 +3243,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         yy = _concat_f32_parts(parts)
         p = kp * (d + 1)
         nc = len(Cs)
-        vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds, has_sw],
+        vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds, has_sw]
+                    + ([1] if explicit else []),
                     [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + _lbfgs_work(p), 5)
         self.classes_ = classes
         self.coef_ = Array.from_list(_rows(vals, kp, d), "<f4")

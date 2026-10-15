@@ -25,7 +25,7 @@ per fold one count, and the result once. The host column runs `logcv_fit`:
 the same statements on the same rows in the same order: the same words.
 """
 from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
-from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight
+from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight, lcv_caller_folds
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_linear.ops import FP, IP, ld, st, ldi, i2f, fa, fd
@@ -545,8 +545,10 @@ def logcv_fit_grid(
     for ci in range(nc):  # small-loop(nc: C grid values): the user's Cs list, one launch constant each
         hc[ci] = fp[1 + ci]
     c.enqueue_copy(dst_buf=cvals, src_ptr=hc.unsafe_ptr())
-    # the StratifiedKFold ids from the device labels (the caller sent zeros)
-    lcv_fold_ids_device(c.copy(), FP(unsafe_from_address=Int(obj.y.unsafe_ptr())), n, max(kp, 2), nf)
+    # the StratifiedKFold ids from the device labels (the caller sent zeros),
+    # unless an explicit cv's fold ids came in y (ip[6] = 1)
+    if not lcv_caller_folds(len(ip), Int(ip[6]) if len(ip) > 6 else 0):
+        lcv_fold_ids_device(c.copy(), FP(unsafe_from_address=Int(obj.y.unsafe_ptr())), n, max(kp, 2), nf)
     c.synchronize()
     _ = hc^
     comptime if C13_LOGCV_WEIGHTS:
