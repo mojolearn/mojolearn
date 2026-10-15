@@ -76,7 +76,7 @@ class WheelMatrixTests(unittest.TestCase):
         for args in ((), ('--no-gpu',)):
             result = self.run_gate(*args)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(result.stdout.count('PASS python3.'), 15)
+            self.assertEqual(result.stdout.count('PASS python3.'), 10)  # 5 interpreters x {fast, identical}
             self.assertIn('all 5 interpreters passed', result.stdout)
             if args:
                 self.assertIn('DEVICE NOT TESTED', result.stdout.splitlines()[-1])
@@ -86,7 +86,7 @@ class WheelMatrixTests(unittest.TestCase):
         result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout.count('dependency-free installed runtime'), 5)
-        self.assertEqual(result.stdout.count('PASS python3.'), 15)
+        self.assertEqual(result.stdout.count('PASS python3.'), 10)  # 5 interpreters x {fast, identical}
 
     def test_ambiguous_wheel_is_refused(self):
         (self.dist / 'mojolearn-other.whl').touch()
@@ -110,8 +110,8 @@ class WheelMatrixTests(unittest.TestCase):
             self.interpreters(smoke_fail=fails, smoke_output=evidence)
             result = self.run_gate()
             # Runtime, FAST/IDENTICAL ByteLM availability, language-model smoke,
-            # and three numeric-mode smoke jobs, for each of five interpreters.
-            self.assertEqual(result.stdout.count(evidence), 35, result.stdout)
+            # and two numeric-mode smoke jobs (fast, identical), for each of five interpreters.
+            self.assertEqual(result.stdout.count(evidence), 30, result.stdout)
             self.assertEqual(result.returncode == 0, not fails)
 
 
