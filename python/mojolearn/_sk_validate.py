@@ -272,8 +272,8 @@ def _integral(obj):
 
 
 def _precomputed(est):
-    return any(getattr(est, k, None) == "precomputed"  # glue: four parameter names
-               for k in ("metric", "kernel", "affinity", "dissimilarity"))
+    keys = ("metric", "kernel", "affinity", "dissimilarity")
+    return any(getattr(est, k, None) == "precomputed" for k in keys)  # glue: four parameter names
 
 
 def _check_X(est, X):
