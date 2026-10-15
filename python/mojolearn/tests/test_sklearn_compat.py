@@ -368,12 +368,22 @@ EXPECTED_FAILED_CHECKS = {
                                            "(NumPy-free input contract)",
     "check_sample_weights_not_an_array": "an __array__-only object is not a buffer or a sequence "
                                          "(NumPy-free input contract)",
-    # FLOAT32 ARITHMETIC: fits compute in float32 (float64 X is cast once),
-    # and these checks compare weighted and row-repeated fits at float64's
-    # default tolerance (assert_allclose, rtol=1e-7).
-    "check_sample_weight_equivalence_on_dense_data": "float32 fits compared at float64 tolerance",
-    "check_sample_weight_equivalence_on_sparse_data": "float32 fits compared at float64 tolerance",
 }
+
+_WEQ = ("check_sample_weight_equivalence_on_dense_data", "check_sample_weight_equivalence_on_sparse_data")
+
+#: scikit-learn's own expected failures of its weight-equivalence checks
+#: (sklearn/utils/_test_common/instance_generator.py, PER_ESTIMATOR_XFAIL_CHECKS),
+#: for the estimators of the same name, with scikit-learn's reason: bootstrap
+#: or random row subsampling, random restarts and shuffled online updates make
+#: a weight-w row differ from w repeated rows by design.
+SKLEARN_WEIGHT_EQUIVALENCE_XFAIL = (
+    "AdaBoostClassifier", "AdaBoostRegressor", "BaggingClassifier", "BaggingRegressor", "BisectingKMeans",
+    "GradientBoostingClassifier", "GradientBoostingRegressor", "KMeans", "LinearSVC", "LinearSVR",
+    "LogisticRegression", "MiniBatchKMeans", "OneClassSVM", "Perceptron", "RandomForestClassifier",
+    "RandomForestRegressor", "SGDClassifier", "SGDOneClassSVM", "SGDRegressor", "SVC", "SVR",
+)
+_SKLEARN_WEQ_REASON = "sample_weight is not equivalent to removing/repeating samples."
 
 
 #: Per estimator: the checks scikit-learn's own test suite expects to fail
@@ -401,6 +411,47 @@ PER_ESTIMATOR_EXPECTED_FAILED_CHECKS = {
                                                  "(scikit-learn skips its own MultiOutputClassifier)",
     },
 }
+
+#: Meta-estimators whose weight-equivalence check rests on a member that
+#: scikit-learn itself xfails (SKLEARN_WEIGHT_EQUIVALENCE_XFAIL): sample_weight
+#: goes to that member's fit, so the wrapper is equivalent exactly when the
+#: member is.
+WEIGHT_EQUIVALENCE_INHERITED = {
+    # members LogisticRegression(C=1), one per output (_factories); scikit-learn
+    # also skips every check of its own MultiOutputClassifier
+    "MultiOutputClassifier": "its LogisticRegression members' sample_weight is not equivalent to "
+                             "removing/repeating samples (scikit-learn xfails LogisticRegression too)",
+    # final_estimator LogisticRegression() fits the stacked predictions with sample_weight
+    "StackingClassifier": "its final LogisticRegression's sample_weight is not equivalent to "
+                          "removing/repeating samples (scikit-learn xfails LogisticRegression too)",
+}
+
+#: FLOAT32 ARITHMETIC, per estimator: the weighted fit is scikit-learn's
+#: weighted problem exactly (a weight-w row counts as w rows, a weight-0 row
+#: as none: the same counts, the same structure), but it runs in float32
+#: (float64 X is cast once) and the check compares the weighted and the
+#: row-repeated fit at float64's default tolerance (assert_allclose,
+#: rtol=1e-7, atol=1e-9). Each entry states the gap measured on NVIDIA
+#: (scikit-learn's check data: 15 rows x 30 features, integer weights 0..4).
+WEIGHT_EQUIVALENCE_FLOAT32 = {
+    # weighted counts sum(w x) per class and feature (x_prep/blocked.mojo
+    # csb1_part, w x per row) vs the repeated rows' x + x + ...; the float32
+    # joint log-likelihood over 30 features is about -50, whose float32 ulp
+    # (3.8e-6) sets the gap of the normalized probabilities
+    "MultinomialNB": "float32 fit: predict_proba max relative gap 3.9e-6 (0.34514019 vs 0.34513885), "
+                     "4 of 45 entries; same counts (float32 log-likelihood of magnitude ~50)",
+    "ComplementNB": "float32 fit: predict_proba max relative gap 3.8e-6 (0.46678317 vs 0.46678495), "
+                    "17 of 45 entries; same counts (float32 log-likelihood of magnitude ~50)",
+}
+
+
+for _name in SKLEARN_WEIGHT_EQUIVALENCE_XFAIL:
+    PER_ESTIMATOR_EXPECTED_FAILED_CHECKS.setdefault(_name, {}).update(
+        {check: _SKLEARN_WEQ_REASON + " (scikit-learn xfails it too)" for check in _WEQ})
+for _name, _reason in WEIGHT_EQUIVALENCE_INHERITED.items():
+    PER_ESTIMATOR_EXPECTED_FAILED_CHECKS.setdefault(_name, {}).update({check: _reason for check in _WEQ})
+for _name, _reason in WEIGHT_EQUIVALENCE_FLOAT32.items():
+    PER_ESTIMATOR_EXPECTED_FAILED_CHECKS.setdefault(_name, {}).update({check: _reason for check in _WEQ})
 
 
 def _expected_failed_checks(estimator):
