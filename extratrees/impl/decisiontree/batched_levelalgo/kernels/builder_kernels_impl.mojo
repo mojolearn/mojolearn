@@ -1341,13 +1341,22 @@ def node_feature_score_host(
     fixed-point row-weight plane; the host restatement of
     `node_feature_score_weighted_kernel` + the finalize pass's WEIGHTED arm
     (class tallies in weight units, the key over the weight totals, the
-    empty-weight / `min_weight_units` rejection, weighted purity)."""
+    empty-weight / `min_weight_units` rejection, weighted purity).
+
+    lane sk-final: a regressor with `row_w_addr` restates
+    `node_feature_score_weighted_reg_kernel` + the finalize pass's weighted
+    regression arm: `labels_q` holds the quantized `w * y`, the cell keeps
+    TWO accumulators (slot 0 Z, slot 1 the weight units W; `n_acc` stays the
+    caller's 1 and the cell's lists are two long) and the key is
+    `regression_key` over (Z, W)."""
     var weighted = is_classification and row_w_addr != 0
+    var weighted_reg = (not is_classification) and row_w_addr != 0
+    var n_slots = 2 if weighted_reg else n_acc
     var row_w = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=row_w_addr if row_w_addr != 0 else Int(labels_q))
     if extent.n_missing != Int32(0):
-        return empty_scored_candidate(SCORE_STATUS_MISSING_REFUSED, n_acc)
+        return empty_scored_candidate(SCORE_STATUS_MISSING_REFUSED, n_slots)
     if node_feature_is_constant(extent, Int32(range_len)):
-        return empty_scored_candidate(SCORE_STATUS_CONSTANT, n_acc)
+        return empty_scored_candidate(SCORE_STATUS_CONSTANT, n_slots)
 
     var threshold: Float32
     if device_draw:
@@ -1355,8 +1364,8 @@ def node_feature_score_host(
     else:
         threshold = draw_threshold(key, extent)
 
-    var acc_left = List[Int32](length=n_acc, fill=Int32(0))
-    var acc_total = List[Int32](length=n_acc, fill=Int32(0))
+    var acc_left = List[Int32](length=n_slots, fill=Int32(0))
+    var acc_total = List[Int32](length=n_slots, fill=Int32(0))
     var n_left = 0
     var n_total = 0
     var col_offset = col * m
@@ -1379,6 +1388,11 @@ def node_feature_score_host(
             acc_total[0] += Int32(lab)
             if goes_left:
                 acc_left[0] += Int32(lab)
+            if weighted_reg:
+                var wr = row_w[unsafe_offset=row]
+                acc_total[1] += wr
+                if goes_left:
+                    acc_left[1] += wr
         if goes_left:
             n_left += 1
 
@@ -1410,6 +1424,17 @@ def node_feature_score_host(
             for kc in range(n_acc):
                 if Int64(Int(acc_total[kc])) == w_total:
                     status = SCORE_STATUS_PURE_NODE
+    elif status == SCORE_STATUS_SCORED and weighted_reg:
+        var rw_total = Int64(Int(acc_total[1]))
+        var rw_left = Int64(Int(acc_left[1]))
+        var rw_right = rw_total - rw_left
+        if (
+            rw_left <= Int64(0)
+            or rw_right <= Int64(0)
+            or rw_left < min_weight_units
+            or rw_right < min_weight_units
+        ):
+            status = SCORE_STATUS_REJECTED_MIN_SAMPLES_LEAF
     elif status == SCORE_STATUS_SCORED and is_classification and n_total > 0:
         for kc in range(n_acc):
             if Int(acc_total[kc]) == n_total:
@@ -1435,12 +1460,19 @@ def node_feature_score_host(
         num = (sq_left >> cs) * nr + (sq_right >> cs) * nl
         den = nl * nr
     elif status == SCORE_STATUS_SCORED:
+        var k_left = n_left
+        var k_right = n_right
+        var k_rows = range_len
+        if weighted_reg:
+            k_rows = Int(acc_total[1])
+            k_left = Int(acc_left[1])
+            k_right = k_rows - k_left
         if not regression_key(
             Int64(Int(acc_left[0])),
             Int64(Int(acc_total[0])),
-            n_left,
-            n_right,
-            range_len,
+            k_left,
+            k_right,
+            k_rows,
             SCORE_SAB_NONE,
             num,
             den,
