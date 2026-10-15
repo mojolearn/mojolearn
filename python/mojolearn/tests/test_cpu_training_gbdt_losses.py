@@ -192,13 +192,19 @@ def test_the_five_configurations_fit_on_the_host_when_built():
     assert np.asarray(mc.predict_proba(x)).shape == (600, 3)
     ova = twice(lambda: mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss="MultiClassOneVsAll"), y3)
     assert np.asarray(ova.predict_proba(x)).shape == (600, 3)
+    # The pointwise losses take the Bayesian bootstrap on a SymmetricTree fit
+    # since 178d71116 (the shared row bootstrap after the full gradients,
+    # `pw_stochastic` in bindings/_mojolearn_gbdt_host.mojo); what the host
+    # still refuses by name is a pointwise loss under a non-symmetric policy.
+    twice(lambda: mojolearn.GradientBoosting(
+        n_estimators=2, max_depth=3, loss="Quantile", bootstrap_type="Bayesian"), yr)
     try:
         mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Quantile",
-                                   bootstrap_type="Bayesian").fit(x, yr)
+                                   grow_policy="Depthwise").fit(x, yr)
     except Exception as exc:
         assert "no CPU implementation of" in str(exc), str(exc)
     else:
-        raise AssertionError("a Bayesian bootstrap fit did not refuse on the host binding")
+        raise AssertionError("a Depthwise Quantile fit did not refuse on the host binding")
 
 
 if __name__ == "__main__":
