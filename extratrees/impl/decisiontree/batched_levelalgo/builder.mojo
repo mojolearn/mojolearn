@@ -80,6 +80,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     ScoredCandidate,
     leaf_kernel,
     leaf_weighted_kernel,
+    leaf_weighted_reg_kernel,
     node_split_kernel,
     node_feature_range_kernel,
     node_feature_range_tiled_kernel,
@@ -88,8 +89,10 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     node_feature_score_reg_tiled_kernel,
     node_feature_score_finalize_kernel,
     node_feature_score_finalize_weighted_kernel,
+    node_feature_score_finalize_weighted_reg_kernel,
     node_feature_score_kernel,
     node_feature_score_weighted_kernel,
+    node_feature_score_weighted_reg_kernel,
     partition_samples,
     phase_setup_a_kernel,
     phase_setup_b_kernel,
@@ -2774,6 +2777,9 @@ struct DeviceDataset(Movable):
     var weighted: Bool
     var min_weight_units: Int64
     """scikit-learn's min_weight_leaf in `d_weights` units (0: none)."""
+    var weight_scale: Float64
+    """lane sk-final: the power of two `d_weights` is quantized at (1.0
+    until `set_row_weights` weights the fit)."""
 
     @always_inline
     def bins_active(self) -> Bool:
@@ -2832,6 +2838,7 @@ struct DeviceDataset(Movable):
         ctx.synchronize()
         _ = dw^
         self.weighted = True
+        self.weight_scale = scale
         self.min_weight_units = Int64(0)
         if min_weight_fraction > 0.0:
             var units = min_weight_fraction * scan.total * scale
@@ -3018,6 +3025,7 @@ def upload_dataset(
     return DeviceDataset(
         d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False,
         d_bins_rm^, d_quant^, d_nbins^, False, d_weights^, False, Int64(0),
+        Float64(1.0),
     )
 
 
@@ -3223,6 +3231,119 @@ def upload_dataset_labels_quantized(
     _ = d_y^
     _ = h_y^
     scale_out = scale
+    return dataset^
+
+
+def et_weighted_labels_kernel(
+    out_z: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """lane sk-final: `out_z[i] = ftz(w[i] * y[i])`, one thread per row.
+    One IEEE float32 product (no addend, so nothing to contract) with the
+    IDENTICAL denormal policy applied: the same word on every vendor and on
+    the host column (`host_weighted_labels`)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        out_z[unsafe_offset=i] = ftz(w[unsafe_offset=i] * y[unsafe_offset=i])
+
+
+def weighted_label_scale_ratio(label_scale: Float64, weight_scale: Float64) raises -> Float64:
+    """lane sk-final: the weighted regressor's leaf scale, `label_scale /
+    weight_scale` (both powers of two, so the quotient is exact), such that
+    `Float32(1 / ratio)` turns a leaf's `Z / W` back into the label's units.
+    Refused when that reciprocal leaves the normal Float32 range."""
+    var ratio = label_scale / weight_scale
+    var inv = 1.0 / ratio
+    if inv < Float64(1.1754943508222875e-38) or inv > Float64(1.7014118346046923e38):
+        raise Error(
+            "sample weights and targets exceed the Float32 fixed-point scale range"
+        )
+    return ratio
+
+
+def upload_dataset_labels_quantized_weighted(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    y: List[Float32],
+    n_rows: Int32,
+    n_cols: Int32,
+    weights_addr: Int,
+    min_weight_fraction: Float64,
+    mut scale_out: Float64,
+    x_addr: Int = 0,
+    x_row_major: Bool = False,
+) raises -> DeviceDataset:
+    """lane sk-final: `upload_dataset_labels_quantized` for a regressor with
+    per-row weights (`weights_addr`: `n_rows` float32 words, borrowed
+    through this call). `DeviceDataset.set_row_weights` checks and quantizes
+    the weights (all 1.0: the unweighted fit, with `scale_out` the label
+    scale and nothing else changed). Otherwise the labels the score and leaf
+    passes read are `z = ftz(w * y)` (`et_weighted_labels_kernel`), whose
+    scale is chosen from `sum |z|` exactly as an unweighted fit's is from
+    `sum |y|`, so every node's Z stays inside the 2^30 slot, and
+    `scale_out` is `weighted_label_scale_ratio(label scale, weight scale)`:
+    a leaf's `Z / W` times `Float32(1 / scale_out)` is its weighted mean."""
+    if len(y) != Int(n_rows):
+        raise Error(
+            "labels must be n_rows long; got "
+            + String(len(y))
+            + " for n_rows="
+            + String(n_rows)
+        )
+    var dataset = upload_dataset(
+        ctx, x_col_major, List[Int32](), n_rows, n_cols, 1,
+        x_addr=x_addr, x_row_major=x_row_major, labels_on_device=True,
+    )
+    var weighted = dataset.set_row_weights(ctx, weights_addr, min_weight_fraction)
+    var n = Int(n_rows)
+    var d_y = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var h_y = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
+    var d_w = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var d_z = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    ctx.synchronize()
+    memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
+    if weighted and n > 0:
+        ctx.enqueue_copy(
+            dst_buf=d_w,
+            src_ptr=MutPointer[Float32, MutUntrackedOrigin](
+                unsafe_from_address=weights_addr
+            ),
+        )
+        ctx.enqueue_function[et_weighted_labels_kernel](
+            d_z.unsafe_ptr(),
+            d_y.unsafe_ptr(),
+            d_w.unsafe_ptr(),
+            n_rows,
+            grid_dim=ceildiv(n, 256),
+            block_dim=256,
+        )
+    else:
+        ctx.enqueue_copy(dst_buf=d_z, src_buf=d_y)
+    # reads back one word, so the copies and the product have landed
+    var mag = device_abs_sum_blocked(ctx, d_z, n)
+    var scale = choose_scale(mag, n)
+    var e = label_scale_exponent(scale)
+    if n > 0:
+        ctx.enqueue_function[quantize_labels_device_kernel](
+            dataset.d_labels.unsafe_ptr(),
+            d_z.unsafe_ptr(),
+            n_rows,
+            Int32(e),
+            grid_dim=ceildiv(n, 256),
+            block_dim=256,
+        )
+    ctx.synchronize()
+    _ = d_y^
+    _ = h_y^
+    _ = d_w^
+    _ = d_z^
+    if weighted:
+        scale_out = weighted_label_scale_ratio(scale, dataset.weight_scale)
+    else:
+        scale_out = scale
     return dataset^
 
 
