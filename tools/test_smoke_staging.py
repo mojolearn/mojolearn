@@ -515,3 +515,12 @@ def test_neural_inputs_outside_the_worker(timed, tmp_path, monkeypatch):
     NEURAL.make_inputs("gemm", "small", 2, path)
     a, b = NEURAL.read_inputs(path), NEURAL.read_inputs(path)
     assert len(writes) == 1 and a["a"] is not b["a"] and a["a"].tobytes() == b["a"].tobytes()
+
+
+def test_neural_stage_removes_a_dead_process_file(in_worker, tmp_path):
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    dead = stage / "neural-gemm-small-steps2.999999999.npz"
+    dead.write_bytes(b"x")
+    got = NEURAL.stage_inputs("gemm", "gaussian", dict(shape="small", steps=2, dir=str(stage)))
+    assert not dead.exists() and os.path.basename(got["file"]) == "neural-gemm-small-steps2.%d.npz" % os.getpid()

@@ -981,7 +981,19 @@ def stage_inputs(lane, dataset, data):
     shape, steps = data["shape"], int(data["steps"])
     os.makedirs(data["dir"], exist_ok=True)
     # one file per process: the worker and its arm servers each stage their own, never rewriting another's
-    path = os.path.join(data["dir"], "neural-%s-%s-steps%d.%d.npz" % (lane, shape, steps, os.getpid()))
+    stem = os.path.join(data["dir"], "neural-%s-%s-steps%d." % (lane, shape, steps))
+    for old in glob.glob(glob.escape(stem) + "*.npz"):     # an earlier smoke's process (gone): its file goes
+        try:
+            pid = int(old[len(stem):-len(".npz")])
+            os.kill(pid, 0)
+        except (ValueError, ProcessLookupError):
+            try:
+                os.remove(old)
+            except OSError:
+                pass
+        except OSError:
+            pass                                          # alive under another user: leave it
+    path = "%s%d.npz" % (stem, os.getpid())
     rec = _write_inputs(lane, shape, steps, path)
     with np.load(path) as z:
         arrays = {k: z[k] for k in z.files}
