@@ -695,6 +695,12 @@ class LinearRegression(NumericModeMixin):
             "mojolearn LinearRegression currently requires one target",
             "mojolearn LinearRegression X and y lengths differ",
         )
+        if rows < 2:
+            # olsFit needs two rows (its refusal is a bare Exception from the
+            # binding); scikit-learn's check_array wording, raised first
+            raise ValueError(
+                f"Found array with {rows} sample(s) (shape=({rows}, {cols})) "
+                "while a minimum of 2 is required.")
         weights = _check_sample_weight(sample_weight, rows, "LinearRegression")
         b = self._bind("_mojolearn_estimators")
         fast_ne = _ols_normal_eq_default(b)
@@ -912,10 +918,9 @@ class LinearRegression(NumericModeMixin):
 #                  'svd' (ridgeSVD -> cuSOLVER gesvd, glm/NOT_IMPLEMENTED.tsv) and
 #                  'cd' (cuml/solvers/cd.pyx) refused by name
 #   normalize      refused: preProcessData's meanvar arm (preprocess.cuh:76-108)
-#   sample_weight  refused: ridge.cuh:197-208 / 220-231, not implemented
-#   n_features==1  refused: ridge.cuh:210 forces ridgeSVD for one column
-#                  (ridge.pyx:355 warns and switches); raised by name by the Mojo
-#                  layer (alpha > 0; `linear_gram_fit` defers to it)
+#   sample_weight  and n_features==1 (ridge.cuh:210 forces ridgeSVD for one
+#                  column): `fit` sends both to the x_linear ridge kernel
+#                  (x_linear/ridge.mojo, weighted means + Cholesky; lane sk-edges)
 #   y 2-D          refused, one target only
 class Ridge(NumericModeMixin):
     """Linear least squares with l2 regularization.
@@ -1472,7 +1477,12 @@ class LogisticRegression(NumericModeMixin):
         strength = 1.0 / self.C
         return self._l1_ratio * strength, (1.0 - self._l1_ratio) * strength
 
-    def fit(self, X, y, sample_weight=None):
+    # sample_weight is not a fit parameter: the quasi-Newton solver has no
+    # weighted loss (cuML's is GLMBase::add_sample_weights, glm_base.cuh:115;
+    # the qn_fit binding refuses has_sample_weight by name;
+    # glm/NOT_IMPLEMENTED.tsv). Advertising it only to raise would tell
+    # scikit-learn's has_fit_parameter it works (lane sk-edges).
+    def fit(self, X, y):
         """Fit the classifier.
 
         Parameters
@@ -1482,8 +1492,6 @@ class LogisticRegression(NumericModeMixin):
         y : array-like of shape (n_samples,)
             Class labels, at least two distinct values. A 2-D ``y``, a
             single class or a length mismatch raises ``ValueError``.
-        sample_weight : None
-            Must be None; weights raise ``NotImplementedError``.
 
         Returns
         -------
@@ -1491,12 +1499,6 @@ class LogisticRegression(NumericModeMixin):
             The fitted estimator.
         """
         self._validate_params()
-        if sample_weight is not None:
-            raise NotImplementedError(
-                "mojolearn LogisticRegression: sample_weight is not implemented "
-                "(GLMBase::add_sample_weights, glm_base.cuh:115; "
-                "glm/NOT_IMPLEMENTED.tsv)"
-            )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape
         if len(_shape_of(y)) != 1:
@@ -1990,7 +1992,9 @@ class QNRegressor(NumericModeMixin):
         self.warm_start = False
         self.penalty_normalized = penalty_normalized
 
-    def fit(self, X, y, sample_weight=None):
+    # No sample_weight parameter: the quasi-Newton solver has no weighted loss
+    # (GLMBase::add_sample_weights, glm_base.cuh:115; glm/NOT_IMPLEMENTED.tsv).
+    def fit(self, X, y):
         """Fit the model.
 
         Parameters
@@ -2000,19 +2004,12 @@ class QNRegressor(NumericModeMixin):
         y : array-like of shape (n_samples,)
             Target values. A 2-D ``y`` or a length mismatch raises
             ``ValueError``.
-        sample_weight : None
-            Must be None; weights raise ``NotImplementedError``.
 
         Returns
         -------
         self : QNRegressor
             The fitted estimator.
         """
-        if sample_weight is not None:
-            raise NotImplementedError(
-                "mojolearn QNRegressor: sample_weight is not implemented "
-                "(GLMBase::add_sample_weights, glm_base.cuh:115; "
-                "glm/NOT_IMPLEMENTED.tsv)")
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape
         t = _target_1d(y, rows, "mojolearn QNRegressor requires a 1-D y",

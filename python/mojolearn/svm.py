@@ -86,12 +86,11 @@ class _LinearSVMBase(NumericModeMixin):
         inv_c = 1.0 / self.C
         return (inv_c, 0.0) if self.penalty == "l1" else (0.0, inv_c)
 
-    def _refuse_sample_weight(self, sample_weight):
-        if sample_weight is not None:
-            raise NotImplementedError(
-                f"mojolearn {type(self).__name__}: sample_weight is not implemented "
-                "(GLMBase::add_sample_weights, glm_base.cuh:115; "
-                "glm/NOT_IMPLEMENTED.tsv)")
+    # No `fit` here takes sample_weight: the quasi-Newton solver has no
+    # weighted loss (GLMBase::add_sample_weights, glm_base.cuh:115; the qn_fit
+    # binding refuses has_sample_weight by name; glm/NOT_IMPLEMENTED.tsv).
+    # Advertising it only to raise would tell scikit-learn's
+    # has_fit_parameter it works (lane sk-edges).
 
 
 class LinearSVC(_LinearSVMBase):
@@ -194,7 +193,7 @@ class LinearSVC(_LinearSVMBase):
                 "implemented; glm/NOT_IMPLEMENTED.tsv)")
         self._check_common()
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y):
         """Fit the classifier.
 
         Parameters
@@ -204,8 +203,6 @@ class LinearSVC(_LinearSVMBase):
         y : array-like of shape (n_samples,)
             Class labels, at least two distinct values. A 2-D ``y``, a
             single class or a length mismatch raises ``ValueError``.
-        sample_weight : None
-            Must be None; weights raise ``NotImplementedError``.
 
         Returns
         -------
@@ -213,7 +210,6 @@ class LinearSVC(_LinearSVMBase):
             The fitted estimator.
         """
         self._validate_params()
-        self._refuse_sample_weight(sample_weight)
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape
         labels, _ = _labels_1d(y)
@@ -471,7 +467,7 @@ class LinearSVR(_LinearSVMBase):
                 f"mojolearn LinearSVR: epsilon must be finite and non-negative, got {epsilon}")
         self._check_common()
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y):
         """Fit the regressor.
 
         Parameters
@@ -481,8 +477,6 @@ class LinearSVR(_LinearSVMBase):
         y : array-like of shape (n_samples,)
             Target values. A 2-D ``y`` or a length mismatch raises
             ``ValueError``.
-        sample_weight : None
-            Must be None; weights raise ``NotImplementedError``.
 
         Returns
         -------
@@ -490,7 +484,6 @@ class LinearSVR(_LinearSVMBase):
             The fitted estimator.
         """
         self._validate_params()
-        self._refuse_sample_weight(sample_weight)
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape
         t = _target_1d(y, rows, "mojolearn LinearSVR requires a 1-D y",
