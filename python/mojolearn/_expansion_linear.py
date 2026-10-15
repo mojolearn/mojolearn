@@ -28,6 +28,7 @@ from ._buffer import addr, addr_ro, as_f32_c, empty, full, zeros
 from ._bufcheck import memcopy
 from ._labels import decode_labels, encode_labels
 from ._mode import NumericModeMixin
+from ._mode import RegressorScoreMixin
 
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
            "HuberRegressor",
@@ -3090,7 +3091,7 @@ def _column(X, name="X"):
     return a
 
 
-class IsotonicRegression(NumericModeMixin):
+class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
     """Isotonic regression: the best monotone fit of one feature.
 
     Follows scikit-learn's IsotonicRegression: fits a non-decreasing (or

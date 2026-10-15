@@ -98,6 +98,64 @@ class SklearnTagsMixin:
         return sklearn_tags(self)
 
 
+class ClassifierScoreMixin:
+    """scikit-learn's `ClassifierMixin.score` for a classifier without its own:
+    the default scorer of `GridSearchCV` and `cross_val_score`."""
+
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        # The match count and weight total are the x_metrics binding's sums.
+        from ._expansion_metrics import accuracy_fraction
+        return accuracy_fraction(y, self.predict(X), sample_weight,
+                                 getattr(self, "numeric_mode", None))
+
+
+class RegressorScoreMixin:
+    """scikit-learn's `RegressorMixin.score` for a regressor without its own:
+    the default scorer of `GridSearchCV` and `cross_val_score`."""
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        # R^2 is the metrics binding's pinned-sum r2_score, in float32.
+        from ._buffer import as_f32_c
+        from ._metrics_impl import r2_score
+        truth, _ = as_f32_c(y, ndim=None, name="y")
+        pred, _ = as_f32_c(self.predict(X), ndim=None, name="prediction")
+        return r2_score(truth, pred, sample_weight=sample_weight,
+                        numeric_mode=getattr(self, "numeric_mode", None))
+
+
 class ParamsMixin(SklearnTagsMixin):
     """`get_params` / `set_params` read off the constructor's signature.
 

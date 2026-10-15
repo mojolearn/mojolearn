@@ -29,6 +29,7 @@ from ._array import Array
 from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
 from ._buffer import addr as _addr, empty as _empty
 from ._mode import SklearnTagsMixin
+from ._mode import RegressorScoreMixin
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
@@ -4019,7 +4020,7 @@ def _dot(k, a, b):
     return k.mm(a, b, ta=True)
 
 
-class _PLS(_Base):
+class _PLS(RegressorScoreMixin, _Base):
     """sklearn `cross_decomposition/_pls.py::_PLS` (NIPALS): `fit`,
     `_get_first_singular_vectors_power_method`, `_center_scale_xy`,
     `_get_first_singular_vectors_svd` (PLSCanonical algorithm='svd'),
