@@ -25,7 +25,8 @@ per fold one count, and the result once. The host column runs `logcv_fit`:
 the same statements on the same rows in the same order: the same words.
 """
 from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
-from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight, lcv_caller_folds
+from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight, lcv_caller_folds, LCV_ROLES_AFTER
+from x_linear.cv_roles import cv_train, cv_test
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_linear.ops import FP, IP, ld, st, ldi, i2f, fa, fd
@@ -87,7 +88,7 @@ def lcv_hit_kernel(x: FP, y: FP, n: Int32, d: Int32, kpp: Int32, fi: Int32, th: 
     var i = Int(block_idx.x) * LCV_TPB + Int(thread_idx.x)
     var nn = Int(n)
     if i < nn:
-        if Int(ld(y, nn + i)) == Int(f):
+        if cv_test(y + nn, i, Int(f), LCV_ROLES_AFTER):
             var h = _predict_code(x, i, Int(d), Int(kpp), fi != 0, th, 0) == Int(ld(y, i))
             st(hit, i, Float32(1) if h else Float32(0))
     witness_end(wf, woff, nonce)
@@ -215,7 +216,7 @@ def lcv_fold_ids_device(var ctx: DeviceContext, y: FP, n: Int, nk: Int, k: Int) 
 # ------------------------------------------------ a fold's training rows (cgr-linear)
 @always_inline
 def _lcv_train(y: FP, n: Int, fold: Int, i: Int) -> Int:
-    return 1 if (i < n and Int(ld(y, n + i)) != fold) else 0
+    return 1 if (i < n and cv_train(y + n, i, fold, LCV_ROLES_AFTER)) else 0
 
 
 def lcv_rows_count_kernel(y: FP, n: Int32, fold: Int32, bcnt: IP, wf: IP, woff: Int32, nonce: Int32):
