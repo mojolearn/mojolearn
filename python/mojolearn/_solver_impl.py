@@ -215,6 +215,26 @@ class ElasticNet(ParamsMixin):
                  max_iter=1000, tol=1e-3, solver="auto", selection="cyclic",
                  precompute=False, copy_X=True, warm_start=False,
                  positive=False, random_state=None):
+        # Stored verbatim (scikit-learn's convention); `_validate_params`
+        # checks them when `fit` runs.
+        self.alpha = alpha
+        self.l1_ratio = l1_ratio
+        self.fit_intercept = fit_intercept
+        self.max_iter = max_iter
+        self.tol = tol
+        self.solver = solver
+        self.selection = selection
+        self.precompute = precompute
+        self.copy_X = copy_X
+        self.warm_start = warm_start
+        self.positive = positive
+        self.random_state = random_state
+
+    def _validate_params(self):
+        """The constructor checks, run at the start of `fit`."""
+        alpha, l1_ratio, solver, selection = self.alpha, self.l1_ratio, self.solver, self.selection
+        precompute, copy_X, warm_start, positive = self.precompute, self.copy_X, self.warm_start, self.positive
+        random_state = self.random_state
         # cuML's own guards first, in their order and with their messages
         # (`elastic_net.py:233-240`), so a script that catches theirs
         # catches these.
@@ -289,18 +309,6 @@ class ElasticNet(ParamsMixin):
                 f"random_state={random_state!r}: None, an int or a "
                 "numpy random state"
             )
-        self.alpha = alpha
-        self.l1_ratio = l1_ratio
-        self.fit_intercept = fit_intercept
-        self.max_iter = max_iter
-        self.tol = tol
-        self.solver = solver
-        self.selection = selection
-        self.precompute = False
-        self.copy_X = True
-        self.warm_start = False
-        self.positive = False
-        self.random_state = random_state
 
     def _as_fortran(self, X, name):
         """A float32 column-major Array over X, and whether that cost the
@@ -354,6 +362,7 @@ class ElasticNet(ParamsMixin):
         # outside mojolearn._cpu_reference.reference_training().
         from ._cpu_reference import require_training
         require_training(self)
+        self._validate_params()
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn ElasticNet: sample_weight is not implemented "

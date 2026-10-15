@@ -58,9 +58,9 @@ def test_coupling_is_a_distribution():
 
 def test_random_state_needs_probability():
     with pytest.raises(NotImplementedError, match="random_state"):
-        SVC(random_state=1)
+        SVC(random_state=1).fit([[0.0], [1.0]], [0, 1])
     with pytest.raises(ValueError, match="random_state"):
-        SVC(probability=True, random_state=-1)
+        SVC(probability=True, random_state=-1).fit([[0.0], [1.0]], [0, 1])
 
 
 def test_predict_proba_needs_probability():
