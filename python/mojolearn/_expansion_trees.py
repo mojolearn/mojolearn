@@ -1107,6 +1107,14 @@ class _BaggingBase(_TreesEnsembleBase):
         # refusals before any member is fitted (a bootstrap gather never
         # reads past row n, so a too-long vector was accepted silently)
         sw = None if sample_weight is None else check_sample_weight(sample_weight, n)
+        if sw is not None:
+            import inspect
+            try:
+                takes = "sample_weight" in inspect.signature(base.fit).parameters
+            except (TypeError, ValueError):
+                takes = False
+            if not takes:  # scikit-learn's BaseBagging refusal and words
+                raise ValueError("The base estimator doesn't support sample weight")
         self.estimators_, self.estimators_features_, self._oob_rows = [], [], []
         all_rows = n_rows == n and not self.bootstrap
         all_cols = n_feat == d and not self.bootstrap_features
