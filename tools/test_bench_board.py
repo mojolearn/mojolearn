@@ -250,6 +250,10 @@ def env(tmp_path, monkeypatch):
     run_race = bb.run_race
     monkeypatch.setattr(bb, "run_race", lambda ctx, race: run_race(dict(ctx, capture_measurements=False), race))
     monkeypatch.setattr(bb, "audit_plan", lambda ctx, races: dict(verdict="MATCHED", races={}))
+    # The stub drivers stand in for our arm, so the GPU-set load probe stands in too: with the source tree's
+    # mojolearn on PYTHONPATH and no built bindings (a CPU test pod) the real probe refuses every NVIDIA/AMD run.
+    # The probe itself is tested in test_gpu_set_refusal_names_the_wheels_reason.
+    monkeypatch.setattr(bb, "gpu_set_refusal", lambda python, vendor: None)
     data = tmp_path / "data"
     for rel in bb.DATA_FILES.values():
         f = data / rel
