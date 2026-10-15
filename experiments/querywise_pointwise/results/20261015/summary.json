@@ -1,0 +1,1063 @@
+{
+  "schema": "mojolearn.querywise-pointwise-evidence/1",
+  "native_freeze": "f63ef2235d8e84339ffafb16c973610a03dcf85a",
+  "source_base": "0f07d1b850e404712e2aedd10fd163e91165c0d9",
+  "integrated_main": "a2f1e261b",
+  "harness_commit": "e2918f3103b941addc9cf8bdd651b209085392d9",
+  "scope": "targeted numerical regression and cross-vendor bitwise evidence for new querywise pointwise route; raw GBDT candidate over verified 0.8.45 wheel base; NOT a released-wheel smoke, full board, performance or general algorithm qualification",
+  "fixture": {
+    "sha256": "d2962b249671027d8fd896078ac9c91f25bdce40e443dca49ae05ef61a89311a",
+    "shape": [
+      344,
+      7
+    ],
+    "query_groups": 40,
+    "source": "checks/gbdt_querywise_pointwise_check.py",
+    "cases_per_vendor": 24,
+    "executed_fits_per_vendor": 23,
+    "expected_refusals_per_vendor": 1,
+    "expected_refusal": "Simple leaf estimator; native route requires Newton or Gradient",
+    "compared_members": 207,
+    "outputs": "predictions and loss curves plus every saved-model NPZ member; compares dtype, shape and raw bytes"
+  },
+  "vendors": {
+    "nvidia": {
+      "archive": "nvidia",
+      "archive_directory": "candidate-ranking-f63-nvidia-04",
+      "compiled_vendor": "cuda",
+      "numeric_mode": 1,
+      "binary_sha256": "f154454f2c4cf6636ba3ff42d6d8f8fd800f15a3d4a96bade7e2ba02d49c48fa",
+      "native_commit": "f63ef2235d8e84339ffafb16c973610a03dcf85a",
+      "compile_exit_status": 0,
+      "compile_seconds": 299.352,
+      "numerical_exit_status": 0,
+      "cases": 24,
+      "failed_cases": [],
+      "comparison_to_apple": {
+        "failures": [],
+        "members": 207,
+        "verdict": "PASS"
+      },
+      "case_settings": [
+        {
+          "loss": "QueryRMSE",
+          "tag": "plain",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9849017369802823
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "repeat",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9849017369802823
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "bayesian-zero",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.0
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9849017369802823
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "bayesian",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.7
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9853565380716857
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "score-noise",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 1.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9840916024361963
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "newton-score",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "score_function": "NewtonCosine"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9849017369802823
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "different-groups",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.981924911672005
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "plain",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9747801473595452
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "repeat",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9747801473595452
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "bayesian-zero",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.0
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9747801473595452
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "bayesian",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.7
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9702144915266885
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "score-noise",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 1.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.8149600398075976
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "newton-score",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "score_function": "NewtonCosine"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.958971867448545
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "different-groups",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9826546980497438
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "plain",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.982875041487419
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "repeat",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.982875041487419
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "bayesian-zero",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.0
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.982875041487419
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "bayesian",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.7
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9941141421515969
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "score-noise",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 1.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.8149600398075976
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "newton-score",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "score_function": "NewtonCosine"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.982875041487419
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "different-groups",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9759158547341921
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "explicit-unit",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 2866,
+          "mean_ndcg": 0.9747801473595452
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "explicit-weighted",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 2866,
+          "mean_ndcg": 0.9613414494210989
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "unsupported-simple",
+          "expected_refusal": "querywise use_pointwise_searcher requires Newton or Gradient leaf estimation; Simple search-stat leaves and Exact are not implemented on this arm"
+        }
+      ],
+      "files": {
+        "validation.json": {
+          "path": "candidate-ranking-f63-nvidia-04/validation.json",
+          "sha256": "4c40ae9867498ec4ae0ceaae2b5b76a715328e229aeddb575b697d1f1b6deb08"
+        },
+        "loaded-binding.json": {
+          "path": "candidate-ranking-f63-nvidia-04/loaded-binding.json",
+          "sha256": "056f641df077fab7be55e3b891cb4d0798fa56ea16bad3b6502d1beb847dace9"
+        },
+        "numerical/summary.json": {
+          "path": "candidate-ranking-f63-nvidia-04/numerical/summary.json",
+          "sha256": "cafe6a8fb0908a61bb9eac375d98b50384156be2492e8ef3c46f40f4ec2f4fcf"
+        },
+        "crossvendor-comparison.json": {
+          "path": "candidate-ranking-f63-nvidia-04/crossvendor-comparison.json",
+          "sha256": "be7bee24bad79437452d29a8d3d997e10dbe57adc72480d2d8f710a203046a1d"
+        },
+        "retained-build/source.json": {
+          "path": "candidate-ranking-f63-nvidia-04/retained-build/source.json",
+          "sha256": "77675e307abdcbdc9e9698736574319af47c30cc49c3c654edd2a72099457887"
+        },
+        "retained-build/build-config.json": {
+          "path": "candidate-ranking-f63-nvidia-04/retained-build/build-config.json",
+          "sha256": "34ab836c5f0207528e25879e29183d0eab10918d8a0fd00998ccbf5afd06a74f"
+        },
+        "retained-build/execution.json": {
+          "path": "candidate-ranking-f63-nvidia-04/retained-build/execution.json",
+          "sha256": "8e7bd76067797427cce489ab1cfb3a7aed14174128b24810ab30d5e64509e004"
+        }
+      },
+      "integrated_native_closure": {
+        "files_checked": 226,
+        "mismatches": [],
+        "result": "same bytes as compiled native freeze"
+      }
+    },
+    "amd": {
+      "archive": "amd",
+      "archive_directory": "candidate-ranking-f63-amd-03",
+      "compiled_vendor": "hip",
+      "numeric_mode": 1,
+      "binary_sha256": "1a2bcd5cf5919e74ca4bc9ab94f91acd082d67265b2c353af7795210a7967a91",
+      "native_commit": "f63ef2235d8e84339ffafb16c973610a03dcf85a",
+      "compile_exit_status": 0,
+      "compile_seconds": 337.519,
+      "numerical_exit_status": 0,
+      "cases": 24,
+      "failed_cases": [],
+      "comparison_to_apple": {
+        "failures": [],
+        "members": 207,
+        "verdict": "PASS"
+      },
+      "case_settings": [
+        {
+          "loss": "QueryRMSE",
+          "tag": "plain",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9849017369802823
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "repeat",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9849017369802823
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "bayesian-zero",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.0
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9849017369802823
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "bayesian",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.7
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9853565380716857
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "score-noise",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 1.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9840916024361963
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "newton-score",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "score_function": "NewtonCosine"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9849017369802823
+        },
+        {
+          "loss": "QueryRMSE",
+          "tag": "different-groups",
+          "params": {
+            "loss": "QueryRMSE",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.981924911672005
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "plain",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9747801473595452
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "repeat",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9747801473595452
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "bayesian-zero",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.0
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9747801473595452
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "bayesian",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.7
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9702144915266885
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "score-noise",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 1.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.8149600398075976
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "newton-score",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "score_function": "NewtonCosine"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.958971867448545
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "different-groups",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9826546980497438
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "plain",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.982875041487419
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "repeat",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.982875041487419
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "bayesian-zero",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.0
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.982875041487419
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "bayesian",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "Bayesian",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "bagging_temperature": 0.7
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9941141421515969
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "score-noise",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 1.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.8149600398075976
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "newton-score",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical",
+            "score_function": "NewtonCosine"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.982875041487419
+        },
+        {
+          "loss": "YetiRank",
+          "tag": "different-groups",
+          "params": {
+            "loss": "YetiRank",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 0,
+          "mean_ndcg": 0.9759158547341921
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "explicit-unit",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 2866,
+          "mean_ndcg": 0.9747801473595452
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "explicit-weighted",
+          "params": {
+            "loss": "PairLogit",
+            "n_estimators": 5,
+            "max_depth": 3,
+            "learning_rate": 0.1,
+            "random_state": 19,
+            "use_pointwise_searcher": true,
+            "boosting_type": "Plain",
+            "bootstrap_type": "No",
+            "random_strength": 0.0,
+            "numeric_mode": "identical"
+          },
+          "explicit_pairs": 2866,
+          "mean_ndcg": 0.9613414494210989
+        },
+        {
+          "loss": "PairLogit",
+          "tag": "unsupported-simple",
+          "expected_refusal": "querywise use_pointwise_searcher requires Newton or Gradient leaf estimation; Simple search-stat leaves and Exact are not implemented on this arm"
+        }
+      ],
+      "files": {
+        "validation.json": {
+          "path": "candidate-ranking-f63-amd-03/validation.json",
+          "sha256": "499cc89440d36407f4d8ddc527182e6d5b6618678fef6afe1deaa0e54747100b"
+        },
+        "loaded-binding.json": {
+          "path": "candidate-ranking-f63-amd-03/loaded-binding.json",
+          "sha256": "a6768314b9487d71be92b16b21b146d55efa173beba5f1f0a7eeb7002fbb7cfc"
+        },
+        "numerical/summary.json": {
+          "path": "candidate-ranking-f63-amd-03/numerical/summary.json",
+          "sha256": "919957e96ce763230c00cc5b7232dca2c9ef1ec2e46e20930b7bb5439b97fcb3"
+        },
+        "crossvendor-comparison.json": {
+          "path": "candidate-ranking-f63-amd-03/crossvendor-comparison.json",
+          "sha256": "fc9f6d4714bae0831a8845a73bbd059b750b1e0a0e72ba9a873c9b8d7c71b453"
+        },
+        "retained-build/source.json": {
+          "path": "candidate-ranking-f63-amd-03/retained-build/source.json",
+          "sha256": "ba986d54ca3c8b13a90d1d7b1694c8a79662aa0126276fb0966a706c53531fa5"
+        },
+        "retained-build/build-config.json": {
+          "path": "candidate-ranking-f63-amd-03/retained-build/build-config.json",
+          "sha256": "b29b7a6f58f5458741766925315c925193b012b55a74dba540fe4bbb48560220"
+        },
+        "retained-build/execution.json": {
+          "path": "candidate-ranking-f63-amd-03/retained-build/execution.json",
+          "sha256": "c2a4cdc6a9c6de79ec421843b940988ba255d5e4ee16f3bed74db675440936ee"
+        }
+      },
+      "integrated_native_closure": {
+        "files_checked": 226,
+        "mismatches": [],
+        "result": "same bytes as compiled native freeze"
+      }
+    },
+    "apple": {
+      "archive": "nvidia",
+      "archive_directory": "candidate-ranking-f63-nvidia-04/reference",
+      "compiled_vendor": "metal",
+      "numeric_mode": 1,
+      "binary_sha256": "8302f0f5a21ddc2f170f299ab26f8bfd767f8af9f13c03403703853c400ca495",
+      "native_commit": "f63ef2235d8e84339ffafb16c973610a03dcf85a",
+      "compile_exit_status": 0,
+      "numerical_exit_status": 0,
+      "cases": 24,
+      "failed_cases": [],
+      "compile_seconds": 124.09993600845337,
+      "numerical_seconds": 3.229663610458374,
+      "binary_local_artifact": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/nvidia-ranking-lane/apple-candidate-package/mojolearn/identical/_mojolearn_gbdt.so",
+      "binary_remote_receipt": "not asserted by these GPU-output archive receipts; orchestration retains Apple artifact separately",
+      "reference_provenance": {
+        "archive": "nvidia",
+        "path": "candidate-ranking-f63-nvidia-04/reference-provenance.json"
+      }
+    }
+  },
+  "direct_nvidia_amd_comparison": {
+    "verdict": "PASS",
+    "members": 207,
+    "exit_status": 0,
+    "file": "nvidia-amd-comparison.json"
+  },
+  "tests": {
+    "controller": {
+      "passed": 46,
+      "exit_status": 0
+    },
+    "cross_compile_tooling": {
+      "passed": 27,
+      "exit_status": 0
+    },
+    "harness": {
+      "passed": 85,
+      "skipped": 1,
+      "exit_status": 0,
+      "skip": "CatBoost-dependent prebin test; CatBoost absent in local CPU test environment"
+    }
+  },
+  "native_library_default_changed": false,
+  "main_native_closure_verified_against_both_retained_builds": true,
+  "pending": [
+    "released-wheel staging/identity metadata/verification and publication are not done",
+    "the two new identity_break canonical lanes have not been executed: their fixtures differ from the 344x7 checker; do not relabel checker hashes as those lanes",
+    "fresh actual-settings preflight and two-recipe full-workload smoke on the new released NVIDIA wheel",
+    "then only PairLogit and YetiRank full workload measurement against admitted CatBoost GPU evidence; preserve all good old cells",
+    "FAST compilation/validation for changed GBDT source is not claimed by the identical-only candidate builds"
+  ],
+  "cherry_picks_relative_a2f1e261": [
+    "f63ef2235d8e84339ffafb16c973610a03dcf85a",
+    "5addace40733d4a88d14a4efe0792ade17270d14",
+    "77163610cd94391d15686600c389a7a897262bfc",
+    "cc15b87d2af5f71538b2587ec707857776c1692b",
+    "b3cc8204f3aea734809621db0f143f17cc9821c3",
+    "fa7b9e0bd44e1a012bc04b19b1740c2c10a4503c",
+    "3029fa86c3a5f634769e44e5fb622f6ef446ab49",
+    "b26767e447c4a32174768faf0ec42a01c093dc67",
+    "21b71ed5eb5f97eb17853828cf113ab01c06a9d7",
+    "e2918f3103b941addc9cf8bdd651b209085392d9"
+  ],
+  "merge_recommendation": "Normal merge this branch to preserve f63 ancestry and accepted compilation; no numerical source recompilation needed for merge.",
+  "root_integration_verification": {
+    "commit": "f9ed2d30dc4fe2d7bf023ec5cf037686ea4792d1",
+    "files_checked": 226,
+    "mismatches": 0,
+    "result": "PASS",
+    "record": "integrated-source-closure.json",
+    "note": "root verified all retained GBDT source/build closure bytes unchanged from accepted f63 compile; no rebuild needed"
+  }
+}
