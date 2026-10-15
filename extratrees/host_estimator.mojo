@@ -78,6 +78,53 @@ def fit_extra_trees_regressor_reference(
     return FitResult(forest^, plan, bound)
 
 
+@fieldwise_init
+struct HostRowWeights(Movable):
+    """lane sk-kernels: the host column's `DeviceDataset.set_row_weights`."""
+
+    var weighted: Bool
+    var q: List[Int32]
+    var min_weight_units: Int64
+
+
+def host_quantize_row_weights(
+    weights: List[Float32], n_rows: Int, min_weight_fraction: Float64
+) raises -> HostRowWeights:
+    """`DeviceDataset.set_row_weights` on the host: the same refusals in
+    the same words, the same blocked binary64 total
+    (`host_abs_sum_blocked`, `device_scan_weights`' order), all 1.0 an
+    unweighted fit, the same power-of-two scale and `Int32(w * scale)`
+    truncation, the same `min_weight_units`."""
+    if len(weights) != n_rows:
+        raise Error("sample weights must be n_rows long")
+    var all_unit = True
+    for i in range(n_rows):
+        var v = weights[i]
+        if not (v >= Float32(0) and v <= Float32(3.4028234663852886e38)):
+            raise Error("sample weights must be finite and nonnegative")
+        if v != Float32(1):
+            all_unit = False
+    var total = host_abs_sum_blocked(Int(weights.unsafe_ptr()), n_rows)
+    if not (total > 0.0):
+        raise Error("sample weights must have positive total")
+    if all_unit:
+        return HostRowWeights(False, List[Int32](), Int64(0))
+    var scale = choose_scale(total, n_rows)
+    if scale < Float64(1.1754943508222875e-38) or scale > Float64(1.7014118346046923e38):
+        raise Error("sample weights exceed the Float32 fixed-point scale range")
+    var fscale = Float32(scale)
+    var q = List[Int32](capacity=n_rows)
+    for i in range(n_rows):
+        q.append(Int32(Int(weights[i] * fscale)))
+    var mwu = Int64(0)
+    if min_weight_fraction > 0.0:
+        var units = min_weight_fraction * total * scale
+        mwu = Int64(Int(units))
+        if Float64(Int(mwu)) < units:
+            mwu += 1
+    return HostRowWeights(True, q^, mwu)
+
+
 def fit_extra_trees_classifier_host_exact(
     x_col_major: List[Float32],
     labels: List[Float32],
@@ -86,6 +133,7 @@ def fit_extra_trees_classifier_host_exact(
     n_classes: Int32,
     config: ExtraTreesConfig,
     tree_start: Int = 0,
+    weights: List[Float32] = List[Float32](),
 ) raises -> FitResult:
     """THE CPU COLUMN'S CLASSIFIER FIT (the CPU training lane, phase 1,
     et-clf, 2026-09-14): `fit_extra_trees_classifier_device` restated on
@@ -96,8 +144,19 @@ def fit_extra_trees_classifier_host_exact(
     cast with its range refusal. Takes no DeviceContext; what
     `bindings/_mojolearn_trees_host.mojo` runs, and what
     `tools/identity_break.py --diff ... --require-columns 4` holds to the
-    three GPU columns."""
-    var plan = classifier_plan(config, n_rows, n_features)
+    three GPU columns.
+
+    lane sk-kernels: `weights` (empty: none) is the per-row weight
+    (`host_quantize_row_weights`); all 1.0 fits unweighted with
+    `min_weight_fraction_leaf` folded into `min_samples_leaf`."""
+    var rw = HostRowWeights(False, List[Int32](), Int64(0))
+    if len(weights) > 0:
+        rw = host_quantize_row_weights(
+            weights, Int(n_rows), config.min_weight_fraction_leaf
+        )
+    var plan = classifier_plan(
+        config, n_rows, n_features, fold_min_weight=not rw.weighted
+    )
     var class_ids = class_ids_for_host(labels, n_rows, n_classes)
     var forest = fit_forest_exact(
         x_col_major,
@@ -114,6 +173,8 @@ def fit_extra_trees_classifier_host_exact(
         plan.bootstrap,
         plan.n_sampled_rows,
         tree_start,
+        rw.q.copy(),
+        rw.min_weight_units,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)

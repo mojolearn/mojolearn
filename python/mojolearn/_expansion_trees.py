@@ -163,15 +163,18 @@ def _dt_common(splitter, max_features, max_leaf_nodes):
     return None if splitter == "random" else max_leaf_nodes
 
 
-def _dt_random_fit(est, cls, X, y, **extra):
+def _dt_random_fit(est, cls, X, y, fit_params=None, **extra):
     """splitter='random': one ExtraTrees tree; its flat arrays become this
-    estimator's, and predict delegates to it."""
+    estimator's, and predict delegates to it. `fit_params` (the classifier's
+    sample_weight) go to the inner fit; `min_weight_fraction_leaf` to its
+    constructor."""
     inner = cls(n_estimators=1, bootstrap=False, max_features=1.0 if est.max_features is None else est.max_features,
                 max_depth=est.max_depth, min_samples_split=est.min_samples_split,
                 min_samples_leaf=est.min_samples_leaf, max_leaf_nodes=est.max_leaf_nodes,
                 min_impurity_decrease=est.min_impurity_decrease, criterion=est.criterion,
+                min_weight_fraction_leaf=est.min_weight_fraction_leaf,
                 random_state=0 if est.random_state is None else est.random_state,
-                numeric_mode=est.numeric_mode, **extra).fit(X, y)
+                numeric_mode=est.numeric_mode, **extra).fit(X, y, **(fit_params or {}))
     est._random_inner = inner
     for name in ("_offsets", "_colid", "_quesval", "_left_child", "_leaves", "_n_trees", "_num_outputs",  # glue: copies a handful of fitted attributes
                  "n_features_in_"):
@@ -201,8 +204,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
     splitter : {"best", "random"}, default="best"
         ``"best"`` searches the quantile bins of every candidate feature.
         ``"random"`` grows one extremely randomized tree (one random threshold
-        per candidate feature), the builder of ``ExtraTreesClassifier``; it
-        accepts no ``sample_weight`` or ``class_weight``.
+        per candidate feature), the builder of ``ExtraTreesClassifier``.
     max_depth : int or None, default=None
         Maximum depth of the tree. None grows until the other stopping rules
         apply.
@@ -211,7 +213,8 @@ class DecisionTreeClassifier(RandomForestClassifier):
     min_samples_leaf : int, default=1
         Minimum number of rows in each leaf.
     min_weight_fraction_leaf : float, default=0.0
-        Only 0.0 is accepted; any other value raises ``NotImplementedError``.
+        Minimum fraction of the total sample weight (of all rows when no
+        ``sample_weight`` is given) required in each leaf, in [0.0, 0.5].
     max_features : int, float, {"sqrt", "log2"} or None, default=None
         Number of features considered per split: an int count, a fraction in
         (0, 1], ``"sqrt"``, ``"log2"``, or None for every feature.
@@ -309,17 +312,16 @@ class DecisionTreeClassifier(RandomForestClassifier):
             Class labels; at least two classes are required.
         sample_weight : array-like of shape (n_samples,), default=None
             Per-row weights, multiplied into the ``class_weight`` row weights.
-            Not accepted with ``splitter="random"``.
 
         Returns
         -------
         self
         """
         if self.splitter == "random":
-            if sample_weight is not None or self.class_weight is not None:
-                _refuse("splitter='random' with weights", "the ExtraTrees builder takes no row weights.")
+            # lane sk-kernels: the ExtraTrees builder's weighted classifier
             self._refresh_config()
-            return _dt_random_fit(self, _ET_CLS, X, y)
+            fit_params = {} if sample_weight is None else {"sample_weight": sample_weight}
+            return _dt_random_fit(self, _ET_CLS, X, y, fit_params, class_weight=self.class_weight)
         if sample_weight is None:
             return self._fit_with_tree_start(X, y)
         return self._fit_weighted(_trees_colmajor(X, self), y, sample_weight)
@@ -451,7 +453,8 @@ class DecisionTreeRegressor(RandomForestRegressor):
     min_samples_leaf : int, default=1
         Minimum number of rows in each leaf.
     min_weight_fraction_leaf : float, default=0.0
-        Only 0.0 is accepted; any other value raises ``NotImplementedError``.
+        Minimum fraction of the total sample weight (of all rows when no
+        ``sample_weight`` is given) required in each leaf, in [0.0, 0.5].
     max_features : int, float, {"sqrt", "log2"} or None, default=None
         Number of features considered per split: an int count, a fraction in
         (0, 1], ``"sqrt"``, ``"log2"``, or None for every feature.

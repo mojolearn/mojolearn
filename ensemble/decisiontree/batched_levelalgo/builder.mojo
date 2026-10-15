@@ -1293,6 +1293,10 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     # silently ignored, because nothing read them from there and nothing
     # checked that the two agreed.
     var scales: BinScales
+    # scikit-learn's `min_weight_leaf` in the weighted bin's real units
+    # (lane sk-kernels; `ObjectiveLike.SetMinWeightLeaf`). 0 from the
+    # constructor; `fit_forest` sets it for a weighted objective only.
+    var min_weight_leaf: Float32
 
     # --- the workspace, `builder.cuh:176-212` ---------------------------
     # `:207-209` -- `rmm::device_uvector<char> d_buff` and
@@ -1481,6 +1485,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.n_cols = n_cols
         self.num_outputs = num_outputs
         self.scales = scales
+        self.min_weight_leaf = Float32(0)
         self.hist_task_rows = histogram_task_rows(Int(params.max_n_bins) * Int(num_outputs) * size_of[Self.O.BinT](), 4 + size_of[Scalar[Self.O.LabelT]](), HIST_WORKLOAD_GRANULARITY)
         self.retained_counts = None
         self.retained_counts_reset = True
@@ -1997,13 +2002,15 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         The value cannot move inside a fit, so the cadence is
         immaterial; `params` being the only source is the property worth
         keeping, not the call count."""
-        return Self.O(
+        var objective = Self.O(
             self.num_outputs,
             self.params.min_samples_leaf,
             Int32(self.params.split_criterion),
             Scalar[Self.O.DataT](self.params.min_impurity_decrease),
             self.scales,
         )
+        objective.SetMinWeightLeaf(self.min_weight_leaf)
+        return objective^
 
     def _leaf_objective(self) -> Self.O:
         """`builder.cuh:642` -- THREE arguments, not four:
