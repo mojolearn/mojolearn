@@ -2777,7 +2777,7 @@ def _cv_roles_f32(splits, n, name):
     mark = _native("mark_split_roles_f32")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
     roles = zeros((len(splits) * n,), "<f4")
     for k, (tr, te) in enumerate(splits):  # glue: one native scatter per side of each split
-        for side, role in ((tr, 1), (te, 2)):
+        for side, role in ((tr, 1), (te, 2)):  # glue: the two sides of one split, one native scatter each
             status = int(mark(addr_ro(side, name="cv") if side.size else 0, side.size, n, k, role,
                               addr(roles, name="cv")))
             if status == 1:
