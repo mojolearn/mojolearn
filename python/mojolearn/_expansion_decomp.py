@@ -28,7 +28,7 @@ from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
 from ._buffer import addr as _addr, empty as _empty
-from ._mode import SklearnTagsMixin
+from ._mode import SklearnTagsMixin, available_if
 from ._mode import RegressorScoreMixin
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
@@ -1599,6 +1599,9 @@ class _Base(SklearnTagsMixin):
             setattr(self, k, v)
         return self
 
+    # Only a class with a `transform` has `fit_transform` (scikit-learn's
+    # TransformerMixin): a classifier or detector on this base has neither.
+    @available_if(lambda self: hasattr(self, "transform"))
     def fit_transform(self, X, y=None):
         """Fit to X, then return ``transform(X)``.
 

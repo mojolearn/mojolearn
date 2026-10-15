@@ -52,7 +52,7 @@ from ._buffer import as_f32_c, as_i32_c, addr_ro, addr as _addr_rw, _as_typed, e
 from . import _labels
 from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
-from ._mode import SklearnTagsMixin
+from ._mode import SklearnTagsMixin, available_if
 
 __all__ = ["f_classif", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
@@ -758,6 +758,9 @@ class _PrepBase(SklearnTagsMixin):
             setattr(self, k, v)
         return self
 
+    # Only a class with a `transform` has `fit_transform` (scikit-learn's
+    # TransformerMixin): a classifier or detector on this base has neither.
+    @available_if(lambda self: hasattr(self, "transform"))
     def fit_transform(self, X, y=None, **fit_params):
         """Fit to ``X``, then transform ``X``.
 
