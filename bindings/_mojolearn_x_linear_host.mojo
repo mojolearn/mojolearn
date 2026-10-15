@@ -124,6 +124,10 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     var a = Int(py=algo)
     var x = _fp(Int(py=x_addr))
     var y = _fp(Int(py=y_addr))
+    comptime if C13_LOGCV_WEIGHTS:
+        # the opt-in C13 weight sums assume disjoint folds (x_linear/cv_roles.mojo)
+        if a == ALGO_LOGCV and n > 0 and Int(py=dims[3]) > n and y[n] < Float32(0):
+            raise Error("x_linear: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS sums disjoint folds; a cv that is not a partition (ShuffleSplit, overlapping or partial splits) is refused under it")
     var out = _fp(Int(py=out_addr))
     _finite(x, Int(py=dims[2]), "X")
     _finite(y, Int(py=dims[3]), "y")

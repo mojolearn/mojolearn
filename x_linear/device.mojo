@@ -84,6 +84,7 @@ from x_linear.cls1_fast import (
     RIDGE_CLS1_CODES, c1_sq_parts_kernel, c1_sum_parts_kernel, c1_dev_parts_kernel, c1_codes_targets_kernel,
 )
 from x_linear.dispatch import ALGO_LOGCV
+from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
 from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_QUANTILE
 from x_linear.quantile_grid import quantile_fit_grid
@@ -5269,6 +5270,11 @@ def fit_device(
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:
         xlin_finite_device(ctx, dx, n_x, y, n_y)
+    comptime if C13_LOGCV_WEIGHTS:
+        # the opt-in C13 weight sums assume disjoint folds; a non-partition cv
+        # marks every fold word -(n + 1) (x_linear/cv_roles.mojo)
+        if algo == ALGO_LOGCV and n > 0 and n_y > n and y[n] < Float32(0):
+            raise Error("x_linear: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS sums disjoint folds; a cv that is not a partition (ShuffleSplit, overlapping or partial splits) is refused under it")
     if algo == ALGO_LOGCV and n > 0:
         # the StratifiedKFold ids from the device labels (x_linear/logcv_grid.mojo),
         # unless an explicit cv's fold ids came in y (ip[6] = 1)
