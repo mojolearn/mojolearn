@@ -399,6 +399,85 @@ def classical_output_refs(rec, members):
     return refs, missing
 
 
+def scored_state_refs(rec, directory, members):
+    """Verify exact scored-call output/model bytes, independently of timers.
+
+    Model snapshots and output identity are separate. An unavailable public
+    model export is an explicit coverage gap, not an output-identity failure.
+    These receipts do not themselves compare vendors or certify a complete
+    fitted-state contract.
+    """
+    import numpy as np
+    import bench_board_state as state
+    refs, missing = {}, {}
+    directory = Path(directory).resolve()
+
+    def retained(ref, expected, *, model=None):
+        if not ref:
+            raise ValueError("scored bytes not retained")
+        relative = Path(ref["path"]).resolve().relative_to(directory)
+        name = str(relative)
+        if relative.parts[0] != "scored" or name not in members:
+            raise ValueError("scored archive member missing")
+        payload = members[name]
+        if len(payload) != ref.get("bytes") or digest(payload) != ref.get("sha256"):
+            raise ValueError("retained file checksum differs")
+        if ref.get("encoding") == "typed canonical state npz":
+            values = state.load_typed_state(io.BytesIO(payload))
+        else:
+            with np.load(io.BytesIO(payload), allow_pickle=False) as saved:
+                values = {key: saved[key] for key in saved.files}
+            if model:
+                full = state.canonical_hash(values)
+                if full != model.get("complete_export_sha256"):
+                    raise ValueError("complete model export digest differs")
+                for key in model.get("excluded_metadata", []):
+                    del values[key]
+        if state.canonical_hash(values) != expected:
+            raise ValueError("scored canonical digest differs")
+        return dict(member=name, bytes=len(payload), sha256=digest(payload),
+                    canonical_sha256=expected, encoding=ref.get("encoding"))
+
+    for cell in rec.get("cells") or []:
+        if cell.get("stored") or cell.get("arm") in rec.get("stored_arms", []):
+            continue
+        key = ("fit", cell["arm"])
+        receipts = cell.get("state_receipts") or []
+        if not receipts:
+            if (rec.get("family") in ("trees", "neural", "classical", "classical2", "algos")
+                    and cell.get("mode") in ("identical", "fast")
+                    and cell.get("status") in ("ok", "not-scored", "recompiled-in-clock")):
+                missing[key] = ["scored output receipt missing"]
+            continue
+        rows, failures = [], []
+        for index, receipt in enumerate(receipts):
+            row = dict(receipt_index=index, model=dict(status="unavailable", reason="no model receipt"))
+            try:
+                if receipt.get("retention_error"):
+                    raise ValueError(receipt["retention_error"])
+                if receipt.get("output_status") != "ok":
+                    raise ValueError("scored output unavailable")
+                row["output"] = retained(receipt.get("retained_output"), receipt.get("output_sha256"))
+            except (ValueError, TypeError, OSError, KeyError, zipfile.BadZipFile, EOFError) as exc:
+                failures.append("scored output %d: %s" % (index, exc))
+            model = receipt.get("model") or {}
+            row["model"] = ({k: model[k] for k in ("status", "class", "source", "reason", "error") if k in model}
+                            or row["model"])
+            if model.get("status") == "ok":
+                try:
+                    row["model"]["retained"] = retained(model.get("retained_export"), model.get("sha256"), model=model)
+                    row["model"]["completeness"] = "public snapshot; full fitted-state contract not certified"
+                except (ValueError, TypeError, OSError, KeyError, zipfile.BadZipFile, EOFError) as exc:
+                    failures.append("scored model %d: %s" % (index, exc))
+            elif model.get("status") == "error" and model.get("retention_error"):
+                failures.append("scored model %d: %s" % (index, model.get("error", "export failed")))
+            rows.append(row)
+        refs[key] = rows
+        if failures:
+            missing[key] = failures
+    return refs, missing
+
+
 def seal(ctx, directory, recipe, rec):
     """Capture measured records and logs, then attach the durable refs per arm."""
     directory = Path(directory)
@@ -408,6 +487,9 @@ def seal(ctx, directory, recipe, rec):
     for p in directory.glob("*.json"):
         if p.name != "upload.json":
             members["records/" + p.name] = p.read_bytes()
+    for p in (directory / "scored").rglob("*.npz"):
+        if p.is_file():
+            members[str(p.relative_to(directory))] = p.read_bytes()
     started = (directory / "recipe.json").stat().st_mtime
     # FAIRNESS FIX (2026-10-13 audit): drivers save scored arrays under work/,
     # while receipts previously retained only logs/raw. Keep the actual output
@@ -423,6 +505,7 @@ def seal(ctx, directory, recipe, rec):
         # delete these arrays before seal(). A verified archive of hashes
         # and logs alone does not retain the scored outputs.
         output_refs, output_missing = classical_output_refs(rec, members)
+    state_refs, state_missing = scored_state_refs(rec, directory, members)
     for field in ("log", "race_json"):
         if rec.get(field):
             p = Path(ctx["out"]) / rec[field]
@@ -471,6 +554,7 @@ def seal(ctx, directory, recipe, rec):
             absent = list(missing)
             if (phase, cell.get("arm")) in output_missing:
                 absent.append(output_missing[(phase, cell["arm"])])
+            absent.extend(state_missing.get((phase, cell.get("arm")), []))
             if not params:
                 absent.append("effective parameters")
             fitted = cell.get("fitted_parameters") or []
@@ -525,6 +609,20 @@ def seal(ctx, directory, recipe, rec):
             if (phase, cell.get("arm")) in output_refs:
                 record["retained_outputs"] = dict(output_refs[(phase, cell["arm"])],
                     status="verified" if ref.get("status") == "verified" else "local")
+            if (phase, cell.get("arm")) in state_refs:
+                rows = state_refs[(phase, cell["arm"])]
+                status = "verified" if ref.get("status") == "verified" else "local"
+                for row in rows:
+                    for value in (row.get("output"), row["model"].get("retained")):
+                        if value:
+                            value["status"] = status
+                record["scored_state"] = dict(receipts=rows, comparison="not compared",
+                    scope="captured scored calls; trees retain the final scored fit only",
+                    cross_vendor_promise=cell.get("mode") == "identical",
+                    eligibility="cross-vendor output comparison requires identical mode, same numerical source, inputs, initial state and settings")
+                if rows and rows[-1].get("output"):
+                    record["retained_outputs"] = dict(rows[-1]["output"],
+                        output_sha256=rows[-1]["output"]["canonical_sha256"])
             record["id"] = digest(encoded(record))
             cell["measurement"] = record
     # A separate receipt avoids a circular hash between the raw archive and
@@ -541,6 +639,8 @@ def seal(ctx, directory, recipe, rec):
     rec["evidence_directory"] = str(directory.relative_to(Path(ctx["out"])))
     if error or changed:
         rec["evidence_failure"] = error or "source changed during measurement"
+    elif state_missing:
+        rec["evidence_failure"] = "incomplete scored-byte retention; local results retained, no further races permitted"
     elif any(c.get("status") == "ok" and (c.get("measurement") or {}).get("completeness") != "complete"
              for c in (rec.get("cells") or []) + (rec.get("infer_cells") or [])
              if not c.get("stored") and c.get("arm") not in rec.get("stored_arms", [])):
@@ -638,6 +738,11 @@ def sync(board_path):
                     # The output member and scored digest were validated at
                     # seal time. This retry verified the same archive bytes.
                     outputs["status"] = "verified"
+                if state["run"].get("status") == "verified":
+                    for row in (record.get("scored_state") or {}).get("receipts", []):
+                        for value in (row.get("output"), (row.get("model") or {}).get("retained")):
+                            if value and value.get("status") == "local":
+                                value["status"] = "verified"
                 record.pop("id", None)
                 record["id"] = digest(encoded(record))
                 records_changed |= encoded(record) != before
