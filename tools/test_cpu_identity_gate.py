@@ -514,15 +514,19 @@ class OwedTests(unittest.TestCase):
         self.assertIn(('km', 'base', 'infer', ('nvidia', 'amd')), self.owed_keys())
 
     def test_cell_missing_from_every_gpu_column_but_unstable_on_cpu_fails(self):
-        for mutation in ('moved', 'one-repeat'):
-            cols = self.columns()
-            c = cols['cpu']['cells']['km/base']
-            if mutation == 'moved':
-                c['infer'], c['infer_verdict'] = ['ibase', 'other'], 'MOVED'
-            else:
-                c['infer'] = ['ibase']
-            self.assertEqual(self.diff(cols), 1, mutation)
-            self.assertNotIn(('km', 'base', 'infer'), [k[:3] for k in self.owed_keys()])
+        cols = self.columns()
+        c = cols['cpu']['cells']['km/base']
+        c['infer'], c['infer_verdict'] = ['ibase', 'other'], 'MOVED'
+        self.assertEqual(self.diff(cols), 1)
+        self.assertNotIn(('km', 'base', 'infer'), [k[:3] for k in self.owed_keys()])
+
+    def test_one_stable_cpu_repeat_is_owed(self):
+        # identity runs once (e3adf2b88, 2026-10-10): one STABLE CPU sample is a value, so a part only the
+        # CPU column hashes, once, is OWED to the three GPU columns rather than short
+        cols = self.columns()
+        cols['cpu']['cells']['km/base']['infer'] = ['ibase']
+        self.assertEqual(self.diff(cols), 0)
+        self.assertIn(('km', 'base', 'infer', ('apple', 'nvidia', 'amd')), self.owed_keys())
 
     def test_column_recording_refused_for_a_cpu_hashed_cell_fails(self):
         for where in ('cell', 'part'):
