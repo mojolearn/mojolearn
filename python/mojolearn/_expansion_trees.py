@@ -36,6 +36,7 @@ from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_c
 from ._buffer import memory_at
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin
+from ._sample_weight import ZERO_WEIGHTS_MSG, check_sample_weight
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit_function,
                                forest_data_session_choice, open_forest_data_session)
@@ -79,14 +80,17 @@ def _trees_f32_weights(values, n, name, est=None):
     refusing non-finite and negative entries and an all-zero vector (a
     sample weight). One native pass (`x_trees_check_weights_f32`); the
     refusals and their wording are the per-element Python loop's."""
+    if name == "sample_weight":
+        # scikit-learn's _check_sample_weight, its wording (sk-edges)
+        return check_sample_weight(values, n)
     arr, _ = as_f32_c(values, ndim=1, name=name)
     if len(arr) != n:
-        raise ValueError(f"{name} has {len(arr)} entries, X has {n} rows")
+        raise ValueError(f"{name}.shape == ({len(arr)},), expected ({n},)!")
     status = int(_trees_x_bind(est).x_trees_check_weights_f32(addr_ro(arr, name=name), [n]))
     if status == 1:
         raise ValueError(f"{name} must be finite and nonnegative")
     if status == 2:
-        raise ValueError(f"{name} must have a positive total")
+        raise ValueError(f"{name}: weights must contain at least one non-zero number")
     return arr
 
 
@@ -1456,16 +1460,14 @@ def _trees_normalized_weights(sample_weight, n, est=None):
         return _trees_normalized_weights_native(est, sample_weight, n)
     if sample_weight is None:
         return full((n,), 1.0 / n, "<f8")
-    sw, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-    if sw.shape[0] != n:
-        raise ValueError(f"sample_weight has {sw.shape[0]} entries, X has {n} rows")
+    sw = check_sample_weight(sample_weight, n)
     out = zeros((max(n, 1),), "<f8")
     status = int(_trees_x_bind(est).x_trees_normalized_weights(addr_ro(sw, name="sample_weight"),
                                                                addr(out, name="weights"), [n]))
     if status == 1:
         raise ValueError("sample_weight must be finite and nonnegative")
     if status == 2:
-        raise ValueError("sample_weight must have a positive total")
+        raise ValueError(ZERO_WEIGHTS_MSG)
     return out
 
 
@@ -1476,16 +1478,14 @@ def _trees_normalized_weights_native(est, sample_weight, n):
     same refusals in the same order and the same float64 words."""
     if sample_weight is None:
         return est._class_major([1.0 / n], n)
-    sw, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-    if len(sw) != n:
-        raise ValueError(f"sample_weight has {len(sw)} entries, X has {n} rows")
+    sw = check_sample_weight(sample_weight, n)
     out, flags = empty((n + 1,), "<f8"), empty((8,), "<i4")
     est._bind().x_trees_exact_sum(addr_ro(sw, name="sample_weight"), addr(out, name="weights"),
                                   addr(flags, name="flags"), [n, 1])
     if flags[0] or flags[1] or flags[2] or flags[3]:
         raise ValueError("sample_weight must be finite and nonnegative")
     if not flags[4]:
-        raise ValueError("sample_weight must have a positive total")
+        raise ValueError(ZERO_WEIGHTS_MSG)
     return out[1:n + 1]
 
 
