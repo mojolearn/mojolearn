@@ -361,11 +361,21 @@ def fit_classification_device(
     # forest; the rows themselves are drawn ON THE DEVICE -- deviation 200
     # fills the identity with a sequence KERNEL, DEVIATION 460 fills a
     # bootstrap slot with `launch_uniform_int`.
-    var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
+    # lane sk-weq-trees: without bootstrap the zero-weight rows leave the
+    # dataset first (`DeviceDataset.drop_zero_weight_rows`: scikit-learn's
+    # splitter keeps only positively weighted rows), so the row count the
+    # fit resolves is the dataset's, not the caller's.
     var tree_params = params
+    var weighted = False
     if weights_addr != 0:
-        if not device_dataset.set_row_weights(ctx, weights_addr, min_weight_fraction):
-            fold_min_weight_count(tree_params, min_weight_fraction, Int(n_sampled))
+        weighted = device_dataset.set_row_weights(
+            ctx, weights_addr, min_weight_fraction, drop_zero_rows=not bootstrap
+        )
+    var n_sampled = resolve_n_sampled_rows(
+        device_dataset.n_rows, bootstrap, n_sampled_rows
+    )
+    if weights_addr != 0 and not weighted:
+        fold_min_weight_count(tree_params, min_weight_fraction, Int(n_sampled))
 
     # DEVIATION 211: the whole forest through ONE merged-frontier trainer --
     # every tree's level runs in the same launches -- instead of a per-tree
@@ -485,13 +495,16 @@ def fit_regression_device_f32(
         dataset = upload_dataset_labels_quantized_weighted(
             ctx, x_col_major, y, n_rows, n_cols, weights_addr,
             min_weight_fraction, scale, x_addr=x_addr, x_row_major=x_row_major,
+            drop_zero_rows=not bootstrap,  # lane sk-weq-trees
         )
     else:
         dataset = upload_dataset_labels_quantized(
             ctx, x_col_major, y, n_rows, n_cols, scale, x_addr=x_addr,
             x_row_major=x_row_major,
         )
-    var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
+    var n_sampled = resolve_n_sampled_rows(
+        dataset.n_rows, bootstrap, n_sampled_rows
+    )
     if weights_addr != 0 and not dataset.weighted:
         fold_min_weight_count(tree_params, min_weight_fraction, Int(n_sampled))
     var tree_ids = List[Int32]()
