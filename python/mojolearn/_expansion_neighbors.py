@@ -837,7 +837,7 @@ class NearestCentroid(_XNeighbors):
             # TOMBSTONE: MOJOLEARN_NC_FAST_CLS1_PREDICT (DROPPED-noise) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
             # Restore: git apply experiments/removed/MOJOLEARN_NC_FAST_CLS1_PREDICT.patch; record in docs/TOMBSTONES.md.
             return _class_array(self.classes_, idx.reshape((idx.shape[0],)))
-        return _argmax_labels(self, self.classes_, self.decision_function(Q))
+        return _argmax_labels(self, self.classes_, self._decision_matrix(Q))
 
     def decision_function(self, X):
         """Discriminant score of each sample for each class.
@@ -853,7 +853,21 @@ class NearestCentroid(_XNeighbors):
         Returns
         -------
         scores : Array of shape (n_queries, n_classes), float32
+            For two classes, shape (n_queries,): the second class's score
+            minus the first's, positive for ``classes_[1]``.
         """
+        dec = self._decision_matrix(X)
+        if dec.shape[1] != 2:
+            return dec
+        # scikit-learn's binary decision_function, scores[:, 1] - scores[:, 0]:
+        # one product with the exact weights (-1, 1), so each entry is the
+        # difference rounded once
+        signs = Array.from_list([-1.0, 1.0], "<f4").reshape((2, 1))
+        diff = self._matmul(dec, signs)
+        return diff.reshape((dec.shape[0],))
+
+    def _decision_matrix(self, X):
+        """The (n_queries, n_classes) discriminant scores."""
         if self.metric != "euclidean":
             raise AttributeError("decision_function is available for metric='euclidean' only")
         Q = _f32(X)
@@ -880,7 +894,7 @@ class NearestCentroid(_XNeighbors):
         proba : Array of shape (n_queries, n_classes)
             Probabilities, columns in the order of ``classes_``.
         """
-        dec = self.decision_function(X)
+        dec = self._decision_matrix(X)
         if hasattr(self._bind(), "xn_softmax64"):
             # lane apple-fast-q-clf (x_neighbors/proba64_nc.mojo, QUALITY-FIX, FAST
             # default; -D MOJOLEARN_PROBA64_QOLD has no export): float64 probabilities,
@@ -907,7 +921,7 @@ class NearestCentroid(_XNeighbors):
         -------
         log_proba : Array of shape (n_queries, n_classes), float32
         """
-        dec = self.decision_function(X)
+        dec = self._decision_matrix(X)
         out = empty(dec.shape, "<f4")
         self._op("log_softmax", [(dec, 0), (out, 1)], dec.shape)
         return out
