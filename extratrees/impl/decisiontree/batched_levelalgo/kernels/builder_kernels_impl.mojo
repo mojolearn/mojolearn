@@ -2759,8 +2759,9 @@ def leaf_values_host(
     return out^
 
 
-def leaf_kernel[
-    TPB: Int, MAX_OUT: Int, CLASSIFICATION: Bool, zero_fill: Bool = False
+@always_inline
+def _leaf_body[
+    TPB: Int, MAX_OUT: Int, CLASSIFICATION: Bool, zero_fill: Bool, WEIGHTED: Bool
 ](
     out_leaves: MutPointer[Float32, MutAnyOrigin],
     out_visit: MutPointer[Int32, MutAnyOrigin],
@@ -2771,8 +2772,11 @@ def leaf_kernel[
     num_outputs_in: Int32,
     inv_scale: Float32,
     sabotage_in: Int32,
+    row_w: MutPointer[Int32, MutAnyOrigin],
 ):
-    """`leafKernel`, `builder_kernels_impl.cuh:391-417`."""
+    """`leafKernel`, `builder_kernels_impl.cuh:391-417`. WEIGHTED
+    (classification, lane sk-kernels): each row adds its fixed-point weight
+    to its class tally, so the leaf vector is the weighted class share."""
     var node_id = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var k = Int(num_outputs_in)
@@ -2851,7 +2855,10 @@ def leaf_kernel[
         var lab = Int(labels_q[unsafe_offset=row])
         comptime if CLASSIFICATION:
             if lab >= 0 and lab < k:
-                priv[unsafe_offset=lab] += Int32(1)
+                comptime if WEIGHTED:
+                    priv[unsafe_offset=lab] += row_w[unsafe_offset=row]
+                else:
+                    priv[unsafe_offset=lab] += Int32(1)
         else:
             priv[unsafe_offset=0] += Int32(lab)
         seen += 1
@@ -2898,3 +2905,59 @@ def leaf_kernel[
                 )
 
     out_visit[unsafe_offset=node_id] = LEAF_VISIT_PUBLISHED
+
+
+def leaf_kernel[
+    TPB: Int, MAX_OUT: Int, CLASSIFICATION: Bool, zero_fill: Bool = False
+](
+    out_leaves: MutPointer[Float32, MutAnyOrigin],
+    out_visit: MutPointer[Int32, MutAnyOrigin],
+    nodes: MutPointer[SparseTreeNode[DType.float32], MutAnyOrigin],
+    instance_ranges: MutPointer[InstanceRange, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    num_outputs_in: Int32,
+    inv_scale: Float32,
+    sabotage_in: Int32,
+):
+    """`leafKernel`, `builder_kernels_impl.cuh:391-417` (`_leaf_body`,
+    unweighted)."""
+    _leaf_body[TPB, MAX_OUT, CLASSIFICATION, zero_fill, False](
+        out_leaves,
+        out_visit,
+        nodes,
+        instance_ranges,
+        row_ids,
+        labels_q,
+        num_outputs_in,
+        inv_scale,
+        sabotage_in,
+        labels_q,
+    )
+
+
+def leaf_weighted_kernel[TPB: Int, MAX_OUT: Int, zero_fill: Bool = False](
+    out_leaves: MutPointer[Float32, MutAnyOrigin],
+    out_visit: MutPointer[Int32, MutAnyOrigin],
+    nodes: MutPointer[SparseTreeNode[DType.float32], MutAnyOrigin],
+    instance_ranges: MutPointer[InstanceRange, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    num_outputs_in: Int32,
+    inv_scale: Float32,
+    sabotage_in: Int32,
+    row_w: MutPointer[Int32, MutAnyOrigin],
+):
+    """The classification leaf pass with row weights (lane sk-kernels)."""
+    _leaf_body[TPB, MAX_OUT, True, zero_fill, True](
+        out_leaves,
+        out_visit,
+        nodes,
+        instance_ranges,
+        row_ids,
+        labels_q,
+        num_outputs_in,
+        inv_scale,
+        sabotage_in,
+        row_w,
+    )
