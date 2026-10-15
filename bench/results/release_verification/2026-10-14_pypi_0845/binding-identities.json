@@ -6814,7 +6814,7 @@
    "identity_digest": "91d24f22c862c2251a7e9aa7f3f14a5b33f3c5b246d3d25cc8cdb7b3e0b0b350",
    "key": "linux-64/host/-/host/_mojolearn_byte_lm_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "d6859adbfa4481d03ef15ffd60d1844a3c4d23f1a0a1d4bdc7e9aa9a1c91950c",
+   "shipped_sha256": "b25cf27ec24595cc6ead248a259180d2ad5e92dbe76410b4cb6631e43dd70d4d",
    "target": "linux-64"
   },
   {
@@ -6869,7 +6869,7 @@
    "identity_digest": "ae1220d4a31f0c2866997d65e637d5f5bece3a395da87f05f131b850d1c61baa",
    "key": "linux-64/host/-/host/_mojolearn_forest_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "146aa8bb24852e69cbb217139fb502648311d34166b70311d8e7936c37c70303",
+   "shipped_sha256": "bc701462b049c5d6958635c3ee638a36fdf7b16e8dc527c098c11194a0c30d97",
    "target": "linux-64"
   },
   {
@@ -6924,7 +6924,7 @@
    "identity_digest": "301d4bbc45f5966a935b87277e4ad2c388148bec9582c5f6951d67ffa14f4dbd",
    "key": "linux-64/host/-/host/_mojolearn_tokenizer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "ef05efe6ff70c413f5b5a3d86c64fe495b6a29ae98feb62e9cd314e04787da1d",
+   "shipped_sha256": "216490cf740599173201d5d4636612b707a5a8dfa302e430c01542fb95f1b631",
    "target": "linux-64"
   },
   {
@@ -6979,7 +6979,7 @@
    "identity_digest": "c1c05676a1fd76ec7e531387927c878b7222b9900b9b6bd249b0c6eb86659c67",
    "key": "linux-64/host/-/host/_mojolearn_neural_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "203286445bf833ffbfa087aa83a9d660936ae787f1eb4e2869806e3bc17ef69e",
+   "shipped_sha256": "88d5e20dda9804f343f5e21d11cc05485617cf12dee049c3eaa10ff7331df168",
    "target": "linux-64"
   },
   {
@@ -7034,7 +7034,7 @@
    "identity_digest": "2ef5af56e3f547dff5b7afef90e0e68c8273ee22c2c06695b38a42c69df95baa",
    "key": "linux-64/host/-/host/_mojolearn_core_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "7c41aab81b7abb9340057bb8a40fe14d38b7c3dba6b12914e56cf87219616ac7",
+   "shipped_sha256": "7c06da399049e67f0f279ed8f3fc7810ae8cc7a8d174eb73a0e83e4227e13adb",
    "target": "linux-64"
   },
   {
@@ -7089,7 +7089,7 @@
    "identity_digest": "1dbe5cd06cd70299784de6f7da1a9d1270c1f6c5f87de82b9086ad3cbee8e4e8",
    "key": "linux-64/host/-/host/_mojolearn_linalg_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "b4f185966ff9b9071d0d7dc5a2c9978631838a84e0270c11eb5bdc4c784b013b",
+   "shipped_sha256": "5060db8bc12e2aa71a257f4f28f8daa9b27aa6b6d13e431553125522344ff141",
    "target": "linux-64"
   },
   {
@@ -7144,7 +7144,7 @@
    "identity_digest": "0ed5f0cfbd474d47f53e2d08475e35d84ecc43488d919438fe606e1eed2808b6",
    "key": "linux-64/host/-/host/_mojolearn_estimators_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "c0a2c68c207ddccf328daaac59456af675676126ed93547c4ae857a54d429dd0",
+   "shipped_sha256": "51e603ac71809c4159582ccc232b1b04acc5f45dd45569ea1dbe24ddcf7999e0",
    "target": "linux-64"
   },
   {
@@ -7199,7 +7199,7 @@
    "identity_digest": "dc7e88e9127a291e4a7395bee57bb756aa30511e5ca86681a8d44bf1d404a2de",
    "key": "linux-64/host/-/host/_mojolearn_metrics_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "15c9a062c5e940134b2fcde6103238d86ec9a38935d1a84662d11bb3d219fca6",
+   "shipped_sha256": "8c151a90df7f00767b8e851dd4250fec262a59f6df483644b514f652811fbceb",
    "target": "linux-64"
   },
   {
@@ -7254,7 +7254,7 @@
    "identity_digest": "92057fdb6c67d14cfd178240558c5f4cf65265cdfdd420f83ffe8fe6fa01842e",
    "key": "linux-64/host/-/host/_mojolearn_preprocessing_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "2a59b95d80686d72389b7b6968cd3a8d81edfb8b8e5072872f860a44a854bf33",
+   "shipped_sha256": "f87d009e53304f551be6f4729e24b1d80cd07a44c9cf307548edf74b69388174",
    "target": "linux-64"
   },
   {
@@ -7309,7 +7309,7 @@
    "identity_digest": "c7ff9db283c682612ec5e7df29277af334b04bcab88c17b8baad273d3db68e81",
    "key": "linux-64/host/-/host/_mojolearn_tsa_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "4bd4909b83387e3e8eb3e973a197ee6853cea6d0de0b028532a634bc88451667",
+   "shipped_sha256": "59777491f611f0f552696893ada5666ca96179ceaf302000dbe5c972de2ffc0d",
    "target": "linux-64"
   },
   {
@@ -7364,7 +7364,7 @@
    "identity_digest": "3a5e08c170c8167908ba9a8048edf78ea756dd29e65ab3486854cd1b6a9a4c3c",
    "key": "linux-64/host/-/host/_mojolearn_solver_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "3544df6bc3389a927b182288268689bf2cdfcc13b4cc202bf1b1232273f43d91",
+   "shipped_sha256": "435a7c06933ef2dea8f0d32faad5a1147062965a30311dcbd4ae57e587dbc647",
    "target": "linux-64"
   },
   {
@@ -7419,7 +7419,7 @@
    "identity_digest": "d673f727bb3d4d67c74508db60a8c7394eb841e09c5c096a062b605395247f1e",
    "key": "linux-64/host/-/host/_mojolearn_svm_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "1bc53cde8a962c206919b78d7cb04986af372d956bdf01da1dcc877e387502f1",
+   "shipped_sha256": "8a878b339b7a8a1f7fa2a9afd6bceb8bb648a49609ed3c71477c73a1e536804c",
    "target": "linux-64"
   },
   {
@@ -7474,7 +7474,7 @@
    "identity_digest": "730ef6e8e87bcea4a42646ccd100a339c63f492f422a1fb3982e2a18a639fd84",
    "key": "linux-64/host/-/host/_mojolearn_trees_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "30a145daf4778bb6558af7a8ccb62f343ff227c02ed3e48087a4560b1408822e",
+   "shipped_sha256": "f02a686c1de8f5a0e35839b496ed143bf7d693fba86d67b1233a3ccfb9851fd7",
    "target": "linux-64"
   },
   {
@@ -7529,7 +7529,7 @@
    "identity_digest": "c92033a898e7ac7a04e89310603915ad9fde2c007ff91a1d1f137a7a59ac7d1c",
    "key": "linux-64/host/-/host/_mojolearn_rf_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "9c43d6666c7dab2cf60a2437676ce886ced3d305bbe5bb6143e01f927fa7b6a0",
+   "shipped_sha256": "fe9faf8a6480e467142350248429a2b47c0b68caa45c6aa1fad9c59bbe39e5b9",
    "target": "linux-64"
   },
   {
@@ -7584,7 +7584,7 @@
    "identity_digest": "60cbbadc3a02eba28dd49b7ae3efd75f839e268da20c1f400fc417655919b8d4",
    "key": "linux-64/host/-/host/_mojolearn_gp_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "be25a8ba74660a77fe14fbc1a755ef974ad18aee985edc25bb58b8a739878bca",
+   "shipped_sha256": "6a7b928000bb8f565a53a93fa5db1071b56bcadad9fa83a0e6ee61648713407e",
    "target": "linux-64"
   },
   {
@@ -7639,7 +7639,7 @@
    "identity_digest": "8602fc4a6e189676001358d2848b5013fd66fdfdbbf6c27c89f0d31b9379fc31",
    "key": "linux-64/host/-/host/_mojolearn_kernel_methods_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "6b4501a8109c7582d2a46c740248b92e648e8c1a53fbcc93b21bd9ac0f08d18b",
+   "shipped_sha256": "38d3cc0086e9be2be6efcbfb5858c3c0ef35754b983876af60333e0b25b95c9f",
    "target": "linux-64"
   },
   {
@@ -7694,7 +7694,7 @@
    "identity_digest": "c367c3d41b4c02cd8d0c58517fdf36fb61b82b771e33236db781402e55ba1e75",
    "key": "linux-64/host/-/host/_mojolearn_mixture_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "aace954fb763899252c39130e5dc41d4e74908d9203e5b624d2ff52b8e18add6",
+   "shipped_sha256": "55391128b4ed547c67aeec92ba829e4cd7bfa52c8614d5b61f8398bb6a08667d",
    "target": "linux-64"
   },
   {
@@ -7749,7 +7749,7 @@
    "identity_digest": "3e11e1f916eb783b8ad02354607d0d9e99158c62bcbf499f2cf005eeb9bbac1e",
    "key": "linux-64/host/-/host/_mojolearn_mixture_infer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "d0e65f5734d886b696775ad9f5af3f5a7c6aa7b14d9123bee89aa88ff0dbca01",
+   "shipped_sha256": "f0bc02ce7d993223e6238a01eaf9cfe38d27ceedbcf908a137397afa260d1019",
    "target": "linux-64"
   },
   {
@@ -7804,7 +7804,7 @@
    "identity_digest": "8ad1be896e195b03421b9aa44737228849b73a1a882b7bdc3398438cc068f9db",
    "key": "linux-64/host/-/host/_mojolearn_hdbscan_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "4aef16587c78e6a0b9d879fb99dc544280851d74ee595bec8aaa79cc11db1ade",
+   "shipped_sha256": "d7cd27d94da80d9ef75f912342e84c4d44ffe53b6a6d9071ddc2472b21134f74",
    "target": "linux-64"
   },
   {
@@ -7859,7 +7859,7 @@
    "identity_digest": "a63ec9c8839293a9975ad412b7359727df58155461052556a1f8f62354ec2bac",
    "key": "linux-64/host/-/host/_mojolearn_gp_infer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "cd677e95d3ba9b5f705d0d50babf860e6db9d4c5d59fd4e60a7f8e62a42cb16f",
+   "shipped_sha256": "5877e2e0709b0e61521aeff89fec626b72864b98c7350b63d229087e2c863cc4",
    "target": "linux-64"
   },
   {
@@ -7914,7 +7914,7 @@
    "identity_digest": "288085fbdd1de7520f31096fe523d864d635fafe9c194231d73699d804405c2d",
    "key": "linux-64/host/-/host/_mojolearn_hdbscan_infer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "333310febe0716890f9cc6ba3e64bde474ca9e53c76c301de02e4fc474019c5b",
+   "shipped_sha256": "259c70f5fb5fc657037fbe1641e2882bbe2eaf07bcd3dd07ddc3c85cafdf4afc",
    "target": "linux-64"
   },
   {
@@ -7969,7 +7969,7 @@
    "identity_digest": "ed832f6f219a809be7bdbe2eeb51154a311856c7d4fda5f0f1f03a45dd4fc6e9",
    "key": "linux-64/host/-/host/_mojolearn_gbdt_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "1d2f9d95d6119abb86904f17008ebe40bc06b424aa543400e548610c0c796cee",
+   "shipped_sha256": "37b725514b875b3b8587a66b5cb822494fa83bbe49f3090f819335a88a3d27ab",
    "target": "linux-64"
   },
   {
@@ -8024,7 +8024,7 @@
    "identity_digest": "020d484be3ab8635eb5e37c21129b3ae36c086dd4cbc089045226ad41f984eba",
    "key": "linux-64/host/-/host/_mojolearn_training_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "ae973f375a0c46abd9cdb99d144523b7789f181d156b680a3c1940f1aa4fb4f2",
+   "shipped_sha256": "d3f83dc3ea4ecd796a0d55939156370cefb76b904f12061f0087cd46c55ab4ff",
    "target": "linux-64"
   },
   {
@@ -8079,7 +8079,7 @@
    "identity_digest": "f7669b1fe15fffbf8bcbc96eaf0a3e4aca31d06ff2b00142c4c1eb39516fee98",
    "key": "linux-64/host/-/host/_mojolearn_resample_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "5921c0b9e3c33fa204c105a5fa6231a2e83a37dbf0c55dd517144f6e4b4b505a",
+   "shipped_sha256": "4ff765848ccadd390d15174a596c3db6559994993de501ad08bfee88c787d67f",
    "target": "linux-64"
   },
   {
@@ -8134,7 +8134,7 @@
    "identity_digest": "1c4e2d508f06aed2afd185bde23af860a0986831775ebedbc7def22e6001035c",
    "key": "linux-64/host/-/host/_mojolearn_mamba_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "a93a3a0f5adc1fd8d8c49e4f446e6e094c628fffa11f32d476d298673cf76ada",
+   "shipped_sha256": "9e23fe04d8e995feae7a52e50a88e992a7bbf00b758bcef31c47831971a24011",
    "target": "linux-64"
   },
   {
@@ -8189,7 +8189,7 @@
    "identity_digest": "520ab9bc51af90c019f84bc0b5b8d74c3c7f755af071874f670f688f8c9ad5bc",
    "key": "linux-64/host/-/host/_mojolearn_arima_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "46065c1fefde856ad7497fd3402e9982633e013c6db7c86bca24c5dad5e67b99",
+   "shipped_sha256": "de34ac858db178070a0bf9d07851f32400d04fbfb2900169be169fab5a130a5b",
    "target": "linux-64"
   },
   {
@@ -8244,7 +8244,7 @@
    "identity_digest": "af8128c76ffd98e805945c73d8130b3579a8ddc47c0eb29387d69b0163bff301",
    "key": "linux-64/host/-/host/_mojolearn_embedding_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "c5c30269676600ac16bcd29da6eecf9f17f4a412ce8880c06ba44cd03e3a0d1d",
+   "shipped_sha256": "283e23341cafd0ef0c308887b195446a2cc193ffdb6206a2713ae5346404e0be",
    "target": "linux-64"
   },
   {
@@ -8299,7 +8299,7 @@
    "identity_digest": "775d4c759c16dfe849ab1c6cf1d6adc2e51f28acd737289eba01abf76450f701",
    "key": "linux-64/host/-/host/_mojolearn_embedding_infer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "626d7e93d1343b4bca71268dd7ef6db2367e0b8f033580d66fd2b43ac817e152",
+   "shipped_sha256": "1aa9394d8404dd34c046ee2aade72e6a228c5b9db05a355d1c520f340245fac6",
    "target": "linux-64"
   },
   {
@@ -8354,7 +8354,7 @@
    "identity_digest": "3c3adf3c19ed8412ebbb36659e5e9d5a28ddd9f6fb65f923205f5d9e7c3a5d8b",
    "key": "linux-64/host/-/host/_mojolearn_ivf_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, ivf/host/ivf_host.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo)",
-   "shipped_sha256": "30287b61870cbbdc0c7ba68b442b853966c38ace92cafdb81231e219da216d6e",
+   "shipped_sha256": "20b4eb569f9a10f3f546df73d2adec372bcd6d35d1c93e8a63baa9ca9de0ea7c",
    "target": "linux-64"
   },
   {
@@ -8409,7 +8409,7 @@
    "identity_digest": "f431524fcd869e7fafd39a65ab33852602bbe7da3b6e67db3696bf707db25069",
    "key": "linux-64/host/-/host/_mojolearn_ivf_search_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, ivf/host/ivf_host.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo)",
-   "shipped_sha256": "b2203053e3ef6fe5647bd64eaf018eab3edef0ad46beae30daa4fac63abd6fbc",
+   "shipped_sha256": "67c4b562687f1dca15b7b68cce9adfdcf3f3eeef5216d31ea4228650d747f8a0",
    "target": "linux-64"
   },
   {
@@ -8464,7 +8464,7 @@
    "identity_digest": "15c9d2e8d4243b8636671fb933ab4b45907461d56d1109e7ca1c7117e2b31b6a",
    "key": "linux-64/host/-/host/_mojolearn_forecast_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "31c200c344b6185d86aa3c1be0014f5d00d65cdc5568212b9e1e9e34553314d0",
+   "shipped_sha256": "d8e4647522b261e6fef79b3b135970488394600a94ed408f3369665ed6f60751",
    "target": "linux-64"
   },
   {
@@ -8519,7 +8519,7 @@
    "identity_digest": "3a5a66fa57d849b33fbb9918038a4b33b0948dcb206805e11c549218d1cf87f9",
    "key": "linux-64/host/-/host/_mojolearn_transformer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "6ac9ec1b9bf9d8754e4220f5b4fe1e9a68d38162bb0bf7e8cf00c53c5f50e0e6",
+   "shipped_sha256": "d163f1375ed5681352c5ab4b5feb6193d92cdcf4b56cda7e85a9c1a64dc429af",
    "target": "linux-64"
   },
   {
@@ -8574,7 +8574,7 @@
    "identity_digest": "a53d29d5b4d757fef701a4c0d59c1aa1ce8ee947552cc2822710911c33a12999",
    "key": "linux-64/host/-/host/_mojolearn_x_linear_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "e8cd8092dbe470bb721f8b3c14a7f74a1f583c5ffdf3a7b89e2e6b0e75710039",
+   "shipped_sha256": "1e5c18dd704f46d6f6047b79233f102ad72165a585c29ce0aa3fea8d695e2474",
    "target": "linux-64"
   },
   {
@@ -8629,7 +8629,7 @@
    "identity_digest": "ca9aedf55c944813f76f7f3d23e9418cf18bf0ff81cb2be7dbb4c2c0ca815cb9",
    "key": "linux-64/host/-/host/_mojolearn_x_cluster_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "f13c3f54cb73bc54d9884a8810e8593d2740664dd76aac24276eeabbdc062acb",
+   "shipped_sha256": "14190d69e303a4092fd6cb1ffe27ce8a20f2a3dfbdeb9ea2e904965d775a78cb",
    "target": "linux-64"
   },
   {
@@ -8684,7 +8684,7 @@
    "identity_digest": "9a836bdc155bebd8b27d0ab36ee39a0b483db736312b3236a6b881b8e33be6f2",
    "key": "linux-64/host/-/host/_mojolearn_x_neighbors_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "442a7ef6f247935895182ab211cedc5245efeedb39f6ce59fd89945caf75ef64",
+   "shipped_sha256": "020d838b8ffa8d23595797b0e1f020f79c67d83989ebf6e6a2c60c78082b0d0e",
    "target": "linux-64"
   },
   {
@@ -8739,7 +8739,7 @@
    "identity_digest": "78b8bad72599c8637f14091872ad7f567ea95acb643dd526c561a08f82d49d74",
    "key": "linux-64/host/-/host/_mojolearn_x_decomp_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "8753cffdeac3f00be762c965a0f076dbd773f097ecc7bb0f169be4ec05e4ee36",
+   "shipped_sha256": "d8fea7dff250c58f81d170fbf22c81d0ded87e8e5880ff2c1221bc3b76c0c6f0",
    "target": "linux-64"
   },
   {
@@ -8794,7 +8794,7 @@
    "identity_digest": "d9b6fd4d61f6fe71e0a70e60a411ecde3394581fcc9c65b86767e95bfa1d3f91",
    "key": "linux-64/host/-/host/_mojolearn_x_prep_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "d0e0b2d3f2099c41cf5142543a078ba776a383c5186c0a419575ecb13336e076",
+   "shipped_sha256": "588f4905cfbc0119a066a29a90f816c1c4feb20e60dc342e134fc467979613b9",
    "target": "linux-64"
   },
   {
@@ -8849,7 +8849,7 @@
    "identity_digest": "2a9f63713e146f91ca18f9bc89fd7a537c353a50df1fa221a61349e18ff912aa",
    "key": "linux-64/host/-/host/_mojolearn_x_sequence_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "405d5a65dd3730746cbb17a169dd42f2171eebb216703a5f90f353e69b24518d",
+   "shipped_sha256": "7a426b9129842345074c0fd938c17483ca4b1ef02ed79e42ed434bda5248fb4a",
    "target": "linux-64"
   },
   {
@@ -8904,7 +8904,7 @@
    "identity_digest": "791a26f96842382863d07457588cbd49e71961c129327422a36e384695d7d390",
    "key": "linux-64/host/-/host/_mojolearn_x_trees_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "282b9bdd01a3851f4bd512172ccf912683ca7d26c734da80d89f571a51527cca",
+   "shipped_sha256": "b60802bf221dc958c61922ce3e1688c98f2cde11e98cb24ffb6da62d1dffcbce",
    "target": "linux-64"
   },
   {
@@ -8959,7 +8959,7 @@
    "identity_digest": "0b25f695b017fb705dbb6a771b23f18bc49f4a55d7ec5902a9f8a34d3d433eeb",
    "key": "linux-64/host/-/host/_mojolearn_x_cnn_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "1412c4e5f6d3b99d01cf739710a35472481da612d9627d51a96129304c6f57e7",
+   "shipped_sha256": "1db86c05321fb89f8198a891601d0d08c08e373978a7da51cfb9c9085807f953",
    "target": "linux-64"
   },
   {
@@ -9014,7 +9014,7 @@
    "identity_digest": "dfeaf74ef91768863c746a3abf27c612c2a50f4c882cc455c09b3d60de24af5e",
    "key": "linux-64/host/-/host/_mojolearn_x_ann_host",
    "reason": "changed: closure (bindings/_mojolearn_x_ann_host.mojo, checks/numerics.mojo, core/package_profile.mojo, ivf/host/ivf_host.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo, x_ann/host/ivf_pq_host.mojo)",
-   "shipped_sha256": "719e7e6725f84619dfe1482badc65db20a66afec11a9241b90e203b9880e1f21",
+   "shipped_sha256": "76786e7a720fdc74a3aadf30e5d65814d5b90e8b218add6af20d25c569696de7",
    "target": "linux-64"
   },
   {
@@ -9069,7 +9069,7 @@
    "identity_digest": "79bcbe5cc45e7756728970fc9aa9c8c131a0a3e1c727cb80743302d736bb6cee",
    "key": "linux-64/host/-/host/_mojolearn_x_metrics_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "df902da1faf7e276b862b59ecf0339c58eeef7c050a9747b955bbbd5720458fe",
+   "shipped_sha256": "784e8c05ed572126014eaf116c0f24a3cd8f53fb5dbf38e4ffc7ac1591487add",
    "target": "linux-64"
   },
   {
@@ -9123,7 +9123,7 @@
    "identity_digest": "97def2717f1280104c70ef0ce18f896935138b52573ef9940c2ca7388681bafb",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_gbdt",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "cb1b115139d94a72e1e763343d15c534414f5925563d7e3de42e3ee5ab05e56f",
    "target": "osx-arm64"
   },
   {
@@ -9177,7 +9177,7 @@
    "identity_digest": "10f9a4b015d00e0fca675baa6be6b7ea0bfb9108409a1d3390070abfc516a9ab",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_rf",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a1967ddd16126db9017429a4202492d6f4a33d0c7f28cb0eb9621dec9c2d2aab",
    "target": "osx-arm64"
   },
   {
@@ -9231,7 +9231,7 @@
    "identity_digest": "b0f978418097005b90fdcc747d229ecda6355ef3e974119c032cb64e2969e137",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_trees",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "c32866d57f09050538cecbb86e83d1205af6d24a2a04d6373b081223ec32d7f1",
    "target": "osx-arm64"
   },
   {
@@ -9285,7 +9285,7 @@
    "identity_digest": "dec0b694c7e5a94391ad9ae2bce9018d059145af0a4918488c061c55c289be8f",
    "key": "osx-arm64/metal/apple/fast/_mojolearn",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "82f3d1f713db14f82f02aff06aa985d76464c11386b2f252782ddc7ae8a961c9",
    "target": "osx-arm64"
   },
   {
@@ -9339,7 +9339,7 @@
    "identity_digest": "319125c602e061952441ddb43623102f6f1f486bc3aa765b24f2f64c16898026",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_estimators",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a579ecbc7cf68843d32b8ac025649546321c66dc982dbf276de1329ccb6e2c71",
    "target": "osx-arm64"
   },
   {
@@ -9393,7 +9393,7 @@
    "identity_digest": "8a03ead2913fa34edcdb085552a6d98b901df8a3ea4f8ef0efe444b4de5e27c6",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_svm",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "ebd91d8dae089c3eb2b4e11aabb1fce465f548a4a84f01aceb984f508c86c3f8",
    "target": "osx-arm64"
   },
   {
@@ -9447,7 +9447,7 @@
    "identity_digest": "ac3914f41ad6edab5a2fe042ef2feec7de416f535e5604c037132dfbe8f59b09",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_solver",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "8201fa8884470b656791d649891b2dd9d22a0381d9949e54bb491828e065e8f7",
    "target": "osx-arm64"
   },
   {
@@ -9501,7 +9501,7 @@
    "identity_digest": "3531b9bb8c7246ddbfd25205e14d6e760b74acb91449ba798412d82492b0d98b",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_metrics",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a4c30c805f709b6c905a31ad0e0bad66824fc4499c7e2576b4768f62a3abf010",
    "target": "osx-arm64"
   },
   {
@@ -9555,7 +9555,7 @@
    "identity_digest": "3e2082e1bac5bcb494c5a97f9eaf4ce0f22eac9fef009388f3932efba7e3a334",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_preprocessing",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "7b6ef113e77119948c3d9bae6aa7dde3a29e18b14f8dfd41a7f44d47164240c0",
    "target": "osx-arm64"
   },
   {
@@ -9609,7 +9609,7 @@
    "identity_digest": "ebe650ddd97266fcf444cb8f6c1187d8a31332afd11496e391afedde6f7052eb",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_tsa",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "e680a517c361c2e300b056809d5683a4e321603408b1ef2d213a05f70567396e",
    "target": "osx-arm64"
   },
   {
@@ -9663,7 +9663,7 @@
    "identity_digest": "448669caf345ccbe60480ec4f73289079a94d3c382b6bfcf8e31ffb29087c7e1",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_linalg",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "51f37c97e837e5e89a1fe6529f51d1b34d5417ca8eb6b760f625d7692d9b61bd",
    "target": "osx-arm64"
   },
   {
@@ -9717,7 +9717,7 @@
    "identity_digest": "07c643f0061f82e21dcb312d7fdcd1adb6ee9098318e21fcfc80c713d2af1452",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_arima",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "873bbf84c554b72fbe36158eca7b7a1fdf7e02d848d479a613c5547d929dd4ab",
    "target": "osx-arm64"
   },
   {
@@ -9771,7 +9771,7 @@
    "identity_digest": "36adf6e2a4b3126e117c47a3f905ac284e862f19feef36e26aaac54d0172b37c",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_gp",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "2306aad94ec588f474da55ea626bbacfb945f8842945c89e9902ea282fa7b4e5",
    "target": "osx-arm64"
   },
   {
@@ -9825,7 +9825,7 @@
    "identity_digest": "1c17b233ec8107f986d227b25140fded3ffda7feb5917092a749cedd716b21b7",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_kernel_methods",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f36d6bb5fed2c8ddfd8584ab99b129045a2d35191d39a620f89165d44642a126",
    "target": "osx-arm64"
   },
   {
@@ -9879,7 +9879,7 @@
    "identity_digest": "7bfbfcf7d949ffcfd5b99b9c00d12c4033466c27fa78226658bc66c6b99583d5",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_mixture",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "db5f2dab8975315564e765fb64594563382fdb0a4d1b69e244077186d92bd51f",
    "target": "osx-arm64"
   },
   {
@@ -9933,7 +9933,7 @@
    "identity_digest": "e8fbdc28cafb345f8ab1f3bddad6f537466beb2a46619792ab58170417977339",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_hdbscan",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "64653f3557d474b66367da6389fa7a9a9200f87a31ddcd69579fe7504efe5aef",
    "target": "osx-arm64"
   },
   {
@@ -9987,7 +9987,7 @@
    "identity_digest": "262cb4401780e172d2a9afbcd53caf62a9ff8709a80d5bbda33741bead93db30",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_resample",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "72d5d73ae8375a2c24e78191e4fafb7fdb4bc849e3b56967f2efd3d4b521be6b",
    "target": "osx-arm64"
   },
   {
@@ -10041,7 +10041,7 @@
    "identity_digest": "f96126ca6c66bd604027a86ed5b8d2305db84d6111bdbfc1d92bd4e27b74afd1",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_ivf",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo, ivf/estimator.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "fa9a0483ae6fe02b51d079e2751ba9e91c01495c501e88ca4e4b75e08f4fe914",
    "target": "osx-arm64"
   },
   {
@@ -10095,7 +10095,7 @@
    "identity_digest": "4567cc1e036735f9d4dbfeee2295557f706de0f3a26afe8db6d683296a80233f",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_training",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo, transformer/experiments/norm_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "39b4c1f5f3455fff3490eb6e265455e285be90e0191195d62926d481bf6a0077",
    "target": "osx-arm64"
   },
   {
@@ -10149,7 +10149,7 @@
    "identity_digest": "712e68bb00b792167844448739adb8a1eb3dc66af6544aa11e965a0e30945ca4",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_mamba",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "994b696319f9a867a2eb9d2cc24c393d0db4e10d4ce3f5d6be5a36293d81a4cd",
    "target": "osx-arm64"
   },
   {
@@ -10203,7 +10203,7 @@
    "identity_digest": "ab8a98a2970b9b5e3b40b53b18127496d966bd2bc4fa3f1798cb8ac0aa3c4463",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_transformer",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo, transformer/experiments/norm_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "33d6ec05feec3fc9052c335ecdd7f525b85b520589fa7b552b8904a0c8dcbac4",
    "target": "osx-arm64"
   },
   {
@@ -10257,7 +10257,7 @@
    "identity_digest": "0d6866e8672201b1e4ba40e6143e824acba5f43962c684bbea0be91bdd64e198",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_embedding",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "cc87b7050200bc4dc932cfd2c462c0fc53b536ca7f3941fc01ae43c0892d651b",
    "target": "osx-arm64"
   },
   {
@@ -10311,7 +10311,7 @@
    "identity_digest": "8b4e7ebb88714cd2cb659dae773b11933e5b91e9bec70a3742a4cc19f80b34ae",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_linear",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "507e157b363b5ab5d6be4c1a18f146bf9bff95317da047c76684376e07df1cbf",
    "target": "osx-arm64"
   },
   {
@@ -10365,7 +10365,7 @@
    "identity_digest": "b8531921f76a0f5df8082a3bf1f25a29642382116df1d6833c1b43d51effb445",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_cluster",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "24171658a9c5aad868b9f51ed1194241bd1ebc06e3badef3afb74bf446662631",
    "target": "osx-arm64"
   },
   {
@@ -10419,7 +10419,7 @@
    "identity_digest": "4d71e1811e77771ef672123b4d06dbfe83ab3ec7a4fcf964599624af9a75788e",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_neighbors",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "3789079d3935ec47702f476a1864a40604b02a2d2b4da071f0709ae2b5bfa738",
    "target": "osx-arm64"
   },
   {
@@ -10473,7 +10473,7 @@
    "identity_digest": "a3160d9ae80065ff86838a75e8a38459cd386a0df3f2d4e02497cebb1a8f78b6",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_decomp",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f6633eb37f9926c673b984e1a6d53dede751dd77f2da4512b772e4ebb1704404",
    "target": "osx-arm64"
   },
   {
@@ -10527,7 +10527,7 @@
    "identity_digest": "43b2bb3e10f0f866374d5b73c047d2710af1a993047afb400bdbee447b65748a",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_prep",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "79f431ee9740c9bf9c8b7663b08c505e94b03461f2aef79c506e49f3ea9bfb70",
    "target": "osx-arm64"
   },
   {
@@ -10581,7 +10581,7 @@
    "identity_digest": "eaba826bdb14e825235863b548e7e7dd24e6bb9eeba6e87560eebd0570f20d9d",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_sequence",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "50cfed51d4e5693eb042a8989094161c5a43f5eb74ba20f4fabe8196e45ab30d",
    "target": "osx-arm64"
   },
   {
@@ -10635,7 +10635,7 @@
    "identity_digest": "ea18be6c8bd52e2328e5863d29f1f5128b74dc00f1d5cb05904f5b22e0b5ce88",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_trees",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "2f5038e3ba1198da0bf439144c65b19020b2f264e6fd262635b74b96650453a3",
    "target": "osx-arm64"
   },
   {
@@ -10689,7 +10689,7 @@
    "identity_digest": "de3e906bdca62d632673d8767312b3acd07a02e6fed826e414b049d3fee6dcea",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_cnn",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f225a68676b48c040fa9f5c9091df50d0a1698fe1d7ec6b3e6bd0cdec4254f99",
    "target": "osx-arm64"
   },
   {
@@ -10743,7 +10743,7 @@
    "identity_digest": "b80f2ce86726669880db6c28e93dfba1935454acbadd823b4497990a03ea619a",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_ann",
    "reason": "changed: closure (bindings/_mojolearn_x_ann.mojo, checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo, ivf/estimator.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "e0a1c9fc8cba2fd69c98360dde87e4d580190f1a0c43a31a5d1a5a987cc21eac",
    "target": "osx-arm64"
   },
   {
@@ -10797,7 +10797,7 @@
    "identity_digest": "70ea2a996c047c25763ff9fb9d731ee53c1be5acce0368b4ffc30d3a36da12aa",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_metrics",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "4d16c524f884d5ad25b1ba9ec7fee5931c319b07f9c10cea0722d0c5d9d54e9a",
    "target": "osx-arm64"
   },
   {
@@ -10851,7 +10851,7 @@
    "identity_digest": "0377e394b2c6254556999bf33571cf1da819e51fbb315cda7a6b639bfa2ec25c",
    "key": "osx-arm64/metal/apple/fast/_mojolearn_byte_lm",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo, transformer/experiments/norm_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "da566d01782c92c3f53d5945a805dac4f65435896bbaaf9198858396c3553c1e",
    "target": "osx-arm64"
   },
   {
@@ -10905,7 +10905,7 @@
    "identity_digest": "befb25a20095649291d47eb23b9f102b7f0da8c4dfff57757b96b62f11b8a6da",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_gbdt",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "62630fec697ef087d6af2bc7ee829aa0adb5223b39e5615e85af7a6ece05b297",
    "target": "osx-arm64"
   },
   {
@@ -10959,7 +10959,7 @@
    "identity_digest": "5c8a6bd147735243405912e9eb109251173ed347f4cb931c1a613ec3d5e08cd2",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_rf",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "4054edbbed0ee8e2db21cda15d29b4059a413021de87799afafa39c42f6f993a",
    "target": "osx-arm64"
   },
   {
@@ -11013,7 +11013,7 @@
    "identity_digest": "24a25ec16fb05996374213607d0b3c65a19ec2f03500e06e974c150331b24fa0",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_trees",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "dc0f3a37b6af3cf98aadac399e76f1d9f989e81eca15e6aa17b15938afbf3ee2",
    "target": "osx-arm64"
   },
   {
@@ -11067,7 +11067,7 @@
    "identity_digest": "66b3133ab7fef8c00bab21fe8ba097da6d8c28f7d07070759df7a17002e26a81",
    "key": "osx-arm64/metal/apple/identical/_mojolearn",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a15edf7b4aa5218c0f85f59bfbb1a614bbe4863afe6f7f88552ef5f2d487c75d",
    "target": "osx-arm64"
   },
   {
@@ -11121,7 +11121,7 @@
    "identity_digest": "1a6d9e57783454e9fc0b2ca9f3cfb27e5c61391089d7fd361b3c75c0d1bb63b3",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_estimators",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a16f9c004150c519ad9cc6c91bd6b10e4750c72faf361feb3ac3411165f9f763",
    "target": "osx-arm64"
   },
   {
@@ -11175,7 +11175,7 @@
    "identity_digest": "cfc9386289e5a21a34517c01b49b178fc35be305e7ac67690778a23bc6ffcf29",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_svm",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "963ae575988805e229866f4bc4e12958a7e4cc471e33ce27ce862a1f01bcfa96",
    "target": "osx-arm64"
   },
   {
@@ -11229,7 +11229,7 @@
    "identity_digest": "3b7c6a873942c35feee995d547f777573dcc8d3ea1e85738a47b92e1ea43fe36",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_solver",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "519173697646e8b9e40eb37a9cae9bc8a84ff890db36f8e5120f2892a2b3d41c",
    "target": "osx-arm64"
   },
   {
@@ -11283,7 +11283,7 @@
    "identity_digest": "64634b0ebe47d1693edbfb15a874d101ec108d6b83179c5b0075e0632127d14e",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_metrics",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "78414f677901d74309557dd6ad4cdb62adf8be55ecfc3a53dca98ec082950119",
    "target": "osx-arm64"
   },
   {
@@ -11337,7 +11337,7 @@
    "identity_digest": "541eab2b6ba74837fdef16a026bc782c926e9d85987cee5ce4933299c7529f7f",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_preprocessing",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "cd7471cd35d97f4ed42a903acdd726a357ffa292bdea1bc3c91d3612e546ae89",
    "target": "osx-arm64"
   },
   {
@@ -11391,7 +11391,7 @@
    "identity_digest": "61707daff229aacb49a3fc0fbc2a4f1f5552eff7659f51f6101a4580e974e837",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_tsa",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "32225ffc3d93a58eeb4d34f9619faed35144ea5572e67327e9196be52bd9c3b7",
    "target": "osx-arm64"
   },
   {
@@ -11445,7 +11445,7 @@
    "identity_digest": "ed8e29d1d3db976547ffade8001406084a36373b38d5cb1a72fe6a3c948136ef",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_linalg",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "66213386a21a1dd19df3724deec72b14447eb3d914cfca1027f5b96c0843f832",
    "target": "osx-arm64"
   },
   {
@@ -11499,7 +11499,7 @@
    "identity_digest": "c0cb691fb5141158e643a6ded54fc3cb30c6934bfb3d6656fe1158c290d0480e",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_arima",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "93bcff3cb7829d3014dce04060172c13d3aa53332df0ec53e5e80fa5d8a6c2e5",
    "target": "osx-arm64"
   },
   {
@@ -11553,7 +11553,7 @@
    "identity_digest": "67fecf846d3b1ce61df9c04e036d63367f47e67c5ba8f4c3b703049fd0c4f542",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_gp",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "160e7edff0413a2a843d0740b7fe65342f7dc67a3f9e09a64f338c03ad6c694c",
    "target": "osx-arm64"
   },
   {
@@ -11607,7 +11607,7 @@
    "identity_digest": "065fdd968befbf7153b7d0e473384607605483f76846d53a030e8991bc1d2476",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_kernel_methods",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "d4c494ff628e23727e9cce340639dd97f3f646ddd21399de8680ec584f69e084",
    "target": "osx-arm64"
   },
   {
@@ -11661,7 +11661,7 @@
    "identity_digest": "a19e12455678881b6924507d7d4e16b6059cd15b30b7cc96254de34ff75775c9",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_mixture",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "19a6b735b580af41fc4b3684940e784f531459dd52e4cba924dfac0138d9ca98",
    "target": "osx-arm64"
   },
   {
@@ -11715,7 +11715,7 @@
    "identity_digest": "48c3cab5a2b4033eb371e3d96b2e3f642c54309c0a817df9879362889cbc10dd",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_hdbscan",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "cb67e633dbeabf5c148beca93d5198e4c480a0e90b2add3fe121f0589ccab69f",
    "target": "osx-arm64"
   },
   {
@@ -11769,7 +11769,7 @@
    "identity_digest": "a26119316ecbc87ac092df011360dbc87fa148dca65cd74495bdf35c91bd0f83",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_resample",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "19baee0999492c7fa4433a81ee4be4a827066b4dd32b594fe9010fd43840f05e",
    "target": "osx-arm64"
   },
   {
@@ -11823,7 +11823,7 @@
    "identity_digest": "3a10c4e7637c14c82747861fcc2c05c9afe2b7bcc867a2c071bc0b05191a8081",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_ivf",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo, ivf/estimator.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "7a8f4a53d4975a87dfb84577832da66571c5ba599900bbf97836c87569bce2c0",
    "target": "osx-arm64"
   },
   {
@@ -11877,7 +11877,7 @@
    "identity_digest": "68cf140ad56c5d14ed98606748d5db11e3df63e3a21826c58344c05bc0a41c41",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_training",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo, transformer/experiments/norm_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "3e36694def79338cc68f3cc0d0dffbff6bdc10193f35570d52848ab261906012",
    "target": "osx-arm64"
   },
   {
@@ -11931,7 +11931,7 @@
    "identity_digest": "9bb6fdac94706e55243f5254f38174ab1c6664a7d7dc179f7a73475e5bdf03f3",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_mamba",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "25b6d4060322c9b8178bbe2daaa0f016fad2da24011d8041aa231ac696538150",
    "target": "osx-arm64"
   },
   {
@@ -11985,7 +11985,7 @@
    "identity_digest": "3e2dff75d3dd590a06209679834444d3045475e10c97793312c2279ea8f77ddf",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_transformer",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo, transformer/experiments/norm_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "993d5c2378159900a8c11f992803553621ccd7f6becab1eadfeaad034af3268b",
    "target": "osx-arm64"
   },
   {
@@ -12039,7 +12039,7 @@
    "identity_digest": "543c89d825a595e1a600552d4c5fcf51f3fcc16bb9b7d545825d70ff1d01ef5c",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_embedding",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "73f75a0c765a0093d49443d59394b52e34ba52875c9aebe20939764706f179b4",
    "target": "osx-arm64"
   },
   {
@@ -12093,7 +12093,7 @@
    "identity_digest": "032fa9c07095e1692b7b73e9691544a392d5ed4aaa4599cef0ca5fa717da6aec",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_linear",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "aba7a3edd8d0f2b9fea922852873f94f06c378449cb03bfe4d9fb4e9a8c8dbed",
    "target": "osx-arm64"
   },
   {
@@ -12147,7 +12147,7 @@
    "identity_digest": "31a1b4e94834cf391947dc964ac8c75467013185aba33a98d61ecddde9de2597",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_cluster",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "36f7bd18a1922a98c1522104a808e759cd3117cf43cd25aff7ba39bc067ed3e4",
    "target": "osx-arm64"
   },
   {
@@ -12201,7 +12201,7 @@
    "identity_digest": "507ece64c808586d07d765965905c0acffec6d06c83c3b1c6ac852b6b7f95a7a",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_neighbors",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f771f38a4cc3bb50f7b17dabbad470de38c358357409a6cd2487087796580b52",
    "target": "osx-arm64"
   },
   {
@@ -12255,7 +12255,7 @@
    "identity_digest": "05e88a9987cc6a88c9edd2dccbe2cb420588bcd58200e005838a4214ec8e50af",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_decomp",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "0d473ce9c95d11bb9d5a599d3c7c031c8b94e84c467973d8c893e9c9483aab59",
    "target": "osx-arm64"
   },
   {
@@ -12309,7 +12309,7 @@
    "identity_digest": "2badc8548b60186275781cf28b2ec167c32f80ccdd7c3f34d36aac75abdf6b51",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_prep",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f587496ef6436e621ed958addff22dc4bdd5c70f0abeca944f62b60cd5606291",
    "target": "osx-arm64"
   },
   {
@@ -12363,7 +12363,7 @@
    "identity_digest": "3c74e92a9c41a875127f2472a5ada978c6645cee4c4b79be2493a5826ecd8b40",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_sequence",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "ec6078d81e633c423e37f789bcf3b8cf5d99d87d7ee77be3bde6106ca776d918",
    "target": "osx-arm64"
   },
   {
@@ -12417,7 +12417,7 @@
    "identity_digest": "3c1f7bc43f2957f73334c6656582a606181c2513fe1a3cbf88080ef8e51a4bae",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_trees",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "45ff92d35afba59e03b91ee8b99dd2bb282e02c5338a8799cfb4a97a7e3138f4",
    "target": "osx-arm64"
   },
   {
@@ -12471,7 +12471,7 @@
    "identity_digest": "2d27617dc8ed7679dd66a38c4fd02f6a2278f4f4ea58e63ac23d131177b83776",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_cnn",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "a64efeb7a4b1bb2cea15a427e69cd0338057fa87bd917fa91a5a3c86de5dc304",
    "target": "osx-arm64"
   },
   {
@@ -12525,7 +12525,7 @@
    "identity_digest": "27234c06d005b76dfb0c9ab15d904436759d25360553cef85c7ca9d3b327ca22",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_ann",
    "reason": "changed: closure (bindings/_mojolearn_x_ann.mojo, checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo, ivf/estimator.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "91c1efe39d8dcad645a69f406d8d2aea18c8dada3cf152e1b6e17a76f5001e65",
    "target": "osx-arm64"
   },
   {
@@ -12579,7 +12579,7 @@
    "identity_digest": "7670b1de2bc6487c15156bd1d573891d510ea6b912e3f9b25203ad1379407172",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_metrics",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "7c0a973ac31728437ee12f2f2a4db98c3595a368d2f0ae3c7c8fb958b4a723b6",
    "target": "osx-arm64"
   },
   {
@@ -12633,7 +12633,7 @@
    "identity_digest": "799bee295c7c2e9a973a7a82d70477bcbb6e5eeb68e6f4e880c60055f928ba7d",
    "key": "osx-arm64/metal/apple/identical/_mojolearn_byte_lm",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo, transformer/experiments/norm_profile.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "93f54495d4abdaeced813d3c0bea3a5863a62540cea62262cfec13e4aa3e2d2c",
    "target": "osx-arm64"
   },
   {
@@ -12688,7 +12688,7 @@
    "identity_digest": "8bfe3c8464646b0466d81cb61893c39e291ce8148a5e5952f071cd0ed5503dc0",
    "key": "osx-arm64/host/-/host/_mojolearn_byte_lm_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "d6859adbfa4481d03ef15ffd60d1844a3c4d23f1a0a1d4bdc7e9aa9a1c91950c",
+   "shipped_sha256": "b25cf27ec24595cc6ead248a259180d2ad5e92dbe76410b4cb6631e43dd70d4d",
    "target": "osx-arm64"
   },
   {
@@ -12743,7 +12743,7 @@
    "identity_digest": "7f765e4d7b091329beaae18e5afa39bb18d88d2de9c1aa7f1f0265b560d536c6",
    "key": "osx-arm64/host/-/host/_mojolearn_forest_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "146aa8bb24852e69cbb217139fb502648311d34166b70311d8e7936c37c70303",
+   "shipped_sha256": "bc701462b049c5d6958635c3ee638a36fdf7b16e8dc527c098c11194a0c30d97",
    "target": "osx-arm64"
   },
   {
@@ -12798,7 +12798,7 @@
    "identity_digest": "e471aa714b9ffb2e074528b5785166d4d5302faa7c65fb441224fb2e5fde309e",
    "key": "osx-arm64/host/-/host/_mojolearn_tokenizer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "ef05efe6ff70c413f5b5a3d86c64fe495b6a29ae98feb62e9cd314e04787da1d",
+   "shipped_sha256": "216490cf740599173201d5d4636612b707a5a8dfa302e430c01542fb95f1b631",
    "target": "osx-arm64"
   },
   {
@@ -12853,7 +12853,7 @@
    "identity_digest": "762e6a7c9547afa4d11b240f7b0b177b72fef09a921df4efe37637cb6884e79c",
    "key": "osx-arm64/host/-/host/_mojolearn_neural_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "203286445bf833ffbfa087aa83a9d660936ae787f1eb4e2869806e3bc17ef69e",
+   "shipped_sha256": "88d5e20dda9804f343f5e21d11cc05485617cf12dee049c3eaa10ff7331df168",
    "target": "osx-arm64"
   },
   {
@@ -12908,7 +12908,7 @@
    "identity_digest": "d00226c9d723194f0eab360afedb9f7831d15966150da1ca4cbe34bd2bd137b8",
    "key": "osx-arm64/host/-/host/_mojolearn_core_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "7c41aab81b7abb9340057bb8a40fe14d38b7c3dba6b12914e56cf87219616ac7",
+   "shipped_sha256": "7c06da399049e67f0f279ed8f3fc7810ae8cc7a8d174eb73a0e83e4227e13adb",
    "target": "osx-arm64"
   },
   {
@@ -12963,7 +12963,7 @@
    "identity_digest": "6f3ec13691f55b51d36606de6a37de5a0569ea2178ed1ba3c0154499c248906a",
    "key": "osx-arm64/host/-/host/_mojolearn_linalg_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "b4f185966ff9b9071d0d7dc5a2c9978631838a84e0270c11eb5bdc4c784b013b",
+   "shipped_sha256": "5060db8bc12e2aa71a257f4f28f8daa9b27aa6b6d13e431553125522344ff141",
    "target": "osx-arm64"
   },
   {
@@ -13018,7 +13018,7 @@
    "identity_digest": "d757dbdf6d0b592e5deb527ae98ffaeaa59342ebb489e3ef813cf14abce253d4",
    "key": "osx-arm64/host/-/host/_mojolearn_estimators_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "c0a2c68c207ddccf328daaac59456af675676126ed93547c4ae857a54d429dd0",
+   "shipped_sha256": "51e603ac71809c4159582ccc232b1b04acc5f45dd45569ea1dbe24ddcf7999e0",
    "target": "osx-arm64"
   },
   {
@@ -13073,7 +13073,7 @@
    "identity_digest": "375f2690d9388d6bb0d17a61598c50a2d80e459860bdf1e92b4b088fad371c42",
    "key": "osx-arm64/host/-/host/_mojolearn_metrics_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "15c9a062c5e940134b2fcde6103238d86ec9a38935d1a84662d11bb3d219fca6",
+   "shipped_sha256": "8c151a90df7f00767b8e851dd4250fec262a59f6df483644b514f652811fbceb",
    "target": "osx-arm64"
   },
   {
@@ -13128,7 +13128,7 @@
    "identity_digest": "97a7f99426b7e962875292492f4c72452bb52314bdd666f42886bbebf449ed62",
    "key": "osx-arm64/host/-/host/_mojolearn_preprocessing_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "2a59b95d80686d72389b7b6968cd3a8d81edfb8b8e5072872f860a44a854bf33",
+   "shipped_sha256": "f87d009e53304f551be6f4729e24b1d80cd07a44c9cf307548edf74b69388174",
    "target": "osx-arm64"
   },
   {
@@ -13183,7 +13183,7 @@
    "identity_digest": "d33731fddc02609e760a021bbbc6d5ecd637ae2c0e14451d7ce45d51b96e9df3",
    "key": "osx-arm64/host/-/host/_mojolearn_tsa_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "4bd4909b83387e3e8eb3e973a197ee6853cea6d0de0b028532a634bc88451667",
+   "shipped_sha256": "59777491f611f0f552696893ada5666ca96179ceaf302000dbe5c972de2ffc0d",
    "target": "osx-arm64"
   },
   {
@@ -13238,7 +13238,7 @@
    "identity_digest": "e0f684c1aaa8b4b596040c31eefd073bd44bfbb4a12b24fd2ab8343fa3630e47",
    "key": "osx-arm64/host/-/host/_mojolearn_solver_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "3544df6bc3389a927b182288268689bf2cdfcc13b4cc202bf1b1232273f43d91",
+   "shipped_sha256": "435a7c06933ef2dea8f0d32faad5a1147062965a30311dcbd4ae57e587dbc647",
    "target": "osx-arm64"
   },
   {
@@ -13293,7 +13293,7 @@
    "identity_digest": "32aea08c584df00b41fedb5112a9b8328791846a6895c24c4d949b2b8af205d5",
    "key": "osx-arm64/host/-/host/_mojolearn_svm_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "1bc53cde8a962c206919b78d7cb04986af372d956bdf01da1dcc877e387502f1",
+   "shipped_sha256": "8a878b339b7a8a1f7fa2a9afd6bceb8bb648a49609ed3c71477c73a1e536804c",
    "target": "osx-arm64"
   },
   {
@@ -13348,7 +13348,7 @@
    "identity_digest": "ab3a7140d5aa425e7f5156bf3bb0fe73c309bfb580ff603bdac8d3e1ed8c6ac5",
    "key": "osx-arm64/host/-/host/_mojolearn_trees_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "30a145daf4778bb6558af7a8ccb62f343ff227c02ed3e48087a4560b1408822e",
+   "shipped_sha256": "f02a686c1de8f5a0e35839b496ed143bf7d693fba86d67b1233a3ccfb9851fd7",
    "target": "osx-arm64"
   },
   {
@@ -13403,7 +13403,7 @@
    "identity_digest": "3516fff415554ee8ac515e22f88e6a79602e59b5e7f4b323b9959eb5de9ca0bd",
    "key": "osx-arm64/host/-/host/_mojolearn_rf_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "9c43d6666c7dab2cf60a2437676ce886ced3d305bbe5bb6143e01f927fa7b6a0",
+   "shipped_sha256": "fe9faf8a6480e467142350248429a2b47c0b68caa45c6aa1fad9c59bbe39e5b9",
    "target": "osx-arm64"
   },
   {
@@ -13458,7 +13458,7 @@
    "identity_digest": "678aa5f0ea175da0a8f30df1dc3c3239b6ef28086ced207a7f8f1fd22bcfcf48",
    "key": "osx-arm64/host/-/host/_mojolearn_gp_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "be25a8ba74660a77fe14fbc1a755ef974ad18aee985edc25bb58b8a739878bca",
+   "shipped_sha256": "6a7b928000bb8f565a53a93fa5db1071b56bcadad9fa83a0e6ee61648713407e",
    "target": "osx-arm64"
   },
   {
@@ -13513,7 +13513,7 @@
    "identity_digest": "db81a92f790a6de63c510aaed0d40de259f6aa653d39be09e143bac264a598a6",
    "key": "osx-arm64/host/-/host/_mojolearn_kernel_methods_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "6b4501a8109c7582d2a46c740248b92e648e8c1a53fbcc93b21bd9ac0f08d18b",
+   "shipped_sha256": "38d3cc0086e9be2be6efcbfb5858c3c0ef35754b983876af60333e0b25b95c9f",
    "target": "osx-arm64"
   },
   {
@@ -13568,7 +13568,7 @@
    "identity_digest": "b434d4b9e095e00cd8af0113fb71e98fbd1d66e23e029e469c763d3dc494e2a2",
    "key": "osx-arm64/host/-/host/_mojolearn_mixture_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "aace954fb763899252c39130e5dc41d4e74908d9203e5b624d2ff52b8e18add6",
+   "shipped_sha256": "55391128b4ed547c67aeec92ba829e4cd7bfa52c8614d5b61f8398bb6a08667d",
    "target": "osx-arm64"
   },
   {
@@ -13623,7 +13623,7 @@
    "identity_digest": "917d6d4739eadafa73ce257a7d06d8c523597830a580d37bd83e6bb13725e0ab",
    "key": "osx-arm64/host/-/host/_mojolearn_mixture_infer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "d0e65f5734d886b696775ad9f5af3f5a7c6aa7b14d9123bee89aa88ff0dbca01",
+   "shipped_sha256": "f0bc02ce7d993223e6238a01eaf9cfe38d27ceedbcf908a137397afa260d1019",
    "target": "osx-arm64"
   },
   {
@@ -13678,7 +13678,7 @@
    "identity_digest": "1f8430b6937de90b4e6192cadc45778179da5937bac2f25fc2cad12fe6f2a553",
    "key": "osx-arm64/host/-/host/_mojolearn_hdbscan_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "4aef16587c78e6a0b9d879fb99dc544280851d74ee595bec8aaa79cc11db1ade",
+   "shipped_sha256": "d7cd27d94da80d9ef75f912342e84c4d44ffe53b6a6d9071ddc2472b21134f74",
    "target": "osx-arm64"
   },
   {
@@ -13733,7 +13733,7 @@
    "identity_digest": "768df15a665fd11fa39840a6fabb441d9925c16fcff986f0b603a4d30de73190",
    "key": "osx-arm64/host/-/host/_mojolearn_gp_infer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "cd677e95d3ba9b5f705d0d50babf860e6db9d4c5d59fd4e60a7f8e62a42cb16f",
+   "shipped_sha256": "5877e2e0709b0e61521aeff89fec626b72864b98c7350b63d229087e2c863cc4",
    "target": "osx-arm64"
   },
   {
@@ -13788,7 +13788,7 @@
    "identity_digest": "b054e86cfc5f86f83d442c484ad81b70d6ecd1b0be2d33a2d1dfa5c40dd9d1f8",
    "key": "osx-arm64/host/-/host/_mojolearn_hdbscan_infer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "333310febe0716890f9cc6ba3e64bde474ca9e53c76c301de02e4fc474019c5b",
+   "shipped_sha256": "259c70f5fb5fc657037fbe1641e2882bbe2eaf07bcd3dd07ddc3c85cafdf4afc",
    "target": "osx-arm64"
   },
   {
@@ -13843,7 +13843,7 @@
    "identity_digest": "3dfc387f4d5e35493aeb5be9b881b6914ade231ce6f0fe5c4d2ceba44bb14c97",
    "key": "osx-arm64/host/-/host/_mojolearn_gbdt_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "1d2f9d95d6119abb86904f17008ebe40bc06b424aa543400e548610c0c796cee",
+   "shipped_sha256": "37b725514b875b3b8587a66b5cb822494fa83bbe49f3090f819335a88a3d27ab",
    "target": "osx-arm64"
   },
   {
@@ -13898,7 +13898,7 @@
    "identity_digest": "493104673002aa9505ad160fc4c28193e1155edd92089ffd09d032311aa38ce7",
    "key": "osx-arm64/host/-/host/_mojolearn_training_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "ae973f375a0c46abd9cdb99d144523b7789f181d156b680a3c1940f1aa4fb4f2",
+   "shipped_sha256": "d3f83dc3ea4ecd796a0d55939156370cefb76b904f12061f0087cd46c55ab4ff",
    "target": "osx-arm64"
   },
   {
@@ -13953,7 +13953,7 @@
    "identity_digest": "2d2bb9a621418eb51f7c307ee2d313d825480016f5aa289132b8a887b1702ceb",
    "key": "osx-arm64/host/-/host/_mojolearn_resample_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "5921c0b9e3c33fa204c105a5fa6231a2e83a37dbf0c55dd517144f6e4b4b505a",
+   "shipped_sha256": "4ff765848ccadd390d15174a596c3db6559994993de501ad08bfee88c787d67f",
    "target": "osx-arm64"
   },
   {
@@ -14008,7 +14008,7 @@
    "identity_digest": "d3daf2ae0a7be9aa400a46e5bbfc79a2c00f0225e3678f53bc28ad847d6e6e33",
    "key": "osx-arm64/host/-/host/_mojolearn_mamba_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "a93a3a0f5adc1fd8d8c49e4f446e6e094c628fffa11f32d476d298673cf76ada",
+   "shipped_sha256": "9e23fe04d8e995feae7a52e50a88e992a7bbf00b758bcef31c47831971a24011",
    "target": "osx-arm64"
   },
   {
@@ -14063,7 +14063,7 @@
    "identity_digest": "f71fe643c68f34d5f20f2cc149ccddd19a5e0229fc19ed22e3c61cf12b180526",
    "key": "osx-arm64/host/-/host/_mojolearn_arima_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "46065c1fefde856ad7497fd3402e9982633e013c6db7c86bca24c5dad5e67b99",
+   "shipped_sha256": "de34ac858db178070a0bf9d07851f32400d04fbfb2900169be169fab5a130a5b",
    "target": "osx-arm64"
   },
   {
@@ -14118,7 +14118,7 @@
    "identity_digest": "00f8510a65614be4bf08d3e384a7951cda4c1a5cf0a6f26a248bd486acfb6c0f",
    "key": "osx-arm64/host/-/host/_mojolearn_embedding_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "c5c30269676600ac16bcd29da6eecf9f17f4a412ce8880c06ba44cd03e3a0d1d",
+   "shipped_sha256": "283e23341cafd0ef0c308887b195446a2cc193ffdb6206a2713ae5346404e0be",
    "target": "osx-arm64"
   },
   {
@@ -14173,7 +14173,7 @@
    "identity_digest": "ea8a1030f8265847c71d487065da7fff9daa936ba19ab338316a5edebc0dc153",
    "key": "osx-arm64/host/-/host/_mojolearn_embedding_infer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "626d7e93d1343b4bca71268dd7ef6db2367e0b8f033580d66fd2b43ac817e152",
+   "shipped_sha256": "1aa9394d8404dd34c046ee2aade72e6a228c5b9db05a355d1c520f340245fac6",
    "target": "osx-arm64"
   },
   {
@@ -14228,7 +14228,7 @@
    "identity_digest": "c163f05e4f594c1a296652b45d9825fe4ca469b80206a505a5d72ccd1963549a",
    "key": "osx-arm64/host/-/host/_mojolearn_ivf_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, ivf/host/ivf_host.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo)",
-   "shipped_sha256": "30287b61870cbbdc0c7ba68b442b853966c38ace92cafdb81231e219da216d6e",
+   "shipped_sha256": "20b4eb569f9a10f3f546df73d2adec372bcd6d35d1c93e8a63baa9ca9de0ea7c",
    "target": "osx-arm64"
   },
   {
@@ -14283,7 +14283,7 @@
    "identity_digest": "1c83389d385e6a75e387846b698917d498456e6f2ac1f742db336ee299f32b9b",
    "key": "osx-arm64/host/-/host/_mojolearn_ivf_search_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, ivf/host/ivf_host.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo)",
-   "shipped_sha256": "b2203053e3ef6fe5647bd64eaf018eab3edef0ad46beae30daa4fac63abd6fbc",
+   "shipped_sha256": "67c4b562687f1dca15b7b68cce9adfdcf3f3eeef5216d31ea4228650d747f8a0",
    "target": "osx-arm64"
   },
   {
@@ -14338,7 +14338,7 @@
    "identity_digest": "57fba081b0e393eefbe9bb15a9f057294b2af4217c5e43a071da4f6cc615d24a",
    "key": "osx-arm64/host/-/host/_mojolearn_forecast_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "31c200c344b6185d86aa3c1be0014f5d00d65cdc5568212b9e1e9e34553314d0",
+   "shipped_sha256": "d8e4647522b261e6fef79b3b135970488394600a94ed408f3369665ed6f60751",
    "target": "osx-arm64"
   },
   {
@@ -14393,7 +14393,7 @@
    "identity_digest": "cedd529928650fe219861339f2b63c17d4dcb6f25210fbf6101a862d0360aa2b",
    "key": "osx-arm64/host/-/host/_mojolearn_transformer_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "6ac9ec1b9bf9d8754e4220f5b4fe1e9a68d38162bb0bf7e8cf00c53c5f50e0e6",
+   "shipped_sha256": "d163f1375ed5681352c5ab4b5feb6193d92cdcf4b56cda7e85a9c1a64dc429af",
    "target": "osx-arm64"
   },
   {
@@ -14448,7 +14448,7 @@
    "identity_digest": "891da5f794a0c2d16e4d94607a98bab7d325f6540d110f6f4e3d81f1fd45952f",
    "key": "osx-arm64/host/-/host/_mojolearn_x_linear_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "e8cd8092dbe470bb721f8b3c14a7f74a1f583c5ffdf3a7b89e2e6b0e75710039",
+   "shipped_sha256": "1e5c18dd704f46d6f6047b79233f102ad72165a585c29ce0aa3fea8d695e2474",
    "target": "osx-arm64"
   },
   {
@@ -14503,7 +14503,7 @@
    "identity_digest": "0ba683b06e82062ede1bfbdec477eb553921ec88e6556d4bb1f1d9cc826f73e0",
    "key": "osx-arm64/host/-/host/_mojolearn_x_cluster_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "f13c3f54cb73bc54d9884a8810e8593d2740664dd76aac24276eeabbdc062acb",
+   "shipped_sha256": "14190d69e303a4092fd6cb1ffe27ce8a20f2a3dfbdeb9ea2e904965d775a78cb",
    "target": "osx-arm64"
   },
   {
@@ -14558,7 +14558,7 @@
    "identity_digest": "d416b1db7abd4d855b4ea9905c6ba9c88d7aae79fdaffde2b23cccf5f72b5e52",
    "key": "osx-arm64/host/-/host/_mojolearn_x_neighbors_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "442a7ef6f247935895182ab211cedc5245efeedb39f6ce59fd89945caf75ef64",
+   "shipped_sha256": "020d838b8ffa8d23595797b0e1f020f79c67d83989ebf6e6a2c60c78082b0d0e",
    "target": "osx-arm64"
   },
   {
@@ -14613,7 +14613,7 @@
    "identity_digest": "82e9e1988b0a1754283e424cecd6f0e731b0e47f629c0ab1ce67c478ece8c509",
    "key": "osx-arm64/host/-/host/_mojolearn_x_decomp_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "8753cffdeac3f00be762c965a0f076dbd773f097ecc7bb0f169be4ec05e4ee36",
+   "shipped_sha256": "d8fea7dff250c58f81d170fbf22c81d0ded87e8e5880ff2c1221bc3b76c0c6f0",
    "target": "osx-arm64"
   },
   {
@@ -14668,7 +14668,7 @@
    "identity_digest": "32223b5ad073cf1237f6fb9df328beb689aecb2aa627799dd2dfa6697b38e0a6",
    "key": "osx-arm64/host/-/host/_mojolearn_x_prep_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "d0e0b2d3f2099c41cf5142543a078ba776a383c5186c0a419575ecb13336e076",
+   "shipped_sha256": "588f4905cfbc0119a066a29a90f816c1c4feb20e60dc342e134fc467979613b9",
    "target": "osx-arm64"
   },
   {
@@ -14723,7 +14723,7 @@
    "identity_digest": "35ee8fac1ed0f5370d325347a5b20c8b8070479a318d772321dbf561a9909138",
    "key": "osx-arm64/host/-/host/_mojolearn_x_sequence_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "405d5a65dd3730746cbb17a169dd42f2171eebb216703a5f90f353e69b24518d",
+   "shipped_sha256": "7a426b9129842345074c0fd938c17483ca4b1ef02ed79e42ed434bda5248fb4a",
    "target": "osx-arm64"
   },
   {
@@ -14778,7 +14778,7 @@
    "identity_digest": "6b773e814f3c95158bce77fff449a2e76f94ce6e21a6cea8e1ec0defe0abef64",
    "key": "osx-arm64/host/-/host/_mojolearn_x_trees_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "282b9bdd01a3851f4bd512172ccf912683ca7d26c734da80d89f571a51527cca",
+   "shipped_sha256": "b60802bf221dc958c61922ce3e1688c98f2cde11e98cb24ffb6da62d1dffcbce",
    "target": "osx-arm64"
   },
   {
@@ -14833,7 +14833,7 @@
    "identity_digest": "06f3c32008d1e5620386d2af16041ee40f2e0d8b82a4f25b6b2b7954f1ac6b40",
    "key": "osx-arm64/host/-/host/_mojolearn_x_cnn_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo, gemm/contract.mojo)",
-   "shipped_sha256": "1412c4e5f6d3b99d01cf739710a35472481da612d9627d51a96129304c6f57e7",
+   "shipped_sha256": "1db86c05321fb89f8198a891601d0d08c08e373978a7da51cfb9c9085807f953",
    "target": "osx-arm64"
   },
   {
@@ -14888,7 +14888,7 @@
    "identity_digest": "abc03353eb7ea33a6758f9b8c3d91106afa9803f3c368fb66610c995b9db6360",
    "key": "osx-arm64/host/-/host/_mojolearn_x_ann_host",
    "reason": "changed: closure (bindings/_mojolearn_x_ann_host.mojo, checks/numerics.mojo, core/package_profile.mojo, ivf/host/ivf_host.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo, x_ann/host/ivf_pq_host.mojo)",
-   "shipped_sha256": "719e7e6725f84619dfe1482badc65db20a66afec11a9241b90e203b9880e1f21",
+   "shipped_sha256": "76786e7a720fdc74a3aadf30e5d65814d5b90e8b218add6af20d25c569696de7",
    "target": "osx-arm64"
   },
   {
@@ -14943,7 +14943,7 @@
    "identity_digest": "1bd714796a5dbb2751ae7c40793dab4372bb9c74bd2ca6546a6e099bb1244d5a",
    "key": "osx-arm64/host/-/host/_mojolearn_x_metrics_host",
    "reason": "changed: closure (checks/numerics.mojo, core/package_profile.mojo)",
-   "shipped_sha256": "df902da1faf7e276b862b59ecf0339c58eeef7c050a9747b955bbbd5720458fe",
+   "shipped_sha256": "784e8c05ed572126014eaf116c0f24a3cd8f53fb5dbf38e4ffc7ac1591487add",
    "target": "osx-arm64"
   }
  ],
