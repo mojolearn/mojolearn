@@ -800,7 +800,7 @@ class RandomForestClassifier(_RandomForestBase):
         self.criterion = criterion
         self._cfg["min_weight_fraction_leaf"] = mwf
 
-    def fit(self, X, y, *, feature_importances=False):
+    def fit(self, X, y, sample_weight=None, *, feature_importances=False):
         """Fit the forest.
 
         Parameters
@@ -809,6 +809,9 @@ class RandomForestClassifier(_RandomForestBase):
             Training data, converted to float32.
         y : array-like of shape (n_samples,)
             Targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Per-row weights, non-negative and not all zero. Multiplied into the
+            ``class_weight`` row weights.
         feature_importances : bool, default False
             Also compute `feature_importances_` during this fit.
 
@@ -816,9 +819,11 @@ class RandomForestClassifier(_RandomForestBase):
         -------
         self
         """
-        return self._fit_with_tree_start(X, y, feature_importances=feature_importances)
+        return self._fit_with_tree_start(X, y, feature_importances=feature_importances,
+                                         sample_weight=sample_weight)
 
-    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False):
+    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
+                             sample_weight=None):
         if not is_bool(feature_importances):
             raise ValueError("feature_importances must be a boolean fit-output request")
         self._refresh_config()
@@ -829,9 +834,16 @@ class RandomForestClassifier(_RandomForestBase):
         self.n_classes_ = int(len(self.classes_))
         if self.n_classes_ < 2:
             raise ValueError("y has fewer than 2 classes")
-        weights = (None if self.class_weight is None else
-                   _class_weight_rows(self.class_weight, self.classes_, y32,
-                                      self._bind("_mojolearn_x_trees")))
+        if sample_weight is not None:
+            # scikit-learn's sample_weight (checked, float32) times the
+            # class_weight row weights, one native product per row; the
+            # weighted entry takes any per-row weights
+            from ._expansion_trees import _trees_weighted_rows
+            weights = _trees_weighted_rows(sample_weight, self.class_weight, self.classes_, y32, self)
+        else:
+            weights = (None if self.class_weight is None else
+                       _class_weight_rows(self.class_weight, self.classes_, y32,
+                                          self._bind("_mojolearn_x_trees")))
         binding = self._bind("_mojolearn_rf")
         self.__dict__.pop("oob_decision_function_", None)
         self.__dict__.pop("oob_score_", None)
@@ -1080,7 +1092,7 @@ class RandomForestRegressor(_RandomForestBase):
         self.criterion = criterion
         self._cfg["min_weight_fraction_leaf"] = mwf
 
-    def fit(self, X, y, *, feature_importances=False):
+    def fit(self, X, y, sample_weight=None, *, feature_importances=False):
         """Fit the forest.
 
         Parameters
@@ -1089,6 +1101,8 @@ class RandomForestRegressor(_RandomForestBase):
             Training data, converted to float32.
         y : array-like of shape (n_samples,)
             Targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Per-row weights, non-negative and not all zero.
         feature_importances : bool, default False
             Also compute `feature_importances_` during this fit.
 
@@ -1096,7 +1110,8 @@ class RandomForestRegressor(_RandomForestBase):
         -------
         self
         """
-        return self._fit_with_tree_start(X, y, feature_importances=feature_importances)
+        return self._fit_with_tree_start(X, y, feature_importances=feature_importances,
+                                         sample_weight=sample_weight)
 
     def _fit_in_session(self, session, y, rows=None):
         """`fit(X, y)` for the X a `ForestDataSession` holds (trees-apple3):
