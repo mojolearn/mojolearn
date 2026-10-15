@@ -79,6 +79,11 @@ from core.abs_sum_blocked import (
     device_any_index_out_of_range,
 )
 from core.weight_scan_device import device_scan_weights
+from core.weight_compact_device import (
+    device_gather_rows,
+    device_gather_rows_colmajor,
+    device_nonzero_weight_rows,
+)
 from ensemble.decisiontree.batched_levelalgo.objectives import (
     ClassificationObjectiveFunction,
     RegressionObjectiveFunction,
@@ -333,6 +338,43 @@ def _rf_min_weight_leaf(frac: Float64, weight_total: Float64) -> Float32:
     return Float32(frac * weight_total)
 
 
+def _rf_drop_zero_weight_rows[LT: DType](
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DT],
+    mut dy: DeviceBuffer[LT],
+    mut dsw: DeviceBuffer[DT],
+    mut weights: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+) raises -> Int:
+    """lane sk-weq-trees: scikit-learn's tree splitter keeps only the rows
+    whose sample_weight is not zero (`_splitter.pyx`, `Splitter.init`), so a
+    zero-weight row must shape nothing -- not the quantile edges (computed
+    from every row of `dx`), not a node's row count. Called on a weighted
+    fit without bootstrap whose weights are not all 1.0: the kept rows are
+    found and gathered ON THE DEVICE (`core/weight_compact_device`) into new
+    column-major X, labels and weights, which replace the caller's; the
+    host weight list becomes the kept weights (one bulk copy). Returns the
+    kept row count; n_rows (and every buffer untouched) when no weight is
+    zero, so such a fit keeps every bit."""
+    var rows = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    var kept = device_nonzero_weight_rows(ctx, dsw, n_rows, rows)
+    if kept >= n_rows or kept <= 0:
+        _ = rows^
+        return n_rows
+    var cx = device_gather_rows_colmajor(ctx, dx, n_rows, n_cols, rows, kept)
+    var cy = device_gather_rows[LT](ctx, dy, rows, kept)
+    var cw = device_gather_rows[DT](ctx, dsw, rows, kept)
+    weights = List[Float32](length=kept, fill=Float32(0))
+    ctx.enqueue_copy(dst_ptr=weights.unsafe_ptr(), src_buf=cw)
+    ctx.synchronize()
+    _ = rows^
+    dx = cx^
+    dy = cy^
+    dsw = cw^
+    return kept
+
+
 def _rf_params_from(params: PythonObject, criterion: Int) raises -> RF_params:
     """Slots 3-15 into `RF_params`, read under the GIL."""
     return RF_params(
@@ -551,6 +593,8 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
             if device_has_nan_f32(ctx, dx, n_rows * n_cols):
                 raise Error("rf_classifier_fit: " + RF_NAN_REFUSAL)
         var host_x = 0 if ROWMAJOR else Int(xp)
+        # sk-weq-trees: the rows the fit sees (fewer when zero weights drop)
+        var n_fit = n_rows
         var dy = ctx.enqueue_create_buffer[CLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         # The host weights drive sampling; non-bootstrap objectives read the
@@ -571,25 +615,35 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
                 raise Error("class weights must be finite and nonnegative")
             if wscan.total <= 0:
                 raise Error("class weights must have positive total")
+            # sk-weq-trees: zero-weight rows leave the fit (no bootstrap);
+            # the kept weights are rescanned (all 1.0 after the drop: the
+            # count objective, the fit on the repeated rows)
+            if not rf_params.bootstrap and not wscan.all_unit:
+                n_fit = _rf_drop_zero_weight_rows[CLT](
+                    ctx, dx, dy, dsw, weights, n_rows, n_cols
+                )
+                if n_fit < n_rows:
+                    host_x = 0
+                    wscan = device_scan_weights(ctx, dsw, n_fit)
             weight_total = wscan.total
             if wscan.all_unit:
                 weights = List[Float32]()
         # cuML randomforest.cuh dispatches weighted objectives only when
         # bootstrap is disabled: sampling already applies bootstrap weights.
         if len(weights) > 0 and not rf_params.bootstrap:
-            var scale = choose_scale(weight_total, n_rows)
+            var scale = choose_scale(weight_total, n_fit)
             if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
                 raise Error("class weights exceed Float32 fixed-point scale range")
             var scales = BinScales(Float32(1), Float32(scale))
             forest = fit_forest[WeightedClsObj](
-                ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
+                ctx, dx, dy, dsw, n_fit, n_cols, n_classes, rf_params,
                 scales, sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
                 min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
             )
         else:
-            _rf_fold_min_weight_count(rf_params, mw_frac, n_rows)
+            _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
             forest = fit_forest[ClsObj](
-                ctx, dx, dy, dsw, n_rows, n_cols, n_classes, rf_params,
+                ctx, dx, dy, dsw, n_fit, n_cols, n_classes, rf_params,
                 sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
             )
         t_s = bt.start()
@@ -1221,10 +1275,39 @@ def rf_classifier_fit_weighted_session_binding(
             raise Error("class weights must be finite and nonnegative")
         if wscan.total <= 0:
             raise Error("class weights must have positive total")
+        # sk-weq-trees: zero-weight rows leave the fit (no bootstrap), as in
+        # `_rf_classifier_fit`. The member then fits its OWN compacted X
+        # with its own quantile table (`fit_forest`), never the session's
+        # shared one (built from every row); a member without a zero weight
+        # keeps the session path and every bit.
+        var n_fit = n_rows
+        if not rf_params.bootstrap and not wscan.all_unit:
+            n_fit = _rf_drop_zero_weight_rows[CLT](
+                ctx, dxv, dy, dsw, weights, n_rows, n_cols
+            )
+            if n_fit < n_rows:
+                wscan = device_scan_weights(ctx, dsw, n_fit)
         weight_total = wscan.total
         if wscan.all_unit:
             weights = List[Float32]()
-        if len(weights) > 0 and not rf_params.bootstrap:
+        if n_fit < n_rows:
+            if len(weights) > 0:
+                var cscale = choose_scale(weight_total, n_fit)
+                if cscale < Float64(1.1754943508222875e-38) or cscale > Float64(3.4028234663852886e38):
+                    raise Error("class weights exceed Float32 fixed-point scale range")
+                forest = fit_forest[WeightedClsObj](
+                    ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
+                    BinScales(Float32(1), Float32(cscale)),
+                    sample_weight_host=weights, host_x_addr=0,
+                    min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
+                )
+            else:
+                _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
+                forest = fit_forest[ClsObj](
+                    ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
+                    sample_weight_host=weights, host_x_addr=0,
+                )
+        elif len(weights) > 0 and not rf_params.bootstrap:
             var scale = choose_scale(weight_total, n_rows)
             if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
                 raise Error("class weights exceed Float32 fixed-point scale range")
@@ -1336,6 +1419,8 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
             if device_has_nan_f32(ctx, dx, n_rows * n_cols):
                 raise Error("rf_regressor_fit: " + RF_NAN_REFUSAL)
         var host_x = 0 if ROWMAJOR else Int(xp)
+        # sk-weq-trees: the rows the fit sees (fewer when zero weights drop)
+        var n_fit = n_rows
         var dy = ctx.enqueue_create_buffer[RLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
@@ -1355,6 +1440,15 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
                 raise Error("sample weights must be finite and nonnegative")
             if wscan.total <= 0:
                 raise Error("sample weights must have positive total")
+            # sk-weq-trees: zero-weight rows leave the fit, as in the
+            # classifier (`_rf_drop_zero_weight_rows`)
+            if not rf_params.bootstrap and not wscan.all_unit:
+                n_fit = _rf_drop_zero_weight_rows[RLT](
+                    ctx, dx, dy, dsw, weights, n_rows, n_cols
+                )
+                if n_fit < n_rows:
+                    host_x = 0
+                    wscan = device_scan_weights(ctx, dsw, n_fit)
             weight_total = wscan.total
             if wscan.all_unit:
                 weights = List[Float32]()
@@ -1368,9 +1462,9 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         # count, which is exact.
         # cpu2-l6-bindings: the label magnitude on the device, in the fixed
         # blocked order the host column restates (`core/abs_sum_blocked`)
-        var mag = device_abs_sum_blocked(ctx, dy, n_rows)
+        var mag = device_abs_sum_blocked(ctx, dy, n_fit)
         var scales = BinScales(
-            Float32(choose_scale(mag, n_rows)), Float32(1.0)
+            Float32(choose_scale(mag, n_fit)), Float32(1.0)
         )
         # `n_unique_labels` is 1 for regression, exactly what
         # `rf_regressor_fit`'s cuML counterpart passes.
@@ -1380,20 +1474,20 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
             # label * weight, so its scale bounds sum |y| * max w, which is
             # >= sum |y * w| for non-negative weights; the weight plane takes
             # the classifier's scale from the weight total.
-            var lscale = choose_scale(mag * max(weight_max, Float64(0)), n_rows)
-            var wscale = choose_scale(weight_total, n_rows)
+            var lscale = choose_scale(mag * max(weight_max, Float64(0)), n_fit)
+            var wscale = choose_scale(weight_total, n_fit)
             if wscale < Float64(1.1754943508222875e-38) or wscale > Float64(3.4028234663852886e38):
                 raise Error("sample weights exceed Float32 fixed-point scale range")
             forest = fit_forest[WeightedRegObj](
-                ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params,
+                ctx, dx, dy, dsw, n_fit, n_cols, 1, rf_params,
                 BinScales(Float32(lscale), Float32(wscale)), sample_weight_host=weights,
                 host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
                 min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
             )
         else:
-            _rf_fold_min_weight_count(rf_params, mw_frac, n_rows)
+            _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
             forest = fit_forest[RegObj](
-                ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
+                ctx, dx, dy, dsw, n_fit, n_cols, 1, rf_params, scales,
                 sample_weight_host=weights,
                 host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
             )

@@ -184,6 +184,11 @@ from checks.numerics import (
 from core.philox import launch_uniform_int
 from core.abs_sum_blocked import device_abs_sum_blocked
 from core.weight_scan_device import device_scan_weights
+from core.weight_compact_device import (
+    device_gather_rows,
+    device_gather_rows_colmajor,
+    device_nonzero_weight_rows,
+)
 from extratrees.checks.fixed_point import choose_scale
 from ensemble.decisiontree.batched_levelalgo.quantiles import compute_quantiles
 from extratrees.checks.pcg_rng import row_sample_seed
@@ -2817,15 +2822,88 @@ struct DeviceDataset(Movable):
         """The weight plane the weighted kernels read."""
         return self.d_weights.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
+    def keep_rows(
+        mut self,
+        ctx: DeviceContext,
+        mut rows: DeviceBuffer[DType.int32],
+        kept: Int,
+    ) raises:
+        """lane sk-weq-trees: the dataset becomes its `kept` rows `rows[0:kept]`
+        (ascending, `core/weight_compact_device`): X (column-major) and the
+        labels gathered on the device, `n_rows` the kept count. Called
+        before any derived plane (row-major copy, bins, weights) exists."""
+        var n = Int(self.n_rows)
+        var cx = device_gather_rows_colmajor(
+            ctx, self.d_data, n, Int(self.n_cols), rows, kept
+        )
+        var cl = device_gather_rows[DType.int32](ctx, self.d_labels, rows, kept)
+        ctx.synchronize()
+        self.d_data = cx^
+        self.d_labels = cl^
+        self.n_rows = Int32(kept)
+
+    def drop_zero_weight_rows(
+        mut self,
+        ctx: DeviceContext,
+        mut dw: DeviceBuffer[DType.float32],
+    ) raises -> Int:
+        """lane sk-weq-trees: scikit-learn's tree splitter keeps only the
+        rows whose sample_weight is not zero (`_splitter.pyx`,
+        `Splitter.init`), so a zero-weight row must shape nothing: not a
+        node's row count, not a node's per-feature min/max (the random
+        threshold's range), not the regression bins. The dataset and `dw`
+        (its `n_rows` weights) become the nonzero-weight rows, found and
+        gathered on the device. Returns the kept count; when no weight is
+        zero nothing is touched, so such a fit keeps every bit. The callers
+        call it only without bootstrap (a bootstrap draws by the weights)."""
+        var n = Int(self.n_rows)
+        if n <= 0:
+            return n
+        var rows = ctx.enqueue_create_buffer[DType.int32](n)
+        var kept = device_nonzero_weight_rows(ctx, dw, n, rows)
+        if kept > 0 and kept < n:
+            var cw = device_gather_rows[DType.float32](ctx, dw, rows, kept)
+            self.keep_rows(ctx, rows, kept)
+            dw = cw^
+        else:
+            kept = n
+        _ = rows^
+        return kept
+
     def set_row_weights(
         mut self,
         ctx: DeviceContext,
         weights_addr: Int,
         min_weight_fraction: Float64,
+        drop_zero_rows: Bool = False,
     ) raises -> Bool:
-        """lane sk-kernels: the classifier's Float32 row weights (the
-        caller's `n_rows` words, borrowed through this call) uploaded,
-        checked on the device (`core/weight_scan_device`: finite, non-
+        """`set_row_weights_device` on the caller's `n_rows` Float32 words
+        (borrowed through this call), uploaded here. `drop_zero_rows`
+        (lane sk-weq-trees; the classifier passes `not bootstrap`) first
+        drops the zero-weight rows (`drop_zero_weight_rows`)."""
+        var n = Int(self.n_rows)
+        if weights_addr == 0 or n <= 0:
+            return False
+        var src = MutPointer[Float32, MutUntrackedOrigin](
+            unsafe_from_address=weights_addr
+        )
+        var dw = ctx.enqueue_create_buffer[DType.float32](n)
+        ctx.enqueue_copy(dst_buf=dw, src_ptr=src)
+        if drop_zero_rows:
+            _ = self.drop_zero_weight_rows(ctx, dw)
+        var weighted = self.set_row_weights_device(ctx, dw, min_weight_fraction)
+        _ = dw^
+        return weighted
+
+    def set_row_weights_device(
+        mut self,
+        ctx: DeviceContext,
+        mut dw: DeviceBuffer[DType.float32],
+        min_weight_fraction: Float64,
+    ) raises -> Bool:
+        """lane sk-kernels: the Float32 row weights `dw` (`n_rows` of them,
+        already on the device; lane sk-weq-trees split the upload off into
+        `set_row_weights`) checked on the device (`core/weight_scan_device`: finite, non-
         negative, positive total; all 1.0 leaves the fit unweighted and
         returns False) and quantized to Int32 units: `Int32(w * scale)`, the
         scale the power of two `choose_scale` picks for the weight total, so
@@ -2836,20 +2914,14 @@ struct DeviceDataset(Movable):
         side's integer units reach the bound exactly when they reach its
         ceiling). Returns True when the fit is weighted."""
         var n = Int(self.n_rows)
-        if weights_addr == 0 or n <= 0:
+        if n <= 0:
             return False
-        var src = MutPointer[Float32, MutUntrackedOrigin](
-            unsafe_from_address=weights_addr
-        )
-        var dw = ctx.enqueue_create_buffer[DType.float32](n)
-        ctx.enqueue_copy(dst_buf=dw, src_ptr=src)
         var scan = device_scan_weights(ctx, dw, n)
         if scan.bad:
             raise Error("sample weights must be finite and nonnegative")
         if not (scan.total > 0.0):
             raise Error("sample weights must have positive total")
         if scan.all_unit:
-            _ = dw^
             return False
         var scale = choose_scale(scan.total, n)
         if scale < Float64(1.1754943508222875e-38) or scale > Float64(1.7014118346046923e38):
@@ -2864,7 +2936,6 @@ struct DeviceDataset(Movable):
             block_dim=256,
         )
         ctx.synchronize()
-        _ = dw^
         self.weighted = True
         self.weight_scale = scale
         self.min_weight_units = Int64(0)
@@ -3302,6 +3373,7 @@ def upload_dataset_labels_quantized_weighted(
     mut scale_out: Float64,
     x_addr: Int = 0,
     x_row_major: Bool = False,
+    drop_zero_rows: Bool = False,
 ) raises -> DeviceDataset:
     """lane sk-final: `upload_dataset_labels_quantized` for a regressor with
     per-row weights (`weights_addr`: `n_rows` float32 words, borrowed
@@ -3312,7 +3384,13 @@ def upload_dataset_labels_quantized_weighted(
     scale is chosen from `sum |z|` exactly as an unweighted fit's is from
     `sum |y|`, so every node's Z stays inside the 2^30 slot, and
     `scale_out` is `weighted_label_scale_ratio(label scale, weight scale)`:
-    a leaf's `Z / W` times `Float32(1 / scale_out)` is its weighted mean."""
+    a leaf's `Z / W` times `Float32(1 / scale_out)` is its weighted mean.
+
+    lane sk-weq-trees: `drop_zero_rows` (the caller passes `not bootstrap`)
+    first drops the zero-weight rows from X, y and the weights on the
+    device (`DeviceDataset.drop_zero_weight_rows`, scikit-learn's splitter
+    keeps only positively weighted rows); the dataset's `n_rows` is then the
+    kept count. Without a zero weight nothing moves."""
     if len(y) != Int(n_rows):
         raise Error(
             "labels must be n_rows long; got "
@@ -3324,27 +3402,43 @@ def upload_dataset_labels_quantized_weighted(
         ctx, x_col_major, List[Int32](), n_rows, n_cols, 1,
         x_addr=x_addr, x_row_major=x_row_major, labels_on_device=True,
     )
-    var weighted = dataset.set_row_weights(ctx, weights_addr, min_weight_fraction)
     var n = Int(n_rows)
     var d_y = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var h_y = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
     var d_w = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-    var d_z = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     ctx.synchronize()
     memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
     ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
-    if weighted and n > 0:
+    var has_w = weights_addr != 0 and n > 0
+    if has_w:
+        # one upload of the weights serves the checks, the drop and z
         ctx.enqueue_copy(
             dst_buf=d_w,
             src_ptr=MutPointer[Float32, MutUntrackedOrigin](
                 unsafe_from_address=weights_addr
             ),
         )
+    if drop_zero_rows and has_w:
+        var rows = ctx.enqueue_create_buffer[DType.int32](n)
+        var kept = device_nonzero_weight_rows(ctx, d_w, n, rows)
+        if kept > 0 and kept < n:
+            var cy = device_gather_rows[DType.float32](ctx, d_y, rows, kept)
+            var cw = device_gather_rows[DType.float32](ctx, d_w, rows, kept)
+            dataset.keep_rows(ctx, rows, kept)
+            d_y = cy^
+            d_w = cw^
+            n = kept
+        _ = rows^
+    var weighted = False
+    if has_w:
+        weighted = dataset.set_row_weights_device(ctx, d_w, min_weight_fraction)
+    var d_z = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    if weighted and n > 0:
         ctx.enqueue_function[et_weighted_labels_kernel](
             d_z.unsafe_ptr(),
             d_y.unsafe_ptr(),
             d_w.unsafe_ptr(),
-            n_rows,
+            Int32(n),
             grid_dim=ceildiv(n, 256),
             block_dim=256,
         )
@@ -3358,7 +3452,7 @@ def upload_dataset_labels_quantized_weighted(
         ctx.enqueue_function[quantize_labels_device_kernel](
             dataset.d_labels.unsafe_ptr(),
             d_z.unsafe_ptr(),
-            n_rows,
+            Int32(n),
             Int32(e),
             grid_dim=ceildiv(n, 256),
             block_dim=256,

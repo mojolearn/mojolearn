@@ -49,6 +49,11 @@ The sabotage arm (`-D MOJOLEARN_HOST_SABOTAGE=1`, `trees_host_sabotage`)
 is `extratrees/checks/pcg_rng.mojo::PCG_HOST_SABOTAGE`: one extra draw
 before every threshold, so every forest this binary fits differs.
 """
+from core.weight_compact_host import (
+    host_gather_colmajor,
+    host_gather_f32,
+    host_nonzero_weight_rows,
+)
 from std.ffi import _Global
 from std.os import abort
 from std.python import Python, PythonObject
@@ -321,23 +326,31 @@ def _et_fit[
     with GILReleased(Python()):
         var x = _read_x_col_major(x_address, n_rows, n_features, ROWMAJOR)
         var y = read_f32(y_address, n_rows)
+        # lane sk-kernels / sk-final: the per-row weights (0: none)
+        var w = List[Float32]()
+        if weights_addr != 0:
+            w = read_f32(weights_addr, n_rows)
+        # lane sk-weq-trees: without bootstrap the zero-weight rows leave
+        # the fit, the device's `DeviceDataset.drop_zero_weight_rows` (same
+        # rows, same ascending order); the plan then sees the kept count, as
+        # the device fit's does (`device_count_nonzero_weights`)
+        var n_fit = n_rows
+        if len(w) > 0 and not config.bootstrap:
+            var rows = host_nonzero_weight_rows(w)
+            if len(rows) > 0 and len(rows) < n_rows:
+                x = host_gather_colmajor(x, n_rows, n_features, rows)
+                y = host_gather_f32(y, rows)
+                w = host_gather_f32(w, rows)
+                n_fit = len(rows)
         comptime if CLASSIFIER:
-            # lane sk-kernels: the per-row weights (0: none)
-            var w = List[Float32]()
-            if weights_addr != 0:
-                w = read_f32(weights_addr, n_rows)
             result = fit_extra_trees_classifier_host_exact(
-                x, y, Int32(n_rows), Int32(n_features), Int32(n_classes), config,
+                x, y, Int32(n_fit), Int32(n_features), Int32(n_classes), config,
                 tree_start, w^,
             )
         else:
-            # lane sk-final: the per-row weights (0: none)
-            var wr = List[Float32]()
-            if weights_addr != 0:
-                wr = read_f32(weights_addr, n_rows)
             result = fit_extra_trees_regressor_host_exact(
-                x, y, Int32(n_rows), Int32(n_features), config, tree_start,
-                wr^,
+                x, y, Int32(n_fit), Int32(n_features), config, tree_start,
+                w^,
             )
     comptime if EXPORT:
         return _retain_et_export(result^)
