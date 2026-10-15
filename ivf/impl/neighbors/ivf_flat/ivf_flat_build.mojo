@@ -129,6 +129,8 @@ from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COP
 from x_ann.kpp_seed import kpp_seed
 from x_ann.kpp_seed_device import kpp_seed_device
 
+# TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
 comptime IVF_FAST_TRAINSET = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
@@ -140,6 +142,8 @@ rule; cuVS trains on `kmeans_trainset_fraction` of the rows). Every row is
 still assigned to the trained centroids."""
 comptime IVF_FAST_ROWS_PER_LIST = 256
 
+# TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
 comptime IVF_FAST_SEED = (
     ANN3_COARSE_SEED
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -162,6 +166,8 @@ stream) over the training rows already on the device, instead of on one host
 core. FAST bits may move (Float32 blocked sums); recall check paired."""
 
 
+# TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
 comptime IVF_FAST_RANDOM_INIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()

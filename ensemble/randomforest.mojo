@@ -181,6 +181,9 @@ Measured at 16 and 220 columns only: NEEDS NEIGHBOR-SHAPE VALIDATION (48, 63,
 64, 96, 128 columns). Bit-inert either side (same forest bytes)."""
 comptime ROWS_SORTED_MIN_COLS = 64
 
+# TOMBSTONE: MOJOLEARN_RF_FAST_QSAMPLE (DROPPED-slower: M4 DecisionTreeRegressor 1M x 32 7995 -> 8673 ms, R2 0.99118 -> 0.99159) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch
+
 # The default bootstrap sampler already
 # computes each sampled row in a GPU thread, then the sampled-label staging
 # kernel rereads that row id to gather its label. Fuse those address-only
@@ -2904,6 +2907,8 @@ def fit_forest_prepared[
             Int(rf_params.tree_params.max_n_bins),
             n_rows,
             n_cols,
+            # TOMBSTONE: MOJOLEARN_RF_FAST_QSAMPLE (DROPPED-slower) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+            # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch
             4,
             rf_params.seed,
             row_major,

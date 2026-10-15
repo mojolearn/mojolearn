@@ -100,6 +100,8 @@ comptime IVF_DEFAULT_N_PROBES = 20
 #: the entries (its refusal is unchanged); the rule below is the build's own.
 #: Every row is still assigned to the trained centroids and laid into the lists.
 #: -D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF trains on every row again.
+# TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise: M4 IVFSQIndex 500k x 128 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
 comptime IVF_TRAINSET_STRIDE = (
     not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
     and not is_defined["MOJOLEARN_IVF_TRAINSET_STRIDE_OFF"]()
@@ -137,6 +139,8 @@ comptime IVF_IDN_RECLUSTER_CAP = (
 #: function of n_train and n_lists only. Bits CHANGE on every column
 #: (device + ivf/host/ivf_host.mojo); recall gate against cuVS. Applies to
 #: IVF-Flat and to IVF-PQ's coarse step (the same build). B2 is moot with it.
+# TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise: M4 IVFSQIndex 500k x 128 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
 comptime IVF_IDN_STRIDED_INIT = (
     GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF"]()
 )

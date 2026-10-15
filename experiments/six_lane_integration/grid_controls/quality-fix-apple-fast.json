@@ -1,0 +1,21 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "quality-fix-apple-fast",
+ "branch": "lane/quality-fix-apple-fast",
+ "head": "e216389b9",
+ "head_note": "FAST + Apple experiments; listed so the planner records them as excluded, not as IDENTICAL grid arms. Both deleted 2026-10-15 (lane/tombstone-qsample-ivfstride).",
+ "controls": {},
+ "algorithms": {},
+ "removed": [
+  {
+   "define": "MOJOLEARN_RF_FAST_QSAMPLE",
+   "control": "rf_fast_qsample",
+   "reason": "DELETED 2026-10-15 (lane/tombstone-qsample-ivfstride, deletion 1a76955b5): DROPPED-slower, M4 DecisionTreeRegressor 1,000,000 x 32 7995 -> 8673 ms (8% slower), R2 0.99118 -> 0.99159 (noise); main 7a8f183f6, one scored fit per arm. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch."
+  },
+  {
+   "define": "MOJOLEARN_IVF_FAST_STRIDED_COARSE",
+   "control": "ivf_fast_strided_coarse",
+   "reason": "DELETED 2026-10-15 (lane/tombstone-qsample-ivfstride, deletion 1a76955b5): DROPPED-noise, M4 IVFSQIndex 500,000 x 128 (n_lists 1024, n_probes 32) 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183; main 7a8f183f6, one scored fit per arm. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch."
+  }
+ ]
+}

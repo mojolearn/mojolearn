@@ -443,6 +443,11 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (LOSER) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
     comptime assert not is_defined["MOJOLEARN_IDN_TF_SESSION_LEAN"](), "removed 2026-10-11 (lane/w2-decide-lm, 68d9654bb): IDN_TF_SESSION_LEAN was LOSER: transformer-forward 1.350 (NV 1.689, AMD 1.011); nv2 v0118, amd a1700. Restore with experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch."
+    # Lane tombstone-qsample-ivfstride (2026-10-15), removed: Apple FAST losers of the M4 A/B on main 7a8f183f6, synthetic non-board data,
+    # one warmup + one scored fit per arm (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md). Code recoverable at 1a76955b5^.
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch (or MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch)
+    comptime assert not is_defined["MOJOLEARN_RF_FAST_QSAMPLE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): RF_FAST_QSAMPLE (split candidates from >= 65,536 sampled rows) was DROPPED-slower: M4 DecisionTreeRegressor 1,000,000 x 32 7995 -> 8673 ms (8% slower), R2 0.99118 -> 0.99159 (noise). Restore with experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch."
+    comptime assert not is_defined["MOJOLEARN_IVF_FAST_STRIDED_COARSE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): IVF_FAST_STRIDED_COARSE (FAST coarse quantizer on the IDENTICAL strided trainset and start) was DROPPED-noise: M4 IVFSQIndex 500,000 x 128, n_lists 1024, n_probes 32 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183. Restore with experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch."
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

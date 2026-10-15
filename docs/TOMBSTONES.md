@@ -70,6 +70,7 @@ in the tables after the sections.
 | [`MOJOLEARN_PL_PAIRS_ONCE`](#mojolearn_pl_pairs_once) | Trees | DROPPED-noise | 2026-10-09 | [MOJOLEARN_PL_PAIRS_ONCE.patch](../experiments/removed/MOJOLEARN_PL_PAIRS_ONCE.patch) |
 | [`MOJOLEARN_REORDER_FLAGS_SCAN_BLOCK`](#mojolearn_reorder_flags_scan_block) | Trees | DROPPED-noise |  | lane only |
 | [`MOJOLEARN_RF_FAST_BATCH16K`](#mojolearn_rf_fast_batch16k) | Trees | DROPPED-noise | 2026-10-03 | [MOJOLEARN_RF_FAST_BATCH16K.patch](../experiments/removed/MOJOLEARN_RF_FAST_BATCH16K.patch) |
+| [`MOJOLEARN_RF_FAST_QSAMPLE`](#mojolearn_rf_fast_qsample) | Trees | DROPPED-slower | 2026-10-15 | [MOJOLEARN_RF_FAST_QSAMPLE.patch](../experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch) |
 | [`MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ`](#mojolearn_rf_nodesplit_zero_after_read) | Trees | DROPPED-noise | 2026-10-03 | [MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ.patch](../experiments/removed/MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ.patch) |
 | [`MOJOLEARN_RF_SMALL_NODE_1024`](#mojolearn_rf_small_node_1024) | Trees | DROPPED-noise | 2026-10-03 | [MOJOLEARN_RF_SMALL_NODE_1024.patch](../experiments/removed/MOJOLEARN_RF_SMALL_NODE_1024.patch) |
 | [`MOJOLEARN_SEG_SCAN_BLOCK`](#mojolearn_seg_scan_block) | Trees | DROPPED-noise |  | lane only |
@@ -143,6 +144,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IVF_FAST_DEVICE_CSR`](#mojolearn_ivf_fast_device_csr) | Neighbors | DROPPED-slower | 2026-10-02 | [MOJOLEARN_IVF_FAST_DEVICE_CSR.patch](../experiments/removed/MOJOLEARN_IVF_FAST_DEVICE_CSR.patch) |
 | [`MOJOLEARN_IVF_FAST_DEVICE_TRAINSET`](#mojolearn_ivf_fast_device_trainset) | Neighbors | DROPPED-noise | 2026-10-02 | [MOJOLEARN_IVF_FAST_DEVICE_TRAINSET.patch](../experiments/removed/MOJOLEARN_IVF_FAST_DEVICE_TRAINSET.patch) |
 | [`MOJOLEARN_IVF_FAST_SCAN_SELECT`](#mojolearn_ivf_fast_scan_select) | Neighbors | DROPPED-noise | 2026-10-02 | [MOJOLEARN_IVF_FAST_SCAN_SELECT.patch](../experiments/removed/MOJOLEARN_IVF_FAST_SCAN_SELECT.patch) |
+| [`MOJOLEARN_IVF_FAST_STRIDED_COARSE`](#mojolearn_ivf_fast_strided_coarse) | Neighbors | DROPPED-noise | 2026-10-15 | [MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch](../experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch) |
 | [`MOJOLEARN_IVF_LAYOUT_SCATTER`](#mojolearn_ivf_layout_scatter) | Neighbors | slower | 2026-10-09 | [MOJOLEARN_IVF_LAYOUT_SCATTER.patch](../experiments/removed/MOJOLEARN_IVF_LAYOUT_SCATTER.patch) |
 | [`MOJOLEARN_KNN_FAST_CLS1_PRESEED`](#mojolearn_knn_fast_cls1_preseed) | Neighbors | DROPPED-noise | 2026-10-03 | [MOJOLEARN_KNN_FAST_CLS1_PRESEED.patch](../experiments/removed/MOJOLEARN_KNN_FAST_CLS1_PRESEED.patch) |
 | [`MOJOLEARN_KNN_FAST_CLS1_SLICES2`](#mojolearn_knn_fast_cls1_slices2) | Neighbors | DROPPED-slower | 2026-10-03 | [MOJOLEARN_KNN_FAST_CLS1_PRESEED.patch](../experiments/removed/MOJOLEARN_KNN_FAST_CLS1_PRESEED.patch) |
@@ -572,6 +574,17 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Recoverable at `f9af6028e` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_RF_FAST_BATCH16K.patch` (applies cleanly to main at the time of writing).
 - Files the patch restores: `bindings/_mojolearn_rf.mojo`
 - EXPERIMENTS.md:139 (Trees (101)): `RF_NODESPLIT_ZERO_AFTER_READ + RF_FAST_BATCH16K` on rf / taxi, istella, lane/apple-fast-trees2 @ bfd1d7cc6, A/B aft-ab-rf1, taxi 11,502 -> 11,485; istella 14,324 -> 14,312 ms, **DROPPED-noise**: 0.1%; RF_FAST_BATCH16K: code removed from main 288809ef8; recover at lane/apple-fast-trees2@bfd1d7cc6; RF_NODESPLIT_ZERO_AFTER_READ: code removed from main 931143bf8; recover at lane/apple-fast-trees2@bfd1d7cc6
+
+### MOJOLEARN_RF_FAST_QSAMPLE
+
+- Verdict: DROPPED-slower. Deleted 2026-10-15 by `1a76955b5` (lane/tombstone-qsample-ivfstride). Added by `e216389b9` (lane/quality-fix-apple-fast), merged to main default off.
+- Recoverable at `1a76955b5^` (`be89e279b`). Patch: `experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch` (deletion reversed, code files only, taken after the tombstones were filled in so it applies to the tree as left: `git diff <tombstone commit> 1a76955b5^ -- <files>`).
+- What it tried: lane quality-fix-apple-fast (2026-10-15), FAST + Apple only, default off: the forest's split candidates were the quantiles of at least 65,536 sampled rows per feature (`rf_quantile_oversampling`: the smallest oversampling factor reaching 65,536 rows) instead of cuML's 4 x max_n_bins (512 rows at 128 bins). Meant to close decision-tree-reg taxi r2 (0.8792 vs scikit-learn 0.8915) and dart-reg istella (0.5514 vs LightGBM 0.5647) on the M3 0.8.34 board. Every tree estimator sharing the forest binning (RandomForest, DecisionTree, Bagging, Stacking, DART members) took it.
+- Verdict numbers: Apple M4 A/B, synthetic non-board data, fast mode, main `7a8f183f6`, one warmup + one scored fit per arm (`experiments/m4_ab/estimator_ab.py`; results `~/mojolearn-evidence/m4-ab-20261015/flips.jsonl`): DecisionTreeRegressor 1,000,000 x 32 nonlinear target 7995 -> 8673 ms (1.08x, slower); held-out R2 0.99118 -> 0.99159 (noise). No NVIDIA / AMD run (FAST + Apple only).
+- Files the patch restores: `ensemble/randomforest.mojo`
+- grid_controls: `quality-fix-apple-fast.json` `rf_fast_qsample` listed in `removed` (the lane had no grid_controls file; FAST + Apple, never an IDENTICAL grid arm).
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-15 (lane/tombstone-qsample-ivfstride).
+- EXPERIMENTS.md: the `MOJOLEARN_RF_FAST_QSAMPLE` row set to DROPPED.
 
 ### MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ
 
@@ -1210,6 +1223,17 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Recoverable at `e662dd863` (the deletion commit's parent). Patch: `experiments/removed/MOJOLEARN_IVF_FAST_SCAN_SELECT.patch` (needs `git apply -3` (main moved on)).
 - Files the patch restores: `x_ann/fast_env.mojo`, `x_ann/ivf_scan_device.mojo`
 - EXPERIMENTS.md:323 (Neighbors (42)): `IVF_FAST_SCAN_SELECT` on ivf-pq / istella; ivf-rabitq / istella; ivf-sq / istella, lane/apple-fast-ann @ 70833546a, A/B ann-ivfpq-select-istella, ann-ivfsq-select-istella, ann-ivfrq-select-istella, - ms, **DROPPED-noise**: reconciled 2026-10-05: ann-ivf*-select pq -0.3%, sq -0.5%, rq +0.1% (LEDGER 2026-10-03); deleted at merge 8d43ec357. Was OPEN: A/B queued, no judged result yet
+
+### MOJOLEARN_IVF_FAST_STRIDED_COARSE
+
+- Verdict: DROPPED-noise. Deleted 2026-10-15 by `1a76955b5` (lane/tombstone-qsample-ivfstride). Added by `71af696ab` (lane/quality-fix-apple-fast), merged to main default off.
+- Recoverable at `1a76955b5^` (`be89e279b`). Patch: `experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch` (deletion reversed, code files only, taken after the tombstones were filled in so it applies to the tree as left: `git diff <tombstone commit> 1a76955b5^ -- <files>`).
+- What it tried: lane quality-fix-apple-fast (2026-10-15), FAST + Apple only, default off: the Apple FAST IVF coarse quantizer trained the IDENTICAL way, on the strided trainset (`IVF_TRAINSET_STRIDE`) from the strided start (`IVF_IDN_STRIDED_INIT`), in place of the seeded uniform sample (`IVF_FAST_TRAINSET`) and the device k-means++ / random-row start (`IVF_FAST_SEED`, `IVF_FAST_RANDOM_INIT`). Meant to close ivf-sq taxi FAST recall@10 0.8333 vs faiss 0.8570. Covered IVF-Flat, IVF-SQ, IVF-RaBitQ and IVF-PQ's coarse step.
+- Verdict numbers: Apple M4 A/B, synthetic non-board data, fast mode, main `7a8f183f6`, one warmup + one scored fit per arm (`experiments/m4_ab/estimator_ab.py`; results `~/mojolearn-evidence/m4-ab-20261015/flips.jsonl`): IVFSQIndex 500,000 x 128, n_lists 1024, n_probes 32: 3276 -> 3260 ms (0.995x, same); recall@8 0.8194 -> 0.8183 (no gain). No NVIDIA / AMD run (FAST + Apple only).
+- Files the patch restores: `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo`, `ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo`
+- grid_controls: `quality-fix-apple-fast.json` `ivf_fast_strided_coarse` listed in `removed` (the lane had no grid_controls file; FAST + Apple, never an IDENTICAL grid arm).
+- Guard refusal (core/six_lane_experiment_guards.mojo): removed 2026-10-15 (lane/tombstone-qsample-ivfstride).
+- EXPERIMENTS.md: the `MOJOLEARN_IVF_FAST_STRIDED_COARSE` row set to DROPPED.
 
 ### MOJOLEARN_IVF_LAYOUT_SCATTER
 

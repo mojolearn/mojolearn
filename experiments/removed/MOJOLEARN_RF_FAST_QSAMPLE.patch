@@ -1,0 +1,65 @@
+diff --git b/ensemble/randomforest.mojo a/ensemble/randomforest.mojo
+index 9e854c534..4ad27c554 100644
+--- b/ensemble/randomforest.mojo
++++ a/ensemble/randomforest.mojo
+@@ -13,6 +13,7 @@ from std.math import ceildiv as _ceildiv
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+ from checks.numerics import (
+     GLOBAL_NUMERIC_MODE,
++    NUMERIC_FAST,
+     NUMERIC_IDENTICAL,
+     ftz,
+     portable_log2_64,
+@@ -181,8 +182,39 @@ Measured at 16 and 220 columns only: NEEDS NEIGHBOR-SHAPE VALIDATION (48, 63,
+ 64, 96, 128 columns). Bit-inert either side (same forest bytes)."""
+ comptime ROWS_SORTED_MIN_COLS = 64
+ 
+-# TOMBSTONE: MOJOLEARN_RF_FAST_QSAMPLE (DROPPED-slower: M4 DecisionTreeRegressor 1M x 32 7995 -> 8673 ms, R2 0.99118 -> 0.99159) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+-# Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch
++# lane quality-fix-apple-fast (2026-10-15), FAST + Apple EXPERIMENT, default OFF
++# (`-D MOJOLEARN_RF_FAST_QSAMPLE` turns it on): the split candidates are the
++# quantiles of at least RF_FAST_QSAMPLE_ROWS sampled rows per feature instead of
++# cuML's 4 x max_n_bins (512 rows at 128 bins, 1,020 at 255). Cause
++# (quality-vs-opponent-20261015, M3 0.8.34 board): every tree here (RandomForest,
++# DecisionTree, Bagging's and Stacking's trees, DART's members) bins on that small
++# sample; decision-tree-reg taxi r2 0.8626 / 0.8792 (128 / 256 bins) vs
++# scikit-learn's exact thresholds 0.8915, dart-reg istella 0.5514 vs LightGBM
++# 0.5647 (LightGBM bins from up to 200,000 rows, bin_construct_sample_cnt). The
++# size rule: a quantile estimated from m rows has standard error
++# sqrt(p (1 - p) / m), at most 0.002 at m = 65,536, a quarter of one bin's width
++# (1/128) or less, against 0.022 (nearly three bin widths) at 512 rows. No shape
++# key; fits with fewer rows than the sample use every row, as before.
++comptime RF_FAST_QSAMPLE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_RF_FAST_QSAMPLE"]()
++)
++comptime RF_FAST_QSAMPLE_ROWS = 65536
++#: cuML's literal (`randomforest.cuh:322`)
++comptime RF_QUANTILE_OVERSAMPLING = 4
++
++
++@always_inline
++def rf_quantile_oversampling(max_n_bins: Int) -> Int:
++    """The oversampling factor of the forest's quantile sample (sample rows =
++    min(n_rows, max_n_bins x factor)): cuML's 4, or under RF_FAST_QSAMPLE the
++    smallest factor that reaches RF_FAST_QSAMPLE_ROWS rows."""
++    comptime if RF_FAST_QSAMPLE:
++        if max_n_bins > 0:
++            var f = (RF_FAST_QSAMPLE_ROWS + max_n_bins - 1) // max_n_bins
++            return f if f > RF_QUANTILE_OVERSAMPLING else RF_QUANTILE_OVERSAMPLING
++    return RF_QUANTILE_OVERSAMPLING
+ 
+ # The default bootstrap sampler already
+ # computes each sampled row in a GPU thread, then the sampled-label staging
+@@ -2907,9 +2939,7 @@ def fit_forest_prepared[
+             Int(rf_params.tree_params.max_n_bins),
+             n_rows,
+             n_cols,
+-            # TOMBSTONE: MOJOLEARN_RF_FAST_QSAMPLE (DROPPED-slower) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+-            # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch
+-            4,
++            rf_quantile_oversampling(Int(rf_params.tree_params.max_n_bins)),
+             rf_params.seed,
+             row_major,
+         )

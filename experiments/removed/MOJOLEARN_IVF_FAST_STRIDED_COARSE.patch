@@ -1,0 +1,103 @@
+diff --git b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+index d7142e830..758aeec65 100644
+--- b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
++++ a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+@@ -83,6 +83,7 @@ from ivf.impl.neighbors.ivf_flat.ivf_group_device import (
+ )
+ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
+     IVF_IDN_RECLUSTER_CAP,
++    IVF_FAST_STRIDED_COARSE,
+     IVF_IDN_STRIDED_INIT,
+     IVF_MAGNITUDE_BOUND,
+     IVF_TRAINSET_STRIDE,
+@@ -129,12 +130,12 @@ from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COP
+ from x_ann.kpp_seed import kpp_seed
+ from x_ann.kpp_seed_device import kpp_seed_device
+ 
+-# TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
+ comptime IVF_FAST_TRAINSET = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and has_apple_gpu_accelerator()
+     and not is_defined["MOJOLEARN_IVF_FAST_TRAINSET_OFF"]()
++    # MOJOLEARN_IVF_FAST_STRIDED_COARSE (ivf_flat_index.mojo) takes the strided trainset instead
++    and not IVF_FAST_STRIDED_COARSE
+ )
+ """FAST on Apple: the coarse quantizer trains on at most
+ `IVF_FAST_ROWS_PER_LIST` rows per list, a seeded uniform sample (FAISS's
+@@ -142,12 +143,12 @@ rule; cuVS trains on `kmeans_trainset_fraction` of the rows). Every row is
+ still assigned to the trained centroids."""
+ comptime IVF_FAST_ROWS_PER_LIST = 256
+ 
+-# TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
+ comptime IVF_FAST_SEED = (
+     ANN3_COARSE_SEED
+     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and has_apple_gpu_accelerator()
++    # MOJOLEARN_IVF_FAST_STRIDED_COARSE takes the strided start instead
++    and not IVF_FAST_STRIDED_COARSE
+ )
+ """FAST on Apple, DEFAULT (lane ann-apple3; `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` reverts):
+ the coarse quantizer is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over
+@@ -166,12 +167,12 @@ stream) over the training rows already on the device, instead of on one host
+ core. FAST bits may move (Float32 blocked sums); recall check paired."""
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
+ comptime IVF_FAST_RANDOM_INIT = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and has_apple_gpu_accelerator()
+     and not is_defined["MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF"]()
++    # MOJOLEARN_IVF_FAST_STRIDED_COARSE takes the strided start instead
++    and not IVF_FAST_STRIDED_COARSE
+ )
+ #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
+ #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
+diff --git b/ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo a/ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo
+index 8ff02f447..a39521699 100644
+--- b/ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo
++++ a/ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo
+@@ -100,10 +100,25 @@ comptime IVF_DEFAULT_N_PROBES = 20
+ #: the entries (its refusal is unchanged); the rule below is the build's own.
+ #: Every row is still assigned to the trained centroids and laid into the lists.
+ #: -D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF trains on every row again.
+-# TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise: M4 IVFSQIndex 500k x 128 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
++#: lane quality-fix-apple-fast (2026-10-15), FAST + Apple EXPERIMENT, default OFF
++#: (`-D MOJOLEARN_IVF_FAST_STRIDED_COARSE` turns it on): the Apple FAST coarse
++#: quantizer trains the way IDENTICAL does, on the strided trainset
++#: (`IVF_TRAINSET_STRIDE`) from the strided start (`IVF_IDN_STRIDED_INIT`), in
++#: place of its seeded uniform sample (`IVF_FAST_TRAINSET`) and its device
++#: k-means++ / random-row start (`IVF_FAST_SEED`, `IVF_FAST_RANDOM_INIT`,
++#: ivf_flat_build.mojo). Cause (quality-vs-opponent-20261015, m3ultra-0834):
++#: ivf-sq taxi FAST recall@10 0.8333 vs faiss 0.8570 (IDENTICAL 0.9350); the
++#: IDENTICAL strided start raised ivf-pq istella recall@10 0.7489 -> 0.8021 on
++#: NV and AMD with taxi equal (postmerge-act-3). A size rule only (rows per
++#: list, cuVS's and FAISS's), no shape key. Applies to IVF-Flat, IVF-SQ,
++#: IVF-RaBitQ and IVF-PQ's coarse step (one build). Measured by an M3 A/B.
++comptime IVF_FAST_STRIDED_COARSE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_IVF_FAST_STRIDED_COARSE"]()
++)
+ comptime IVF_TRAINSET_STRIDE = (
+-    not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
++    (not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()) or IVF_FAST_STRIDED_COARSE)
+     and not is_defined["MOJOLEARN_IVF_TRAINSET_STRIDE_OFF"]()
+ )
+ #: lane fg-ivf (read_ivf.md idea B2), DEFAULT ON outside FAST
+@@ -139,10 +154,9 @@ comptime IVF_IDN_RECLUSTER_CAP = (
+ #: function of n_train and n_lists only. Bits CHANGE on every column
+ #: (device + ivf/host/ivf_host.mojo); recall gate against cuVS. Applies to
+ #: IVF-Flat and to IVF-PQ's coarse step (the same build). B2 is moot with it.
+-# TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise: M4 IVFSQIndex 500k x 128 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
+ comptime IVF_IDN_STRIDED_INIT = (
+-    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF"]()
++    (GLOBAL_NUMERIC_MODE != NUMERIC_FAST or IVF_FAST_STRIDED_COARSE)
++    and not is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF"]()
+ )
+ 
+ 
