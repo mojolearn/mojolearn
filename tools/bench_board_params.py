@@ -1117,6 +1117,18 @@ def _semantic_r5(lane, param, arm, ours, theirs, library):
             return "gamma parameterizes only the RBF affinity; both use the compared nearest_neighbors affinity"
         if param == "prediction_data" and ours.get(param) is False:
             return "no prediction data kept: ours prediction_data=False; cuML SpectralClustering has no predict"
+        # smoke-mappings (2026-10-15; classical2/spectral/{istella,taxi}: "coef0 missing from cuml-gpu
+        # read-back", the same for degree). degree, coef0 and kernel_params parameterize only scikit-learn's
+        # polynomial/sigmoid/callable kernel affinities. Ours python/mojolearn/_spectral_impl.py
+        # SpectralClustering refuses any value but None for all three (lines 414-425: "it parameterizes an
+        # RBF or polynomial affinity"); cuML 26.08 cluster/spectral_clustering.pyx takes none of them and
+        # builds only the nearest_neighbors/precomputed affinity (lines 161-164). Fires only when ours holds
+        # None and both arms run the compared nearest_neighbors affinity.
+        if param in ("degree", "coef0", "kernel_params") and param in ours and ours[param] is None \
+                and ours.get("affinity") == theirs.get("affinity") == "nearest_neighbors":
+            return ("%s parameterizes only polynomial/sigmoid kernel affinities: ours holds None (any value is "
+                    "refused), cuML SpectralClustering has none; both use the compared nearest_neighbors "
+                    "affinity" % param)
         return None
     # smoke-fixes (2026-10-14; tsvd: "n_oversamples, power_iteration_normalizer missing from cuml-gpu
     # read-back"). Ours python/mojolearn/decomposition.py:785-796 reads both only when
