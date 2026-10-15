@@ -55,7 +55,7 @@ AdditiveChi2Sampler ClassicalMDS ComplementNB DictionaryLearning EllipticEnvelop
 FactorAnalysis FastICA IncrementalPCA Isomap KNNImputer KNeighborsClassifier
 KNeighborsRegressor KernelDensity KernelPCA KernelRidge LatentDirichletAllocation
 LocalOutlierFactor LocallyLinearEmbedding MDS MinCovDet MiniBatchDictionaryLearning
-MiniBatchSparsePCA MultinomialNB NMF NearestCentroid NearestNeighbors OneClassSVM
+MiniBatchSparsePCA MultinomialNB NMF NearestCentroid NearestNeighbors Nystroem OneClassSVM
 PCA PLSRegression PolynomialCountSketch RBFSampler SVC SVR SkewedChi2Sampler
 SparsePCA TruncatedSVD
 """.split())
