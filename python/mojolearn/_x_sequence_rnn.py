@@ -17,6 +17,7 @@ between layers, proj_size, initial hidden state, packed / variable-length
 sequences, float64.
 """
 from ._optional_numpy import require_numpy
+from ._mode import ClassifierScoreMixin, ParamsMixin, RegressorScoreMixin
 np = require_numpy('_x_sequence_rnn')
 
 from . import _backend
@@ -85,7 +86,7 @@ def _f32(a, name):
     return np.ascontiguousarray(a, dtype=np.float32)
 
 
-class _RecurrentBase:
+class _RecurrentBase(ParamsMixin):
     _CELL = "lstm"
     _TASK = 0
 
@@ -234,7 +235,9 @@ class _RecurrentBase:
         return self._run(X, want_seq=True)[1]
 
 
-class _RecurrentRegressor(_RecurrentBase):
+class _RecurrentRegressor(RegressorScoreMixin, _RecurrentBase):
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "regressor"
     _TASK = 0
 
     def fit(self, X, y):
@@ -249,7 +252,9 @@ class _RecurrentRegressor(_RecurrentBase):
         return out[:, 0].copy() if self._y_1d else out
 
 
-class _RecurrentClassifier(_RecurrentBase):
+class _RecurrentClassifier(ClassifierScoreMixin, _RecurrentBase):
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "classifier"
     _TASK = 1
 
     def fit(self, X, y):

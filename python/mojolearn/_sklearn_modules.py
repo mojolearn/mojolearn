@@ -35,6 +35,7 @@ LAYOUT = {
     "manifold": ("ClassicalMDS", "Isomap", "LocallyLinearEmbedding", "MDS", "TSNE"),
     "mixture": ("BayesianGaussianMixture",),
     "neighbors": ("KernelDensity", "LocalOutlierFactor", "NearestCentroid"),
+    "neural_network": ("MLPClassifier", "MLPRegressor"),
     "preprocessing": ("Binarizer", "KBinsDiscretizer", "LabelBinarizer", "LabelEncoder", "MaxAbsScaler",
                       "MultiLabelBinarizer", "Normalizer", "OneHotEncoder", "OrdinalEncoder", "PolynomialFeatures",
                       "PowerTransformer", "QuantileTransformer", "RobustScaler", "SplineTransformer",
