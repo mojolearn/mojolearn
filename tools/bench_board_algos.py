@@ -3629,6 +3629,12 @@ def _build_est(lane, arm, D):
         if qk == "gmm":
             o.update(weights=_arr(est.weights_, np.float64), means=_arr(est.means_, np.float64),
                      covariances=_arr(est.covariances_, np.float64))
+            # lane quality-fix-apple-fast (2026-10-15): the fit's own objective and stopping, so a
+            # held-out gap (bayesian-gmm taxi 4.896 vs scikit-learn 6.178 on the M3 0.8.34 board)
+            # reads as a worse optimum (lower bound lower) or a scoring difference (bound equal)
+            for attr in ("lower_bound_", "n_iter_", "converged_"):
+                if getattr(est, attr, None) is not None:
+                    o["gmm_" + attr.rstrip("_")] = np.array([float(getattr(est, attr))], dtype=np.float64)
         if qk in ("pca", "nmf", "recon", "fa"):
             o["components"] = _arr(est.components_, np.float64)
         if qk == "fa":
@@ -7494,6 +7500,19 @@ def quality(lane, D, outs):
             elif qk == "gmm":
                 e["mean_log_likelihood"] = float(more.gmm_loglik(D["Xq"], o["weights"], o["means"],
                                                                  o["covariances"]).mean())
+                # diagnostics beside the metric (not the verdict; lane quality-fix-apple-fast):
+                # the fit rows' mean log-likelihood, the fit's lower bound / iterations /
+                # convergence and the components holding at least 1e-3 of the weight. A
+                # failure here never costs the metric above.
+                try:
+                    e["fit_mean_log_likelihood"] = float(more.gmm_loglik(
+                        _stride(D["X"], 100000), o["weights"], o["means"], o["covariances"]).mean())
+                    e["active_components"] = int((np.asarray(o["weights"]) >= 1e-3).sum())
+                    for key in ("gmm_lower_bound", "gmm_n_iter", "gmm_converged"):
+                        if key in o:
+                            e[key[4:]] = float(np.asarray(o[key]).reshape(-1)[0])
+                except Exception as exc:  # noqa: BLE001
+                    e["gmm_diagnostics_error"] = repr(exc)[:200]
             elif qk == "embed":
                 E = o["out"]
                 e["trustworthiness_k15"] = (more.trustworthiness(D["X"], E) if np.all(np.isfinite(E))
