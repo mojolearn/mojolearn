@@ -712,8 +712,13 @@ def fit_extra_trees_regressor_device(
     x_addr: Int = 0,
     x_row_major: Bool = False,  # DEVIATION 2637: a borrowed ROW-major X
     tree_start: Int = 0,
+    weights_addr: Int = 0,
 ) raises -> FitResult:
     """`ExtraTreesRegressor.fit` with the split search on the GPU.
+
+    lane sk-final: `weights_addr` (0: none) is scikit-learn's per-row
+    sample_weight, `n_rows` Float32 words borrowed through this call
+    (`fit_regression_device_f32`).
 
     DEVIATION BLOCK -- DEVIATION 188, CLOSED. This function refused BY NAME
     while `train_regression_device` did not exist: the device reduction had
@@ -747,7 +752,9 @@ def fit_extra_trees_regressor_device(
     the device at all: an arm that silently served the host fit would return
     bit-equal leaves, and the check requires at least one to differ.
     """
-    var plan = regressor_plan(config, n_rows, n_features)
+    var plan = regressor_plan(
+        config, n_rows, n_features, fold_min_weight=weights_addr == 0
+    )
     # cpu3-trees: the labels are quantized on the device (the scale's sum and
     # the per-row truncation), `quantize_labels_host`'s Int32s and scale
     var forest = fit_regression_device_f32(
@@ -763,6 +770,10 @@ def fit_extra_trees_regressor_device(
         plan.n_sampled_rows,
         x_addr=x_addr,
         x_row_major=x_row_major, tree_start=tree_start,
+        weights_addr=weights_addr,
+        min_weight_fraction=(
+            config.min_weight_fraction_leaf if weights_addr != 0 else 0.0
+        ),
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
