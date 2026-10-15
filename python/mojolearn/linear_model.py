@@ -1002,6 +1002,16 @@ class Ridge(NumericModeMixin):
 
     def __init__(self, *, alpha=1.0, solver="auto", fit_intercept=True,
                  normalize=False):
+        # Stored verbatim (scikit-learn's convention); `_validate_params`
+        # checks them when `fit` runs.
+        self.alpha = alpha
+        self.solver = solver
+        self.fit_intercept = fit_intercept
+        self.normalize = normalize
+
+    def _validate_params(self):
+        """The constructor checks, run at the start of `fit`."""
+        alpha, solver, normalize = self.alpha, self.solver, self.normalize
         if alpha < 0.0:
             raise ValueError(f"alpha must be non-negative, got {alpha}")
         if solver not in ("auto", "eig", "svd", "cd"):
@@ -1018,10 +1028,6 @@ class Ridge(NumericModeMixin):
                 "mojolearn Ridge: normalize is not implemented (preprocess.cuh:"
                 "76-108, the meanvar arm of preProcessData; glm/NOT_IMPLEMENTED.tsv)"
             )
-        self.alpha = alpha
-        self.solver = solver
-        self.fit_intercept = fit_intercept
-        self.normalize = normalize
 
     def fit(self, X, y, sample_weight=None):
         """Fit the ridge model.
@@ -1040,6 +1046,7 @@ class Ridge(NumericModeMixin):
         self : Ridge
             The fitted estimator.
         """
+        self._validate_params()
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn Ridge: sample_weight is not implemented "
