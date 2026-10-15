@@ -108,14 +108,16 @@ def is_fitted(est):
 
     The flag is set by the `fit` wrapper below. An instance without it (one
     pickled before the flag existed, or assembled from parts) counts as
-    fitted when it carries a public attribute ending in an underscore,
-    scikit-learn's `check_is_fitted` rule. While a `fit` is running on the
+    fitted when it carries a public attribute ending in an underscore that
+    is not None (scikit-learn's `check_is_fitted` rule; a constructor that
+    sets `model_ = None` placeholders does not count). While a `fit` is running on the
     instance, its own calls to `predict` or `transform` are let through.
     """
     state = vars(est)
     if state.get("_mojolearn_fitted") or state.get("_mojolearn_fitting"):
         return True
-    return any(k.endswith("_") and not k.startswith("_") for k in state)  # glue: scans fitted attribute names
+    return any(k.endswith("_") and not k.startswith("_") and v is not None  # glue: scans fitted attribute names
+               for k, v in state.items())
 
 
 def _track_fit(method):
