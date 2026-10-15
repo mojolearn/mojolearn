@@ -841,6 +841,14 @@ def _h(*arrays):
         if a.dtype == object or a.dtype.kind in "OUSV":
             raise TypeError(f"identity_break._h: refusing dtype={a.dtype} (an object or text array "
                             "hashes addresses or encodings, not numbers); pass the numeric arrays")
+        if a.dtype == np.float64:
+            # 0.8.47: regressors return float64 as scikit-learn does, widened exactly
+            # from the float32 the kernels compute. Hash such an array as the float32
+            # it is, so the record names the arithmetic, not the output dtype; a
+            # result that really carries float64 bits keeps its float64 hash.
+            narrow = a.astype(np.float32)
+            if np.array_equal(narrow.astype(np.float64), a, equal_nan=True):
+                a = narrow
         m.update(str(a.dtype).encode())
         m.update(str(a.shape).encode())
         m.update(a.tobytes())
