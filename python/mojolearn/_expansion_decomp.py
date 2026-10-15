@@ -4048,6 +4048,13 @@ class _PLS(RegressorScoreMixin, _Base):
     def _validate_params(self):
         """Parameter checks, run at the start of `fit` (none here)."""
 
+    def __sklearn_tags__(self):
+        # scikit-learn's _PLS tags: a projection model, not scored as a
+        # regressor by its estimator checks (poor_score)
+        tags = super().__sklearn_tags__()
+        tags.regressor_tags.poor_score = True
+        return tags
+
     def _center_scale(self, k, A):
         n = A.r
         mean = k.colmean(A)
@@ -4084,6 +4091,12 @@ class _PLS(RegressorScoreMixin, _Base):
         if Ym is None:
             raise ValueError("Y is required")
         n, p, q = M.r, M.c, Ym.c
+        # scikit-learn's check_X_y / check_array(ensure_min_samples=2) wording,
+        # before the 1 / (n - 1) of the scaling
+        if Ym.r != n:
+            raise ValueError(f"Found input variables with inconsistent numbers of samples: [{n}, {Ym.r}]")
+        if n < 2:
+            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {p})) while a minimum of 2 is required.")
         nc = int(self.n_components)
         bound = p if self._deflation == "regression" else min(n, p, q)
         if not 1 <= nc <= bound:

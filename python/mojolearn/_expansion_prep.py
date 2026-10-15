@@ -3333,6 +3333,13 @@ def _check_nonnegative(pr_values, who):
 class _DiscreteNB(_Classifier):
     #: MultinomialNB and ComplementNB take a CSR input on the FAST CSR path
     _csr_ok = False
+
+    def __sklearn_tags__(self):
+        # scikit-learn's _BaseDiscreteNB tags: count models, not held to the
+        # estimator checks' training-accuracy bar on dense Gaussian data
+        tags = super().__sklearn_tags__()
+        tags.classifier_tags.poor_score = True
+        return tags
     #: whether `_params` reads the column minimum row (the negative-input
     #: refusal of MultinomialNB / ComplementNB)
     _needs_min = False
