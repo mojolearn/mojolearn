@@ -74,7 +74,7 @@ def _require_candidate() raises:
 
 def _shape_size(shape: PythonObject) raises -> Int:
     var total = 1
-    for axis in range(len(shape)):
+    for axis in range(len(shape)):  # small-loop(shape: buffer rank metadata): one extent per axis, never tensor elements
         var extent = Int(py=shape[axis])
         # Kernels use signed Int32 element counts and index products. This
         # is their representable address domain, not a benchmark-size cap.
@@ -225,7 +225,7 @@ def fast_matmul_bf16_binding(
         keywords = PythonObject(from_owned=keyword_pointer)
     if keywords is not PythonObject(None):
         var keys = _BOUNDARY.get_or_create_ptr()[].builtins.tuple(keywords.keys())
-        for index in range(len(keys)):
+        for index in range(len(keys)):  # small-loop(keys: API keyword metadata): three supported names then first unknown rejects, never tensor elements
             var key = keys[index]
             var name = String(key)
             if name == "transpose_a":
