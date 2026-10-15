@@ -425,13 +425,31 @@ def et_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
     return _et_regressor_fit[EXPORT, True](x_addr, y_addr, params)
 
 
+def et_regressor_fit_weighted_binding[EXPORT: Bool = False, ROWMAJOR: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`et_regressor_fit` (`_rowmajor` when ROWMAJOR) with per-row weights
+    (lane sk-final): `weights` is n_rows float32, scikit-learn's
+    sample_weight, borrowed through the call. Checked and quantized on the
+    device (`upload_dataset_labels_quantized_weighted`)."""
+    var address = Int(py=weights_addr)
+    if address == 0:
+        raise Error("et_regressor_fit_weighted requires a nonzero float32 weight pointer")
+    return _et_regressor_fit[EXPORT, ROWMAJOR](
+        x_addr, y_addr, params, weights_addr=address
+    )
+
+
 def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
     tree_start: Int = 0,
+    weights_addr: Int = 0,
 ) raises -> PythonObject:
-    """Fit `ExtraTreesRegressor`. Same contract; slot 2 MUST be 0."""
+    """Fit `ExtraTreesRegressor`. Same contract; slot 2 MUST be 0.
+    `weights_addr` (lane sk-final, 0: none) as `et_regressor_fit_weighted`."""
     if len(params) != N_FIT_PARAMS:
         raise Error(
             "et_regressor_fit: params must hold "
@@ -474,6 +492,7 @@ def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         result = fit_extra_trees_regressor_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), config,
             x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=tree_start,
+            weights_addr=weights_addr,
         )
         ctx.synchronize()
     times.stop_host("boundary_device_fit_and_context", stamp)
@@ -664,6 +683,24 @@ def et_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     return _et_regressor_fit(x_addr, y_addr, params, Int(py=tree_start))
 
 
+def et_classifier_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, weights_addr: PythonObject, tree_start: PythonObject) raises -> PythonObject:
+    """lane sk-final: `et_classifier_fit_shard` with per-row weights."""
+    var address = Int(py=weights_addr)
+    if address == 0:
+        raise Error("et_classifier_fit_weighted_shard requires a nonzero float32 weight pointer")
+    return _et_classifier_fit(x_addr, y_addr, params, Int(py=tree_start), weights_addr=address)
+
+
+def et_regressor_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, weights_addr: PythonObject, tree_start: PythonObject) raises -> PythonObject:
+    """lane sk-final: `et_regressor_fit_shard` with per-row weights."""
+    var address = Int(py=weights_addr)
+    if address == 0:
+        raise Error("et_regressor_fit_weighted_shard requires a nonzero float32 weight pointer")
+    return _et_regressor_fit(x_addr, y_addr, params, Int(py=tree_start), weights_addr=address)
+
+
 @export
 def PyInit__mojolearn_trees() abi("C") -> PythonObject:
     try:
@@ -686,6 +723,10 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         m.def_function[et_regressor_fit_binding[True]]("et_regressor_fit_export")
         m.def_function[et_regressor_fit_rowmajor_binding[False]]("et_regressor_fit_rowmajor")
         m.def_function[et_regressor_fit_rowmajor_binding[True]]("et_regressor_fit_rowmajor_export")
+        m.def_function[et_regressor_fit_weighted_binding[False]]("et_regressor_fit_weighted")
+        m.def_function[et_regressor_fit_weighted_binding[True]]("et_regressor_fit_weighted_export")
+        m.def_function[et_regressor_fit_weighted_binding[False, True]]("et_regressor_fit_weighted_rowmajor")
+        m.def_function[et_regressor_fit_weighted_binding[True, True]]("et_regressor_fit_weighted_rowmajor_export")
         m.def_function[et_predict_binding]("et_predict")
         m.def_function[et_predict_gpu_parallel_binding]("et_predict_gpu_parallel")
         m.def_function[forest_resident_layout_binding]("forest_resident_layout")
@@ -709,6 +750,8 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         m.def_function[forest_predict_resident_labels_gpu_binding[False]]("forest_predict_resident_labels_gpu")
         m.def_function[et_classifier_fit_shard_binding]("et_classifier_fit_shard")
         m.def_function[et_regressor_fit_shard_binding]("et_regressor_fit_shard")
+        m.def_function[et_classifier_fit_weighted_shard_binding]("et_classifier_fit_weighted_shard")
+        m.def_function[et_regressor_fit_weighted_shard_binding]("et_regressor_fit_weighted_shard")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_trees: ", e))
