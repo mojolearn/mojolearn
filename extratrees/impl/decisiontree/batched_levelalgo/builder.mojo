@@ -8050,14 +8050,16 @@ def train_forest_regression_device_timed(
 
         dataset.ensure_row_major(ctx, Int(k))
         comptime if ET_RANGE_TILED and ET_SCORE_TILED:
-            if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS:
+            # lane sk-final: a weighted fit's score pass reads raw X, so its
+            # ranges must be raw too (no binned codes)
+            if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS and not dataset.weighted:
                 dataset.ensure_binned(ctx)
         var ws = make_level_workspace(
             ctx,
             Int(params.max_batch_size),
             Int32(total_rows),
             n_cols,
-            1,
+            2 if dataset.weighted else 1,  # lane sk-final: (Z, W) slots
             Int(k),
             TPB,
         )
@@ -8120,25 +8122,47 @@ def train_forest_regression_device_timed(
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
         # folds that memset and `d_visit`'s into the launch itself -- the
         # block-exclusive-ownership argument is at the classification twin.
-        ctx.enqueue_function[
-            leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, False, zero_fill=True]
-        ](
-            d_leaves.unsafe_ptr(),
-            d_visit.unsafe_ptr(),
-            d_nodes.unsafe_ptr().unsafe_bitcast[
-                SparseTreeNode[DType.float32]
-            ](),
-            d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
-            d_row_ids.unsafe_ptr(),
-            dataset.d_labels.unsafe_ptr(),
-            Int32(k_out),
-            # `inv_scale` puts the fixed-point mean back into the
-            # label's own units -- DEVIATION 179.
-            Float32(1.0 / scale),
-            LEAF_SAB_NONE,
-            grid_dim=(total_nodes, 1, 1),
-            block_dim=(TPB, 1, 1),
-        )
+        if dataset.weighted:
+            # lane sk-final: the weighted mean Z / W; `scale` is the
+            # label-to-weight scale ratio (`weighted_label_scale_ratio`)
+            ctx.enqueue_function[
+                leaf_weighted_reg_kernel[TPB, LEAF_MAX_OUT_DEFAULT, zero_fill=True]
+            ](
+                d_leaves.unsafe_ptr(),
+                d_visit.unsafe_ptr(),
+                d_nodes.unsafe_ptr().unsafe_bitcast[
+                    SparseTreeNode[DType.float32]
+                ](),
+                d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
+                d_row_ids.unsafe_ptr(),
+                dataset.d_labels.unsafe_ptr(),
+                Int32(k_out),
+                Float32(1.0 / scale),
+                LEAF_SAB_NONE,
+                dataset.weights_ptr(),
+                grid_dim=(total_nodes, 1, 1),
+                block_dim=(TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[
+                leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, False, zero_fill=True]
+            ](
+                d_leaves.unsafe_ptr(),
+                d_visit.unsafe_ptr(),
+                d_nodes.unsafe_ptr().unsafe_bitcast[
+                    SparseTreeNode[DType.float32]
+                ](),
+                d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
+                d_row_ids.unsafe_ptr(),
+                dataset.d_labels.unsafe_ptr(),
+                Int32(k_out),
+                # `inv_scale` puts the fixed-point mean back into the
+                # label's own units -- DEVIATION 179.
+                Float32(1.0 / scale),
+                LEAF_SAB_NONE,
+                grid_dim=(total_nodes, 1, 1),
+                block_dim=(TPB, 1, 1),
+            )
         lp.download_trees(
             ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first, out
         )
