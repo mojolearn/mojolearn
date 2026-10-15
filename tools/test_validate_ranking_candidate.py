@@ -202,3 +202,53 @@ def test_acknowledged_stopped_failure_still_refuses_live_workers(tmp_path):
     (process / 'environ').write_bytes(b'MOJOLEARN_BOARD_SESSION=failed-worker\0')
     with pytest.raises(ValueError, match='measurement workers still active'):
         V.check_boundary(ack, 'nvidia', 90, proc)
+
+
+def fixture_wheel(tmp_path, name, payload):
+    import base64
+    import csv
+    import hashlib
+    import io
+    import zipfile
+    info = name.replace('-', '_') + '-0.8.45.dist-info'
+    files = dict(payload)
+    files[info + '/METADATA'] = ('Metadata-Version: 2.1\nName: ' + name + '\nVersion: 0.8.45\n').encode()
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator='\n')
+    for file, data in files.items():
+        digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).decode().rstrip('=')
+        writer.writerow([file, 'sha256=' + digest, len(data)])
+    writer.writerow([info + '/RECORD', '', ''])
+    files[info + '/RECORD'] = buffer.getvalue().encode()
+    path = tmp_path / (name + '.whl')
+    with zipfile.ZipFile(path, 'w') as archive:
+        for file, data in files.items():
+            archive.writestr(file, data)
+    digest = V.sha(path)
+    return dict(distribution=name, path=str(path), pypi_digest_match=True, sha256=digest, pypi_sha256=digest)
+
+
+@pytest.mark.parametrize('vendor,foreign', [('nvidia', 'mojolearn-amd'), ('amd', 'mojolearn-nvidia')])
+def test_overlay_extracts_only_verified_target_when_both_vendor_metadata_installed(tmp_path, monkeypatch, vendor, foreign):
+    from types import SimpleNamespace
+    _, directory, arch, plugin = V.VENDORS[vendor]
+    installed = [SimpleNamespace(metadata={'Name': name}, version='0.8.45')
+                 for name in ['mojolearn', 'mojolearn-nvidia', 'mojolearn-amd']]
+    monkeypatch.setattr(V.metadata, 'distributions', lambda: installed)
+    rel = 'mojolearn/' + directory + '/' + arch + '/identical/_mojolearn_gbdt.so'
+    wheels = [fixture_wheel(tmp_path, 'mojolearn', {'mojolearn/__init__.py': b'verified core', 'mojolearn_diagnostics.py': b'verified diagnostic helper'}),
+              fixture_wheel(tmp_path, plugin, {rel: b'verified released GBDT',
+                  'mojolearn/' + directory + '/' + arch + '/identical/_mojolearn_linalg.so': b'unchanged linalg'})]
+    manifest = tmp_path / 'wheel-manifest.json'; V.write(manifest, dict(all_digests_match=True, files=wheels))
+    candidate = tmp_path / 'candidate.so'; candidate.write_bytes(b'raw candidate GBDT')
+    out = tmp_path / 'out'; out.mkdir()
+    site, target = V.package_overlay(out, vendor, candidate, manifest)
+    assert target.read_bytes() == b'raw candidate GBDT'
+    evidence = V.read(out / 'overlay-manifest.json')
+    assert {d['distribution'] for d in evidence['base_distributions']} == {'mojolearn', plugin}
+    assert [d['distribution'] for d in evidence['excluded_distributions']] == [foreign]
+    assert not (site / (foreign.replace('-', '_') + '-0.8.45.dist-info')).exists()
+    assert evidence['changed'] == [rel]
+    assert (site / 'mojolearn/__init__.py').read_bytes() == b'verified core'
+    unchanged = 'mojolearn/' + directory + '/' + arch + '/identical/_mojolearn_linalg.so'
+    assert evidence['before'][unchanged] == evidence['after'][unchanged]

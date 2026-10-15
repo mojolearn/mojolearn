@@ -12,7 +12,7 @@ import hashlib
 import importlib.metadata as metadata
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import signal
@@ -20,6 +20,8 @@ import subprocess
 import sys
 import time
 import traceback
+import zipfile
+from email.parser import BytesParser
 
 FREEZE = 'f63ef2235d8e84339ffafb16c973610a03dcf85a'
 CHECKER = 'b2ad3802db4e011413ac3c613791d5510c99aa211ae5e51766d7415caa9af6fe'
@@ -178,48 +180,80 @@ def verify_candidate(artifact, vendor):
 
 
 def package_overlay(out, vendor, candidate, manifest_path):
-    """Copy all package bytes and adjacent plugin metadata; verify wheel RECORDs."""
+    """Extract only verified core + target vendor wheels; never copy foreign bytes."""
     _, directory, arch, plugin = VENDORS[vendor]
     manifest = read(manifest_path)
     required(manifest.get('all_digests_match') is True, 'released-wheel verification missing')
-    all_dists = [d for d in metadata.distributions() if
-                 d.metadata['Name'].lower().replace('_', '-') in ('mojolearn', 'mojolearn-nvidia', 'mojolearn-amd')]
-    dists = {d.metadata['Name'].lower().replace('_', '-'): d for d in all_dists}
-    required('mojolearn' in dists and plugin in dists, 'installed core or vendor plugin missing')
-    required(all(d.version == '0.8.45' for d in dists.values()), 'installed overlay base must be 0.8.45')
-    root = Path(dists['mojolearn'].locate_file('')).resolve()
-    site = out / 'overlay-site'
-    site.mkdir()
+    selected = ['mojolearn', plugin]
+    installed = {d.metadata['Name'].lower().replace('_', '-'): d for d in metadata.distributions()
+                 if d.metadata['Name'].lower().replace('_', '-') in ('mojolearn', 'mojolearn-nvidia', 'mojolearn-amd')}
+    required(all(name in installed and installed[name].version == '0.8.45' for name in selected),
+             'selected installed core/vendor metadata must be 0.8.45')
+    excluded = [dict(distribution=name, installed_version=dist.version,
+                     reason='unused foreign vendor; no metadata or package bytes copied')
+                for name, dist in sorted(installed.items()) if name not in selected]
+    site = out / 'overlay-site'; site.mkdir()
     verified = []
-    for name, dist in dists.items():
-        required(Path(dist.locate_file('')).resolve() == root, 'plugin metadata must be adjacent to core')
-        wheel = next((r for r in manifest['files'] if r['distribution'] == name), None)
+    for name in selected:
+        wheel = next((row for row in manifest['files'] if row['distribution'] == name), None)
         required(wheel and wheel.get('pypi_digest_match') is True, 'missing verified wheel: ' + name)
         required(sha(wheel['path']) == wheel['sha256'] == wheel['pypi_sha256'], 'wheel bytes changed: ' + name)
-        checked = 0
-        for row in csv.reader((dist.read_text('RECORD') or '').splitlines()):
-            if not row[1]:
-                continue
-            algorithm, encoded = row[1].split('=', 1)
-            required(algorithm == 'sha256', 'unsupported installed RECORD digest')
-            path = Path(dist.locate_file(row[0]))
-            expected = base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)).hex()
-            required(sha(path) == expected, 'installed wheel bytes changed: ' + str(path))
-            checked += 1
-        required(checked > 0, 'empty installed RECORD: ' + name)
-        info = Path(dist._path)
-        shutil.copytree(info, site / info.name)
-        verified.append(dict(distribution=name, version=dist.version, record_files_verified=checked,
-                             wheel_sha256=wheel['sha256'], metadata=str(info)))
-    shutil.copytree(root / 'mojolearn', site / 'mojolearn', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        with zipfile.ZipFile(wheel['path']) as archive:
+            names = archive.namelist()
+            meta_paths = [n for n in names if n.endswith('.dist-info/METADATA')]
+            required(len(meta_paths) == 1, 'wheel must contain exactly one distribution metadata file')
+            meta = BytesParser().parsebytes(archive.read(meta_paths[0]))
+            required(meta['Name'].lower().replace('_', '-') == name and meta['Version'] == '0.8.45',
+                     'verified wheel distribution/version mismatch')
+            info_dir = str(PurePosixPath(meta_paths[0]).parent)
+            record_path = info_dir + '/RECORD'
+            required(record_path in names, 'verified wheel RECORD missing')
+            record = list(csv.reader(archive.read(record_path).decode().splitlines()))
+            record_files = set()
+            for row in record:
+                record_files.add(row[0])
+                required(row[0] in names, 'wheel RECORD references missing bytes')
+                if not row[1]:
+                    required(row[0] == record_path, 'unhashed wheel member outside RECORD')
+                    continue
+                algorithm, encoded = row[1].split('=', 1)
+                expected = base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)).hex()
+                required(algorithm == 'sha256' and hashlib.sha256(archive.read(row[0])).hexdigest() == expected,
+                         'wheel RECORD digest mismatch: ' + row[0])
+            count = 0
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                relative = PurePosixPath(info.filename)
+                required(not relative.is_absolute() and '..' not in relative.parts and '\\' not in info.filename,
+                         'unsafe wheel member path')
+                required(relative.parts[0] in ('mojolearn', info_dir) or
+                         (len(relative.parts) == 1 and relative.suffix == '.py'), 'unsupported wheel payload location')
+                required(info.filename in record_files, 'wheel payload absent from RECORD')
+                required((info.external_attr >> 16) & 0o170000 != 0o120000, 'wheel symlinks unsupported')
+                data = archive.read(info.filename)
+                dest = site.joinpath(*relative.parts)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if dest.exists():
+                    required(dest.read_bytes() == data, 'conflicting selected wheel payload: ' + info.filename)
+                else:
+                    dest.write_bytes(data)
+                    mode = (info.external_attr >> 16) & 0o777
+                    if mode:
+                        dest.chmod(mode)
+                count += 1
+            verified.append(dict(distribution=name, version=meta['Version'], source='verified PyPI wheel bytes',
+                wheel_path=wheel['path'], wheel_sha256=wheel['sha256'], extracted_files=count,
+                metadata=info_dir, record_files_verified=len(record_files)))
     before = {str(p.relative_to(site)): sha(p) for p in site.rglob('*') if p.is_file()}
     rel = Path('mojolearn') / directory / arch / 'identical/_mojolearn_gbdt.so'
     target = site / rel
-    required(target.is_file(), 'installed vendor GBDT slot is missing: ' + str(rel))
+    required(target.is_file(), 'verified vendor wheel GBDT slot is missing: ' + str(rel))
     shutil.copy2(candidate, target)
     after = {str(p.relative_to(site)): sha(p) for p in site.rglob('*') if p.is_file()}
     required({k for k in after if before.get(k) != after[k]} == {str(rel)}, 'overlay changed more than identical GBDT')
-    write(out / 'overlay-manifest.json', dict(base_distributions=verified, installed_site=str(root),
+    write(out / 'overlay-manifest.json', dict(base_distributions=verified, excluded_distributions=excluded,
+          overlay_source='only verified core and requested vendor wheel archives; no installed package tree copied',
           before=before, after=after, changed=[str(rel)], base_version='0.8.45',
           qualification='raw candidate overlay; NOT a released 0.8.45 execution'))
     return site, target
