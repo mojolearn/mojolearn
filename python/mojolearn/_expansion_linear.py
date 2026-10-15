@@ -2595,8 +2595,12 @@ def _kfold_ids_f32(n, k):
     float32: contiguous folds, the first n % k of them one row longer
     (the base binding's `fold_ids`, cast by `cast_elements`; lane
     cgr4-py-compute)."""
-    if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > n:
+    if not isinstance(k, int) or isinstance(k, bool) or k < 2:
         raise ValueError("mojolearn: cv must be None or an int in [2, n_samples]")
+    if k > n:
+        # scikit-learn's KFold wording (its check_fit2d_1sample reads it)
+        raise ValueError(f"Cannot have number of splits n_splits={k} greater than the "
+                         f"number of samples: n_samples={n}.")
     from ._buffer import _native
     ids = empty((n,), "<i4")
     counts = empty((k,), "<i8")
