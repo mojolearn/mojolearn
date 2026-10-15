@@ -17,7 +17,8 @@ with residual balancing every 10 iterations (section 3.4.1, mu = 10,
 tau = 2) and the stopping rule of section 3.3.1 (eps_abs, eps_rel). Every
 iteration runs in the same fixed order; the answer is w = z (exact zeros)
 and b from beta. It reaches the LP's optimum to ADMM precision, not to a
-vertex, so coefficients agree with theirs to a tolerance, not exactly.
+vertex; the vertex polish below (lane sk-weq-linear) then moves it onto the
+vertex when that does not raise the objective.
 
 COLUMN EQUILIBRATION (lane/gap-board-refusals, 2026-10-02): the w = z
 split is D w = D z with D = diag(||x_j||) (1 for a zero column), the
