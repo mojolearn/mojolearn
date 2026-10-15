@@ -119,6 +119,7 @@ def _factories():
         "TSNE": lambda: ml.TSNE(perplexity=2),
         "TruncatedSVD": lambda: ml.TruncatedSVD(n_components=1, n_iter=5),
         "MeanShift": lambda: ml.MeanShift(bandwidth=1.0, max_iter=5),
+        "HuberRegressor": lambda: ml.HuberRegressor(max_iter=5),
         "HDBSCAN": lambda: ml.HDBSCAN(min_samples=1),
         # scikit-learn's own test settings for these two (its
         # _test_common/instance_generator.py INIT_PARAMS): with the default
@@ -466,12 +467,6 @@ WEIGHT_EQUIVALENCE_FLOAT32 = {
                       "same weighted problem",
     "TweedieRegressor": "float32 fit: predict gap 1 ulp, 1.6e-7 relative (1.50056839 vs 1.50056815); "
                         "same weighted problem",
-    # counts sum(w) and sum(w over outliers) (x_linear/huber.mojo); a flat
-    # objective (30 features, 15 rows, alpha 1e-4) leaves float32 optimizer
-    # rounding. scikit-learn's own HuberRegressor fails this check at its
-    # defaults too (its suite runs it with max_iter=5).
-    "HuberRegressor": "float32 fit: predict gaps of float32 optimizer rounding (2.98e-8 vs -7.45e-8 near 0); "
-                      "same weighted problem; scikit-learn's own fails at default params too",
     # one Ridge per output column (MultiOutputRegressor(Ridge()), _factories)
     "MultiOutputRegressor": "float32 fit of its Ridge members: the gap of Ridge's entry; same weighted problem",
 }
