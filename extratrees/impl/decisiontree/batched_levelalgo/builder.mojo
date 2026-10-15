@@ -79,6 +79,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     node_feature_score_host,
     ScoredCandidate,
     leaf_kernel,
+    leaf_weighted_kernel,
     node_split_kernel,
     node_feature_range_kernel,
     node_feature_range_tiled_kernel,
@@ -86,7 +87,9 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     ET_QSTRIDE,
     node_feature_score_reg_tiled_kernel,
     node_feature_score_finalize_kernel,
+    node_feature_score_finalize_weighted_kernel,
     node_feature_score_kernel,
+    node_feature_score_weighted_kernel,
     partition_samples,
     phase_setup_a_kernel,
     phase_setup_b_kernel,
@@ -177,6 +180,7 @@ from checks.numerics import (
 )
 from core.philox import launch_uniform_int
 from core.abs_sum_blocked import device_abs_sum_blocked
+from core.weight_scan_device import device_scan_weights
 from extratrees.checks.fixed_point import choose_scale
 from ensemble.decisiontree.batched_levelalgo.quantiles import compute_quantiles
 from extratrees.checks.pcg_rng import row_sample_seed
@@ -2652,10 +2656,79 @@ struct DeviceDataset(Movable):
     """ET_BINNED_REG: the per-feature borders, `n_cols x ET_BINS`."""
     var d_nbins: DeviceBuffer[DType.int32]
     var has_bins: Bool
+    var d_weights: DeviceBuffer[DType.int32]
+    """lane sk-kernels: the classifier's fixed-point row weights
+    (`et_quantize_weights_kernel`), one element until `set_row_weights`
+    finds weights that are not all 1."""
+    var weighted: Bool
+    var min_weight_units: Int64
+    """scikit-learn's min_weight_leaf in `d_weights` units (0: none)."""
 
     @always_inline
     def bins_active(self) -> Bool:
         return self.has_bins
+
+    def weights_ptr(mut self) -> MutPointer[Int32, MutAnyOrigin]:
+        """The weight plane the weighted kernels read."""
+        return self.d_weights.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+    def set_row_weights(
+        mut self,
+        ctx: DeviceContext,
+        weights_addr: Int,
+        min_weight_fraction: Float64,
+    ) raises -> Bool:
+        """lane sk-kernels: the classifier's Float32 row weights (the
+        caller's `n_rows` words, borrowed through this call) uploaded,
+        checked on the device (`core/weight_scan_device`: finite, non-
+        negative, positive total; all 1.0 leaves the fit unweighted and
+        returns False) and quantized to Int32 units: `Int32(w * scale)`, the
+        scale the power of two `choose_scale` picks for the weight total, so
+        every class accumulator, and the node total the exact Gini key is
+        shifted over, stays below 2^30. Truncation drops at most one unit per
+        row. `min_weight_fraction` becomes `min_weight_units`, scikit-learn's
+        `min_weight_fraction_leaf * total weight` in units, rounded up (a
+        side's integer units reach the bound exactly when they reach its
+        ceiling). Returns True when the fit is weighted."""
+        var n = Int(self.n_rows)
+        if weights_addr == 0 or n <= 0:
+            return False
+        var src = MutPointer[Float32, MutUntrackedOrigin](
+            unsafe_from_address=weights_addr
+        )
+        var dw = ctx.enqueue_create_buffer[DType.float32](n)
+        ctx.enqueue_copy(dst_buf=dw, src_ptr=src)
+        var scan = device_scan_weights(ctx, dw, n)
+        if scan.bad:
+            raise Error("sample weights must be finite and nonnegative")
+        if not (scan.total > 0.0):
+            raise Error("sample weights must have positive total")
+        if scan.all_unit:
+            _ = dw^
+            return False
+        var scale = choose_scale(scan.total, n)
+        if scale < Float64(1.1754943508222875e-38) or scale > Float64(1.7014118346046923e38):
+            raise Error("sample weights exceed the Float32 fixed-point scale range")
+        self.d_weights = ctx.enqueue_create_buffer[DType.int32](n)
+        ctx.enqueue_function[et_quantize_weights_kernel](
+            self.d_weights.unsafe_ptr(),
+            dw.unsafe_ptr(),
+            Float32(scale),
+            Int32(n),
+            grid_dim=ceildiv(n, 256),
+            block_dim=256,
+        )
+        ctx.synchronize()
+        _ = dw^
+        self.weighted = True
+        self.min_weight_units = Int64(0)
+        if min_weight_fraction > 0.0:
+            var units = min_weight_fraction * scan.total * scale
+            var need = Int64(Int(units))
+            if Float64(Int(need)) < units:
+                need += 1
+            self.min_weight_units = need
+        return True
 
     def ensure_binned(mut self, ctx: DeviceContext) raises:
         """Build the row-major codes and their borders (RandomForest's
@@ -2829,11 +2902,26 @@ def upload_dataset(
     var d_bins_rm = ctx.enqueue_create_buffer[ET_CODE](1)
     var d_quant = ctx.enqueue_create_buffer[DType.float32](1)
     var d_nbins = ctx.enqueue_create_buffer[DType.int32](1)
+    var d_weights = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.synchronize()
     return DeviceDataset(
         d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False,
-        d_bins_rm^, d_quant^, d_nbins^, False,
+        d_bins_rm^, d_quant^, d_nbins^, False, d_weights^, False, Int64(0),
     )
+
+
+def et_quantize_weights_kernel(
+    out_q: MutPointer[Int32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    scale: Float32,
+    n_in: Int32,
+):
+    """lane sk-kernels: `out_q[i] = Int32(w[i] * scale)`, one thread per
+    row. `scale` is a power of two, so the product is exact and the
+    truncation is the same word on every vendor and on the host column."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        out_q[unsafe_offset=i] = Int32(Int(w[unsafe_offset=i] * scale))
 
 
 def class_ids_device_kernel(
@@ -4168,6 +4256,26 @@ def _enqueue_classification_leaves[MAX_OUT: Int](
     even though split search admitted 32. The wider leaf kernel performs
     the same per-class integer counts and probability normalization.
     """
+    if dataset.weighted:
+        ctx.enqueue_function[
+            leaf_weighted_kernel[DEVICE_TPB, MAX_OUT, zero_fill=True]
+        ](
+            d_leaves.unsafe_ptr(),
+            d_visit.unsafe_ptr(),
+            d_nodes.unsafe_ptr().unsafe_bitcast[
+                SparseTreeNode[DType.float32]
+            ](),
+            d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
+            d_row_ids.unsafe_ptr(),
+            dataset.d_labels.unsafe_ptr(),
+            Int32(k_out),
+            Float32(1.0),  # classification: no fixed-point rescale
+            LEAF_SAB_NONE,
+            dataset.weights_ptr(),
+            grid_dim=(total_nodes, 1, 1),
+            block_dim=(DEVICE_TPB, 1, 1),
+        )
+        return
     ctx.enqueue_function[
         leaf_kernel[DEVICE_TPB, MAX_OUT, True, zero_fill=True]
     ](
@@ -4207,6 +4315,65 @@ def _enqueue_classification_score[MAX_ACC: Int](
     same integers, row assignment, random draws and score finalization.
     """
     comptime TPB = DEVICE_TPB
+    # lane sk-kernels: the weighted classifier's twins (row weights in the
+    # class accumulators); the unweighted launches below are unchanged.
+    if dataset.weighted:
+        ctx.enqueue_function[
+            node_feature_score_weighted_kernel[TPB, MAX_ACC, ET_ROW_MAJOR]
+        ](
+            ws.d_nleft.unsafe_ptr(),
+            ws.d_ntotal.unsafe_ptr(),
+            ws.d_accl.unsafe_ptr(),
+            ws.d_acct.unsafe_ptr(),
+            ws.d_nblocks.unsafe_ptr(),
+            ws.d_min.unsafe_ptr(),
+            ws.d_max.unsafe_ptr(),
+            ws.d_missing.unsafe_ptr(),
+            dataset.search_data_ptr(),
+            d_row_ids.unsafe_ptr(),
+            dataset.d_labels.unsafe_ptr(),
+            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            ws.d_colids.unsafe_ptr(),
+            ws.d_tree.unsafe_ptr(),
+            n_rows,
+            Int32(k),
+            n_classes,
+            seed,
+            Int32(0),
+            dataset.n_cols,
+            dataset.weights_ptr(),
+            grid_dim=search_grid(n_blocks_dimx, Int(k)),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_function[
+            node_feature_score_finalize_weighted_kernel[MAX_ACC]
+        ](
+            ws.d_status.unsafe_ptr(),
+            ws.d_thresh.unsafe_ptr(),
+            ws.d_gnum.unsafe_ptr(),
+            ws.d_gden.unsafe_ptr(),
+            ws.d_nleft.unsafe_ptr(),
+            ws.d_ntotal.unsafe_ptr(),
+            ws.d_accl.unsafe_ptr(),
+            ws.d_acct.unsafe_ptr(),
+            ws.d_min.unsafe_ptr(),
+            ws.d_max.unsafe_ptr(),
+            ws.d_missing.unsafe_ptr(),
+            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            ws.d_colids.unsafe_ptr(),
+            ws.d_tree.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(k),
+            n_classes,
+            seed,
+            params.min_samples_leaf,
+            Int32(0),
+            dataset.min_weight_units,
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+        return
     ctx.enqueue_function[
         node_feature_score_kernel[TPB, MAX_ACC, True, ET_ROW_MAJOR]
     ](
@@ -4419,6 +4586,10 @@ def search_batch_enqueue(
     # One row per fused lane bounds registers and preserves range key seams.
     # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     var fused_small_rows = Int32(ET_SMALL_NODE_TPB) if T05 and not range_only and n_classes <= 32 else Int32(0)
+    if dataset.weighted:
+        # lane sk-kernels: the fused small-node pass counts rows, not
+        # weights; the weighted classifier keeps the score + finalize pair.
+        fused_small_rows = Int32(0)
 
     # --- per-batch device buffers ------------------------------------
     ref d_min = ws.d_min
@@ -4682,31 +4853,58 @@ def search_batch_enqueue(
 
     # --- 5. scored cells into candidates (DEVIATION 182) -------------
     clock.tick(ctx, PHASE_SCORE)
-    ctx.enqueue_function[score_to_candidate_kernel](
-        c_q.unsafe_ptr(),
-        c_c.unsafe_ptr(),
-        c_m.unsafe_ptr(),
-        c_l.unsafe_ptr(),
-        c_nu.unsafe_ptr(),
-        c_de.unsafe_ptr(),
-        c_v.unsafe_ptr(),
-        d_status.unsafe_ptr(),
-        d_thresh.unsafe_ptr(),
-        d_nleft.unsafe_ptr(),
-        d_ntotal.unsafe_ptr(),
-        d_accl.unsafe_ptr(),
-        d_acct.unsafe_ptr(),
-        d_gnum.unsafe_ptr(),
-        d_gden.unsafe_ptr(),
-        d_colids.unsafe_ptr(),
-        Int32(n_cells),
-        n_classes,
-        params.min_samples_leaf,
-        params.split_criterion,
-        Int32(k),
-        grid_dim=ceildiv(n_cells, 64),
-        block_dim=64,
-    )
+    if dataset.weighted:
+        ctx.enqueue_function[score_to_candidate_weighted_kernel](
+            c_q.unsafe_ptr(),
+            c_c.unsafe_ptr(),
+            c_m.unsafe_ptr(),
+            c_l.unsafe_ptr(),
+            c_nu.unsafe_ptr(),
+            c_de.unsafe_ptr(),
+            c_v.unsafe_ptr(),
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_colids.unsafe_ptr(),
+            Int32(n_cells),
+            n_classes,
+            params.min_samples_leaf,
+            params.split_criterion,
+            Int32(k),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+    else:
+        ctx.enqueue_function[score_to_candidate_kernel](
+            c_q.unsafe_ptr(),
+            c_c.unsafe_ptr(),
+            c_m.unsafe_ptr(),
+            c_l.unsafe_ptr(),
+            c_nu.unsafe_ptr(),
+            c_de.unsafe_ptr(),
+            c_v.unsafe_ptr(),
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_colids.unsafe_ptr(),
+            Int32(n_cells),
+            n_classes,
+            params.min_samples_leaf,
+            params.split_criterion,
+            Int32(k),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
 
     if fused_small_rows != 0:
         _enqueue_small_node_splits[True](ctx,ws,dataset,d_row_ids,
