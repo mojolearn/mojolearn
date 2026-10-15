@@ -1845,7 +1845,7 @@ def entropy_gain_per_split(
 
 
 @always_inline
-def _score_to_candidate_body[WEIGHTED: Bool](
+def _score_to_candidate_body[WEIGHTED: Bool, WEIGHTED_REG: Bool = False](
     cand_quesval: MutPointer[Float32, MutAnyOrigin],
     cand_colid: MutPointer[Int32, MutAnyOrigin],
     cand_metric: MutPointer[Float32, MutAnyOrigin],
@@ -1909,6 +1909,15 @@ def _score_to_candidate_body[WEIGHTED: Bool](
     and `NodeQueue.push` turns into a leaf -- the same outcome the host
     path reaches by never producing a candidate at all.
 
+    WEIGHTED_REG (lane sk-final): the weighted regressor's cells carry two
+    accumulators (`n_classes_in` = 2 is the stride): slot 0 the quantized
+    `w * y` sum Z, slot 1 the weight units W. The MSE metric is the
+    one-output gain over Z with W where the counts stood; the deviance
+    criteria take (Z, W) in place of (label sum, count), which leaves their
+    ranking unchanged for the same reason the label scale does
+    (`regression_deviance_gain`: the children's W add to the parent's
+    exactly, so a constant log offset cancels).
+
     `best_metric_val` IS ZERO FOR A SCORED CELL, and that is DEVIATION 175
     surfacing here rather than a shortcut: the device does not compute
     cuML's float `GainPerSplit`. For classification it does not need to --
@@ -1966,6 +1975,7 @@ def _score_to_candidate_body[WEIGHTED: Bool](
             var g_len = in_n_total[unsafe_offset=idx]
             var g_left = in_n_left[unsafe_offset=idx]
             var g_msl = min_samples_leaf
+            var g_ncls = n_classes
             comptime if WEIGHTED:
                 g_len = Int32(0)
                 g_left = Int32(0)
@@ -1973,6 +1983,11 @@ def _score_to_candidate_body[WEIGHTED: Bool](
                     g_len += in_acc_total[unsafe_offset=idx * n_classes + kw]
                     g_left += in_acc_left[unsafe_offset=idx * n_classes + kw]
                 g_msl = Int32(0)
+            elif WEIGHTED_REG:
+                g_len = in_acc_total[unsafe_offset=idx * n_classes + 1]
+                g_left = in_acc_left[unsafe_offset=idx * n_classes + 1]
+                g_msl = Int32(0)
+                g_ncls = 1
             if entropy:
                 # DEVIATION 459: the float gain is the metric AND the key.
                 var g = Float32(0)
@@ -1992,12 +2007,17 @@ def _score_to_candidate_body[WEIGHTED: Bool](
             elif deviance:
                 # DEVIATION 5610: the deviance gain over the cell's scaled
                 # label sums is the metric AND the key (`den = 1`).
+                var d_left = in_acc_left[unsafe_offset=idx]
+                var d_total = in_acc_total[unsafe_offset=idx]
+                var d_nl = in_n_left[unsafe_offset=idx]
+                var d_nt = in_n_total[unsafe_offset=idx]
+                comptime if WEIGHTED_REG:
+                    d_left = in_acc_left[unsafe_offset=idx * n_classes]
+                    d_total = in_acc_total[unsafe_offset=idx * n_classes]
+                    d_nl = g_left
+                    d_nt = g_len
                 var g = regression_deviance_gain(
-                    in_acc_left[unsafe_offset=idx],
-                    in_acc_total[unsafe_offset=idx],
-                    in_n_left[unsafe_offset=idx],
-                    in_n_total[unsafe_offset=idx],
-                    criterion_in,
+                    d_left, d_total, d_nl, d_nt, criterion_in
                 )
                 cand_metric[unsafe_offset=idx] = g
                 cand_num[unsafe_offset=idx] = float_gain_key(g)
@@ -2007,12 +2027,12 @@ def _score_to_candidate_body[WEIGHTED: Bool](
                     in_acc_left,
                     in_acc_total,
                     idx * n_classes,
-                    n_classes,
+                    g_ncls,
                     g_len,
                     g_left,
                     g_msl,
                 )
-                comptime if T14 and not T14_EXACT:
+                comptime if T14 and not T14_EXACT and not WEIGHTED_REG:
                     if criterion_in == CRITERION_MSE:
                         cand_metric[unsafe_offset=idx] = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(
                             Float32(in_n_total[unsafe_offset=idx]),Float32(in_n_left[unsafe_offset=idx]),
@@ -2108,6 +2128,56 @@ def score_to_candidate_weighted_kernel(
     sk-kernels): the Gini / entropy metric over the accumulators' weight
     totals (`_score_to_candidate_body`'s WEIGHTED arm)."""
     _score_to_candidate_body[True](
+        cand_quesval,
+        cand_colid,
+        cand_metric,
+        cand_nleft,
+        cand_num,
+        cand_den,
+        cand_valid,
+        in_status,
+        in_threshold,
+        in_n_left,
+        in_n_total,
+        in_acc_left,
+        in_acc_total,
+        in_gini_num,
+        in_gini_den,
+        colids,
+        n_cells_in,
+        n_classes_in,
+        min_samples_leaf_in,
+        criterion_in,
+        columns_per_node,
+    )
+
+def score_to_candidate_weighted_reg_kernel(
+    cand_quesval: MutPointer[Float32, MutAnyOrigin],
+    cand_colid: MutPointer[Int32, MutAnyOrigin],
+    cand_metric: MutPointer[Float32, MutAnyOrigin],
+    cand_nleft: MutPointer[Int32, MutAnyOrigin],
+    cand_num: MutPointer[Int64, MutAnyOrigin],
+    cand_den: MutPointer[Int64, MutAnyOrigin],
+    cand_valid: MutPointer[Int32, MutAnyOrigin],
+    in_status: MutPointer[Int32, MutAnyOrigin],
+    in_threshold: MutPointer[Float32, MutAnyOrigin],
+    in_n_left: MutPointer[Int32, MutAnyOrigin],
+    in_n_total: MutPointer[Int32, MutAnyOrigin],
+    in_acc_left: MutPointer[Int32, MutAnyOrigin],
+    in_acc_total: MutPointer[Int32, MutAnyOrigin],
+    in_gini_num: MutPointer[Int64, MutAnyOrigin],
+    in_gini_den: MutPointer[Int64, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    n_cells_in: Int32,
+    n_classes_in: Int32,
+    min_samples_leaf_in: Int32,
+    criterion_in: Int32,
+    columns_per_node: Int32,
+):
+    """`score_to_candidate_kernel` for the weighted regressor (lane
+    sk-final): `n_classes_in` = 2 is the (Z, W) accumulator stride
+    (`_score_to_candidate_body`'s WEIGHTED_REG arm)."""
+    _score_to_candidate_body[False, True](
         cand_quesval,
         cand_colid,
         cand_metric,
