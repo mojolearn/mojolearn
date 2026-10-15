@@ -200,6 +200,12 @@ def _needs_fit(method, name, require_fit=True):
         except Exception as err:
             _sk_validate.reraise(self, check, err)
             raise
+        if not _caller_outside(sys._getframe(1)):
+            # mojolearn's own chains (OneClassSVM.predict -> decision_function
+            # -> score_samples) pass these Arrays straight to float32 kernels:
+            # a float64 widening here was read back as float32 words, so each
+            # label came from the bytes of another row's score.
+            return out
         return _sk_validate.after_call(self, name, out)
 
     guarded._mojolearn_needs_fit = require_fit
@@ -351,6 +357,11 @@ def _public_result(est, name, out):
     np = sys.modules.get("numpy")
     if np is None:
         return out
+    # An outlier detector's scores are float64, as scikit-learn's are
+    # (`_sk_validate.after_call`). The widening must happen here, on the
+    # Array: this wrapper runs inside `_needs_fit`'s guard, so the guard's
+    # own `after_call` only ever sees the NumPy view made below.
+    out = _sk_validate.after_call(est, name, out)
     out = _ndarray(out, np)
     if (name == "predict" and type(out) is np.ndarray and out.dtype.kind == "f"
             and out.dtype.itemsize < 8 and getattr(est, "_estimator_type", None) == "regressor"):
