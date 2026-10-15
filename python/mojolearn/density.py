@@ -4,6 +4,7 @@
 
 from . import _mojolearn_estimators, _serialize
 from ._array import Array
+from ._sample_weight import check_sample_weight
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, zeros
 from ._mode import NumericModeMixin
 from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
@@ -355,20 +356,10 @@ class DBSCAN(NumericModeMixin):
         w = None
         weight_addr = 0
         if sample_weight is not None:
-            shape = _shape_of(sample_weight)
-            if len(shape) != 1 or shape[0] != x.shape[0]:
-                raise ValueError(
-                    "mojolearn DBSCAN: sample_weight must be one value per "
-                    f"row, got shape {shape} for {x.shape[0]} rows"
-                )
-            w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-            if not all_finite(w):
-                raise ValueError(
-                    "mojolearn DBSCAN: sample_weight contains a NaN or an "
-                    "infinity. The weighted core-point test is a float sum "
-                    "compared against min_samples, and neither value gives "
-                    "that comparison a meaning"
-                )
+            # scikit-learn's _check_sample_weight: shape, finite, not all zero
+            # (its wording); negative weights are allowed, as there (a
+            # negative weight suppresses its neighbors' core status). Read only.
+            w = check_sample_weight(sample_weight, x.shape[0], allow_negative=True)
             weight_addr = addr_ro(w, name="sample_weight")
 
         # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding.
@@ -845,26 +836,9 @@ class KernelDensity(NumericModeMixin):
         self.n_features_in_ = x.shape[1]
         self.n_samples_fit_ = x.shape[0]
         if sample_weight is not None:
-            shape = _shape_of(sample_weight)
-            if len(shape) != 1 or shape[0] != x.shape[0]:
-                raise ValueError(
-                    "mojolearn KernelDensity: sample_weight must be 1-D with "
-                    f"one entry per row of X, got shape {shape}"
-                )
-            w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-            if not all_finite(w) or w.min() < 0:
-                raise ValueError(
-                    "mojolearn KernelDensity: sample_weight must be finite "
-                    "and non-negative"
-                )
-            # Only the sum's SIGN is read, and for finite non-negative weights
-            # sum > 0 exactly when max > 0 (lane cpu2-l9-neighbors): `max` is
-            # the base binding's device `reduce_stat`, where the float `sum`
-            # was a host fold.
-            if float(w.max()) <= 0.0:
-                raise ValueError(
-                    "mojolearn KernelDensity: sample_weight must sum to > 0"
-                )
+            # scikit-learn's _check_sample_weight (shape, finite, >= 0, not
+            # all zero, its wording) by the base binding's reductions
+            w = check_sample_weight(sample_weight, x.shape[0])
             self._w = w.copy() if immutable else w
         else:
             self._w = None

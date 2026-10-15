@@ -61,10 +61,10 @@ def _weights(sample_weight, n):
     """sample_weight as a float32 Array of n values (None stays None)."""
     if sample_weight is None:
         return None
-    w = _buffer.as_f32_c(sample_weight, ndim=None, name="sample_weight")[0]
-    if w.size != n:
-        raise ValueError(f"sample_weight has {w.size} values for {n} samples")
-    return w
+    # scikit-learn's _check_sample_weight (shape, finite, not all zero, its
+    # wording) before the kernels; read only, never written
+    from ._sample_weight import check_sample_weight
+    return check_sample_weight(sample_weight, n, allow_negative=True)
 
 
 def _seed(random_state):

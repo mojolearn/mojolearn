@@ -4,6 +4,7 @@
 
 from . import _mojolearn, _serialize
 from ._array import Array
+from ._sample_weight import check_sample_weight
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
 from ._mode import NumericModeMixin
 
@@ -331,13 +332,9 @@ class KMeans(NumericModeMixin):
         else:
             # DEVIATION 2369: a 1-D vector by contract (`ndim=1`); the
             # NumPy-era `.ravel()` also accepted an (n, 1) column.
-            w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-            _refuse_non_finite(w, "sample_weight", "fit")
-            if w.shape[0] != n:
-                raise ValueError(
-                    f"mojolearn: sample_weight has {w.shape[0]} entries, X "
-                    f"has {n} rows"
-                )
+            # scikit-learn's _check_sample_weight (shape, finite, not all
+            # zero, its wording); a scalar is a constant vector. Read only.
+            w = check_sample_weight(sample_weight, n, allow_negative=True)
             n_weights = n
 
         inertia, n_iter, sum_scale, weight_scale = self._bind("_mojolearn").kmeans_fit(
