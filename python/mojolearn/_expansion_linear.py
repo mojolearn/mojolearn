@@ -2478,11 +2478,11 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
     """Ridge regression with built-in selection of ``alpha``.
 
     Follows scikit-learn's RidgeCV. With ``cv=None`` the alpha is chosen by
-    efficient leave-one-out cross-validation; with ``cv=k`` (an int) by
-    unshuffled K-fold cross-validation scored by R^2, after which the model
-    is refit on all rows with the best alpha (the first one on a tie).
-    Cross-validation objects for ``cv``, ``scoring``, ``alpha_per_target``
-    and a 2-D ``y`` are not supported.
+    efficient leave-one-out cross-validation; otherwise by cross-validation
+    over ``cv`` scored by R^2 (weighted by ``sample_weight`` when given),
+    after which the model is refit on all rows with the best alpha (the
+    first one on a tie). ``scoring``, ``alpha_per_target`` and a 2-D ``y``
+    are not supported.
 
     Parameters
     ----------
@@ -2492,8 +2492,10 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         Whether to fit an intercept.
     scoring : None, default None
         Only None is supported; anything else raises ValueError.
-    cv : int or None, default None
-        None for leave-one-out, or the number of folds (2 to n_samples).
+    cv : int, cross-validation splitter, iterable or None, default None
+        None for leave-one-out; an int for that many unshuffled K-fold folds
+        (2 to n_samples); a splitter (an object with ``split``) or an
+        iterable of ``(train, test)`` index arrays for those splits.
     gcv_mode : str or None, default None
         Accepted for compatibility; ignored.
     store_cv_results : bool, default False
@@ -2511,7 +2513,7 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         Selected alpha.
     best_score_ : float
         Score of the selected alpha: minus its mean squared leave-one-out
-        error with ``cv=None``, its mean K-fold R^2 with ``cv=k``.
+        error with ``cv=None``, otherwise its mean R^2 over the splits.
     coef_ : float32 array of shape (n_features,)
         Weights.
     intercept_ : float
@@ -2549,7 +2551,9 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         y : array-like of shape (n_samples,)
             Targets (1-D).
         sample_weight : array-like of shape (n_samples,) or float, optional
-            Non-negative weights with a positive sum; only with ``cv=None``.
+            Non-negative weights with a positive sum. With ``cv`` set, each
+            split's fit uses its training rows' weights and its R^2 its test
+            rows' weights.
 
         Returns
         -------
@@ -2560,8 +2564,8 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         ------
         ValueError
             On an unsupported option, a non-positive alpha, an invalid
-            ``cv``, ``sample_weight`` or ``store_cv_results`` with ``cv``
-            set, or when ``X'X + alpha I`` cannot be factored.
+            ``cv``, ``store_cv_results`` with ``cv`` set, or when
+            ``X'X + alpha I`` cannot be factored.
         """
         if self.scoring is not None or self.alpha_per_target:
             raise ValueError("mojolearn RidgeCV: only scoring=None, alpha_per_target=False are implemented")
@@ -2571,7 +2575,9 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         a, n, d = _matrix(X)
         yv = _vector(y, n)
         if self.cv is not None:
-            return self._fit_kfold(a, n, d, yv, alphas, sample_weight)
+            if _is_int_cv(self.cv) and sample_weight is None:
+                return self._fit_kfold(a, n, d, yv, alphas, sample_weight)
+            return self._fit_splits(X, y, a, n, d, yv, alphas, sample_weight)
         vals = _ridge_run(self, a, n, d, yv, 1, alphas, sample_weight)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
@@ -2586,13 +2592,9 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         """cv = k (lane/neural-pass91): their GridSearchCV over the alphas with
         KFold(k) (no shuffle) and Ridge.score, then Ridge refit on every row
         with the first best alpha (x_linear/ridgecv.mojo)."""
-        cv = self.cv
-        if not isinstance(cv, int) or isinstance(cv, bool):
-            raise ValueError("mojolearn RidgeCV: cv must be None or an int (KFold)")
+        cv = int(self.cv)
         if not 2 <= cv <= n:
             raise ValueError("mojolearn RidgeCV: cv must be in [2, n_samples]")
-        if sample_weight is not None:
-            raise ValueError("mojolearn RidgeCV: sample_weight with cv is not implemented")
         if self.store_cv_results:
             raise ValueError("cv!=None and store_cv_results=True are incompatible")
         A = len(alphas)
@@ -2611,6 +2613,63 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         self.alpha_ = alphas[best]
         self.best_score_ = float(scores[best])  # one element of the score Array
         self.n_features_in_ = d
+        return self
+
+    def _fit_splits(self, X, y, a, n, d, yv, alphas, sample_weight):
+        """cv = a splitter, explicit (train, test) splits, or an int with
+        sample_weight: scikit-learn's GridSearchCV over the alphas, each
+        split's Ridge fit on its training rows with their weights, scored by
+        Ridge.score on its test rows (r2_score weighted by the test rows'
+        weights, as GridSearchCV routes sample_weight to a scorer that takes
+        it), the mean over splits ranked, the first best alpha refit on every
+        row with every weight. Python only walks the handful of splits and
+        alphas: the row gathers (`gather_rows_bytes`), the fits (`_ridge_run`),
+        the predictions (`_decision`), the scores (`r2_score`), the means
+        (`row_means_f64`) and the choice (`reduce_stat` argmax) are native.
+        A weight-w row is w repeated rows and a weight-0 row a removed one in
+        every fit and every score."""
+        from ._buffer import _native
+        from ._metrics_impl import r2_score
+        from .model_selection import _row_means
+        if self.store_cv_results:
+            raise ValueError("cv!=None and store_cv_results=True are incompatible")
+        if _is_int_cv(self.cv):
+            from .model_selection import KFold
+            cv = int(self.cv)
+            if not 2 <= cv <= n:
+                raise ValueError("mojolearn RidgeCV: cv must be in [2, n_samples]")
+            splits = _cv_splits(KFold(n_splits=cv), a, yv)
+        else:
+            splits = _cv_splits(self.cv, X, y)
+        w = None if sample_weight is None else _weights_f32(sample_weight, n)
+        gather = _native("gather_rows_bytes")
+
+        def take(src, idx, width):
+            # rows idx of src (width float32 words a row) as a new Array
+            out = empty((idx.size, width) if width > 1 else (idx.size,), "<f4")
+            gather(addr_ro(src, name="rows"), addr(out, name="rows"), addr_ro(idx, name="rows"), n, idx.size,
+                   4 * width)
+            return out
+
+        self.n_features_in_ = d
+        rows = [[] for _ in alphas]  # glue: one score list per alpha (alpha-grid sized)
+        for tr, te in splits:  # glue: one native gather, fit, predict and score per split and alpha
+            if not tr.size or not te.size:
+                raise ValueError("mojolearn RidgeCV: every cv split needs training and test rows")
+            xtr, ytr, xte, yte = take(a, tr, d), take(yv, tr, 1), take(a, te, d), take(yv, te, 1)
+            wtr = None if w is None else take(w, tr, 1)
+            wte = None if w is None else take(w, te, 1)
+            for i, alpha in enumerate(alphas):  # glue: one native fit per alpha
+                vals = _ridge_run(self, xtr, tr.size, d, ytr, 1, [alpha], wtr)
+                pred = _decision(self, xte, Array.from_list(vals[:d], "<f4"), float(vals[d]))
+                rows[i].append(float(r2_score(yte, pred.reshape((te.size,)), sample_weight=wte)))
+        means = Array.from_list(_row_means(rows), "<f8")
+        best = int(_native("reduce_stat")(addr_ro(means, name="scores"), 1, len(alphas), 3))
+        vals = _ridge_run(self, a, n, d, yv, 1, [alphas[best]], w)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.alpha_ = alphas[best]
+        self.best_score_ = float(means[best])  # one element of the mean-score Array
         return self
 
 
