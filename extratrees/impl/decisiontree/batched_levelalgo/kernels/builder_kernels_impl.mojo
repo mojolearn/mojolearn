@@ -2304,7 +2304,15 @@ def _node_feature_score_finalize_body[
     a node is pure when one class holds all of W; a split is rejected when
     a side holds no weight or less than `min_weight_units` (scikit-learn's
     min_weight_leaf in units; 0 checks only the empty side). The row-count
-    `min_samples_leaf` test is unchanged."""
+    `min_samples_leaf` test is unchanged.
+
+    WEIGHTED regression (lane sk-final, `n_acc_in` = 2): slot 0 holds the
+    quantized `w * y` sums Z, slot 1 the weight units W. The same side
+    rejection on W; the exact key is `regression_key` over (Z, W) in place
+    of (label sum, row count): A = ZL WR - ZR WL with |Z| <= 2^30 and
+    W <= 2^30, the node-uniform shift taken over the node's W, so
+    (|A| >> j)^2 <= 2^62 and WL WR <= 2^58 (DEVIATION 189's bounds with W
+    in the row count's place)."""
     var n_cells = Int(n_cells_in)
     var n_sampled_cols = Int(n_sampled_cols_in)
     var n_acc = Int(n_acc_in)
@@ -2398,6 +2406,22 @@ def _node_feature_score_finalize_body[
                 out_status[unsafe_offset=slot] = SCORE_STATUS_PURE_NODE
                 slot += stride
                 continue
+        elif WEIGHTED:
+            # lane sk-final: the weighted regressor's side test on slot 1
+            var rw_total = Int64(Int(out_acc_total[unsafe_offset = slot * n_acc + 1]))
+            var rw_left = Int64(Int(out_acc_left[unsafe_offset = slot * n_acc + 1]))
+            var rw_right = rw_total - rw_left
+            if (
+                rw_left <= Int64(0)
+                or rw_right <= Int64(0)
+                or rw_left < min_weight_units
+                or rw_right < min_weight_units
+            ):
+                out_status[unsafe_offset=slot] = (
+                    SCORE_STATUS_REJECTED_MIN_SAMPLES_LEAF
+                )
+                slot += stride
+                continue
         elif CLASSIFICATION:
             var pure = False
             for kc in range(n_acc):
@@ -2445,12 +2469,20 @@ def _node_feature_score_finalize_body[
         else:
             var key_num = Int64(0)
             var key_den = Int64(0)
+            var k_left = n_left
+            var k_right = n_right
+            var k_rows = range_len
+            comptime if WEIGHTED:
+                # lane sk-final: the weight units stand where the counts stood
+                k_rows = Int(out_acc_total[unsafe_offset = slot * n_acc + 1])
+                k_left = Int(out_acc_left[unsafe_offset = slot * n_acc + 1])
+                k_right = k_rows - k_left
             var key_ok = regression_key(
                 Int64(Int(out_acc_left[unsafe_offset = slot * n_acc])),
                 Int64(Int(out_acc_total[unsafe_offset = slot * n_acc])),
-                n_left,
-                n_right,
-                range_len,
+                k_left,
+                k_right,
+                k_rows,
                 sabotage,
                 key_num,
                 key_den,
@@ -2541,6 +2573,57 @@ def node_feature_score_finalize_weighted_kernel[MAX_ACC: Int](
     """The classification finalize pass over weighted accumulators (lane
     sk-kernels; `_node_feature_score_finalize_body`'s WEIGHTED arm)."""
     _node_feature_score_finalize_body[MAX_ACC, True, True](
+        out_status,
+        out_threshold,
+        out_gini_num,
+        out_gini_den,
+        out_n_left,
+        out_n_total,
+        out_acc_left,
+        out_acc_total,
+        in_min,
+        in_max,
+        in_n_missing,
+        work_items,
+        colids,
+        tree_ids,
+        n_cells_in,
+        n_sampled_cols_in,
+        n_acc_in,
+        seed,
+        min_samples_leaf_in,
+        sabotage_in,
+        min_weight_units,
+    )
+
+
+def node_feature_score_finalize_weighted_reg_kernel[MAX_ACC: Int](
+    out_status: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
+    out_gini_num: MutPointer[Int64, MutAnyOrigin],
+    out_gini_den: MutPointer[Int64, MutAnyOrigin],
+    out_n_left: MutPointer[Int32, MutAnyOrigin],
+    out_n_total: MutPointer[Int32, MutAnyOrigin],
+    out_acc_left: MutPointer[Int32, MutAnyOrigin],
+    out_acc_total: MutPointer[Int32, MutAnyOrigin],
+    in_min: MutPointer[Float32, MutAnyOrigin],
+    in_max: MutPointer[Float32, MutAnyOrigin],
+    in_n_missing: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
+    n_cells_in: Int32,
+    n_sampled_cols_in: Int32,
+    n_acc_in: Int32,
+    seed: UInt64,
+    min_samples_leaf_in: Int32,
+    sabotage_in: Int32,
+    min_weight_units: Int64,
+):
+    """The regression finalize pass over (Z, W) accumulators (lane
+    sk-final; `_node_feature_score_finalize_body`'s weighted regression
+    arm, `n_acc_in` = 2)."""
+    _node_feature_score_finalize_body[MAX_ACC, False, True](
         out_status,
         out_threshold,
         out_gini_num,
