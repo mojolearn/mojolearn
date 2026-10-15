@@ -632,6 +632,25 @@ def _trees_sub_seed(seed, k):
     return (seed * 1000003 + 7919 * (k + 1)) % 2147483647
 
 
+def _trees_member_weights(active, sample_weight, n_rows):
+    """scikit-learn's `_BaseVoting.fit` / stacking rule for `sample_weight`:
+    None stays None; otherwise it is checked once against X (the shared
+    helper's shape, sign and all-zero refusals) and every active member must
+    take a `sample_weight` fit parameter, else ValueError in scikit-learn's
+    words. Glue: one signature lookup per member."""
+    if sample_weight is None:
+        return None
+    import inspect
+    for name, est in active:  # glue: one signature lookup per member
+        try:
+            takes = "sample_weight" in inspect.signature(est.fit).parameters
+        except (TypeError, ValueError):
+            takes = False
+        if not takes:
+            raise ValueError(f"Underlying estimator {name} does not support sample weights.")
+    return check_sample_weight(sample_weight, n_rows)
+
+
 def _trees_clone(est, **overrides):
     """A fresh unfitted copy with the same constructor parameters, plus
     `overrides` for the ones the estimator has (random_state)."""
@@ -2901,6 +2920,7 @@ class VotingClassifier(ClassifierScoreMixin, _TreesWrapperBase):
         self.classes_, codes = encode_labels(y)
         self.n_classes_ = len(self.classes_)
         active = _trees_estimators(self.estimators)
+        sample_weight = _trees_member_weights(active, sample_weight, Xa.shape[0])
         self.estimators_ = []
         for _, est in active:  # glue: one member fit per estimator
             e = _trees_clone(est)
@@ -3055,6 +3075,7 @@ class VotingRegressor(RegressorScoreMixin, _TreesWrapperBase):
         self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         active = _trees_estimators(self.estimators)
+        sample_weight = _trees_member_weights(active, sample_weight, Xa.shape[0])
         self.estimators_ = []
         for _, est in active:  # glue: one member fit per estimator
             e = _trees_clone(est)
