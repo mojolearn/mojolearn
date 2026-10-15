@@ -17,10 +17,9 @@ from ._arrays import _addr, _addr_ro
 from .ensemble import GradientBoosting
 
 
-class NotFittedError(ValueError, AttributeError):
-    """Raised before fit, with scikit-learn's `NotFittedError` bases
-    (ValueError and AttributeError), so callers that catch either keep
-    working without this module importing scikit-learn."""
+# One NotFittedError for the package; an instance of scikit-learn's too when
+# scikit-learn is imported (see mojolearn.exceptions).
+from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
 
 
 class _GBDTAdapter:
@@ -90,7 +89,7 @@ class _GBDTAdapter:
 
     def _check_fitted(self):
         if not self.__sklearn_is_fitted__():
-            raise NotFittedError(f'{type(self).__name__} is not fitted')
+            raise not_fitted_error(f'{type(self).__name__} is not fitted')
 
     def __sklearn_is_fitted__(self):
         return getattr(getattr(self, '_learner_', None), 'model_', None) is not None

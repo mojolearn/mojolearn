@@ -391,7 +391,7 @@ class NumericModeMixin(ParamsMixin):
         sig = inspect.signature(orig)
         if "numeric_mode" not in sig.parameters:
             params = list(sig.parameters.values())
-            at = next((i for i, p in enumerate(params) if p.kind is p.VAR_KEYWORD), len(params))
+            at = next((i for i, p in enumerate(params) if p.kind is p.VAR_KEYWORD), len(params))  # glue: signature parameter position
             params.insert(at, inspect.Parameter("numeric_mode", inspect.Parameter.KEYWORD_ONLY, default=None))
             sig = sig.replace(parameters=params)
         __init__.__signature__ = sig

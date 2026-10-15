@@ -21,10 +21,9 @@ from ._arrays import _addr, _addr_ro
 __all__ = ['MinMaxScaler', 'StandardScaler']
 
 
-class NotFittedError(ValueError, AttributeError):
-    """Raised by transform before fit, with scikit-learn's `NotFittedError`
-    bases (ValueError and AttributeError), so callers that catch either keep
-    working without this module importing scikit-learn."""
+# One NotFittedError for the package; an instance of scikit-learn's too when
+# scikit-learn is imported (see mojolearn.exceptions).
+from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
 
 #: The saved-model format of both scalers (lane/inference-linear-svm,
 #: 2026-09-15): `mojolearn.host_model(path)` transforms from it on a CPU.
@@ -545,7 +544,7 @@ class MinMaxScaler(_ScalerProtocol):
 
     def _transform(self, X, inverse):
         if not self.__sklearn_is_fitted__():
-            raise NotFittedError('MinMaxScaler is not fitted')
+            raise not_fitted_error('MinMaxScaler is not fitted')
         binding = self._binding(self.numeric_mode_)
         # `minmax_transform_direct` (lane apple-fast-prep; lane cpu2-l3-prep: every GPU
         # binding): X up from its own buffer, the device scans the output (and X when the
@@ -974,7 +973,7 @@ class StandardScaler(_ScalerProtocol):
             raise ValueError('StandardScaler transform copy must be a bool or None')
         copy = self.copy if copy is None else copy
         if not self.__sklearn_is_fitted__():
-            raise NotFittedError('StandardScaler is not fitted')
+            raise not_fitted_error('StandardScaler is not fitted')
         binding = self._binding(self.numeric_mode_)
         # `standard_transform_direct` (lane cpu2-l3-prep, every GPU binding): X up from
         # its own buffer, the device scans the output (and X when the output is not
