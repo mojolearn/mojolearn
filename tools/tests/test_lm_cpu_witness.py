@@ -18,10 +18,20 @@ sys.path.insert(0, str(TOOLS))
 SPEC = importlib.util.spec_from_file_location('lm_cpu_witness', TOOLS / 'lm_cpu_witness.py')
 w = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(w)
-_CV = importlib.util.spec_from_file_location(
-    'cross_vendor_for_test', TOOLS.parent / 'python/mojolearn/cross_vendor.py')
-cross_vendor = importlib.util.module_from_spec(_CV)
-_CV.loader.exec_module(cross_vendor)  # the fold needs only the standard library
+
+
+def _cross_vendor():
+    """The package's cross_vendor, or None when no binding set is built: its
+    fold is the base binding's fold_pair_f32 since de82c9a18 (no Python
+    element loop), so it needs the package, not just the source file. Any
+    other import failure still fails the test."""
+    try:
+        from mojolearn import cross_vendor
+    except ImportError as error:
+        if 'binary exists under' not in str(error):
+            raise
+        return None
+    return cross_vendor
 
 
 def _package():
@@ -197,6 +207,10 @@ class Fold(unittest.TestCase):
     def test_equals_the_coordinators_fold(self):
         """cross_vendor.ordered_fold (the host emulation the live segment
         uses) and this numpy fold give the same bytes, subnormals included."""
+        cross_vendor = _cross_vendor()
+        if cross_vendor is None:
+            self.skipTest('built mojolearn bindings not present: the coordinator fold is the base '
+                          "binding's fold_pair_f32 (bash bindings/build*.sh)")
         ordered_fold = cross_vendor.ordered_fold
         gs = self._gradients()
         total = None
