@@ -5159,7 +5159,9 @@ def fit_device(
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         # LassoCV / ElasticNetCV with every row pass on the grid
         # (x_linear/enetcv_fast.mojo, lane/apple-fast-classical); `=0` is the A/B arm
-        if algo == ALGO_ENETCV and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_ENETCV_FAST")) != "0":
+        # (the weighted fit, ip[7] = 1, takes the grid's weighted arm)
+        if (algo == ALGO_ENETCV and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_ENETCV_FAST")) != "0"
+                and not (len(ip) > 7 and Int(ip[7]) != 0)):
             if enetcv_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res):
                 return
     if algo == ALGO_LOGCV and n > 0:

@@ -2639,7 +2639,7 @@ def _kfold_ids_f32(n, k):
     return out
 
 
-def _enetcv_fit(est, X, y, l1_ratios):
+def _enetcv_fit(est, X, y, l1_ratios, sample_weight=None):
     name = type(est).__name__
     if est.selection != "cyclic":
         raise ValueError(f"mojolearn {name}: selection='random' is not implemented")
@@ -2661,10 +2661,20 @@ def _enetcv_fit(est, X, y, l1_ratios):
         grid = len(values)
     if grid < 1:
         raise ValueError(f"mojolearn {name}: at least one alpha is required")
-    yy = _concat_f32(yv, ids)
+    # scikit-learn's LinearModelCV.fit: a scalar sample_weight is no
+    # weighting; an array is checked and rides after the fold ids, and ip[7]
+    # selects the kernels' weighted arm (x_linear/cd.mojo, cd_grid.mojo)
+    import numbers
+    if isinstance(sample_weight, numbers.Number):
+        sample_weight = None
+    if sample_weight is None:
+        yy, weighted = _concat_f32(yv, ids), 0
+    else:
+        yy, weighted = _concat_f32_parts([yv, ids, _weights_f32(sample_weight, n)]), 1
     L = len(l1_ratios)
     fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])  # glue: builds the float parameter list
-    ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit), int(bool(est.positive))]
+    ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit), int(bool(est.positive)),
+          weighted]
     vals = _run(est, ALGO_ENETCV, a, n, d, yy, ip, fp, d + 4 + L * grid + L * grid * folds,
                 d * d + 4 * d + 3 + grid * (d + 2), 1)
     est.coef_ = Array.from_list(vals[:d], "<f4")
@@ -2768,7 +2778,7 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
         self.cv, self.verbose, self.n_jobs, self.positive = cv, verbose, n_jobs, positive
         self.random_state, self.selection = random_state, selection
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         """Fit the model and select ``alpha``.
 
         Parameters
@@ -2777,6 +2787,11 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
             Training data, converted to float32; values must be finite.
         y : array-like of shape (n_samples,)
             Targets.
+        sample_weight : float or array-like of shape (n_samples,), default None
+            Per-sample weights, as scikit-learn's: each fit rescales its
+            weights to sum to its number of rows, and each held-out score is
+            the weighted mean squared error. A single number means no
+            weighting.
 
         Returns
         -------
@@ -2789,7 +2804,7 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
             If ``selection`` is not 'cyclic', ``cv`` is not None or an int
             in [2, n_samples], or no alpha is given.
         """
-        _enetcv_fit(self, X, y, [1.0])
+        _enetcv_fit(self, X, y, [1.0], sample_weight)
         return self
 
 
@@ -2878,7 +2893,7 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
         self.cv, self.copy_X, self.verbose, self.n_jobs = cv, copy_X, verbose, n_jobs
         self.positive, self.random_state, self.selection = positive, random_state, selection
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         """Fit the model and select ``l1_ratio`` and ``alpha``.
 
         Parameters
@@ -2887,6 +2902,11 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
             Training data, converted to float32; values must be finite.
         y : array-like of shape (n_samples,)
             Targets.
+        sample_weight : float or array-like of shape (n_samples,), default None
+            Per-sample weights, as scikit-learn's: each fit rescales its
+            weights to sum to its number of rows, and each held-out score is
+            the weighted mean squared error. A single number means no
+            weighting.
 
         Returns
         -------
@@ -2901,7 +2921,7 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
             alpha is given.
         """
         ratios = list(self.l1_ratio) if hasattr(self.l1_ratio, "__len__") else [self.l1_ratio]
-        self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])  # glue: converts the l1_ratio argument
+        self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios], sample_weight)  # glue: converts the l1_ratio argument
         return self
 
 

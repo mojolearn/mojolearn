@@ -280,16 +280,24 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     # the host column's fold-block statistics past the fit's own words (the
     # host binding sizes them under ENETCV_FOLD_BLOCKS)
     var wk = fw + d * d + 4 * d + 3 + a_n * (d + 2)
+    var weighted = ecv_weighted(ip)
     comptime if ENETCV_FOLD_BLOCKS and not is_gpu():
-        fb_host_stats(x, y, n, d, f_n, wk)
+        if not weighted:
+            fb_host_stats(x, y, n, d, f_n, wk)
     # the grids, on all rows
-    _prep_cv(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc, wk, f_n)
+    if weighted:
+        _prep_w(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
+    else:
+        _prep_cv(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc, wk, f_n)
     if t.lead():
         ecv_alphas(res, alphas, fp, l_n, a_n, explicit, eps, fw, q, d, n)
     t.sync()
     # the path on each fold
     for f in range(f_n):
-        _prep_cv(t, x, y, n, d, fid, f, fi, fw, xm, gg, q, sc, wk, f_n)
+        if weighted:
+            _prep_w(t, x, y, n, d, fid, f, fi, fw, xm, gg, q, sc)
+        else:
+            _prep_cv(t, x, y, n, d, fid, f, fi, fw, xm, gg, q, sc, wk, f_n)
         var ym = ld(fw, sc)
         var yn = ld(fw, sc + 1)
         var rows = Int(ld(fw, sc + 2))
@@ -334,6 +342,13 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
                         b = fs(b, fm(ld(fw, xm + j), ld(fw, w + j)))
                     copy(fw, pb + k * (d + 1), fw, w, d)
                     st(fw, pb + k * (d + 1) + d, b)
+                if weighted:
+                    # the weighted held-out scores (`ecv_w_held`, the device
+                    # grid's `ecv_score_w_kernel` statements)
+                    for k in range(a_n):
+                        st(res, mse + (l * a_n + k) * f_n + f,
+                           ecv_w_held(x, y, y + 2 * n, fid, n, d, f, fw, pb + k * (d + 1)))
+                    continue
                 # the held-out squared errors of the whole path, one row pass:
                 # alpha k's sum is its own accumulator, rows ascending
                 comptime if ENETCV_SCORE_BLOCKS > 0:
@@ -357,7 +372,10 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
         ecv_choose(res, fp, d, l_n, a_n, f_n)
     t.sync()
     # the refit on all rows, from zero
-    _prep_cv(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc, wk, f_n)
+    if weighted:
+        _prep_w(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
+    else:
+        _prep_cv(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc, wk, f_n)
     if not t.lead():
         return
     var l1r = ld(res, d + 2)
@@ -552,6 +570,129 @@ def ecv_held_sse(x: FP, y: FP, fid: FP, n: Int, d: Int, fold: Int, wb: FP, o: In
             var r = fs(p, ld(y, i))
             acc = fmad(r, r, acc)
     return acc
+
+
+# ------------------------------------------------ sample_weight (lane sk-round2, 2026-10-15)
+# scikit-learn's weighted LassoCV / ElasticNetCV (`LinearModelCV.fit`,
+# `_path_residuals`, `_alpha_grid`): each prep (a fold's training rows, or
+# every row) rescales its weights to sum to its row count (sw * rows /
+# sum(sw)), centers on the weighted means and forms the weighted Gram, X'y
+# and |yc|^2, so the unweighted CD with l1 = alpha l1_ratio rows runs the
+# weighted objective; a held-out score is sum(w r^2) / sum(w) over the
+# held-out rows with their raw weights. The weights ride in y after the fold
+# ids (y: targets n | fold ids n | weights n) and ip[7] = 1 selects this
+# arm. The device runs one thread per value through these functions and the
+# host column loops them, so every word is the same statements, rows
+# ascending. The unweighted routes (fold blocks, score blocks, staged
+# kernels) are untouched; the weighted arm bypasses them.
+
+
+def ecv_weighted(ip: IP) -> Bool:
+    """ip[7] (always sent by the Python layer) selects the weighted arm."""
+    return ldi(ip, 7) != 0
+
+
+def ecv_w_ratio(wv: FP, fid: FP, n: Int, fold: Int, rows: Int) -> Float32:
+    """rows / sum(w) over the prep's rows ascending: scikit-learn's rescale
+    of the training weights to sum to the training row count."""
+    var acc = Float32(0)
+    for i in range(n):
+        if _ecv_row(fid, i, fold, False):
+            acc = fa(acc, ld(wv, i))
+    return fd(i2f(rows), acc)
+
+
+def ecv_w_mean(v: FP, off: Int, step: Int, wv: FP, ratio: Float32, fid: FP, n: Int, fold: Int,
+               rows: Int) -> Float32:
+    """The weighted mean sum(w' v) / rows (w' = w ratio, which sums to rows)
+    over the prep's rows ascending."""
+    var acc = Float32(0)
+    for i in range(n):
+        if _ecv_row(fid, i, fold, False):
+            acc = fmad(fm(ld(wv, i), ratio), ld(v, off + i * step), acc)
+    return fd(acc, i2f(rows))
+
+
+def ecv_w_cfmad(a: FP, aoff: Int, astep: Int, ma: Float32, b: FP, boff: Int, bstep: Int, mb: Float32,
+                wv: FP, ratio: Float32, fid: FP, n: Int, fold: Int) -> Float32:
+    """acc = fmad(w' (a_i - ma), b_i - mb, acc) over the prep's rows
+    ascending: a weighted Gram, X'y or |yc|^2 entry."""
+    var acc = Float32(0)
+    for i in range(n):
+        if _ecv_row(fid, i, fold, False):
+            var wi = fm(ld(wv, i), ratio)
+            acc = fmad(fm(wi, fs(ld(a, aoff + i * astep), ma)), fs(ld(b, boff + i * bstep), mb), acc)
+    return acc
+
+
+def ecv_w_held(x: FP, y: FP, wv: FP, fid: FP, n: Int, d: Int, fold: Int, wb: FP, o: Int) -> Float32:
+    """The weighted held-out mean squared error of the path point at
+    wb[o:o+d+1]: sum(w r^2) / sum(w) over the fold's rows ascending (0 when
+    they weigh nothing), each prediction a chain over j from the intercept."""
+    var acc = Float32(0)
+    var ws = Float32(0)
+    var b0 = ld(wb, o + d)
+    for i in range(n):
+        if _ecv_row(fid, i, fold, True):
+            var p = b0
+            for j in range(d):
+                p = fmad(ld(x, i * d + j), ld(wb, o + j), p)
+            var r = fs(p, ld(y, i))
+            var wi = ld(wv, i)
+            acc = fmad(fm(wi, r), r, acc)
+            ws = fa(ws, wi)
+    if ws > Float32(0):
+        return fd(acc, ws)
+    return Float32(0)
+
+
+def ecv_w_mean_cell(x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool, fw: FP, xm: Int, sc: Int,
+                    j: Int):
+    """Value j of a weighted prep's means: column j's mean into fw[xm + j]
+    (j < d), or (j == d) the y mean and the row count into fw[sc], fw[sc + 2]."""
+    var wv = y + 2 * n
+    var rows = ecv_rows(fid, n, fold)
+    var ratio = ecv_w_ratio(wv, fid, n, fold, rows)
+    if j < d:
+        st(fw, xm + j, ecv_w_mean(x, j, d, wv, ratio, fid, n, fold, rows) if fi else Float32(0))
+    else:
+        st(fw, sc, ecv_w_mean(y, 0, 1, wv, ratio, fid, n, fold, rows) if fi else Float32(0))
+        st(fw, sc + 2, i2f(rows))
+
+
+def ecv_w_gram_cell(x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fw: FP, xm: Int, gg: Int, q: Int,
+                    sc: Int, c: Int):
+    """Value c of a weighted prep's Gram (upper cell, mirrored), X'y entry or
+    |yc|^2, from the means `ecv_w_mean_cell` wrote."""
+    var wv = y + 2 * n
+    var cells = d * (d + 1) // 2
+    var rows = ecv_rows(fid, n, fold)
+    var ratio = ecv_w_ratio(wv, fid, n, fold, rows)
+    var ym = ld(fw, sc)
+    if c < cells:
+        var jk = upper_cell(c, d)
+        var j = jk[0]
+        var k = jk[1]
+        var acc = ecv_w_cfmad(x, j, d, ld(fw, xm + j), x, k, d, ld(fw, xm + k), wv, ratio, fid, n, fold)
+        st(fw, gg + j * d + k, acc)
+        st(fw, gg + k * d + j, acc)
+    elif c < cells + d:
+        var j = c - cells
+        st(fw, q + j, ecv_w_cfmad(x, j, d, ld(fw, xm + j), y, 0, 1, ym, wv, ratio, fid, n, fold))
+    else:
+        st(fw, sc + 1, ecv_w_cfmad(y, 0, 1, ym, y, 0, 1, ym, wv, ratio, fid, n, fold))
+
+
+def _prep_w(t: Team, x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
+            fw: FP, xm: Int, gg: Int, q: Int, sc: Int):
+    """A weighted prep on the lead: every mean, then every Gram / X'y /
+    |yc|^2 value, through the cell functions the device grid runs."""
+    if t.lead():
+        for j in range(d + 1):
+            ecv_w_mean_cell(x, y, n, d, fid, fold, fi, fw, xm, sc, j)
+        for c in range(d * (d + 1) // 2 + d + 1):
+            ecv_w_gram_cell(x, y, n, d, fid, fold, fw, xm, gg, q, sc, c)
+    t.sync()
 
 
 # ------------------------------------------------ ENETCV_SCORE_BLOCKS (lane/classical-cv-folds, 2026-10-07)
