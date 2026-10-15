@@ -1277,6 +1277,8 @@ def _exact_candidate(
     var g_len = cell.n_total
     var g_left = cell.n_left
     var g_msl = min_samples_leaf
+    var g_ncls = n_acc
+    var weighted_reg = (not is_classification) and row_w_addr != 0
     if is_classification and row_w_addr != 0:
         g_len = Int32(0)
         g_left = Int32(0)
@@ -1284,6 +1286,13 @@ def _exact_candidate(
             g_len += cell.acc_total[kw]
             g_left += cell.acc_left[kw]
         g_msl = Int32(0)
+    elif weighted_reg:
+        # lane sk-final: `score_to_candidate_weighted_reg_kernel`'s
+        # arguments, the weight units W (slot 1) where the counts stood
+        g_len = cell.acc_total[1]
+        g_left = cell.acc_left[1]
+        g_msl = Int32(0)
+        g_ncls = 1
     var acc_left = cell.acc_left.copy()
     var acc_total = cell.acc_total.copy()
     var left_p = acc_left.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
@@ -1301,15 +1310,20 @@ def _exact_candidate(
         criterion == CRITERION_POISSON or criterion == CRITERION_GAMMA or criterion == CRITERION_INVERSE_GAUSSIAN
     ):
         # DEVIATION 5610, as `score_to_candidate_kernel` forms it.
-        metric = regression_deviance_gain(acc_left[0], acc_total[0], cell.n_left, cell.n_total, criterion)
+        var d_nl = cell.n_left
+        var d_nt = cell.n_total
+        if weighted_reg:
+            d_nl = g_left
+            d_nt = g_len
+        metric = regression_deviance_gain(acc_left[0], acc_total[0], d_nl, d_nt, criterion)
         num = float_gain_key(metric)
         den = Int64(1)
     else:
         metric = gain_per_split(
-            left_p, total_p, 0, n_acc, g_len, g_left, g_msl
+            left_p, total_p, 0, g_ncls, g_len, g_left, g_msl
         )
         comptime if T14 and not T14_EXACT:
-            if not is_classification and criterion == CRITERION_MSE:
+            if not is_classification and criterion == CRITERION_MSE and not weighted_reg:
                 metric = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(Float32(cell.n_total),Float32(cell.n_left),Float32(acc_total[0]),Float32(acc_left[0]))))
         num = cell.gini_num
         den = cell.gini_den
@@ -1402,7 +1416,9 @@ def set_leaf_predictions_exact_host(
     is the same pass over pointers): integer class counts or the integer
     sum of the quantized labels, then `Float32(count_c) / Float32(total)`
     for a classifier and `ftz(Float32(sum) / Float32(seen) * inv_scale)`
-    for a regressor. An internal node's slot keeps the zeros
+    for a regressor (lane sk-final: with `row_w_addr`, the weight units'
+    sum in `seen`'s place, 0 for a leaf holding no weight, as
+    `leaf_weighted_reg_kernel`). An internal node's slot keeps the zeros
     (`builder.cuh:582`'s memset, DEVIATION 471's zero_fill)."""
     var n_nodes = tree.num_nodes()
     if len(node_instances) != n_nodes:
@@ -1420,11 +1436,12 @@ def set_leaf_predictions_exact_host(
             continue
         var rng = node_instances[node_id]
         comptime if T14 and not T14_EXACT:
-            if not is_classification:
+            if not is_classification and row_w_addr == 0:
                 tree.vector_leaf[node_id*k] = et_leaf_moment_host(dataset.row_ids,labels_q,Int(rng.begin),Int(rng.count),inv_scale)
                 continue
         var acc = List[Int32](length=k, fill=Int32(0))
         var seen = Int32(0)
+        var w_seen = Int32(0)
         for i in range(Int(rng.begin), Int(rng.begin) + Int(rng.count)):
             var row = Int(dataset.row_ids[unsafe_offset=i])
             var lab = Int(labels_q[unsafe_offset=row])
@@ -1439,6 +1456,11 @@ def set_leaf_predictions_exact_host(
                         acc[lab] += Int32(1)
             else:
                 acc[0] += Int32(lab)
+                if row_w_addr != 0:
+                    # lane sk-final: `leaf_weighted_reg_kernel`'s weight sum
+                    w_seen += MutPointer[Int32, MutAnyOrigin](
+                        unsafe_from_address=row_w_addr
+                    )[unsafe_offset=row]
             seen += 1
         var base = node_id * k
         if is_classification:
@@ -1450,10 +1472,16 @@ def set_leaf_predictions_exact_host(
                     Int(total)
                 )
         else:
+            var den = seen
+            if row_w_addr != 0:
+                den = w_seen
             for c in range(k):
-                tree.vector_leaf[base + c] = ftz(
-                    Float32(Int(acc[c])) / Float32(Int(seen)) * inv_scale
-                )
+                if den == Int32(0):
+                    tree.vector_leaf[base + c] = Float32(0.0)
+                else:
+                    tree.vector_leaf[base + c] = ftz(
+                        Float32(Int(acc[c])) / Float32(Int(den)) * inv_scale
+                    )
 
 
 def train_tree_exact(
