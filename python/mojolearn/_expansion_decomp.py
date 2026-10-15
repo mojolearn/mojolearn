@@ -2842,6 +2842,7 @@ class FastICA(_Base):
         k = self._kit()
         M = _M.from_input(X)
         n, d = M.r, M.c
+        _min_samples(n, d, "FastICA")
         if self.algorithm not in ("parallel", "deflation"):
             raise ValueError("algorithm must be 'parallel' or 'deflation'")
         whiten = self.whiten
@@ -5893,6 +5894,11 @@ class Isomap(_Base):
             nn = None
         else:
             nn = int(self.n_neighbors)
+            if nn >= n:
+                # scikit-learn's kneighbors refusal (the query point itself is
+                # one of the n_neighbors + 1 it asks for)
+                raise ValueError(f"Expected n_neighbors <= n_samples_fit, but n_neighbors = {nn + 1}, "
+                                 f"n_samples_fit = {n}, n_samples = {n}")
             idx, sq = _knn_mats(k, M, M, nn, True, kind, pw)
             if kind == 0:
                 sq = k.ew("sqrt", sq)
@@ -6555,7 +6561,7 @@ class LocallyLinearEmbedding(_Base):
         nn = int(self.n_neighbors)
         nc = int(self.n_components)
         if nn >= n:
-            raise ValueError("Expected n_neighbors < n_samples")
+            raise ValueError("Expected n_neighbors < n_samples, but n_samples = %d, n_neighbors = %d" % (n, nn))
         if self.method == "hessian" and nn <= nc + nc * (nc + 1) // 2:
             raise ValueError("for method='hessian', n_neighbors must be greater than "
                              "[n_components * (n_components + 3) / 2]")
