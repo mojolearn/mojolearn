@@ -475,11 +475,14 @@ def after_fit(est, check):
         from ._optional_numpy import require_numpy
         np = require_numpy("feature_names_in_")
         est.feature_names_in_ = np.asarray(names, dtype=object)
-    if _kind(est) == "classifier" and type(state.get("classes_")) is list:
+    classes = state.get("classes_")
+    if (_kind(est) == "classifier" and type(classes) is list
+            and not any(isinstance(c, (list, tuple)) or getattr(c, "ndim", 0)  # glue: one test per class label (classes-sized)
+                        for c in classes)):
         # `classes_[codes]` with an integer array, as scikit-learn's
         # callers index an ndarray `classes_` (`_labels.ClassLabels`).
         from ._labels import ClassLabels
-        state["classes_"] = ClassLabels(state["classes_"])
+        state["classes_"] = ClassLabels(classes)
 
 
 def reraise(est, check, err):
