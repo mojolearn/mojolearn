@@ -112,11 +112,17 @@ def split_fixture(wheel, version):
         members = {n: archive.read(n) for n in archive.namelist()}
     wheel.unlink()
     payload = json.loads(members[dist + 'LINUX_PAYLOAD.json'])
+    # pack_wheel.write_split: every GPU member moves to its vendor package's
+    # equal-depth directory (gpu_plugins.installed_member: mojolearn/cuda/sm_89/...
+    # -> mojolearn/cuda_native/sm_89/...), and the payload's member maps follow.
+    for mapping in ('extensions', 'binding_origin'):
+        if mapping in payload:
+            payload[mapping] = {plugins.installed_member(k): v for k, v in payload[mapping].items()}
     tag = 'py3-none-manylinux_2_35_x86_64'
     parts = {}
     for name, data in members.items():
         if not name.startswith(dist):
-            parts.setdefault(plugins.member_vendor(name), {})[name] = data
+            parts.setdefault(plugins.member_vendor(name), {})[plugins.installed_member(name)] = data
     out = []
     for vendor, files in sorted(parts.items(), key=lambda kv: kv[0] or ''):
         if vendor is None:
@@ -136,8 +142,10 @@ def split_fixture(wheel, version):
             name = row['wheel_name'] + '-' + version + '-' + tag + '.whl'
         files[wdist + 'METADATA'] = ('\n'.join(meta) + '\n').encode()
         files[wdist + 'WHEEL'] = ('Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: ' + tag + '\n').encode()
+        native = sorted(n for n in files if n.endswith('.so') or '/.libs/' in n)
         files[wdist + 'LINUX_PAYLOAD.json'] = json.dumps(
-            dict(payload, split=dict(role=role, distribution=dist_name))).encode()
+            dict(payload, split=dict(role=role, distribution=dist_name, profile=gate.SPLIT_PROFILE,
+                                     native_members=native))).encode()
         rows = io.StringIO()
         writer = csv.writer(rows)
         for member, data in files.items():
@@ -245,6 +253,9 @@ def fixture(root, split=False):
             for code in (gate.surface.MODES[mode],):
                 name = surface + '-' + mode
                 prefix = key + '/' + ('' if mode == 'fast' else mode + '/')
+                if split:  # a split install holds the set at its vendor package's directory
+                    prefix = gate.surface.load_gpu_plugins().installed_member('mojolearn/' + prefix + 'x.so')[
+                        len('mojolearn/'):-len('x.so')]
                 bindings = {binding: dict(path=package + '/' + prefix + binding + '.so',
                     sha256=audit['extension_hashes'][prefix + binding + '.so'], mode_code=code)
                     for binding in gate.surface.expected_bindings(mode, True)}
@@ -323,7 +334,7 @@ class EndToEndRelease061(unittest.TestCase):
                         result = gate.check_release061(wheel, qualification, root)
                         self.assertEqual(result['status'], 'PASSED')
                         self.assertEqual(set(result['runtime_coverage']), gate.RELEASE_ARCHES)
-                        self.assertEqual(result['jobs_per_runtime_architecture'], 11)
+                        self.assertEqual(result['jobs_per_runtime_architecture'], 10)  # smoke x {fast, identical}, 7 identical surfaces, byte-lm (fast + identical only since d4241beeb)
                         self.assertEqual(ordered.call_count, 2)
                         self.assertEqual(result['assembly_profile'], gate.surface.RELEASE_PROFILE)
 
@@ -378,7 +389,9 @@ class SplitSet(unittest.TestCase):
 
     def test_nvidia_only_set_admits_without_a_cross_vendor_comparison(self):
         global ARCHES
-        ARCHES, saved = {'cuda/sm_89', 'cuda/sm_90'}, ARCHES
+        # the NVIDIA plugin's slots as the registry has them (gpu_plugins.required_sets: sm_89 alone
+        # since 0.8.38 dropped sm_90a and 0.8.39 took the PTX slot out while over PyPI's limit)
+        ARCHES, saved = set(gate.surface.PLUGIN_ARCHES['cuda']), ARCHES
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
@@ -446,7 +459,7 @@ class HopperSpelling(unittest.TestCase):
         self.assertEqual(result['status'], 'PASSED')
         self.assertEqual(set(result['runtime_coverage']),
                          {'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})
-        self.assertEqual(result['jobs_per_runtime_architecture'], 11)
+        self.assertEqual(result['jobs_per_runtime_architecture'], 10)  # smoke x {fast, identical}, 7 identical surfaces, byte-lm (fast + identical only since d4241beeb)
         self.assertIn(f"FULL {result['jobs_per_runtime_architecture']} installed jobs", result['scope'])
 
     def test_hopper_spelled_sm_90_still_admits(self):
