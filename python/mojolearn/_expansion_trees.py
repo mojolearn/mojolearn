@@ -3169,14 +3169,22 @@ class _StackingBase(_TreesWrapperBase):
     def _widths(self, Xa, y_fit):
         return None
 
-    def _fit_stack(self, X, y_fit, splits, final):
+    def _fit_stack(self, X, y_fit, splits, final, sample_weight=None):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n, d = Xa.shape
         active = _trees_estimators(self.estimators)
+        # scikit-learn: the weights go to every member's fit (all rows and
+        # each fold's training rows) and to the final estimator's
+        sw = _trees_member_weights(active + [("final_estimator", final)], sample_weight, n)
+
+        def fit_member(e, Xs, ys, rows=None):
+            if sw is None:
+                return e.fit(Xs, ys)
+            return e.fit(Xs, ys, sample_weight=sw if rows is None else self._gather_vec(sw, rows))
         self.estimators_ = []
         for _, est in active:  # glue: one member fit per estimator
             e = _trees_clone(est)
-            e.fit(Xa, y_fit(None))
+            fit_member(e, Xa, y_fit(None))
             self.estimators_.append(e)
         self.stack_method_ = [self._method(e) for e in self.estimators_]  # glue: one stack method per member
         widths = []
@@ -3189,7 +3197,7 @@ class _StackingBase(_TreesWrapperBase):
             col0 = 0
             for (_, est), m, w in zip(active, self.stack_method_, widths):  # glue: one member fit per fold and member
                 e = _trees_clone(est)
-                e.fit(self._gather(Xa, tr, cols), y_fit(tr))
+                fit_member(e, self._gather(Xa, tr, cols), y_fit(tr), tr)
                 got = self._place(meta, n, width, self._out(e, m, self._gather(Xa, te, cols)), te, col0)
                 if got != w:
                     raise ValueError("a member's output width changed between folds (a class missing from a fold)")
@@ -3199,7 +3207,7 @@ class _StackingBase(_TreesWrapperBase):
         self._widths_ = widths
         self.named_estimators_ = dict((nm, e) for (nm, _), e in zip(active, self.estimators_))  # glue: named estimators map over members
         self.final_estimator_ = _trees_clone(final)
-        self.final_estimator_.fit(as_f32_c(meta.reshape((n, width)), ndim=2, name="meta")[0], y_fit(None))
+        fit_member(self.final_estimator_, as_f32_c(meta.reshape((n, width)), ndim=2, name="meta")[0], y_fit(None))
         self.n_features_in_ = d
         self._fitted = True
         return self
@@ -3308,8 +3316,9 @@ class StackingClassifier(ClassifierScoreMixin, _StackingBase):
             Training data, converted to float32.
         y : array of shape (n_samples,)
             Class labels.
-        sample_weight : None
-            Only None is accepted; weights raise ``NotImplementedError``.
+        sample_weight : array of shape (n_samples,), default None
+            Passed to every member's ``fit`` (each fold's rows) and to the
+            final estimator's; every one of them must accept it.
 
         Returns
         -------
@@ -3322,8 +3331,6 @@ class StackingClassifier(ClassifierScoreMixin, _StackingBase):
             from a fold's training rows).
         """
         self._validate_params()
-        if sample_weight is not None:
-            _refuse("StackingClassifier sample_weight", "not carried in pass 1.")
         self.classes_, codes = encode_labels(y)
         self._binary = len(self.classes_) == 2
         nat = _trees_native_glue(self)
@@ -3334,7 +3341,7 @@ class StackingClassifier(ClassifierScoreMixin, _StackingBase):
             from .linear_model import LogisticRegression
             final = LogisticRegression()
         return self._fit_stack(X, lambda rows: codes if rows is None else self._gather_codes(codes, rows),
-                               splits, final)
+                               splits, final, sample_weight)
 
     def predict(self, X):
         """Predict class labels with the final estimator on the stacked outputs.
@@ -3432,23 +3439,23 @@ class StackingRegressor(RegressorScoreMixin, _StackingBase):
             Training data, converted to float32.
         y : array of shape (n_samples,)
             Targets, converted to float32.
-        sample_weight : None
-            Only None is accepted; weights raise ``NotImplementedError``.
+        sample_weight : array of shape (n_samples,), default None
+            Passed to every member's ``fit`` (each fold's rows) and to the
+            final estimator's; every one of them must accept it.
 
         Returns
         -------
         self
         """
         self._validate_params()
-        if sample_weight is not None:
-            _refuse("StackingRegressor sample_weight", "not carried in pass 1.")
         y32, _ = as_f32_c(y, ndim=1, name="y")
         splits = _trees_splits(self.cv, X, y, len(y32), partition=True, native=_trees_native_glue(self))
         final = self.final_estimator
         if final is None:
             from .linear_model import Ridge
             final = Ridge()
-        return self._fit_stack(X, lambda rows: y32 if rows is None else self._gather_vec(y32, rows), splits, final)
+        return self._fit_stack(X, lambda rows: y32 if rows is None else self._gather_vec(y32, rows), splits, final,
+                               sample_weight)
 
     def predict(self, X):
         """Predict with the final estimator on the stacked member predictions.
