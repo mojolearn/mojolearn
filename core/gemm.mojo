@@ -6,6 +6,7 @@ from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+from gemm.afn_apple_fast import afn_gemm_fp32_ragged_k_ptr_into
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -468,6 +469,16 @@ def gemm_nt(
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
         return
+    # lane/identical-gemm-ktail (2026-10-15), MOJOLEARN_GEMM_FAST_RAGGED_K
+    # (default OFF, A/B owed; see the define in gemm/afn_apple_fast.mojo):
+    # FAST Apple, a `k` that is not whole simdgroup-kernel windows takes that
+    # kernel instead of MAX's matmul, which leaves its fast kernel there.
+    if afn_gemm_fp32_ragged_k_ptr_into(
+        ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        m, n, k, OP_NT,
+    ):
+        return
     if try_scoped_gemm[False, 0](
         ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
         x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
@@ -515,6 +526,12 @@ def gemm_nt_gram(
     # True alias Gram retains its original lifetime and plain NT epilogue.
     var scoped_xt = xt  # mutable view; shared buffer remains caller-owned
     var xp = scoped_xt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    # MOJOLEARN_GEMM_FAST_RAGGED_K (FAST default, _OFF to disable; see gemm_nt above): the
+    # self-Gram reads `xt` as both operands; the kernel only reads them.
+    if afn_gemm_fp32_ragged_k_ptr_into(
+        ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xp, xp, m, n, k, OP_NT
+    ):
+        return
     if try_scoped_gemm[False, 0](
         ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xp, xp,
         m, n, k, k, 1, 1, k, 1, k,
