@@ -22,7 +22,7 @@ iteration's launches are one witness unit (in place, so a cut raises).
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
-from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, row_dot
+from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, sti, i2f, row_dot
 from x_linear.tops import fold_parts, fold_blocks, fold_fa, fold_sq, FOLD_BLOCK, t_cholesky
 from x_linear.team import device_team, team_work, LINEAR_TPB
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device
@@ -30,6 +30,8 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.quantile import (
     q_lower_cell, q_a, q_gram_part, q_gram_cell, q_spread_part, q_resid, q_prox,
     t_chol_solve_cols, q_layout, q_start, q_tail,
+    qp_layout, qp_row, qp_objective, qp_support, qp_take, qp_vertex, qp_rounds,
+    QP_GONE, QP_K, QP_DONE, QP_OK, QP_FADMM, QP_WORDS,
 )
 
 comptime QG_TPB = 256
@@ -370,6 +372,181 @@ def qg_finish_kernel(d: Int32, cols: Int32, fi: Int32, fw: FP, state: FP, res: F
     witness_end(wf, woff, nonce)
 
 
+# ------------------------------------------------ the vertex polish (lane sk-weq-linear)
+# x_linear/quantile.mojo's polish on the grid: the row residuals a thread a
+# row, their loss terms folded a thread a FOLD_BLOCK then ascending (the host
+# column's fold_fa_blocked), each round's pick a thread per QP_CHUNK rows then
+# the chunks ascending (exact: the smallest key, the lower row on a tie), the
+# Gram-Schmidt test and the vertex on one block (`qp_take`, `qp_vertex`, the
+# host column's statements).
+comptime QP_CHUNK = 256
+
+
+@always_inline
+def _qp_setup_body(d: Int32, cols: Int32, fi: Int32, fw: FP, pw: FP, ps: FP):
+    if _gid() == 0:
+        var dd = Int(d)
+        var mi = Int(cols)
+        var o = q_layout(0, dd, mi)
+        var po = qp_layout(dd, mi)
+        for w in range(QP_WORDS):
+            st(ps, w, Float32(0))
+        var k = qp_support(fw, o[7], dd, fi != 0, pw, po[7])
+        st(ps, QP_K, i2f(k))
+        if k == 0:
+            st(ps, QP_DONE, Float32(1))
+
+
+def qp_setup_kernel(d: Int32, cols: Int32, fi: Int32, fw: FP, pw: FP, ps: FP, wf: IP, woff: Int32, nonce: Int32):
+    """One thread: the support S and the polish state words."""
+    _qp_setup_body(d, cols, fi, fw, pw, ps)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _qp_rows_body(x: FP, y: FP, n: Int32, d: Int32, cols: Int32, fi: Int32, sw: Int32, sel: Int32, fw: FP,
+                  fp: FP, pw: FP, ps: FP, keys: FP, terms: FP):
+    var nn = Int(n)
+    var dd = Int(d)
+    var i = _gid()
+    if i >= nn or ld(ps, QP_K) == Float32(0):
+        return
+    if sel == 0:
+        var o = q_layout(0, dd, Int(cols))
+        var b = ld(fw, o[1] + dd) if fi != 0 else Float32(0)
+        qp_row(x, y, nn, dd, sw != 0, ld(fp, 0), fw, o[7], b, i, keys, terms, True)
+    else:
+        if ld(ps, QP_OK) == Float32(0):
+            return
+        var po = qp_layout(dd, Int(cols))
+        var b = ld(pw, po[8] + dd) if fi != 0 else Float32(0)
+        qp_row(x, y, nn, dd, sw != 0, ld(fp, 0), pw, po[8], b, i, keys, terms, False)
+
+
+def qp_rows_kernel(x: FP, y: FP, n: Int32, d: Int32, cols: Int32, fi: Int32, sw: Int32, sel: Int32, fw: FP,
+                   fp: FP, pw: FP, ps: FP, keys: FP, terms: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread per row: the loss term (and with sel 0 the key) under the ADMM
+    answer (sel 0) or the vertex (sel 1)."""
+    _qp_rows_body(x, y, n, d, cols, fi, sw, sel, fw, fp, pw, ps, keys, terms)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _qp_parts_body(n: Int32, sel: Int32, ps: FP, terms: FP, lp: FP):
+    if ld(ps, QP_K) == Float32(0) or (sel != 0 and ld(ps, QP_OK) == Float32(0)):
+        return
+    var nn = Int(n)
+    var b = _gid()
+    if b < fold_blocks(nn):
+        var lo = b * FOLD_BLOCK
+        st(lp, b, fold_fa(terms, lo, 1, min(FOLD_BLOCK, nn - lo)))
+
+
+def qp_parts_kernel(n: Int32, sel: Int32, ps: FP, terms: FP, lp: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread per row block: the loss terms folded from zero."""
+    _qp_parts_body(n, sel, ps, terms, lp)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _qp_obj_body(nb: Int32, d: Int32, cols: Int32, fw: FP, fp: FP, state: FP, ps: FP, lp: FP):
+    if _gid() == 0 and ld(ps, QP_K) != Float32(0):
+        var o = q_layout(0, Int(d), Int(cols))
+        st(ps, QP_FADMM, qp_objective(fold_parts(lp, 0, Int(nb)), ld(state, QS_DEN), ld(fp, 1), fw, o[7], Int(d)))
+
+
+def qp_obj_kernel(nb: Int32, d: Int32, cols: Int32, fw: FP, fp: FP, state: FP, ps: FP, lp: FP,
+                  wf: IP, woff: Int32, nonce: Int32):
+    """One thread: the ADMM answer's objective."""
+    _qp_obj_body(nb, d, cols, fw, fp, state, ps, lp)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _qp_pick_parts_body(n: Int32, ps: FP, keys: FP, kp: FP, kip: IP):
+    if ld(ps, QP_DONE) != Float32(0):
+        return
+    var nn = Int(n)
+    var c = _gid()
+    var lo = c * QP_CHUNK
+    if lo < nn:
+        var best = QP_GONE
+        var ci = 0
+        for i in range(lo, min(lo + QP_CHUNK, nn)):
+            var kv = ld(keys, i)
+            if kv < best:
+                best = kv
+                ci = i
+        st(kp, c, best)
+        sti(kip, c, ci)
+
+
+def qp_pick_parts_kernel(n: Int32, ps: FP, keys: FP, kp: FP, kip: IP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread per QP_CHUNK rows: the chunk's smallest key and its first row."""
+    _qp_pick_parts_body(n, ps, keys, kp, kip)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _qp_take_body(x: FP, y: FP, nch: Int32, d: Int32, cols: Int32, pw: FP, ps: FP, keys: FP, kp: FP, kip: IP,
+                  tw: FP):
+    var t = device_team(tw, 0, 3, 0)
+    # every thread reads the words before the lead writes one (qp_take syncs)
+    if ld(ps, QP_DONE) != Float32(0):
+        return
+    var best = QP_GONE
+    var ci = 0
+    for c in range(Int(nch)):
+        var kv = ld(kp, c)
+        if kv < best:
+            best = kv
+            ci = ldi(kip, c)
+    qp_take(t, x, y, Int(d), Int(cols), pw, ps, keys, best, ci)
+
+
+def qp_take_kernel(x: FP, y: FP, nch: Int32, d: Int32, cols: Int32, pw: FP, ps: FP, keys: FP, kp: FP, kip: IP,
+                   tw: FP, wf: IP, woff: Int32, nonce: Int32):
+    """One block: the chunks' picks folded ascending, then `qp_take`."""
+    _qp_take_body(x, y, nch, d, cols, pw, ps, keys, kp, kip, tw)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _qp_vertex_body(d: Int32, cols: Int32, pw: FP, ps: FP, tw: FP):
+    var t = device_team(tw, 0, 3, 0)
+    if ld(ps, QP_OK) == Float32(0):
+        return
+    qp_vertex(t, pw, Int(d), Int(cols), Int(ld(ps, QP_K)))
+
+
+def qp_vertex_kernel(d: Int32, cols: Int32, pw: FP, ps: FP, tw: FP, wf: IP, woff: Int32, nonce: Int32):
+    """One block: the vertex beta_S = Q' L^-1 y_R."""
+    _qp_vertex_body(d, cols, pw, ps, tw)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _qp_final_body(nb: Int32, d: Int32, cols: Int32, fi: Int32, fp: FP, state: FP, ps: FP, pw: FP, lp: FP,
+                   res: FP):
+    if _gid() != 0 or ld(ps, QP_OK) == Float32(0):
+        return
+    var dd = Int(d)
+    var po = qp_layout(dd, Int(cols))
+    var f_pol = qp_objective(fold_parts(lp, 0, Int(nb)), ld(state, QS_DEN), ld(fp, 1), pw, po[8], dd)
+    if f_pol <= ld(ps, QP_FADMM):
+        for j in range(dd):
+            st(res, j, ld(pw, po[8] + j))
+        st(res, dd, ld(pw, po[8] + dd) if fi != 0 else Float32(0))
+
+
+def qp_final_kernel(nb: Int32, d: Int32, cols: Int32, fi: Int32, fp: FP, state: FP, ps: FP, pw: FP, lp: FP,
+                    res: FP, wf: IP, woff: Int32, nonce: Int32):
+    """One thread: the vertex replaces the ADMM answer in res when its
+    objective is not above."""
+    _qp_final_body(nb, d, cols, fi, fp, state, ps, pw, lp, res)
+    witness_end(wf, woff, nonce)
+
+
 def quantile_fit_grid(
     var ctx: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, res: FP,
@@ -501,12 +678,96 @@ def quantile_fit_grid(
             ctx.synchronize()
             if hst[QS_DONE] != Float32(0):
                 break
+    # the vertex polish (lane sk-weq-linear; x_linear/quantile.mojo): the ADMM
+    # answer's rows and objective, the rounds, the vertex and its objective
+    var nch = (n + QP_CHUNK - 1) // QP_CHUNK
+    var g_ch = max(_qb(nch), 1)
+    var dpw = ctx.enqueue_create_buffer[DType.float32](max(qp_layout(d, cols)[9], 1))
+    var dps = ctx.enqueue_create_buffer[DType.float32](QP_WORDS)
+    var dkeys = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dterms = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dlp = ctx.enqueue_create_buffer[DType.float32](max(nb, 1))
+    var dkp = ctx.enqueue_create_buffer[DType.float32](max(nch, 1))
+    var dkip = ctx.enqueue_create_buffer[DType.int32](max(nch, 1))
+    var pwp = dpw.unsafe_ptr()
+    var psp = dps.unsafe_ptr()
+    var np0 = wit.begin()
+    var wp = 0
+    ctx.enqueue_function[qp_setup_kernel](
+        Int32(d), Int32(cols), Int32(fi), fwp, pwp, psp, wit.p(), Int32(wp), np0, grid_dim=1, block_dim=1,
+    )
+    wp += 1
+    ctx.enqueue_function[qp_rows_kernel](
+        xp, yp, Int32(n), Int32(d), Int32(cols), Int32(fi), Int32(sw), Int32(0), fwp, dfp.unsafe_ptr(), pwp, psp,
+        dkeys.unsafe_ptr(), dterms.unsafe_ptr(), wit.p(), Int32(wp), np0, grid_dim=g_rows, block_dim=QG_TPB,
+    )
+    wp += g_rows
+    ctx.enqueue_function[qp_parts_kernel](
+        Int32(n), Int32(0), psp, dterms.unsafe_ptr(), dlp.unsafe_ptr(), wit.p(), Int32(wp), np0,
+        grid_dim=g_nb, block_dim=QG_TPB,
+    )
+    wp += g_nb
+    ctx.enqueue_function[qp_obj_kernel](
+        Int32(nb), Int32(d), Int32(cols), fwp, dfp.unsafe_ptr(), stp, psp, dlp.unsafe_ptr(), wit.p(), Int32(wp),
+        np0, grid_dim=1, block_dim=1,
+    )
+    wp += 1
+    if not wit.ok(ctx, wp, "QuantileRegressor polish setup"):
+        wit.fail()
+    var hps = List[Float32](length=QP_WORDS, fill=Float32(0))
+    ctx.enqueue_copy(dst_ptr=hps.unsafe_ptr(), src_buf=dps)
+    ctx.synchronize()
+    if hps[QP_DONE] == Float32(0):
+        # rounds past the last one return at once (QP_DONE); the host reads
+        # the word once a batch, the device caps the rounds (qp_rounds(k))
+        for rd in range(qp_rounds(cols)):
+            var npr = wit.begin()
+            ctx.enqueue_function[qp_pick_parts_kernel](
+                Int32(n), psp, dkeys.unsafe_ptr(), dkp.unsafe_ptr(), dkip.unsafe_ptr(), wit.p(), Int32(0), npr,
+                grid_dim=g_ch, block_dim=QG_TPB,
+            )
+            ctx.enqueue_function[qp_take_kernel](
+                xp, yp, Int32(nch), Int32(d), Int32(cols), pwp, psp, dkeys.unsafe_ptr(), dkp.unsafe_ptr(),
+                dkip.unsafe_ptr(), dtw.unsafe_ptr(), wit.p(), Int32(g_ch), npr, grid_dim=1, block_dim=LINEAR_TPB,
+            )
+            if not wit.ok(ctx, g_ch + 1, "QuantileRegressor polish round"):
+                wit.fail()
+            if (rd + 1) % QG_BATCH == 0:
+                ctx.enqueue_copy(dst_ptr=hps.unsafe_ptr(), src_buf=dps)
+                ctx.synchronize()
+                if hps[QP_DONE] != Float32(0):
+                    break
+        var npv = wit.begin()
+        wp = 0
+        ctx.enqueue_function[qp_vertex_kernel](
+            Int32(d), Int32(cols), pwp, psp, dtw.unsafe_ptr(), wit.p(), Int32(wp), npv,
+            grid_dim=1, block_dim=LINEAR_TPB,
+        )
+        wp += 1
+        ctx.enqueue_function[qp_rows_kernel](
+            xp, yp, Int32(n), Int32(d), Int32(cols), Int32(fi), Int32(sw), Int32(1), fwp, dfp.unsafe_ptr(), pwp,
+            psp, dkeys.unsafe_ptr(), dterms.unsafe_ptr(), wit.p(), Int32(wp), npv, grid_dim=g_rows, block_dim=QG_TPB,
+        )
+        wp += g_rows
+        ctx.enqueue_function[qp_parts_kernel](
+            Int32(n), Int32(1), psp, dterms.unsafe_ptr(), dlp.unsafe_ptr(), wit.p(), Int32(wp), npv,
+            grid_dim=g_nb, block_dim=QG_TPB,
+        )
+        wp += g_nb
+        if not wit.ok(ctx, wp, "QuantileRegressor polish vertex"):
+            wit.fail()
     var nf2 = wit.begin()
     ctx.enqueue_function[qg_finish_kernel](
         Int32(d), Int32(cols), Int32(fi), fwp, stp, dout.unsafe_ptr(), wit.p(), Int32(0), nf2,
         grid_dim=1, block_dim=QG_TPB,
     )
-    if not wit.ok(ctx, 1, "QuantileRegressor finish"):
+    # the vertex over the ADMM answer when its objective is not above (no-op
+    # when the polish found no vertex)
+    ctx.enqueue_function[qp_final_kernel](
+        Int32(nb), Int32(d), Int32(cols), Int32(fi), dfp.unsafe_ptr(), stp, psp, pwp, dlp.unsafe_ptr(),
+        dout.unsafe_ptr(), wit.p(), Int32(1), nf2, grid_dim=1, block_dim=1,
+    )
+    if not wit.ok(ctx, 2, "QuantileRegressor finish"):
         wit.fail()
     if n_out > 0:
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout.create_sub_buffer[DType.float32](0, n_out))
@@ -527,4 +788,12 @@ def quantile_fit_grid(
     _ = dprb^
     _ = dstate^
     _ = dtw^
+    _ = hps^
+    _ = dpw^
+    _ = dps^
+    _ = dkeys^
+    _ = dterms^
+    _ = dlp^
+    _ = dkp^
+    _ = dkip^
     _ = wit^

@@ -1664,8 +1664,10 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
     """Linear regression that predicts a conditional quantile.
 
     Solves scikit-learn's QuantileRegressor problem (the pinball loss plus
-    an L1 penalty) with ADMM instead of a linear program, so results agree
-    with scikit-learn up to the solver tolerance. ``solver`` accepts
+    an L1 penalty) with ADMM instead of a linear program, then moves the
+    answer onto the linear program's vertex (the rows the fit passes through
+    solved exactly) whenever that does not raise the objective, so results
+    agree with scikit-learn's exact solution. ``solver`` accepts
     scikit-learn's names but always runs ADMM; ``max_iter`` and ``tol`` are
     mojolearn's own keywords.
 
