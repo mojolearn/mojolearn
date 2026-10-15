@@ -896,7 +896,104 @@ def mamba_weight_spec(model, d):
 
 
 def make_inputs(lane, shape, steps, path, *, mamba_spec=None):
-    """Write the race's single input file (.npz) and return its record."""
+    """Write the race's single input file (.npz) and return its record.
+
+    smoke-fixes (2026-10-15; NVIDIA smoke-0845 neural/gemm/gaussian/shape=full STARTED at 5 s, check 6.79 s: the
+    4096^3 GEMM's 128 MB of inputs were generated, written and hashed here, then read back and hashed again by
+    every arm, all inside the recipe's timer): inside the campaign smoke's worker the file stage_inputs wrote
+    before the recipe's timer (the same function, seed, lane, shape and steps, so the same bytes) is linked (or
+    copied) to `path` and its record returned. A timed race (no smoke worker) writes the file here as always."""
+    SI = smoke_staging()
+    if SI is not None and mamba_spec is None:
+        got = SI.STAGED.entries.get(_stage_key(lane, shape, steps)) or SI.STAGED.pinned.get(
+            _stage_key(lane, shape, steps))
+        if got is not None:
+            staged_path, stamp, rec = got[0]
+            try:
+                if SI.file_stamp(staged_path) == stamp:
+                    _place_file(staged_path, path)
+                    return json.loads(json.dumps(rec))
+            except OSError:
+                pass                          # gone: write it here, as a timed race does
+    return _write_inputs(lane, shape, steps, path, mamba_spec=mamba_spec)
+
+
+def smoke_staging():
+    """tools/smoke_inproc.py when this process is the campaign smoke's worker or one of its arm servers (they
+    serve the --params-only parameter probe only), else None: a timed race or worker gets None here without
+    importing anything, so it writes, reads and hashes its inputs exactly as before."""
+    if os.environ.get("MOJOLEARN_SMOKE_IN_PROCESS") != str(os.getpid()):
+        return None
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import smoke_inproc
+    return smoke_inproc if smoke_inproc.in_process() else None
+
+
+def _stage_key(lane, shape, steps):
+    return ("neural-inputs", lane, shape, int(steps), SEED)
+
+
+def _place_file(src, dst):
+    """dst holds src's bytes: a hard link where the file system allows it, else a copy."""
+    import shutil
+    if os.path.lexists(dst):
+        os.remove(dst)
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copyfile(src, dst)
+
+
+def _content_key(path):
+    """An npz's members as its zip directory names them (name, size, CRC-32): the key of its exact bytes, read
+    without reading the arrays (a link or copy of the same file has the same key)."""
+    import zipfile
+    with zipfile.ZipFile(path) as zf:
+        return ("neural-npz",) + tuple(sorted((i.filename, i.file_size, i.CRC) for i in zf.infolist()))
+
+
+def read_inputs(path):
+    """{name: array} of a race's input file, what `{k: z[k] for k in np.load(path).files}` gives. Inside the
+    smoke worker or its arm servers (smoke-fixes 2026-10-15, gemm STARTED at 5 s in this read, once per arm) the
+    arrays stage_inputs made are returned when the file's zip directory names the same bytes, else the file is
+    read once per process: every arm then shares the same arrays (and sha256_array hashes them once)."""
+    import numpy as np
+
+    def read():
+        with np.load(path) as z:
+            return {k: z[k] for k in z.files}
+    SI = smoke_staging()
+    if SI is None:
+        return read()
+    return dict(SI.STAGED.get(_content_key(path), read))
+
+
+def stage_inputs(lane, dataset, data):
+    """The smoke worker's stage-data step for one neural recipe (tools/smoke_worker.py, also in each arm server),
+    outside every recipe's timer: the race's input file written once under data["dir"] (the same make_inputs
+    body, seed, lane, shape and steps the recipe's race uses), its arrays kept for the parameter probes' reads
+    and its record for make_inputs. A no-op outside the smoke worker. `dataset` is the lane's own (DATA_OF)."""
+    SI = smoke_staging()
+    if SI is None:
+        return {"status": "not in the smoke worker"}
+    import numpy as np
+    shape, steps = data["shape"], int(data["steps"])
+    os.makedirs(data["dir"], exist_ok=True)
+    # one file per process: the worker and its arm servers each stage their own, never rewriting another's
+    path = os.path.join(data["dir"], "neural-%s-%s-steps%d.%d.npz" % (lane, shape, steps, os.getpid()))
+    rec = _write_inputs(lane, shape, steps, path)
+    with np.load(path) as z:
+        arrays = {k: z[k] for k in z.files}
+    SI.STAGED.get(_content_key(path), lambda: arrays)
+    key = _stage_key(lane, shape, steps)
+    SI.STAGED.entries.pop(key, None)
+    SI.STAGED.get(key, lambda: (path, SI.file_stamp(path), rec), nbytes=0)
+    return {"status": "ok", "staged": ["neural %s %s steps=%d" % (lane, shape, steps)], "arrays": sorted(arrays),
+            "file": path}
+
+
+def _write_inputs(lane, shape, steps, path, *, mamba_spec=None):
     import numpy as np
     rng = np.random.default_rng(SEED)
     model = MODEL_OF[lane]
@@ -1142,8 +1239,15 @@ def _gemm_record(lane, library, implementation, data):
     return dict(__library__=library, __implementation__=implementation, seed=SEED,
                 operation="matmul", transpose_b=lane == "gemm-int8",
                 operand_value_type={"gemm":"float32", "gemm-bf16":"bfloat16", "gemm-int8":"int8"}[lane],
-                input_arrays={k: dict(shape=list(a.shape), dtype=str(a.dtype), sha256=_sha(a.tobytes()))
+                input_arrays={k: dict(shape=list(a.shape), dtype=str(a.dtype), sha256=_array_sha(a))
                               for k, a in arrays.items()})
+
+
+def _array_sha(a):
+    """sha256 of a C-contiguous array's bytes; inside the smoke worker hashed once per staged array
+    (smoke_inproc.sha256_array: the same digest), not once per arm (smoke-fixes 2026-10-15, gemm)."""
+    SI = smoke_staging()
+    return _sha(a.tobytes()) if SI is None else SI.sha256_array(a)
 
 
 def _read_neural_ab_config(path):
@@ -2852,8 +2956,7 @@ def _prepare_worker(args):
         ab_config = _read_neural_ab_config(getattr(args, "neural_ab_config", None))
         _apply_neural_ab_environment(ab_config)
         import numpy as np
-        with np.load(args.data) as z:
-            data = {k: z[k] for k in z.files}
+        data = read_inputs(args.data)
         preparation_start = time.perf_counter()
         runner = build_runner(args.lane, args.arm, args.shape, data, ab_config=ab_config)
         runner.sync()

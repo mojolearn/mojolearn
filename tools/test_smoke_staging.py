@@ -462,3 +462,56 @@ def test_prebinned_block_is_built_every_time_outside_the_worker(timed, tmp_path,
     a = SPEC.prebinned_data("gbdt-depthwise", SPEC.load_with_fallback("istella", "shipped", None), cfg)
     b = SPEC.prebinned_data("gbdt-depthwise", SPEC.load_with_fallback("istella", "shipped", None), cfg)
     assert len(calls) == 2 and a.bins_sha256 == b.bins_sha256 and a.X_train is not b.X_train
+
+
+# ---------------------------------------------------------------------------
+# neural (smoke-fixes 2026-10-15: NVIDIA neural/gemm/gaussian/shape=full STARTED at 5 s, check 6.79 s, in the
+# arms' reads of the race's 128 MB input file)
+# ---------------------------------------------------------------------------
+
+NEURAL = _load("bench_board_neural")
+
+
+def test_neural_inputs_are_staged_once_and_equal_the_timed_build(in_worker, tmp_path, monkeypatch):
+    """stage_inputs writes the race's file before the timer; inside the timer make_inputs only links it,
+    every arm's read returns the staged arrays (no np.load) and the GEMM record hashes each array once. The
+    file, record and parameter record are the ones the timed path builds."""
+    timed_path = tmp_path / "timed.npz"
+    monkeypatch.setenv(SI.ENV_FLAG, str(os.getpid() + 1))
+    want_rec = NEURAL.make_inputs("gemm", "small", 2, str(timed_path))
+    with np.load(timed_path) as z:
+        want = {k: z[k] for k in z.files}
+    want_record = NEURAL._gemm_record("gemm", "torch", "matmul", want)
+    monkeypatch.setenv(SI.ENV_FLAG, str(os.getpid()))
+
+    got = NEURAL.stage_inputs("gemm", "gaussian", dict(shape="small", steps=2, dir=str(tmp_path / "stage")))
+    assert got["status"] == "ok" and got["arrays"] == ["a", "b"]
+    writes = _counting(monkeypatch, NEURAL, "_write_inputs")
+    loads = _counting(monkeypatch, np, "load")
+    work = tmp_path / "work" / "neural-gemm-small.npz"
+    work.parent.mkdir()
+    work.write_bytes(b"stale")
+    rec = NEURAL.make_inputs("gemm", "small", 2, str(work))
+    assert writes == [] and rec == want_rec
+    assert work.read_bytes() == timed_path.read_bytes()
+    first, second = NEURAL.read_inputs(str(work)), NEURAL.read_inputs(str(work))
+    assert loads == [] and first is not second and first["a"] is second["a"]
+    assert all(first[k].tobytes() == want[k].tobytes() for k in want)
+    misses = SI.HASHES.misses
+    assert NEURAL._gemm_record("gemm", "torch", "matmul", first) == want_record
+    assert NEURAL._gemm_record("gemm", "torch", "matmul", second) == want_record
+    assert SI.HASHES.misses == misses + 2               # a and b hashed once for both arms
+
+    # another lane, shape or steps is not staged: built in the check, as before
+    other = NEURAL.make_inputs("gemm", "small", 3, str(tmp_path / "work" / "other.npz"))
+    assert len(writes) == 1 and other["steps"] == 3
+
+
+def test_neural_inputs_outside_the_worker(timed, tmp_path, monkeypatch):
+    assert NEURAL.stage_inputs("gemm", "gaussian", dict(shape="small", steps=2, dir=str(tmp_path))) == {
+        "status": "not in the smoke worker"}
+    path = str(tmp_path / "in.npz")
+    writes = _counting(monkeypatch, NEURAL, "_write_inputs")
+    NEURAL.make_inputs("gemm", "small", 2, path)
+    a, b = NEURAL.read_inputs(path), NEURAL.read_inputs(path)
+    assert len(writes) == 1 and a["a"] is not b["a"] and a["a"].tobytes() == b["a"].tobytes()

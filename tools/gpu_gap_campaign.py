@@ -233,8 +233,16 @@ DRIVERS = ("bench_board", "bench_board_algos", "bench_board_neural", "bench_boar
 #: - classical kmeans/pca/ols on istella (NVIDIA): the block is staged once (r14) and the torch/cuML/hipVS arms'
 #:   device uploads (cuML 1.2 s per arm in smokewarm-nvidia) are skipped in the probe
 #:   (classical_two_datasets._torch_setup/_cuml_setup probe_defers).
+#: - neural gemm (NVIDIA smoke-0845, 2026-10-15: STARTED at 5 s, check 6.79 s, in the arms' reads of the 4096^3
+#:   race's 128 MB input file): every neural race's input file is generated before the recipe's timer
+#:   (stage_request -> bench_board_neural.stage_inputs), make_inputs links it, the arms share its staged arrays
+#:   (read_inputs) and each array is hashed once (_array_sha); timed races write, read and hash as before.
 #: A recipe that again needs a longer timer gets an entry here with its measured check time and reason.
 SMOKE_SLOW = {}
+
+
+#: the board's --rounds under the smoke (one preflight-only round; stage_request derives neural steps from it)
+SMOKE_ROUNDS = 1
 
 
 def recipe_timeout(args, race):
@@ -251,7 +259,7 @@ def smoke_command(args, race, directory, mode, receipts):
     python = args.python_env
     cmd = [python, str(ROOT / "tools/bench_board.py"),
            "--vendor", args.vendor, "--python-env", python, "--skip-install",
-           "--cache", args.cache, "--rows", "full", "--rounds", "1", "--modes", mode,
+           "--cache", args.cache, "--rows", "full", "--rounds", str(SMOKE_ROUNDS), "--modes", mode,
            "--gpu-opponents-only", "--preflight-only", "--preflight-scorer", "--evidence-local-only",
            "--families", race["family"], "--lanes", race["lane"], "--race-ids", race["id"],
            "--out", str(directory)]
@@ -684,6 +692,15 @@ def stage_request(args, race, arm_python=None):
         driver = ROOT / "bench/speed/forest_speed_arm.py"
         dataset = B.tree_driver_dataset(race["lane"], race["dataset"])
         data = dict(size="shipped", rows=None, arms=sorted(race.get("opponents") or race.get("arms") or ()))
+    elif family == "neural":
+        # smoke-fixes (2026-10-15; NVIDIA smoke-0845 neural/gemm/gaussian/shape=full STARTED at 5 s, check 6.79 s,
+        # in the arms' reads of the race's 128 MB input file): the race's input file is generated once here, its
+        # arrays and record kept for make_inputs and every arm's read (bench_board_neural.stage_inputs). steps is
+        # the race's rounds + 1 under smoke_command's --rounds 1; the shape is the race's own (the board's
+        # neural_cmd default "full").
+        driver, dataset = ROOT / "tools/bench_board_neural.py", race["dataset"]
+        data = dict(shape=race.get("shape") or "full", steps=SMOKE_ROUNDS + 1,
+                    dir=os.path.join(cache, "neural-stage"))
     else:
         return None
     arms = set(race.get("arms") or ())

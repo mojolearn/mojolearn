@@ -477,7 +477,22 @@ def test_stage_request_names_the_algos_block_dir_and_the_race_arm_interpreters(t
     assert item['lane'] == 'als' and item['dataset'] == 'text'
     assert item['data'] == str(tmp_path / 'cache' / 'algos-data' / 'rows-full')
     assert item['driver'].endswith('tools/bench_board_algos.py')
-    assert C.stage_request(args, dict(race, family='neural'), {}) is None
+    assert C.stage_request(args, dict(race, family='other'), {}) is None
+
+
+def test_stage_request_stages_the_neural_race_inputs_before_the_timer(tmp_path):
+    """smoke-fixes 2026-10-15 (NVIDIA neural/gemm/gaussian/shape=full STARTED at 5 s in the arms' input reads):
+    a neural recipe's input file is staged by bench_board_neural.stage_inputs with the race's shape and the steps
+    its smoke race uses (--rounds SMOKE_ROUNDS, so rounds + 1)."""
+    args = SimpleNamespace(cache=str(tmp_path / "cache"))
+    race = dict(id='neural/gemm/gaussian/shape=full', family='neural', lane='gemm', dataset='gaussian',
+                shape='full', arms=['ours', 'torch-eager-fp32'])
+    item, = C.stage_request(args, race, {})['items']
+    assert item['driver'].endswith('tools/bench_board_neural.py') and item['lane'] == 'gemm'
+    assert item['data'] == dict(shape='full', steps=C.SMOKE_ROUNDS + 1, dir=str(tmp_path / 'cache' / 'neural-stage'))
+    cmd = C.smoke_command(SimpleNamespace(python_env='py', vendor='nvidia', cache='c', wheel_manifest=None),
+                          race, tmp_path, 'identical', {})
+    assert cmd[cmd.index('--rounds') + 1] == str(C.SMOKE_ROUNDS)
 
 
 def test_stage_request_stages_classical_classical2_and_trees_through_their_drivers(tmp_path):
