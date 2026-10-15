@@ -435,9 +435,14 @@ _add("isotonic", xlane="linear", ours="IsotonicRegression", task="reg", block="r
 # it is pinned to 3 x batch_size on both. n_iter and n_steps of every arm are recorded
 # (_ITER_LANES): early stopping by max_no_improvement can end the arms at different steps.
 # Results raced before this change were wrong for this lane; apply extra scrutiny.
+# n_init 1 -> 3 on BOTH arms (lane quality-fix-identical, 2026-10-15): with one k-means++ start each
+# library lands in its own local optimum from its own random stream (taxi silhouette ours 0.1381 vs
+# scikit-learn 0.1655, ARI 0.53; quality-vs-opponent-20261015), a one-draw lottery. Three starts, the
+# best by inertia on the init sample (both libraries' rule), shrink it on both arms alike. The stored
+# scikit-learn cells were scored at n_init=1 and must be re-scored at 3.
 _add("minibatch-kmeans", xlane="cluster", ours="MiniBatchKMeans", task="cluster", block="cls",
      sk="sklearn.cluster:MiniBatchKMeans",
-     params=dict(n_clusters=8, batch_size=4096, max_iter=100, n_init=1, init_size=3 * 4096,
+     params=dict(n_clusters=8, batch_size=4096, max_iter=100, n_init=3, init_size=3 * 4096,
                  random_state=SEED))
 _add("bisecting-kmeans", xlane="cluster", ours="BisectingKMeans", task="cluster", block="cls",
      sk="sklearn.cluster:BisectingKMeans", params=dict(n_clusters=8, random_state=SEED))
