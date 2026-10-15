@@ -707,7 +707,15 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
 #: rab5-ard): ard istella r2 0.2826 -> 0.3270 (scikit-learn 0.3274) BUT
 #: 67.2 -> 1348.1 ms. KEPT for correctness; the speed fix is owed in lane
 #: apple-fast-general-speed.
-comptime ARD_FAST_EQ = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_ARD_SIGMA_QOLD"]()
+#: IDENTICAL TOO (lane quality-fix-identical, 2026-10-15): the same audit
+#: holds for identical on NVIDIA, AMD and Apple (r2 -0.1249 vs 0.3274;
+#: quality-vs-opponent-20261015), so the equilibrated sigma is now the rule
+#: in every mode, on every vendor and in the host column (the device driver
+#: x_linear/ard_grid.mojo and the host `ard_fit` both reach it through
+#: `_t_ard_sigma`). Bits change for every ARD fit in identical, on all
+#: columns together. `-D MOJOLEARN_ARD_SIGMA_QOLD` (A arm) restores the old,
+#: failure-ignoring factor in both modes.
+comptime ARD_EQ = not is_defined["MOJOLEARN_ARD_SIGMA_QOLD"]()
 comptime ARD_EQ_TRIES = 8
 
 
@@ -755,7 +763,7 @@ def _ard_eq_next_ridge(ridge: Float32, dk: Int) -> Float32:
 
 
 def _ard_sigma_eq(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
-    """ARD_FAST_EQ's sigma on one thread. Returns dk."""
+    """ARD_EQ's sigma on one thread. Returns dk."""
     var dk = 0
     for j in range(d):
         if ldi(iw, keep + j) != 0:
@@ -775,7 +783,7 @@ def _ard_sigma_eq(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: F
 
 def _t_ard_sigma_eq(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP,
                     keep: Int) -> Int:
-    """ARD_FAST_EQ's sigma on the team: rows and columns split as in
+    """ARD_EQ's sigma on the team: rows and columns split as in
     `_t_ard_sigma`; `t_cholesky`'s result is uniform, so is the retry."""
     var dk = 0
     if t.lead():
@@ -800,7 +808,7 @@ def _t_ard_sigma_eq(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: In
 
 def _ard_sigma(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
     """sigma (dk x dk, over the kept features in ascending order) = inv(diag(lambda) + alpha G). Returns dk."""
-    comptime if ARD_FAST_EQ:
+    comptime if ARD_EQ:
         return _ard_sigma_eq(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
     var dk = 0
     for j in range(d):
@@ -843,7 +851,7 @@ def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, 
         return dk0
     if t.nt <= 1:
         return _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
-    comptime if ARD_FAST_EQ:
+    comptime if ARD_EQ:
         if d >= ARD_TEAM_MIN:
             return _t_ard_sigma_eq(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
     # below ARD_TEAM_MIN features the column barriers of `t_cholesky` cost
@@ -899,7 +907,9 @@ def _ard_factor_coef(d: Int, dk: Int, fw: FP, aa: Int, xty: Int, alpha: Float32,
 def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
     """`_ard_coef` with its dk outputs split across the team (each its own
     chain over b ascending); the same words."""
-    comptime if C15_FACTOR_SOLVE:
+    # C15 solves on `aa` as the factor of diag(lambda) + alpha G; under ARD_EQ
+    # `aa` holds the equilibrated A~'s factor, so the sigma product is used
+    comptime if C15_FACTOR_SOLVE and not ARD_EQ:
         if t.lead():
             _ard_factor_coef(d, dk, fw, sg - d * d, xty, alpha, iw, keep, res)
         t.sync()
@@ -919,7 +929,7 @@ def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Floa
 
 
 def _ard_coef(d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
-    comptime if C15_FACTOR_SOLVE:
+    comptime if C15_FACTOR_SOLVE and not ARD_EQ:
         _ard_factor_coef(d, dk, fw, sg - d * d, xty, alpha, iw, keep, res)
         return
     fill(res, 0, d, Float32(0))
