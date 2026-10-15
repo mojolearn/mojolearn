@@ -491,6 +491,14 @@ CONFIG = {
         "mismatches": [
             "seed: no arm has a seed argument (deterministic)",
             "max_cluster_size: ours and cuML 0, scikit-learn None (both mean no limit)",
+            # lane quality-fix-identical (2026-10-15): the taxi noise gap (ours 14.06% noise, cuML
+            # 13.10%, scikit-learn 14.22%; silhouette 0.0015 vs cuML 0.0120) traced to this; core
+            # distance, reachability, condensing, stability, EOM selection and labelling match cuML.
+            "spanning tree: ours and scikit-learn build the exact minimum spanning tree of the full "
+            "mutual-reachability graph; cuML builds it over the symmetrized (min_samples + 1)-NN "
+            "graph in mutual-reachability space and joins its components (cuVS "
+            "cluster/detail/single_linkage.cuh:75-135, mst.cuh cross_component_nn), an approximate "
+            "tree where groups of duplicate rows split that graph (taxi)",
             "min_samples: ours and cuML 10, scikit-learn 11. The SAME k-th neighbour: cuML's "
             "runner.h:68-80 (ours transcribes it) runs the k-NN at min_samples + 1 including the "
             "point itself; scikit-learn's kneighbors(X, min_samples) counts the point itself "
