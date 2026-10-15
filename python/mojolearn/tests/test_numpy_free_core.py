@@ -534,7 +534,8 @@ def test_getbuffer_paths():
             call()
             raise AssertionError(msg)
         except ValueError as e:
-            assert str(e) == "mojolearn: " + msg, str(e)
+            # the old message leads; scikit-learn's wording may follow it
+            assert str(e).startswith("mojolearn: " + msg), str(e)
 
 
 # ---------------------------------------------------------------- Array API
