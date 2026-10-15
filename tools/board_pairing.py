@@ -38,6 +38,17 @@ PAIRS_FIELD = "pairs_with"
 #: 254 borders over every row (border_build_max_samples 0), XGBoost max_bin 255. Every split
 #: candidate is then the same on both arms. The CatBoost pairings keep the raw input.
 OUR_PAIRINGS = {
+    # FAIRNESS FIX (2026-10-13 audit): the categorical Lossguide recipe
+    # inherited the positive-gain floor used for XGBoost, although its GPU
+    # opponent is CatBoost alone. Its GPU Lossguide grower has no gain floor
+    # (greedy_search_helper.cpp:294-300). Retain the existing CPU configuration
+    # separately; never compare either own configuration with the other arm.
+    "gbdt-categorical": {
+        "ours": {"opponents": ("catboost-cpu",), "settings": {"min_split_gain": 0.0},
+                 "why": "retain the existing CPU configuration, including its Apple fast arm; its parameter audit still applies"},
+        "ours-catboost-gpu": {"opponents": ("catboost-gpu",), "settings": {"min_split_gain": None},
+                              "why": "no split-gain floor, matching CatBoost GPU Lossguide"},
+    },
     "gbdt-depthwise": {
         "ours": {"opponents": ("catboost-*",), "settings": {},
                  "why": "raw input, ours' and CatBoost's own GreedyLogSum borders"},

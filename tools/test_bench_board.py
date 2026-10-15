@@ -347,6 +347,8 @@ def test_plan_apple_carries_fast_and_identical_arms():
         if r["family"] == "trees":
             # smoke-fixes r13: gbdt-lossguide races its second own configuration (tools/board_pairing.py)
             extra = {a: "identical" for a in bb.PAIR.extra_own_arms(r["lane"])}
+            if r["lane"] == "gbdt-categorical":
+                extra = {}  # Apple has the CPU CatBoost pairing only.
             assert r["our_arms"] == dict({"ours": "identical", "ours-ab": "fast"}, **extra)
             assert all(o.endswith("-cpu") for o in r["opponents"])
         else:
@@ -360,7 +362,10 @@ def test_plan_gpu_boxes_identical_only(vendor):
     for r in races:
         # smoke-fixes r13: gbdt-lossguide races its second own configuration (tools/board_pairing.py)
         extra = {a: "identical" for a in bb.PAIR.extra_own_arms(r["lane"])} if r["family"] == "trees" else {}
-        assert r["our_arms"] == dict({"ours": "identical"}, **extra)
+        expected = dict({"ours": "identical"}, **extra)
+        if r["family"] == "trees" and r["lane"] == "gbdt-categorical":
+            expected = {"ours-catboost-gpu" if vendor == "nvidia" else "ours": "identical"}
+        assert r["our_arms"] == expected
         assert "ours-ab" not in r["arms"] and "ours-fast" not in r["arms"]
     nv = {r["lane"]: r["opponents"] for r in races if r["family"] == "trees"}
     if vendor == "nvidia":

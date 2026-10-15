@@ -2814,6 +2814,12 @@ def catboost_arms(lane, cfg, data, devices):
         # ours.
         if data.cat_idx:
             p["cat_features"] = list(data.cat_idx)
+            # FAIRNESS FIX (2026-10-13 audit): make the automatic one-hot
+            # threshold explicit. Ours' native TCatFeatureParams.default()
+            # fixes it at 2 (gbdt/options/catboost_options.mojo); a manual
+            # one_hot_features override is not the same categorical policy.
+            if task_type == "GPU":
+                p["one_hot_max_size"] = 2
             # FAIRNESS FIX (2026-10-13 audit): CatBoost shuffled the learn rows before
             # computing its CTR target statistics (preprocess.cpp:161-199) while ours computes
             # them over the rows in the order given (ensemble.py cat_features), extra work and

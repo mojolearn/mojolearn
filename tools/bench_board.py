@@ -807,8 +807,16 @@ def gpu_opponents_only(races, vendor):
     out = []
     for race in races:
         opponents = [a for a in race["opponents"] if arm_device(a, vendor) == "gpu"]
-        arms = [a for a in race["arms"] if a in race["our_arms"] or a in opponents]
-        out.append(dict(race, opponents=opponents, arms=arms))
+        ours = dict(race["our_arms"])
+        if race.get("our_pairing"):
+            # FAIRNESS FIX (2026-10-13 audit): a CPU-only pairing must not
+            # add an unpaired own configuration to a GPU-only campaign.
+            pairing = race["our_pairing"]
+            ours = {a: mode for a, mode in ours.items()
+                    if any(PAIR.pairs({PAIR.PAIRS_FIELD: pairing.get("ours" if a == "ours-ab" else a, [])}, opponent)
+                           for opponent in opponents)}
+        arms = [a for a in race["arms"] if a in ours or a in opponents]
+        out.append(dict(race, opponents=opponents, our_arms=ours, arms=arms))
     return out
 
 
@@ -875,6 +883,16 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                 opp = gpu_opponents_first(
                     (TREE_OPPONENTS if fam == "trees" else CLASSICAL_OPPONENTS)[vendor][lane])
                 ours = our_arms(fam, modes, lane)
+                if fam == "trees" and lane == "gbdt-categorical":
+                    # FAIRNESS FIX (2026-10-13 audit): retain only configurations
+                    # paired with an opponent actually selected on this vendor.
+                    # In particular, CatBoost GPU's no-floor categorical policy
+                    # must not create an unused extra arm on Apple or AMD.
+                    pairing = PAIR.lane_pairing(lane)
+                    ours = {a: mode for a, mode in ours.items()
+                            if any(PAIR.pairs({PAIR.PAIRS_FIELD: pairing.get(
+                                "ours" if a == "ours-ab" else a, [])}, opponent)
+                                   for opponent in opp)}
                 races.append({
                     "id": race_id(fam, lane, ds, rows),
                     "family": fam, "lane": lane, "dataset": ds, "rows": rows,
@@ -1092,6 +1110,10 @@ def child_env(ctx, extra=None):
     env["PYTHONUNBUFFERED"] = "1"
     env["MOJOLEARN_BOARD_VENDOR"] = ctx["vendor"]     # tools/bench_board_probe.py
     if ctx["vendor"] == "amd":
+        # FAIRNESS FIX (2026-10-13 audit): setup set this only in its own
+        # process. A later smoke/timing worker could not import HIP CuPy, so
+        # every hipVS parameter probe refused despite an installed opponent.
+        env.setdefault("ROCM_HOME", "/opt/rocm")
         # FAIRNESS FIX (2026-10-13 audit): AMD's hipVS wheels put native
         # libraries in package-local lib64 directories; retain their paths in
         # worker receipts. A successful pip install alone did not prove import.
