@@ -65,31 +65,74 @@ def check_boundary(ack_path, vendor, seconds, proc_root=Path('/proc')):
              'fresh root boundary acknowledgement required')
     required(0 <= time.time() - ack['created_epoch'] <= 300, 'boundary acknowledgement expired')
     required(ack.get('native_commit') == FREEZE, 'boundary acknowledges a different candidate')
-    campaign = Path(ack['campaign']).resolve()
-    state = read(campaign)
-    required((campaign.parent / 'PAUSE').is_file(), 'measurement PAUSE marker missing')
-    required(state.get('status') == 'paused between cells', 'measurement is not paused between cells')
-    required(state.get('vendor') == vendor, 'measurement vendor differs')
-    required(time.time() - state.get('heartbeat', 0) < 30, 'measurement pause heartbeat is stale')
-    required(time.time() + seconds + 900 < state['provider_deadline'], 'insufficient window plus 900s retention reserve')
-    sessions = []
-    for path in sorted(campaign.parent.glob('measured/*/*-session/session.json')):
-        item = read(path)
-        required(item.get('status') == 'finished' and item.get('remaining_workers') == [],
-                 'unfinished measurement session: ' + str(path))
-        sessions.append(dict(path=str(path), session=item['session'], sha256=sha(path)))
+    entries = ack.get('campaigns') or [dict(path=ack['campaign'], controller_exit=ack.get('controller_exit'))]
+    required(entries and len({e['path'] for e in entries}) == len(entries), 'empty or duplicate campaign list')
+    campaigns, sessions, recorded_pids = [], [], []
+    for entry in entries:
+        campaign = Path(entry['path']).resolve()
+        state = read(campaign)
+        required(state.get('vendor') == vendor, 'measurement vendor differs')
+        required(time.time() + seconds + 900 < state['provider_deadline'], 'insufficient window plus 900s retention reserve')
+        status = state.get('status')
+        if status == 'paused between cells':
+            required((campaign.parent / 'PAUSE').is_file(), 'measurement PAUSE marker missing')
+            required(time.time() - state.get('heartbeat', 0) < 30, 'measurement pause heartbeat is stale')
+        elif status == 'finished':
+            recipes = state.get('recipes', {})
+            required(state.get('expected', -1) == state.get('recorded', -2) == len(recipes) and
+                     all(row.get('status') == 'complete' for row in recipes.values()),
+                     'finished campaign has incomplete expected coverage')
+            exit_path = entry.get('controller_exit')
+            required(exit_path and Path(exit_path).read_text().strip() == '0',
+                     'finished campaign requires retained controller exit status 0')
+            required(not state.get('final_retention_error'), 'finished campaign retention failed')
+        else:
+            raise ValueError('measurement is neither paused between cells nor fully finished')
+        for path in sorted(campaign.parent.glob('measured/*/*-session/session.json')):
+            item = read(path)
+            required(item.get('status') == 'finished' and item.get('remaining_workers') == [],
+                     'unfinished measurement session: ' + str(path))
+            sessions.append(dict(path=str(path), session=item['session'], sha256=sha(path)))
+            if item.get('pid'):
+                recorded_pids.append(int(item['pid']))
+        if entry.get('controller_pid'):
+            # Paused campaign controllers intentionally remain alive; finished
+            # controllers must have exited before ownership is released.
+            if status == 'finished':
+                recorded_pids.append(int(entry['controller_pid']))
+        campaigns.append(dict(path=str(campaign), state=state, gate=status,
+                              controller_exit=entry.get('controller_exit')))
     # Retain only the relevant marker, never unrelated /proc environment secrets.
-    markers = {(b'MOJOLEARN_BOARD_SESSION=' + s['session'].encode()) for s in sessions}
+    markers = {(b'MOJOLEARN_BOARD_SESSION=' + item['session'].encode()) for item in sessions}
     workers = []
-    for p in proc_root.iterdir():
-        if p.name.isdigit():
-            try:
-                if markers.intersection((p / 'environ').read_bytes().split(b'\0')):
-                    workers.append(int(p.name))
-            except (FileNotFoundError, ProcessLookupError):
-                pass
+    for process in proc_root.iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            marked = markers.intersection((process / 'environ').read_bytes().split(b'\0'))
+            if marked or int(process.name) in recorded_pids:
+                # A zombie has no executable work; parent reaping may lag.
+                stat = process / 'stat'
+                zombie = stat.exists() and stat.read_text().rsplit(')', 1)[1].lstrip().startswith('Z ')
+                if not zombie:
+                    workers.append(int(process.name))
+        except (FileNotFoundError, ProcessLookupError):
+            pass
     required(not workers, 'measurement workers still active: ' + str(workers))
-    return dict(acknowledgement=ack, campaign=state, sessions=sessions, checked_epoch=time.time())
+    return dict(acknowledgement=ack, campaigns=campaigns, sessions=sessions, checked_epoch=time.time())
+
+
+def boundary_still_held(boundary):
+    for entry in boundary['campaigns']:
+        campaign = Path(entry['path'])
+        state = read(campaign)
+        if state.get('status') != entry['gate']:
+            return False
+        if entry['gate'] == 'paused between cells' and not (campaign.parent / 'PAUSE').is_file():
+            return False
+        if entry['gate'] == 'finished' and Path(entry['controller_exit']).read_text().strip() != '0':
+            return False
+    return True
 
 
 def verify_candidate(artifact, vendor):
@@ -338,9 +381,8 @@ def run(args):
                 while proc.poll() is None:
                     if time.monotonic() >= deadline:
                         raise TimeoutError('candidate numerical timeout')
-                    campaign = Path(boundary['acknowledgement']['campaign'])
-                    if not (campaign.parent / 'PAUSE').exists() or read(campaign).get('status') != 'paused between cells':
-                        raise RuntimeError('measurement pause removed during diagnostics')
+                    if not boundary_still_held(boundary):
+                        raise RuntimeError('measurement boundary changed during diagnostics')
                     time.sleep(.2)
         finally:
             if proc is not None:

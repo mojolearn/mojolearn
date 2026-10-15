@@ -103,3 +103,48 @@ def test_boundary_refuses_orphan_measurement_worker(tmp_path):
     (worker / 'environ').write_bytes(b'OTHER=ignored\0MOJOLEARN_BOARD_SESSION=fixture\0')
     with pytest.raises(ValueError, match='measurement workers still active'):
         V.check_boundary(ack, 'nvidia', 90, proc)
+
+
+def test_completed_campaign_releases_without_synthetic_pause(tmp_path):
+    ack, proc = boundary(tmp_path)
+    (tmp_path / 'PAUSE').unlink()
+    campaign = tmp_path / 'campaign.json'
+    data = V.read(campaign)
+    data.update(status='finished', expected=1, recorded=1, recipes={'one': {'status': 'complete'}})
+    V.write(campaign, data)
+    exit_path = tmp_path / 'controller.exit'; exit_path.write_text('0\n')
+    a = V.read(ack); a['campaigns'] = [dict(path=str(campaign), controller_exit=str(exit_path))]
+    V.write(ack, a)
+    result = V.check_boundary(ack, 'nvidia', 90, proc)
+    assert V.boundary_still_held(result)
+    assert result['campaigns'][0]['gate'] == 'finished'
+
+
+def test_finished_campaign_missing_work_is_not_released(tmp_path):
+    ack, proc = boundary(tmp_path)
+    campaign = tmp_path / 'campaign.json'
+    data = V.read(campaign)
+    data.update(status='finished', expected=2, recorded=1, recipes={'one': {'status': 'complete'}})
+    V.write(campaign, data)
+    with pytest.raises(ValueError, match='incomplete expected coverage'):
+        V.check_boundary(ack, 'nvidia', 90, proc)
+
+
+def test_finished_campaign_requires_actual_successful_controller_exit(tmp_path):
+    ack, proc = boundary(tmp_path)
+    campaign = tmp_path / 'campaign.json'
+    data = V.read(campaign)
+    data.update(status='finished', expected=0, recorded=0, recipes={})
+    V.write(campaign, data)
+    with pytest.raises(ValueError, match='retained controller exit status 0'):
+        V.check_boundary(ack, 'nvidia', 90, proc)
+
+
+def test_all_queued_campaigns_must_acknowledge_boundary(tmp_path):
+    ack, proc = boundary(tmp_path)
+    second = tmp_path / 'second-campaign.json'
+    V.write(second, dict(status='running', vendor='nvidia', provider_deadline=time.time()+3600))
+    a = V.read(ack); a['campaigns'] = [dict(path=a['campaign']), dict(path=str(second))]
+    V.write(ack, a)
+    with pytest.raises(ValueError, match='neither paused between cells nor fully finished'):
+        V.check_boundary(ack, 'nvidia', 90, proc)
