@@ -38,9 +38,9 @@ def _fit_or_skip(x, y, **kw):
 
 def test_break_ties_with_ovo_is_refused():
     with pytest.raises(ValueError, match="break_ties"):
-        SVC(break_ties=True, decision_function_shape="ovo")
+        SVC(break_ties=True, decision_function_shape="ovo").fit([[0.0], [1.0]], [0, 1])
     with pytest.raises(ValueError, match="decision_function_shape"):
-        SVC(decision_function_shape="ovx")
+        SVC(decision_function_shape="ovx").fit([[0.0], [1.0]], [0, 1])
 
 
 def test_one_class_is_refused():
