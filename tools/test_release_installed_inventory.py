@@ -48,7 +48,8 @@ class InstalledInventoryTests(unittest.TestCase):
             env = {'MOJOLEARN_REPO': str(ROOT), 'MOJOLEARN_EXPECT_VENDOR': 'cuda', 'MOJOLEARN_NUMERIC_MODE': mode}
             context = dict(hashlib=hashlib, pathlib=__import__('pathlib'), sys=__import__('sys'), os=os,
                            mojolearn=types.SimpleNamespace(numeric_mode=lambda: mode),
-                           _backend=types.SimpleNamespace(binding=binding, read_vendor=lambda module: 'cuda'),
+                           _backend=types.SimpleNamespace(binding=binding, read_vendor=lambda module: 'cuda',
+                                                     _MODULES=tuple(modules)),
                            installed=package/'__init__.py', release_profile=True,
                            audit={'extension_hashes': hashes}, architecture={'selected_architecture': 'sm_90a'})
             with patch.dict(os.environ, env):
@@ -56,8 +57,9 @@ class InstalledInventoryTests(unittest.TestCase):
             return set(loaded), context['readback']
 
     def test_all_advertised_bindings_and_only_supported_tiers_load(self):
-        # fast = 3 tree + 15 classical bindings since classical FAST (2e62edbd1)
-        for mode, count in [('fast', 18), ('identical', 23)]:
+        # fast = TIERED + CLASSICAL_FAST (32 bindings, the expansion lanes
+        # included); identical = all 32 plus the byte LM in a release profile.
+        for mode, count in [('fast', 32), ('identical', 33)]:
             with self.subTest(mode=mode):
                 loaded, rows = self.readback(mode)
                 self.assertEqual(loaded, expected_bindings(mode, True))
