@@ -471,7 +471,10 @@ def before_call(est, method, slots, args, kwargs):
     if X is _MISSING or X is None:
         return None
     info = _check_X(est, X, fitting=False)
-    _check_width(est, X, info)
+    # inverse_transform takes the transformed space (n_components columns), not
+    # the fit's features; scikit-learn checks n_features_in_ only on the latter.
+    if method != "inverse_transform":
+        _check_width(est, X, info)
     return Check(X, info, False)
 
 
