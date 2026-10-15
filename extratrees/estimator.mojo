@@ -680,7 +680,8 @@ def fit_extra_trees_classifier_device(
 
 
 def regressor_plan(
-    config: ExtraTreesConfig, n_rows: Int32, n_features: Int32
+    config: ExtraTreesConfig, n_rows: Int32, n_features: Int32,
+    fold_min_weight: Bool = True,
 ) raises -> FitPlan:
     """`classifier_plan`'s regression twin, for DEVIATION 187's reason.
 
@@ -693,7 +694,7 @@ def regressor_plan(
             "the regression criterion must be squared_error, poisson, gamma or"
             " inverse_gaussian; the others are refused by validity_check"
         )
-    return resolve(config, Int(n_rows), Int(n_features))
+    return resolve(config, Int(n_rows), Int(n_features), fold_min_weight)
 
 
 def _is_regression_criterion(c: Int32) -> Bool:

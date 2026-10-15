@@ -21,6 +21,10 @@ from extratrees.estimator import (
 from extratrees.impl.randomforest.randomforest import class_ids_for_host
 from extratrees.checks.fixed_point import choose_scale, quantize
 from core.abs_sum_blocked_host import host_abs_sum_blocked
+from checks.numerics import ftz
+from extratrees.impl.decisiontree.batched_levelalgo.builder import (
+    weighted_label_scale_ratio,
+)
 from extratrees.impl.randomforest.host_forest import (
     fit_classification,
     fit_forest_exact,
@@ -85,6 +89,8 @@ struct HostRowWeights(Movable):
     var weighted: Bool
     var q: List[Int32]
     var min_weight_units: Int64
+    var scale: Float64
+    """lane sk-final: the power of two `q` is quantized at (1.0 unweighted)."""
 
 
 def host_quantize_row_weights(
@@ -108,7 +114,7 @@ def host_quantize_row_weights(
     if not (total > 0.0):
         raise Error("sample weights must have positive total")
     if all_unit:
-        return HostRowWeights(False, List[Int32](), Int64(0))
+        return HostRowWeights(False, List[Int32](), Int64(0), Float64(1.0))
     var scale = choose_scale(total, n_rows)
     if scale < Float64(1.1754943508222875e-38) or scale > Float64(1.7014118346046923e38):
         raise Error("sample weights exceed the Float32 fixed-point scale range")
@@ -122,7 +128,7 @@ def host_quantize_row_weights(
         mwu = Int64(Int(units))
         if Float64(Int(mwu)) < units:
             mwu += 1
-    return HostRowWeights(True, q^, mwu)
+    return HostRowWeights(True, q^, mwu, scale)
 
 
 def fit_extra_trees_classifier_host_exact(
@@ -149,7 +155,7 @@ def fit_extra_trees_classifier_host_exact(
     lane sk-kernels: `weights` (empty: none) is the per-row weight
     (`host_quantize_row_weights`); all 1.0 fits unweighted with
     `min_weight_fraction_leaf` folded into `min_samples_leaf`."""
-    var rw = HostRowWeights(False, List[Int32](), Int64(0))
+    var rw = HostRowWeights(False, List[Int32](), Int64(0), Float64(1.0))
     if len(weights) > 0:
         rw = host_quantize_row_weights(
             weights, Int(n_rows), config.min_weight_fraction_leaf
@@ -187,6 +193,7 @@ def fit_extra_trees_regressor_host_exact(
     n_features: Int32,
     config: ExtraTreesConfig,
     tree_start: Int = 0,
+    weights: List[Float32] = List[Float32](),
 ) raises -> FitResult:
     """THE CPU COLUMN'S REGRESSOR FIT (et-reg, 2026-09-14):
     `fit_extra_trees_regressor_device` restated on the host. The labels
@@ -197,9 +204,34 @@ def fit_extra_trees_regressor_host_exact(
     computes them (DEVIATION 179), so the leaf VALUES are the device's,
     where `fit_extra_trees_regressor_reference` returns Float64 means that
     differ from the device by up to one quantization step and cannot be
-    the CPU column. Takes no DeviceContext."""
-    var plan = regressor_plan(config, n_rows, n_features)
-    var ql = quantize_labels_host(y, n_rows)
+    the CPU column. Takes no DeviceContext.
+
+    lane sk-final: `weights` (empty: none) is the per-row weight,
+    `upload_dataset_labels_quantized_weighted` restated: the weights through
+    `host_quantize_row_weights` (all 1.0 fits unweighted with
+    `min_weight_fraction_leaf` folded into `min_samples_leaf`), the labels
+    the search reads are `ftz(w * y)` quantized as `quantize_labels_host`
+    quantizes y, and the leaf scale is `weighted_label_scale_ratio`."""
+    var rw = HostRowWeights(False, List[Int32](), Int64(0), Float64(1.0))
+    if len(weights) > 0:
+        rw = host_quantize_row_weights(
+            weights, Int(n_rows), config.min_weight_fraction_leaf
+        )
+    var plan = regressor_plan(
+        config, n_rows, n_features, fold_min_weight=not rw.weighted
+    )
+    var ql: Tuple[List[Int32], Float64]
+    var leaf_scale: Float64
+    if rw.weighted:
+        var z = List[Float32](capacity=Int(n_rows))
+        for i in range(Int(n_rows)):
+            # `et_weighted_labels_kernel`: one float32 product, flushed
+            z.append(ftz(weights[i] * y[i]))
+        ql = quantize_labels_host(z, n_rows)
+        leaf_scale = weighted_label_scale_ratio(ql[1], rw.scale)
+    else:
+        ql = quantize_labels_host(y, n_rows)
+        leaf_scale = ql[1]
     var forest = fit_forest_exact(
         x_col_major,
         y,
@@ -211,10 +243,12 @@ def fit_extra_trees_regressor_host_exact(
         plan.n_trees,
         config.random_state,
         False,
-        Float32(1.0 / ql[1]),
+        Float32(1.0 / leaf_scale),
         plan.bootstrap,
         plan.n_sampled_rows,
         tree_start,
+        rw.q.copy(),
+        rw.min_weight_units,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
