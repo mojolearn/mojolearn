@@ -257,20 +257,35 @@ def test_ordered_and_feature_freq_fit_on_the_host_when_built():
     else:
         raise AssertionError("an unweighted pointwise fit did not refuse on the host binding")
 
-    # the one-hot categorical arm, and the CTR refusal above one_hot_max_size
+    # the one-hot and CTR categorical arms.
+    # The host's one-hot arm restates the deterministic fit the
+    # gbdt-categorical-ctr lane records (identity_break._gbdt_legacy_kw: no
+    # bootstrap, random_strength 0); the SymmetricTree defaults since
+    # 2026-09-19 are CatBoost's stochastic ones, which it refuses by name.
+    det = dict(bootstrap_type="No", random_strength=0.0)
     outs = []
     for _ in range(2):
         c = mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss="Logloss", cat_features=[0],
-                                       one_hot_features=[1]).fit(coded, yc)
+                                       one_hot_features=[1], **det).fit(coded, yc)
         outs.append((c.model_, np.asarray(c.predict(coded)).tobytes()))
     assert outs[0] == outs[1], "two one-hot host fits returned different bytes"
     assert "type cat" in outs[0][0] and "ctr_" not in outs[0][0]
+    # A CTR column (above one_hot_max_size) trains on the host since
+    # gbdt-categorical-ctr-tables (98b823c46, gbdt/host/gbdt_oracle_ctr.mojo);
+    # what still refuses by name is an eval set beside a CTR column.
+    outs = []
+    for _ in range(2):
+        c = mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss", cat_features=[1],
+                                       **det).fit(coded, yc)
+        outs.append((c.model_, np.asarray(c.predict(coded)).tobytes()))
+    assert outs[0] == outs[1], "two CTR host fits returned different bytes"
     try:
-        mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss", cat_features=[1]).fit(coded, yc)
+        mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss", cat_features=[1],
+                                   **det).fit(coded, yc, eval_set=(coded[:300], yc[:300]))
     except Exception as exc:
         assert "no CPU implementation of" in str(exc), str(exc)
     else:
-        raise AssertionError("a CTR categorical fit did not refuse on the host binding")
+        raise AssertionError("a CTR fit with an eval set did not refuse on the host binding")
 
 
 if __name__ == "__main__":
