@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "apple-fast-bf16-existing-public-default-20261015",
   "date": "2026-10-15",
-  "status": "source_default_enabled_pending_root_build_qualification",
+  "status": "apple_default_build_and_correctness_qualified_pending_release",
   "authorization": "Andrew explicitly requested making Apple BF16 the fast path after reviewing full4096 results; scope restricted to existing explicit BF16 operations",
   "source_change_base": "d76a63de47db581b301b2f5504a2ac8cf349eab2",
   "default_enabled": true,
@@ -91,9 +91,6 @@
     }
   },
   "pending": [
-    "root default FAST build and existing 23 GPU tests",
-    "root explicit BF16=0 build/capability check",
-    "root IDENTICAL build/check or qualified unchanged-arithmetic reuse",
     "other target and installed release qualification",
     "full-estimator recipes and measurements before broader model precision/wiring changes",
     "Apple FAST board opponent contract and effective readback; no board run here"
@@ -102,5 +99,32 @@
     "compiles": 0,
     "gpu_runs": 0,
     "publications": 0
+  },
+  "root_qualification": {
+    "source_commit": "23577498792f76b5a7050795ffff942266bbc57e",
+    "receipt": "decisions/20261015-enable-existing-bf16/validation/validation.json",
+    "cpu_policy_tests": 43,
+    "gpu_correctness_tests": 23,
+    "failures": 0,
+    "skipped": 0,
+    "variants": [
+      "fast-default",
+      "fast-off",
+      "identical"
+    ],
+    "saved_full4096_outputs": {
+      "default_fast_matches_previous_fast": true,
+      "identical_matches_previous_identical": true
+    },
+    "new_performance_measurements": 0,
+    "cross_vendor_fast_identity": "not promised or tested",
+    "durable_artifacts": {
+      "bytes": 219390252,
+      "r2_bucket": "mojolearn-data",
+      "r2_key": "measurements/records/v1/f6305813f8a70dc00d0daed6b921018ec8e4234cd26833c318a4f45ab43859b9.tar.gz",
+      "sha256": "f6305813f8a70dc00d0daed6b921018ec8e4234cd26833c318a4f45ab43859b9",
+      "status": "verified",
+      "verification": "GET sha256"
+    }
   }
 }

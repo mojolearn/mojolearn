@@ -1,0 +1,17 @@
+{
+  "started": 1792066999.1336918,
+  "source_commit": "23577498792f76b5a7050795ffff942266bbc57e",
+  "command": [
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python",
+    "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-default/probe.py",
+    "fast-off",
+    "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/local-full-4096",
+    "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-default",
+    "5f74a241961d74711752f07f326ca1d9856ee3884f8fc198dcea7ec19d8e6070"
+  ],
+  "numeric_mode": "fast",
+  "defines": "MOJOLEARN_AFN_GEMM_BF16_MMA=0",
+  "status": "finished",
+  "exit_code": 0,
+  "elapsed_s": 0.40117931365966797
+}

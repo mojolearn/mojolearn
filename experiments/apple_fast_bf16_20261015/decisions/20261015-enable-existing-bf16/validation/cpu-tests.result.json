@@ -1,0 +1,23 @@
+{
+  "exit_code": 0,
+  "elapsed_s": 1.3468931668903679,
+  "command": [
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tools/test_apple_bf16_default.py",
+    "tools/test_bench_board_bf16_capability.py",
+    "tools/test_build_defines.py",
+    "--junitxml=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-default-lane/cpu-tests.xml"
+  ],
+  "log": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-default-lane/cpu-tests.log",
+  "gpu_runs": 0,
+  "compiles": 0,
+  "coverage": {
+    "tests": 43,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  }
+}

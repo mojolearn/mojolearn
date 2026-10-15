@@ -1,0 +1,17 @@
+{
+  "started": 1792066961.888553,
+  "source_commit": "23577498792f76b5a7050795ffff942266bbc57e",
+  "command": [
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "python/mojolearn/tests/test_linalg_fast_bf16.py",
+    "--junitxml=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-default/correctness-default.xml"
+  ],
+  "numeric_mode": "fast",
+  "defines": "",
+  "status": "finished",
+  "exit_code": 0,
+  "elapsed_s": 1.3965530395507812
+}

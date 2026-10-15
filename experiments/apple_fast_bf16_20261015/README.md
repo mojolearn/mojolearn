@@ -2,7 +2,7 @@
 
 The existing explicit BF16 operations now default on in Apple FAST source,
 following Andrew's 2026-10-15 instruction. `current_decision.json` records the
-scope, caller audit and pending root build qualification. Explicit
+scope, caller audit and completed Apple build qualification. Explicit
 `MOJOLEARN_BUILD_DEFINES=MOJOLEARN_AFN_GEMM_BF16_MMA=0` disables the route,
 including when aggregate experimental switches are on. Historical measurement
 summaries retain their original default-off decision unchanged.
@@ -146,7 +146,10 @@ original absolute paths remain in the byte-for-byte historical receipts.
 The enabled source is scoped to explicit BF16 public operations. Float32-A /
 BF16-B and transpose variants have correctness evidence but no timing claim.
 No estimator has been wired to BF16, and any broader model change still needs
-its full-workload evidence. Root owns default-on, explicit-off and IDENTICAL
-build qualification; the historical compile06 evidence does not claim those
-new builds have completed. A Mac-only new-version release is technically
-possible, but no release or public documentation is authorized here.
+its full-workload evidence. Root compiled frozen `235774987` in default-on, explicit-off and IDENTICAL
+configurations. All three builds and capability checks passed, with 23 GPU
+correctness tests and 43 CPU policy tests passing without skips. The full4096
+output replay reproduced the earlier FAST and IDENTICAL outputs respectively;
+no new timing measurement was performed. Receipts are under
+`decisions/20261015-enable-existing-bf16/validation/`. Release qualification
+and publication remain pending.

@@ -6,7 +6,7 @@
     "apple"
   ],
   "default_enabled": true,
-  "status": "source_default_enabled_pending_root_build_qualification",
+  "status": "apple_default_build_and_correctness_qualified_pending_release",
   "runner": "local_benchmark.py",
   "selectable_arms": [
     "prepare",
@@ -39,5 +39,6 @@
   "current_decision": "current_decision.json",
   "explicit_off_defines": [
     "MOJOLEARN_AFN_GEMM_BF16_MMA=0"
-  ]
+  ],
+  "default_qualification": "decisions/20261015-enable-existing-bf16/validation/validation.json"
 }

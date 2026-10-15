@@ -1,0 +1,15 @@
+{
+  "started": 1792066894.569803,
+  "source_commit": "23577498792f76b5a7050795ffff942266bbc57e",
+  "command": [
+    "bash",
+    "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+    "bash",
+    "bindings/build_linalg.sh"
+  ],
+  "numeric_mode": "fast",
+  "defines": "",
+  "status": "finished",
+  "exit_code": 0,
+  "elapsed_s": 64.9912109375
+}

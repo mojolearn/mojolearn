@@ -1,0 +1,15 @@
+{
+  "started": 1792066963.2868211,
+  "source_commit": "23577498792f76b5a7050795ffff942266bbc57e",
+  "command": [
+    "bash",
+    "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+    "bash",
+    "bindings/build_linalg.sh"
+  ],
+  "numeric_mode": "fast",
+  "defines": "MOJOLEARN_AFN_GEMM_BF16_MMA=0",
+  "status": "finished",
+  "exit_code": 0,
+  "elapsed_s": 35.84499382972717
+}

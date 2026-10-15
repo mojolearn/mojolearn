@@ -1,0 +1,28 @@
+{
+  "status": "passed",
+  "source_commit": "23577498792f76b5a7050795ffff942266bbc57e",
+  "variants": {
+    "fast-default": {
+      "sha256": "1f9e5e1eb11915344ec4abbad6a5a6fbe84f7b731ed18e2429915e23f753c701",
+      "bytes": 2269640,
+      "path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-default/fast-default.so"
+    },
+    "fast-off": {
+      "sha256": "5f74a241961d74711752f07f326ca1d9856ee3884f8fc198dcea7ec19d8e6070",
+      "bytes": 2105704,
+      "path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-default/fast-off.so"
+    },
+    "identical": {
+      "sha256": "1dea06904980fa21b175afa098e3fd9beef97699b4ff5f5c4179a690093ae988",
+      "bytes": 3113960,
+      "path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-default/identical.so"
+    }
+  },
+  "correctness": {
+    "tests": 23,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "scope": "default enabled, explicit off, IDENTICAL gates; saved full4096 output equivalence; no new performance measurement or cross-vendor rerace"
+}

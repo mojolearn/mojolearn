@@ -1,0 +1,9 @@
+{
+  "variant": "fast-off",
+  "mode": 0,
+  "binary": "/Users/andrewhendel/CascadeProjects/mojolearn-apple-fast-bf16-default/python/mojolearn/_mojolearn_linalg.so",
+  "binary_sha256": "5f74a241961d74711752f07f326ca1d9856ee3884f8fc198dcea7ec19d8e6070",
+  "fast_bf16_available": false,
+  "disabled_refusal": "Apple fast BF16 requires a fast Apple GPU binding with MOJOLEARN_AFN_GEMM_BF16_MMA enabled (default 1; explicit 0 disables it); no identical fallback is used",
+  "status": "passed"
+}

@@ -1,0 +1,17 @@
+{
+  "variant": "identical",
+  "mode": 1,
+  "binary": "/Users/andrewhendel/CascadeProjects/mojolearn-apple-fast-bf16-default/python/mojolearn/identical/_mojolearn_linalg.so",
+  "binary_sha256": "1dea06904980fa21b175afa098e3fd9beef97699b4ff5f5c4179a690093ae988",
+  "fast_bf16_available": false,
+  "input_sha256": "26460b62a0964ef96bd7a451976203c5ec7fd681d50d893020a9a24174c65410",
+  "reference_sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+  "shape": [
+    4096,
+    4096
+  ],
+  "bitwise_equal": true,
+  "differing_elements": 0,
+  "output_sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+  "status": "passed"
+}

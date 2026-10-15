@@ -1,0 +1,9 @@
+{
+  "bytes": 219390252,
+  "local_path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-default/all-evidence.tar.gz",
+  "r2_bucket": "mojolearn-data",
+  "r2_key": "measurements/records/v1/f6305813f8a70dc00d0daed6b921018ec8e4234cd26833c318a4f45ab43859b9.tar.gz",
+  "sha256": "f6305813f8a70dc00d0daed6b921018ec8e4234cd26833c318a4f45ab43859b9",
+  "status": "verified",
+  "verification": "GET sha256"
+}
