@@ -31,7 +31,7 @@ import struct
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, full, zeros
 from ._lazy_out import _empty_out
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin, available_if
 from ._mode import RegressorScoreMixin
 
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
@@ -512,6 +512,7 @@ class LocalOutlierFactor(_XNeighbors):
         diff = b - a
         return b - diff * (1.0 - t) if t >= 0.5 else a + diff * t
 
+    @available_if(lambda self: not self.novelty)
     def fit_predict(self, X, y=None):
         """Fit the model and label the training samples.
 
@@ -544,6 +545,7 @@ class LocalOutlierFactor(_XNeighbors):
         if not self.novelty:
             raise AttributeError(f"{what} is not available when novelty=False; use fit_predict")
 
+    @available_if(lambda self: self.novelty)
     def score_samples(self, X):
         """Negative local outlier factor of new samples.
 
@@ -570,6 +572,7 @@ class LocalOutlierFactor(_XNeighbors):
         self._op("lof_score", [(idx, 0), (self._lrd, 0), (lrd, 0), (score, 1)], (k, nq, nf))
         return score
 
+    @available_if(lambda self: self.novelty)
     def decision_function(self, X):
         """Shifted outlier score of new samples: ``score_samples(X) - offset_``.
 
@@ -587,6 +590,7 @@ class LocalOutlierFactor(_XNeighbors):
         self._novelty("decision_function")
         return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
 
+    @available_if(lambda self: self.novelty)
     def predict(self, X):
         """Label new samples as inliers or outliers.
 

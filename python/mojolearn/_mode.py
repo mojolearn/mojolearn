@@ -192,7 +192,9 @@ def install_fit_tracking(cls):
     install_public_outputs(cls)
     for name in _FITS:  # glue: wraps the fit method names
         method = cls.__dict__.get(name)
-        if inspect.isfunction(method):
+        if isinstance(method, available_if):
+            setattr(cls, name, available_if(method.check)(_track_fit(method.fn)))
+        elif inspect.isfunction(method):
             setattr(cls, name, _track_fit(method))
     for name in _LOADS:  # glue: wraps the loader method names
         method = cls.__dict__.get(name)
@@ -540,7 +542,9 @@ class NumericModeMixin(ParamsMixin):
         # `reference_training()`.
         for method_name in ("fit", "partial_fit", "fit_predict", "fit_transform", "_fit_with_tree_start"):  # glue: wraps five estimator method names
             method = cls.__dict__.get(method_name)
-            if method is not None:
+            if isinstance(method, available_if):
+                setattr(cls, method_name, available_if(method.check)(_guard_cpu_training(method.fn)))
+            elif method is not None:
                 setattr(cls, method_name, _guard_cpu_training(method))
         orig = cls.__dict__.get("__init__")
         if orig is None:
