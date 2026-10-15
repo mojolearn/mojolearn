@@ -91,7 +91,7 @@ def plan_cells(race):
 def parse_tree_infer(path):
     """The FSPEED-INFER* lines of one forest_speed_arm.py log."""
     out = {"paths": {}, "rounds": {}, "warmup": {}, "acc": {}, "refused": {}, "agree": {},
-           "notes": []}
+           "notes": [], "state_receipts": {}}
     try:
         fh = open(path, errors="replace")
     except OSError:
@@ -100,6 +100,10 @@ def parse_tree_infer(path):
         for line in fh:
             head, _, rest = line.rstrip("\n").partition(" ")
             if not head.startswith("FSPEED-INFER"):
+                continue
+            if head == "FSPEED-INFER-STATE":
+                state = json.loads(rest)
+                out["state_receipts"].setdefault((state["arm"], state["batch"]), []).append(state["receipt"])
                 continue
             f = _kv(rest)
             arm, batch = f.get("arm"), f.get("batch")
@@ -180,6 +184,7 @@ def tree_cells(bb, ctx, race, log_path, fit_cells):
             h = rec["hashes"]
             cell["hash"] = h[-1] if h else None
             cell["hash_stable"] = (len(set(h)) == 1) if h else None
+            cell["state_receipts"] = p["state_receipts"].get((arm, batch), [])
             q = dict(p["acc"].get((arm, batch)) or {})
             for m, v in list(q.items()):
                 fv = fit_q.get(arm, {}).get(m)

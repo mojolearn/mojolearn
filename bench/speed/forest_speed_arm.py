@@ -972,6 +972,19 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
                 emit_infer("FSPEED-INFER", lane, [("arm", name), ("batch", batch), ("rows", rows),
                                                   ("round", r), ("ms", "%.3f" % ms),
                                                   ("hash", spec.hash_predictions(vec))])
+                # FAIRNESS FIX (2026-10-13 audit): inference retained only
+                # a short digest. Save the exact already-consumed output
+                # after its clock, separately for each batch and scored round.
+                # The fitted model belongs to the fit cell; no export,
+                # prediction or fit is repeated for this receipt.
+                from bench_board_state import scored_receipt, canonical_hash
+                state = scored_receipt({"prediction": np.asarray(vec)})
+                state.update(phase="infer", batch=batch, round=r,
+                             input_sha256=canonical_hash({"X": np.asarray(x)}),
+                             input_shape=list(np.asarray(x).shape), input_dtype=np.asarray(x).dtype.str)
+                state["model"] = dict(status="unavailable", reason="fitted model snapshot belongs to the fit cell")
+                print("FSPEED-INFER-STATE " + json.dumps(dict(arm=name, lane=lane, batch=batch,
+                      round=r, receipt=state), sort_keys=True), flush=True)
         if batch == "test":
             for name, vec in last.items():
                 try:

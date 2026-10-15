@@ -1,9 +1,11 @@
 """CPU-only proof that scored receipts retain verifiable bytes, without refitting."""
 import io
+import importlib.util
 import os
 from pathlib import Path
 import sys
 import tarfile
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -209,3 +211,89 @@ def test_missing_scored_bytes_halt_next_race_and_fast_never_claims_identity(tmp_
     assert cell["times_ms"] == [1.25]
     assert any("scored archive member missing" in item for item in cell["measurement"]["missing"])
     assert cell["measurement"]["scored_state"]["cross_vendor_promise"] is False
+
+
+def tree_inference(tmp_path, monkeypatch):
+    import bench_board_infer as I
+    from contextlib import redirect_stdout
+    spec = importlib.util.spec_from_file_location("forest_byte_retention",
+        Path(__file__).resolve().parents[1] / "bench/speed/forest_speed_arm.py")
+    driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver)
+    directory, rec, _ = capture(tmp_path, family="trees")
+    data = SimpleNamespace(X_train=np.arange(12, dtype=np.float32).reshape(6, 2),
+        X_test=np.zeros((3, 2), np.float32), _ours_Xtest=np.zeros((3, 2), np.float32),
+        cat_idx=None, task="binary")
+    calls = []
+    def predict(x):
+        calls.append(len(x))
+        return np.full(len(x), len(calls), np.float32)
+    monkeypatch.setattr(driver, "infer_spec", lambda *args, **kwargs: (predict, lambda raw: raw, "fixture"))
+    monkeypatch.setattr(driver, "infer_metrics", lambda *args: [])
+    monkeypatch.setattr(driver.spec, "per_arm_budget_s", lambda: 100)
+    # Exactly one timer start/end for each existing call. The receipt is after
+    # the clock; it cannot add a timed call, prediction, or model export.
+    ticks = iter(range(12))
+    monkeypatch.setattr(driver.time, "perf_counter", lambda: next(ticks))
+    text = io.StringIO()
+    with patch.dict(os.environ, {E.RECEIPTS: str(directory / "workers")}), redirect_stdout(text):
+        driver.run_inference("rf", [SimpleNamespace(name="ours")], {"ours": object()},
+                             data, 2, 5, float("inf"))
+    assert calls == [3, 3, 3, 5, 5, 5]
+    log = tmp_path / "inference.log"
+    log.write_text(text.getvalue())
+    bb = SimpleNamespace(base_cell=lambda ctx, race, arm, mode: dict(arm=arm, mode=mode),
+                         _status=lambda ms, refused, rounds: "ok" if len(ms) == rounds and not refused else "partial",
+                         strip_our_cpu_cells=lambda cells: cells, add_ratios=lambda cells: cells)
+    rec["infer_cells"] = I.tree_cells(bb, {"rounds": 2},
+        dict(arms=["ours"], our_arms={"ours": "identical"}), str(log), rec["cells"])
+    members = {str(p.relative_to(directory)): p.read_bytes() for p in (directory / "scored").rglob("*.npz")}
+    return directory, rec, members
+
+
+def test_tree_inference_retains_every_scored_round_and_separates_fit_batches(tmp_path, monkeypatch):
+    directory, rec, members = tree_inference(tmp_path, monkeypatch)
+    refs, missing = E.scored_state_refs(rec, directory, members)
+    assert not missing
+    assert set(refs) == {("fit", "ours"), ("infer", "ours", "test"), ("infer", "ours", "large")}
+    for batch, values, rows in (("test", [2, 3], 3), ("large", [5, 6], 5)):
+        records = refs[("infer", "ours", batch)]
+        assert [r["round"] for r in records] == [1, 2]
+        for row, expected in zip(records, values):
+            with np.load(io.BytesIO(members[row["output"]["member"]]), allow_pickle=False) as saved:
+                np.testing.assert_array_equal(saved["prediction"], np.full(rows, expected, np.float32))
+            assert row["input"]["shape"] == [rows, 2]
+    E.seal(dict(out=str(tmp_path), measurement_inventory={}, measurement_source={"status": "local"},
+                evidence_r2=False), directory, dict(source={}, dataset={"identity": "input-sha"}, hardware={}), rec)
+    identities = set()
+    for cell in rec["infer_cells"]:
+        assert cell["times_ms"] == [1000.0, 1000.0]
+        measurement = cell["measurement"]
+        assert measurement["scored_state"]["phase"] == "infer"
+        assert measurement["scored_state"]["batch"] == cell["batch"]
+        identities.add(measurement["retained_outputs"]["canonical_sha256"])
+    assert len(identities) == 2
+
+
+@pytest.mark.parametrize("failure", ["missing", "corrupt", "wrong-batch", "fit-in-infer", "missing-round", "missing-all"])
+def test_tree_inference_bad_evidence_does_not_hide_or_replace_other_cells(tmp_path, monkeypatch, failure):
+    directory, rec, members = tree_inference(tmp_path, monkeypatch)
+    bad = next(c for c in rec["infer_cells"] if c["batch"] == "test")
+    receipt = bad["state_receipts"][0]
+    member = str(Path(receipt["retained_output"]["path"]).relative_to(directory))
+    if failure == "missing":
+        del members[member]
+    elif failure == "corrupt":
+        members[member] = b"truncated npz"
+    elif failure == "wrong-batch":
+        receipt["batch"] = "large"
+    elif failure == "fit-in-infer":
+        bad["state_receipts"] = rec["cells"][0]["state_receipts"]
+    elif failure == "missing-all":
+        bad["state_receipts"] = []
+    else:
+        bad["state_receipts"].pop()
+    refs, missing = E.scored_state_refs(rec, directory, members)
+    assert set(missing) == {("infer", "ours", "test")}
+    assert refs[("fit", "ours")][0]["output"]
+    assert len(refs[("infer", "ours", "large")]) == 2

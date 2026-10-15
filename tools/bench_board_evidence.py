@@ -399,6 +399,11 @@ def classical_output_refs(rec, members):
     return refs, missing
 
 
+def scored_state_key(phase, cell):
+    """Fit and distinct inference batches must never share output receipts."""
+    return (phase, cell["arm"], cell.get("batch")) if phase == "infer" else (phase, cell["arm"])
+
+
 def scored_state_refs(rec, directory, members):
     """Verify exact scored-call output/model bytes, independently of timers.
 
@@ -438,21 +443,34 @@ def scored_state_refs(rec, directory, members):
         return dict(member=name, bytes=len(payload), sha256=digest(payload),
                     canonical_sha256=expected, encoding=ref.get("encoding"))
 
-    for cell in rec.get("cells") or []:
+    cells = [("fit", cell) for cell in rec.get("cells") or []]
+    cells += [("infer", cell) for cell in rec.get("infer_cells") or []]
+    for phase, cell in cells:
         if cell.get("stored") or cell.get("arm") in rec.get("stored_arms", []):
             continue
-        key = ("fit", cell["arm"])
+        key = scored_state_key(phase, cell)
         receipts = cell.get("state_receipts") or []
         if not receipts:
             if (rec.get("family") in ("trees", "neural", "classical", "classical2", "algos")
+                    and (phase == "fit" or rec.get("family") == "trees")
                     and cell.get("mode") in ("identical", "fast")
                     and cell.get("status") in ("ok", "not-scored", "recompiled-in-clock")):
                 missing[key] = ["scored output receipt missing"]
             continue
         rows, failures = [], []
+        if phase == "infer":
+            expected = len(cell["times_ms"]) if "times_ms" in cell else cell.get("rounds")
+            if expected is None or [r.get("round") for r in receipts] != list(range(1, expected + 1)):
+                failures.append("scored inference receipt rounds do not match measured rounds")
         for index, receipt in enumerate(receipts):
             row = dict(receipt_index=index, model=dict(status="unavailable", reason="no model receipt"))
+            if phase == "infer":
+                row.update(phase=phase, batch=cell.get("batch"), round=receipt.get("round"),
+                           input=dict(sha256=receipt.get("input_sha256"), shape=receipt.get("input_shape"),
+                                      dtype=receipt.get("input_dtype")))
             try:
+                if phase == "infer" and (receipt.get("phase") != phase or receipt.get("batch") != cell.get("batch")):
+                    raise ValueError("scored receipt phase/batch differs from measurement")
                 if receipt.get("retention_error"):
                     raise ValueError(receipt["retention_error"])
                 if receipt.get("output_status") != "ok":
@@ -554,7 +572,8 @@ def seal(ctx, directory, recipe, rec):
             absent = list(missing)
             if (phase, cell.get("arm")) in output_missing:
                 absent.append(output_missing[(phase, cell["arm"])])
-            absent.extend(state_missing.get((phase, cell.get("arm")), []))
+            state_key = scored_state_key(phase, cell)
+            absent.extend(state_missing.get(state_key, []))
             if not params:
                 absent.append("effective parameters")
             fitted = cell.get("fitted_parameters") or []
@@ -609,15 +628,17 @@ def seal(ctx, directory, recipe, rec):
             if (phase, cell.get("arm")) in output_refs:
                 record["retained_outputs"] = dict(output_refs[(phase, cell["arm"])],
                     status="verified" if ref.get("status") == "verified" else "local")
-            if (phase, cell.get("arm")) in state_refs:
-                rows = state_refs[(phase, cell["arm"])]
+            if state_key in state_refs:
+                rows = state_refs[state_key]
                 status = "verified" if ref.get("status") == "verified" else "local"
                 for row in rows:
                     for value in (row.get("output"), row["model"].get("retained")):
                         if value:
                             value["status"] = status
                 record["scored_state"] = dict(receipts=rows, comparison="not compared",
-                    scope="captured scored calls; trees retain the final scored fit only",
+                    phase=phase, batch=cell.get("batch") if phase == "infer" else None,
+                    scope=("final scored fit" if rec.get("family") == "trees" and phase == "fit"
+                           else "each captured scored call"),
                     cross_vendor_promise=cell.get("mode") == "identical",
                     eligibility="cross-vendor output comparison requires identical mode, same numerical source, inputs, initial state and settings")
                 if rows and rows[-1].get("output"):
