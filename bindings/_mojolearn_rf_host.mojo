@@ -72,6 +72,13 @@ from bindings.forest_export_binding import (
     validate_forest_export_destinations,
 )
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.weight_compact_host import (
+    host_all_unit,
+    host_gather_colmajor,
+    host_gather_f32,
+    host_gather_i32,
+    host_nonzero_weight_rows,
+)
 from checks.fixed_point import choose_scale
 from core.abs_sum_blocked_host import host_abs_sum_blocked
 from checks.kernel_matrix import (
@@ -347,6 +354,35 @@ def _read_weights(weights_addr: Int, n_rows: Int) raises -> List[Float32]:
     return weights^
 
 
+def _host_drop_zero_weight_rows(
+    mut x: List[Float32],
+    mut weights: List[Float32],
+    mut y_kept: List[Int32],
+    y_address: Int,
+    n_rows: Int,
+    n_cols: Int,
+    bootstrap: Bool,
+) raises -> Int:
+    """`bindings/_mojolearn_rf.mojo::_rf_drop_zero_weight_rows` on the host
+    column (lane sk-weq-trees): a weighted classifier fit without bootstrap
+    keeps only its nonzero-weight rows (scikit-learn's splitter), in the
+    device's ascending order. `x` (column-major) and `weights` become the
+    kept rows', `y_kept` the kept labels; all-1.0 kept weights become the
+    empty list (the count objective), as the device rescan does. Returns
+    the kept row count (n_rows, nothing touched, when no weight is zero)."""
+    if len(weights) == 0 or bootstrap:
+        return n_rows
+    var rows = host_nonzero_weight_rows(weights)
+    if len(rows) >= n_rows or len(rows) == 0:
+        return n_rows
+    x = host_gather_colmajor(x, n_rows, n_cols, rows)
+    y_kept = host_gather_i32(read_i32(y_address, n_rows), rows)
+    weights = host_gather_f32(weights, rows)
+    if host_all_unit(weights):
+        weights = List[Float32]()
+    return len(rows)
+
+
 def _rf_fit[
     CLASSIFIER: Bool, EXPORT: Bool, ROWMAJOR: Bool
 ](
@@ -390,18 +426,28 @@ def _rf_fit[
     # `bindings/_mojolearn_rf.mojo:363-380`: the weights' checks in their
     # words; all-unit weights fit unweighted.
     var weights = _read_weights(weights_addr, n_rows)
-    var mwl = _apply_min_weight_fraction(p, _min_weight_fraction(params), weights, n_rows)
     var x_address = _index(x_addr)
     var y_address = _index(y_addr)
+    # sk-weq-trees: a weighted classifier fit without bootstrap drops its
+    # zero-weight rows (`_host_drop_zero_weight_rows`); n_fit is the kept count
+    var x = _read_x_col_major(x_address, n_rows, n_cols, ROWMAJOR)
+    var y_kept = List[Int32]()
+    var n_fit = n_rows
+    comptime if CLASSIFIER:
+        n_fit = _host_drop_zero_weight_rows(
+            x, weights, y_kept, y_address, n_rows, n_cols, p.bootstrap
+        )
+    var y_fit = y_address if n_fit == n_rows else Int(y_kept.unsafe_ptr())
+    var mwl = _apply_min_weight_fraction(p, _min_weight_fraction(params), weights, n_fit)
     var forest: RfHostForest
     with GILReleased(Python()):
-        var x = _read_x_col_major(x_address, n_rows, n_cols, ROWMAJOR)
         forest = _rf_fit_colmajor[CLASSIFIER](
-            x^, y_address, n_rows, n_cols, n_classes, p, weights, tree_start, importance_addr != 0,
+            x^, y_fit, n_fit, n_cols, n_classes, p, weights, tree_start, importance_addr != 0,
             mwl,
         )
         if oob_addr != 0:
             rf_host_oob[CLASSIFIER](forest,p,f32_ptr(x_address),y_address,weights,n_rows,n_cols,oob_addr,oob_score_addr)
+    _ = y_kept^
     if importance_addr != 0:
         rf_host_importance(forest,n_cols,importance_addr)
     comptime if EXPORT:
@@ -808,15 +854,22 @@ def rf_classifier_fit_weighted_session_binding(
     if w_address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
     var weights = _read_weights(w_address, n_rows)
-    var mwl = _apply_min_weight_fraction(p, _min_weight_fraction(params), weights, n_rows)
     var x = _session_x(entry, _index(handle), n_rows, n_cols)
     var y_address = _index(y_addr)
+    # sk-weq-trees: the zero-weight rows leave this member's fit
+    var y_kept = List[Int32]()
+    var n_fit = _host_drop_zero_weight_rows(
+        x, weights, y_kept, y_address, n_rows, n_cols, p.bootstrap
+    )
+    var y_fit = y_address if n_fit == n_rows else Int(y_kept.unsafe_ptr())
+    var mwl = _apply_min_weight_fraction(p, _min_weight_fraction(params), weights, n_fit)
     var forest: RfHostForest
     with GILReleased(Python()):
         forest = _rf_fit_colmajor[True](
-            x^, y_address, n_rows, n_cols, n_classes, p, weights, 0,
+            x^, y_fit, n_fit, n_cols, n_classes, p, weights, 0,
             min_weight_leaf=mwl,
         )
+    _ = y_kept^
     return _retain_rf_export(forest^)
 
 
