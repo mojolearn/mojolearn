@@ -443,7 +443,7 @@ class MinMaxScaler(_ScalerProtocol):
         for i, name in enumerate(('data_min_', 'data_max_', 'data_range_', 'scale_', 'min_')):  # glue: sets five fitted attribute names
             setattr(self, name, got[i].copy())
 
-    def fit(self, X, y=None, sample_weight=None):
+    def fit(self, X, y=None):
         """Compute the per-feature minimum and maximum.
 
         Parameters
@@ -451,8 +451,6 @@ class MinMaxScaler(_ScalerProtocol):
         X : array-like of shape (n_samples, n_features), float32
             Training data; NaN is ignored, infinity is refused.
         y : ignored
-        sample_weight : None
-            Not supported; any value raises ``NotImplementedError``.
 
         Returns
         -------
@@ -465,8 +463,9 @@ class MinMaxScaler(_ScalerProtocol):
         for name in list(self.__dict__):  # glue: drops stale fitted attributes
             if name.endswith('_'):
                 del self.__dict__[name]
-        if sample_weight is not None:
-            raise NotImplementedError('MinMaxScaler does not support sample_weight')
+        # scikit-learn's MinMaxScaler.fit takes no sample_weight, so neither
+        # does this one: with the parameter in the signature, scikit-learn's
+        # checks (has_fit_parameter) run its weight-equivalence check on it.
         mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
         binding = self._binding(mode)
         direct = _direct_entry(binding, "minmax_fit_direct")
