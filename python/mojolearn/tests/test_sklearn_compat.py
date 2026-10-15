@@ -120,6 +120,12 @@ def _factories():
         "TruncatedSVD": lambda: ml.TruncatedSVD(n_components=1, n_iter=5),
         "MeanShift": lambda: ml.MeanShift(bandwidth=1.0, max_iter=5),
         "HuberRegressor": lambda: ml.HuberRegressor(max_iter=5),
+        # scikit-learn's INIT_PARAMS for both: five coordinate-descent passes
+        # per alpha, so a weight-w row and w repeated rows run the same
+        # passes (with the default tol=1e-4 stop, float32 rounding can end
+        # one fit a pass before the other: LassoCV predict gap 1.4e-2)
+        "LassoCV": lambda: ml.LassoCV(max_iter=5, cv=3),
+        "ElasticNetCV": lambda: ml.ElasticNetCV(max_iter=5, cv=3),
         "HDBSCAN": lambda: ml.HDBSCAN(min_samples=1),
         # scikit-learn's own test settings for these two (its
         # _test_common/instance_generator.py INIT_PARAMS): with the default
@@ -469,6 +475,24 @@ WEIGHT_EQUIVALENCE_FLOAT32 = {
                         "same weighted problem",
     # one Ridge per output column (MultiOutputRegressor(Ridge()), _factories)
     "MultiOutputRegressor": "float32 fit of its Ridge members: the gap of Ridge's entry; same weighted problem",
+    # weighted means, sqrt(w) row scaling and the weighted held-out errors
+    # over the check's LeaveOneGroupOut splits (x_linear/ridgecv.mojo); the
+    # same alpha on both fits
+    "RidgeCV": "float32 fit: predict max absolute gap 7.2e-7 (3 float32 ulps at 2.0), relative 1.9e-4 only on "
+               "an entry near 0; same weighted problem and alpha",
+    # final_estimator RidgeCV() over the members' cross-validated predictions
+    "StackingRegressor": "float32 fit of its final RidgeCV: predict gap 3.7e-8 absolute, 1.7e-6 relative "
+                         "(0.02137140 vs 0.02137136), 3 of 15 entries; same weighted problem",
+    # five L-BFGS steps (scikit-learn's max_iter=5 check setting) on the
+    # weighted Huber loss (sum of w times the loss; x_linear/huber.mojo)
+    "HuberRegressor": "float32 fit, max_iter=5: predict max relative gap 1.2e-5 (0.53079778 vs 0.53080392); "
+                      "same weighted problem",
+    # loss and penalty scaled by sum(w) of the training rows, held-out
+    # accuracy weighted by the raw weights (x_linear/logcv.mojo); the
+    # accuracies are exact integer ratios, so both fits pick the same C, and
+    # float32 L-BFGS stopping at tol=1e-4 sets the gap
+    "LogisticRegressionCV": "float32 L-BFGS fit (tol=1e-4): predict_proba max absolute gap 3.8e-5 (0.86843020 vs "
+                            "0.86842579), relative 4.2e-4; same weighted problem and C",
 }
 
 
