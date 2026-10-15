@@ -7173,6 +7173,13 @@ def search_batch_regression_enqueue(
     # representation has a separate threshold-snapping contract and keeps B.
     # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     var fused_small_rows = Int32(ET_SMALL_NODE_TPB) if T05 and not range_only and not dataset.bins_active() else Int32(0)
+    # lane sk-final: the weighted regressor's cells hold two accumulators
+    # (Z, W; the workspace was built with `n_classes = 2`), and the fused
+    # small-node pass sums labels over row counts, so it stays off.
+    var n_acc_reg = 1
+    if dataset.weighted:
+        n_acc_reg = 2
+        fused_small_rows = Int32(0)
 
     ref d_min = ws.d_min
     ref d_max = ws.d_max
@@ -7263,7 +7270,7 @@ def search_batch_regression_enqueue(
             d_accl.unsafe_ptr(),
             d_acct.unsafe_ptr(),
             Int32(n_cells),
-            Int32(n_cells),
+            Int32(n_cells * n_acc_reg),
             r_mx.unsafe_ptr(),
             Int32(setup_nodes),
             r_q.unsafe_ptr(),
@@ -7388,7 +7395,39 @@ def search_batch_regression_enqueue(
     var tiled_score = False
     comptime if ET_SCORE_TILED:
         tiled_score = dataset.has_rm
-    if tiled_score and dataset.bins_active():
+    if dataset.weighted:
+        # lane sk-final: the weighted regressor's score pass, (Z, W) per
+        # cell. Its trainer never bins X, so the raw thresholds stand; the
+        # counts and sums are integers, the same in any kernel's order.
+        ctx.enqueue_function[
+            node_feature_score_weighted_reg_kernel[TPB, MAX_ACC, ET_ROW_MAJOR]
+        ](
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_nblocks.unsafe_ptr(),
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            dataset.search_data_ptr(),
+            d_row_ids.unsafe_ptr(),
+            dataset.d_labels.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            ws.d_tree.unsafe_ptr(),
+            n_rows,
+            Int32(k),
+            Int32(2),
+            seed,
+            Int32(0),
+            dataset.n_cols,
+            dataset.weights_ptr(),
+            grid_dim=search_grid(n_blocks, Int(k)),
+            block_dim=(TPB, 1, 1),
+        )
+    elif tiled_score and dataset.bins_active():
         ctx.enqueue_function[
             node_feature_score_reg_tiled_kernel[TPB, ET_CODE_TILE, ET_CODE]
         ](
@@ -7470,63 +7509,119 @@ def search_batch_regression_enqueue(
             grid_dim=search_grid(n_blocks, Int(k)),
             block_dim=(TPB, 1, 1),
         )
-    ctx.enqueue_function[
-        node_feature_score_finalize_kernel[MAX_ACC, False]
-    ](
-        d_status.unsafe_ptr(),
-        d_thresh.unsafe_ptr(),
-        d_gnum.unsafe_ptr(),
-        d_gden.unsafe_ptr(),
-        d_nleft.unsafe_ptr(),
-        d_ntotal.unsafe_ptr(),
-        d_accl.unsafe_ptr(),
-        d_acct.unsafe_ptr(),
-        d_min.unsafe_ptr(),
-        d_max.unsafe_ptr(),
-        d_missing.unsafe_ptr(),
-        d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-        d_colids.unsafe_ptr(),
-        ws.d_tree.unsafe_ptr(),
-        Int32(n_cells),
-        Int32(k),
-        Int32(1),
-        seed,
-        params.min_samples_leaf,
-        Int32(0),
-        grid_dim=ceildiv(n_cells, 64),
-        block_dim=64,
-    )
+    if dataset.weighted:
+        ctx.enqueue_function[
+            node_feature_score_finalize_weighted_reg_kernel[MAX_ACC]
+        ](
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_colids.unsafe_ptr(),
+            ws.d_tree.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(k),
+            Int32(2),
+            seed,
+            params.min_samples_leaf,
+            Int32(0),
+            dataset.min_weight_units,
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+    else:
+        ctx.enqueue_function[
+            node_feature_score_finalize_kernel[MAX_ACC, False]
+        ](
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_colids.unsafe_ptr(),
+            ws.d_tree.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(k),
+            Int32(1),
+            seed,
+            params.min_samples_leaf,
+            Int32(0),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
     # The regression candidate carries cuML's MSE gain as its exact key
     # (DEVIATION 189), so the conversion is the classification one with
     # `n_classes = 1`: the accumulator loop runs once and the metric is
     # the gain in SCALED units, which is monotone in the label's own units
     # and therefore orders identically.
     clock.tick(ctx, PHASE_SCORE)
-    ctx.enqueue_function[score_to_candidate_kernel](
-        c_q.unsafe_ptr(),
-        c_c.unsafe_ptr(),
-        c_m.unsafe_ptr(),
-        c_l.unsafe_ptr(),
-        c_nu.unsafe_ptr(),
-        c_de.unsafe_ptr(),
-        c_v.unsafe_ptr(),
-        d_status.unsafe_ptr(),
-        d_thresh.unsafe_ptr(),
-        d_nleft.unsafe_ptr(),
-        d_ntotal.unsafe_ptr(),
-        d_accl.unsafe_ptr(),
-        d_acct.unsafe_ptr(),
-        d_gnum.unsafe_ptr(),
-        d_gden.unsafe_ptr(),
-        d_colids.unsafe_ptr(),
-        Int32(n_cells),
-        Int32(1),
-        params.min_samples_leaf,
-        params.split_criterion,
-        Int32(k),
-        grid_dim=ceildiv(n_cells, 64),
-        block_dim=64,
-    )
+    if dataset.weighted:
+        ctx.enqueue_function[score_to_candidate_weighted_reg_kernel](
+            c_q.unsafe_ptr(),
+            c_c.unsafe_ptr(),
+            c_m.unsafe_ptr(),
+            c_l.unsafe_ptr(),
+            c_nu.unsafe_ptr(),
+            c_de.unsafe_ptr(),
+            c_v.unsafe_ptr(),
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_colids.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(2),
+            params.min_samples_leaf,
+            params.split_criterion,
+            Int32(k),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+    else:
+        ctx.enqueue_function[score_to_candidate_kernel](
+            c_q.unsafe_ptr(),
+            c_c.unsafe_ptr(),
+            c_m.unsafe_ptr(),
+            c_l.unsafe_ptr(),
+            c_nu.unsafe_ptr(),
+            c_de.unsafe_ptr(),
+            c_v.unsafe_ptr(),
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_colids.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(1),
+            params.min_samples_leaf,
+            params.split_criterion,
+            Int32(k),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
     if fused_small_rows != 0:
         _enqueue_small_node_splits[False](ctx,ws,dataset,d_row_ids,
             n_nodes,k,Int32(1),seed,params)
