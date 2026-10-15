@@ -1,0 +1,13 @@
+{
+  "files": {
+    "mojolearn-0.8.46-py3-none-macosx_11_0_arm64.whl": "b62801a43264d4ef38a087e9fd98647e9ab2225b4cf8e41b3d2086f913ca7172"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "dedd866a183e127b5e117f66641dda764753d450"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.46"
+}
