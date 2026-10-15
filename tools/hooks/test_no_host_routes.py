@@ -316,6 +316,31 @@ def test_head_is_clean():
     assert rc == 0, err
 
 
+def test_bf16_metadata_loop_annotations():
+    # BF16's native boundary validates rank/keyword metadata, not tensor
+    # elements. Use the existing reviewed small-loop annotation; unannotated
+    # lookalikes remain findings rather than teaching a name-based exemption.
+    cases = [
+        ("def shape_size(shape: PythonObject) raises -> Int:\n"
+         "    var total = 1\n"
+         "    for axis in range(len(shape)):{note}\n"
+         "        total *= Int(py=shape[axis])\n"
+         "    return total\n",
+         "  # small-loop(shape: buffer rank metadata): one extent per axis, never tensor elements"),
+        ("def parse_keywords(keys: PythonObject) raises:\n"
+         "    for index in range(len(keys)):{note}\n"
+         "        var key = keys[index]\n"
+         "        if String(key) != \"out\":\n"
+         "            raise Error(\"unknown keyword\")\n",
+         "  # small-loop(keys: API keyword metadata): supported argument names only, never tensor elements"),
+    ]
+    for source, note in cases:
+        annotated = list(enumerate(source.format(note=note).splitlines(), 1))
+        assert nhr._mojo_host_loops(annotated, "bindings/bf16_metadata_fixture.mojo") == []
+        unannotated = list(enumerate(source.format(note="").splitlines(), 1))
+        assert len(nhr._mojo_host_loops(unannotated, "bindings/bf16_metadata_fixture.mojo")) == 1
+
+
 def test_blocked_classes():
     missed = []
     for name, changes, needle in BLOCKED:

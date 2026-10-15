@@ -6,6 +6,7 @@ export remains explicit and must not be treated as a verified model match.
 """
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 from contextlib import contextmanager
@@ -296,6 +297,50 @@ def canonical_hash(value):
     return h.hexdigest()
 
 
+def save_typed_state(path, value):
+    """Retain a public state_dict without pickle or loss of array/scalar types."""
+    import numpy as np
+    arrays = {}
+
+    def pack(obj):
+        if isinstance(obj, np.generic):
+            obj = np.asarray(obj)
+        if isinstance(obj, np.ndarray):
+            if obj.dtype.hasobject:
+                raise TypeError("object arrays cannot establish state identity")
+            key = "array_%d" % len(arrays)
+            arrays[key] = np.ascontiguousarray(obj) if obj.ndim else obj.copy()
+            return ["array", key]
+        if isinstance(obj, dict):
+            return ["dict", [[key, pack(obj[key])] for key in sorted(obj)]]
+        if isinstance(obj, (list, tuple)):
+            return ["sequence", [pack(item) for item in obj]]
+        if obj is None or isinstance(obj, (str, bool, int, float)):
+            return ["scalar", obj]
+        raise TypeError("unsupported exported state type: " + type(obj).__name__)
+
+    tree = json.dumps(pack(value), allow_nan=False, separators=(",", ":")).encode()
+    np.savez(path, structure=np.frombuffer(tree, dtype=np.uint8), **arrays)
+
+
+def load_typed_state(path):
+    """Read the non-executable container produced by save_typed_state."""
+    import numpy as np
+    with np.load(path, allow_pickle=False) as saved:
+        def unpack(node):
+            kind, value = node
+            if kind == "array":
+                return saved[value].copy()
+            if kind == "dict":
+                return {key: unpack(item) for key, item in value}
+            if kind == "sequence":
+                return [unpack(item) for item in value]
+            if kind == "scalar":
+                return value
+            raise ValueError("unknown state node: " + str(kind))
+        return unpack(json.loads(saved["structure"].tobytes()))
+
+
 def _model_receipt(model, *, retain_directory=None):
     """Hash a public snapshot; never fit, predict, or inspect opaque handles."""
     if model is None:
@@ -305,7 +350,13 @@ def _model_receipt(model, *, retain_directory=None):
         return dict(info, status="unavailable", reason="opponent model export is not normalized")
     if callable(getattr(model, "state_dict", None)):
         state = model.state_dict()
-        return dict(info, status="ok", source="public state_dict", sha256=canonical_hash(state))
+        result = dict(info, status="ok", source="public state_dict", sha256=canonical_hash(state))
+        if retain_directory is not None:
+            with _export_directory(retain_directory, "mojolearn-scored-state-") as directory:
+                path = directory / "model.npz"
+                save_typed_state(path, state)
+                result['retained_export'] = dict(_retained_export(path), encoding='typed canonical state npz')
+        return result
     if callable(getattr(model, "save", None)):
         import numpy as np
         with _export_directory(retain_directory, "mojolearn-scored-state-") as directory:
@@ -334,7 +385,8 @@ def model_receipt(model, *, retain_directory=None):
         # Keep the scored measurement and its original diagnostic. Failed
         # exports are never an identity claim and can be repaired separately.
         return {"status": "error", "class": type(model).__name__,
-                "error": type(exc).__name__ + ": " + str(exc)}
+                "error": type(exc).__name__ + ": " + str(exc),
+                "retention_error": retain_directory is not None and isinstance(exc, OSError)}
 
 
 def runner_model(runner):
@@ -349,7 +401,38 @@ def runner_model(runner):
 
 
 def scored_receipt(outputs, runner=None, model=None):
+    """Capture already-scored values after the clock, with bytes in board runs.
+
+    No fit/predict is performed here. Public model exports remain snapshots,
+    not a claim that every estimator exposes its complete fitted state.
+    """
     present = outputs is not None and bool(outputs) and all(value is not None for value in outputs.values())
-    return {"schema": "mojolearn-scored-receipt/1", "output_status": "ok" if present else "unavailable",
-            "output_sha256": canonical_hash(outputs) if present else None,
-            "model": model_receipt(model if model is not None else runner_model(runner))}
+    receipt = {"schema": "mojolearn-scored-receipt/1", "output_status": "ok" if present else "unavailable",
+               "output_sha256": canonical_hash(outputs) if present else None}
+    directory = None
+    receipts = os.environ.get("MOJOLEARN_MEASUREMENT_RECEIPTS")
+    if receipts:
+        # FAIRNESS FIX (2026-10-13 audit): tree/model receipts used to hash
+        # temporary exports and discard the actual bytes. Capture each scored
+        # call centrally, before a later round can replace its output/state.
+        try:
+            import numpy as np
+            root = Path(receipts).parent / "scored"
+            root.mkdir(parents=True, exist_ok=True)
+            directory = Path(tempfile.mkdtemp(prefix=str(os.getpid()) + "-", dir=root))
+            if present:
+                path = directory / "outputs.npz"
+                if all(isinstance(value, np.ndarray) for value in outputs.values()):
+                    np.savez(path, **outputs)
+                    encoding = 'numpy output arrays'
+                else:
+                    save_typed_state(path, outputs)
+                    encoding = 'typed canonical state npz'
+                receipt['retained_output'] = dict(_retained_export(path), encoding=encoding)
+        except Exception as exc:
+            # Preserve the completed clock and its hash. Seal records the
+            # retention failure and blocks the next race, never reruns this one.
+            receipt['retention_error'] = type(exc).__name__ + ': ' + str(exc)
+    receipt['model'] = model_receipt(model if model is not None else runner_model(runner),
+                                    retain_directory=directory / 'model' if directory is not None else None)
+    return receipt

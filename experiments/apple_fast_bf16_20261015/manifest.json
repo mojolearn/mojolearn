@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "APPLE-FAST-BF16-PUBLIC-20261015",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "default_enabled": false,
+  "status": "local_operation_screening_complete",
+  "runner": "local_benchmark.py",
+  "selectable_arms": [
+    "prepare",
+    "released-identical",
+    "candidate-fast",
+    "torch-mps"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_AFN_GEMM_BF16_MMA=1"
+  ],
+  "implementation_paths": [
+    "bindings/apple_fast_bf16_public.mojo",
+    "bindings/_mojolearn_linalg.mojo",
+    "python/mojolearn/linalg_fast.py",
+    "gemm/afn_apple_fast.mojo"
+  ],
+  "correctness_test": "python/mojolearn/tests/test_linalg_fast_bf16.py",
+  "results": "result_summary.json",
+  "affected_current_public_operation": "mojolearn.linalg_fast explicit BF16 operations; newly wired generic mojolearn.linalg BF16 operations in FAST only",
+  "affected_estimators": "No production estimator BF16 caller established; no implicit FP32 quantization or broad wiring",
+  "full_workload_recipe": null,
+  "full_workload_status": "full GEMM primitive 4096^3 recipe identified but unrun; estimator mappings and datasets pending",
+  "build_owner": "orchestrator only; runner never compiles, installs or publishes",
+  "generic_wiring_status": "source_ready_uncompiled",
+  "runner_presets": {
+    "screen": "original three-shape local screening, seed 82471 uniform",
+    "full": "GEMM_SHAPES.full 4096^3, seed 7 standard_normal; full primitive only, not estimator or board coverage"
+  }
+}

@@ -13,7 +13,8 @@ blocks call ``gemm.afn_apple_fast.afn_gemm_fused_into`` directly; this
 wrapper is the Python face of the same entry for tests and the quality
 judge). Nothing in the tree calls it this round.
 """
-from ._buffer import addr, addr_ro, empty, probe
+from ._buffer import addr, addr_ro, empty
+from ._bufcheck import probe
 from ._linalg_impl import _OPS, _load, _operand, numeric_mode
 
 EPILOGUES = {None: 0, "bias": 1, "bias_residual": 2, "bias_silu": 3, "bias_gelu": 4}
@@ -109,4 +110,16 @@ def matmul_fused(a, b, *, bias=None, residual=None, activation=None,
     return out_arr
 
 
-__all__ = ["matmul_fused", "has_fused", "EPILOGUES"]
+# Import-time binding only. All BF16 argument handling, packing, allocations,
+# launches, synchronization and consumed-output construction run in Mojo.
+# This opt-in candidate has no identical fallback, and does not change the
+# default-off MOJOLEARN_AFN_GEMM_BF16_MMA experiment switch. A missing/newer
+# binding is an installation error; never fall back to the Python wrapper.
+_bf16_binding = _load()
+has_bf16 = _bf16_binding.fast_bf16_available
+to_bf16 = _bf16_binding.fast_to_bf16
+from_bf16 = _bf16_binding.fast_from_bf16
+matmul_bf16 = _bf16_binding.fast_matmul_bf16
+
+__all__ = ["matmul_fused", "has_fused", "EPILOGUES",
+           "has_bf16", "to_bf16", "from_bf16", "matmul_bf16"]

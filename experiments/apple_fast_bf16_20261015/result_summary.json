@@ -1,0 +1,258 @@
+{
+  "schema": 1,
+  "experiment": "apple-fast-bf16-public-20261015",
+  "status": "local_operation_screening_complete",
+  "decision": "retain candidate disabled by default",
+  "reason": "Five scored samples per shape show 13.9% and 8.6% less time on the medium and neighboring-tail cases, 7.2% more time on the small case. Scope and noise are insufficient for full-workload/default promotion.",
+  "source_commit": "6cec6320d1d76b5ef3569794115ffe525a5df98d",
+  "candidate_define": "MOJOLEARN_AFN_GEMM_BF16_MMA=1",
+  "numeric_mode": "fast",
+  "hardware": {
+    "cpu": "Apple M4",
+    "memory_bytes": 17179869184,
+    "logical_cpus": 10
+  },
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "candidate_binary": {
+    "path": "/Users/andrewhendel/CascadeProjects/mojolearn-apple-fast-bf16/python/mojolearn/_mojolearn_linalg.so",
+    "sha256": "b2c32bea3eea8321f9909d10e8f497b4f15529dd8d51cb1340751e836cf41565",
+    "bytes": 2250168,
+    "commit": "6cec6320d1d76b5ef3569794115ffe525a5df98d"
+  },
+  "original_executed_controller_sha256": "c861085ff1790ca5b6d26ce59a54320101c54fa34573cf9435b5aa3a78c334d2",
+  "portable_runner": "local_benchmark.py",
+  "portable_runner_executed_for_these_results": false,
+  "artifact_manifest": {
+    "results/20261015/executed_controller.py": {
+      "sha256": "c861085ff1790ca5b6d26ce59a54320101c54fa34573cf9435b5aa3a78c334d2",
+      "bytes": 7789
+    },
+    "results/20261015/comparison.json": {
+      "sha256": "71acec69d36d067cef71e28bf1e5042f77ccdd26c774c6b01652fd21d10e0d9c",
+      "bytes": 2093
+    },
+    "results/20261015/inputs.json": {
+      "sha256": "3f1f07262f61c877723cec88a7a30c37adb7de19c351159d5c6b8bb3fd67fd19",
+      "bytes": 1284
+    }
+  },
+  "raw_evidence_directory": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane",
+  "raw_binary": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/compile-05-candidate-on.so",
+  "raw_input_and_output_arrays": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/local-medium",
+  "validation": {
+    "compile": {
+      "receipt": "compile-05.result.json",
+      "exit_code": 0,
+      "elapsed_s": 38.24789023399353,
+      "scope": "enabled Apple FAST linalg binding only"
+    },
+    "correctness": {
+      "receipt": "correctness-05.result.json",
+      "junit": "correctness-05.xml",
+      "exit_code": 0,
+      "passed": 22,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "cold_one_hot": {
+      "receipt": "diagnose-tail-03.result.json",
+      "log": "diagnose-tail-03.log",
+      "exit_code": 0,
+      "cases": 35,
+      "failed": 0
+    },
+    "timing": {
+      "released-identical": {
+        "status": "finished",
+        "complete": true,
+        "cases": 3,
+        "scored_samples": 15,
+        "first_calls": 3,
+        "excluded_warmups": 3,
+        "accuracy_passed": 21,
+        "failures": [],
+        "version": "0.8.45",
+        "binary_sha256": "66213386a21a1dd19df3724deec72b14447eb3d914cfca1027f5b96c0843f832",
+        "result_summary": "results/20261015/released-identical/summary.json",
+        "sha256": "3f760259572dce8a2dc07fbf7c677fe28ba35d5d05b6af2737d3476fbcafe5c1"
+      },
+      "candidate-fast": {
+        "status": "finished",
+        "complete": true,
+        "cases": 3,
+        "scored_samples": 15,
+        "first_calls": 3,
+        "excluded_warmups": 3,
+        "accuracy_passed": 21,
+        "failures": [],
+        "version": null,
+        "binary_sha256": "b2c32bea3eea8321f9909d10e8f497b4f15529dd8d51cb1340751e836cf41565",
+        "result_summary": "results/20261015/candidate-fast/summary.json",
+        "sha256": "ed62718b9073c047eb66f1bd9a430abe3ed9ef92e6bcacec40cd712741c26103"
+      },
+      "torch-mps": {
+        "status": "finished",
+        "complete": true,
+        "cases": 3,
+        "scored_samples": 15,
+        "first_calls": 3,
+        "excluded_warmups": 3,
+        "accuracy_passed": 21,
+        "failures": [],
+        "version": "2.13.0",
+        "binary_sha256": null,
+        "result_summary": "results/20261015/torch-mps/summary.json",
+        "sha256": "3ab49d4d833321538399250a6a792c4938539997ccda4621bec88ca654c1b12d"
+      }
+    }
+  },
+  "recipe": {
+    "operation": "NN matrix multiply, BF16 uint16 host operands, float32 accumulation and materialized float32 host result",
+    "seed": 82471,
+    "dataset": "deterministic synthetic uniform [-1,1] rounded to BF16; not an estimator dataset",
+    "data_manifest": "results/20261015/inputs.json",
+    "input_manifest_sha256": "3f1f07262f61c877723cec88a7a30c37adb7de19c351159d5c6b8bb3fd67fd19",
+    "timed_boundary": "prepacked BF16 host inputs through consumed float32 host output; native packing, allocation, transfers, required widening, multiplication, synchronization, download and test-controller output materialization included",
+    "excluded": "imports, BF16 test-data construction, float64 oracle, hashing, evidence serialization",
+    "oracle": "independent float64 dot of exactly widened BF16 values",
+    "error_bound": "4*K*float32_epsilon*sum(abs(A)*abs(B)) + 1e-6",
+    "scored_samples_each": 5,
+    "excluded_warmups_each": 1,
+    "first_calls_each": 1,
+    "first_call_scope": "first recorded call per shape; only first shape is first operation in its process; empty system caches not claimed",
+    "arms": "separate serial processes; existing shipped 0.8.45 IDENTICAL, candidate FAST, real PyTorch 2.13.0 MPS float32 mm with exact BF16 widening inside the clock",
+    "opponent_flags": {
+      "PYTORCH_ENABLE_MPS_FALLBACK": "0",
+      "PYTORCH_MPS_FAST_MATH": "0",
+      "PYTORCH_MPS_PREFER_METAL": "0"
+    },
+    "native_instruction_scope": "Apple simdgroup FP32 multiplication/accumulation from exactly widened BF16 bits; not a claim of dedicated BF16 tensor instructions"
+  },
+  "rows": [
+    {
+      "shape_m_n_k": [
+        256,
+        384,
+        320
+      ],
+      "existing_identical_ms": 0.9685,
+      "candidate_fast_ms": 1.037833,
+      "torch_mps_ms": 1.922959,
+      "candidate_over_identical": 1.0715880227155394,
+      "candidate_over_torch": 0.5397062547875435,
+      "scored_samples_each": 5,
+      "candidate_time_change_vs_identical_percent": 7.158802271553943
+    },
+    {
+      "shape_m_n_k": [
+        768,
+        1024,
+        640
+      ],
+      "existing_identical_ms": 6.62575,
+      "candidate_fast_ms": 5.703375,
+      "torch_mps_ms": 14.11925,
+      "candidate_over_identical": 0.8607893446024979,
+      "candidate_over_torch": 0.4039431981160473,
+      "scored_samples_each": 5,
+      "candidate_time_change_vs_identical_percent": -13.92106553975021
+    },
+    {
+      "shape_m_n_k": [
+        769,
+        1025,
+        641
+      ],
+      "existing_identical_ms": 7.287042,
+      "candidate_fast_ms": 6.659166,
+      "torch_mps_ms": 6.010375,
+      "candidate_over_identical": 0.9138366431811427,
+      "candidate_over_torch": 1.1079451781294845,
+      "scored_samples_each": 5,
+      "candidate_time_change_vs_identical_percent": -8.616335681885733
+    }
+  ],
+  "pending": [
+    "current-source candidate-OFF and IDENTICAL compilation",
+    "other-target compilation/release qualification",
+    "full-workload estimator mapping and measurements before default promotion",
+    "cross-vendor IDENTICAL same-release qualification; this FAST path makes no cross-vendor bitwise claim",
+    "public documentation/release qualification",
+    "generic BF16 wiring source added after the measured native commit; new boundary requires frozen compilation and 23-test GPU qualification"
+  ],
+  "retention": "Original executed controller and summaries are retained byte-for-byte in git; full logs, binaries, inputs and output arrays remain in raw_evidence_directory. Artifact hashes do not by themselves replace retained bytes.",
+  "portable_runner_validation": {
+    "cpu_only": true,
+    "checks": 5,
+    "passed": 5,
+    "failed": 0,
+    "gpu_calls": 0,
+    "checks_scope": [
+      "help",
+      "small CPU fixture preparation with relative hashed paths",
+      "refuse evidence overwrite",
+      "reject invalid shape",
+      "reject unidentified candidate"
+    ],
+    "additional_static_checks": [
+      "Python AST and all result JSON parse",
+      "docs exclusion hook skips new aliases and preserves existing IDENTICAL API",
+      "original controller copied byte-for-byte"
+    ],
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/portable-runner-checks/summary.json",
+    "validated_runner_commit": "fff1dfa73d582869ca38dbfb5cfd04eda0e11d1e"
+  },
+  "durable_retention": {
+    "bytes": 181871269,
+    "local_path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-retention/all-evidence.tar.gz",
+    "r2_bucket": "mojolearn-data",
+    "r2_key": "measurements/records/v1/a2397742b2a1cba2865940141d63cc8f2b0483b096cfb72d9b7ad4c16a8e4558.tar.gz",
+    "sha256": "a2397742b2a1cba2865940141d63cc8f2b0483b096cfb72d9b7ad4c16a8e4558",
+    "status": "verified",
+    "verification": "GET sha256",
+    "scope": "Original frozen experiment including original executed source, binaries, inputs, scored outputs and complete build/test logs including failed attempts; excludes later generic-wiring edits"
+  },
+  "generic_wiring": {
+    "status": "source_ready_uncompiled",
+    "default_enabled": false,
+    "public_operations": [
+      "mojolearn.linalg.matmul_bf16",
+      "mojolearn.linalg.to_bf16",
+      "mojolearn.linalg.from_bf16"
+    ],
+    "implementation": "import-time direct native aliases in FAST only, compiled argument parsing preserves keyword operands; IDENTICAL aliases unchanged",
+    "capability_guard": "installed native flag plus exact generic alias identities; OFF/old builds unsupported, crashed probes fail rather than pass",
+    "full_primitive_recipe": {
+      "source": "tools/bench_board_neural.py",
+      "shape_key": "GEMM_SHAPES.full",
+      "m": 4096,
+      "n": 4096,
+      "k": 4096,
+      "seed": 7,
+      "operation": "NN BF16 input, FP32 accumulation/output, same host-to-consumed-host boundary",
+      "status": "pending; no new measurement authorized",
+      "runner": "local_benchmark.py prepare --preset full --output NEW_DIRECTORY",
+      "distribution": "default_rng(7).standard_normal float32, A then B, rounded to BF16"
+    },
+    "estimators": "No direct BF16 GEMM estimator caller established. Existing Transformer/Mamba packed weights are unpacked to FP32; training is FP32-only. Further wiring requires native packed-weight retention or explicit new precision opt-in and full-workload recipes.",
+    "cpu_validation": {
+      "harness_suite": {
+        "passed": 97,
+        "failed": 0,
+        "exit_code": 0,
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/generic-wiring-cpu-tests-02.result.json"
+      },
+      "final_targeted_with_full_selector": {
+        "passed": 11,
+        "failed": 0,
+        "exit_code": 0,
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/generic-wiring-selector-tests.result.json"
+      },
+      "gpu_calls": 0,
+      "full_fixture_allocated": false,
+      "native_compile": "pending",
+      "native_gpu_correctness": "23-test suite pending"
+    }
+  }
+}

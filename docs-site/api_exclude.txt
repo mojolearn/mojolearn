@@ -42,3 +42,18 @@ Mamba3Block.export_owned_weights	owned-weights build only; raises RuntimeError e
 Mamba3Block.release_owned_weights	owned-weights build only; raises RuntimeError elsewhere
 resample.fast_defines	internal build switches, no meaning to users
 parallel_causal_lm.ParallelCausalLM	multi-GPU layer ownership: no cross-vendor qualification
+linalg_fast.has_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+linalg_fast.to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+linalg_fast.from_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+linalg_fast.matmul_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+# Direct native aliases report their binding module to autodoc.
+_mojolearn_linalg.has_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.from_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.matmul_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.fast_bf16_available	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.fast_to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.fast_from_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.fast_matmul_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.public_fast_to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.public_fast_from_bf16	experimental Apple BF16 candidate; installed-release qualification pending

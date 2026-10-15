@@ -2766,6 +2766,7 @@ class Worker:
         self.status = "ok"
         self.error = None
         self.info = None
+        self.read_failure = None
 
     def send(self, text):
         self.proc.stdin.write((text + "\n").encode())
@@ -2775,18 +2776,24 @@ class Worker:
         """One protocol object, or None at the deadline or at EOF. A line
         that is not a JSON object (a launcher such as `pixi run` printing
         before the interpreter owns fd 1) is kept in `noise` and skipped."""
-        deadline = time.monotonic() + seconds
+        started = time.monotonic()
+        deadline = started + seconds
+        self.read_failure = None
         fd = self.proc.stdout.fileno()
         while True:
             while b"\n" not in self.buf:
                 left = deadline - time.monotonic()
                 if left <= 0:
+                    self.read_failure = {"reason": "deadline", "deadline_s": seconds,
+                                         "elapsed_s": time.monotonic() - started}
                     return None
                 ready, _, _ = select.select([fd], [], [], min(left, 5.0))
                 if not ready:
                     continue
                 chunk = os.read(fd, 65536)
                 if not chunk:
+                    self.read_failure = {"reason": "eof", "deadline_s": seconds,
+                                         "elapsed_s": time.monotonic() - started}
                     return None
                 self.buf += chunk
             line, self.buf = self.buf.split(b"\n", 1)

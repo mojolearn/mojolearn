@@ -1685,6 +1685,16 @@ def _semantic_r18(lane, param, arm, ours, theirs, library):
     identity_ctrs = (lane == "gbdt-categorical" and plain and theirs.get("has_time") is True
                      and ours.get("permutation_count") == 1
                      and ours.get("ctr_estimation_permutation_id") == 0)
+    # FAIRNESS FIX (2026-10-13 audit): None means no forced one-hot columns,
+    # not no automatic one-hot encoding. Native TCatFeatureParams.default()
+    # fixes the threshold at 2; require CatBoost's explicit read-back of 2
+    # and the same categorical columns before mapping either absent API field.
+    automatic_one_hot = (identity_ctrs and ours.get("one_hot_features") is None
+                         and bool(ours.get("cat_features"))
+                         and ours.get("cat_features") == theirs.get("cat_features")
+                         and theirs.get("one_hot_max_size") == 2)
+    if param == "one_hot_max_size" and param in theirs and param not in ours and automatic_one_hot:
+        return "automatic one-hot at cardinality <= 2 on both: native fixed threshold and explicit CatBoost read-back"
     if param == "has_time" and param in theirs and param not in ours:
         # smoke-fixes (2026-10-14; gbdt-categorical/taxi: "has_time missing from ours read-back"):
         # ours has no has_time; its CTRs are always computed over the rows as passed, in the
@@ -1697,6 +1707,15 @@ def _semantic_r18(lane, param, arm, ours, theirs, library):
     if param not in ours or param in theirs:
         return None
     v = ours[param]
+    if param == "one_hot_features" and automatic_one_hot:
+        return "no forced one-hot columns; both use automatic cardinality <= 2 on the same declared columns"
+    if param == "scale_pos_weight" and v == 1.0 and lane in _R18_RANK_LANES \
+            and loss in ("PairLogit", "YetiRank") \
+            and not any(k in theirs for k in ("class_weights", "auto_class_weights")):
+        # FAIRNESS FIX (2026-10-13 audit): the canonical ratio of absent
+        # class weights is 1; ranking has no positive-class reweighting.
+        # This does NOT waive the unresolved ranking searcher difference.
+        return "no class weighting on either ranking arm (unit canonical ratio)"
     if param in ("ctr_estimation_permutation_id", "permutation_count") and identity_ctrs:
         # smoke-fixes (2026-10-14; gbdt-categorical/taxi: "ctr_estimation_permutation_id,
         # permutation_count missing from catboost-gpu read-back"): CatBoost's Python constructor

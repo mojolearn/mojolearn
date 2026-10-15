@@ -20,7 +20,7 @@ by name rather than approximated. They run on the device on a GPU install and on
 host binding on a CPU-only install, with the same bits. `Cholesky` factors a
 symmetric positive-definite matrix and solves with the factor.
 
-Importing this module does not load the extension or run any computation.
+Importing this module does not run numerical computation.
 
 Examples
 --------
@@ -60,6 +60,20 @@ from ._linalg_impl import (
 # `_mojolearn_linalg`: the GP build already links every Cholesky kernel
 # and a second copy would be a second binary of the same arithmetic.
 from ._cholesky_impl import Cholesky
+
+# Import-time aliases only: FAST BF16 selection, argument handling, packing,
+# launches and completion are compiled native operations. Keep IDENTICAL's
+# existing surface and low-bit profile guard unchanged. The native capability
+# remains false unless the Apple experiment was explicitly compiled on.
+from . import _backend as _linalg_backend
+
+if _linalg_backend.default_mode() == "fast":
+    from ._linalg_impl import _load as _load_selected_linalg
+    _bf16_native = _load_selected_linalg()
+    _fast_bf16_available = _bf16_native.fast_bf16_available
+    to_bf16 = _bf16_native.public_fast_to_bf16
+    from_bf16 = _bf16_native.public_fast_from_bf16
+    matmul_bf16 = _bf16_native.fast_matmul_bf16
 
 __all__ = ['matmul', 'numeric_mode', 'profile', 'require_identical',
            # the three decompositions under their own names

@@ -48,18 +48,20 @@ def test_task_rosters_per_vendor(vendor):
     for r in races:
         opp = r["opponents"]
         libs = {o.split("-")[0] for o in opp}
-        want = {"catboost", "xgboost"} | (set() if r["lane"] == "gbdt-rank-pairlogit"
-                                          else {"lightgbm"})
+        # FAIRNESS FIX (2026-10-13 audit): these task algorithms now
+        # explicitly refuse XGBoost and LightGBM; only CatBoost matches.
+        want = {"catboost"}
         assert libs == want, (vendor, r["id"], opp)
         if vendor == "apple":
             assert r["our_arms"] == {"ours": "identical", "ours-ab": "fast"}
             assert all(o.endswith("-cpu") for o in opp)
         else:
-            assert r["our_arms"] == {"ours": "identical"}
+            own = "ours-catboost-gpu" if vendor == "nvidia" and r["lane"] == "gbdt-categorical" else "ours"
+            assert r["our_arms"] == {own: "identical"}
         if vendor == "nvidia":
             assert all(not o.endswith("-cpu") for o in opp)
         if vendor == "amd":
-            assert "xgboost-gpu" in opp and "catboost-cpu" in opp
+            assert opp == ["catboost-cpu"]
     # every arm the board plans is one the driver builds for that lane
     for r in races:
         cfg = spec.lane_config(r["lane"], "shipped")
@@ -102,8 +104,8 @@ def test_dry_run_lists_task_races_and_rank_data(capsys):
                     "--lanes", ",".join(TASKS)]) == 0
     text = capsys.readouterr().out
     assert "data istella-rank" in text and "gbm-bench/istella/istella_rank.npz" in text
-    assert "TOTAL races=5 cells=29" in text
-    assert "INFER cells=58" in text
+    assert "TOTAL races=5 cells=10" in text
+    assert "INFER cells=20" in text
 
 
 # --- configs -----------------------------------------------------------------
@@ -385,8 +387,11 @@ def test_xgboost_gpu_refuses_without_the_vendor_backend(monkeypatch, capsys, ven
     fake = _FakeXgb(info)
     assert (spec._xgb_gpu_refusal(fake) is not None) is refused
     monkeypatch.setitem(sys.modules, "xgboost", fake)
+    # This unit checks backend refusal; the separate prebin test covers
+    # CatBoost border preparation and the shared matrix/hash contract.
+    monkeypatch.setattr(spec, "prebinned_data", lambda lane, data, cfg: data)
     cfg = {"xgboost_grow_policy": "depthwise", "grow_policy": "Depthwise"}
-    arms = spec.xgboost_arms("gbdt-depthwise", cfg, types.SimpleNamespace(cat_idx=None), ["cpu", "gpu"])
+    arms = spec.xgboost_arms("gbdt-depthwise", cfg, types.SimpleNamespace(cat_idx=None, X_train=np.zeros((2, 1)), X_test=np.zeros((1, 1))), ["cpu", "gpu"])
     names = [a.name for a in arms]
     out = capsys.readouterr().out
     assert "xgboost-cpu" in names

@@ -807,8 +807,16 @@ def gpu_opponents_only(races, vendor):
     out = []
     for race in races:
         opponents = [a for a in race["opponents"] if arm_device(a, vendor) == "gpu"]
-        arms = [a for a in race["arms"] if a in race["our_arms"] or a in opponents]
-        out.append(dict(race, opponents=opponents, arms=arms))
+        ours = dict(race["our_arms"])
+        if race.get("our_pairing"):
+            # FAIRNESS FIX (2026-10-13 audit): a CPU-only pairing must not
+            # add an unpaired own configuration to a GPU-only campaign.
+            pairing = race["our_pairing"]
+            ours = {a: mode for a, mode in ours.items()
+                    if any(PAIR.pairs({PAIR.PAIRS_FIELD: pairing.get("ours" if a == "ours-ab" else a, [])}, opponent)
+                           for opponent in opponents)}
+        arms = [a for a in race["arms"] if a in ours or a in opponents]
+        out.append(dict(race, opponents=opponents, our_arms=ours, arms=arms))
     return out
 
 
@@ -875,6 +883,16 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                 opp = gpu_opponents_first(
                     (TREE_OPPONENTS if fam == "trees" else CLASSICAL_OPPONENTS)[vendor][lane])
                 ours = our_arms(fam, modes, lane)
+                if fam == "trees" and lane == "gbdt-categorical":
+                    # FAIRNESS FIX (2026-10-13 audit): retain only configurations
+                    # paired with an opponent actually selected on this vendor.
+                    # In particular, CatBoost GPU's no-floor categorical policy
+                    # must not create an unused extra arm on Apple or AMD.
+                    pairing = PAIR.lane_pairing(lane)
+                    ours = {a: mode for a, mode in ours.items()
+                            if any(PAIR.pairs({PAIR.PAIRS_FIELD: pairing.get(
+                                "ours" if a == "ours-ab" else a, [])}, opponent)
+                                   for opponent in opp)}
                 races.append({
                     "id": race_id(fam, lane, ds, rows),
                     "family": fam, "lane": lane, "dataset": ds, "rows": rows,
@@ -889,19 +907,65 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
         unsupported = unsupported_our_arms(race)
         if unsupported:
             race["unsupported_arms"] = unsupported
+        if race.get("family") == "neural" and race.get("lane") == "gemm-bf16" and "fast" in race.get("our_arms", {}).values():
+            race["capability_checks_pending"] = ["installed native Apple FAST BF16 and generic aliases"]
     return enforce_gpu_only(races)
 
 
-def unsupported_our_arms(race):
+def unsupported_our_arms(race, ctx=None):
     """Public API capabilities, never benchmark-shape exceptions.
 
-    _linalg_impl._lowbit_binding calls require_identical() for BF16/INT8
-    on every shape. No FAST implementation is exposed by these APIs.
+    INT8 still requires IDENTICAL. BF16 is an optional native Apple FAST
+    capability; planning cannot infer whether the worker's wheel enabled it.
+    Execution checks the actual binding before preparation or timing.
     """
     if race.get("family") != "neural" or race.get("lane") not in ("gemm-bf16", "gemm-int8"):
         return {}
-    return {arm: "UNSUPPORTED(FAST low-bit API requires IDENTICAL: _lowbit_binding.require_identical)"
-            for arm, mode in race.get("our_arms", {}).items() if mode == "fast"}
+    fast = [arm for arm, mode in race.get("our_arms", {}).items() if mode == "fast"]
+    if not fast:
+        return {}
+    if race["lane"] == "gemm-int8":
+        return {arm: "UNSUPPORTED(FAST INT8 API requires IDENTICAL: _lowbit_binding.require_identical)"
+                for arm in fast}
+    probe = (race.get("capability_probes") or {}).get("fast_bf16")
+    if ctx is not None:
+        probe = probe_fast_bf16_capability(ctx)
+        race.setdefault("capability_probes", {})["fast_bf16"] = probe
+        race.pop("capability_checks_pending", None)
+    if probe is None or probe["supported"]:
+        return {}
+    return {arm: "UNSUPPORTED(%s)" % probe["reason"] for arm in fast}
+
+
+def probe_fast_bf16_capability(ctx):
+    """Retain a no-compute probe of the same interpreter/binding as the worker."""
+    import tempfile
+    root = Path(ctx["out"], "raw", "params-only", "capabilities")
+    root.mkdir(parents=True, exist_ok=True)
+    directory = Path(tempfile.mkdtemp(prefix="fast-bf16-", dir=root))
+    command = [ctx["python"], "-u", ctx["neural_driver"], "capability-fast-bf16"]
+    env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="fast")
+    receipt = dict(command=command, numeric_mode="fast", started=now_utc(),
+                   log=str(directory / "probe.log"), gpu_work_submitted=False)
+    try:
+        with open(directory / "probe.log", "w") as log:
+            done = subprocess.run(command, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=60)
+        receipt["exit_code"] = done.returncode
+        if done.returncode:
+            raise RuntimeError("FAST BF16 capability probe failed; inspect " + receipt["log"])
+        lines = (directory / "probe.log").read_text().splitlines()
+        result = json.loads(lines[-1])
+        if result.get("schema") != "mojolearn.fast-bf16-capability.v1" or type(result.get("supported")) is not bool:
+            raise ValueError("invalid FAST BF16 capability receipt")
+        receipt.update(result, finished=now_utc())
+    except Exception as exc:
+        receipt.update(status="failed", error=str(exc), finished=now_utc())
+        (directory / "probe.json").write_text(json.dumps(receipt, indent=2) + "\n")
+        # A crashed or missing probe is never converted into expected unsupported.
+        raise
+    receipt.update(status="complete", receipt=str(directory / "probe.json"))
+    (directory / "probe.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    return receipt
 
 
 def plan_summary(races):
@@ -1092,6 +1156,10 @@ def child_env(ctx, extra=None):
     env["PYTHONUNBUFFERED"] = "1"
     env["MOJOLEARN_BOARD_VENDOR"] = ctx["vendor"]     # tools/bench_board_probe.py
     if ctx["vendor"] == "amd":
+        # FAIRNESS FIX (2026-10-13 audit): setup set this only in its own
+        # process. A later smoke/timing worker could not import HIP CuPy, so
+        # every hipVS parameter probe refused despite an installed opponent.
+        env.setdefault("ROCM_HOME", "/opt/rocm")
         # FAIRNESS FIX (2026-10-13 audit): AMD's hipVS wheels put native
         # libraries in package-local lib64 directories; retain their paths in
         # worker receipts. A successful pip install alone did not prove import.
@@ -2979,7 +3047,7 @@ def audit_plan(ctx, races):
     checkpoint = os.path.join(ctx["out"], "evidence", "preflight.json")
     E.write(checkpoint, report)
     for race in races:
-        unsupported = unsupported_our_arms(race)
+        unsupported = unsupported_our_arms(race, ctx)
         arms = [a for a in race["arms"] if a not in unsupported]
         files = race_data_files(ctx, race)
         data = dict(name=race["dataset"], rows_requested=race.get("rows"),
@@ -2990,11 +3058,13 @@ def audit_plan(ctx, races):
         has_ours = any(a in arms for a in race.get("our_arms", {}))
         # smoke-fixes (2026-10-14; neural/gemm-bf16 Apple fast: "no supported own arm"): the verdict was
         # already UNSUPPORTED, but its problem line did not say why; it now names each own arm's capability
-        # reason (unsupported_our_arms: the FAST low-bit API requires IDENTICAL, _lowbit_binding.require_identical).
+        # reason (including the installed native BF16 capability, not a shape rule).
         entry = (preflight_check(sub, race, arms) if arms and has_ours else
                  dict(verdict="UNSUPPORTED", problems=["no supported own arm (%s); no opponent-only timing" % (
                      "; ".join("%s: %s" % kv for kv in sorted(unsupported.items())) or "no own arm planned")],
                       unsupported_arms=unsupported))
+        if race.get("capability_probes"):
+            entry["capability_probes"] = race["capability_probes"]
         E.write(directory / "preflight.json", entry)
         report["races"][race["id"]] = dict(recipe=recipe, audit=entry)
         if entry["verdict"] == "REFUSED":
@@ -3271,7 +3341,9 @@ def run_race(ctx, race):
                 "generator": "retained source and recorded seed" if not files else None}
         evidence = E.begin(ctx, race, race_settings(ctx, race), data)
         ctx = dict(ctx, measurement_receipts=str(evidence[0] / "workers"))
-    stored = stored_opponents(ctx, race)
+    unsupported = unsupported_our_arms(race, ctx)
+    all_unsupported = bool(race.get("our_arms")) and set(race["our_arms"]) <= set(unsupported)
+    stored = {} if all_unsupported else stored_opponents(ctx, race)
     skipped = [] if (ctx.get("with_opponents") or ctx.get("retime")) else [
         a for a in race.get("opponents") or [] if a not in stored]
     full = race
@@ -3285,7 +3357,6 @@ def run_race(ctx, race):
     if skipped:
         print("bench_board:   opponents not stored, not raced (ours-only default; "
               "--with-opponents races them): %s" % ", ".join(skipped), flush=True)
-    unsupported = unsupported_our_arms(race)
     declared_race = race
     if unsupported:
         race = dict(race, arms=[a for a in race["arms"] if a not in unsupported],
@@ -3297,7 +3368,7 @@ def run_race(ctx, race):
         root = os.path.join(ctx["out"], "provenance")
         os.makedirs(root, exist_ok=True)
         ctx["receipt_dir"] = tempfile.mkdtemp(prefix="race-", dir=root)
-    if race["arms"]:
+    if race["arms"] and (race["our_arms"] or ctx.get("opponents_only")):
         # FAIRNESS FIX (2026-10-13 audit): check both newly executed and reused
         # arms before timing. A cached opponent is not proof of pairing parity.
         preflight = None
@@ -3319,6 +3390,8 @@ def run_race(ctx, race):
                    rows=race["rows"], our_arms=declared_race["our_arms"], cells=[],
                    started=now_utc(), finished=now_utc(), status="unsupported", rc=0,
                    params_check="NOT APPLICABLE (public API unsupported)")
+    if declared_race.get("capability_probes"):
+        rec["capability_probes"] = declared_race["capability_probes"]
     if unsupported:
         rec["unsupported_arms"] = unsupported
         for arm, reason in unsupported.items():
@@ -4151,7 +4224,10 @@ def smoke_verdict(race, rec, vendor):
     if rec is None:
         return [("-", "not run")]
     fails = []
-    unsupported = unsupported_our_arms(race)
+    # Resume/review may reconstruct the plan; use the retained actual binding
+    # witness rather than assuming a fresh plan proved support or absence.
+    capability_race = dict(race, capability_probes=rec.get("capability_probes") or race.get("capability_probes") or {})
+    unsupported = unsupported_our_arms(capability_race)
     all_unsupported = bool(race.get("our_arms")) and set(race["our_arms"]) <= set(unsupported)
     if rec.get("status") == "unsupported" and all_unsupported:
         cells = {c.get("arm"): c for c in rec.get("cells") or []}

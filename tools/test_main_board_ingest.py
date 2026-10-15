@@ -311,6 +311,98 @@ class PairedSessions(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"mixed worker evidence"):
                 MB.paired_observations(BB,["nv="+p],FakeGit(),MB.Skips())
 
+    def retained_board(self):
+        board = self.board()
+        race = next(iter(board["races"].values()))
+        for i, cell in enumerate(race["cells"]):
+            params = dict(params={"alpha": 1, "max_iter": 500, "seed": 7}, raw_params={"alpha": 1, "max_iter": 500},
+                          implementation={"module": "mojolearn.svm" if not i else "cuml.svm", "name": "LinearSVR"})
+            source_digest, artifact_digest = (str(i + 1) * 64, str(i + 3) * 64)
+            def ref(digest):
+                return dict(status="verified", sha256=digest, r2_bucket="evidence",
+                            r2_key="measurements/records/v1/" + digest + ".tar.gz")
+            hardware = dict(status="verified", vendor="nvidia", host="old-host" if i else "current-host",
+                            gpu_driver_identity="NVIDIA L40S UUID " + str(i))
+            cell.update(params=params, family="classical2", device_name="NVIDIA L40S",
+                        comparability={"span": {"input_home": "host", "inside_clock": "fit"}},
+                        measurement=dict(id="original-" + str(i), completeness="complete", hardware=hardware,
+                            source=dict(ref(source_digest), commit=A if i else B), artifacts=ref(artifact_digest),
+                            controller_hardware={"gpu": {"vendor": "nvidia", "name": "NVIDIA L40S"}},
+                            parameters=copy.deepcopy(params), dataset={"identity": "same-full-input"}, shape={"rows": 40000}))
+        race["cells"][1]["stored"] = dict(key_id="immutable-original-key", box="old-host", commit=A)
+        return board
+
+    def read_paired(self, board):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "board.json")
+            with open(p, "w") as f:
+                json.dump(board, f)
+            return MB.paired_observations(BB, ["nv=" + p], FakeGit(), MB.Skips())
+
+    def test_retained_opponent_keeps_older_source_host_and_original_evidence(self):
+        board = self.retained_board()
+        original = copy.deepcopy(next(iter(board["races"].values()))["cells"][1])
+        obs = self.read_paired(board)
+        race = obs[0]["paired_race"]
+        self.assertEqual(race["cells"][1], original)
+        self.assertNotIn("opponents_excluded", race)
+        audit = MB.RF.fairness_rule(race, "identical", "fit", "2026-10-15")
+        self.assertEqual(audit["admitted_opponents"], ["cuml-gpu"])
+        self.assertNotEqual(race["cells"][0]["measurement"]["source"], original["measurement"]["source"])
+        # Importing does not mutate the supplied historical board or key.
+        self.assertEqual(next(iter(board["races"].values()))["cells"][1], original)
+
+    def test_bad_retained_pairing_is_excluded_without_losing_completed_own_cell(self):
+        for defect in ("work", "coverage", "gpu", "archive", "clock", "readback", "missing"):
+            with self.subTest(defect=defect):
+                board = self.retained_board()
+                race = next(iter(board["races"].values()))
+                cell = race["cells"][1]
+                m = cell["measurement"]
+                if defect == "work":
+                    cell["params"]["params"]["max_iter"] = 20
+                    m["parameters"] = copy.deepcopy(cell["params"])
+                elif defect == "coverage":
+                    del cell["params"]["params"]["alpha"]
+                    m["parameters"] = copy.deepcopy(cell["params"])
+                elif defect == "gpu":
+                    m["controller_hardware"]["gpu"]["name"] = "NVIDIA H100"
+                elif defect == "archive":
+                    m["artifacts"]["r2_key"] = "wrong-archive"
+                elif defect == "clock":
+                    cell["comparability"]["span"] = {}
+                elif defect == "readback":
+                    m["parameters"]["params"]["max_iter"] = 20
+                else:
+                    m["completeness"] = "incomplete"
+                own = copy.deepcopy(race["cells"][0])
+                retained = copy.deepcopy(cell)
+                imported = self.read_paired(board)[0]["paired_race"]
+                self.assertEqual(imported["cells"][0], own)
+                self.assertEqual(imported["cells"][1], retained)
+                self.assertEqual(imported["opponents_excluded"]["arms"], ["cuml-gpu"])
+                audit = MB.RF.fairness_rule(imported, "identical", "fit", "2026-10-15")
+                self.assertFalse((audit or {}).get("admitted_opponents"))
+                # The complete ingest annotates rows and then checks evidence
+                # bases. A later rebuild must not erase this fresh exclusion.
+                obs = self.read_paired(board)
+                winners, failures, ledger = MB.choose(obs)
+                assembled = MB.assemble(BB, "nvidia-l40s", winners, ledger,
+                    MB.identity_index(obs), [], {}, "2026-10-15", failures)
+                MB.CALLS.annotate_board(assembled)
+                MB.apply_fairness(assembled, {}, "2026-10-15")
+                for repeat in range(2):
+                    kept = next(iter(assembled["races"].values()))
+                    self.assertIn("cuml-gpu", kept["opponents_excluded"]["arms"])
+                    self.assertFalse(kept["audit"]["identical/fit"].get("admitted_opponents"))
+                    previous = copy.deepcopy(assembled)
+                    rotated = MB.previous_observations(assembled)
+                    winners, failures, ledger = MB.choose(rotated)
+                    assembled = MB.assemble(BB, "nvidia-l40s", winners, ledger,
+                        MB.identity_index(rotated), [], {}, "2026-10-15", failures)
+                    MB.CALLS.annotate_board(assembled)
+                    MB.apply_fairness(assembled, previous, "2026-10-15")
+
 
 class FairnessMarks(unittest.TestCase):
     """Supported historical measurements survive; missing evidence does not publish."""
