@@ -33,7 +33,7 @@ from . import _portable_math as math
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
 from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f64_c, as_i32_c, empty, frombytes, full, zeros
-from ._buffer import memory_at
+from ._buffer import _has_buffer, memory_at
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin, available_if
 from ._sample_weight import ZERO_WEIGHTS_MSG, check_sample_weight
@@ -3775,6 +3775,13 @@ class MultiOutputClassifier(_TreesWrapperBase):
         if getattr(y, "ndim", None) == 1:
             raise ValueError("y must have at least two dimensions for multi-output "
                              "classification but has only one.")
+        if (not isinstance(y, (list, tuple)) and not _has_buffer(y)
+                and callable(getattr(y, "__array__", None))):
+            # A pandas DataFrame (scikit-learn's check_sample_weights_pandas_series)
+            # has no buffer and iterates its column names: its own `__array__`
+            # hands back the host block, as `_buffer._materialize` takes X.
+            # Glue: one conversion call.
+            y = y.__array__()
         _trees_multioutput_y(y)
         sample_weight = _trees_member_weights([(None, self.estimator)], sample_weight, Xa.shape[0])
         W = _trees_label_words(y)
