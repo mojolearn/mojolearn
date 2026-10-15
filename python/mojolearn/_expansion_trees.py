@@ -119,8 +119,12 @@ def _trees_weighted_rows(sample_weight, class_weight, classes, codes, est=None):
     if class_weight is None:
         return sw
     codes32 = codes if isinstance(codes, Array) and codes.dtype == "<i4" else as_i32_c(codes, ndim=1, name="codes")[0]
-    cw, _ = as_f32_c(_class_weight_rows(class_weight, classes, codes32, _trees_x_bind(est)), ndim=1,
-                     name="class_weight rows")
+    rows = _class_weight_rows(class_weight, classes, codes32, _trees_x_bind(est))
+    if rows is None:
+        # every class weight is 1 (a dict of ones, or 'balanced' on balanced
+        # labels): the rows are the sample weights unchanged
+        return sw
+    cw, _ = as_f32_c(rows, ndim=1, name="class_weight rows")
     out = empty((n,), "<f4")
     _trees_x_bind(est).x_trees_mul_f32(addr_ro(sw, name="sample_weight"), addr_ro(cw, name="class_weight"),
                                        addr(out, name="weights"), [n])

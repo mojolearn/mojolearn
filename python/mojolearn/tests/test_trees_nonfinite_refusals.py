@@ -13,7 +13,7 @@ Found by the pip smoke of 0.8.13 (2026-09-22):
   bare `Exception` ("All splits have infinite score"); a NaN in the eval
   set's labels was not checked either.
 - ExtraTreesClassifier(class_weight=...) raised a bare `Exception` from the
-  native builder instead of NotImplementedError.
+  native builder; it now fits through the weighted builder.
 
 Every check here runs before any device work, so it needs the bindings to
 import and nothing more. Run as a module:
@@ -69,9 +69,16 @@ def test_isolation_forest_refuses_nonfinite_X():
             ValueError, "NaN or infinity")
 
 
-def test_extra_trees_class_weight_is_not_implemented():
-    _raises(lambda: ml.ExtraTreesClassifier(n_estimators=2, class_weight="balanced").fit(_rows(), _labels()),
-            NotImplementedError, "class_weight is not implemented")
+def test_extra_trees_class_weight_fits():
+    # ExtraTreesClassifier takes class_weight through the weighted builder
+    # (3097f5f65). 'balanced' on balanced labels makes every class weight 1,
+    # so the row weights are the sample weights unchanged; it used to pass
+    # None on as the class weight rows and fail with a TypeError.
+    for labels in (_labels(), [0] * 18 + [1] * 6):
+        model = ml.ExtraTreesClassifier(n_estimators=2, class_weight="balanced",
+                                        random_state=0).fit(_rows(), labels)
+        assert list(model.classes_) == [0, 1]
+        assert len(model.predict(_rows())) == 24
 
 
 def test_gradient_boosting_refuses_nonfinite_labels():
@@ -80,7 +87,7 @@ def test_gradient_boosting_refuses_nonfinite_labels():
         y = [float(i) for i in range(24)]
         y[3] = bad
         _raises(lambda: ml.GradientBoosting(n_estimators=2).fit(X, y),
-                ValueError, "y must be finite")
+                ValueError, "Input y contains NaN or infinity")
         good = [float(i) for i in range(24)]
         _raises(lambda: ml.GradientBoosting(n_estimators=2).fit(X, good, eval_set=(X, y)),
                 ValueError, "eval_set y must be finite")
