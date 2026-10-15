@@ -88,7 +88,10 @@ NEW_MODULES = {
 def _factories():
     """Constructors for the classes whose `__init__` has required arguments."""
     ml = mojolearn
-    dictionary = np.random.default_rng(0).random((5, 8), dtype=np.float32)
+    rng = np.random.default_rng(0)
+    dictionary = rng.random((5, 8), dtype=np.float32)
+    series = rng.random(42, dtype=np.float32)
+    series2d = rng.random((42, 2), dtype=np.float32)
     return {
         "MultiOutputClassifier": lambda: ml.MultiOutputClassifier(ml.DecisionTreeClassifier()),
         "MultiOutputRegressor": lambda: ml.MultiOutputRegressor(ml.Ridge()),
@@ -103,6 +106,10 @@ def _factories():
             [("rf", ml.RandomForestClassifier()), ("dt", ml.DecisionTreeClassifier())], voting="soft"),
         "VotingRegressor": lambda: ml.VotingRegressor(
             [("rf", ml.RandomForestRegressor()), ("dt", ml.DecisionTreeRegressor())]),
+        # statsmodels-style: the series is the first constructor argument
+        "AutoARIMA": lambda: ml.AutoARIMA(series),
+        "STL": lambda: ml.STL(series, period=7),
+        "VAR": lambda: ml.VAR(series2d),
         "IVFIndex": lambda: ml.IVFIndex(n_lists=4, n_probes=2),
         "IVFPQIndex": lambda: ml.IVFPQIndex(n_lists=4, n_probes=2),
         "IVFSQIndex": lambda: ml.IVFSQIndex(n_lists=4, n_probes=2),

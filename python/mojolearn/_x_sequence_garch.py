@@ -4,6 +4,7 @@
 ``arch_model(..., vol='GARCH', dist='normal')``. Each series is fitted on the
 GPU."""
 from ._optional_numpy import require_numpy
+from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_garch')
 
 from . import _backend
@@ -14,7 +15,7 @@ from ._buffer import _native
 # variance recursion, backcast, variance bounds, starting-value grid and
 # Gaussian likelihood, maximised by statsforecast's Nelder-Mead inside arch's
 # bounds.
-class GARCH:
+class GARCH(ParamsMixin):
     """GARCH(p, o, q) conditional volatility model with normal errors.
 
     Fits a constant- or zero-mean GARCH model by Gaussian maximum

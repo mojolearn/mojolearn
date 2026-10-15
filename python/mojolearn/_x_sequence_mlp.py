@@ -15,6 +15,7 @@ Refused by name (sequence/NOT_IMPLEMENTED.tsv): solver='lbfgs',
 early_stopping=True, warm_start, partial_fit, multilabel targets, verbose,
 float64 input."""
 from ._optional_numpy import require_numpy
+from ._mode import ClassifierScoreMixin, ParamsMixin, RegressorScoreMixin
 np = require_numpy('_x_sequence_mlp')
 
 from . import _backend
@@ -26,7 +27,7 @@ _SOLVER = {"adam": 0, "sgd": 1}
 _LR = {"constant": 0, "invscaling": 1, "adaptive": 2}
 
 
-class _BaseMLP:
+class _BaseMLP(ParamsMixin):
     _LOSS = None
 
     def __init__(self, hidden_layer_sizes=(100,), activation="relu", *, solver="adam", alpha=0.0001,
@@ -178,7 +179,7 @@ class _BaseMLP:
         return out
 
 
-class MLPRegressor(_BaseMLP):
+class MLPRegressor(RegressorScoreMixin, _BaseMLP):
     """Multi-layer perceptron regressor, as scikit-learn's `MLPRegressor`.
 
     Minimizes half the mean squared error plus an L2 penalty, with an identity output
@@ -276,6 +277,8 @@ class MLPRegressor(_BaseMLP):
     >>> model = mojolearn.MLPRegressor(hidden_layer_sizes=(64,), max_iter=50).fit(X, y)
     >>> pred = model.predict(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "regressor"
     _LOSS_CODE = 0
 
     def fit(self, X, y):
@@ -292,7 +295,7 @@ class MLPRegressor(_BaseMLP):
         return out[:, 0].copy() if self._y_1d else out
 
 
-class MLPClassifier(_BaseMLP):
+class MLPClassifier(ClassifierScoreMixin, _BaseMLP):
     """Multi-layer perceptron classifier, as scikit-learn's `MLPClassifier`.
 
     Minimizes the log loss plus an L2 penalty, with a logistic output for two classes
@@ -392,6 +395,8 @@ class MLPClassifier(_BaseMLP):
     >>> model = mojolearn.MLPClassifier(hidden_layer_sizes=(32,), max_iter=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "classifier"
 
     def fit(self, X, y):
         """Train on `X` (n_samples, n_features) float32 and 1-D labels `y`; returns self."""

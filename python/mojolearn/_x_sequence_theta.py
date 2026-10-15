@@ -4,6 +4,7 @@
 DynamicOptimizedTheta and AutoTheta, following the models of the same names in
 ``statsforecast.models``. Each series is fitted on the GPU."""
 from ._optional_numpy import require_numpy
+from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_theta')
 
 from . import _backend
@@ -16,7 +17,7 @@ _MODEL_NAMES = np.array(list(_MODELS), dtype=object)
 # seasonal test and classical decomposition, the theta state-space models, their
 # MSE objective minimised by statsforecast's Nelder-Mead, and the point forecast.
 # Refusals are listed by name in sequence/NOT_IMPLEMENTED.tsv.
-class AutoTheta:
+class AutoTheta(ParamsMixin):
     """Automatic theta model selection.
 
     Fits the four theta models (standard, optimized, dynamic, dynamic

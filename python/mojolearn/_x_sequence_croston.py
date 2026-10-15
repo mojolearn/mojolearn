@@ -4,12 +4,13 @@
 CrostonOptimized and CrostonSBA, following statsforecast's models of the same
 names. Each series is fitted on the GPU."""
 from ._optional_numpy import require_numpy
+from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_croston')
 
 from . import _backend
 
 
-class _Croston:
+class _Croston(ParamsMixin):
     """Shared fit/predict for the Croston variants (one series per GPU thread,
     `sequence/croston.mojo`)."""
     _VARIANT = 0

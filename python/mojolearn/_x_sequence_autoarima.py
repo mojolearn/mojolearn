@@ -5,6 +5,7 @@
 import itertools
 
 from ._optional_numpy import require_numpy
+from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_autoarima')
 
 from . import _portable_math as _pm
@@ -137,7 +138,7 @@ def _options(name, value, lo, hi):
 # `s` of 0, None or 1 is non-seasonal (the reference's `if s is 1: s = None`).
 # seasonal_test="seas" over a D list of two options is statsmodels' STL, not a
 # GPU path in the reference either.
-class AutoARIMA:
+class AutoARIMA(ParamsMixin):
     """Automatic ARIMA order selection for a batch of series.
 
     Chooses, per series, the differencing order ``d`` by the KPSS test and
@@ -191,7 +192,8 @@ class AutoARIMA:
             y = y.reshape(1, -1)
         if y.ndim != 2 or y.size == 0:
             raise ValueError("AutoARIMA: endog must be (batch_size, n_obs)")
-        self.endog = y
+        self.endog = endog  # verbatim, as get_params / clone report it
+        self._endog = y
         self.batch_size, self.n_obs = int(y.shape[0]), int(y.shape[1])
         self.models = []
 
@@ -278,7 +280,7 @@ class AutoARIMA:
         q_opts = _options("q", q, 0, s - 1 if s else 4)
         P_opts = _options("P", P, 0, 4 if s else 0)
         Q_opts = _options("Q", Q, 0, 4 if s else 0)
-        y = self.endog
+        y = self._endog
         fast_mode = self._fast_mode()
         if len(d_opts) == 1:
             dser = np.full(self.batch_size, d_opts[0], dtype=np.int64)
@@ -500,9 +502,9 @@ class AutoARIMA:
                 # MOJOLEARN_ARIMA_FAST_SEARCH_REUSE: the search ran this order
                 # on these series with the fit's start, optimizer and maxiter,
                 # per series independently; adopt that optimum, no refit
-                self._fitted[i] = _adopt_search_fit(m, _take(self.endog, self._ids[i]), *reuse[i])
+                self._fitted[i] = _adopt_search_fit(m, _take(self._endog, self._ids[i]), *reuse[i])
             else:
-                self._fitted[i] = m.fit(_take(self.endog, self._ids[i]))
+                self._fitted[i] = m.fit(_take(self._endog, self._ids[i]))
         return self
 
     def _gather(self, fn, width):

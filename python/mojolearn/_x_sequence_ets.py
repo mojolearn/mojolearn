@@ -4,6 +4,7 @@
 following statsforecast's ``AutoETS`` with a fixed model. Each series is
 fitted on the GPU."""
 from ._optional_numpy import require_numpy
+from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_ets')
 
 from . import _backend
@@ -18,7 +19,7 @@ from ._buffer import _native
 # need positive data; n <= (parameter count) + 4 is the reference's "tiny
 # datasets" refusal; a series no longer than season_length is fitted without a
 # season, as there (ets_f).
-class ETS:
+class ETS(ParamsMixin):
     """Exponential smoothing (ETS) with a fixed model.
 
     Fits ETS(E, T, S) by maximum likelihood over the smoothing parameters and
@@ -278,3 +279,4 @@ class DampedETS(ETS):
 
     def __init__(self, season_length=1, error="A", alpha=None, beta=None, phi=None, numeric_mode=None):
         super().__init__(season_length, error + "AN", True, alpha, beta, phi, numeric_mode=numeric_mode)
+        self.error = error  # stored so get_params / clone report it

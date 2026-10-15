@@ -3,6 +3,7 @@
 """Vector autoregression (VAR), following statsmodels'
 ``statsmodels.tsa.vector_ar.var_model.VAR``. Fitted on the GPU."""
 from ._optional_numpy import require_numpy
+from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_var')
 
 from . import _backend
@@ -84,7 +85,7 @@ class VARResults:
 
 # The arithmetic is `sequence/vecar.mojo` (a scaled Cholesky solve of the
 # normal equations in float32, where statsmodels calls lstsq in float64).
-class VAR:
+class VAR(ParamsMixin):
     """Vector autoregression estimated by OLS.
 
     Fits one least-squares regression per equation on the shared lagged
@@ -122,7 +123,9 @@ class VAR:
         y = np.ascontiguousarray(y, dtype=np.float32)
         if y.ndim != 2 or y.shape[1] < 1:
             raise ValueError("VAR: endog must be (n_obs, n_variables)")
-        self.endog = y
+        self.endog = endog  # verbatim, as get_params / clone report it
+        self.exog = exog
+        self._endog = y
         self.neqs = int(y.shape[1])
         self.numeric_mode = numeric_mode
 
@@ -159,14 +162,14 @@ class VAR:
             raise NotImplementedError(f"VAR.fit: trend={trend!r} is not implemented ('c' and 'n' are)")
         p = int(maxlags)
         kt = 1 if trend == "c" else 0
-        n, K = self.endog.shape
+        n, K = self._endog.shape
         m = kt + K * p
         params = np.zeros((m, K), dtype=np.float32)
         sigma = np.zeros((K, K), dtype=np.float32)
         resid = np.zeros((max(n - p, 1), K), dtype=np.float32)
         code = _backend.binding("_mojolearn_x_sequence", self.numeric_mode).var_fit(
-            [self.endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data], [n, K, p, kt])
+            [self._endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data], [n, K, p, kt])
         if int(code):
             raise np.linalg.LinAlgError(  # glue: raises the numpy error class
                 f"VAR.fit: the lagged design is rank deficient (Cholesky pivot of column {int(code) - 1})")
-        return VARResults(self.endog, params, sigma, resid, p, kt, self.numeric_mode)
+        return VARResults(self._endog, params, sigma, resid, p, kt, self.numeric_mode)

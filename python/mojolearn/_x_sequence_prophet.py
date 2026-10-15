@@ -5,6 +5,7 @@ seasonalities, holiday regressors) fitted on the GPU."""
 from . import _portable_math as math
 
 from ._optional_numpy import require_numpy
+from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_prophet')
 
 from . import _backend
@@ -36,7 +37,7 @@ def _days(t, mode):
 # batch sharing t). The fit is our float32 L-BFGS, not Stan's; parity with the
 # prophet package is at a tolerance. Refusals are listed by name in
 # sequence/NOT_IMPLEMENTED.tsv.
-class ProphetForecaster:
+class ProphetForecaster(ParamsMixin):
     """Prophet-style additive or multiplicative forecaster with linear growth.
 
     Models a series as a piecewise-linear trend with changepoints, plus

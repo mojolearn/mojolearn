@@ -5,6 +5,7 @@
 from . import _portable_math as math
 
 from ._optional_numpy import require_numpy
+from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_stl')
 
 from . import _backend
@@ -30,7 +31,7 @@ class DecomposeResult:
 
 # The arithmetic is `sequence/stl.mojo`, statsmodels' `_stl.pyx` loops in
 # float32, one series per GPU thread (or host loop iteration).
-class STL:
+class STL(ParamsMixin):
     """Season-Trend decomposition using Loess.
 
     Splits each series into seasonal, trend and residual components with
@@ -109,7 +110,8 @@ class STL:
         for name, v in (("seasonal_deg", seasonal_deg), ("trend_deg", trend_deg), ("low_pass_deg", low_pass_deg)):  # glue: the three named degree arguments
             if v not in (0, 1):
                 raise ValueError(f"{name} must be 0 or 1")
-        self.endog = y
+        self.endog = endog  # verbatim, as get_params / clone report it
+        self._endog = y
         self.period = period
         self.seasonal = int(seasonal)
         self.trend = int(trend)
@@ -149,13 +151,13 @@ class STL:
             inner_iter = 2 if self.robust else 5
         if outer_iter is None:
             outer_iter = 15 if self.robust else 0
-        B, n = self.endog.shape
+        B, n = self._endog.shape
         outs = [np.zeros((B, n), dtype=np.float32) for _ in range(4)]  # glue: the four output buffers
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        b.stl([self.endog.ctypes.data] + [o.ctypes.data for o in outs],  # glue: the four output buffer addresses
+        b.stl([self._endog.ctypes.data] + [o.ctypes.data for o in outs],  # glue: the four output buffer addresses
               [B, n, self.period, self.seasonal, self.trend, self.low_pass,
                self.seasonal_deg + 2 * self.trend_deg + 4 * self.low_pass_deg,
                self.seasonal_jump, self.trend_jump, self.low_pass_jump, int(inner_iter), int(outer_iter)])
         season, trend, weights, resid = (o[0] if self._one else o for o in outs)  # glue: the four output buffers
-        observed = self.endog[0] if self._one else self.endog
+        observed = self._endog[0] if self._one else self._endog
         return DecomposeResult(observed, season, trend, resid, weights)
