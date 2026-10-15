@@ -10,7 +10,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from x_ann.filter_topk import filter_topk_host
-from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, X_ANN_PY2MOJO, tsne_init_y0
+from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, X_ANN_PY2MOJO, tsne_first_components, tsne_init_y0
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int, ptr_f32, ptr_i32
 from x_ann.ivf_pq_core import pq_len_of
@@ -80,7 +80,8 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     post_exaggeration_learning_rate_factor [, init mode, random_state low 32 bits, high 32 bits]
     (lane apple-fast-py2mojo-cluster: mode 1 random, 2 the PCA embedding in y0 scaled,
     x_ann/tsne_init.mojo; 0 or absent y0 as given). release-0845: the factor is params[7] and the
-    init tail moved from 7..9 to 8..10."""
+    init tail moved from 7..9 to 8..10. Lane sk-kernels: an optional params[11], n_components
+    (1 or 2, default 2); at 1, y0 and y_out hold n floats (`tsne_init_y0`)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var max_iter = p_int(params, 2)
@@ -94,14 +95,15 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     var seed = UInt64(0)
     if len(params) > 10:
         seed = (UInt64(p_int(params, 10)) << 32) | UInt64(p_int(params, 9))
+    var k = p_int(params, 11) if len(params) > 11 else 2
     var y0 = tsne_init_y0(
-        mode, in_f32(addrs, 1, n * 2) if mode != TSNE_INIT_RANDOM else List[Float32](), n, seed
+        mode, in_f32(addrs, 1, n * k) if mode != TSNE_INIT_RANDOM else List[Float32](), n, seed, k
     )
     var y = List[Float32]()
     var kl = Float32(0.0)
     with GILReleased(Python()):
         tsne_fit_host(x, n, d, y0, perplexity, exaggeration, lr, post_factor, max_iter, exploration, y, kl)
-    out_f32(y, addrs, 2)
+    out_f32(tsne_first_components(y, n, k), addrs, 2)
     out_f32([kl], addrs, 3)
     return PythonObject(n)
 

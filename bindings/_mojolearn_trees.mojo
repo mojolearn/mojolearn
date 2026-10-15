@@ -327,11 +327,28 @@ def et_classifier_fit_rowmajor_binding[EXPORT: Bool = False](
     return _et_classifier_fit[EXPORT, True](x_addr, y_addr, params)
 
 
+def et_classifier_fit_weighted_binding[EXPORT: Bool = False, ROWMAJOR: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`et_classifier_fit` (`_rowmajor` when ROWMAJOR) with per-row weights
+    (lane sk-kernels): `weights` is n_rows float32, scikit-learn's
+    sample_weight times its class_weight row, borrowed through the call.
+    Checked and quantized on the device (`DeviceDataset.set_row_weights`)."""
+    var address = Int(py=weights_addr)
+    if address == 0:
+        raise Error("et_classifier_fit_weighted requires a nonzero float32 weight pointer")
+    return _et_classifier_fit[EXPORT, ROWMAJOR](
+        x_addr, y_addr, params, weights_addr=address
+    )
+
+
 def _et_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
     tree_start: Int = 0,
+    weights_addr: Int = 0,
 ) raises -> PythonObject:
     """Fit `ExtraTreesClassifier`. `x` is COLUMN-major float32
     (n_rows * n_features), `y` is float32 class CODES in [0, n_classes).
@@ -375,6 +392,7 @@ def _et_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         result = fit_extra_trees_classifier_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
             config, x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=tree_start,
+            weights_addr=weights_addr,
         )
         ctx.synchronize()
     times.stop_host("boundary_device_fit_and_context", stamp)
@@ -660,6 +678,10 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         m.def_function[et_classifier_fit_binding[True]]("et_classifier_fit_export")
         m.def_function[et_classifier_fit_rowmajor_binding[False]]("et_classifier_fit_rowmajor")
         m.def_function[et_classifier_fit_rowmajor_binding[True]]("et_classifier_fit_rowmajor_export")
+        m.def_function[et_classifier_fit_weighted_binding[False]]("et_classifier_fit_weighted")
+        m.def_function[et_classifier_fit_weighted_binding[True]]("et_classifier_fit_weighted_export")
+        m.def_function[et_classifier_fit_weighted_binding[False, True]]("et_classifier_fit_weighted_rowmajor")
+        m.def_function[et_classifier_fit_weighted_binding[True, True]]("et_classifier_fit_weighted_rowmajor_export")
         m.def_function[et_regressor_fit_binding[False]]("et_regressor_fit")
         m.def_function[et_regressor_fit_binding[True]]("et_regressor_fit_export")
         m.def_function[et_regressor_fit_rowmajor_binding[False]]("et_regressor_fit_rowmajor")

@@ -16,6 +16,7 @@ from . import _mojolearn_solver, _serialize
 from ._array import Array
 from ._mode import ParamsMixin
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros, _materialize
+from ._sample_weight import check_sample_weight
 from .linear_model import _check_saved_by, _r2_host, _restore_mode, _saved_mode, _shape_of
 
 # cuML's `loss_funct` / DistanceType style codes this surface uses.
@@ -91,8 +92,8 @@ _CD_FORMAT = "mojolearn-cd-1"
 #   solver 'qn'    refused: cuML's 'auto' picks 'qn' for sparse input
 #                  (elastic_net.py:243-244); 'qn' under l1 is OWL-QN on that
 #                  surface (glm/NOT_IMPLEMENTED.tsv)
-#   sample_weight  the weighted preProcessData and sqrt-weight scaling are not
-#                  implemented (cd.mojo raises)
+#   sample_weight  implemented (lane sk-kernels): solver/impl/cd_weighted.mojo,
+#                  scikit-learn's rescale to sum n, weighted centering, sqrt rows
 #   positive / warm_start / precompute  cuML raises UnsupportedOnGPU too
 #                  (elastic_net.py:143, :146, :149); cdFit reads coef as its
 #                  starting point and solver/estimator.mojo zeroes it every fit
@@ -338,12 +339,11 @@ class ElasticNet(ParamsMixin):
         `_classical_host.py` answers the CPU binding instead."""
         return _mojolearn_solver
 
-    # sample_weight is not a fit parameter: the coordinate-descent kernel
-    # (solver/impl/cd.mojo) has no weighted path (cuML's is the weighted
-    # preProcessData plus the sqrt-weight scaling and its undo, cd.cuh:156-194
-    # and :274-287; solver/NOT_IMPLEMENTED.tsv). Advertising it only to raise
-    # would tell scikit-learn's has_fit_parameter it works (lane sk-edges).
-    def fit(self, X, y):
+    # sample_weight (lane sk-kernels): checked here with scikit-learn's
+    # wording and handed to the weighted coordinate descent
+    # (solver/impl/cd_weighted.mojo: weights rescaled to sum to n_samples,
+    # weighted centering, sqrt-weight row scaling, all in Mojo).
+    def fit(self, X, y, sample_weight=None):
         """Fit the model by coordinate descent.
 
         Parameters
@@ -354,6 +354,10 @@ class ElasticNet(ParamsMixin):
         y : array-like of shape (n_samples,)
             Target values. A 2-D ``y`` or a length mismatch raises
             ``ValueError``.
+        sample_weight : float or array-like of shape (n_samples,), default None
+            Per-sample weights, non-negative and not all zero. As in
+            scikit-learn, they are rescaled to sum to ``n_samples``, so the
+            data term is the weighted mean of the squared residuals.
 
         Returns
         -------
@@ -401,26 +405,33 @@ class ElasticNet(ParamsMixin):
         if target.shape[0] != n_rows:
             raise ValueError("mojolearn ElasticNet X and y lengths differ")
 
+        sw = None
+        if sample_weight is not None:
+            sw = check_sample_weight(sample_weight, n_rows)
+
         self.coef_ = zeros((n_cols,), "<f4")
         info = zeros((1,), "<f4")
+        params = [
+            n_rows, n_cols, 1 if self.fit_intercept else 0,
+            int(self.max_iter), float(self.alpha), float(self.l1_ratio),
+            float(self.tol), _SELECTION_SHUFFLE[self.selection],
+            0 if sw is None else 1, 1 if row_major else 0,
+        ]
+        if sw is not None:
+            params.append(addr_ro(sw, name="sample_weight"))
         n_iter = self._solver().cd_fit(
             addr_ro(work_x, name="X"), addr_ro(target, name="y"),
             addr(self.coef_, name="coef_"), addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_solver.mojo::cd_fit_binding.
             # n_rows, n_cols, fit_intercept, max_iter, alpha, l1_ratio, tol,
-            # shuffle, has_sample_weight, row_major
-            [
-                n_rows, n_cols, 1 if self.fit_intercept else 0,
-                int(self.max_iter), float(self.alpha), float(self.l1_ratio),
-                float(self.tol), _SELECTION_SHUFFLE[self.selection], 0,
-                1 if row_major else 0,
-            ],
+            # shuffle, has_sample_weight, row_major[, sample_weight address]
+            params,
         )
         self.intercept_ = float(info[0])
         self.n_iter_ = int(n_iter)
         self.n_features_in_ = n_cols
-        # `work_x` is the object the address above belongs to; it lives in
-        # this frame for the whole call, which is the borrow contract.
+        # `work_x` (and `sw`) are the objects the addresses above belong to;
+        # they live in this frame for the whole call, the borrow contract.
         return self
 
     def predict(self, X):

@@ -99,6 +99,7 @@ from ensemble.host.rf_oracle import (
     RF_POISSON,
     RfHostForest,
     RfHostParams,
+    n_sampled_rows_host,
     rf_host_fit,
 )
 
@@ -275,6 +276,53 @@ def _retain_rf_export(var forest: RfHostForest) raises -> PythonObject:
     )
 
 
+def _params_len_ok(params: PythonObject) raises -> Bool:
+    """`bindings/_mojolearn_rf.mojo::_rf_params_len_ok`: 16 slots, or 17
+    with the optional `min_weight_fraction_leaf`."""
+    var n = len(params)
+    return n == N_RF_FIT_PARAMS or n == N_RF_FIT_PARAMS + 1
+
+
+def _min_weight_fraction(params: PythonObject) raises -> Float64:
+    """`bindings/_mojolearn_rf.mojo::_rf_min_weight_fraction`, its words."""
+    if len(params) <= N_RF_FIT_PARAMS:
+        return 0.0
+    var f = Float64(py=params[N_RF_FIT_PARAMS])
+    if not (f >= 0.0 and f <= 0.5):
+        raise Error(
+            "The 'min_weight_fraction_leaf' parameter must be a float in the"
+            " range [0.0, 0.5]. Got " + String(f) + " instead."
+        )
+    return f
+
+
+def _apply_min_weight_fraction(
+    mut p: RfHostParams, frac: Float64, weights: List[Float32], n_rows: Int
+) -> Float32:
+    """`bindings/_mojolearn_rf.mojo::_rf_fold_min_weight_count` and
+    `_rf_min_weight_leaf`: on the weighted objective (non-unit weights, no
+    bootstrap) returns `frac * total weight` for `rf_host_fit`; on a count
+    objective raises `p.min_samples_leaf` to ceil(frac * the tree's row
+    count) and returns 0. frac == 0 changes nothing."""
+    if not (frac > 0.0):
+        return Float32(0)
+    if len(weights) > 0 and not p.bootstrap:
+        var total = Float64(0)
+        for i in range(len(weights)):
+            total += Float64(weights[i])
+        return Float32(frac * total)
+    var n_tree = n_sampled_rows_host(
+        p.bootstrap, p.max_samples if p.bootstrap else Float32(1.0), n_rows
+    )
+    var bound = frac * Float64(n_tree)
+    var need = Int(bound)
+    if Float64(need) < bound:
+        need += 1
+    if need > p.min_samples_leaf:
+        p.min_samples_leaf = need
+    return Float32(0)
+
+
 def _read_weights(weights_addr: Int, n_rows: Int) raises -> List[Float32]:
     """The weighted classifier's Float32 row weights (0: none), with the GPU
     binding's checks in its words (`bindings/_mojolearn_rf.mojo:363-380`);
@@ -317,10 +365,11 @@ def _rf_fit[
     weighted classifier's Float32 row weights (0: none); `tree_start` the
     GPU binding's global tree ID offset (the shard fits below)."""
     comptime entry = "rf_classifier_fit" if CLASSIFIER else "rf_regressor_fit"
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _params_len_ok(params):
         raise Error(
             entry + ": params must hold " + String(N_RF_FIT_PARAMS)
-            + " values, got " + String(len(params))
+            + " values (17 with min_weight_fraction_leaf), got "
+            + String(len(params))
         )
     var n_rows = _index(params[0])
     var n_cols = _index(params[1])
@@ -341,13 +390,15 @@ def _rf_fit[
     # `bindings/_mojolearn_rf.mojo:363-380`: the weights' checks in their
     # words; all-unit weights fit unweighted.
     var weights = _read_weights(weights_addr, n_rows)
+    var mwl = _apply_min_weight_fraction(p, _min_weight_fraction(params), weights, n_rows)
     var x_address = _index(x_addr)
     var y_address = _index(y_addr)
     var forest: RfHostForest
     with GILReleased(Python()):
         var x = _read_x_col_major(x_address, n_rows, n_cols, ROWMAJOR)
         forest = _rf_fit_colmajor[CLASSIFIER](
-            x^, y_address, n_rows, n_cols, n_classes, p, weights, tree_start, importance_addr != 0
+            x^, y_address, n_rows, n_cols, n_classes, p, weights, tree_start, importance_addr != 0,
+            mwl,
         )
         if oob_addr != 0:
             rf_host_oob[CLASSIFIER](forest,p,f32_ptr(x_address),y_address,weights,n_rows,n_cols,oob_addr,oob_score_addr)
@@ -369,6 +420,7 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
     weights: List[Float32],
     tree_start: Int,
     retain_importance: Bool = False,
+    min_weight_leaf: Float32 = Float32(0),
 ) raises -> RfHostForest:
     """The host fit on a COLUMN-major X already read: the one body `_rf_fit`
     and the data session entries below share, so a session member's forest
@@ -379,6 +431,7 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
         forest = rf_host_fit(
             x^, y, List[Float32](), n_rows, n_cols, n_classes, True, p,
             Float32(1.0), tree_start, weights, retain_importance,
+            min_weight_leaf,
         )
     else:
         var y = read_f32(y_address, n_rows)
@@ -646,10 +699,11 @@ def _session_params[CLASSIFIER: Bool](
     entry: String, params: PythonObject, criterion: PythonObject
 ) raises -> RfHostParams:
     """The GPU session entries' slot checks, in their words."""
-    if len(params) != N_RF_FIT_PARAMS:
+    if not _params_len_ok(params):
         raise Error(
             entry + ": params must hold " + String(N_RF_FIT_PARAMS)
-            + " values, got " + String(len(params))
+            + " values (17 with min_weight_fraction_leaf), got "
+            + String(len(params))
         )
     comptime if CLASSIFIER:
         if _index(params[2]) < 2:
@@ -659,7 +713,14 @@ def _session_params[CLASSIFIER: Bool](
             raise Error(entry + ": n_classes (slot 2) must be 0")
     var crit = _index(criterion)
     _check_criterion(entry, crit, CLASSIFIER)
-    return _params_from(params, crit)
+    var p = _params_from(params, crit)
+    comptime if not CLASSIFIER:
+        # the regressor sessions fit unweighted: slot 16 is a count bound
+        # (the weighted classifier session applies it with its weights)
+        _ = _apply_min_weight_fraction(
+            p, _min_weight_fraction(params), List[Float32](), _index(params[0])
+        )
+    return p
 
 
 def _session_x(entry: String, session_id: Int, n_rows: Int, n_cols: Int) raises -> List[Float32]:
@@ -747,12 +808,14 @@ def rf_classifier_fit_weighted_session_binding(
     if w_address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
     var weights = _read_weights(w_address, n_rows)
+    var mwl = _apply_min_weight_fraction(p, _min_weight_fraction(params), weights, n_rows)
     var x = _session_x(entry, _index(handle), n_rows, n_cols)
     var y_address = _index(y_addr)
     var forest: RfHostForest
     with GILReleased(Python()):
         forest = _rf_fit_colmajor[True](
-            x^, y_address, n_rows, n_cols, n_classes, p, weights, 0
+            x^, y_address, n_rows, n_cols, n_classes, p, weights, 0,
+            min_weight_leaf=mwl,
         )
     return _retain_rf_export(forest^)
 

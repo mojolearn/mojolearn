@@ -55,7 +55,7 @@ def test_public_names():
     (lambda: LinearSVC(penalty="elasticnet"), ValueError, "penalty"),
     (lambda: LinearSVC(C=0.0), ValueError, "C must be positive"),
     (lambda: LinearSVC(penalized_intercept=True), NotImplementedError, "penalized_intercept"),
-    (lambda: LinearSVC(class_weight="balanced"), NotImplementedError, "class_weight"),
+    (lambda: LinearSVC(class_weight="uniform"), ValueError, "class_weight"),
     (lambda: LinearSVC(multi_class="crammer_singer"), ValueError, "multi_class"),
     (lambda: LinearSVR(loss="hinge"), ValueError, "loss"),
     (lambda: LinearSVR(epsilon=-0.1), ValueError, "epsilon"),
@@ -75,12 +75,23 @@ def test_refused_by_name(make, exc, word):
         make().fit(X, yc)
 
 
-def test_sample_weight_refused_by_name():
-    X, yc, yr = _data(n=16)
-    w = np.ones(16, dtype=np.float32)
-    for est, y in ((LinearSVC(), yc), (LinearSVR(), yr), (QNRegressor(), yr)):
-        with pytest.raises(NotImplementedError, match="sample_weight"):
-            est.fit(X, y, sample_weight=w)
+def test_sample_weight_unit_weights_match_unweighted():
+    # the weighted arm multiplies each row's term and dZ by its weight;
+    # unit weights give the unweighted objective (lane sk-kernels)
+    X, yc, yr = _data(n=64)
+    w = np.ones(64, dtype=np.float32)
+    for make, y in ((LinearSVC, yc), (LinearSVR, yr), (QNRegressor, yr)):
+        a = make().fit(X, y)
+        b = make().fit(X, y, sample_weight=w)
+        np.testing.assert_allclose(np.asarray(b.coef_), np.asarray(a.coef_), rtol=1e-4, atol=1e-5)
+
+
+def test_class_weight_balanced_fits():
+    X, yc, _ = _data(n=64)
+    m = LinearSVC(class_weight="balanced").fit(X, yc)
+    assert m.classes_ == [0, 1]
+    m = LinearSVC(class_weight={0: 1.0, 1: 3.0}).fit(X, yc)
+    assert np.asarray(m.coef_).shape == (1, X.shape[1])
 
 
 @pytest.mark.parametrize("loss", ["hinge", "squared_hinge"])

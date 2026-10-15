@@ -272,6 +272,7 @@ def _et_fit[
 ](
     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
     tree_start: Int = 0,
+    weights_addr: Int = 0,
 ) raises -> PythonObject:
     """`_et_classifier_fit` / `_et_regressor_fit` of the GPU binding: the
     same slot checks in the same words, then the host fit. `tree_start` is
@@ -321,9 +322,13 @@ def _et_fit[
         var x = _read_x_col_major(x_address, n_rows, n_features, ROWMAJOR)
         var y = read_f32(y_address, n_rows)
         comptime if CLASSIFIER:
+            # lane sk-kernels: the per-row weights (0: none)
+            var w = List[Float32]()
+            if weights_addr != 0:
+                w = read_f32(weights_addr, n_rows)
             result = fit_extra_trees_classifier_host_exact(
                 x, y, Int32(n_rows), Int32(n_features), Int32(n_classes), config,
-                tree_start,
+                tree_start, w^,
             )
         else:
             result = fit_extra_trees_regressor_host_exact(
@@ -351,6 +356,47 @@ def et_classifier_fit_rowmajor_binding(
     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     return _et_fit[True, False, True](x_addr, y_addr, params)
+
+
+def _et_classifier_fit_weighted[EXPORT: Bool, ROWMAJOR: Bool](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_trees.mojo::et_classifier_fit_weighted_binding`."""
+    var address = _index(weights_addr)
+    if address == 0:
+        raise Error("et_classifier_fit_weighted requires a nonzero float32 weight pointer")
+    return _et_fit[True, EXPORT, ROWMAJOR](
+        x_addr, y_addr, params, weights_addr=address
+    )
+
+
+def et_classifier_fit_weighted_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    return _et_classifier_fit_weighted[False, False](x_addr, y_addr, params, weights_addr)
+
+
+def et_classifier_fit_weighted_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    return _et_classifier_fit_weighted[True, False](x_addr, y_addr, params, weights_addr)
+
+
+def et_classifier_fit_weighted_rowmajor_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    return _et_classifier_fit_weighted[False, True](x_addr, y_addr, params, weights_addr)
+
+
+def et_classifier_fit_weighted_rowmajor_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    return _et_classifier_fit_weighted[True, True](x_addr, y_addr, params, weights_addr)
 
 
 def et_classifier_fit_rowmajor_export_binding(
@@ -552,6 +598,10 @@ def PyInit__mojolearn_trees_host() abi("C") -> PythonObject:
         module.def_function[et_classifier_fit_export_binding]("et_classifier_fit_export")
         module.def_function[et_classifier_fit_rowmajor_binding]("et_classifier_fit_rowmajor")
         module.def_function[et_classifier_fit_rowmajor_export_binding]("et_classifier_fit_rowmajor_export")
+        module.def_function[et_classifier_fit_weighted_binding]("et_classifier_fit_weighted")
+        module.def_function[et_classifier_fit_weighted_export_binding]("et_classifier_fit_weighted_export")
+        module.def_function[et_classifier_fit_weighted_rowmajor_binding]("et_classifier_fit_weighted_rowmajor")
+        module.def_function[et_classifier_fit_weighted_rowmajor_export_binding]("et_classifier_fit_weighted_rowmajor_export")
         module.def_function[et_regressor_fit_binding]("et_regressor_fit")
         module.def_function[et_regressor_fit_export_binding]("et_regressor_fit_export")
         module.def_function[et_regressor_fit_rowmajor_binding]("et_regressor_fit_rowmajor")

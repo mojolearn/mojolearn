@@ -462,8 +462,8 @@ def check_logistic_refuses_by_name() raises:
     if m3.find("logistic loss invalid C") < 0:
         raise Error("3 classes under logistic did not raise their text; got: " + m3)
     var m4 = _fit_raises(ctx, _params(1.0, True, True), 2, True)
-    if m4.find("sample_weight is NOT IMPLEMENTED") < 0:
-        raise Error("sample_weight did not raise by name; got: " + m4)
+    if m4.find("has_sample_weight is set but no sample_weight buffer") < 0:
+        raise Error("has_sample_weight without a weight buffer did not raise by name; got: " + m4)
     var p5 = _params(1.0, True, True)
     p5.loss = 42
     var m5 = _fit_raises(ctx, p5, 2, False)

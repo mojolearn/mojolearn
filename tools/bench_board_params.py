@@ -1117,6 +1117,17 @@ def _semantic_r5(lane, param, arm, ours, theirs, library):
             return "gamma parameterizes only the RBF affinity; both use the compared nearest_neighbors affinity"
         if param == "prediction_data" and ours.get(param) is False:
             return "no prediction data kept: ours prediction_data=False; cuML SpectralClustering has no predict"
+        # smoke-mappings (2026-10-15; classical2/spectral/{istella,taxi}: "eigen_solver missing from cuml-gpu
+        # read-back"). Full pass over the lane's read-backs: cuML 26.08 SpectralClustering get_params carries
+        # affinity, eigen_tol, n_clusters, n_components, n_init, n_neighbors, random_state (all compared) and
+        # output_type, verbose (IGNORE). Ours python/mojolearn/_spectral_impl.py SpectralClustering adds
+        # assign_labels, gamma, prediction_data (mapped above), degree, coef0, kernel_params (below), n_jobs,
+        # verbose (IGNORE) and eigen_solver: ours accepts only None, its one Lanczos solver (docstring
+        # "Only None is accepted"); cuML's spectral clustering runs cuVS/RAFT Lanczos and takes no
+        # eigen_solver. eigen_tol (1e-5 on both arms) is compared.
+        if param == "eigen_solver" and param in ours and ours[param] is None \
+                and ours.get("affinity") == theirs.get("affinity") == "nearest_neighbors":
+            return "Lanczos on both: ours eigen_solver=None (its only solver); cuML/cuVS has no other; eigen_tol compared"
         # smoke-mappings (2026-10-15; classical2/spectral/{istella,taxi}: "coef0 missing from cuml-gpu
         # read-back", the same for degree). degree, coef0 and kernel_params parameterize only scikit-learn's
         # polynomial/sigmoid/callable kernel affinities. Ours python/mojolearn/_spectral_impl.py

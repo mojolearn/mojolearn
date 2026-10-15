@@ -500,7 +500,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     var has_cw = ldi(ip, 11) != 0
     # ip[12] (lane/neural-pass103): the minibatch size, 0 the per-sample fit
     # (fix-l1-linear: negative is "auto", `sgd_batch`)
-    var batch = sgd_batch(Int(ldi(ip, 12)), Int(k))
+    var batch = sgd_batch(Int(ldi(ip, 12)), Int(k), n)
     # ip[13] (lane/neural-pass132): the per-sample-equivalent batch step (`mb_step`)
     var bsum = ldi(ip, 13) != 0
     var swp = y + n
@@ -1122,13 +1122,45 @@ comptime SGD_OC_IDN_MB_DEFAULT = (
 )
 
 
+# lane sk-kernels (2026-10-15): the default minibatch of SGDClassifier,
+# SGDRegressor, Perceptron and the passive-aggressive pair ("auto", sent as
+# -cap with cap >= 2: 4096 for the SGD pair, 256 for the others) follows the
+# row count. A fixed batch of `cap` rows gives a fit on n < cap rows ONE step
+# per epoch, so `max_iter` epochs are at most `max_iter` steps and the
+# `n_iter_no_change` test stops it after a handful: scikit-learn's own checks
+# (check_class_weight_classifiers, check_regressors_train, ~100-300 rows)
+# saw a few steps and poor fits. Cost reasoning: every step is a fixed number
+# of grid launches (three per batch, see the minibatch notes above), so the
+# step count per epoch is what a small fit pays for, while the rows per step
+# set how much of the device one launch fills. The rule keeps at least
+# SGD_AUTO_STEPS steps per epoch (batch = n // SGD_AUTO_STEPS, at least 1)
+# and never exceeds `cap`: once n >= SGD_AUTO_STEPS * cap the batch is `cap`,
+# the old default, word for word; below it the batch shrinks smoothly with n
+# (no threshold on any one shape; every n gets the same steps-per-epoch
+# floor). 32 steps an epoch: enough updates for the n_iter_no_change window
+# (5 epochs = 160 steps) to see the loss settle, while a batch still
+# averages >= 1 row and the launch count of a small fit stays below
+# scikit-learn's per-sample n steps. `-D MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF`
+# restores the fixed `cap` (the A/B arm B). New bits for every fit with
+# n < SGD_AUTO_STEPS * cap on the host column and every device together.
+comptime SGD_ADAPTIVE_BATCH = not is_defined["MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF"]()
+comptime SGD_AUTO_STEPS = 32
+
+
 @always_inline
-def sgd_batch(ipb: Int, k: Int) -> Int:
+def sgd_batch(ipb: Int, k: Int, n: Int) -> Int:
     """The minibatch size of a fit from ip[12]: positive is the caller's,
-    0 the per-sample fit, negative "auto" (SGDOneClassSVM's default, see
-    SGD_OC_IDN_MB_DEFAULT)."""
+    0 the per-sample fit, -1 "auto" for SGDOneClassSVM (k == 1, see
+    SGD_OC_IDN_MB_DEFAULT; the per-sample fit for any other k, as before),
+    and -cap (cap >= 2) the row-count default of the other SGD estimators
+    (SGD_ADAPTIVE_BATCH): n // SGD_AUTO_STEPS, at least 1, at most cap."""
     if ipb > 0:
         return ipb
+    if ipb < -1 and k != 1:
+        var cap = -ipb
+        comptime if SGD_ADAPTIVE_BATCH:
+            return max(1, min(cap, n // SGD_AUTO_STEPS))
+        return cap
     if ipb < 0 and k == 1:
         comptime if SGD_OC_IDN_MB_DEFAULT:
             return MB_BATCH_DEFAULT

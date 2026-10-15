@@ -539,7 +539,7 @@ class TSNE(NumericModeMixin):
     Parameters
     ----------
     n_components : int, default 2
-        Dimension of the embedding. Only 2 is supported.
+        Dimension of the embedding, 1 or 2.
     perplexity : float, default 30.0
         Effective number of neighbors. Must be in ``(0, n_samples)``.
     early_exaggeration : float, default 12.0
@@ -555,7 +555,7 @@ class TSNE(NumericModeMixin):
         it after the early phase, as cuML's ``TSNE`` does. Must be positive.
     max_iter : int, default 1000
         Number of optimization iterations, all of which run.
-    init : {'pca', 'random'} or array-like of shape (n_samples, 2), default 'pca'
+    init : {'pca', 'random'} or array-like of shape (n_samples, n_components), default 'pca'
         Initial embedding. 'pca' is mojolearn's PCA embedding scaled as
         scikit-learn scales it: divided by the first column's standard
         deviation and multiplied by 1e-4. mojolearn uses an exact
@@ -614,8 +614,8 @@ class TSNE(NumericModeMixin):
         self.init = init
         self.random_state = random_state
 
-    def _init(self, x, n, seed):
-        """The caller's start array (n, 2) float32 ('pca' and 'random' are
+    def _init(self, x, n, seed, k=2):
+        """The caller's start array (n, k) float32 ('pca' and 'random' are
         built in the binding, x_ann/tsne_init.mojo)."""
         from ._optional_numpy import require_numpy
         np = require_numpy('_expansion_ann')
@@ -623,8 +623,8 @@ class TSNE(NumericModeMixin):
         if isinstance(init, str):
             raise ValueError(f"mojolearn TSNE: init must be 'pca', 'random' or an array, got {init!r}")
         y0 = np.ascontiguousarray(np.asarray(init, dtype=np.float32))
-        if y0.shape != (n, 2):
-            raise ValueError(f"mojolearn TSNE: an init array must have shape ({n}, 2), got {y0.shape}")
+        if y0.shape != (n, k):
+            raise ValueError(f"mojolearn TSNE: an init array must have shape ({n}, {k}), got {y0.shape}")
         return y0
 
     def fit(self, X, y=None):
@@ -645,7 +645,7 @@ class TSNE(NumericModeMixin):
         Raises
         ------
         ValueError
-            If `n_components` is not 2, `perplexity` is out of range,
+            If `n_components` is not 1 or 2, `perplexity` is out of range,
             `post_exaggeration_learning_rate_factor` is not positive, `init`
             is an unknown string, or an `init` array has the wrong shape.
         TypeError
@@ -659,8 +659,11 @@ class TSNE(NumericModeMixin):
             # scikit-learn's TSNE validates X with ensure_min_samples=2
             raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 "
                              "is required by TSNE.")
-        if self.n_components != 2:
-            raise ValueError("mojolearn TSNE: n_components must be 2 (the only arm implemented)")
+        # n_components 1 runs the two-dimensional kernels with a second
+        # column that stays +0 (x_ann/tsne_init.mojo `tsne_init_y0`)
+        if isinstance(self.n_components, bool) or self.n_components not in (1, 2):
+            raise ValueError(f"mojolearn TSNE: n_components must be 1 or 2, got {self.n_components!r}")
+        k = int(self.n_components)
         max_iter = _ann_int("TSNE", "max_iter", self.max_iter)
         seed = _ann_int("TSNE", "random_state", self.random_state)
         perplexity = float(self.perplexity)
@@ -687,27 +690,28 @@ class TSNE(NumericModeMixin):
                 mode = 1
             else:
                 from .decomposition import PCA
-                pca = PCA(n_components=2)
+                pca = PCA(n_components=k)
                 mode_name = getattr(self, "numeric_mode", None)
                 if mode_name is not None:
                     pca.numeric_mode = mode_name
                 y0 = np.ascontiguousarray(np.asarray(pca.fit_transform(x), dtype=np.float32))
                 mode = 2
             s64 = seed & ((1 << 64) - 1)
-            tail = [mode, s64 & 0xFFFFFFFF, s64 >> 32]
+            tail = [mode, s64 & 0xFFFFFFFF, s64 >> 32, k]
         else:
-            y0 = self._init(x, n, seed)       # the caller's array (or a refusal)
-        emb = empty((n * 2,), "<f4")
+            y0 = self._init(x, n, seed, k)    # the caller's array (or a refusal)
+            tail = [0, 0, 0, k]
+        emb = empty((n * k,), "<f4")
         kl = empty((1,), "<f4")
         native.x_ann_tsne_fit(
             # x, y0, y_out, kl_out
             [addr_ro(x, name="X"), addr_ro(y0, name="init"), addr(emb, name="embedding_"), addr(kl, name="kl")],
             # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate,
             # post_exaggeration_learning_rate_factor (the binding forms the product)
-            # (+ init mode, random_state low, high: the binding builds y0)
+            # (+ init mode, random_state low, high: the binding builds y0; n_components)
             [n, d, max_iter, exploration, perplexity, exag, lr, post_factor] + tail,
         )
-        self.embedding_ = emb.reshape((n, 2))
+        self.embedding_ = emb.reshape((n, k))
         self.kl_divergence_ = float(np.asarray(kl)[0])
         self.n_iter_ = max_iter
         self.learning_rate_ = lr
@@ -726,7 +730,7 @@ class TSNE(NumericModeMixin):
 
         Returns
         -------
-        embedding : ndarray of shape (n_samples, 2), float32
+        embedding : ndarray of shape (n_samples, n_components), float32
             The embedding, also stored in `embedding_`.
         """
         return self.fit(X).embedding_

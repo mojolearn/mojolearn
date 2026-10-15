@@ -440,7 +440,8 @@ def _class_prep(est, class_weight, classes, codes, sample_weight=None, weighted=
 
 def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0, power_t,
              epsilon, fit_intercept, max_iter, tol, n_iter_no_change, shuffle, random_state,
-             sample_weight=None, class_weight=None, classes=None, codes=None, batch_size=0, batch_sum=False):
+             sample_weight=None, class_weight=None, classes=None, codes=None, batch_size=0, batch_sum=False,
+             auto_cap=4096):
     a, n, d = X
     if penalty not in _SGD_PENALTY:
         raise ValueError(f"mojolearn {type(est).__name__}: penalty must be 'l2', 'l1', 'elasticnet' or None")
@@ -475,8 +476,14 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
     # 0.879 at 4096 (sklearn 0.60 / 0.902); the one-class objective 0.5001 /
     # 0.5010 vs 0.5008 / 0.5062 (sklearn 0.5000 / 0.5001));
     # batch 0 is the per-sample fit (batch_size=0)
-    if batch_size and (not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size < 1):
-        raise ValueError(f"mojolearn {type(est).__name__}: batch_size must be a positive int")
+    # "auto" (lane sk-kernels): the row-count default, sent as -auto_cap; the
+    # fit resolves it (x_linear/sgd.mojo `sgd_batch`, SGD_ADAPTIVE_BATCH):
+    # at least 32 steps an epoch, at most auto_cap rows a step
+    auto = isinstance(batch_size, str) and batch_size == "auto"
+    if auto:
+        batch_size = -int(auto_cap)
+    elif batch_size and (not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size < 1):
+        raise ValueError(f"mojolearn {type(est).__name__}: batch_size must be 'auto', 0 or a positive int")
     # batch_sum (lane/neural-pass132): Perceptron's batch step is the SUM of
     # its rows' updates (the per-sample fit's scale, so `tol` reads the same
     # loss scale); MOJOLEARN_SGD_BATCH_SUM=0/1 overrides for an A/B
@@ -503,8 +510,9 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
 
     Follows scikit-learn's SGDClassifier: a binary linear model, one-vs-rest
     for more than two classes. Two defaults differ from scikit-learn and
-    change results: the fit runs minibatch SGD with ``batch_size=4096`` rows
-    per step (``batch_size=0`` gives scikit-learn's per-sample updates), and
+    change results: the fit runs minibatch SGD (by default ``n_samples // 32``
+    rows per step, at most 4096; ``batch_size=0`` gives scikit-learn's
+    per-sample updates), and
     ``random_state=None`` means seed 0, so a fit is reproducible by default.
 
     Parameters
@@ -545,8 +553,9 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         Not supported: True raises ValueError.
     warm_start : bool, default False
         Not supported: True raises ValueError.
-    batch_size : int, default 4096
-        Rows per minibatch step; 0 runs per-sample SGD.
+    batch_size : 'auto' or int, default 'auto'
+        Rows per minibatch step; 'auto' is ``n_samples // 32`` (at least 1,
+        at most 4096), 0 runs per-sample SGD.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
@@ -583,7 +592,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True,
                  epsilon=0.1, random_state=None, learning_rate="optimal", eta0=0.0,
                  power_t=0.5, early_stopping=False, n_iter_no_change=5,
-                 class_weight=None, average=False, warm_start=False, batch_size=4096):
+                 class_weight=None, average=False, warm_start=False, batch_size="auto"):
         self.loss, self.penalty, self.alpha, self.l1_ratio = loss, penalty, alpha, l1_ratio
         self.fit_intercept, self.max_iter, self.tol, self.shuffle = fit_intercept, max_iter, tol, shuffle
         self.epsilon, self.random_state, self.learning_rate = epsilon, random_state, learning_rate
@@ -664,8 +673,9 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
 
     Follows scikit-learn's SGDRegressor. Two defaults differ from
     scikit-learn and change results: the fit runs minibatch SGD with
-    ``batch_size=4096`` rows per step (``batch_size=0`` gives scikit-learn's
-    per-sample updates), and ``random_state=None`` means seed 0, so a fit is
+    ``n_samples // 32`` rows per step by default, at most 4096
+    (``batch_size=0`` gives scikit-learn's per-sample updates), and
+    ``random_state=None`` means seed 0, so a fit is
     reproducible by default.
 
     Parameters
@@ -704,8 +714,9 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
         Not supported: True raises ValueError.
     warm_start : bool, default False
         Not supported: True raises ValueError.
-    batch_size : int, default 4096
-        Rows per minibatch step; 0 runs per-sample SGD.
+    batch_size : 'auto' or int, default 'auto'
+        Rows per minibatch step; 'auto' is ``n_samples // 32`` (at least 1,
+        at most 4096), 0 runs per-sample SGD.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
@@ -739,7 +750,7 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
     def __init__(self, loss="squared_error", *, penalty="l2", alpha=0.0001, l1_ratio=0.15,
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, epsilon=0.1,
                  random_state=None, learning_rate="invscaling", eta0=0.01, power_t=0.25,
-                 early_stopping=False, n_iter_no_change=5, average=False, warm_start=False, batch_size=4096):
+                 early_stopping=False, n_iter_no_change=5, average=False, warm_start=False, batch_size="auto"):
         self.loss, self.penalty, self.alpha, self.l1_ratio = loss, penalty, alpha, l1_ratio
         self.fit_intercept, self.max_iter, self.tol, self.shuffle = fit_intercept, max_iter, tol, shuffle
         self.epsilon, self.random_state, self.learning_rate = epsilon, random_state, learning_rate
@@ -1757,8 +1768,9 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
 
     Follows scikit-learn's Perceptron: SGD with the perceptron loss and a
     constant step ``eta0``, one-vs-rest for more than two classes. Unlike
-    scikit-learn, the default fit runs minibatches of ``batch_size=256``
-    rows, each step the sum of its rows' updates; ``batch_size=0`` gives
+    scikit-learn, the default fit runs minibatches of ``n_samples // 32``
+    rows (at most 256), each step the sum of its rows' updates;
+    ``batch_size=0`` gives
     scikit-learn's per-sample updates.
 
     Parameters
@@ -1795,8 +1807,9 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
         Per-class weights; 'balanced' weighs classes inversely to their frequency.
     warm_start : bool, default False
         Not supported: True raises ValueError.
-    batch_size : int, default 256
-        Rows per minibatch step; 0 runs per-sample updates.
+    batch_size : 'auto' or int, default 'auto'
+        Rows per minibatch step; 'auto' is ``n_samples // 32`` (at least 1,
+        at most 256), 0 runs per-sample updates.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
@@ -1831,7 +1844,7 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
     def __init__(self, *, penalty=None, alpha=0.0001, l1_ratio=0.15, fit_intercept=True, max_iter=1000,
                  tol=1e-3, shuffle=True, verbose=0, eta0=1.0, n_jobs=None, random_state=0,
                  early_stopping=False, validation_fraction=0.1, n_iter_no_change=5, class_weight=None,
-                 warm_start=False, batch_size=256):
+                 warm_start=False, batch_size="auto"):
         self.batch_size = batch_size
         self.penalty, self.alpha, self.l1_ratio, self.fit_intercept = penalty, alpha, l1_ratio, fit_intercept
         self.max_iter, self.tol, self.shuffle, self.verbose, self.eta0 = max_iter, tol, shuffle, verbose, eta0
@@ -1872,7 +1885,7 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
             self.alpha, self.l1_ratio, self.eta0, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
             sample_weight, self.class_weight, classes, icodes, batch_size=self.batch_size,
-            batch_sum=True)
+            batch_sum=True, auto_cap=256)
         return self
 
 
@@ -1887,7 +1900,7 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
     Follows scikit-learn's PassiveAggressiveClassifier, one-vs-rest for more
     than two classes: ``loss='hinge'`` is PA-I and ``'squared_hinge'`` is
     PA-II. Unlike scikit-learn, the default fit runs minibatches of
-    ``batch_size=256`` rows; ``batch_size=0`` gives scikit-learn's
+    ``n_samples // 32`` rows (at most 256); ``batch_size=0`` gives scikit-learn's
     per-sample updates.
 
     Parameters
@@ -1922,8 +1935,9 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
         Per-class weights; 'balanced' weighs classes inversely to their frequency.
     average : bool, default False
         Not supported: True raises ValueError.
-    batch_size : int, default 256
-        Rows per minibatch step; 0 runs per-sample updates.
+    batch_size : 'auto' or int, default 'auto'
+        Rows per minibatch step; 'auto' is ``n_samples // 32`` (at least 1,
+        at most 256), 0 runs per-sample updates.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
@@ -1958,7 +1972,7 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0, loss="hinge",
                  n_jobs=None, random_state=None, warm_start=False, class_weight=None, average=False,
-                 batch_size=256):
+                 batch_size="auto"):
         self.batch_size = batch_size
         self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
         self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
@@ -2003,7 +2017,8 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["hinge"], None, lr,
             1.0, 0.0, self.C, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, icodes, batch_size=self.batch_size)
+            sample_weight, self.class_weight, classes, icodes, batch_size=self.batch_size,
+            auto_cap=256)
         return self
 
 
@@ -2013,7 +2028,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
     Follows scikit-learn's PassiveAggressiveRegressor:
     ``loss='epsilon_insensitive'`` is PA-I and
     ``'squared_epsilon_insensitive'`` is PA-II. Unlike scikit-learn, the
-    default fit runs minibatches of ``batch_size=256`` rows;
+    default fit runs minibatches of ``n_samples // 32`` rows (at most 256);
     ``batch_size=0`` gives scikit-learn's per-sample updates.
 
     Parameters
@@ -2046,8 +2061,9 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
         Not supported: True raises ValueError.
     average : bool, default False
         Not supported: True raises ValueError.
-    batch_size : int, default 256
-        Rows per minibatch step; 0 runs per-sample updates.
+    batch_size : 'auto' or int, default 'auto'
+        Rows per minibatch step; 'auto' is ``n_samples // 32`` (at least 1,
+        at most 256), 0 runs per-sample updates.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
@@ -2080,7 +2096,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0,
                  loss="epsilon_insensitive", epsilon=0.1, random_state=None, warm_start=False,
-                 average=False, batch_size=256):
+                 average=False, batch_size="auto"):
         self.batch_size = batch_size
         self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
         self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
@@ -2123,7 +2139,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
             self, Xm, yv, 0, _SGD_REG_LOSS["epsilon_insensitive"], None, lr,
             1.0, 0.0, self.C, 0.5, self.epsilon, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, batch_size=self.batch_size)
+            sample_weight, batch_size=self.batch_size, auto_cap=256)
         self.coef_ = coef.reshape((Xm[2],))
         self.intercept_ = intercept
         return self

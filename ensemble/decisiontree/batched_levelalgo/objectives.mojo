@@ -410,6 +410,16 @@ trait ObjectiveLike(Copyable & Deinitable):
         """`objectives.cuh:150` / `:361`."""
         ...
 
+    def SetMinWeightLeaf(mut self, min_weight_leaf: Float32):
+        """NOT theirs (cuML has no `min_weight_fraction_leaf`; scikit-learn's
+        `min_weight_leaf`, `_classes.py` BaseDecisionTree.fit). The least
+        summed sample weight each child of a split must hold, in the
+        weighted bin's real units. 0 (the constructor's value) checks
+        nothing. Read only by the WEIGHTED bins' `GainPerSplit`: on the
+        unweighted (count) bins the builder's caller folds the bound into
+        `min_samples_leaf` instead (`bindings/_mojolearn_rf.mojo`)."""
+        ...
+
     def PureNodeIsTerminal(self) -> Bool:
         """DEVIATION 2502, ours. True when a node whose rows all carry one
         class can never split under this objective's gain rule, so the
@@ -533,6 +543,9 @@ struct ClassificationObjectiveFunction[
     var min_impurity_decrease: Scalar[Self.dtype]
     # NOT in their class. DEVIATION 101b's fixed-point scales.
     var scales: BinScales
+    # NOT in their class. scikit-learn's `min_weight_leaf` (see
+    # `ObjectiveLike.SetMinWeightLeaf`); 0 checks nothing.
+    var min_weight_leaf: Float32
 
     @always_inline
     def __init__(
@@ -555,6 +568,12 @@ struct ClassificationObjectiveFunction[
         self.criterion = criterion
         self.min_impurity_decrease = min_impurity_decrease
         self.scales = scales
+        self.min_weight_leaf = Float32(0)
+
+    @always_inline
+    def SetMinWeightLeaf(mut self, min_weight_leaf: Float32):
+        """See `ObjectiveLike.SetMinWeightLeaf`."""
+        self.min_weight_leaf = min_weight_leaf
 
     @always_inline
     def WeightAt[
@@ -822,6 +841,20 @@ struct ClassificationObjectiveFunction[
             Int(self.min_samples_leaf)
         ):
             return -Scalar[Self.dtype].MAX_FINITE
+        # scikit-learn's min_weight_leaf on the weighted bin (lane
+        # sk-kernels): each child's summed weight, the same `WeightAt` the
+        # gains read. Unreached at the default 0 and on the count bins, so
+        # no unweighted or default-weighted bit moves.
+        comptime if Self.weighted:
+            if self.min_weight_leaf > Float32(0):
+                var mw_total = self.WeightAt(hist, n_bins - 1, n_bins)
+                var mw_left = self.WeightAt(hist, i, n_bins)
+                var mw_right = mw_total - mw_left
+                if (
+                    mw_left.cast[DType.float32]() < self.min_weight_leaf
+                    or mw_right.cast[DType.float32]() < self.min_weight_leaf
+                ):
+                    return -Scalar[Self.dtype].MAX_FINITE
 
         # `:132-136`. Their `default:` arm returns the same sentinel, so a
         # regression criterion handed to a classification objective is a
@@ -1057,6 +1090,9 @@ struct RegressionObjectiveFunction[
     var min_impurity_decrease: Scalar[Self.dtype]
     # NOT in their class. DEVIATION 101b's fixed-point scales.
     var scales: BinScales
+    # NOT in their class. scikit-learn's `min_weight_leaf` (see
+    # `ObjectiveLike.SetMinWeightLeaf`); 0 checks nothing.
+    var min_weight_leaf: Float32
 
     # `objectives.cuh:211` -- `10 * numeric_limits<DataT>::epsilon()`.
     #
@@ -1104,6 +1140,12 @@ struct RegressionObjectiveFunction[
         self.criterion = criterion
         self.min_impurity_decrease = min_impurity_decrease
         self.scales = scales
+        self.min_weight_leaf = Float32(0)
+
+    @always_inline
+    def SetMinWeightLeaf(mut self, min_weight_leaf: Float32):
+        """See `ObjectiveLike.SetMinWeightLeaf`."""
+        self.min_weight_leaf = min_weight_leaf
 
     @always_inline
     def MSEGain[
@@ -1446,6 +1488,18 @@ struct RegressionObjectiveFunction[
             Int(self.min_samples_leaf)
         ):
             return -Scalar[Self.dtype].MAX_FINITE
+        # scikit-learn's min_weight_leaf on the weighted bin (lane
+        # sk-kernels); unreached at the default 0 and on the count bin.
+        comptime if Self.weighted:
+            if self.min_weight_leaf > Float32(0):
+                var mw_total = hist[unsafe_offset = Int(n_bins) - 1].Weight(self.scales)
+                var mw_left = hist[unsafe_offset = Int(i)].Weight(self.scales)
+                var mw_right = mw_total - mw_left
+                if (
+                    mw_left.cast[DType.float32]() < self.min_weight_leaf
+                    or mw_right.cast[DType.float32]() < self.min_weight_leaf
+                ):
+                    return -Scalar[Self.dtype].MAX_FINITE
 
         # `:331-337`. NOTE their `MAE` (`algo_helper.h:14`) has no arm and
         # falls to `default:` -- cuML does not implement MAE on GPU. Kept.

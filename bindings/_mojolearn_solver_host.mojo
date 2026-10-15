@@ -72,7 +72,7 @@ from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
     PAIRWISE_MAX_ROWS,
 )
-from solver.host.cd_oracle import cd_oracle_fit
+from solver.host.cd_oracle import CdOracleResult, cd_oracle_fit, cd_oracle_fit_weighted
 from solver.impl.cd_gram_rule import cd_idn_gram_shape
 from std.os import getenv
 
@@ -151,7 +151,8 @@ def cd_fit_binding(
         5  l1_ratio           (float; Lasso passes 1.0)
         6  tol                (float)
         7  shuffle            (0/1; 1 is REFUSED BY NAME, as on the device)
-        8  has_sample_weight  (0/1; 1 is REFUSED BY NAME, as on the device)
+        8  has_sample_weight  (0/1; 1 runs `cd_oracle_fit_weighted`, the
+                              device's weighted fit, and needs slot 10)
         9  row_major          (0/1, optional): `x_addr` is C-ORDER; the GPU
                               binding transposes it on the device, this one
                               reads it into the same column-major words
@@ -159,13 +160,15 @@ def cd_fit_binding(
                               811275d5b refused every Lasso/ElasticNet fit
                               here: Python passes 10 values since
                               lane/gap-nv-classical2)
+       10  sample_weight address (optional; lane sk-kernels): n_rows
+                              float32 weights, read only when slot 8 is 1
     """
-    if len(params) != 9 and len(params) != 10:
+    if len(params) < 9 or len(params) > 11:
         raise Error(
-            "cd_fit: params must contain 9 or 10 values, got " + String(len(params))
+            "cd_fit: params must contain 9 to 11 values, got " + String(len(params))
         )
     var row_major = False
-    if len(params) == 10:
+    if len(params) >= 10:
         row_major = _index(params[9]) != 0
     var x_address = _index(x_addr)
     var y_address = _index(y_addr)
@@ -180,6 +183,11 @@ def cd_fit_binding(
     var tol = Float32(Float64(py=params[6]))
     var shuffle = _index(params[7]) != 0
     var has_sw = _index(params[8]) != 0
+    var sw_address = 0
+    if has_sw:
+        if len(params) != 11:
+            raise Error("cd_fit: has_sample_weight needs the weight address as params[10]")
+        sw_address = _index(params[10])
     var n_iter = 0
     with GILReleased(Python()):
         # `cd_fit_host`'s guards, then `cd_fit_traced`'s, in their order and
@@ -199,12 +207,6 @@ def cd_fit_binding(
             )
         if n_rows <= 1:
             raise Error("Parameter n_rows: number of rows cannot be less than two")
-        if has_sw:
-            raise Error(
-                "Parameter sample_weight: REFUSED BY NAME. cd.cuh:136-163 and"
-                " :240-251 (the weighted preprocess, the sqrt-weight scaling of"
-                " input and labels, and their undo) are not implemented"
-            )
         if shuffle:
             raise Error(
                 "Parameter shuffle: REFUSED BY NAME (cuML selection='random')."
@@ -243,9 +245,18 @@ def cd_fit_binding(
         # the Gram sweeps for the shapes the device takes them, the row
         # sweeps under a trace, as `cd_fit_traced` keeps them.
         var gram = cd_idn_gram_shape(n_rows, n_cols) and String(getenv("MOJOLEARN_IDENTITY_TRACE")) == ""
-        var out = cd_oracle_fit(
-            x, y, n_rows, n_cols, fit_intercept, epochs, alpha, l1_ratio, tol, True, False, gram
-        )
+        var out: CdOracleResult
+        if has_sw:
+            # lane sk-kernels: the weighted fit (solver/impl/cd_weighted.mojo)
+            var w = read_f32(sw_address, n_rows)
+            out = cd_oracle_fit_weighted(
+                x, y, w, n_rows, n_cols, fit_intercept, epochs, alpha,
+                l1_ratio, tol, gram,
+            )
+        else:
+            out = cd_oracle_fit(
+                x, y, n_rows, n_cols, fit_intercept, epochs, alpha, l1_ratio, tol, True, False, gram
+            )
         if len(out.coef) != n_cols:
             raise Error("cd_fit: the host oracle returned coef of an unexpected length; nothing written")
         for j in range(n_cols):

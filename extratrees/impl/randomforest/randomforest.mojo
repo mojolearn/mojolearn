@@ -108,6 +108,25 @@ ExtraTrees'. This directory is ExtraTrees, so the default is sklearn's;
 `bootstrap=True` is honoured (DEVIATION 460), never silently ignored."""
 
 
+def fold_min_weight_count(
+    mut params: DecisionTreeParams, frac: Float64, n_tree_rows: Int
+):
+    """lane sk-kernels: scikit-learn's `min_weight_fraction_leaf` on a fit
+    whose rows all weigh 1. A tree's total weight is then its row count
+    (`n_tree_rows`: the bootstrap draw, or every row), and an integer child
+    count c satisfies c >= frac * total exactly when c >= ceil(frac * total),
+    so the bound is `min_samples_leaf` raised to that ceiling. frac == 0
+    changes nothing."""
+    if not (frac > 0.0):
+        return
+    var bound = frac * Float64(n_tree_rows)
+    var need = Int(bound)
+    if Float64(need) < bound:
+        need += 1
+    if need > Int(params.min_samples_leaf):
+        params.min_samples_leaf = Int32(need)
+
+
 def resolve_n_sampled_rows(
     n_rows: Int32, bootstrap: Bool, n_sampled_rows: Int32
 ) raises -> Int32:
@@ -275,8 +294,17 @@ def fit_classification_device(
     x_addr: Int = 0,
     x_row_major: Bool = False,  # DEVIATION 2637, see `upload_dataset`
     tree_start: Int = 0,
+    weights_addr: Int = 0,
+    min_weight_fraction: Float64 = 0.0,
 ) raises -> Forest:
     """`randomforest.cuh:155-195` again, with the split search on the GPU.
+
+    lane sk-kernels: `weights_addr` (0: none) is scikit-learn's per-row
+    weight (sample_weight times the class_weight row), `n_rows` Float32
+    words borrowed through this call; `DeviceDataset.set_row_weights` turns
+    them into the weighted classifier's fixed-point plane. When they are all
+    1.0 the fit is the unweighted one, and `min_weight_fraction` (which the
+    caller did not fold, see `fold_min_weight_count`) is folded here.
 
     Everything the host loop does, this does: `error_checking` and
     `validity_check` first, the bootstrap count resolved through
@@ -332,6 +360,10 @@ def fit_classification_device(
     # fills the identity with a sequence KERNEL, DEVIATION 460 fills a
     # bootstrap slot with `launch_uniform_int`.
     var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
+    var tree_params = params
+    if weights_addr != 0:
+        if not device_dataset.set_row_weights(ctx, weights_addr, min_weight_fraction):
+            fold_min_weight_count(tree_params, min_weight_fraction, Int(n_sampled))
 
     # DEVIATION 211: the whole forest through ONE merged-frontier trainer --
     # every tree's level runs in the same launches -- instead of a per-tree
@@ -351,7 +383,7 @@ def fit_classification_device(
         tree_ids.append(Int32(tree_start + tree_id))
     var forest = Forest(n_classes)
     forest.trees = train_forest_classification_device(
-        ctx, device_dataset, params, tree_ids, seed,
+        ctx, device_dataset, tree_params, tree_ids, seed,
         bootstrap=bootstrap, n_sampled_rows=n_sampled,
     )
     forest.n_trees = n_trees

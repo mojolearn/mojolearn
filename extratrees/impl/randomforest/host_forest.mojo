@@ -161,6 +161,8 @@ def fit_forest_exact(
     bootstrap: Bool = BOOTSTRAP_DEFAULT,
     n_sampled_rows: Int32 = 0,
     tree_start: Int = 0,
+    row_w_q: List[Int32] = List[Int32](),
+    min_weight_units: Int64 = 0,
 ) raises -> Forest:
     """The forest loop of `fit_classification` / `fit_regression` over
     `train_tree_exact`, the HOST RESTATEMENT OF THE DEVICE TRAINER (the CPU
@@ -203,6 +205,11 @@ def fit_forest_exact(
     var labels_q_p = labels_q.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
     var x_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](x_col_major.unsafe_ptr())
     var labels_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](labels.unsafe_ptr())
+    # lane sk-kernels: the weighted classifier's fixed-point row weights
+    # (`host_quantize_row_weights`; empty: unweighted)
+    if len(row_w_q) != 0 and len(row_w_q) != Int(n_rows):
+        raise Error("fit_forest_exact: row_w_q must be empty or n_rows long")
+    var row_w_addr = Int(row_w_q.unsafe_ptr()) if len(row_w_q) > 0 else 0
     # THE TREES, ONE TASK PER CONTIGUOUS TREE RANGE (lane/trees-cpu,
     # 2026-09-28). A tree reads X, the label planes and its own seed and
     # writes only its own `TreeMetaDataNode`, so trees may run on different
@@ -220,7 +227,7 @@ def fit_forest_exact(
     var failed = List[Bool](length=tasks, fill=False)
     var messages = List[String](length=tasks, fill=String(""))
 
-    def _tree_task(task: Int) {mut slots, mut failed, mut messages, imm x_p, imm labels_p, imm labels_q_p, imm n_rows, imm n_cols, imm n_sampled, imm bootstrap, imm seed, imm tree_start, imm num_outputs, imm params, imm is_classification, imm inv_scale, imm chunk, imm n, imm tasks}:
+    def _tree_task(task: Int) {mut slots, mut failed, mut messages, imm x_p, imm labels_p, imm labels_q_p, imm n_rows, imm n_cols, imm n_sampled, imm bootstrap, imm seed, imm tree_start, imm num_outputs, imm params, imm is_classification, imm inv_scale, imm chunk, imm n, imm tasks, imm row_w_addr, imm min_weight_units}:
         var lo = task * chunk
         var hi = min(lo + chunk, n)
         try:
@@ -243,6 +250,7 @@ def fit_forest_exact(
                 slots[tree_id] = train_tree_exact(
                     dataset, labels_q_p, params, Int32(tree_start + tree_id), seed,
                     is_classification, Int(num_outputs), inv_scale,
+                    row_w_addr, min_weight_units,
                 )
                 _ = row_ids.unsafe_ptr()
         except e:
@@ -256,6 +264,7 @@ def fit_forest_exact(
     _ = x_col_major.unsafe_ptr()
     _ = labels.unsafe_ptr()
     _ = labels_q.unsafe_ptr()
+    _ = row_w_q.unsafe_ptr()
     # the serial walk raised its first failing tree's error; the lowest
     # failing task holds the lowest trees and stopped at its first
     for k in range(tasks):

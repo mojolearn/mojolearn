@@ -344,6 +344,8 @@ def host_one_sided_jacobi_svd(
 def host_pca_full_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
     """`pca_full_validate` under IDENTICAL, with the wide route refused by
     name (see the module docstring) after the checks the device makes."""
+    if n_cols <= 1:
+        raise Error("Parameter n_cols: number of columns cannot be less than two")
     host_pca_validate(n_rows, n_cols, n_components)
     if n_rows < n_cols:
         if n_components > n_rows:

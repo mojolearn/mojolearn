@@ -133,6 +133,7 @@ from extratrees.impl.randomforest.randomforest import (
     Forest,
     class_ids_for_host,
     fit_classification_device,
+    fold_min_weight_count,
     fit_regression_device,
     fit_regression_device_f32,
 )
@@ -345,12 +346,18 @@ def refuse_unported(config: ExtraTreesConfig) raises:
     Each entry names the deviation or the `NOT_IMPLEMENTED.tsv` row that explains it,
     so a caller gets a reason rather than a wall.
     """
-    if config.min_weight_fraction_leaf != 0.0:
+    # lane sk-kernels: min_weight_fraction_leaf is honoured (a count bound
+    # when every row weighs 1, `fold_min_weight_count`; the weighted
+    # classifier's `min_weight_units` otherwise). scikit-learn's range and
+    # words.
+    if not (
+        config.min_weight_fraction_leaf >= 0.0
+        and config.min_weight_fraction_leaf <= 0.5
+    ):
         raise Error(
-            "min_weight_fraction_leaf is not implemented: it is a fraction of the"
-            " total SAMPLE WEIGHT, and sample_weight is unimplemented (see"
-            " NOT_IMPLEMENTED.tsv and DEVIATION 144, whose exact integer comparison"
-            " assumes unweighted counts). Only the default 0.0 is accepted."
+            "The 'min_weight_fraction_leaf' parameter must be a float in the"
+            " range [0.0, 0.5]. Got " + String(config.min_weight_fraction_leaf)
+            + " instead."
         )
     if config.has_monotonic_cst:
         raise Error(
@@ -503,9 +510,15 @@ def _et_device_batch() -> Int:
 
 
 def resolve(
-    config: ExtraTreesConfig, n_rows: Int, n_features: Int
+    config: ExtraTreesConfig, n_rows: Int, n_features: Int,
+    fold_min_weight: Bool = True,
 ) raises -> FitPlan:
-    """sklearn's configuration into cuML's, with every refusal applied first."""
+    """sklearn's configuration into cuML's, with every refusal applied first.
+
+    `fold_min_weight` (lane sk-kernels): fold `min_weight_fraction_leaf`
+    into `min_samples_leaf` for a fit whose rows all weigh 1. A weighted fit
+    passes False and its trainer applies the fraction to the weights (or
+    folds it itself when they turn out all 1)."""
     refuse_unported(config)
 
     var count = resolve_max_features(
@@ -535,10 +548,15 @@ def resolve(
     else:
         params.max_depth = config.max_depth
 
-    validity_check(params)
     var n_sampled = Int32(0)
     if config.bootstrap:
         n_sampled = Int32(config.max_samples) if config.max_samples > 0 else Int32(n_rows)
+    if fold_min_weight:
+        fold_min_weight_count(
+            params, config.min_weight_fraction_leaf,
+            Int(n_sampled) if config.bootstrap else n_rows,
+        )
+    validity_check(params)
     return FitPlan(
         params, config.n_estimators, count, unlimited, config.bootstrap,
         n_sampled,
@@ -559,7 +577,8 @@ struct FitResult(Movable):
 
 
 def classifier_plan(
-    config: ExtraTreesConfig, n_rows: Int32, n_features: Int32
+    config: ExtraTreesConfig, n_rows: Int32, n_features: Int32,
+    fold_min_weight: Bool = True,
 ) raises -> FitPlan:
     """Every check and every refusal a classifier fit applies, in ONE place.
 
@@ -575,7 +594,7 @@ def classifier_plan(
             " (DEVIATION 459); the regression criteria are refused by"
             " validity_check"
         )
-    return resolve(config, Int(n_rows), Int(n_features))
+    return resolve(config, Int(n_rows), Int(n_features), fold_min_weight)
 
 
 def depth_cap_bound(forest: Forest, plan: FitPlan) -> Bool:
@@ -604,8 +623,13 @@ def fit_extra_trees_classifier_device(
     x_addr: Int = 0,
     x_row_major: Bool = False,  # DEVIATION 2637: a borrowed ROW-major X
     tree_start: Int = 0,
+    weights_addr: Int = 0,
 ) raises -> FitResult:
     """`ExtraTreesClassifier.fit` with the split search on the GPU.
+
+    lane sk-kernels: `weights_addr` (0: none) is the per-row weight
+    (scikit-learn's sample_weight times its class_weight row), `n_rows`
+    Float32 words borrowed through this call (`fit_classification_device`).
 
     DEVIATION BLOCK -- DEVIATION 187, stated in full in the module docstring.
     The signature is `fit_extra_trees_classifier`'s plus a `DeviceContext`, and
@@ -629,7 +653,9 @@ def fit_extra_trees_classifier_device(
     therefore possible, is named when it happens, and is what
     `device_forest_check` uses to prove this arm reaches the device at all.
     """
-    var plan = classifier_plan(config, n_rows, n_features)
+    var plan = classifier_plan(
+        config, n_rows, n_features, fold_min_weight=weights_addr == 0
+    )
     var forest = fit_classification_device(
         ctx,
         x_col_major,
@@ -644,6 +670,10 @@ def fit_extra_trees_classifier_device(
         plan.n_sampled_rows,
         x_addr=x_addr,
         x_row_major=x_row_major, tree_start=tree_start,
+        weights_addr=weights_addr,
+        min_weight_fraction=(
+            config.min_weight_fraction_leaf if weights_addr != 0 else 0.0
+        ),
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
