@@ -151,7 +151,14 @@ def enrich(lane, inputs, outputs, quality, python, directory, timeout, *, fit_ca
     the reference runs now. Each arm's entry says whether the scorer ran: `scorer: "scored"` (a distance, or a
     scored output failure such as a mismatch) or `scorer: "failed"` (the reference itself could not run)."""
     missing = [arm for arm in outputs if arm.startswith('ours') and quality.get(arm) == {}]
-    if not missing:
+    # SCORER GAPS (lane quality-scorers, 2026-10-15): a race of ours now also scores against the untimed torch
+    # reference (bench_board_algos.independent_quality_reference), so ours' quality is no longer empty. The own-host
+    # distance is still recorded beside it; a reference that cannot run is noted without hiding the torch metric.
+    beside = [arm for arm in outputs if arm.startswith('ours') and quality.get(arm)
+              and 'error' not in quality[arm] and 'scorer' not in quality[arm]
+              and 'relative_error_vs_own_host' not in quality[arm]
+              and any(key in quality[arm] for key in TORCH_REFERENCE_METRICS)]
+    if not missing and not beside:
         return None
     try:
         ref_outputs, receipt = precomputed or reference(lane, inputs, python, directory, timeout,
@@ -161,11 +168,24 @@ def enrich(lane, inputs, outputs, quality, python, directory, timeout, *, fit_ca
                 quality[arm] = dict(compare(outputs[arm], ref_outputs), scorer='scored')
             except Exception as error:
                 quality[arm] = {'error': str(error), 'scorer': 'scored'}
+        for arm in beside:
+            try:
+                quality[arm].update(compare(outputs[arm], ref_outputs))
+            except Exception as error:     # a mismatch is a scored failure of the arm, as above
+                quality[arm].update(error=str(error))
+            quality[arm]['scorer'] = 'scored'
     except Exception as error:
         receipt = str(Path(directory) / 'receipt.json')
         for arm in missing:
             quality[arm] = {'error': str(error), 'scorer': 'failed', 'scorer_error': str(error)}
+        for arm in beside:
+            quality[arm]['own_host_reference_error'] = str(error)[:600]
     return receipt
+
+
+#: the metrics bench_board_algos.quality records against the torch reference (kinds layer and optim)
+TORCH_REFERENCE_METRICS = ('rel_fro_vs_torch_eager_fp32', 'max_rel_diff_vs_torch_eager_fp32',
+                           'optimizer_update_error_vs_torch_fp32')
 
 
 def host_binding_artifacts(modules=None):

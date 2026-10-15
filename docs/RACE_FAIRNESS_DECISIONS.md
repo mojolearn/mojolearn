@@ -30,7 +30,7 @@ Equal iteration caps never prove equal executed work or equal quality. Fixed
 training-step throughput measurements still perform the declared step count;
 they are distinct from time to a quality target.
 
-`tools/board_quality.py` implements `mojolearn.quality-parity.v6`. Its engineering
+`tools/board_quality.py` implements `mojolearn.quality-parity.v7`. Its engineering
 margins are declared by metric, independent of dataset, vendor and timing winner:
 
 | Metric | Admission margin |
@@ -43,6 +43,25 @@ margins are declared by metric, independent of dataset, vendor and timing winner
 | Deterministic transformations against a common scikit-learn reference | Both relative Frobenius errors ≤ 0.0001; nonfinite outputs fail |
 | Neural layer outputs against the same eager FP32 torch reference | Both relative Frobenius errors ≤ 0.01 (permits native fast precision) |
 | Optimizer updates against the same eager FP32 torch reference | Both relative Frobenius update errors ≤ 0.0001; compare final minus initial parameters |
+| Canonical correlation, cross-validated R², permutation p-value, resample mean shift (in column standard deviations) | Absolute difference ≤ 0.01 |
+| Kernel approximation error, FastICA excess kurtosis, bootstrap standard error, STL residual spread | Difference / max(abs(values)) ≤ 5% |
+| GARCH total log likelihood | Absolute difference ≤ 0.05 nats |
+| Random-trees-embedding active leaves per row | Equal (one per tree) |
+| Forward outputs and learning-rate schedules against ours (max abs difference / max abs ours) | Both ≤ 0.01; ours' own value is 0 |
+| Gradient-norm clipping norm, cross-entropy gradient against ours; cross-entropy loss against FP64; KPSS statistic against statsmodels | Both ≤ 0.0001 |
+| PageRank L1 distance to networkx over the shared stopping rule's bound 2·α/(1−α)·n·tol | Both ≤ 1 |
+| Connected components against networkx | The same partition up to relabeling (1 − ARI = 0) |
+| Agreement fractions with one named arm (BPE documents and vocabulary vs ours, outlier flags vs scikit-learn, KPSS flags and differencing order vs statsmodels) | Both disagreements (1 − value) ≤ 0.01 |
+
+The v7 additions (2026-10-15) close scorer gaps: metrics already recorded on both
+arms that had no declared rule. A metric measured against one named arm (torch
+eager FP32, scikit-learn, networkx, statsmodels or ours) takes that arm's own
+value by definition (0 distance, 1 agreement) when its stored cell is the
+comparison. When a race of ours holds no reference arm, the race runs the
+reference untimed after the timed workers stop (torch eager FP32 for the layer
+and forward lanes, networkx for the graph lanes, scikit-learn for the outlier
+lanes, statsmodels for KPSS and differencing order), as for the scikit-learn
+oracle below.
 
 The v2 additions were declared before the resumed GPU campaign on 2026-10-14.
 All v1 limits remain unchanged. The reference arm's zero distance is recorded

@@ -3766,6 +3766,16 @@ QUALITY_NOTE = {
     "forecast_rmse": "lower is better", "insample_rmse": "lower is better",
     "mean_llf": "higher is better", "mean_aic": "lower is better",
     "bits_equal_vs_ours_identical": "yes is the product's promise",
+    # scorer gaps (lane quality-scorers, 2026-10-15; rules in tools/board_quality.py v7)
+    "rel_fro_vs_torch_eager_fp32": "0 is the eager FP32 torch output exactly",
+    "l1_vs_networkx_over_stop_bound": "0 is networkx's scores exactly, 1 the stopping rule's bound",
+    "partition_disagreement_vs_networkx": "0 is networkx's partition exactly",
+    "jaccard_vs_sklearn": "1 is scikit-learn's flags exactly",
+    "flag_agreement_vs_statsmodels": "1 is statsmodels' decisions exactly",
+    "d_agreement_vs_statsmodels": "1 is statsmodels' orders exactly",
+    "mean_canonical_corr": "higher is better", "mean_r2": "higher is better",
+    "mean_abs_excess_kurtosis": "higher is more non-Gaussian",
+    "max_mean_shift_over_std": "lower is better",
 }
 
 

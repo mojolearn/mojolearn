@@ -8,11 +8,21 @@ Unknown metrics require review; finite output alone is not equal quality.
 """
 import math
 
-POLICY = "mojolearn.quality-parity.v6"
+POLICY = "mojolearn.quality-parity.v7"
 # Absolute score units (one percentage point for bounded scores).
 ABSOLUTE = dict.fromkeys(("accuracy", "auc", "roc_auc", "r2", "recall_at_k",
     "recall_at_10", "trustworthiness_k15", "explained_variance_ratio_sum",
     "explained_variance_fraction", "silhouette", "modularity"), 0.01)
+# SCORER GAPS (lane quality-scorers, 2026-10-15): metrics the board already recorded on both arms of a
+# race but that had no declared rule, so every such race read INSUFFICIENT
+# (~/mojolearn-evidence/quality-vs-opponent-20261015.md "Scorer gaps"). Declared before any rerun.
+#   mean_canonical_corr (cca, pls-canonical): a correlation, bounded like r2.
+#   mean_r2 (cross-val-score): r2 averaged over the same folds.
+#   pvalue (permutation-test): the Monte Carlo error of a permutation p-value with 9,999
+#   resamples is at most sqrt(.25 / 9999) = 0.005, so 0.01 is two standard errors.
+#   max_mean_shift_over_std (resample): the resample mean's shift in units of the column's
+#   standard deviation; 0.01 std is the sampling noise of a mean over 10^4 rows.
+ABSOLUTE.update(mean_canonical_corr=0.01, mean_r2=0.01, pvalue=0.01, max_mean_shift_over_std=0.01)
 # Log density is already logarithmic: a relative difference in its numeric value
 # is meaningless. 0.05 nats corresponds to exp(0.05), about 1.051, in density.
 ABSOLUTE.update(mean_log_likelihood=0.05, mean_nll=0.05,
@@ -20,6 +30,20 @@ ABSOLUTE.update(mean_log_likelihood=0.05, mean_nll=0.05,
 RELATIVE = dict.fromkeys(("rmse", "masked_rmse", "forecast_rmse", "logloss",
     "inertia", "perplexity", "loss_last_step", "relative_reconstruction_error",
     "relative_reconstruction_error_100k_rows"), 0.05)
+# SCORER GAPS (2026-10-15), declared before any rerun: errors and estimates both arms record.
+#   kernel_rel_error (additive-chi2, skewed-chi2, poly-count-sketch, nystroem, rbf-sampler): the
+#   approximation's relative Frobenius error against the exact kernel, lower is better.
+#   mean_abs_excess_kurtosis (fastica): the non-Gaussianity of the recovered sources.
+#   standard_error (bootstrap): the bootstrap estimate; its Monte Carlo error with 9,999 resamples
+#   is about 1 / sqrt(2 * 9999) = 0.7%, far inside 5%.
+#   residual_std (stl): the decomposition's residual spread on the same series.
+RELATIVE.update(kernel_rel_error=0.05, mean_abs_excess_kurtosis=0.05, standard_error=0.05,
+                residual_std=0.05)
+# Exact contracts: random-trees-embedding activates exactly one leaf per tree in every row.
+RELATIVE.update(nonzeros_per_row=0.0)
+# mean_llf (garch): the series' total log likelihood at the fitted parameters. A likelihood-ratio
+# test reads differences of total log likelihood directly; 0.05 nats is negligible at any length.
+ABSOLUTE.update(mean_llf=0.05)
 # A common reference bound, not a demand that fp32 and bf16 have equal errors.
 # This gate deliberately allows the opponent's native fast precision.
 REFERENCE = {"max_rel_err_vs_fp64": 0.01, "relative_residual": 1e-4,
@@ -42,7 +66,57 @@ REFERENCE = {"max_rel_err_vs_fp64": 0.01, "relative_residual": 1e-4,
              # must implement channel-wise inverted dropout at the requested
              # probability; their random masks need not be identical.
              "dropout_contract_relative_error": 1e-6,
-             "dropout_probability_z": 6.0}
+             "dropout_probability_z": 6.0,
+             # SCORER GAPS (2026-10-15), declared before any rerun. Distances to ONE named arm's
+             # output on the same inputs (and, for the layers, the same weights): that arm's own
+             # value is 0 by definition (SELF_REFERENCE below).
+             # forward lanes (tools/bench_board_neural.py) and the schedules: max |o - ours| / max
+             # |ours|; 0.01 is the same common bound as rel_fro_vs_torch_eager_fp32, which admits
+             # an opponent's native bf16/tf32.
+             "max_rel_diff_vs_ours": 0.01,
+             # fp32 reductions and elementwise gradients of the same inputs (clip-grad-norm, cross-entropy)
+             "norm_rel_diff_vs_ours": 1e-4,
+             "grad_max_rel_diff_vs_ours": 1e-4,
+             "loss_rel_err_vs_fp64": 1e-4,
+             # kpss: the test statistic against statsmodels' on the same series
+             "stat_max_rel_diff_vs_statsmodels": 1e-4,
+             # pagerank: the L1 distance to networkx's scores over the bound the shared stopping rule
+             # allows (bench_board_algos.pagerank_l1_bound: two arms each within alpha / (1 - alpha)
+             # times the final L1 change n x tol of the fixed point); 1 is that bound.
+             "l1_vs_networkx_over_stop_bound": 1.0,
+             # connected components are exact: the same partition up to relabeling, or 1 - ARI.
+             "partition_disagreement_vs_networkx": 0.0}
+# SCORER GAPS (2026-10-15): agreement fractions in [0, 1] with one named arm; 1 is that arm's own
+# output. Both arms' disagreement (1 - value) must be at most the margin (bounded-score policy).
+AGREEMENT = {"documents_equal_to_ours": 0.01, "jaccard_vs_ours": 0.01, "jaccard_vs_sklearn": 0.01,
+             "flag_agreement_vs_statsmodels": 0.01, "d_agreement_vs_statsmodels": 0.01}
+# The arm a reference or agreement metric is measured against, and that arm's own value. A race
+# that scored the arm itself (the stored torch-eager-fp32, networkx-cpu or statsmodels-cpu cell)
+# records no distance to itself; the comparison reads this value instead of INSUFFICIENT.
+SELF_REFERENCE = {
+    "rel_fro_vs_torch_eager_fp32": ("torch-eager-fp32", 0.0),
+    "optimizer_update_error_vs_torch_fp32": ("torch-eager-fp32", 0.0),
+    "rel_diff_vs_sklearn": ("sklearn-cpu", 0.0),
+    "max_rel_diff_vs_ours": ("ours", 0.0),
+    "norm_rel_diff_vs_ours": ("ours", 0.0),
+    "grad_max_rel_diff_vs_ours": ("ours", 0.0),
+    "stat_max_rel_diff_vs_statsmodels": ("statsmodels-cpu", 0.0),
+    "l1_vs_networkx_over_stop_bound": ("networkx-cpu", 0.0),
+    "partition_disagreement_vs_networkx": ("networkx-cpu", 0.0),
+    "documents_equal_to_ours": ("ours", 1.0),
+    "jaccard_vs_ours": ("ours", 1.0),
+    "jaccard_vs_sklearn": ("sklearn-cpu", 1.0),
+    "flag_agreement_vs_statsmodels": ("statsmodels-cpu", 1.0),
+    "d_agreement_vs_statsmodels": ("statsmodels-cpu", 1.0),
+}
+
+
+def metric_value(cell, quality, metric):
+    """The arm's recorded value, or the self-reference value when the arm IS the metric's reference."""
+    value = quality.get(metric)
+    if value is None and metric in SELF_REFERENCE and cell.get("arm") == SELF_REFERENCE[metric][0]:
+        return SELF_REFERENCE[metric][1]
+    return value
 
 
 def number(value):
@@ -101,9 +175,10 @@ def compare(ours, theirs):
         elif scored_failure(quality):
             failures.append("recorded quality failure: " + str(arm))
     for metric in sorted(set(qo) | set(qt)):
-        if metric not in ABSOLUTE and metric not in RELATIVE and metric not in REFERENCE:
+        if metric not in ABSOLUTE and metric not in RELATIVE and metric not in REFERENCE \
+                and metric not in AGREEMENT:
             continue
-        a, b = qo.get(metric), qt.get(metric)
+        a, b = metric_value(ours, qo, metric), metric_value(theirs, qt, metric)
         if not number(a) or not number(b):
             checks.append(dict(metric=metric, ours=a, opponent=b, verdict="INSUFFICIENT",
                                reason="metric missing or nonfinite on one arm"))
@@ -115,6 +190,9 @@ def compare(ours, theirs):
             kind, margin = "symmetric-relative", RELATIVE[metric]
             scale = max(abs(a), abs(b))
             observed = difference / scale if scale else 0.0
+        elif metric in AGREEMENT:
+            kind, margin = "both-disagreements-at-most", AGREEMENT[metric]
+            observed = max(1.0 - a, 1.0 - b)
         else:
             kind, margin, observed = "both-reference-errors-at-most", REFERENCE[metric], max(abs(a), abs(b))
         checks.append(dict(metric=metric, ours=a, opponent=b, comparison=kind,

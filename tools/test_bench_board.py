@@ -1059,7 +1059,11 @@ def test_neural_driver_inputs_and_quality(tmp_path, monkeypatch):
                                           "torch-compile-bf16": {"y": y[:1]}})
     assert q["torch-eager-fp32"] == {"max_abs_diff_vs_ours": 0.5, "max_rel_diff_vs_ours": 0.5 / 11}
     assert "shape_mismatch_vs_ours" in q["torch-compile-bf16"]
-    assert q["ours"] == {"host_reference_passed": True}
+    # every arm is also measured against the eager FP32 torch output (scorer gaps, 2026-10-15)
+    assert q["ours"]["host_reference_passed"] is True
+    assert q["ours"]["rel_fro_vs_torch_eager_fp32"] == pytest.approx(
+        np.linalg.norm(np.full(12, .5)) / np.linalg.norm(np.arange(12) + .5))
+    assert "shape_mismatch_vs_torch_eager_fp32" in q["torch-compile-bf16"]
 
 
 # --- the classical2 family ---------------------------------------------------
