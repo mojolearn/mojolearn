@@ -1799,7 +1799,8 @@ def entropy_gain_per_split(
     )
 
 
-def score_to_candidate_kernel(
+@always_inline
+def _score_to_candidate_body[WEIGHTED: Bool](
     cand_quesval: MutPointer[Float32, MutAnyOrigin],
     cand_colid: MutPointer[Int32, MutAnyOrigin],
     cand_metric: MutPointer[Float32, MutAnyOrigin],
@@ -1820,7 +1821,7 @@ def score_to_candidate_kernel(
     n_classes_in: Int32,
     min_samples_leaf_in: Int32,
     criterion_in: Int32,
-    columns_per_node: Int32 = 1,
+    columns_per_node: Int32,
 ):
     """Scored cells into reduction candidates, elementwise.
 
@@ -1884,7 +1885,7 @@ def score_to_candidate_kernel(
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     var parent_terms = InlineArray[Float32,32](fill=Float32(0))
-    comptime if T06:
+    comptime if T06 and not WEIGHTED:
         if entropy and n_classes <= 32:
             var node = idx
             var width = Int(columns_per_node)
@@ -1912,10 +1913,25 @@ def score_to_candidate_kernel(
             cand_quesval[unsafe_offset=idx] = in_threshold[unsafe_offset=idx]
             cand_colid[unsafe_offset=idx] = colids[unsafe_offset=idx]
             cand_nleft[unsafe_offset=idx] = in_n_left[unsafe_offset=idx]
+            # lane sk-kernels: the weighted classifier's gains read the
+            # node's and the left side's WEIGHT totals (the accumulators'
+            # sums) where the counts stood; the finalize pass already
+            # applied min_samples_leaf to the row counts, so the gain's own
+            # count test is passed 0.
+            var g_len = in_n_total[unsafe_offset=idx]
+            var g_left = in_n_left[unsafe_offset=idx]
+            var g_msl = min_samples_leaf
+            comptime if WEIGHTED:
+                g_len = Int32(0)
+                g_left = Int32(0)
+                for kw in range(n_classes):
+                    g_len += in_acc_total[unsafe_offset=idx * n_classes + kw]
+                    g_left += in_acc_left[unsafe_offset=idx * n_classes + kw]
+                g_msl = Int32(0)
             if entropy:
                 # DEVIATION 459: the float gain is the metric AND the key.
                 var g = Float32(0)
-                if T06 and n_classes <= 32:
+                if T06 and not WEIGHTED and n_classes <= 32:
                     var objective = EntropyObjectiveFunction[DType.float32](Int32(n_classes),min_samples_leaf)
                     g = objective.GainPerSplitCached(
                         in_acc_left.unsafe_offset(idx*n_classes).unsafe_bitcast[CountBin](),
@@ -1924,7 +1940,7 @@ def score_to_candidate_kernel(
                     )
                 else:
                     g = entropy_gain_per_split(in_acc_left,in_acc_total,idx*n_classes,n_classes,
-                        in_n_total[unsafe_offset=idx],in_n_left[unsafe_offset=idx],min_samples_leaf)
+                        g_len,g_left,g_msl)
                 cand_metric[unsafe_offset=idx] = g
                 cand_num[unsafe_offset=idx] = float_gain_key(g)
                 cand_den[unsafe_offset=idx] = Int64(1)
@@ -1947,9 +1963,9 @@ def score_to_candidate_kernel(
                     in_acc_total,
                     idx * n_classes,
                     n_classes,
-                    in_n_total[unsafe_offset=idx],
-                    in_n_left[unsafe_offset=idx],
-                    min_samples_leaf,
+                    g_len,
+                    g_left,
+                    g_msl,
                 )
                 comptime if T14 and not T14_EXACT:
                     if criterion_in == CRITERION_MSE:
@@ -1969,6 +1985,106 @@ def score_to_candidate_kernel(
             cand_valid[unsafe_offset=idx] = Int32(0)
         idx += stride
 
+
+def score_to_candidate_kernel(
+    cand_quesval: MutPointer[Float32, MutAnyOrigin],
+    cand_colid: MutPointer[Int32, MutAnyOrigin],
+    cand_metric: MutPointer[Float32, MutAnyOrigin],
+    cand_nleft: MutPointer[Int32, MutAnyOrigin],
+    cand_num: MutPointer[Int64, MutAnyOrigin],
+    cand_den: MutPointer[Int64, MutAnyOrigin],
+    cand_valid: MutPointer[Int32, MutAnyOrigin],
+    in_status: MutPointer[Int32, MutAnyOrigin],
+    in_threshold: MutPointer[Float32, MutAnyOrigin],
+    in_n_left: MutPointer[Int32, MutAnyOrigin],
+    in_n_total: MutPointer[Int32, MutAnyOrigin],
+    in_acc_left: MutPointer[Int32, MutAnyOrigin],
+    in_acc_total: MutPointer[Int32, MutAnyOrigin],
+    in_gini_num: MutPointer[Int64, MutAnyOrigin],
+    in_gini_den: MutPointer[Int64, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    n_cells_in: Int32,
+    n_classes_in: Int32,
+    min_samples_leaf_in: Int32,
+    criterion_in: Int32,
+    columns_per_node: Int32 = 1,
+):
+    """Scored cells into reduction candidates (`_score_to_candidate_body`,
+    unweighted; its docstring is the design note)."""
+    _score_to_candidate_body[False](
+        cand_quesval,
+        cand_colid,
+        cand_metric,
+        cand_nleft,
+        cand_num,
+        cand_den,
+        cand_valid,
+        in_status,
+        in_threshold,
+        in_n_left,
+        in_n_total,
+        in_acc_left,
+        in_acc_total,
+        in_gini_num,
+        in_gini_den,
+        colids,
+        n_cells_in,
+        n_classes_in,
+        min_samples_leaf_in,
+        criterion_in,
+        columns_per_node,
+    )
+
+
+def score_to_candidate_weighted_kernel(
+    cand_quesval: MutPointer[Float32, MutAnyOrigin],
+    cand_colid: MutPointer[Int32, MutAnyOrigin],
+    cand_metric: MutPointer[Float32, MutAnyOrigin],
+    cand_nleft: MutPointer[Int32, MutAnyOrigin],
+    cand_num: MutPointer[Int64, MutAnyOrigin],
+    cand_den: MutPointer[Int64, MutAnyOrigin],
+    cand_valid: MutPointer[Int32, MutAnyOrigin],
+    in_status: MutPointer[Int32, MutAnyOrigin],
+    in_threshold: MutPointer[Float32, MutAnyOrigin],
+    in_n_left: MutPointer[Int32, MutAnyOrigin],
+    in_n_total: MutPointer[Int32, MutAnyOrigin],
+    in_acc_left: MutPointer[Int32, MutAnyOrigin],
+    in_acc_total: MutPointer[Int32, MutAnyOrigin],
+    in_gini_num: MutPointer[Int64, MutAnyOrigin],
+    in_gini_den: MutPointer[Int64, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    n_cells_in: Int32,
+    n_classes_in: Int32,
+    min_samples_leaf_in: Int32,
+    criterion_in: Int32,
+    columns_per_node: Int32,
+):
+    """`score_to_candidate_kernel` for the weighted classifier (lane
+    sk-kernels): the Gini / entropy metric over the accumulators' weight
+    totals (`_score_to_candidate_body`'s WEIGHTED arm)."""
+    _score_to_candidate_body[True](
+        cand_quesval,
+        cand_colid,
+        cand_metric,
+        cand_nleft,
+        cand_num,
+        cand_den,
+        cand_valid,
+        in_status,
+        in_threshold,
+        in_n_left,
+        in_n_total,
+        in_acc_left,
+        in_acc_total,
+        in_gini_num,
+        in_gini_den,
+        colids,
+        n_cells_in,
+        n_classes_in,
+        min_samples_leaf_in,
+        criterion_in,
+        columns_per_node,
+    )
 
 comptime ET_SMALL_NODE_TPB = T05_SMALL_NODE_ROWS
 """T05 one row per lane, two exact class-count planes of at most 32 Int32s.
