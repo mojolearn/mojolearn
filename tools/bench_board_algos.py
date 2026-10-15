@@ -376,21 +376,21 @@ _add("quantile", xlane="linear", ours="QuantileRegressor", task="reg", block="re
      mism=["solver: ours accepts 'highs' and always runs ADMM (max_iter=5000, tol=1e-4); no "
            "library implements an ADMM quantile regression, so no opponent races"])
 # FAIRNESS FIX (2026-10-13 audit): ours' Perceptron and passive-aggressive pair default to
-# minibatch steps of 256 rows, while scikit-learn updates per sample: a different algorithm.
+# minibatch steps of up to 256 rows (n_samples // 32, lane sk-kernels), while scikit-learn updates per sample: a different algorithm.
 # Ours now races batch_size=0, its documented per-sample form (scikit-learn's); `ours_extra`
 # carries it to our arm only (scikit-learn has no batch_size). Results raced before this change were wrong for this lane; apply extra scrutiny.
 _add("perceptron", xlane="linear", ours="Perceptron", task="clf", block="cls",
      sk="sklearn.linear_model:Perceptron", params=dict(max_iter=20, tol=None, random_state=SEED),
      ours_extra=dict(batch_size=0),
-     mism=["ours batch_size=0 (per-sample updates, scikit-learn's form; ours defaults to 256)"])
+     mism=["ours batch_size=0 (per-sample updates, scikit-learn's form; ours defaults to 'auto': n_samples // 32 rows, at most 256)"])
 _add("pa-clf", xlane="linear", ours="PassiveAggressiveClassifier", task="clf", block="cls",
      sk="sklearn.linear_model:PassiveAggressiveClassifier",
      params=dict(C=1.0, max_iter=20, tol=None, random_state=SEED), ours_extra=dict(batch_size=0),
-     mism=["ours batch_size=0 (per-sample updates, scikit-learn's form; ours defaults to 256)"])
+     mism=["ours batch_size=0 (per-sample updates, scikit-learn's form; ours defaults to 'auto': n_samples // 32 rows, at most 256)"])
 _add("pa-reg", xlane="linear", ours="PassiveAggressiveRegressor", task="reg", block="reg",
      sk="sklearn.linear_model:PassiveAggressiveRegressor",
      params=dict(C=1.0, max_iter=20, tol=None, random_state=SEED), ours_extra=dict(batch_size=0),
-     mism=["ours batch_size=0 (per-sample updates, scikit-learn's form; ours defaults to 256)"])
+     mism=["ours batch_size=0 (per-sample updates, scikit-learn's form; ours defaults to 'auto': n_samples // 32 rows, at most 256)"])
 _add("ridge-clf", xlane="linear", ours="RidgeClassifier", task="clf", block="cls",
      sk="sklearn.linear_model:RidgeClassifier", params=dict(alpha=1.0, random_state=SEED))
 # FAIRNESS FIX (2026-10-13 audit): ours' batch_size was left at its default (None: minibatches of
