@@ -15,6 +15,7 @@ from ._labels import decode_labels
 from . import _backend, _metrics_impl as metrics
 from ._arrays import _addr, _addr_ro
 from .ensemble import GradientBoosting
+from ._mode import PublicOutputsMixin
 
 
 # One NotFittedError for the package; an instance of scikit-learn's too when
@@ -22,7 +23,7 @@ from .ensemble import GradientBoosting
 from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
 
 
-class _GBDTAdapter:
+class _GBDTAdapter(PublicOutputsMixin):
     _loss = None
 
     # Every default is GradientBoosting's own, so a default adapter is the

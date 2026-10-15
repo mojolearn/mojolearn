@@ -17,6 +17,7 @@ from ._labels import is_bool
 
 from . import _backend, _serialize
 from ._arrays import _addr, _addr_ro
+from ._mode import PublicOutputsMixin
 
 __all__ = ['MinMaxScaler', 'StandardScaler']
 
@@ -242,7 +243,7 @@ def _add_counts(mode, a, b, d):
     return P._class_words(pr, out, d, True)
 
 
-class _ScalerProtocol:
+class _ScalerProtocol(PublicOutputsMixin):
     @staticmethod
     def _input(X, allow_nan=False, with_copied=False, scan=True):
         """A float32 C-contiguous Array of X. `allow_nan`: NaN passes (the
