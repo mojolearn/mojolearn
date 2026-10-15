@@ -355,8 +355,21 @@ EXPECTED_FAILED_CHECKS = {
 }
 
 
+#: Per estimator: the checks scikit-learn's own test suite expects to fail
+#: for the same estimator (sklearn/utils/_test_common/instance_generator.py,
+#: PER_ESTIMATOR_XFAIL_CHECKS), with scikit-learn's reason.
+PER_ESTIMATOR_EXPECTED_FAILED_CHECKS = {
+    # A direct Cholesky solve has no iteration count; scikit-learn's
+    # RidgeClassifier reports n_iter_ = None for it and xfails the check.
+    "RidgeClassifier": {"check_non_transformer_estimators_n_iter": "n_iter_ cannot be easily accessed "
+                                                                   "(scikit-learn xfails it too)"},
+}
+
+
 def _expected_failed_checks(estimator):
-    return dict(EXPECTED_FAILED_CHECKS)
+    out = dict(EXPECTED_FAILED_CHECKS)
+    out.update(PER_ESTIMATOR_EXPECTED_FAILED_CHECKS.get(type(estimator).__name__, {}))
+    return out
 
 
 def _checked_estimators():
