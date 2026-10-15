@@ -1277,7 +1277,7 @@ def _exact_candidate(
     if is_classification and row_w_addr != 0:
         g_len = Int32(0)
         g_left = Int32(0)
-        for kw in range(n_acc):
+        for kw in range(n_acc):  # small-loop(n_acc: the class count, at most 32): the host column's weight totals, not rows
             g_len += cell.acc_total[kw]
             g_left += cell.acc_left[kw]
         g_msl = Int32(0)
