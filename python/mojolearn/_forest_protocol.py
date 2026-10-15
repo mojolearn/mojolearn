@@ -116,20 +116,18 @@ def forest_estimator(kind):
 
         @functools.wraps(original)
         def initialize(self, *args, **kwargs):
+            # scikit-learn's convention: the constructor stores its
+            # parameters verbatim and checks nothing; `_validate_params`
+            # (run by `_refresh_config` at the start of every fit) does.
             bound = signature.bind(self, *args, **kwargs)
             bound.apply_defaults()
-            mode = bound.arguments["numeric_mode"]
-            if mode is not None and (not isinstance(mode, str) or
-                    mode.strip().lower() not in ("fast", "identical")):
-                raise ValueError("numeric_mode must be fast, identical or None")
-            self._validate_inference_engine(bound.arguments.get("inference_engine", "sequential"))
-            original(self, *args, **kwargs)
             for name in cls._parameter_names:  # glue: copies constructor parameter names
                 setattr(self, name, bound.arguments[name])
             self._has_constructor_parameters = True
 
         initialize.__signature__ = signature
         cls.__init__ = initialize
+        cls._forest_original_init = original
         cls._parameter_names = tuple(p.name for p in parameters if p.name != "self")  # glue: collects constructor parameter names
         cls._estimator_type = kind
         return cls
@@ -157,22 +155,40 @@ class ForestProtocol:
         if unknown:
             raise ValueError(f"Invalid parameter(s) {unknown} for {type(self).__name__}")
         values.update(params)
-        # Apply constructor checks before dropping fitted state. Bounds checked
-        # only by native fit remain deferred, as in the original constructors.
+        # The parameter checks run at fit (`_validate_params`), as in
+        # scikit-learn; a new setting drops the fitted state.
         replacement = type(self)(**values)
         self.__dict__.clear()
         self.__dict__.update(replacement.__dict__)
         return self
 
+    def _validate_params(self):
+        """The constructor checks, run at fit (scikit-learn's convention):
+        refuses a bad parameter with the message the constructor used to
+        raise, and derives the native configuration (`_cfg`) from the
+        stored parameters, which stay as given."""
+        params = {name: getattr(self, name) for name in self._parameter_names}  # glue: reads constructor parameters by name
+        mode = params.get("numeric_mode")
+        if mode is not None and (not isinstance(mode, str) or
+                mode.strip().lower() not in ("fast", "identical")):
+            raise ValueError("numeric_mode must be fast, identical or None")
+        self._validate_inference_engine(params.get("inference_engine", "sequential"))
+        type(self)._forest_original_init(self, **params)
+        for name, value in params.items():  # glue: restores constructor parameters verbatim
+            setattr(self, name, value)
+
     def _refresh_config(self):
         replacement = type(self)(**self.get_params())
-        # sklearn owns this transient context while Pipeline.fit is active.
-        context = self.__dict__.get("_parent_callback_ctx")
+        # Checks first: a refused parameter leaves this instance as it was.
+        replacement._validate_params()
+        # sklearn owns this transient context while Pipeline.fit is active,
+        # and the fit tracker (`_mode._track_fit`) its in-fit count.
+        keep = {k: self.__dict__[k] for k in ("_parent_callback_ctx", "_mojolearn_fitting")  # glue: two bookkeeping attribute names
+                if k in self.__dict__}
         # Once a new fit begins, old nodes/classes must not survive a failure.
         self.__dict__.clear()
         self.__dict__.update(replacement.__dict__)
-        if context is not None:
-            self._parent_callback_ctx = context
+        self.__dict__.update(keep)
 
     @staticmethod
     def _validated_mode(mode):
