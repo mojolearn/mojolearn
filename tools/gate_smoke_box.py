@@ -77,7 +77,7 @@ if step in ("smoke", "all"):
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
     env.pop("PYTHONHOME", None)
-    smoke_out = root / "smoke"
+    smoke_out = root / ("smoke-" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))
     mark(phase="smoke", status="running", smoke_started=time.time())
     cmd = [python, str(HERE / "gpu_gap_campaign.py"), "--vendor", vendor, "--out", str(smoke_out),
            "--cache", cache, "--python-env", python, "--wheel-manifest", manifest,
