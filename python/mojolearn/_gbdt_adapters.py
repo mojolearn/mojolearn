@@ -9,7 +9,7 @@ sklearn Pipeline does not automatically transform a supplied eval_set.
 import inspect
 
 from ._array import Array
-from ._buffer import materialize_f32_lists, all_finite, empty, as_f32_c
+from ._buffer import all_finite, empty, as_f32_c
 from ._labels import decode_labels
 
 from . import _backend, _metrics_impl as metrics
@@ -375,7 +375,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
         """
         self._validate_params()
         self._clear_fit()
-        target = materialize_f32_lists(y, "y")[0]
+        target = as_f32_c(y, ndim=None, name="y")[0]
         self._regression_target(target, 'y')
         if eval_set is not None:
             if isinstance(eval_set, list):
@@ -385,13 +385,16 @@ class GradientBoostingRegressor(_GBDTAdapter):
             if not isinstance(eval_set, tuple) or len(eval_set) != 2:
                 raise ValueError('eval_set must be (X_eval, y_eval) or a one-pair list')
             eval_X, eval_y = eval_set
-            eval_target = materialize_f32_lists(eval_y, "eval_set y")[0]
+            eval_target = as_f32_c(eval_y, ndim=None, name="eval_set y")[0]
             self._regression_target(eval_target, 'eval_set y')
             eval_set = (eval_X, eval_target)
         return self._fit_native(X, target, sample_weight, eval_set)
 
     @staticmethod
     def _regression_target(target, name):
+        # `target` comes from as_f32_c: an integer or float64 y is cast to
+        # float32 once by the base binding's converters (scikit-learn takes
+        # any numeric y), so the dtype test below only guards the contract.
         if target.ndim != 1 or target.size == 0:
             raise ValueError(f'{name} must be nonempty one-dimensional targets')
         if target.dtype != "<f4":
@@ -411,7 +414,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
         Follows scikit-learn's weighted ``r2_score``.
         """
         self._check_fitted()
-        target = materialize_f32_lists(y, "y")[0]
+        target = as_f32_c(y, ndim=None, name="y")[0]
         self._regression_target(target, 'y')
         return metrics.r2_score(target, self.predict(X),
                                 sample_weight=sample_weight,
