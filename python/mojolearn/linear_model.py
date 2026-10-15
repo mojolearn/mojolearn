@@ -2057,3 +2057,10 @@ class QNRegressor(NumericModeMixin):
             scores 0.0.
         """
         return _r2_host(self.predict(X), y)
+
+
+# scikit-learn keeps more estimators in this module than it defines; they resolve from
+# the package at first use (`_sklearn_modules`), so `from mojolearn.linear_model import ...`
+# takes the same names as scikit-learn's module.
+from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
+__getattr__ = _lazy_exports("linear_model")

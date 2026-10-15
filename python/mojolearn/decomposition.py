@@ -1012,3 +1012,10 @@ class TruncatedSVD(NumericModeMixin):
         obj.n_components_ = nc
         obj.n_features_in_ = nf
         return obj
+
+
+# scikit-learn keeps more estimators in this module than it defines; they resolve from
+# the package at first use (`_sklearn_modules`), so `from mojolearn.decomposition import ...`
+# takes the same names as scikit-learn's module.
+from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
+__getattr__ = _lazy_exports("decomposition")

@@ -3137,3 +3137,10 @@ class OrderedRMSE(GradientBoosting):
 
 # Separate sklearn prediction contracts; legacy GradientBoosting stays unchanged.
 from ._gbdt_adapters import GradientBoostingClassifier, GradientBoostingRegressor
+
+
+# scikit-learn keeps more estimators in this module than it defines; they resolve from
+# the package at first use (`_sklearn_modules`), so `from mojolearn.ensemble import ...`
+# takes the same names as scikit-learn's module.
+from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
+__getattr__ = _lazy_exports("ensemble")

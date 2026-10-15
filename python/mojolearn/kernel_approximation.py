@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""Kernel feature-map approximations, under scikit-learn's module name."""
+
+from .kernel_methods import Nystroem, RBFSampler
+from ._expansion_neighbors import AdditiveChi2Sampler, PolynomialCountSketch, SkewedChi2Sampler
+
+__all__ = ["Nystroem", "RBFSampler", "AdditiveChi2Sampler", "PolynomialCountSketch", "SkewedChi2Sampler"]
