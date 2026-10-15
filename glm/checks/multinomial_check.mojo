@@ -523,8 +523,8 @@ def check_softmax_refuses_by_name() raises:
     if m4 != "":
         raise Error("an l1 penalty RAISED, and min_owlqn is implemented; got: " + m4)
     var m5 = _fit_raises(ctx, _params(1.0, True, True), 3, True)
-    if m5.find("sample_weight is NOT IMPLEMENTED") < 0:
-        raise Error("sample_weight did not raise by name; got: " + m5)
+    if m5.find("has_sample_weight is set but no sample_weight buffer") < 0:
+        raise Error("has_sample_weight without a weight buffer did not raise by name; got: " + m5)
     print(
         "check_softmax_refuses_by_name OK: softmax with C=2, logistic with C=3,"
         " a too-small w0 and sample_weight each RAISE by name; an l1 penalty"
