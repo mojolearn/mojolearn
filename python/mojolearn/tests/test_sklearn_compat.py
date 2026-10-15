@@ -384,6 +384,22 @@ PER_ESTIMATOR_EXPECTED_FAILED_CHECKS = {
     # RidgeClassifier reports n_iter_ = None for it and xfails the check.
     "RidgeClassifier": {"check_non_transformer_estimators_n_iter": "n_iter_ cannot be easily accessed "
                                                                    "(scikit-learn xfails it too)"},
+    # scikit-learn's MultiOutputClassifier refuses a 1-D y, predicts an
+    # (n_samples, n_outputs) array and returns predict_proba as a list per
+    # output, by design; these four checks assume a single-output classifier
+    # and fail on scikit-learn's own MultiOutputClassifier, which its test
+    # suite therefore skips (MultiOutputClassifier.__sklearn_tags__:
+    # tags._skip_test = True). Ours follows the same contract.
+    "MultiOutputClassifier": {
+        "check_classifiers_classes": "fits a 1-D y; a 1-D y is refused by design "
+                                     "(scikit-learn skips its own MultiOutputClassifier)",
+        "check_classifiers_one_label_sample_weights": "fits a 1-D y; a 1-D y is refused by design "
+                                                      "(scikit-learn skips its own MultiOutputClassifier)",
+        "check_classifiers_train": "expects predict of shape (n_samples,); multi-output predict is "
+                                   "(n_samples, n_outputs) (scikit-learn skips its own MultiOutputClassifier)",
+        "check_methods_sample_order_invariance": "row-indexes predict_proba; it is a list per output "
+                                                 "(scikit-learn skips its own MultiOutputClassifier)",
+    },
 }
 
 

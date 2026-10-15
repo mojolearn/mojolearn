@@ -149,8 +149,8 @@ def _kind(est):
 
 
 def arg_slots(func):
-    """(position of X, position of y) among the positional parameters of
-    `func` after `self`; None for a parameter it does not have. X counts
+    """(position of X, position of y, the name of y) among the positional
+    parameters of `func` after `self`; None for a parameter it does not have. X counts
     only as the FIRST parameter and only when it is named `X`: a method
     whose first parameter is a series, documents or labels is not
     scikit-learn's tabular input and is not validated here."""
@@ -158,12 +158,15 @@ def arg_slots(func):
     try:
         params = list(inspect.signature(func).parameters.values())[1:]
     except (TypeError, ValueError):
-        return None, None
+        return None, None, None
     names = [p.name for p in params  # glue: the method's parameter names
              if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
     ix = 0 if names[:1] == ["X"] else None
-    iy = names.index("y") if (ix is not None and "y" in names) else None
-    return ix, iy
+    # the target is `y`, or `Y` for the multi-output estimators that name
+    # it so (MultiOutputRegressor/Classifier, the PLS family)
+    yname = "y" if "y" in names else ("Y" if "Y" in names else None)
+    iy = names.index(yname) if (ix is not None and yname is not None) else None
+    return ix, iy, yname
 
 
 def _get(args, kwargs, index, name):
@@ -432,24 +435,24 @@ class Check:
 
 def before_fit(est, method, slots, args, kwargs):
     """Validate a fit's X and y; return `(args, kwargs, check)`."""
-    ix, iy = slots
+    ix, iy, yname = slots
     X = _get(args, kwargs, ix, "X")
     if X is _MISSING:
         return args, kwargs, None
     info = _check_X(est, X)
     if method == "partial_fit" and "n_features_in_" in vars(est):
         _check_width(est, X, info)
-    y = _get(args, kwargs, iy, "y")
+    y = _get(args, kwargs, iy, yname)
     if y is not _MISSING:
         y2 = _check_y(est, y)
         if y2 is not y:
-            args, kwargs = _put(args, kwargs, iy, "y", y2)
+            args, kwargs = _put(args, kwargs, iy, yname, y2)
     return args, kwargs, Check(X, info, True)
 
 
 def before_call(est, method, slots, args, kwargs):
     """Validate the X of a predict, transform or score call; return a check."""
-    ix, _ = slots
+    ix = slots[0]
     X = _get(args, kwargs, ix, "X")
     if X is _MISSING or X is None:
         return None

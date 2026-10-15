@@ -138,7 +138,7 @@ def _track_fit(method):
     # scikit-learn's input and target validation (`_sk_validate`) runs on the
     # outermost fit only: a fit's own nested fits see validated input.
     validates = method.__name__ in _sk_validate.FIT_METHODS
-    slots = _sk_validate.arg_slots(method) if validates else (None, None)
+    slots = _sk_validate.arg_slots(method) if validates else (None, None, None)
 
     @functools.wraps(method)
     def tracked(self, *args, **kwargs):
