@@ -58,7 +58,7 @@ from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
 from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes, threshold_codes
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin, is_fitted as _is_fitted
 from ._scale_gamma import scale_gamma, scale_gamma_x
 from .linear_model import (
     _accuracy_host,
@@ -783,6 +783,13 @@ class SVC(NumericModeMixin):
         self.decision_function_shape = decision_function_shape
         self.probability = probability
         self.break_ties = break_ties
+
+    def __setstate__(self, state):
+        # A model pickled before the parameter checks moved to fit carries
+        # no `_hp_*` working values: derive them from its stored parameters.
+        self.__dict__.update(state)
+        if "_hp_C" not in state and _is_fitted(self):
+            self._validate_params()
 
     def _validate_params(self):
         """The constructor checks, run at the start of `fit` and in `load`."""
@@ -2144,6 +2151,13 @@ class SVR(NumericModeMixin):
         self.max_iter = max_iter
         self.nochange_steps = nochange_steps
         self.output_type = output_type
+
+    def __setstate__(self, state):
+        # A model pickled before the parameter checks moved to fit carries
+        # no `_hp_*` working values: derive them from its stored parameters.
+        self.__dict__.update(state)
+        if "_hp_C" not in state and _is_fitted(self):
+            self._validate_params()
 
     def _validate_params(self):
         """The constructor checks, run at the start of `fit` and in `load`."""

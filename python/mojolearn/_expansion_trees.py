@@ -3452,6 +3452,8 @@ def _multiout_ridge_entry(est, sample_weight):
     """The estimators binding when it has the one-program ridge and `est`
     is a plain Ridge (eig arm, no normalize), else None."""
     from .linear_model import Ridge
+    if type(est) is Ridge:
+        est._validate_params()  # Ridge checks its parameters at fit; this route skips Ridge.fit
     if sample_weight is not None or type(est) is not Ridge or est.normalize:
         return None
     try:
