@@ -23,6 +23,10 @@ import time
 import numpy as np
 
 SHAPES = [(256, 384, 320), (768, 1024, 640), (769, 1025, 641)]
+# Full primitive recipe: tools/bench_board_neural.py GEMM_SHAPES["full"]
+# and its seed-7 standard-normal float32 input generator. Test data only;
+# these dimensions never control product dispatch or establish estimator coverage.
+FULL_SHAPES = [(4096, 4096, 4096)]
 
 
 def digest(path):
@@ -33,14 +37,19 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2, allow_nan=False) + '\n')
 
 
-def prepare(root, shapes):
+def prepare(root, shapes, preset="screen"):
     # A partial preparation also contains unique evidence: require a new path.
     root.mkdir(parents=True, exist_ok=False)
-    rng = np.random.default_rng(82471)
+    seed = 7 if preset == "full" else 82471
+    rng = np.random.default_rng(seed)
     records = []
     for m, n, k in shapes:
-        a = rng.uniform(-1, 1, (m, k)).astype(np.float32)
-        b = rng.uniform(-1, 1, (k, n)).astype(np.float32)
+        if preset == "full":
+            a = rng.standard_normal((m, k)).astype(np.float32)
+            b = rng.standard_normal((k, n)).astype(np.float32)
+        else:
+            a = rng.uniform(-1, 1, (m, k)).astype(np.float32)
+            b = rng.uniform(-1, 1, (k, n)).astype(np.float32)
         def packed(x):
             u = x.view(np.uint32)
             return ((u + np.uint32(0x7fff) + ((u >> 16) & 1)) >> 16).astype(np.uint16)
@@ -52,7 +61,10 @@ def prepare(root, shapes):
         path = root / ('input-%d-%d-%d.npz' % (m, n, k))
         np.savez(path, a=ab, b=bb, oracle=oracle, abs_product_sum=scale)
         records.append(dict(m=m, n=n, k=k, path=path.name, sha256=digest(path), bytes=path.stat().st_size))
-    save(root / 'inputs.json', dict(seed=82471, cases=records, shapes_reason='explicit test shapes; defaults cover small, medium rectangular and neighboring-tail operations; no dispatch changes',
+    save(root / 'inputs.json', dict(seed=seed, preset=preset, cases=records,
+        distribution='standard_normal float32' if preset == 'full' else 'uniform [-1,1] float32',
+        recipe_source='tools/bench_board_neural.py GEMM_SHAPES.full and SEED' if preset == 'full' else 'local operation screening',
+        shapes_reason='explicit test shapes; full is the declared full GEMM primitive, not an estimator dataset; no dispatch changes',
         input='prepacked BF16 uint16 host buffers', accumulation='float32', output='float32 host array',
         scope='local preliminary operation screening; no training/default-promotion/full-board claim'))
 
@@ -72,12 +84,12 @@ def run(root, arm, *, source_commit, wheel_manifest, samples, warmup):
     (directory / 'controller.py').write_bytes(Path(__file__).read_bytes())
     save(directory / 'summary.json', record)
     if arm == 'candidate-fast':
-        from mojolearn import linalg_fast as api
-        assert api.has_bf16(), 'Candidate not enabled; refuse to time a substitute'
+        from mojolearn import linalg as api
+        assert api._fast_bf16_available(), 'Candidate not enabled; refuse to time a substitute'
         function = api.matmul_bf16
         import mojolearn._mojolearn_linalg as binding
         record.update(module=str(Path(binding.__file__).resolve()), binary_sha256=digest(binding.__file__),
-                      numeric_mode='fast', source=source_commit)
+                      numeric_mode='fast', source=source_commit, public_api='mojolearn.linalg.matmul_bf16')
     elif arm == 'released-identical':
         from mojolearn import linalg as api
         from mojolearn import _linalg_impl
@@ -159,6 +171,7 @@ def main():
     parser.add_argument('arm', choices=['prepare', 'candidate-fast', 'released-identical', 'torch-mps'])
     parser.add_argument('--output', type=Path, required=True, help='Retained inputs and separate arm directories')
     parser.add_argument('--shape', type=shape, action='append', help='Preparation only: repeat M,N,K; defaults to the retained screening shapes')
+    parser.add_argument('--preset', choices=['screen', 'full'], default='screen', help='Preparation only: full selects the board 4096-cubed GEMM primitive, seed 7')
     parser.add_argument('--source-commit', default=os.environ.get('MOJOLEARN_BENCH_SOURCE_COMMIT'), help='Exact candidate source commit')
     parser.add_argument('--wheel-manifest', type=Path, help='Optional released wheel provenance, retained by hash')
     parser.add_argument('--samples', type=int, default=5)
@@ -168,13 +181,15 @@ def main():
         parser.error('samples must be positive and warmup nonnegative')
     if args.shape and args.arm != 'prepare':
         parser.error('--shape belongs to prepare; all arms consume the retained manifest')
+    if args.preset != 'screen' and (args.arm != 'prepare' or args.shape):
+        parser.error('--preset full belongs to prepare and cannot be combined with --shape')
     if args.arm == 'candidate-fast' and not args.source_commit:
         parser.error('--source-commit is required for candidate-fast')
     if args.arm == 'prepare':
-        shapes = args.shape or SHAPES
+        shapes = args.shape or (FULL_SHAPES if args.preset == 'full' else SHAPES)
         if len(set(shapes)) != len(shapes):
             parser.error('Preparation shapes must be unique')
-        prepare(args.output, shapes)
+        prepare(args.output, shapes, args.preset)
         return 0
     attempt_existed = (args.output / args.arm).exists()
     try:

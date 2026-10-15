@@ -201,19 +201,7 @@ def fast_from_bf16_binding(value: PythonObject) raises -> PythonObject:
     return result
 
 
-def fast_matmul_bf16_binding(
-    mut py_self: PythonObject, mut args: PythonObject, mut kwargs: PythonObject
-) raises -> PythonObject:
-    _require_candidate()
-    # PythonModuleBuilder.def_py_function is the supported raw tuple/dict
-    # binding interface on the pinned compiler. Parsing stays in Mojo.
-    if len(args) != 2:
-        raise Error("fast matmul_bf16 expects two positional operands")
-    var a = args[0]
-    var b = args[1]
-    var transpose_a = False
-    var transpose_b = False
-    var out = PythonObject(None)
+def _normalized_keywords(kwargs: PythonObject) raises -> PythonObject:
     # CPython passes a null kwargs pointer when no keyword arguments were
     # supplied. A raw def_py_function exposes that as a nullable object,
     # which is distinct from Python None. Normalize using PythonObject's
@@ -223,12 +211,82 @@ def fast_matmul_bf16_binding(
     var keywords = PythonObject(None)
     if keyword_pointer:
         keywords = PythonObject(from_owned=keyword_pointer)
+    return keywords
+
+
+def _single_operand(args: PythonObject, kwargs: PythonObject, name: String) raises -> PythonObject:
+    if len(args) > 1:
+        raise Error("fast BF16 conversion expects one operand")
+    var value = PythonObject(None)
+    var supplied = len(args) == 1
+    if supplied:
+        value = args[0]
+    var keywords = _normalized_keywords(kwargs)
     if keywords is not PythonObject(None):
         var keys = _BOUNDARY.get_or_create_ptr()[].builtins.tuple(keywords.keys())
-        for index in range(len(keys)):  # small-loop(keys: API keyword metadata): three supported names then first unknown rejects, never tensor elements
+        for index in range(len(keys)):  # small-loop(keys: API keyword metadata): one supported name then first unknown rejects, never tensor elements
+            var key = keys[index]
+            if String(key) != name:
+                raise Error("fast BF16 conversion: unknown keyword " + String(key))
+            if supplied:
+                raise Error("fast BF16 conversion: duplicate operand " + name)
+            value = keywords[key]
+            supplied = True
+    if not supplied:
+        raise Error("fast BF16 conversion: missing operand " + name)
+    return value
+
+
+def public_fast_to_bf16_binding(
+    mut py_self: PythonObject, mut args: PythonObject, mut kwargs: PythonObject
+) raises -> PythonObject:
+    _require_candidate()
+    return fast_to_bf16_binding(_single_operand(args, kwargs, "x"))
+
+
+def public_fast_from_bf16_binding(
+    mut py_self: PythonObject, mut args: PythonObject, mut kwargs: PythonObject
+) raises -> PythonObject:
+    _require_candidate()
+    return fast_from_bf16_binding(_single_operand(args, kwargs, "bits"))
+
+
+def fast_matmul_bf16_binding(
+    mut py_self: PythonObject, mut args: PythonObject, mut kwargs: PythonObject
+) raises -> PythonObject:
+    _require_candidate()
+    # Preserve generic linalg's positional-or-keyword operands and
+    # keyword-only options using the pinned compiler's native raw callback.
+    if len(args) > 2:
+        raise Error("fast matmul_bf16 expects two operands")
+    var a = PythonObject(None)
+    var b = PythonObject(None)
+    var has_a = len(args) > 0
+    var has_b = len(args) > 1
+    if has_a:
+        a = args[0]
+    if has_b:
+        b = args[1]
+    var transpose_a = False
+    var transpose_b = False
+    var out = PythonObject(None)
+    var keywords = _normalized_keywords(kwargs)
+    if keywords is not PythonObject(None):
+        var keys = _BOUNDARY.get_or_create_ptr()[].builtins.tuple(keywords.keys())
+        for index in range(len(keys)):  # small-loop(keys: API keyword metadata): five supported names then first unknown rejects, never tensor elements
             var key = keys[index]
             var name = String(key)
-            if name == "transpose_a":
+            if name == "a":
+                if has_a:
+                    raise Error("fast matmul_bf16: duplicate operand a")
+                a = keywords[key]
+                has_a = True
+            elif name == "b":
+                if has_b:
+                    raise Error("fast matmul_bf16: duplicate operand b")
+                b = keywords[key]
+                has_b = True
+            elif name == "transpose_a":
                 transpose_a = Bool(keywords[key])
             elif name == "transpose_b":
                 transpose_b = Bool(keywords[key])
@@ -236,6 +294,8 @@ def fast_matmul_bf16_binding(
                 out = keywords[key]
             else:
                 raise Error("fast matmul_bf16: unknown keyword " + name)
+    if not has_a or not has_b:
+        raise Error("fast matmul_bf16: both a and b operands are required")
     if transpose_a and transpose_b:
         raise Error("fast matmul_bf16 supports NN, NT and TN, not both transposes")
     var left = _Input(a, True, True)

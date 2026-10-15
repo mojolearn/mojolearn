@@ -55,3 +55,5 @@ _mojolearn_linalg.fast_bf16_available	experimental Apple BF16 candidate; install
 _mojolearn_linalg.fast_to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 _mojolearn_linalg.fast_from_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 _mojolearn_linalg.fast_matmul_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.public_fast_to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+_mojolearn_linalg.public_fast_from_bf16	experimental Apple BF16 candidate; installed-release qualification pending

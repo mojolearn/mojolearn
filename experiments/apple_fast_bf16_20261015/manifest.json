@@ -25,9 +25,14 @@
   ],
   "correctness_test": "python/mojolearn/tests/test_linalg_fast_bf16.py",
   "results": "result_summary.json",
-  "affected_current_public_operation": "mojolearn.linalg_fast.matmul_bf16; BF16 conversion helpers",
+  "affected_current_public_operation": "mojolearn.linalg_fast explicit BF16 operations; newly wired generic mojolearn.linalg BF16 operations in FAST only",
   "affected_estimators": "No production estimator BF16 caller established; no implicit FP32 quantization or broad wiring",
   "full_workload_recipe": null,
-  "full_workload_status": "pending; retained synthetic operation screening does not satisfy full-dataset candidate evaluation",
-  "build_owner": "orchestrator only; runner never compiles, installs or publishes"
+  "full_workload_status": "full GEMM primitive 4096^3 recipe identified but unrun; estimator mappings and datasets pending",
+  "build_owner": "orchestrator only; runner never compiles, installs or publishes",
+  "generic_wiring_status": "source_ready_uncompiled",
+  "runner_presets": {
+    "screen": "original three-shape local screening, seed 82471 uniform",
+    "full": "GEMM_SHAPES.full 4096^3, seed 7 standard_normal; full primitive only, not estimator or board coverage"
+  }
 }

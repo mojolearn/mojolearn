@@ -131,6 +131,8 @@ from bindings.apple_fast_bf16_public import (
     fast_to_bf16_binding,
     fast_from_bf16_binding,
     fast_matmul_bf16_binding,
+    public_fast_to_bf16_binding,
+    public_fast_from_bf16_binding,
 )
 
 
@@ -989,6 +991,8 @@ def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
         m.def_function[gemm_bf16_binding]("gemm_bf16")
         initialize_fast_bf16_boundary()
         m.def_function[fast_bf16_available_binding]("fast_bf16_available")
+        m.def_py_function[public_fast_to_bf16_binding]("public_fast_to_bf16")
+        m.def_py_function[public_fast_from_bf16_binding]("public_fast_from_bf16")
         m.def_function[fast_to_bf16_binding]("fast_to_bf16",
             "Convert a float32 buffer to uint16 BF16 bits using round-to-nearest-even; return a same-shaped mojolearn.Array. Apple fast mode only.")
         m.def_function[fast_from_bf16_binding]("fast_from_bf16",

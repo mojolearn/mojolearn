@@ -21,8 +21,10 @@ bound; quality and failures remain in the retained records.
 These are local operation screens, not full-dataset estimator measurements or
 a same-source default-promotion A/B. The small case lost 7.2%; the medium cases
 took 8.6–13.9% less time. No statistical significance or empty system caches are
-claimed. Generic `mojolearn.linalg` routing, board capability integration, other
-builds, installed-release qualification and full-workload evidence remain pending.
+claimed. Generic `mojolearn.linalg` routing and an installed-capability guard
+have since been added as source; their changed native boundary needs a new frozen
+build and qualification. Other builds, installed-release qualification and
+full-workload evidence remain pending.
 No existing estimator has been wired to use this candidate implicitly.
 
 ## Select an arm
@@ -42,7 +44,12 @@ PYTORCH_ENABLE_MPS_FALLBACK=0 PYTORCH_MPS_FAST_MATH=0 PYTORCH_MPS_PREFER_METAL=0
 
 Preparation accepts repeated `--shape M,N,K` arguments; all arms then consume
 that same hashed input manifest. Candidate execution requires an enabled native
-binding and refuses a substitute. Build owners use
+binding and the generic native aliases, and refuses a substitute. For the full
+primitive, select `prepare --preset full --output /path/to/new-full-attempt`,
+then run the same three arm commands against that new output directory. It
+selects the board's 4096-cubed GEMM shape and seed-7 standard-normal inputs; it
+does not run a full estimator or full board. The original screening inputs and
+results remain untouched. Build owners use
 `MOJOLEARN_BUILD_DEFINES=MOJOLEARN_AFN_GEMM_BF16_MMA=1` when building the FAST
 linalg binding; setting `MOJOLEARN_BUILD_DEFINE_FLAGS` directly is insufficient.
 Builds remain the orchestrator's responsibility.
@@ -69,8 +76,23 @@ portable adaptation. Binary, input/output array bytes and full logs remain in
 the recorded evidence directory; hashes alone are not replacement retention.
 
 The portable runner has CPU-only preparation/argument checks; its GPU path has
-not been rerun. Reuse the accepted native compile/correctness evidence: this
-delivery changes only experiment tooling, exclusions and comments after the
-measured native commit. Keep the candidate off until the applicable whole-
-workload evidence supports promotion. A Mac-only new-version release is
-technically possible, but no release or public documentation is authorized here.
+not been rerun. The historical compile/correctness evidence qualifies the frozen
+`6cec6320d` native boundary. Subsequent generic wiring preserves keyword operands
+through new native argument parsing, so it requires a new frozen build and the
+expanded 23-test suite; the historical timing is not a claim about new bytes.
+The full primitive recipe is `tools/bench_board_neural.py`'s `GEMM_SHAPES.full`,
+4096 by 4096 by 4096 from seed 7, with input hashes retained when materialized.
+It is unrun here and is not an estimator dataset. Existing transformer/Mamba
+packed BF16 weights are unpacked to FP32, and training is FP32-only: broader
+wiring needs native packed-weight retention or an explicit precision opt-in,
+actual caller mapping, and full-workload recipes.
+
+Root archived the original experiment, including all source, binary, input,
+output and failed-attempt logs, to bucket `mojolearn-data`, key
+`measurements/records/v1/a2397742b2a1cba2865940141d63cc8f2b0483b096cfb72d9b7ad4c16a8e4558.tar.gz`.
+The 181,871,269 bytes were independently GET/SHA256 verified; see the durable
+reference in `result_summary.json`. This archive predates generic wiring.
+
+Keep the candidate off until the applicable whole-workload evidence supports
+promotion. A Mac-only new-version release is technically possible, but no
+release or public documentation is authorized here.

@@ -1323,6 +1323,34 @@ class OursLM(Ours):
         return None if self.lane in TRAIN_LANES else Ours.digest(self)
 
 
+def fast_bf16_capability():
+    """Read the actual installed native capability without submitting GPU work."""
+    ml = _ours_module()
+    import mojolearn.linalg as linalg
+    from mojolearn import _linalg_impl
+    binding = _linalg_impl._load()
+    getter = getattr(binding, "fast_bf16_available", None)
+    compiled_mode = int(binding.linalg_numeric_mode())
+    enabled = bool(getter()) if getter is not None else False
+    # A binary flag alone is insufficient: an older generic wrapper still
+    # calls require_identical. Verify the actual public entrypoint aliases.
+    aliases = {name: getattr(linalg, name, None) is getattr(binding, native, None)
+               and getattr(binding, native, None) is not None
+               for name, native in (("matmul_bf16", "fast_matmul_bf16"),
+                                    ("to_bf16", "public_fast_to_bf16"),
+                                    ("from_bf16", "public_fast_from_bf16"))}
+    supported = compiled_mode == 0 and enabled and all(aliases.values())
+    module_path = os.path.abspath(binding.__file__)
+    with open(module_path, "rb") as fh:
+        binary_sha256 = hashlib.sha256(fh.read()).hexdigest()
+    return dict(schema="mojolearn.fast-bf16-capability.v1", supported=supported,
+                native_enabled=enabled, compiled_mode=compiled_mode, aliases=aliases,
+                version=getattr(ml, "__version__", None), module_path=module_path,
+                binary_sha256=binary_sha256, gpu_work_submitted=False,
+                reason="native Apple FAST BF16 and generic aliases available" if supported else
+                       "installed binding lacks enabled Apple FAST BF16 or its native generic aliases")
+
+
 class OursGEMM(Ours):
     def __init__(self, lane, shape, data):
         import numpy as np
@@ -1331,16 +1359,23 @@ class OursGEMM(Ours):
         import mojolearn.linalg as linalg
         self.linalg = linalg
         self.lane = lane
+        mode = linalg.numeric_mode()
+        capability = None
+        if lane == "gemm-bf16" and mode == "fast":
+            capability = fast_bf16_capability()
+            if not capability["supported"]:
+                raise RuntimeError("UNSUPPORTED: " + capability["reason"])
         self.a, self.b = np.ascontiguousarray(data["a"]), np.ascontiguousarray(data["b"])
         if lane == "gemm-bf16":           # the bf16 bits, made before the clock
             self.a, self.b = linalg.to_bf16(self.a), linalg.to_bf16(self.b)
         elif lane == "gemm-int8":         # the codes with exponent 0: C = A B^T exactly
             self.a = (self.a, np.zeros(self.a.shape[0], dtype=np.int32))
             self.b = (self.b, np.zeros(self.b.shape[0], dtype=np.int32))
-        mode = linalg.numeric_mode()
         self.identical = mode == "identical"
         self.info = _ours_info(ml, getattr(linalg, "__file__", None), mode)
         self.info.update(profile=linalg.PROFILE, call=LANE_TEXT[lane][0])
+        if capability is not None:
+            self.info.update(bf16_capability=capability, profile="apple.fast.bf16.fp32-accumulate")
         self.library_call = {"gemm": linalg.matmul, "gemm-bf16": linalg.matmul_bf16,
                              "gemm-int8": linalg.matmul_int8}[lane]
         self.record = _gemm_record(lane, "mojolearn", self.library_call, data)
@@ -3482,6 +3517,9 @@ def build_parser():
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv == ["capability-fast-bf16"]:
+        print(json.dumps(fast_bf16_capability()), flush=True)
+        return 0
     if argv[:1] == ["scorer-preflight-child"]:      # scorer_preflight's child (lane, shape, inputs npz)
         return scorer_preflight_child(*argv[1:4])
     args = build_parser().parse_args(argv)

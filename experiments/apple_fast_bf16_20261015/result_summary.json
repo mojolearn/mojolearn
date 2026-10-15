@@ -177,9 +177,9 @@
     "current-source candidate-OFF and IDENTICAL compilation",
     "other-target compilation/release qualification",
     "full-workload estimator mapping and measurements before default promotion",
-    "generic mojolearn.linalg native dispatch and board unsupported-guard integration",
     "cross-vendor IDENTICAL same-release qualification; this FAST path makes no cross-vendor bitwise claim",
-    "public documentation/release qualification"
+    "public documentation/release qualification",
+    "generic BF16 wiring source added after the measured native commit; new boundary requires frozen compilation and 23-test GPU qualification"
   ],
   "retention": "Original executed controller and summaries are retained byte-for-byte in git; full logs, binaries, inputs and output arrays remain in raw_evidence_directory. Artifact hashes do not by themselves replace retained bytes.",
   "portable_runner_validation": {
@@ -200,6 +200,59 @@
       "docs exclusion hook skips new aliases and preserves existing IDENTICAL API",
       "original controller copied byte-for-byte"
     ],
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/portable-runner-checks/summary.json"
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/portable-runner-checks/summary.json",
+    "validated_runner_commit": "fff1dfa73d582869ca38dbfb5cfd04eda0e11d1e"
+  },
+  "durable_retention": {
+    "bytes": 181871269,
+    "local_path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-retention/all-evidence.tar.gz",
+    "r2_bucket": "mojolearn-data",
+    "r2_key": "measurements/records/v1/a2397742b2a1cba2865940141d63cc8f2b0483b096cfb72d9b7ad4c16a8e4558.tar.gz",
+    "sha256": "a2397742b2a1cba2865940141d63cc8f2b0483b096cfb72d9b7ad4c16a8e4558",
+    "status": "verified",
+    "verification": "GET sha256",
+    "scope": "Original frozen experiment including original executed source, binaries, inputs, scored outputs and complete build/test logs including failed attempts; excludes later generic-wiring edits"
+  },
+  "generic_wiring": {
+    "status": "source_ready_uncompiled",
+    "default_enabled": false,
+    "public_operations": [
+      "mojolearn.linalg.matmul_bf16",
+      "mojolearn.linalg.to_bf16",
+      "mojolearn.linalg.from_bf16"
+    ],
+    "implementation": "import-time direct native aliases in FAST only, compiled argument parsing preserves keyword operands; IDENTICAL aliases unchanged",
+    "capability_guard": "installed native flag plus exact generic alias identities; OFF/old builds unsupported, crashed probes fail rather than pass",
+    "full_primitive_recipe": {
+      "source": "tools/bench_board_neural.py",
+      "shape_key": "GEMM_SHAPES.full",
+      "m": 4096,
+      "n": 4096,
+      "k": 4096,
+      "seed": 7,
+      "operation": "NN BF16 input, FP32 accumulation/output, same host-to-consumed-host boundary",
+      "status": "pending; no new measurement authorized",
+      "runner": "local_benchmark.py prepare --preset full --output NEW_DIRECTORY",
+      "distribution": "default_rng(7).standard_normal float32, A then B, rounded to BF16"
+    },
+    "estimators": "No direct BF16 GEMM estimator caller established. Existing Transformer/Mamba packed weights are unpacked to FP32; training is FP32-only. Further wiring requires native packed-weight retention or explicit new precision opt-in and full-workload recipes.",
+    "cpu_validation": {
+      "harness_suite": {
+        "passed": 97,
+        "failed": 0,
+        "exit_code": 0,
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/generic-wiring-cpu-tests-02.result.json"
+      },
+      "final_targeted_with_full_selector": {
+        "passed": 11,
+        "failed": 0,
+        "exit_code": 0,
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/generic-wiring-selector-tests.result.json"
+      },
+      "gpu_calls": 0,
+      "full_fixture_allocated": false,
+      "native_compile": "pending",
+      "native_gpu_correctness": "23-test suite pending"
+    }
   }
 }

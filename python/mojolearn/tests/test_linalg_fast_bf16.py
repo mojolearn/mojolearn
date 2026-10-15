@@ -136,3 +136,26 @@ def test_invalid_parameters_refuse_before_dispatch(fast):
     for args, kwargs in invalid:
         with pytest.raises(Exception):
             _native_call(fast.matmul_bf16, *args, **kwargs)
+
+
+def test_generic_bf16_native_aliases_and_keyword_operands(fast):
+    from mojolearn import linalg
+    assert linalg.matmul_bf16 is fast.matmul_bf16
+    assert linalg._fast_bf16_available()
+    a = np.arange(12, dtype=np.float32).reshape(3, 4)
+    b = np.arange(8, dtype=np.float32).reshape(4, 2)
+    ab = _native_call(linalg.to_bf16, x=a)
+    bb = _native_call(linalg.to_bf16, b)
+    wide = _native_call(linalg.from_bf16, bits=ab)
+    np.testing.assert_array_equal(np.asarray(wide), a)
+    for args, kwargs in [((), dict(a=ab, b=bb)), ((ab,), dict(b=bb)), ((ab, bb), {})]:
+        got = _native_call(linalg.matmul_bf16, *args, **kwargs)
+        np.testing.assert_array_equal(np.asarray(got), a @ b)
+    for function, args, kwargs in [
+        (linalg.to_bf16, (a,), dict(x=a)),
+        (linalg.from_bf16, (), dict(x=ab)),
+        (linalg.matmul_bf16, (ab,), dict(a=ab, b=bb)),
+        (linalg.matmul_bf16, (), dict(a=ab)),
+    ]:
+        with pytest.raises(Exception):
+            _native_call(function, *args, **kwargs)
