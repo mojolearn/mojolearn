@@ -1220,8 +1220,8 @@ class RandomForestRegressor(_RandomForestBase):
                 has_weighted = False
             if not has_weighted:
                 raise NotImplementedError(
-                    "sample_weight for a regression forest needs the GPU forest binding "
-                    "(rf_regressor_fit_weighted); this install's binding does not export it")
+                    "sample_weight for a regression forest needs a forest binding that exports "
+                    "rf_regressor_fit_weighted; this install's binding predates it")
             w = check_sample_weight(sample_weight, len(y32))
             w_max = float(w.max())  # glue: native max reduction of the weights
             weighted = _forest_fit_function(binding, "rf_regressor_fit_weighted")
