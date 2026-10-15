@@ -338,3 +338,11 @@ def test_linkage_retains_loader_basename_and_exact_bytes(tmp_path, monkeypatch):
     assert (destination / "runtime/libExample.so.1").read_bytes() == real.read_bytes()
     assert record["ldd"]["runtime"][0]["sha256"] == xcc.file_sha(real)
     assert record["ldd"]["unresolved"] == []
+
+
+def test_compile_workflow_uses_locked_python_on_ubuntu_2204():
+    workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/cross-compile-check.yml").read_text()
+    # Ubuntu 22.04 system Python 3.10 lacks tomllib, imported by pack_wheel.
+    # Use the frozen source's locked environment, also used by its build script.
+    assert '/usr/bin/time -v -o out/time.txt pixi run python "$script"' in workflow
+    assert '/usr/bin/time -v -o out/time.txt python3 "$script"' not in workflow

@@ -184,7 +184,7 @@ jobs:
             script=.xcc-tooling/tools/cross_compile_check.py
             retain_args=(--source-root "$GITHUB_WORKSPACE" --keep-artifacts out/artifacts)
           fi
-          /usr/bin/time -v -o out/time.txt python3 "$script" --ref "$REF_SHA" \
+          /usr/bin/time -v -o out/time.txt pixi run python "$script" --ref "$REF_SHA" \
             --only "$NAME" --tiers "$TIER" --archs "$ARCH" --timeout "${IN_TIMEOUT:-1500}" --json out/result.json \
             "${retain_args[@]}" > out/controller.log 2>&1
           rc=$?
