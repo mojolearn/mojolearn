@@ -32,7 +32,18 @@ def test_descriptor_default_fold_route_reaches_native_helpers():
     exec(compile(selected, 'actual-model-selection-routing', 'exec'), namespace)
     with pytest.raises(NativeRoute):
         list(namespace['_folds'](2, object(), object(), [0, 1, 0, 1], None))
-    native_calls = {n.args[0].value for n in ast.walk(functions['_native_default_folds'])
+    # The default folds reach the native helpers directly or through module
+    # helpers they call (the fold selection lives in _select_folds, shared
+    # with the sabotage control), so follow the module-level call graph.
+    reached, todo = set(), ['_native_default_folds']
+    while todo:
+        name = todo.pop()
+        if name in reached or name not in functions:
+            continue
+        reached.add(name)
+        todo.extend(n.func.id for n in ast.walk(functions[name])
+                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name))
+    native_calls = {n.args[0].value for name in reached for n in ast.walk(functions[name])
                     if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_native'
                     and n.args and isinstance(n.args[0], ast.Constant)}
     assert {'fold_ids', 'select_fold_i64'} <= native_calls

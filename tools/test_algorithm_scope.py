@@ -221,10 +221,13 @@ def test_apple_pass_refuses_anything_that_widens_it(extra):
 
 
 def test_cpu_pass_is_local_cpu_with_the_apple_pass_cells(monkeypatch, capsys):
+    # The pass takes every shared Mac slot (025edd4e9: half the logical cores
+    # unless MAC_SLOTS is set; 5 on the 10-core M4, the old fixed value).
     monkeypatch.delenv("MAC_SLOTS", raising=False)
+    monkeypatch.delenv("MOJOLEARN_CPU_PASS_SLOTS", raising=False)
     assert verify_lanes.main(["--lanes", "ridge,ols,kmeans,knn,lasso", "--cpu-pass", "--plan"]) == 0
     out = capsys.readouterr().out
-    assert "backend=cpu jobs=5" in out and "runpod" not in out
+    assert f"backend=cpu jobs={verify_lanes.mac_slot.slot_count()} " in out and "runpod" not in out
     assert f"--fixtures {verify_lanes.APPLE_PASS_FIXTURES}" in out
     assert "--repeats 1" in out and "--no-batch" in out and "--no-rlpair" in out
 

@@ -66,7 +66,11 @@ def scratch(changes, base="HEAD"):
         tree = _git("write-tree", env=env)
     finally:
         os.unlink(idx)
-    return _git("commit-tree", tree, "-p", base, "-m", "no_host_routes scratch", inp="")
+    # A scratch commit needs an author and committer; a fresh clone (the CPU
+    # test pod) has no git identity, so the commit carries its own.
+    ident = dict(os.environ, GIT_AUTHOR_NAME="no_host_routes test", GIT_AUTHOR_EMAIL="scratch@invalid",
+                 GIT_COMMITTER_NAME="no_host_routes test", GIT_COMMITTER_EMAIL="scratch@invalid")
+    return _git("commit-tree", tree, "-p", base, "-m", "no_host_routes scratch", inp="", env=ident)
 
 
 def run_tree(ref, baseline=None):
