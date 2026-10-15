@@ -198,9 +198,14 @@ def _preload_cuda_libs(names):
 #   quality the conductor's metric; infer the timed inference call or None
 # ---------------------------------------------------------------------------
 
-def _E(name, **kw):
-    """A nested estimator, resolved per library (ours: mojolearn.<name>)."""
-    return {"__est__": name, "kw": kw}
+def _E(name, ours_kw=None, **kw):
+    """A nested estimator, resolved per library (ours: mojolearn.<name>).
+    `ours_kw` holds ours-only keywords (a parameter the other library does not
+    have, e.g. a tree's n_bins), merged into ours' instance only."""
+    e = {"__est__": name, "kw": kw}
+    if ours_kw:
+        e["ours_kw"] = dict(ours_kw)
+    return e
 
 
 _STD = "standardized by the fit rows"
@@ -1300,10 +1305,20 @@ _add("decision-tree-clf", xlane="trees", ours="DecisionTreeClassifier", task="cl
      mism=["cuml-gpu is cuML's forest with one tree, no bootstrap, every feature (no GPU "
            "single-tree class exists), n_bins=128 as ours",
            "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
+# QUALITY/FAIRNESS FIX (lane quality-fix-apple-fast, 2026-10-15): ours' trees split on per-feature
+# quantile bins and scikit-learn's on exact thresholds. At n_bins=128 the bins are 128 quantiles of a
+# 512-row sample (cuML's rule, 4 x n_bins rows: ensemble/decisiontree/batched_levelalgo/quantiles.mojo
+# compute_quantiles), which merges taxi's location-id columns (up to 265 values): r2 taxi on the M3
+# 0.8.34 board, decision-tree-reg 0.8626 (ours, 128 bins) / 0.8792 (ours-fast, 256) vs scikit-learn
+# 0.8915. Ours now races n_bins=1024, the finest split search it (and cuML) accepts
+# (ensemble/decisiontree/decisiontree.mojo max_n_bins <= 1024), the nearest to exact thresholds; the
+# same explicit value in both ours arms (identical and fast) and on cuML. Not a shape rule: the
+# maximum, whatever the dataset. Results raced before this change used 128 (256 FAST default).
+_DT_EXACT_BINS = 1024
 _add("decision-tree-reg", xlane="trees", ours="DecisionTreeRegressor", task="reg", block="reg",
      sk="sklearn.tree:DecisionTreeRegressor", params=dict(max_depth=16, max_features=1.0, random_state=SEED),
      cuml="cuml.ensemble:RandomForestRegressor",
-     cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
+     cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=_DT_EXACT_BINS,
                       random_state=SEED, n_streams=1),
      # smoke-fixes (2026-10-14; decision-tree-reg: "max_bin is unset on ours and 128 on cuml-gpu"):
      # ours' DecisionTreeRegressor n_bins=None resolves at fit to the tier default (128 in
@@ -1312,8 +1327,8 @@ _add("decision-tree-reg", xlane="trees", ours="DecisionTreeRegressor", task="reg
      # (ours _expansion_trees.py DecisionTreeRegressor docstring "cuML's rule"; cuML 26.08
      # randomforest_common.pyx n_bins -> max_n_bins), so ours now gets n_bins=128 explicitly, cuML's
      # value, in every mode. n_streams: as decision-tree-clf.
-     ours_extra=dict(n_bins=128),
-     mism=["cuml-gpu is cuML's forest with one tree (see decision-tree-clf)", "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
+     ours_extra=dict(n_bins=_DT_EXACT_BINS),
+     mism=["cuml-gpu is cuML's forest with one tree (see decision-tree-clf)", "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=1024 quantile bins per feature (both ours arms and cuML; ours' maximum, the nearest to exact) (not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("bagging-clf", xlane="trees", ours="BaggingClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:BaggingClassifier",
      params=dict(estimator=_E("DecisionTreeClassifier", max_depth=12, random_state=SEED),
@@ -1321,9 +1336,10 @@ _add("bagging-clf", xlane="trees", ours="BaggingClassifier", task="clf", block="
      mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("bagging-reg", xlane="trees", ours="BaggingRegressor", task="reg", block="reg",
      sk="sklearn.ensemble:BaggingRegressor",
-     params=dict(estimator=_E("DecisionTreeRegressor", max_depth=12, random_state=SEED),
+     params=dict(estimator=_E("DecisionTreeRegressor", max_depth=12, random_state=SEED,
+                              ours_kw=dict(n_bins=_DT_EXACT_BINS)),
                  n_estimators=10, random_state=SEED), sk_extra=dict(n_jobs=-1),
-     mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
+     mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=1024 quantile bins per feature (both ours arms; ours' maximum, the nearest to exact) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("adaboost-clf", xlane="trees", ours="AdaBoostClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:AdaBoostClassifier",
      params=dict(estimator=_E("DecisionTreeClassifier", max_depth=3, random_state=SEED),
@@ -1382,9 +1398,10 @@ _add("stacking-clf", xlane="trees", ours="StackingClassifier", task="clf", block
 _add("stacking-reg", xlane="trees", ours="StackingRegressor", task="reg", block="reg",
      sk="sklearn.ensemble:StackingRegressor",
      params=dict(estimators=[("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000)),
-                             ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED))],
+                             ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED,
+                                       ours_kw=dict(n_bins=_DT_EXACT_BINS)))],
                  final_estimator=_E("Ridge", alpha=1.0), cv=5),
-     mism=["nested DecisionTreeRegressor(max_depth=8): ours is its forest builder with one tree, splitting on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
+     mism=["nested DecisionTreeRegressor(max_depth=8): ours is its forest builder with one tree, splitting on n_bins=1024 quantile bins per feature (both ours arms; ours' maximum, the nearest to exact) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("multioutput-clf", xlane="trees", ours="MultiOutputClassifier", task="multiclf", block="cls",
      sk="sklearn.multioutput:MultiOutputClassifier",
      params=dict(estimator=_E("LogisticRegression", max_iter=200)),
@@ -2039,7 +2056,10 @@ def lane_config(lane):
 def _jsonable(v):
     if isinstance(v, dict):
         if "__est__" in v:
-            return "%s(%s)" % (v["__est__"], ", ".join("%s=%r" % kv for kv in sorted(v["kw"].items())))
+            out = "%s(%s)" % (v["__est__"], ", ".join("%s=%r" % kv for kv in sorted(v["kw"].items())))
+            if v.get("ours_kw"):
+                out += " [ours only: %s]" % ", ".join("%s=%r" % kv for kv in sorted(v["ours_kw"].items()))
+            return out
         return {k: _jsonable(x) for k, x in v.items()}
     if isinstance(v, (list, tuple)):
         return [_jsonable(x) for x in v]
@@ -3181,8 +3201,8 @@ def _resolve(v, lib):
             if not hasattr(ml, name):
                 raise Skipped("SKIPPED: not built yet (mojolearn has no %s, a base estimator)" % name)
             cls = getattr(ml, name)
-        else:
-            cls = _imp(SK_BASE[name])
+            return cls(**dict(v["kw"], **v.get("ours_kw", {})))
+        cls = _imp(SK_BASE[name])
         return cls(**v["kw"])
     if isinstance(v, list):
         return [_resolve(x, lib) for x in v]
