@@ -2216,6 +2216,7 @@ FAMILIES = (
             "forest_export", "forest_export_legacy", "forest_export_release",
             "rf_predict_proba", "rf_predict_reg",
             "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
+            "rf_regressor_fit_weighted", "rf_regressor_fit_weighted_export",
             "rf_classifier_fit_shard", "rf_regressor_fit_shard",
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
             "rf_data_session_open", "rf_data_session_close",

@@ -1823,7 +1823,7 @@ def rf_host_fit(
         var scale = choose_scale(total, n_rows)
         if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
             raise Error(
-                ("class" if classification else "sample") + " weights exceed Float32 fixed-point scale range"
+                (String("class") if classification else String("sample")) + " weights exceed Float32 fixed-point scale range"
             )
         wscale = Float32(scale)
         # `prepare_weights`' copy_if (`randomforest.mojo:2084-2100`): the
