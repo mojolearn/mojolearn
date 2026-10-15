@@ -28,6 +28,7 @@ from ._buffer import addr, addr_ro, as_f32_c, empty, full, zeros
 from ._bufcheck import memcopy
 from ._labels import decode_labels, encode_labels
 from ._mode import NumericModeMixin
+from ._sample_weight import check_sample_weight
 from ._mode import RegressorScoreMixin
 
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
@@ -166,16 +167,12 @@ def _decision(est, X, coef, intercept, link=LINK_IDENTITY):
 
 
 def _weights_f32(sample_weight, n):
-    """The checked float32 sample weights: finite-or-infinite non-negative
-    with a positive sum (scikit-learn's _check_sample_weight), tested by the
-    base binding's reductions (a NaN fails the sum test), no row loop here."""
-    if isinstance(sample_weight, (int, float)):
-        w = full((n,), float(sample_weight), "<f4")
-    else:
-        w = _vector(sample_weight, n, "sample_weight")
-    if n == 0 or not (w.min() >= 0) or not (w.sum() > 0):  # glue: native Mojo min and sum of the weights via Array methods
-        raise ValueError("mojolearn: sample_weight must be non-negative with a positive sum")
-    return w
+    """The checked float32 sample weights (scikit-learn's _check_sample_weight
+    and its wording, `_sample_weight.check_sample_weight`): a scalar or a
+    1-D vector of n finite non-negative entries, not all zero, tested by the
+    base binding's reductions, no row loop here. A fresh copy, so no kernel
+    can write into the caller's array."""
+    return check_sample_weight(sample_weight, n, copy=True)
 
 
 def _concat_f32(a, b):

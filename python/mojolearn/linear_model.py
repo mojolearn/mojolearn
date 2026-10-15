@@ -27,6 +27,7 @@ from ._labels import (
     encode_labels, flatten_labels, sorted_classes, threshold_codes,
 )
 from ._mode import NumericModeMixin
+from ._sample_weight import check_sample_weight
 
 #: The model file formats (the classical host inference lane, 2026-09-13).
 #: `save` writes exactly what `predict` reads, raw bytes and exact dtypes,
@@ -437,38 +438,16 @@ def _check_sample_weight(sample_weight, n_rows, estimator):
     or None when there are no weights.
 
     cuML validates nothing here: `olsFit` takes a raw pointer and trusts it.
-    These three checks are OURS and they are input validation, which is the
-    one kind of refusal that is correct rather than a gap -- a length
-    mismatch would read past the end of the array on the device, and a
-    negative weight makes `sqrt(w)` a NaN that silently poisons the whole
-    fit. Non-finite weights are refused for the same reason.
+    These checks are input validation (scikit-learn's `_check_sample_weight`
+    and its wording, `_sample_weight.check_sample_weight`): a length mismatch
+    would read past the end of the array on the device, a negative weight
+    makes `sqrt(w)` a NaN that silently poisons the whole fit, non-finite
+    weights likewise, and an all-zero vector leaves nothing to fit.
+    `estimator` is kept for the callers' signature.
     """
     if sample_weight is None:
         return None
-    shape = _shape_of(sample_weight)
-    if len(shape) != 1:
-        raise ValueError(
-            f"mojolearn {estimator}: sample_weight must be 1-D, got "
-            f"{len(shape)} dimensions"
-        )
-    w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-    if w.shape[0] != n_rows:
-        raise ValueError(
-            f"mojolearn {estimator}: sample_weight has {w.shape[0]} entries "
-            f"but X has {n_rows} rows"
-        )
-    if not all_finite(w):
-        raise ValueError(
-            f"mojolearn {estimator}: sample_weight contains a non-finite "
-            "value; sqrt of it would poison every row of the fit"
-        )
-    if w.min() < 0.0:
-        raise ValueError(
-            f"mojolearn {estimator}: sample_weight has a negative entry; "
-            "a weighted least squares scales rows by sqrt(w) (ols.cuh:100) "
-            "and sqrt of a negative is a NaN"
-        )
-    return w
+    return check_sample_weight(sample_weight, n_rows)
 
 
 def _ols_tsqr_on(rows, cols):
@@ -949,9 +928,9 @@ class Ridge(NumericModeMixin):
     centered on their means before the solve.
 
     ``X`` is read as float32 (a C-contiguous float32 array is used without
-    a copy). ``y`` must be one-dimensional: a single target.
-    ``sample_weight`` is not supported, and a design with a single feature
-    and ``alpha > 0`` is refused with an error.
+    a copy). ``y`` must be one-dimensional: a single target. Weighted fits
+    and single-feature designs are solved with a Cholesky factorization of
+    the regularized normal equations.
 
     Parameters
     ----------
@@ -1038,8 +1017,11 @@ class Ridge(NumericModeMixin):
             Training data, read as float32.
         y : array-like of shape (n_samples,)
             Target values. A 2-D ``y`` raises ``ValueError``.
-        sample_weight : None
-            Must be None; weights raise ``NotImplementedError``.
+        sample_weight : float or array-like of shape (n_samples,), default None
+            Non-negative, finite per-row weights; a weighted fit minimizes
+            ``sum(w_i * r_i**2) + alpha * ||coef||**2`` with weighted means
+            for the intercept. A wrong shape, a negative or non-finite
+            entry, or all-zero weights raise ``ValueError``.
 
         Returns
         -------
@@ -1047,11 +1029,6 @@ class Ridge(NumericModeMixin):
             The fitted estimator.
         """
         self._validate_params()
-        if sample_weight is not None:
-            raise NotImplementedError(
-                "mojolearn Ridge: sample_weight is not implemented "
-                "(ridge.cuh:197-208; glm/NOT_IMPLEMENTED.tsv)"
-            )
         self.solver_ = "eig"
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape
@@ -1060,6 +1037,21 @@ class Ridge(NumericModeMixin):
             "mojolearn Ridge currently requires one target",
             "mojolearn Ridge X and y lengths differ",
         )
+        weights = _check_sample_weight(sample_weight, rows, "Ridge")
+        if weights is not None or cols == 1:
+            # Weighted fits, and the one-feature design (ridgeFit sends
+            # n_cols == 1 to ridgeSVD, which is not implemented), take the
+            # x_linear ridge kernel (x_linear/ridge.mojo: weighted means,
+            # the weighted normal equations plus alpha, one Cholesky). Glue
+            # only: the kernel computes every number.
+            from ._expansion_linear import _ridge_run
+            vals = _ridge_run(self, x, rows, cols, target, 1, [float(self.alpha)], weights)
+            self.coef_ = Array.from_list(vals[:cols], "<f4")
+            self.intercept_ = float(vals[cols]) if self.fit_intercept else 0.0
+            self._x_mean = zeros((cols,), "<f4")
+            self._y_mean = 0.0
+            self.n_features_in_ = cols
+            return self
         b = self._bind("_mojolearn_estimators")
         q = getattr(b, "ridge_resident_default", None)
         resident = getattr(b, "ridge_fit_resident", None)

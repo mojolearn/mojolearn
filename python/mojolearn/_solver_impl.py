@@ -338,7 +338,12 @@ class ElasticNet(ParamsMixin):
         `_classical_host.py` answers the CPU binding instead."""
         return _mojolearn_solver
 
-    def fit(self, X, y, sample_weight=None):
+    # sample_weight is not a fit parameter: the coordinate-descent kernel
+    # (solver/impl/cd.mojo) has no weighted path (cuML's is the weighted
+    # preProcessData plus the sqrt-weight scaling and its undo, cd.cuh:156-194
+    # and :274-287; solver/NOT_IMPLEMENTED.tsv). Advertising it only to raise
+    # would tell scikit-learn's has_fit_parameter it works (lane sk-edges).
+    def fit(self, X, y):
         """Fit the model by coordinate descent.
 
         Parameters
@@ -349,8 +354,6 @@ class ElasticNet(ParamsMixin):
         y : array-like of shape (n_samples,)
             Target values. A 2-D ``y`` or a length mismatch raises
             ``ValueError``.
-        sample_weight : None
-            Must be None; weights raise ``NotImplementedError``.
 
         Returns
         -------
@@ -363,14 +366,6 @@ class ElasticNet(ParamsMixin):
         from ._cpu_reference import require_training
         require_training(self)
         self._validate_params()
-        if sample_weight is not None:
-            raise NotImplementedError(
-                "mojolearn ElasticNet: sample_weight is not implemented "
-                "(cd.cuh:156-194 and :274-287 -- the weighted "
-                "preProcessData, the sqrt-weight scaling of input and "
-                "labels and its undo; solver/NOT_IMPLEMENTED.tsv). "
-                "solver/impl/cd.mojo refuses it by name"
-            )
         if hasattr(X, "toarray") or hasattr(X, "tocsr"):
             raise NotImplementedError(
                 "mojolearn ElasticNet: sparse X is refused. cdFit is dense "
@@ -393,6 +388,12 @@ class ElasticNet(ParamsMixin):
         self.input_copied_ = copied
         self.fortran_copied_ = copied
         n_rows, n_cols = work_x.shape
+        if n_rows < 2:
+            # cdFit needs two rows (its refusal is a bare Exception from the
+            # binding); scikit-learn's check_array wording, raised first
+            raise ValueError(
+                f"Found array with {n_rows} sample(s) (shape=({n_rows}, {n_cols})) "
+                "while a minimum of 2 is required.")
         if len(_shape_of(y)) != 1:
             raise ValueError(
                 "mojolearn ElasticNet currently requires one target")
