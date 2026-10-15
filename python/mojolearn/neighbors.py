@@ -19,7 +19,7 @@ from . import _portable_math as math
 from . import _mojolearn, _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
-from ._labels import encode_labels, sorted_classes
+from ._labels import decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 from .linear_model import (
@@ -1131,6 +1131,9 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         """
         if self._y_cols is None:
             raise RuntimeError("this estimator is not fitted yet")
+        if getattr(self, "_label_names", None) is not None:
+            raise ValueError("mojolearn: save stores integer class labels; this model "
+                             "was fit on str labels")
         arrays = _knn_arrays(self)
         arrays["y_cols"] = self._y_cols
         arrays["classes"] = Array.from_list(
@@ -1211,6 +1214,19 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         from ._sk_validate import whole_float_labels
         # whole-number float labels (scikit-learn's callers pass 0.0/1.0)
         # convert exactly to the integer labels below
+        self._label_names = None
+        if (len(shape) == 1 and not _is_integer_labels(y)
+                and not whole_float_labels(y)):
+            # Labels of any other kind (str labels, as scikit-learn's
+            # check_classifiers_classes passes) vote as their dense codes in
+            # `classes_` order; `predict` decodes the voted codes.
+            names, codes = encode_labels(y)
+            if not all(isinstance(c, str) for c in names):  # glue: kind test of the class labels (classes-sized)
+                raise ValueError(
+                    f"mojolearn: y must be integer or str class labels, got "
+                    f"{_dtype_name(y)}; cast your labels")
+            self._label_names = names
+            y = codes
         if not _is_integer_labels(y) and not whole_float_labels(y):
             raise ValueError(
                 f"mojolearn: y must be integer class labels, got "
@@ -1260,6 +1276,9 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         such lists for a 2-D `y`."""
         if self._y_cols is None:
             raise AttributeError("classes_ is set by fit")
+        names = getattr(self, "_label_names", None)
+        if names is not None:
+            return names
         if self.outputs_2d_:
             return self._classes_list
         return self._classes_list[0]
@@ -1376,7 +1395,11 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         if self.outputs_2d_:
             return labels.astype("<i8")
         # (nq, 1) -> (nq,) is a C-order reshape; int32 -> int64 is exact.
-        return labels.reshape((labels.shape[0],)).astype("<i8")
+        codes = labels.reshape((labels.shape[0],)).astype("<i8")
+        names = getattr(self, "_label_names", None)
+        if names is not None:
+            return decode_labels(names, codes)
+        return codes
 
     def predict_proba(self, X):
         """Return each query's vote fractions per class.
