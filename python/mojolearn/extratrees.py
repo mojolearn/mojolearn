@@ -447,7 +447,8 @@ class ExtraTreesClassifier(_ExtraTreesBase):
     min_samples_leaf : int, default 1
         Minimum rows in a leaf.
     min_weight_fraction_leaf : float, default 0.0
-        Only 0.0 is accepted; sample weights are not supported.
+        Minimum fraction of the total sample weight (of all rows when no
+        ``sample_weight`` is given) required in each leaf, in [0.0, 0.5].
     max_features : {'sqrt', 'log2'}, int, float or None, default 'sqrt'
         Features drawn per split: a name, a count, a fraction, or None for
         all features.
@@ -471,9 +472,8 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         Only 0 is accepted; any other value raises `NotImplementedError`.
     warm_start : bool, default False
         Only False is accepted; there is no incremental fit.
-    class_weight : None, default None
-        Only None is accepted; any other value raises `NotImplementedError`
-        in `fit`.
+    class_weight : dict, 'balanced' or None, default None
+        Per-class weights, multiplied into ``sample_weight``.
     ccp_alpha : float, default 0.0
         Only 0.0 is accepted; cost-complexity pruning is not implemented.
     max_samples : int, float or None, default None
@@ -715,7 +715,8 @@ class ExtraTreesRegressor(_ExtraTreesBase):
     min_samples_leaf : int, default 1
         Minimum rows in a leaf.
     min_weight_fraction_leaf : float, default 0.0
-        Only 0.0 is accepted; sample weights are not supported.
+        Minimum fraction of the training rows required in each leaf, in
+        [0.0, 0.5].
     max_features : {'sqrt', 'log2'}, int, float or None, default 1.0
         Features drawn per split: a name, a count, a fraction, or None for
         all features.
