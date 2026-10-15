@@ -2800,13 +2800,11 @@ def _nb_weights(pr, sample_weight, n):
     """sample_weight -> its arena offset (None when not given)."""
     if sample_weight is None:
         return None
-    w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-    if w.shape[0] != n:
-        raise ValueError(f"mojolearn: sample_weight has {w.shape[0]} entries, expected {n}")
-    from ._buffer import all_finite
-    if n and not all_finite(w):
-        raise ValueError("mojolearn: sample_weight must be finite")
-    return pr.put(w)
+    # scikit-learn's _check_sample_weight: scalar/list/Series, its shape,
+    # finiteness, sign and all-zero refusals and wording (the shared helper;
+    # native reductions). `pr.put` copies, so the caller's array is not written.
+    from ._sample_weight import check_sample_weight
+    return pr.put(check_sample_weight(sample_weight, n))
 
 
 #: binding -> its `x_prep_idn_int` bits (0 when it has none), probed once
