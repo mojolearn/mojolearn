@@ -167,26 +167,26 @@ def main(out=sys.stdout):
     arm = "REFUSALS"
     rep.raises(arm, NotImplementedError, "callable optimizer",
                "a callable optimizer is refused by name (DEVIATION 2881)",
-               GaussianProcessRegressor, optimizer=lambda f, t, bounds: (t, f(t)))
+               lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), optimizer=lambda f, t, bounds: (t, f(t)))
     rep.raises(arm, ValueError, "random_state",
                "n_restarts_optimizer=3 without an int random_state is refused",
-               GaussianProcessRegressor, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=3)
+               lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), optimizer="fmin_l_bfgs_b", n_restarts_optimizer=3)
     rep.raises(arm, TypeError, "normalize_y must be a bool",
                "a non-bool normalize_y is refused by name",
-               GaussianProcessRegressor, normalize_y="yes")
+               lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), normalize_y="yes")
     rep.raises(arm, NotImplementedError, "copy_X_train",
                "copy_X_train=False is refused",
-               GaussianProcessRegressor, copy_X_train=False)
+               lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), copy_X_train=False)
     rep.raises(arm, ValueError, "random_state",
                "a negative random_state is refused",
-               GaussianProcessRegressor, random_state=-1)
+               lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), random_state=-1)
     rep.raises(arm, TypeError, "composition",
                "a non-Kernel kernel object is refused",
-               GaussianProcessRegressor, kernel="rbf")
+               lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), kernel="rbf")
     rep.raises(arm, ValueError, "must be 1-D",
                "a 2-D y is refused by name",
                GaussianProcessRegressor().fit, x, y.reshape(N, 1))
-    rep.raises(arm, ValueError, "call fit() first",
+    rep.raises(arm, ValueError, "not fitted yet",
                "unfitted covariance prediction is refused",
                gp.predict, x, **{"return_cov": True})
     rep.raises(arm, ValueError, "call fit() first",
