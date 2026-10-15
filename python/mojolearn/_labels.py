@@ -272,8 +272,14 @@ def _encode_labels_native(y):
         return None
     bool_source = False
     if not isinstance(y, Array):
-        with Buf(y, name="y") as b:
-            bool_source = typestr_of(b) == "|b1"
+        try:
+            with Buf(y, name="y") as b:
+                bool_source = typestr_of(b) == "|b1"
+        except (TypeError, ValueError):
+            # an object-dtype buffer ('O': str labels in a NumPy object
+            # array) or a format no Array holds: the Python routine reads it
+            # through `tolist()` and names any refusal
+            return None
     try:
         arr, _ = _materialize(y, "y")
     except (TypeError, ValueError):

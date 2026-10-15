@@ -25,6 +25,15 @@ from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
 
 class _GBDTAdapter(PublicOutputsMixin):
     _loss = None
+    # NaN in X takes the learner's nan_mode branch ('Min' by default)
+    _sklearn_input_tags = {"allow_nan": True}
+
+    def __init_subclass__(cls, **kw):
+        # scikit-learn's input and target validation and NotFittedError, as
+        # every other estimator gets them (`_mode.install_fit_tracking`)
+        super().__init_subclass__(**kw)
+        from ._mode import install_fit_tracking
+        install_fit_tracking(cls)
 
     # Every default is GradientBoosting's own, so a default adapter is the
     # default learner: None defers to CatBoost's GPU defaults under
@@ -386,6 +395,8 @@ class GradientBoostingRegressor(_GBDTAdapter):
         """
         self._validate_params()
         self._clear_fit()
+        # float64 and integer targets are cast to float32 once, natively
+        # (`as_f32_c`), as scikit-learn's callers pass them
         target = as_f32_c(y, ndim=None, name="y")[0]
         self._regression_target(target, 'y')
         if eval_set is not None:
@@ -425,6 +436,8 @@ class GradientBoostingRegressor(_GBDTAdapter):
         Follows scikit-learn's weighted ``r2_score``.
         """
         self._check_fitted()
+        # float64 and integer targets are cast to float32 once, natively
+        # (`as_f32_c`), as scikit-learn's callers pass them
         target = as_f32_c(y, ndim=None, name="y")[0]
         self._regression_target(target, 'y')
         return metrics.r2_score(target, self.predict(X),

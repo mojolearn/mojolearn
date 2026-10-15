@@ -317,6 +317,10 @@ def typestr_of(buf):
         return f"|S{fmt[:-1]}"
     if fmt.endswith("w") and fmt[:-1].isdigit():
         return f"<U{fmt[:-1]}"
+    if fmt[:1] == "Z":
+        # scikit-learn's wording and type (`check_array`): complex input is
+        # a value error, not an unsupported container
+        raise ValueError(f"Complex data not supported: buffer format {fmt!r} is complex")
     raise TypeError(f"mojolearn: unsupported buffer format {fmt!r}")
 
 
@@ -424,6 +428,16 @@ def _materialize(obj, name):
             "%s silently would hide a transfer the caller did not ask for. "
             "Copy it yourself first: cupy `x.get()`, torch `x.cpu()`, "
             "numba `x.copy_to_host()`." % (name, kind, name)
+        )
+    if hasattr(obj, "tocsr") and hasattr(obj, "nnz") and hasattr(obj, "shape"):
+        # A scipy.sparse matrix or array has no buffer; walked as nested
+        # rows it recursed without end (matrix) or failed to index (DIA).
+        # Converters that accept sparse X densify it first
+        # (`as_f32_dense_c`); everything else refuses it by name, in
+        # scikit-learn's words.
+        raise TypeError(
+            f"mojolearn: Sparse data was passed for {name}, but dense data is required. "
+            "Use '.toarray()' to convert to a dense numpy array."
         )
     if (not isinstance(obj, (list, tuple, str, bytes)) and not _has_buffer(obj)
             and callable(getattr(obj, "__array__", None))):
@@ -701,11 +715,20 @@ def _output_store(code, n):
 def _as_typed(obj, dtype, order, ndim, name):
     a, copied = _materialize(obj, name)
     if ndim is not None and a.ndim != ndim:
+        hint = ""
+        if ndim == 2 and a.ndim < 2:
+            # scikit-learn's advice (`check_array`), which its checks match
+            hint = (". Reshape your data either using array.reshape(-1, 1) if your data "
+                    "has a single feature or array.reshape(1, -1) if it contains a single sample.")
         raise ValueError(
-            f"mojolearn: {name} must be {ndim}-D, got {a.ndim}-D shape {a.shape}"
+            f"mojolearn: {name} must be {ndim}-D, got {a.ndim}-D shape {a.shape}{hint}"
         )
     if a.size == 0:
-        raise ValueError(f"mojolearn: {name} is empty, shape {a.shape}")
+        what = "feature(s)" if a.ndim == 2 and a.shape[0] else "sample(s)"
+        raise ValueError(
+            f"mojolearn: {name} is empty, shape {a.shape}: Found array with 0 {what} "
+            f"(shape={a.shape}) while a minimum of 1 is required."
+        )
     a, c2 = _convert(a, dtype, order)
     return a, copied or c2
 

@@ -44,6 +44,7 @@ import sys
 
 from . import _backend
 from ._array import Array as _Array
+from . import _sk_validate
 
 
 def _guard_cpu_training(method):
@@ -86,6 +87,9 @@ def sklearn_tags(est):
     if callable(getattr(est, "transform", None)):
         tags.transformer_tags = TransformerTags(
             preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ())))
+    from ._sk_validate import input_tag_overrides
+    for name, value in input_tag_overrides(cls).items():  # glue: sklearn tag field overrides by name
+        setattr(tags.input_tags, name, value)
     for name, value in getattr(cls, "_sklearn_input_tags", {}).items():  # glue: sklearn tag field overrides by name
         setattr(tags.input_tags, name, value)
     for name, value in getattr(cls, "_sklearn_target_tags", {}).items():  # glue: sklearn tag field overrides by name
@@ -124,13 +128,24 @@ def is_fitted(est):
 def _track_fit(method):
     if getattr(method, "_mojolearn_tracks_fit", False):
         return method
+    # scikit-learn's input and target validation (`_sk_validate`) runs on the
+    # outermost fit only: a fit's own nested fits see validated input.
+    validates = method.__name__ in _sk_validate.FIT_METHODS
+    slots = _sk_validate.arg_slots(method) if validates else (None, None)
 
     @functools.wraps(method)
     def tracked(self, *args, **kwargs):
         state = vars(self)
+        check = None
+        if validates and not state.get("_mojolearn_fitting"):
+            args, kwargs, check = _sk_validate.before_fit(self, method.__name__, slots, args, kwargs)
         state["_mojolearn_fitting"] = state.get("_mojolearn_fitting", 0) + 1
         try:
             out = method(self, *args, **kwargs)
+        except Exception as err:
+            if check is not None:
+                _sk_validate.reraise(self, check, err)
+            raise
         finally:
             # `vars(self)` again: `set_params` inside a fit replaces the dict's contents
             state = vars(self)
@@ -146,26 +161,41 @@ def _track_fit(method):
         after = getattr(self, "_mojolearn_after_fit", None)
         if after is not None:
             after()
+        if check is not None:
+            _sk_validate.after_fit(self, check)
         return out
 
     tracked._mojolearn_tracks_fit = True
     return tracked
 
 
-def _needs_fit(method, name):
+def _needs_fit(method, name, require_fit=True):
+    """`method` refusing an unfitted instance (unless `require_fit` is False,
+    a stateless transformer), then validating its X (`_sk_validate`)."""
     if getattr(method, "_mojolearn_needs_fit", False):
         return method
+    slots = _sk_validate.arg_slots(method)
 
     @functools.wraps(method)
     def guarded(self, *args, **kwargs):
-        if not is_fitted(self):
+        if require_fit and not is_fitted(self):
             from .exceptions import not_fitted_error
             raise not_fitted_error(
                 f"This {type(self).__name__} instance is not fitted yet. Call 'fit' with "
                 f"appropriate arguments before using {name}.")
-        return method(self, *args, **kwargs)
+        if vars(self).get("_mojolearn_fitting"):
+            return method(self, *args, **kwargs)
+        check = _sk_validate.before_call(self, name, slots, args, kwargs)
+        if check is None:
+            return method(self, *args, **kwargs)
+        try:
+            return method(self, *args, **kwargs)
+        except Exception as err:
+            _sk_validate.reraise(self, check, err)
+            raise
 
-    guarded._mojolearn_needs_fit = True
+    guarded._mojolearn_needs_fit = require_fit
+    guarded._mojolearn_validates = True
     return guarded
 
 
@@ -204,7 +234,11 @@ def install_fit_tracking(cls):
         for name in _NEEDS_FIT:  # glue: unwraps the method names that need a fit
             method = getattr(cls, name, None)
             if getattr(method, "_mojolearn_needs_fit", False):  # guarded on a stateful base
-                setattr(cls, name, method.__wrapped__)
+                method = method.__wrapped__
+            if inspect.isfunction(method) and not getattr(method, "_mojolearn_validates", False):
+                method = _needs_fit(method, name, require_fit=False)  # validates X, needs no fit
+            if method is not None and method is not getattr(cls, name, None):
+                setattr(cls, name, method)
         return
     for name in _NEEDS_FIT:  # glue: wraps the method names that need a fit
         raw = inspect.getattr_static(cls, name, None)
@@ -213,6 +247,9 @@ def install_fit_tracking(cls):
                 setattr(cls, name, available_if(raw.check)(_needs_fit(raw.fn, name)))
             continue
         method = getattr(cls, name, None)
+        if (getattr(method, "_mojolearn_validates", False)
+                and not getattr(method, "_mojolearn_needs_fit", False)):
+            method = method.__wrapped__  # a stateless base's validate-only guard
         if inspect.isfunction(method) and not getattr(method, "_mojolearn_needs_fit", False):
             setattr(cls, name, _needs_fit(method, name))
 

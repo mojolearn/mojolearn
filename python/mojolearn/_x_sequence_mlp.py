@@ -87,13 +87,11 @@ class _BaseMLP(ParamsMixin):
             raise ValueError("learning_rate_init > 0, max_iter >= 1 and alpha >= 0 are required")
 
     def _X(self, X):
-        X = np.asarray(X)
-        if X.dtype == np.float64:
-            raise TypeError("float64 is refused; pass float32 (no float64 on the device)")
-        X = np.ascontiguousarray(X, dtype=np.float32)
-        if X.ndim != 2:
-            raise ValueError("X must be 2-D")
-        return X
+        # scikit-learn passes float64: it is cast to float32 once, natively
+        # (`as_f32_c`, one round-to-nearest-even per element), as every
+        # other estimator's input is; the view keeps the converted Array alive
+        from ._buffer import as_f32_c
+        return np.asarray(as_f32_c(X, ndim=2, name="X")[0])
 
     def _init(self, sizes, rng):
         coefs, intercepts = [], []
@@ -283,11 +281,10 @@ class MLPRegressor(RegressorScoreMixin, _BaseMLP):
 
     def fit(self, X, y):
         """Train on `X` (n_samples, n_features) float32 and targets `y`; returns self."""
-        y = np.asarray(y)
-        if y.dtype == np.float64:
-            raise TypeError("float64 is refused; pass float32")
+        from ._buffer import as_f32_c
+        y = np.asarray(as_f32_c(y, ndim=None, name="y")[0])  # float64 targets cast once, natively
         self._y_1d = y.ndim == 1
-        return self._fit(X, y.reshape(len(y), -1).astype(np.float32), 0)
+        return self._fit(X, np.ascontiguousarray(y.reshape(len(y), -1)), 0)
 
     def predict(self, X):
         """Predicted values, (n_samples,) for a 1-D training target, else (n_samples, n_outputs)."""
