@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_moe_tie_lane_respects_real_readonly_weight_setter():
     model_tree = ast.parse((ROOT / 'python/mojolearn/_x_sequence_moe.py').read_text())
     model_class = next(n for n in model_tree.body if isinstance(n, ast.ClassDef) and n.name == 'MoEBlock')
-    scope = dict(np=np, _WEIGHTS=('router', 'gate_up_proj', 'down_proj'))
+    scope = dict(np=np, _WEIGHTS=('router', 'gate_up_proj', 'down_proj'), is_seq_tensor=lambda v: False)
     exec(compile(ast.Module(body=[model_class], type_ignores=[]), 'actual-moe-model', 'exec'), scope)
     instances = []
 
@@ -25,9 +25,11 @@ def test_moe_tie_lane_respects_real_readonly_weight_setter():
             instances.append(self)
 
         def __call__(self, x):
-            self.router_logits_ = np.zeros((len(x), self.E), dtype=np.float32)
-            self.selected_experts_ = np.zeros((len(x), self.k), dtype=np.int64)
-            self.routing_weights_ = np.zeros((len(x), self.k), dtype=np.float32)
+            # forward keeps its routing outputs as [logits, picks, weights,
+            # int64 picks] behind the read-only properties (51fc53dfb)
+            object.__setattr__(self, '_routing', [np.zeros((len(x), self.E), dtype=np.float32),
+                                                  np.zeros((len(x), self.k), dtype=np.float32),
+                                                  np.zeros((len(x), self.k), dtype=np.float32), None])
             return np.zeros_like(x)
 
     tree = ast.parse((ROOT / 'tools/identity_lanes/sequence.py').read_text())
