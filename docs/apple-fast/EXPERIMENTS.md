@@ -2110,3 +2110,13 @@ A/B on main c8ef6c66d, same box, one run per arm, NV L40S nv2 / AMD MI325X, dige
 | define | algorithm / dataset | branch@sha | A/B tag | before -> after (ratio B/A) | verdict | reason |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_GEMM_FAST_RAGGED_K` | linalg.matmul fp32 FAST Apple (all FAST Apple `_fast_vendor_gemm`, `gemm_nt`, `gemm_nt_gram` callers) | lane/identical-gemm-ktail @ 42dfb8458 | bf16-vs-fp32fast-20261015/run3 (local M4, one run per arm) | 4096x4096x2500 1974.6 -> 97.7; 3000x5000x2500 1780.5 -> 86.1 | KEPT, FAST default (`_OFF`) | ragged k left MAX fast kernel; quality equal (rel RMS 9.0e-7/8.9e-7) |
+
+## FAST Apple quality fixes against the opponent (lane/quality-fix-apple-fast, 2026-10-15)
+
+Source: ~/mojolearn-evidence/quality-vs-opponent-20261015.md (M3 0.8.34 board WORSE rows). Both defines are default OFF and owe an M3 A/B (one run per arm; the M3 is the Apple FAST peer's). Quality is the board metric against FAST main (arm A) and the best opponent.
+
+| define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_IVF_FAST_STRIDED_COARSE` | ivf-sq taxi, istella; ivf-rabitq taxi, istella; ivf-pq istella; ivf taxi (x_ann) | lane/quality-fix-apple-fast @ e216389b9 | qfaf-ivfstride-* (owed) | owed | OPEN | ivf-sq taxi FAST recall@10 0.8333 vs faiss 0.8570 (IDENTICAL 0.9350): the FAST coarse quantizer (seeded uniform 256-rows-per-list sample, device k-means++ start) replaced by IDENTICAL's strided trainset and strided start (ivf_flat_index.mojo); watch ivf-rabitq taxi (FAST 0.1842 vs faiss 0.1263 today) |
+| `MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF` (existing rollback) | ivf-sq taxi (x_ann) | main @ 3843d4de0 | qfaf-ivfrandoff-* (owed) | owed | OPEN | the brief's _OFF A/B; IVF_FAST_SEED's k-means++ start is the default and wins over the random start (ivf_flat_build.mojo, INIT_ARRAY already set), so arm B should match arm A's digest; the second B arm adds `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` (k-means|| seeding) |
+| `MOJOLEARN_RF_FAST_QSAMPLE` | decision-tree-reg taxi, istella; bagging-reg taxi; stacking-reg taxi; dart-reg istella, taxi; random-forest-reg istella (speed) (rf) | lane/quality-fix-apple-fast @ e216389b9 | qfaf-qsample-* (owed) | owed | OPEN | split candidates from >= 65,536 sampled rows instead of cuML's 4 x max_n_bins (512 at 128 bins): decision-tree-reg taxi r2 0.8792 (FAST, 256 bins) vs scikit-learn 0.8915, dart-reg istella 0.5514 vs LightGBM 0.5647 (bins from up to 200,000 rows); speed cost is the larger segmented sort per forest (per member for DART) |
