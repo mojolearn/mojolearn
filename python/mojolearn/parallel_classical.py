@@ -217,6 +217,8 @@ def fit_coordinate_descent(estimator, X, y, *, devices=(0,)):
 def fit_svm(estimator, X, y, *, devices=(0,), sample_weight=None):
     """Distribute linear/RBF kernel rows, retaining the original SVC/SVR solver.
 
+    ``sample_weight`` (optional, one non-negative weight per row) scales each
+    row's ``C`` exactly as ``SVC.fit`` / ``SVR.fit`` do.
     Full data, working-set state and output kernel tile remain on the root.
     A one-row kernel operation has only one active device.
     """
@@ -225,11 +227,12 @@ def fit_svm(estimator, X, y, *, devices=(0,), sample_weight=None):
         raise TypeError('requires mojolearn.SVC or SVR')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel SVM requires IDENTICAL')
-    if sample_weight is not None:
-        raise NotImplementedError('SVC/SVR do not implement sample_weight')
     pool = DevicePool(devices, cooperative=True)
     try:
-        result = pool.map([('svm_fit', estimator, (X, y))])[0]
+        # sample_weight goes to the estimator's own fit, which checks it
+        # (scikit-learn's rules and wording, _sample_weight.check_sample_weight)
+        # and scales each row's C as SVC/SVR do on one device
+        result = pool.map([('svm_fit', estimator, (X, y, sample_weight))])[0]
     finally:
         pool.close()
     estimator.__dict__ = result.__dict__.copy()
