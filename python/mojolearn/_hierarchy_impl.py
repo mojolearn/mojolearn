@@ -18,7 +18,7 @@ whoever owns that file decides the public namespace.
 import sys
 
 from . import _backend, _expansion_cluster, _mojolearn_solver, _serialize
-from ._mode import ParamsMixin
+from ._mode import ParamsMixin, available_if
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, frombytes, zeros
 from .density import _check_queries
@@ -77,7 +77,8 @@ PAIRWISE_MAX_ROWS = 46340
 # on cuML's Boruvka route (`_mojolearn_solver.linkage_fit`); everything else
 # takes the x_cluster route (`x_cluster/agglo.mojo`, ENTRY_AGGLO).
 #
-# Defaults: connectivity 'pairwise' here; cuML's PYTHON default is 'knn'
+# Defaults: connectivity None (scikit-learn's spelling of the full dense graph,
+# normalized to 'pairwise'); cuML's PYTHON default is 'knn'
 # (`agglomerative.pyx:123`), their C++ default is pairwise (`linkage.hpp:43-44`)
 # and scikit-learn's dense tree is pairwise too. DEVIATION 881: the k-NN graph
 # arm is rung 2 and NOT IMPLEMENTED, so 'knn' is refused by name rather than
@@ -116,9 +117,8 @@ class AgglomerativeClustering(ParamsMixin):
     average and Ward linkages, connectivity matrices and per-merge
     distances. Input is a dense array, converted to float32.
 
-    Two defaults differ from scikit-learn's and change the result:
-    `linkage` is 'single' (scikit-learn: 'ward') and `connectivity` is
-    'pairwise', the full dense graph (scikit-learn's None). cuML's
+    One default differs from scikit-learn's and changes the result:
+    `linkage` is 'single' (scikit-learn: 'ward'). cuML's
     ``AgglomerativeClustering`` also defaults to single linkage, but to
     'knn' connectivity, which is not available here; pass
     ``connectivity='pairwise'`` explicitly when moving cuML code.
@@ -139,7 +139,7 @@ class AgglomerativeClustering(ParamsMixin):
         value, including a callable, raises NotImplementedError. Ward
         linkage requires 'euclidean' or 'l2'; 'cosine' rejects rows that are
         all zeros.
-    connectivity : 'pairwise', None, array-like, sparse matrix or callable, default 'pairwise'
+    connectivity : None, 'pairwise', array-like, sparse matrix or callable, default None
         'pairwise' and None both mean no constraint (the full dense graph).
         A matrix of shape (n_samples, n_samples), or a callable that returns
         one from `X`, restricts merges to its nonzero entries, as in
@@ -208,7 +208,7 @@ class AgglomerativeClustering(ParamsMixin):
     _BINDING = "_mojolearn_estimators"
 
     def __init__(self, n_clusters=2, *, metric="euclidean",
-                 connectivity="pairwise", linkage="single", c=15,
+                 connectivity=None, linkage="single", c=15,
                  memory=None, compute_full_tree="auto",
                  distance_threshold=None, compute_distances=False,
                  prediction_data=False):
@@ -563,6 +563,7 @@ class AgglomerativeClustering(ParamsMixin):
         """
         return self.fit(X).labels_
 
+    @available_if(lambda self: bool(self.prediction_data) or getattr(self, "_fit_X", None) is not None)
     def predict(self, X):
         """Label new rows with the cluster of their nearest training row.
 
@@ -574,9 +575,10 @@ class AgglomerativeClustering(ParamsMixin):
         cut into a cluster with a lower label, which happens only when
         `n_clusters` exceeds the number of distinct rows.
 
-        Only single linkage with the 'euclidean' or 'l2' metric can predict,
-        and only after a fit with ``prediction_data=True`` (or a model
-        loaded with `load`).
+        Only single linkage with the 'euclidean' or 'l2' metric can predict.
+        The method exists only with ``prediction_data=True`` (or on a model
+        loaded with `load`), so ``hasattr(model, "predict")`` is False
+        otherwise.
 
         Parameters
         ----------
