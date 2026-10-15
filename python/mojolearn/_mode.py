@@ -40,8 +40,10 @@ answer. See `_backend.load_set`'s header.
 
 import functools
 import inspect
+import sys
 
 from . import _backend
+from ._array import Array as _Array
 
 
 def _guard_cpu_training(method):
@@ -138,6 +140,12 @@ def _track_fit(method):
             else:
                 state.pop("_mojolearn_fitting", None)
         state["_mojolearn_fitted"] = True
+        # A fit leaves every per-instance cache slot its predict path uses
+        # in place, so predict and transform never add to `__dict__`
+        # (scikit-learn's check_dict_unchanged): see `_mojolearn_after_fit`.
+        after = getattr(self, "_mojolearn_after_fit", None)
+        if after is not None:
+            after()
         return out
 
     tracked._mojolearn_tracks_fit = True
@@ -176,7 +184,9 @@ def install_fit_tracking(cls):
     """Mark `cls` fitted after its fits and loaders; refuse its predict,
     transform and score methods before that (see `is_fitted`). A class with
     `_sklearn_requires_fit = False` (a stateless transformer) is not guarded.
+    Also installs the NumPy outputs (`install_public_outputs`).
     """
+    install_public_outputs(cls)
     for name in _FITS:  # glue: wraps the fit method names
         method = cls.__dict__.get(name)
         if inspect.isfunction(method):
@@ -192,12 +202,160 @@ def install_fit_tracking(cls):
                 setattr(cls, name, method.__wrapped__)
         return
     for name in _NEEDS_FIT:  # glue: wraps the method names that need a fit
+        raw = inspect.getattr_static(cls, name, None)
+        if isinstance(raw, available_if):
+            if not getattr(raw.fn, "_mojolearn_needs_fit", False):
+                setattr(cls, name, available_if(raw.check)(_needs_fit(raw.fn, name)))
+            continue
         method = getattr(cls, name, None)
         if inspect.isfunction(method) and not getattr(method, "_mojolearn_needs_fit", False):
             setattr(cls, name, _needs_fit(method, name))
 
 
-class SklearnTagsMixin:
+class available_if:
+    """A method that exists only when `check(self)` is true, as
+    scikit-learn's `sklearn.utils._available_if.available_if` does it:
+    `hasattr(est, name)` is False otherwise, so scikit-learn's checks and
+    meta-estimators skip a method this configuration does not have
+    (`SVC(probability=False).predict_proba`, `LocalOutlierFactor().predict`).
+    `check` returns a bool or raises AttributeError. scikit-learn is not
+    needed."""
+
+    def __init__(self, check):
+        self.check = check
+        self.fn = None
+
+    def __call__(self, fn):
+        self.fn = fn
+        functools.update_wrapper(self, fn)
+        return self
+
+    def __set_name__(self, owner, name):
+        self.attribute_name = name
+
+    def __get__(self, obj, owner=None):
+        if obj is None:
+            return self.fn
+        name = getattr(self, "attribute_name", self.fn.__name__)
+        try:
+            ok = self.check(obj)
+        except AttributeError as exc:
+            raise AttributeError(
+                f"This {type(obj).__name__!r} has no attribute {name!r}") from exc
+        if not ok:
+            raise AttributeError(f"This {type(obj).__name__!r} has no attribute {name!r}")
+        return self.fn.__get__(obj, owner)
+
+
+#: The public methods whose results scikit-learn users index, reduce and
+#: compare as NumPy arrays.
+_OUTPUTS = ("predict", "predict_proba", "predict_log_proba", "decision_function", "transform",
+            "fit_transform", "inverse_transform", "score_samples", "fit_predict", "kneighbors",
+            "sample")
+
+_PKG = __name__.rpartition(".")[0]
+_PKG_DOT = _PKG + "."
+
+
+#: The wrapper functions this module puts around estimator methods; their
+#: frames are skipped when looking for the real caller.
+_WRAPPER_CODES = frozenset(("public", "guarded", "tracked", "load"))
+
+
+def _caller_outside(frame):
+    """True when `frame` (skipping this module's own method wrappers)
+    belongs to code outside the package: the caller is a user or
+    scikit-learn, not another mojolearn method."""
+    while (frame is not None and frame.f_code.co_name in _WRAPPER_CODES
+           and frame.f_globals.get("__name__") == __name__):
+        frame = frame.f_back
+    if frame is None:
+        return True
+    mod = frame.f_globals.get("__name__") or ""
+    return mod != _PKG and not mod.startswith(_PKG_DOT)
+
+
+def _ndarray(value, np):
+    """`value` as a NumPy array when it is an `Array` (a zero-copy view of
+    the same memory, `Array.__array__`); a tuple's Array members likewise."""
+    if type(value) is _Array:
+        return value.__array__()
+    if type(value) is tuple:
+        return tuple(_ndarray(v, np) for v in value)  # glue: converts the members of a result tuple
+    return value
+
+
+def _public_result(est, name, out):
+    """A public method's result for a caller outside the package.
+
+    With NumPy loaded (it always is under scikit-learn), an `Array` result
+    becomes a `numpy.ndarray` view of the same memory, so the result
+    supports everything scikit-learn and its users do with one (fancy
+    indexing, `sum(axis=...)`, comparisons, `round`, `dtype.kind`). A
+    regressor's `predict` is float64, scikit-learn's dtype for regression
+    predictions. Without NumPy loaded the `Array` is returned unchanged
+    (the NumPy-free contract)."""
+    np = sys.modules.get("numpy")
+    if np is None:
+        return out
+    out = _ndarray(out, np)
+    if (name == "predict" and type(out) is np.ndarray and out.dtype.kind == "f"
+            and out.dtype.itemsize < 8 and getattr(est, "_estimator_type", None) == "regressor"):
+        out = out.astype(np.float64)
+    return out
+
+
+def _public_output(method, name):
+    @functools.wraps(method)
+    def public(self, *args, **kwargs):
+        out = method(self, *args, **kwargs)
+        if _caller_outside(sys._getframe(1)):
+            return _public_result(self, name, out)
+        return out
+
+    public._mojolearn_public_out = True
+    return public
+
+
+def install_public_outputs(cls):
+    """Give `cls`'s public result methods (`_OUTPUTS`) NumPy results for
+    callers outside the package (`_public_result`). Calls between the
+    library's own estimators keep the `Array`s their code is written for."""
+    for name in _OUTPUTS:  # glue: wraps the public result method names
+        raw = inspect.getattr_static(cls, name, None)
+        if isinstance(raw, available_if):
+            if not getattr(raw.fn, "_mojolearn_public_out", False):
+                setattr(cls, name, available_if(raw.check)(_public_output(raw.fn, name)))
+            continue
+        if inspect.isfunction(raw) and not getattr(raw, "_mojolearn_public_out", False):
+            setattr(cls, name, _public_output(raw, name))
+
+
+_object_getattribute = object.__getattribute__
+
+
+class PublicOutputsMixin:
+    """NumPy results for callers outside the package: the public result
+    methods (`install_public_outputs`) and the fitted attributes. A public
+    attribute ending in an underscore (`coef_`, `labels_`,
+    `cluster_centers_`) that holds an `Array` reads as a `numpy.ndarray`
+    view of the same memory when NumPy is loaded and the reader is not
+    mojolearn's own code; the instance keeps the `Array`."""
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        install_public_outputs(cls)
+
+    def __getattribute__(self, name):
+        value = _object_getattribute(self, name)
+        if type(value) is _Array and name[-1] == "_" and name[0] != "_":
+            np = sys.modules.get("numpy")
+            if np is not None and _caller_outside(sys._getframe(1)):
+                return value.__array__()
+        return value
+
+
+class SklearnTagsMixin(PublicOutputsMixin):
     """`__sklearn_tags__` for an estimator: see `sklearn_tags`. Subclasses
     get fit tracking and `NotFittedError` (see `install_fit_tracking`)."""
 
