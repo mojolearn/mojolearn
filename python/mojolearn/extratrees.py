@@ -602,13 +602,19 @@ class ExtraTreesClassifier(_ExtraTreesBase):
             from ._expansion_trees import _trees_weighted_rows
             weights = _trees_weighted_rows(sample_weight, self._cfg["class_weight"],
                                            self.classes_, codes, self)
-            if tree_start is not None:
-                raise NotImplementedError(
-                    "sample_weight and class_weight are not implemented for a"
-                    " tree-ID shard fit")
             binding = self._bind("_mojolearn_trees")
             if not callable(getattr(binding, "et_classifier_fit_weighted_export", None)):
                 raise RuntimeError("rebuild the trees binding for weighted ExtraTrees fits")
+            if tree_start is not None:
+                # lane sk-final: the weighted tree-ID shard
+                if not callable(getattr(binding, "et_classifier_fit_weighted_shard", None)):
+                    raise RuntimeError("rebuild the trees binding for weighted ExtraTrees shard fits")
+
+                def shard_fn(x, y, params):
+                    return binding.et_classifier_fit_weighted_shard(
+                        x, y, params, addr_ro(weights, name="sample_weight"), tree_start)
+                return self._fit_arrays(X, codes.astype("<f4"), self.n_classes_, shard_fn,
+                                        cfg=dict(self._cfg, class_weight=None))
             weighted = _forest_fit_function(binding, "et_classifier_fit_weighted")
             weighted_rm = _rowmajor_fit_function(binding, "et_classifier_fit_weighted")
 
@@ -833,7 +839,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         if max_features == 1.0 and not isinstance(max_features, int):
             self._cfg["max_features"] = None
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         """Fit the forest.
 
         Parameters
@@ -842,14 +848,17 @@ class ExtraTreesRegressor(_ExtraTreesBase):
             Training data, converted to float32.
         y : array-like of shape (n_samples,)
             Targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Per-row weights. Splits and leaf values use the weighted sums,
+            as in scikit-learn.
 
         Returns
         -------
         self
         """
-        return self._fit_with_tree_start(X, y)
+        return self._fit_with_tree_start(X, y, sample_weight=sample_weight)
 
-    def _fit_with_tree_start(self, X, y, tree_start=None):
+    def _fit_with_tree_start(self, X, y, tree_start=None, sample_weight=None):
         self._refresh_config()
         self._capture_fit_mode()
         ya, _ = as_f32_c(y, ndim=1, name="y")
@@ -868,6 +877,34 @@ class ExtraTreesRegressor(_ExtraTreesBase):
                     " -max() for a non-positive label sum, which would fit a stump"
                     " silently"
                 )
+        if sample_weight is not None:
+            # lane sk-final: scikit-learn's _check_sample_weight (its
+            # wording), then the weighted builder (`et_regressor_fit_weighted`):
+            # the weights are checked again, quantized and multiplied into
+            # the labels on the device.
+            from ._sample_weight import check_sample_weight
+            weights = check_sample_weight(sample_weight, len(ya))
+            binding = self._bind("_mojolearn_trees")
+            if not callable(getattr(binding, "et_regressor_fit_weighted_export", None)):
+                raise RuntimeError("rebuild the trees binding for weighted ExtraTrees fits")
+            if tree_start is not None:
+                if not callable(getattr(binding, "et_regressor_fit_weighted_shard", None)):
+                    raise RuntimeError("rebuild the trees binding for weighted ExtraTrees shard fits")
+
+                def shard_fn(x, y, params):
+                    return binding.et_regressor_fit_weighted_shard(
+                        x, y, params, addr_ro(weights, name="sample_weight"), tree_start)
+                return self._fit_arrays(X, ya, 0, shard_fn)
+            weighted = _forest_fit_function(binding, "et_regressor_fit_weighted")
+            weighted_rm = _rowmajor_fit_function(binding, "et_regressor_fit_weighted")
+
+            def fit_fn(x, y, params):
+                return weighted(x, y, params, addr_ro(weights, name="sample_weight"))
+            rowmajor_fn = None
+            if weighted_rm is not None:
+                def rowmajor_fn(x, y, params):
+                    return weighted_rm(x, y, params, addr_ro(weights, name="sample_weight"))
+            return self._fit_arrays(X, ya, 0, fit_fn, rowmajor_fn)
         if tree_start is not None:
             binding = self._bind('_mojolearn_trees')
             if not callable(getattr(binding, 'et_regressor_fit_shard', None)):

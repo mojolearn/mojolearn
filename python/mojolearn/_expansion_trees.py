@@ -550,17 +550,17 @@ class DecisionTreeRegressor(RandomForestRegressor):
         y : array-like of shape (n_samples,)
             Target values.
         sample_weight : array-like of shape (n_samples,), default=None
-            Per-row weights. Not accepted with ``splitter="random"``.
+            Per-row weights.
 
         Returns
         -------
         self
         """
         if self.splitter == "random":
-            if sample_weight is not None:
-                _refuse("splitter='random' with weights", "the ExtraTrees builder takes no row weights.")
+            # lane sk-final: the ExtraTrees builder's weighted regressor
             self._refresh_config()
-            return _dt_random_fit(self, ExtraTreesRegressor, X, y)
+            fit_params = {} if sample_weight is None else {"sample_weight": sample_weight}
+            return _dt_random_fit(self, ExtraTreesRegressor, X, y, fit_params)
         return self._fit_with_tree_start(X, y, sample_weight=sample_weight)
 
     def get_depth(self):
