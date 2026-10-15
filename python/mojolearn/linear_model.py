@@ -1407,6 +1407,28 @@ class LogisticRegression(NumericModeMixin):
     def __init__(self, *, penalty="l2", tol=1e-4, C=1.0, fit_intercept=True,
                  class_weight=None, max_iter=1000, linesearch_max_iter=50,
                  l1_ratio=None, solver="qn"):
+        # Stored verbatim (scikit-learn's convention); `_validate_params`
+        # checks them when `fit` runs.
+        self.penalty = penalty
+        self.tol = tol
+        self.C = C
+        self.fit_intercept = fit_intercept
+        self.class_weight = class_weight
+        self.max_iter = max_iter
+        self.linesearch_max_iter = linesearch_max_iter
+        self.l1_ratio = l1_ratio
+        self.solver = solver
+
+    # QN(...) defaults the Python door does not expose (class constants, so
+    # the instance carries only its constructor parameters)
+    lbfgs_memory = 5
+    penalty_normalized = True
+
+    def _validate_params(self):
+        """The constructor checks, run at the start of `fit`. Sets
+        `_l1_ratio`, the l1 ratio the solver reads."""
+        penalty, solver, class_weight, C = self.penalty, self.solver, self.class_weight, self.C
+        l1_ratio = self.l1_ratio
         if penalty not in ("l1", "l2", "elasticnet", None):
             raise ValueError(f"`penalty` {penalty!r} not supported.")
         if solver != "qn":
@@ -1420,17 +1442,10 @@ class LogisticRegression(NumericModeMixin):
             )
         if C <= 0:
             raise ValueError(f"C must be positive, got {C}")
-        self.penalty = penalty
-        self.tol = tol
-        self.C = C
-        self.fit_intercept = fit_intercept
-        self.class_weight = None
-        self.max_iter = max_iter
-        self.linesearch_max_iter = linesearch_max_iter
         # `logistic_regression.py:310-316`, copied including the two
         # messages: `l1_ratio` is REQUIRED for elasticnet and IGNORED
         # (set to None) for every other penalty.
-        self.l1_ratio = None
+        self._l1_ratio = None
         if penalty == "elasticnet":
             if l1_ratio is None:
                 raise ValueError(
@@ -1440,11 +1455,7 @@ class LogisticRegression(NumericModeMixin):
                 raise ValueError(
                     "l1_ratio value has to be between 0.0 and 1.0"
                 )
-            self.l1_ratio = l1_ratio
-        self.solver = solver
-        # QN(...) defaults the Python door does not expose
-        self.lbfgs_memory = 5
-        self.penalty_normalized = True
+            self._l1_ratio = l1_ratio
 
     def _get_qn_params(self):
         """`_get_qn_params`, logistic_regression.py:632-649, all four arms.
@@ -1460,7 +1471,7 @@ class LogisticRegression(NumericModeMixin):
         if self.penalty == "l2":
             return 0.0, 1.0 / self.C
         strength = 1.0 / self.C
-        return self.l1_ratio * strength, (1.0 - self.l1_ratio) * strength
+        return self._l1_ratio * strength, (1.0 - self._l1_ratio) * strength
 
     def fit(self, X, y, sample_weight=None):
         """Fit the classifier.
@@ -1480,6 +1491,7 @@ class LogisticRegression(NumericModeMixin):
         self : LogisticRegression
             The fitted estimator.
         """
+        self._validate_params()
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn LogisticRegression: sample_weight is not implemented "

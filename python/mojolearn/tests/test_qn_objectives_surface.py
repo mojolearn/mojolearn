@@ -68,8 +68,11 @@ def test_public_names():
     (lambda: QNRegressor(max_iter=0), ValueError, "max_iter"),
 ])
 def test_refused_by_name(make, exc, word):
+    # LinearSVC/LinearSVR check their parameters when fit runs (scikit-learn's
+    # convention), before any binding is touched; QNRegressor at construction.
+    X, yc, _ = _data(n=16)
     with pytest.raises(exc, match=word):
-        make()
+        make().fit(X, yc)
 
 
 def test_sample_weight_refused_by_name():
