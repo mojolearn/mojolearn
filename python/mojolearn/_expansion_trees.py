@@ -2731,6 +2731,15 @@ def _trees_splits(cv, X, y, n, codes=None, partition=False, native=None, n_class
     (`_trees_native_folds`; `codes` is then an int32 Array in
     [0, n_classes)), else None."""
     c = _trees_cv(cv)
+    # sk-edges: a y shorter than X made the device fold builder read past
+    # the codes buffer (CUDA_ERROR_ILLEGAL_ADDRESS, sticky for the whole
+    # process); scikit-learn's check_consistent_length refusal comes first.
+    n_x = getattr(X, "shape", None)
+    n_x = int(n_x[0]) if n_x is not None and len(n_x) else n
+    n_y = len(codes) if codes is not None else n
+    if len({int(n), n_x, int(n_y)}) != 1:  # glue: three row counts
+        raise ValueError("Found input variables with inconsistent numbers of samples: "
+                         f"[{n_x}, {int(n_y)}]")
     if isinstance(c, int):
         if native is None:
             raise ValueError("mojolearn: an int cv needs the estimator whose binding builds the folds")
