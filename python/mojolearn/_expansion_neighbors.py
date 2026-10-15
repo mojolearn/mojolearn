@@ -2207,7 +2207,11 @@ class _LabelPropagationBase(_XNeighbors):
         unlabeled = empty((n,), "<i4")
         a = _f32_scalar(1.0 - float(self.alpha)) if self._variant != "propagation" else 1.0
         if n and C:
-            self._op("p2m_lp_labels", [(codes, 0), (ld, 1), (ys, 1), (unlabeled, 1)], (n, C, skip), (a,))
+            # The binding reads every int as a size (>= 0), so "no unlabeled
+            # marker" is passed as a code no row carries (len(allc)), which
+            # the item treats exactly as skip -1: no row unlabeled, codes kept.
+            self._op("p2m_lp_labels", [(codes, 0), (ld, 1), (ys, 1), (unlabeled, 1)],
+                     (n, C, skip if skip >= 0 else len(allc)), (a,))
         if self._variant == "propagation":
             ys = None
         if self.kernel == "knn":
