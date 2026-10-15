@@ -514,13 +514,13 @@ _GP_FORMAT = "mojolearn-gp-1"
 # - alpha IS the Cholesky profile's jitter; there is no second jitter knob
 #   (DEVIATION 1751). Passed through UNCLAMPED so the Mojo refusals stay
 #   reachable: NaN, negative and +inf refused by name (DEVIATION 1768);
-#   under identical only +0.0 and 2**-20 are accepted (DEVIATION 1637).
+#   any other value is accepted in both modes (the identical two-value pin
+#   of DEVIATION 1637 was removed by lane sk-edges, 2026-10-15).
 # - DEVIATION 1772: the default alpha is 2**-20, not sklearn's 1e-10. (a)
 #   Every kernel matrix this lane builds has a unit diagonal, and in float32
 #   1.0 + 1e-10 rounds to exactly 1.0 (the gap above 1.0 is 2**-23), so
 #   sklearn's default ridge would be a bitwise no-op here, measured by
-#   `check_duplicate_inputs_need_the_ridge` (DEVIATION 1752). (b) Under
-#   identical the Cholesky profile accepts exactly +0.0 and 2**-20. 2**-20 is
+#   `check_duplicate_inputs_need_the_ridge` (DEVIATION 1752). (b) 2**-20 is
 #   the smallest float32 ridge on a unit diagonal that does anything and is
 #   `gaussian_process/estimator.mojo::gp_profile_alpha()`'s value.
 # - optimizer: 'fmin_l_bfgs_b' uses the identical gradient (DEVIATION 2880)
@@ -564,6 +564,10 @@ class GaussianProcessRegressor(NumericModeMixin):
     - The default ``optimizer`` is ``None``: the kernel you pass is used as
       is. Pass ``optimizer="fmin_l_bfgs_b"`` (scikit-learn's default) to fit
       the hyperparameters by maximizing the log marginal likelihood.
+    - Kernel matrices are factored in float32. When ``K + alpha * I`` is
+      not positive definite there and ``alpha`` is positive, ``fit`` warns
+      and refits with ``alpha`` ten times larger, until the factorization
+      succeeds or ``alpha`` reaches 1.0.
     - A failed Cholesky factorization does not raise. ``fit`` returns
       normally and records LAPACK's code in ``info_``; check that it is 0.
       A nonzero ``info_`` means this kernel and ridge do not describe the
@@ -583,9 +587,8 @@ class GaussianProcessRegressor(NumericModeMixin):
         including scikit-learn kernel objects, raise ``TypeError``.
     alpha : float, default 2**-20
         Value added to the diagonal of the training kernel matrix (a ridge).
-        NaN, negative and infinite values are refused at fit time. Under
-        ``numeric_mode="identical"`` only ``0.0`` and ``2**-20`` are
-        accepted. Not to be confused with the fitted ``alpha_``.
+        NaN, negative and infinite values are refused at fit time. Not to
+        be confused with the fitted ``alpha_``.
     optimizer : None or "fmin_l_bfgs_b", default None
         None fits the kernel as passed. ``"fmin_l_bfgs_b"`` maximizes the log
         marginal likelihood over the kernel's free hyperparameters (those
@@ -898,24 +901,45 @@ class GaussianProcessRegressor(NumericModeMixin):
         # this frame -- x, targets, kinds, kparams, ls_len, ls, l_out,
         # dual, scalars -- which is what keeps the addresses alive.
         ext = self._extension()
-        info = (ext.gpr_fit_ptr if _gpr_ptr(ext) else ext.gpr_fit)(
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
-            # x, y, kinds, kparams, ls_len, ls, l_out, dual_out, scalars_out
-            [
-                addr_ro(x, name="x"),
-                addr_ro(targets, name="targets"),
-                addr_ro(kinds, name="kinds"),
-                addr_ro(kparams, name="kparams"),
-                addr_ro(ls_len, name="ls_len"),
-                addr_ro(ls, name="ls"),
-                addr(l_out, name="l_out"),
-                addr(dual, name="dual"),
-                addr(scalars, name="scalars"),
-            ],
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
-            # n_train, n_features, n_nodes, n_ls, alpha
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._alpha],
-        )
+        fit_fn = ext.gpr_fit_ptr if _gpr_ptr(ext) else ext.gpr_fit
+        while True:
+            info = fit_fn(
+                # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
+                # x, y, kinds, kparams, ls_len, ls, l_out, dual_out, scalars_out
+                [
+                    addr_ro(x, name="x"),
+                    addr_ro(targets, name="targets"),
+                    addr_ro(kinds, name="kinds"),
+                    addr_ro(kparams, name="kparams"),
+                    addr_ro(ls_len, name="ls_len"),
+                    addr_ro(ls, name="ls"),
+                    addr(l_out, name="l_out"),
+                    addr(dual, name="dual"),
+                    addr(scalars, name="scalars"),
+                ],
+                # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
+                # n_train, n_features, n_nodes, n_ls, alpha
+                [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._alpha],
+            )
+            # A ridge too small for float32 (scikit-learn factors in float64,
+            # where its 1e-10 suffices): K + alpha*I is not positive definite
+            # here. A positive alpha is raised tenfold and the fit repeated
+            # until the factor exists or the ridge reaches the kernel's unit
+            # diagonal, with a warning naming the ridge used (control flow
+            # on the binding's status word; the factor is the binding's, so
+            # every vendor takes the same steps). alpha=0 asks for no ridge
+            # and keeps the failed fit's info_.
+            if int(info) == 0 or not self._alpha > 0.0 or self._alpha >= 1.0:
+                break
+            asked = self._alpha
+            self._alpha = min(asked * 10.0, 1.0)
+            import warnings
+            warnings.warn(
+                f"mojolearn GaussianProcessRegressor: K + alpha*I is not positive "
+                f"definite in float32 with alpha={asked:g}; refitting with "
+                f"alpha={self._alpha:g}. Pass a larger alpha to skip this step.",
+                RuntimeWarning,
+            )
         self.X_train_ = x
         self.y_train_ = targets
         self._y_train_mean = y_mean

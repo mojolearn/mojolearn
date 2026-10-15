@@ -305,39 +305,12 @@ def gp_validate_alpha(alpha: Float32) raises:
         )
     if alpha > Float32(3.4028234663852886e38):
         raise Error("gpr_fit_host: alpha is +inf; refused by name")
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var pinned = chol_jitter_pinned()
-        var ok = bitcast[DType.uint32](alpha) == UInt32(0) or bitcast[
-            DType.uint32
-        ](alpha) == bitcast[DType.uint32](pinned)
-        if not ok:
-            raise Error(
-                "gpr_fit_host: NUMERIC_IDENTICAL refuses the unpinned"
-                " alpha 0x"
-                + gp_hex32_bits(alpha)
-                + ". The ridge is part of profile "
-                + GP_PROFILE
-                + ", which CONTAINS mojolearn.identical.cholesky.fp32.v1,"
-                " and alpha IS that profile's jitter passed through"
-                " unchanged (DEVIATION 1751). There is no second jitter"
-                " knob to turn. The two pinned values are 0x00000000 (no"
-                " ridge) and 0x"
-                + gp_hex32_bits(pinned)
-                + " (2^-20).\n"
-                "  If you are implementing a scikit-learn script, its default"
-                " is alpha=1e-10 and on this column that value is a NO-OP:"
-                " every kernel matrix here has a unit diagonal, the"
-                " float32 gap above 1.0 is 2^-23 = 1.19e-7, and 1.0 +"
-                " 1e-10 rounds to exactly 1.0. So the default ridge adds"
-                " nothing at all in float32 and the factorization would"
-                " refuse at a pivot with no ridge having been applied."
-                " DEVIATION 1752.\n"
-                "  For a LARGER ridge than 2^-20, apply the pinned one"
-                " more than once and record how many times; to change the"
-                " value, that is a v2 of the Cholesky profile and not an"
-                " argument. To explore ridges freely, build NUMERIC_FAST"
-                " and drop the cross-vendor claim. DEVIATION 1637"
-            )
+    # IDENTICAL accepts any finite non-negative ridge (sk-edges, 2026-10-15;
+    # was DEVIATION 1637's two-value pin). The ridge is the caller's own,
+    # recorded parameter (scikit-learn's `alpha`), and adding it is one
+    # flush-to-zero float32 add per diagonal entry, the same word on every
+    # vendor, so any value keeps the cross-vendor identity. The pin made
+    # scikit-learn's estimator checks (alpha=0.01) and every user ridge fail.
 
 
 def gp_validate_data(

@@ -160,23 +160,12 @@ def chol_host_validate_jitter(jitter: Float32) raises:
     var big = bitcast[DType.float32](UInt32(0x7F800000))
     if jitter == big:
         raise Error("add_jitter: jitter is +inf; refused by name")
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var pinned = chol_host_jitter_pinned()
-        var bits = bitcast[DType.uint32](jitter)
-        if not (bits == UInt32(0) or bits == bitcast[DType.uint32](pinned)):
-            raise Error(
-                "add_jitter: NUMERIC_IDENTICAL refuses the unpinned jitter"
-                " 0x"
-                + chol_host_hex32_bits(jitter)
-                + ". The ridge is part of profile "
-                + CHOL_HOST_PROFILE
-                + " and not a caller's free choice. The two pinned values are"
-                " 0x00000000 (no ridge) and 0x"
-                + chol_host_hex32_bits(pinned)
-                + " (2^-20). DEVIATION 1637. For a larger ridge, apply the"
-                " pinned one more than once and record how many times; to"
-                " change the value, that is a v2."
-            )
+    # IDENTICAL accepts any finite non-negative ridge (sk-edges, 2026-10-15;
+    # was DEVIATION 1637's two-value pin). The ridge is the caller's own,
+    # recorded parameter (scikit-learn's `alpha`), and adding it is one
+    # flush-to-zero float32 add per diagonal entry, the same word on every
+    # vendor, so any value keeps the cross-vendor identity. The pin made
+    # scikit-learn's estimator checks (alpha=0.01) and every user ridge fail.
 
 
 def chol_host_validate_matrix(a: List[Float32], n: Int, what: String) raises:

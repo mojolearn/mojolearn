@@ -682,8 +682,7 @@ def check_gp_refusals() raises:
         )
     n_refused += 1
 
-    # 5. A negative alpha, a NaN alpha, and under IDENTICAL an unpinned one
-    #    -- including scikit-learn's own default.
+    # 5. A negative alpha, a NaN alpha and +inf.
     var bad_alpha: List[Float32] = [
         Float32(-1.0),
         Float32(-0.001),
@@ -703,21 +702,9 @@ def check_gp_refusals() raises:
                 + " was accepted"
             )
         n_refused += 1
-    comptime if IDENTICAL:
-        # scikit-learn's DEFAULT, refused by name under IDENTICAL.
-        var refused_default = False
-        try:
-            _ = gpr_fit_host(x, n, d, y, spec, Float32(1e-10))
-        except:
-            refused_default = True
-        if not refused_default:
-            raise Error(
-                "check_gp_refusals FAILED: alpha=1e-10, scikit-learn's"
-                " default, was accepted under NUMERIC_IDENTICAL. It is"
-                " neither pinned value and it is additionally a no-op in"
-                " float32. DEVIATIONS 1751 and 1752"
-            )
-        n_refused += 1
+    # Any other finite non-negative alpha is accepted in both modes
+    # (sk-edges 2026-10-15: the IDENTICAL two-value pin is gone; the ridge is
+    # one ftz add per diagonal entry, the same word on every vendor).
     # Both PINNED ridges must be ACCEPTED.
     _ = gpr_fit_host(x, n, d, y, spec, Float32(0.0))
     _ = gpr_fit_host(x, n, d, y, spec, gp_profile_alpha())

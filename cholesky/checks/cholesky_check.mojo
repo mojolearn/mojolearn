@@ -431,16 +431,9 @@ def check_cholesky_refusals() raises:
     # The two pinned values are always accepted.
     chol_validate_jitter(Float32(0.0))
     chol_validate_jitter(chol_jitter_pinned())
-    comptime if IDENTICAL:
-        raised = False
-        try:
-            chol_validate_jitter(Float32(1e-6))
-        except e:
-            raised = True
-            n_refused += 1
-            print("  refused  unpinned jitter 1e-6: " + String(e))
-        if not raised:
-            _expect_raise("an unpinned jitter under IDENTICAL")
+    # Any finite non-negative ridge is accepted in both modes (one ftz add
+    # per diagonal entry, the same word on every vendor).
+    chol_validate_jitter(Float32(1e-6))
 
     # (5) the NB hint. DEVIATION 1630. Under IDENTICAL a hint that is not the
     # pinned value raises; under FAST it is honored, and BOTH sides are

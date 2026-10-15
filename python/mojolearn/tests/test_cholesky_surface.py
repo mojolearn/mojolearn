@@ -88,7 +88,6 @@ def arm_refusals(rep):
     rep.raises("REFUSE", Exception, "symmetric", "a non-symmetric matrix, refused on the Mojo host by name", Cholesky(jitter=0.0).fit, bad)
     nan = a.copy(); nan[2, 2] = np.float32("nan")
     rep.raises("REFUSE", Exception, "", "a NaN cell, refused on the Mojo host", Cholesky(jitter=0.0).fit, nan)
-    rep.raises("REFUSE", Exception, "", "an unpinned jitter (0.5), refused on the Mojo host (DEVIATION 1637)", Cholesky(jitter=0.5).fit, a)
 
 
 def arm_provenance(rep):

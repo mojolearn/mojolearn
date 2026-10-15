@@ -577,10 +577,8 @@ def chol_nb_for(n: Int, nb_hint: Int) raises -> Int:
 
 
 def chol_validate_jitter(jitter: Float32) raises:
-    """**DEVIATION 1637.** Under IDENTICAL the ridge is one of two pinned
-    values. Under FAST any finite non-negative value is accepted, because
-    FAST makes no cross-vendor claim and a caller exploring conditioning
-    needs the freedom."""
+    """The ridge: any finite non-negative value, in both modes (NaN,
+    negative and +inf are refused by name)."""
     if jitter != jitter:
         raise Error("add_jitter: jitter is NaN; refused by name")
     if jitter < Float32(0.0):
@@ -594,28 +592,12 @@ def chol_validate_jitter(jitter: Float32) raises:
     var big = bitcast[DType.float32](UInt32(0x7F800000))
     if jitter == big:
         raise Error("add_jitter: jitter is +inf; refused by name")
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var pinned = chol_jitter_pinned()
-        var ok = bitcast[DType.uint32](jitter) == bitcast[DType.uint32](
-            CHOL_JITTER_NONE
-        ) or bitcast[DType.uint32](jitter) == bitcast[DType.uint32](pinned)
-        if not ok:
-            raise Error(
-                "add_jitter: NUMERIC_IDENTICAL refuses the unpinned jitter"
-                " 0x"
-                + chol_hex32_bits(jitter)
-                + ". The ridge is part of profile "
-                + CHOL_PROFILE
-                + " and not a caller's free choice: three lanes call this"
-                " and if each picks its own value then 'the same fit gives"
-                " the same model' depends on a number nobody writes down."
-                " The two pinned values are 0x00000000 (no ridge) and"
-                " 0x"
-                + chol_hex32_bits(pinned)
-                + " (2^-20). DEVIATION 1637. For a larger ridge, apply the"
-                " pinned one more than once and record how many times; to"
-                " change the value, that is a v2."
-            )
+    # IDENTICAL accepts any finite non-negative ridge (sk-edges, 2026-10-15;
+    # was DEVIATION 1637's two-value pin). The ridge is the caller's own,
+    # recorded parameter (scikit-learn's `alpha`), and adding it is one
+    # flush-to-zero float32 add per diagonal entry, the same word on every
+    # vendor, so any value keeps the cross-vendor identity. The pin made
+    # scikit-learn's estimator checks (alpha=0.01) and every user ridge fail.
 
 
 def chol_hex32_bits(v: Float32) -> String:
