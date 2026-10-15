@@ -33,8 +33,10 @@ def test_engine_routes_and_revalidates(cls, monkeypatch):
     model.inference_engine = 'bad'
     with pytest.raises(ValueError, match='inference_engine'):
         model._prediction_function('predict')
+    # scikit-learn's convention: the constructor stores the value and the
+    # fit-time checks refuse it.
     with pytest.raises(ValueError, match='inference_engine'):
-        cls(inference_engine=False)
+        cls(inference_engine=False)._validate_params()
     model.inference_engine = 'parallel_groves'
     with pytest.raises(RuntimeError, match='rebuild'):
         model._prediction_function('absent')

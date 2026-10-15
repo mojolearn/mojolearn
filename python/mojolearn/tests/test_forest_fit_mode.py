@@ -79,6 +79,9 @@ def test_invalid_direct_mode_refused_at_call(cls, mode, boundary):
 def test_score_captured_mode_and_equivalent_spelling(cls, monkeypatch, boundary):
     model = cls(numeric_mode=' IDENTICAL ')
     model._capture_fit_mode()
+    # score refuses an unfitted instance; this one stands for a completed fit
+    # (its predict is faked below).
+    vars(model)['_mojolearn_fitted'] = True
     model.numeric_mode = None
     boundary[0][0] = 'fast'
     monkeypatch.setattr(model, 'predict', lambda X: np.array([0, 1]))
