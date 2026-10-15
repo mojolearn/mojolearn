@@ -55,8 +55,8 @@ WHAT IS HONORED AND WHAT IS REFUSED, one line per parameter:
                                     previous fit's latent values, so a second
                                     fit would depend on the first
     copy_X_train          refused   False: X always crosses to float32 memory
-    random_state          refused   anything but None; only the refused
-                                    optimizer restarts draw random numbers
+    random_state          accepted  unused: only the refused optimizer
+                                    restarts draw random numbers
     multi_class           honored   'one_vs_rest'; 'one_vs_one' is refused BY
                                     NAME (not implemented, and it has no
                                     predict_proba in the reference either)
@@ -213,8 +213,8 @@ class GaussianProcessClassifier(NumericModeMixin):
         Only False is accepted (``NotImplementedError`` otherwise).
     copy_X_train : bool, default True
         Only True is accepted: X is always copied to float32 memory.
-    random_state : None, default None
-        Only None is accepted; without an optimizer nothing is random.
+    random_state : int, RandomState instance or None, default None
+        Accepted for compatibility; nothing in the fit is random.
     multi_class : "one_vs_rest", default "one_vs_rest"
         ``"one_vs_one"`` raises ``NotImplementedError``; any other value
         raises ``ValueError``.
@@ -345,12 +345,9 @@ class GaussianProcessClassifier(NumericModeMixin):
                 f"{_NAME}: copy_X_train=False is refused; X always crosses to "
                 "float32 C-order memory, so there is no reference to keep"
             )
-        if random_state is not None:
-            raise NotImplementedError(
-                f"{_NAME}: random_state is refused; only the optimizer's "
-                "restarts draw random numbers in the reference, and the "
-                "optimizer is refused"
-            )
+        # random_state is accepted and unused: in the reference only the
+        # optimizer's restarts draw random numbers, and those are refused
+        # (n_restarts_optimizer=0), so it never changes a fit there either
         if multi_class == "one_vs_one":
             raise NotImplementedError(
                 f"{_NAME}: multi_class='one_vs_one' is refused BY NAME; it is "

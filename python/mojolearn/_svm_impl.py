@@ -617,8 +617,7 @@ class SVC(NumericModeMixin):
     affect training. There is no `shrinking` parameter. Every parameter is
     keyword-only. A parameter that would be ignored is refused rather than
     accepted: `degree` with any kernel but 'poly', `coef0` with any kernel
-    but 'poly' or 'sigmoid', `random_state` without `probability=True`,
-    and a truthy `verbose` or any `output_type` all raise
+    but 'poly' or 'sigmoid', and a truthy `verbose` or any `output_type` all raise
     `NotImplementedError`.
 
     Parameters
@@ -661,7 +660,8 @@ class SVC(NumericModeMixin):
         Only None is accepted; results are mojolearn Arrays.
     random_state : int or None, default None
         With `probability=True`, the seed of the cross-validation fold
-        shuffle (None means 0); an int in [0, 2**64). Refused otherwise.
+        shuffle (None means 0); an int in [0, 2**64). Unused when
+        `probability` is False.
     class_weight : dict, 'balanced' or None, default None
         Per-class weights; row i's penalty becomes
         `C * class_weight[y_i] * sample_weight_i`.
@@ -929,13 +929,11 @@ class SVC(NumericModeMixin):
                 "selector; this package returns mojolearn Arrays"
             )
         probability = bool(probability)
-        if random_state is not None and not probability:
-            raise NotImplementedError(
-                "mojolearn SVC: random_state is refused without "
-                "probability=True; the C-SVC solver and its one-vs-one "
-                "multiclass draw no random numbers, and scikit-learn reads it "
-                "only for probability's cross-validation folds"
-            )
+        if not probability:
+            # scikit-learn accepts random_state always and reads it only for
+            # probability's cross-validation folds; the C-SVC solver draws no
+            # random numbers, so without probability it is accepted and unused
+            random_state = None
         if random_state is not None and (
                 isinstance(random_state, bool) or not isinstance(random_state, numbers.Integral)
                 or not 0 <= int(random_state) < 2 ** 64):
