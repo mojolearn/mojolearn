@@ -1,0 +1,34 @@
+{
+  "seed": 82471,
+  "cases": [
+    {
+      "m": 256,
+      "n": 384,
+      "k": 320,
+      "path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/local-medium/input-256-384-320.npz",
+      "sha256": "d8dd6d639a2d1055fbc4bf975257c6591a62b3b6f073aae69efd99eb4b74f465",
+      "bytes": 1983460
+    },
+    {
+      "m": 768,
+      "n": 1024,
+      "k": 640,
+      "path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/local-medium/input-768-1024-640.npz",
+      "sha256": "94f9da56991165eb9014bc4ef886ff9e863761e1250c6608f2c25c818f67951d",
+      "bytes": 14877668
+    },
+    {
+      "m": 769,
+      "n": 1025,
+      "k": 641,
+      "path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/local-medium/input-769-1025-641.npz",
+      "sha256": "72e24fc6b2fe46c6f087623d3c3c12dd25eefde0daf0c59cb834c6128b25a19c",
+      "bytes": 14912504
+    }
+  ],
+  "shapes_reason": "small screening, medium rectangular workload and neighboring tail dimensions; no dispatch changes",
+  "input": "prepacked BF16 uint16 host buffers",
+  "accumulation": "float32",
+  "output": "float32 host array",
+  "scope": "local preliminary operation screening; no training/default-promotion/full-board claim"
+}

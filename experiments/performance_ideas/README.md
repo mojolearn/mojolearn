@@ -11,6 +11,11 @@ The [consolidated A/B experiment index](../AB_EXPERIMENT_INDEX.md) lists all
 114 registered cards with their files, plus existing IDENTICAL recipes,
 historical Apple FAST records and other A/B drivers.
 
+The [Apple FAST BF16 public-operation screen](../apple_fast_bf16_20261015/README.md)
+retains a native candidate, a selectable local runner, and three-shape Apple M4
+results. The candidate stays off: medium cases improved modestly, the small case
+regressed, and full-workload/default-promotion evidence remains pending.
+
 The shared catalog also registers the 54 source-only
 [Apple FAST classical candidates](../apple_fast_classical_20261006/README.md)
 as `AFCL-L01..L14`, `AFCL-G01..G14`, `AFCL-T01..T12` and `AFCL-P01..P14`.

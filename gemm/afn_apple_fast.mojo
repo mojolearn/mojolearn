@@ -109,6 +109,14 @@ comptime AFN_GEMM_SPLITK = AFN_GEMM_ALL or (
 comptime AFN_GEMM_TILESHAPE = AFN_GEMM_ALL or (
     AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_TILESHAPE"]()
 )
+# Default remains OFF. Apple M4 local screening at 6cec6320d (2026-10-15),
+# experiments/apple_fast_bf16_20261015/result_summary.json: whole-operation
+# BF16 host -> consumed FP32 host, 5 scored samples + 1 excluded warmup.
+# Versus shipped 0.8.45 IDENTICAL, medium/neighbor cases took 13.9%/8.6% less
+# time; small took 7.2% more. All 3 arms/3 cases passed the FP64 error bound;
+# native tests: 22 passed, no skips, plus 35 cold one-hot probes. Shape-dependent
+# preliminary operation screening, not full-workload/default-promotion evidence;
+# no cross-vendor identity claim. Other builds and estimator coverage pending.
 comptime AFN_GEMM_BF16_MMA = AFN_GEMM_ALL or AFN_GEMM2_ON or (
     AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_BF16_MMA"]()
 )
