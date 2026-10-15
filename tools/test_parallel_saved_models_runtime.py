@@ -5,6 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from needs_built_package import require_built_package
+require_built_package()
 import identity_break as identity
 import mojolearn as ml
 from mojolearn import _backend

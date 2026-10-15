@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from needs_built_package import require_built_package
+require_built_package()
 from parallel_cv_witness import compare_records, read_records
 
 

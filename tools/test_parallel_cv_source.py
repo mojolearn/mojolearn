@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from needs_built_package import require_built_package
+require_built_package()
 from parallel_cross_val_check import source_identity
 from mojolearn._verify_parallel_cv import PROFILE_FILES
 

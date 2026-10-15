@@ -1,6 +1,8 @@
 """Installed CV entry point and complete receipt failure contracts; no GPU claims."""
 import copy
 import pytest
+from needs_built_package import require_built_package
+require_built_package()
 from mojolearn import _verify_parallel_cv as cv
 from mojolearn._parallel_cv_witness import score_with_witness
 from test_parallel_cv_witness import records
