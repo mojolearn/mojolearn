@@ -910,6 +910,8 @@ class PoissonRegressor(_GLMBase):
     >>> model = mojolearn.PoissonRegressor(alpha=0.01).fit(X, y)
     """
     _power = 1.0
+    # y >= 0 (scikit-learn's positive_only target tag)
+    _sklearn_target_tags = {"positive_only": True}
 
     def __init__(self, *, alpha=1.0, fit_intercept=True, solver="lbfgs", max_iter=100, tol=1e-4,
                  warm_start=False, verbose=0):
@@ -966,6 +968,8 @@ class GammaRegressor(_GLMBase):
     >>> model = mojolearn.GammaRegressor(alpha=0.01).fit(X, y)
     """
     _power = 2.0
+    # y > 0 (scikit-learn's positive_only target tag)
+    _sklearn_target_tags = {"positive_only": True}
 
     def __init__(self, *, alpha=1.0, fit_intercept=True, solver="lbfgs", max_iter=100, tol=1e-4,
                  warm_start=False, verbose=0):
@@ -1037,6 +1041,14 @@ class TweedieRegressor(_GLMBase):
 
     def _power_value(self):
         return float(self.power)
+
+    def _sklearn_instance_target_tags(self):
+        # power > 0 needs y >= 0 (power >= 1) or y > 0 (power >= 2), as
+        # scikit-learn's TweedieRegressor tags it; power 0 takes any y
+        try:
+            return {"positive_only": float(self.power) > 0}
+        except (TypeError, ValueError):
+            return {}
 
     def _link_code(self):
         p = float(self.power)

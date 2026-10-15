@@ -72,6 +72,8 @@ def sklearn_tags(est):
       matching scikit-learn tag fields (allow_nan, positive_only,
       one_d_array, ...), set where the estimator's contract differs from
       the defaults.
+    - `_sklearn_instance_target_tags()`: target tag overrides that depend
+      on the instance's parameters.
     - `_sklearn_requires_fit = False` for a stateless transformer.
     """
     from sklearn.utils import (ClassifierTags, InputTags, RegressorTags,  # glue: sklearn tag protocol, imported only when sklearn asks
@@ -94,6 +96,11 @@ def sklearn_tags(est):
         setattr(tags.input_tags, name, value)
     for name, value in getattr(cls, "_sklearn_target_tags", {}).items():  # glue: sklearn tag field overrides by name
         setattr(tags.target_tags, name, value)
+    # target tags that depend on a parameter (TweedieRegressor's power)
+    own = getattr(est, "_sklearn_instance_target_tags", None)
+    if callable(own):
+        for name, value in own().items():  # glue: sklearn tag field overrides by name
+            setattr(tags.target_tags, name, value)
     return tags
 
 
