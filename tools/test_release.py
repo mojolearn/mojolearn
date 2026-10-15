@@ -316,16 +316,36 @@ class RunTests(unittest.TestCase):
         self.assertEqual(r.go(), 0)
         self.assertEqual(calls, [])
 
-    def test_dry_run_plans_every_step_and_writes_nothing(self):
+    def dry_run(self, *extra):
         # The identity cache lives under the evidence root; the dry run must
         # write nothing under the state directory.
         env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._t.name) / "evidence"),
                    MOJOLEARN_AMD_PROVIDER="do")   # no DigitalOcean probe from a test
         out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run",
-                              "--state-dir", str(self.state)], capture_output=True, text=True, timeout=600, env=env)
+                              "--state-dir", str(self.state), *extra],
+                             capture_output=True, text=True, timeout=600, env=env)
         self.assertEqual(out.returncode, 0, out.stderr)
         for step in release.Release.STEPS:
             self.assertIn("-- " + step, out.stdout)
+        self.assertFalse(self.state.exists())
+        return out
+
+    def test_dry_run_without_gpu_smoke_skips_every_gpu_column(self):
+        # Andrew 2026-10-13 (8109d122d): identity and behavior are checked before merge;
+        # by default a release builds, checks artifact integrity and publishes, and every
+        # gpu-column-* step is SKIPPED: nothing rented, no lq.
+        out = self.dry_run()
+        gpu = out.stdout.split("-- gpu-column-nvidia", 1)[1].split("-- publish-nvidia", 1)[0]
+        columns = [step for step in release.Release.STEPS if step.startswith("gpu-column-")]
+        self.assertTrue(columns)
+        self.assertEqual(gpu.count(release.Release.NO_GPU_SKIP), len(columns))
+        self.assertNotIn("would launch", gpu)
+        self.assertNotIn("release_lq_smoke.py", gpu)
+        self.assertNotIn("--rent", gpu)
+
+    def test_dry_run_plans_every_step_and_writes_nothing(self):
+        # --gpu-smoke restores the GPU wheel smokes (8109d122d); this is that route's plan.
+        out = self.dry_run("--gpu-smoke")
         # the decision table, in full, and a leg command for every leg it launches
         self.assertIn("== binding reuse plan for", out.stdout)
         self.assertIn("legs to launch:", out.stdout)
