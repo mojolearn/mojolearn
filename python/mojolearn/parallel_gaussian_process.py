@@ -7,6 +7,8 @@ not a distributed factorization of a single binary covariance matrix.
 """
 __all__ = ['fit_gaussian_process_classifier', 'predict_gaussian_process_classifier']
 
+import copy
+
 from ._parallel_pool import DevicePool
 from ._array import Array
 from ._buffer import as_f32_c
@@ -20,7 +22,10 @@ def _validate(estimator):
         raise TypeError('requires mojolearn.GaussianProcessClassifier')
     if (getattr(estimator, 'numeric_mode', None) or _backend.default_mode()) != 'identical':
         raise ValueError('parallel GPC requires IDENTICAL numeric mode')
-    estimator._validate_params()
+    # Every constructor check `fit` runs, on a shallow copy: `_validate_params`
+    # writes the resolved `_kernel` and iteration cap, and the caller's
+    # estimator must not change until the whole fit has succeeded.
+    copy.copy(estimator)._validate_params()
 
 
 def _fresh(estimator):
