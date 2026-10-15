@@ -296,3 +296,20 @@ def test_stopped_campaign_accepts_actual_structured_failed_exit(tmp_path):
     assert result['campaigns'][0]['controller_exit_evidence']['exit_status'] == 1
     V.write(path, dict(exit_code=1, started=time.time()-2, finished=time.time()))
     assert not V.boundary_still_held(result)
+
+
+def test_unreadable_known_nginx_service_is_recorded_but_never_recorded_worker(tmp_path):
+    process = tmp_path / '86'; process.mkdir()
+    (process / 'cmdline').write_bytes(b'nginx: worker process\0')
+    (process / 'status').write_text('Name:\tnginx\nUid:\t65534\t65534\t65534\t65534\n')
+    assert V.unreadable_environment_process(process, [])['uid'] == 65534
+    with pytest.raises(ValueError, match='recorded worker environment unreadable'):
+        V.unreadable_environment_process(process, [86])
+
+
+def test_unknown_unreadable_process_still_blocks(tmp_path):
+    process = tmp_path / '87'; process.mkdir()
+    (process / 'cmdline').write_bytes(b'python benchmark.py\0')
+    (process / 'status').write_text('Name:\tpython\nUid:\t0\t0\t0\t0\n')
+    with pytest.raises(ValueError, match='potential worker environment unreadable'):
+        V.unreadable_environment_process(process, [])

@@ -81,6 +81,20 @@ def read_controller_exit(path):
                 sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw))
 
 
+def unreadable_environment_process(process, recorded_pids):
+    """Only the observed unprivileged nginx service may lack environ access."""
+    required(int(process.name) not in recorded_pids, 'recorded worker environment unreadable: ' + process.name)
+    # Fail closed when cmdline/status are also unreadable or unknown. A root
+    # benchmark worker is never excused merely because environ denied access.
+    command = (process / 'cmdline').read_bytes().replace(b'\0', b' ').strip()
+    status = dict(line.split(':', 1) for line in (process / 'status').read_text().splitlines() if ':' in line)
+    uids = status.get('Uid', '').split()
+    required(command == b'nginx: worker process' and status.get('Name', '').strip() == 'nginx' and
+             uids == ['65534'] * 4, 'potential worker environment unreadable: ' + process.name)
+    return dict(pid=int(process.name), command=command.decode(), name='nginx', uid=65534,
+                reason='known unprivileged container nginx worker; no recorded measurement PID')
+
+
 def check_boundary(ack_path, vendor, seconds, proc_root=Path('/proc')):
     ack = read(ack_path)
     required(ack.get('authorized_by') == 'root' and ack.get('vendor') == vendor,
@@ -146,7 +160,7 @@ def check_boundary(ack_path, vendor, seconds, proc_root=Path('/proc')):
                               failure_evidence=failure_evidence, controller_exit_evidence=exit_evidence))
     # Retain only the relevant marker, never unrelated /proc environment secrets.
     markers = {(b'MOJOLEARN_BOARD_SESSION=' + item['session'].encode()) for item in sessions}
-    workers = []
+    workers, unreadable_nonworkers = [], []
     for process in proc_root.iterdir():
         if not process.name.isdigit():
             continue
@@ -158,10 +172,13 @@ def check_boundary(ack_path, vendor, seconds, proc_root=Path('/proc')):
                 zombie = stat.exists() and stat.read_text().rsplit(')', 1)[1].lstrip().startswith('Z ')
                 if not zombie:
                     workers.append(int(process.name))
+        except PermissionError:
+            unreadable_nonworkers.append(unreadable_environment_process(process, recorded_pids))
         except (FileNotFoundError, ProcessLookupError):
             pass
     required(not workers, 'measurement workers still active: ' + str(workers))
-    return dict(acknowledgement=ack, campaigns=campaigns, sessions=sessions, checked_epoch=time.time())
+    return dict(acknowledgement=ack, campaigns=campaigns, sessions=sessions,
+                unreadable_nonworkers=unreadable_nonworkers, checked_epoch=time.time())
 
 
 def boundary_still_held(boundary):
