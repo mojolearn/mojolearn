@@ -1669,11 +1669,11 @@ def train(
                 " grow_policy=" + grow_policy_name(policy) + " is refused"
                 " (the reference registers it, querywise_non_symmetric.cpp:5-14)"
             )
-        if use_pointwise_searcher:
-            raise Error(
-                "loss='" + loss + "' with use_pointwise_searcher is not"
-                " implemented here; the greedy subsets searcher only"
-            )
+        # FAIRNESS FIX (2026-10-13 audit): querywise.cpp registers
+        # PairLogit/YetiRank with CatBoost's pointwise trainer. Plain
+        # DocParallel uses TDocParallelObliviousTreeSearcher. Its native
+        # grouped-target path is wired in fit_with_test; the categorical,
+        # held-out and permutation constraints below still apply.
         for f in range(len(cat_features)):  # small-loop(cat_features: per-feature option flags): option validation, reads no data
             if cat_features[f]:
                 raise Error(

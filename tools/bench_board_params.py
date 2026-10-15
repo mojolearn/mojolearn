@@ -1411,6 +1411,35 @@ _R7_CATBOOST_LANES = frozenset({"gbdt-symmetric", "gbdt-symmetric-1000", "gbdt-m
 _R7_PLAIN_LOSSES = ("Logloss", "MultiClass", "RMSE")
 
 
+def _semantic_querywise_pointwise(lane, param, arm, ours, theirs, library):
+    """Map the explicitly selected GPU ranking searcher, never its old false route."""
+    # FAIRNESS FIX (2026-10-13 audit, completed 2026-10-15): CatBoost v1.2.10
+    # cuda/train_lib/querywise.cpp includes train_template_pointwise.h. Plain
+    # DocParallel instantiates TDocParallelObliviousTree with its pointwise
+    # searcher. Native f63ef223 implements its querywise statistics; this is
+    # not an alias for our previous greedy-subsets algorithm. Keep CPU,
+    # FeatureParallel, unsupported leaf methods and other losses refused.
+    loss = {"gbdt-rank-pairlogit": "PairLogit", "gbdt-rank-yetirank": "YetiRank"}.get(lane)
+    if loss is None or library != "catboost" or arm != "catboost-gpu":
+        return None
+    if not (ours.get("loss") == theirs.get("loss") == loss and
+            ours.get("grow_policy") == theirs.get("grow_policy") == "SymmetricTree" and
+            ours.get("boosting_type") == theirs.get("boosting_type") == "Plain" and
+            ours.get("leaf_estimation_method") == theirs.get("leaf_estimation_method") and
+            ours.get("leaf_estimation_method") in ("Newton", "Gradient") and
+            "cat_features" in ours and ours["cat_features"] is None and
+            theirs.get("cat_features") is None and
+            ours.get("use_pointwise_searcher") is True and
+            theirs.get("data_partition") == "DocParallel"):
+        return None
+    if (param == "use_pointwise_searcher" and param not in theirs) or (
+            param == "data_partition" and param not in ours):
+        return ("the same GPU querywise oblivious searcher: native grouped-target pointwise "
+                "search and CatBoost Plain DocParallel TDocParallelObliviousTreeSearcher; "
+                "loss and leaf estimator match explicitly")
+    return None
+
+
 def _semantic_r7(lane, param, arm, ours, theirs, library):
     """smoke-fixes (2026-10-14) sub-lane r7: trees/gbdt-symmetric, gbdt-symmetric-1000,
     gbdt-multiclass, gbdt-ordered (CatBoost 1.2.10 GPU) and trees/rf (cuML 26.08), absent API
@@ -1762,7 +1791,7 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     apply only to the named recipe, library and resolved settings.
     """
     # smoke-fixes (2026-10-14): the per-sub-lane source-reviewed mappings, each value-conditional and lane-named
-    for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_r7, _semantic_r8, _semantic_r11, _semantic_r15, _semantic_r18):
+    for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_querywise_pointwise, _semantic_r7, _semantic_r8, _semantic_r11, _semantic_r15, _semantic_r18):
         why = _mapping(lane, param, arm, ours, theirs, library)
         if why:
             return why

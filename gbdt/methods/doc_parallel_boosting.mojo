@@ -2320,6 +2320,58 @@ def walk_leaf_values(
     return out^
 
 
+
+def _launch_querywise_pointwise_target(
+    ctx: DeviceContext,
+    objective: Int,
+    second_order: Bool,
+    mut query: Optional[QuerywiseTargetBuffers],
+    mut pairs: Optional[PairwiseTargetBuffers],
+    mut yeti: Optional[YetiRankTargetBuffers],
+    mut cursor: DeviceBuffer[DType.float32],
+    yeti_seed: UInt64,
+    mut stats: DeviceBuffer[DType.float32],
+    mut value_partials: DeviceBuffer[DType.float32],
+    mut magnitude_partials: DeviceBuffer[DType.float32],
+    compute_magnitudes: Bool,
+) raises:
+    # FAIRNESS FIX (2026-10-13 audit): the doc-parallel searcher's
+    # ComputeWeakTarget calls GradientAtZero for Cosine/L2 and NewtonAtZero
+    # for Newton scores (CatBoost 1.2.10, oblivious_tree_doc_parallel_
+    # structure_searcher.cpp:179-185). Querywise StochasticDer, used by the
+    # OTHER searcher, reverses that flag. Do not dispatch through it here.
+    # The two planes are [weight-or-Hessian, weighted gradient], in original
+    # document order. Query/explicit-pair state stays fit-owned and is also
+    # passed to the grouped leaf estimator after the structure is grown.
+    if objective == OBJECTIVE_QUERY_RMSE and query.__bool__():
+        # QueryRMSE's Hessian equals its row weight in either score mode.
+        launch_query_rmse_with[False](
+            ctx, query.value(), cursor, False, stats, value_partials, True,
+            magnitude_partials, compute_magnitudes,
+        )
+    elif objective == OBJECTIVE_PAIR_LOGIT and pairs.__bool__():
+        if second_order:
+            launch_pair_logit_with[False, True](
+                ctx, pairs.value(), cursor, False, stats, value_partials,
+                True, magnitude_partials, compute_magnitudes,
+            )
+        else:
+            launch_pair_logit_with[False, False](
+                ctx, pairs.value(), cursor, False, stats, value_partials,
+                True, magnitude_partials, compute_magnitudes,
+            )
+    elif objective == OBJECTIVE_YETI_RANK and yeti.__bool__():
+        # YetiRank GradientAt delegates to NewtonAt. Its sampled pair
+        # weights occupy plane zero for every score function; one seed is
+        # consumed for this derivative call, not once per plane.
+        launch_yeti_rank_with[False](
+            ctx, yeti.value(), cursor, False, yeti_seed, stats,
+            value_partials, True, magnitude_partials, compute_magnitudes,
+        )
+    else:
+        raise Error("the pointwise querywise target is missing its grouped state")
+
+
 def fit_with_test(
     mut model: TAdditiveModel,
     ctx: DeviceContext,
@@ -2767,15 +2819,15 @@ def fit_with_test(
     # ---- the QUERYWISE target (QueryRMSE) ----
     # `TQuerywiseTargetsImpl` (`targets/querywise_targets_impl.h`) over the
     # doc-parallel grouping (`gpu_data/samples_grouping_gpu.h`). This
-    # implementation carries it on the SymmetricTree greedy searcher at one
+    # implementation carries it on either SymmetricTree searcher at one
     # permutation with no held-out set; every other arm refuses it by name.
     var is_querywise = objective == OBJECTIVE_QUERY_RMSE
     var query_buffers = Optional[QuerywiseTargetBuffers]()
     if is_querywise:
         var has_test_rows = test.__bool__() and test.value().n_rows > 0
-        if non_symmetric or use_pointwise_searcher or perm_count > 1 or has_test_rows:
+        if non_symmetric or perm_count > 1 or has_test_rows:
             raise Error(
-                "QueryRMSE is implemented for the SymmetricTree greedy"
+                "QueryRMSE is implemented for a SymmetricTree"
                 " searcher at one permutation with no eval set; this fit asked"
                 " for another arm"
             )
@@ -2793,9 +2845,9 @@ def fit_with_test(
     var loss_norm = Float64(n_rows)
     if is_pair_logit:
         var has_test_rows = test.__bool__() and test.value().n_rows > 0
-        if non_symmetric or use_pointwise_searcher or perm_count > 1 or has_test_rows:
+        if non_symmetric or perm_count > 1 or has_test_rows:
             raise Error(
-                "PairLogit is implemented for the SymmetricTree greedy"
+                "PairLogit is implemented for a SymmetricTree"
                 " searcher at one permutation with no eval set; this fit asked"
                 " for another arm"
             )
@@ -2845,9 +2897,9 @@ def fit_with_test(
     var yeti_rand = TRandom(random_seed ^ UInt64(0x5945544952414E4B))
     if is_yeti_rank:
         var has_test_rows = test.__bool__() and test.value().n_rows > 0
-        if non_symmetric or use_pointwise_searcher or perm_count > 1 or has_test_rows:
+        if non_symmetric or perm_count > 1 or has_test_rows:
             raise Error(
-                "YetiRank is implemented for the SymmetricTree greedy"
+                "YetiRank is implemented for a SymmetricTree"
                 " searcher at one permutation with no eval set; this fit asked"
                 " for another arm"
             )
@@ -2857,6 +2909,21 @@ def fit_with_test(
                 10, Float32(0.85),
             )
         )
+    # The pointwise searcher here returns a structure, then the native
+    # grouped oracle estimates its leaves. CatBoost Simple instead retains
+    # the BOOTSTRAPPED search-stat leaves; routing it through the oracle
+    # would silently change the algorithm. Keep that new combination
+    # explicitly unavailable until those search leaves are carried through.
+    if use_pointwise_searcher and (is_querywise or is_pair_logit or is_yeti_rank):
+        if (
+            leaf_estimation_method != LEAF_ESTIMATION_NEWTON
+            and leaf_estimation_method != LEAF_ESTIMATION_GRADIENT
+        ):
+            raise Error(
+                "querywise use_pointwise_searcher requires Newton or Gradient"
+                " leaf estimation; Simple search-stat leaves and Exact are"
+                " not implemented on this arm"
+            )
     if not (is_querywise or is_pair_logit or is_yeti_rank) and (
         len(group_sizes) > 0 or len(pair_winners) > 0
     ):
@@ -3223,6 +3290,18 @@ def fit_with_test(
                 lcur, n_rows, row_index, False,
                 fv_part, True,
                 stats, n_rows,
+                mag_part, mags_in_mse,
+            )
+        elif use_pointwise_searcher and (is_querywise or is_pair_logit or is_yeti_rank):
+            # Complete grouped derivatives before bootstrap. The existing
+            # pointwise noise reduction below intentionally sees these
+            # unbootstrapped planes, as CatBoost ComputeWeakTarget does.
+            var search_yeti_seed = UInt64(0)
+            if is_yeti_rank:
+                search_yeti_seed = yeti_rand.next_uniform_l()
+            _launch_querywise_pointwise_target(
+                ctx, objective, second_order, query_buffers, pair_buffers,
+                yeti_buffers, lcur, search_yeti_seed, stats, fv_part,
                 mag_part, mags_in_mse,
             )
         elif is_querywise:

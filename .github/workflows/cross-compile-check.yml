@@ -43,6 +43,15 @@ on:
         description: "comma list of tiers (default: every shipped tier)"
         required: false
         default: ""
+      only:
+        description: "optional comma list of changed binding names; blank keeps the existing scope"
+        required: false
+        default: ""
+      keep_artifacts:
+        description: "retain raw Linux diagnostic binaries, source, full compiler logs and runtime closure; never publish"
+        required: false
+        default: false
+        type: boolean
       defines:
         description: "integration only: space separated NAME[=V] switch defines added to the identical tier"
         required: false
@@ -88,10 +97,11 @@ jobs:
         env:
           IN_ARCHS: ${{ inputs.archs }}
           IN_TIERS: ${{ inputs.tiers }}
+          IN_ONLY: ${{ inputs.only }}
           REF_SHA: ${{ steps.refsha.outputs.sha }}
         run: |
           set -eu
-          python3 tools/cross_compile_check.py --ref "$REF_SHA" --archs "$IN_ARCHS" ${IN_TIERS:+--tiers "$IN_TIERS"} --list-json plan.json
+          python3 tools/cross_compile_check.py --ref "$REF_SHA" --archs "$IN_ARCHS" ${IN_TIERS:+--tiers "$IN_TIERS"} ${IN_ONLY:+--only "$IN_ONLY"} --list-json plan.json
           echo "count=$(python3 -c 'import json; print(json.load(open("plan.json"))["count"])')" >> "$GITHUB_OUTPUT"
           echo "matrix=$(python3 -c 'import json; d=json.load(open("plan.json")); print(json.dumps(dict(include=d["include"])))')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -112,7 +122,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.count != '0'
     name: ${{ matrix.name }} ${{ matrix.tier }} ${{ matrix.arch }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.keep_artifacts && 'ubuntu-22.04' || 'ubuntu-latest' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -121,6 +131,15 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ needs.plan.outputs.commit_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      # Retention tooling may be newer than the frozen numerical source.
+      # Keep it separate: the source checkout stays at commit_sha.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: inputs.keep_artifacts
+        with:
+          ref: ${{ github.sha }}
+          path: .xcc-tooling
           fetch-depth: 1
           persist-credentials: false
       - name: Fetch the diff base
@@ -148,23 +167,40 @@ jobs:
           TIER: ${{ matrix.tier }}
           ARCH: ${{ matrix.arch }}
           IN_TIMEOUT: ${{ inputs.timeout }}
+          KEEP_ARTIFACTS: ${{ inputs.keep_artifacts }}
           MOJOLEARN_XCC_EXTRA_DEFINES: ${{ inputs.defines }}
         run: |
           set -u
+          set +e  # preserve the compiler/controller status before failing the step
           mkdir -p out
-          pixi run mojo --version
-          /usr/bin/time -v -o out/time.txt python3 tools/cross_compile_check.py --ref "$REF_SHA" \
-            --only "$NAME" --tiers "$TIER" --archs "$ARCH" --timeout "${IN_TIMEOUT:-1500}" --json out/result.json
+          pixi run mojo --version > out/compiler-version.log 2>&1
+          compiler_rc=$?
+          printf '%s\n' "$compiler_rc" > out/compiler-version.exit
+          [[ "$compiler_rc" = 0 ]] || exit "$compiler_rc"
+          { uname -a; pixi --version; gcc --version; ld --version; ldd --version; } > out/toolchain.log 2>&1
+          script=tools/cross_compile_check.py
+          retain_args=()
+          if [[ "$KEEP_ARTIFACTS" = true ]]; then
+            script=.xcc-tooling/tools/cross_compile_check.py
+            retain_args=(--source-root "$GITHUB_WORKSPACE" --keep-artifacts out/artifacts)
+          fi
+          /usr/bin/time -v -o out/time.txt pixi run python "$script" --ref "$REF_SHA" \
+            --only "$NAME" --tiers "$TIER" --archs "$ARCH" --timeout "${IN_TIMEOUT:-1500}" --json out/result.json \
+            "${retain_args[@]}" > out/controller.log 2>&1
           rc=$?
+          printf '%s\n' "$rc" > out/controller.exit
+          tail -n 12 out/controller.log
           grep -E "Maximum resident|Elapsed" out/time.txt || true
           df -h / | tail -1
-          exit $rc
+          exit "$rc"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: xcc-${{ matrix.key }}
           path: out/
           if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
 
   summary:
     needs: [plan, compile]

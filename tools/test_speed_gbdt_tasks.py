@@ -428,3 +428,19 @@ def test_prebinned_input_is_one_block_for_both_arms_of_the_xgboost_pairing():
         xn = x.copy()
         xn[0, 0] = np.nan
         spec.prebinned_data("gbdt-lossguide", spec.Data("toy", xn, xt, y, d.y_test, "binary"), cfg)
+
+
+@pytest.mark.parametrize('lane', ['gbdt-rank-pairlogit', 'gbdt-rank-yetirank'])
+def test_querywise_recipe_explicitly_selects_supported_pointwise_searcher(lane):
+    cfg = spec.lane_config(lane, 'shipped')
+    assert cfg['use_pointwise_searcher'] is True
+    assert cfg['data_partition'] == 'DocParallel'
+    assert cfg['leaf_estimation_method'] == 'Newton'
+    assert cfg['random_strength'] == 1.0
+    assert cfg['boosting_type'] == 'Plain'
+    gpu = spec.catboost_tree_params(cfg, 'GPU')
+    assert gpu['data_partition'] == 'DocParallel'
+    assert 'data_partition' not in spec.catboost_tree_params(cfg, 'CPU')
+    # This repair changes only the searcher, not the existing workload.
+    assert (cfg['n_estimators'], cfg['max_depth']) == (100, 6)
+    assert 'border_build_max_samples' not in cfg

@@ -20,7 +20,11 @@ ON GITHUB, BY HAND. .github/workflows/cross-compile-check.yml runs the
 same selection (--list-json, one source of truth) and then one standard
 runner per binding x tier x arch (--only/--tiers/--archs), in parallel;
 --summarize merges their result files into one verdict table. The local
-task is unchanged.
+task is unchanged. Opt-in --keep-artifacts DIR is a Linux diagnostic route:
+it runs the existing binding build script with one compiler worker and the
+portable host baseline, and retains complete compiler logs, source bytes,
+exit status, the native binary and its resolved runtime closure. It does
+not install, publish, or claim GPU/identity/release qualification.
 
 WHY. 0.8.19's `fast` svm binding never finished compiling for NVPTX or AMDGPU:
 every Linux leg sat on it for more than 33 minutes and was killed by its build
@@ -56,6 +60,10 @@ Exit status is 0 only when every job PASSes; a selection that cannot be read
 widens to "build everything".
 """
 import argparse
+import hashlib
+import platform
+import re
+import tarfile
 import json
 import os
 import shutil
@@ -168,12 +176,28 @@ def group_cpu_seconds(pgid):
 
 
 def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_seconds, clock=time.monotonic,
-            sleep=time.sleep):
+            sleep=time.sleep, retain=None, env=None):
     """(verdict, seconds, log_tail). The compiler runs in its own process
     group so a kill takes every child with it."""
-    log = tempfile.TemporaryFile(mode="w+")
+    retain = Path(retain) if retain else None
+    if retain:
+        retain.mkdir(parents=True, exist_ok=True)
+    log = (retain / "build.log").open("w+") if retain else tempfile.TemporaryFile(mode="w+")
+    record = dict(command=list(map(str, cmd)), cwd=str(cwd), complete=False,
+                  exit_status=None, verdict="STARTED", output=str(out))
+    if retain:
+        (retain / "execution.json").write_text(json.dumps(record, indent=2) + "\n")
     t0 = clock()
-    p = subprocess.Popen(cmd, cwd=str(cwd), stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    try:
+        p = subprocess.Popen(cmd, cwd=str(cwd), stdout=log, stderr=subprocess.STDOUT,
+                             start_new_session=True, env=env)
+    except OSError as exc:
+        log.write(str(exc) + "\n")
+        log.close()
+        if retain:
+            record.update(verdict="FAIL", error=str(exc))
+            (retain / "execution.json").write_text(json.dumps(record, indent=2) + "\n")
+        raise
     last_cpu, last_move = -1.0, t0
     verdict = None
     while verdict is None:
@@ -200,6 +224,10 @@ def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_se
             pass
         p.wait()
     secs = clock() - t0
+    if retain:
+        record.update(complete=True, exit_status=p.returncode, verdict=verdict,
+                      seconds=round(secs, 3), output_exists=Path(out).is_file())
+        (retain / "execution.json").write_text(json.dumps(record, indent=2) + "\n")
     log.seek(0)
     text = log.read()
     log.close()
@@ -209,6 +237,91 @@ def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_se
     if verdict == "STALLED":
         tail = [f"compiler CPU flat at {max(last_cpu, 0):.0f} s for {stall:.0f} s"]
     return verdict, secs, tail
+
+
+
+def file_sha(path):
+    h = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def retain_sources(root, script, directory):
+    """Capture actual imported source bytes before invoking the compiler."""
+    import bincache
+    directory.mkdir(parents=True, exist_ok=True)
+    identity, files = bincache.source_digest(root, str(root / "bindings" / script), [])
+    records = []
+    with tarfile.open(directory / "source.tar.gz", "w:gz", dereference=True) as archive:
+        for rel in sorted(files):
+            path = root / rel
+            archive.add(path, arcname=rel, recursive=False)
+            records.append(dict(path=rel, sha256=file_sha(path), bytes=path.stat().st_size))
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True,
+                          text=True, check=True).stdout.strip()
+    diff = subprocess.run(["git", "diff", "--binary", "HEAD", "--", *sorted(files)],
+                          cwd=root, capture_output=True, check=True).stdout
+    (directory / "source-working-tree.patch").write_bytes(diff)
+    record = dict(source_commit=head, source_working_tree_changed=bool(diff), closure=identity, files=records,
+                  archive_sha256=file_sha(directory / "source.tar.gz"),
+                  tooling_path=str(Path(__file__).resolve()), tooling_sha256=file_sha(__file__))
+    (directory / "source.json").write_text(json.dumps(record, indent=2) + "\n")
+    shutil.copy2(__file__, directory / "cross_compile_check.py")
+    return record
+
+
+def retained_build_command(root, script, name, tier, arch):
+    """Use the existing release binding script, without installing/publishing."""
+    column = column_of(arch).lower()
+    overrides = dict(MOJOLEARN_NUMERIC_MODE=tier, MOJOLEARN_TARGET_COLUMN=column,
+                     MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_COMPILE_JOBS="1",
+                     MOJOLEARN_LINUX_CPU="x86-64-v3", MOJOLEARN_SKIP_BUILD_GATE="1")
+    if tier == "identical":
+        overrides["MOJOLEARN_BUILD_DEFINES"] = ",".join(
+            os.environ.get("MOJOLEARN_XCC_EXTRA_DEFINES", "").split())
+    output = root / "python/mojolearn" / ("" if tier == "fast" else tier) / (name + ".so")
+    return ["bash", "-x", str(root / "bindings" / script)], output, overrides
+
+
+def retain_linkage(binary, root, directory):
+    """Keep linkage diagnostics and actual resolved runtime bytes for transfer."""
+    env = os.environ.copy()
+    envlib = root / ".pixi/envs/default/lib"
+    env["LD_LIBRARY_PATH"] = str(envlib) + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+    reports = {}
+    for name, cmd in (("dynamic", ["readelf", "-d", str(binary)]),
+                      ("symbol-versions", ["readelf", "--version-info", str(binary)]),
+                      ("ldd", ["ldd", str(binary)])):
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=60)
+        text = result.stdout + result.stderr
+        (directory / (name + ".log")).write_text(text)
+        reports[name] = dict(command=cmd, exit_status=result.returncode)
+        if name == "ldd":
+            runtime = directory / "runtime"
+            runtime.mkdir(exist_ok=True)
+            libraries = []
+            for line in text.splitlines():
+                match = re.search(r"(?:=>\s+|^\s*)(/\S+)\s+\(", line)
+                if match:
+                    load_path = Path(match.group(1))
+                    source = load_path.resolve()
+                    # Keep the loader-visible basename, even when it was a
+                    # symlink to a versioned library in the compiler env.
+                    dest = runtime / load_path.name
+                    if dest.exists() and file_sha(dest) != file_sha(source):
+                        raise RuntimeError("runtime basename collision: " + str(source))
+                    shutil.copy2(source, dest)
+                    libraries.append(dict(path=str(source), retained=str(dest.relative_to(directory)),
+                                          sha256=file_sha(dest), bytes=dest.stat().st_size))
+            reports[name].update(runtime=libraries, unresolved=[line.strip() for line in text.splitlines()
+                                                                if "not found" in line],
+                                 lookup_library_path=env["LD_LIBRARY_PATH"])
+    (directory / "linkage.json").write_text(json.dumps(reports, indent=2) + "\n")
+    if reports["ldd"]["exit_status"] != 0 or reports["ldd"]["unresolved"]:
+        raise RuntimeError("runtime closure incomplete; see linkage.json and ldd.log")
+    return reports
 
 
 # ---------------------------------------------------------------- GitHub matrix
@@ -298,6 +411,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--ref", default="", help="compare against this commit or tag (default: the last v* tag)")
     ap.add_argument("--head", default="HEAD", help="the commit whose changes select (the WORKING TREE is compiled)")
+    ap.add_argument("--source-root", default="", help="frozen source checkout when tooling is checked out separately")
+    ap.add_argument("--keep-artifacts", default="", help="Linux only: retain full logs, source, native binaries and runtime bytes here; use the binding's build script")
     ap.add_argument("--archs", default=",".join(DEFAULT_ARCHS))
     ap.add_argument("--tiers", default="", help="comma list; default every tier the Linux lists ship")
     ap.add_argument("--only", default="", help="comma list of binding names (still must be changed)")
@@ -320,13 +435,20 @@ def main(argv=None):
 
     import bincache
     import release_reuse
+    root = Path(a.source_root).resolve() if a.source_root else ROOT
+    keep = Path(a.keep_artifacts).resolve() if a.keep_artifacts else None
+    if keep and a.mojo != "pixi run mojo":
+        raise SystemExit("--keep-artifacts uses the canonical binding build script; --mojo override is not supported")
+    if keep and sys.platform != "linux" and not a.dry_run and not a.list_json:
+        raise SystemExit("--keep-artifacts executes Linux binding build scripts; use a Linux CPU runner")
     ev = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expanduser("~/mojolearn-evidence")))
     cache = Path(a.cache) if a.cache else ev / "release" / "identities"
-    ref = a.ref or last_tag()
+    ref = a.ref or last_tag(root)
     print(f"cross-compile-check: {ref} .. {a.head} (working tree compiled), archs {a.archs}, "
           f"timeout {a.timeout:.0f} s, stall {a.stall:.0f} s")
-    scripts = changed_scripts(release_reuse.facts_for_commit(ref, cache),
-                              release_reuse.facts_for_commit(a.head, cache))
+    fact_args = dict(root=root) if a.source_root else {}
+    scripts = changed_scripts(release_reuse.facts_for_commit(ref, cache, **fact_args),
+                              release_reuse.facts_for_commit(a.head, cache, **fact_args))
     rows = linux_rows()
     shipped = {s for _n, s, _t in rows}
     for script, why in sorted(scripts.items()):
@@ -342,7 +464,7 @@ def main(argv=None):
         return 0
     plans = {}
     for script in sorted({j[1] for j in jobs}):
-        plans[script] = bincache.script_plan(ROOT, str(ROOT / "bindings" / script), [])
+        plans[script] = bincache.script_plan(root, str(root / "bindings" / script), [])
     unreadable = [s for s, pl in plans.items() if pl is None or len(pl[0]) != 1]
     if unreadable:
         for s in unreadable:
@@ -360,18 +482,56 @@ def main(argv=None):
         for name, script, tier, arch in jobs:
             roots, incs, _shells = plans[script]
             out = scratch / f"{name}-{tier}-{arch}.so"
-            cmd = compile_cmd(mojo, roots[0].relative_to(ROOT),
-                              [os.path.relpath(i, ROOT) for i in incs], tier, arch, out)
+            cmd = compile_cmd(mojo, roots[0].relative_to(root),
+                              [os.path.relpath(i, root) for i in incs], tier, arch, out)
+            retained = keep / job_key(name, tier, arch) if keep else None
+            overrides = {}
+            if keep:
+                cmd, out, overrides = retained_build_command(root, script, name, tier, arch)
             if a.dry_run:
                 print(f"  would    {name:34s} {tier:13s} {arch:7s} {' '.join(cmd)}")
+                if keep:
+                    print("           environment " + json.dumps(overrides, sort_keys=True))
                 continue
-            verdict, secs, tail = run_one(cmd, out, a.timeout, a.stall)
+            if retained:
+                if retained.exists():
+                    raise SystemExit(f"retention directory already exists; preserve it and choose a new path: {retained}")
+                source = retain_sources(root, script, retained)
+                # An old successful output must never satisfy a failed build.
+                if out.exists():
+                    raise SystemExit(f"refusing to overwrite existing binding: {out}; use a fresh frozen source checkout")
+                (retained / "build-config.json").write_text(json.dumps(dict(
+                    name=name, tier=tier, arch=arch, environment=overrides,
+                    inherited_build_environment={key: os.environ[key] for key in (
+                        "MODULAR_HOME", "PIXI_PROJECT_MANIFEST", "MOJOLEARN_EXTRA_DEFINES",
+                        "MOJOLEARN_MOJO_BUILD_FLAGS", "MOJOLEARN_BUILD_EXTRA_DEFINES") if key in os.environ},
+                    source_commit=source["source_commit"], platform=platform.platform(),
+                    qualification="raw diagnostic candidate; not a release or GPU pass"), indent=2) + "\n")
+            child_env = dict(os.environ, **overrides) if retained else None
+            verdict, secs, tail = run_one(cmd, out, a.timeout, a.stall, cwd=root,
+                                          retain=retained, env=child_env)
+            if retained and out.is_file():
+                binary = retained / (name + ".so")
+                shutil.copy2(out, binary)
+                (retained / "binary.json").write_text(json.dumps(dict(
+                    source=str(out), retained=binary.name, bytes=binary.stat().st_size,
+                    sha256=file_sha(binary)), indent=2) + "\n")
+                try:
+                    retain_linkage(binary, root, retained)
+                except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+                    (retained / "retention-error.txt").write_text(str(exc) + "\n")
+                    verdict = "RETENTION_FAILED"
+                    tail = [str(exc)]
             print(f"  {verdict:8s} {name:34s} {tier:13s} {arch:7s} {secs:7.1f} s", flush=True)
             for ln in tail:
                 print(f"           {ln[:240]}")
-            results.append(dict(name=name, script=script, tier=tier, arch=arch, verdict=verdict,
-                                seconds=round(secs, 1), detail=tail))
-            out.unlink(missing_ok=True)
+            result = dict(name=name, script=script, tier=tier, arch=arch, verdict=verdict,
+                          seconds=round(secs, 1), detail=tail)
+            if retained:
+                result["evidence"] = str(retained)
+            results.append(result)
+            if not retained:
+                out.unlink(missing_ok=True)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
     if a.dry_run:
