@@ -1728,9 +1728,12 @@ def _node_feature_score_body[
     row_w: MutPointer[Int32, MutAnyOrigin],
 ):
     """Steps 2, 3 and 4 of DEVIATION 137: skip, draw, and accumulate.
-    WEIGHTED (classification only, lane sk-kernels): each row adds its
+    WEIGHTED classification (lane sk-kernels): each row adds its
     fixed-point weight `row_w[row]` to its class accumulators in place of 1
-    (`n_left` / `n_total` stay row counts); unweighted, `row_w` is unread."""
+    (`n_left` / `n_total` stay row counts). WEIGHTED regression (lane
+    sk-final): `labels_q` holds the quantized `w * y` and each cell keeps
+    TWO accumulators, slot 0 the sum of `w * y` units and slot 1 the sum of
+    `row_w` units (`n_acc_in` is 2). Unweighted, `row_w` is unread."""
     var wb = Int(block_idx.x)
     var fslot = Int(block_idx.y)
     comptime if ROW_MAJOR:
@@ -1882,6 +1885,12 @@ def _node_feature_score_body[
                     priv_total[unsafe_offset=0] += q
                 if goes_left:
                     priv_left[unsafe_offset=0] += q
+                comptime if WEIGHTED:
+                    # lane sk-final: the weight units, slot 1
+                    if counts_total:
+                        priv_total[unsafe_offset=1] += wq
+                    if goes_left:
+                        priv_left[unsafe_offset=1] += wq
 
         if goes_left:
             n_left += 1
@@ -2030,6 +2039,62 @@ def node_feature_score_weighted_kernel[
     `row_w[row]` is the row's fixed-point weight (`DeviceDataset.d_weights`),
     added to its class accumulators in place of 1."""
     _node_feature_score_body[TPB, MAX_ACC, True, ROW_MAJOR, True](
+        out_n_left,
+        out_n_total,
+        out_acc_left,
+        out_acc_total,
+        out_n_blocks,
+        in_min,
+        in_max,
+        in_n_missing,
+        data,
+        row_ids,
+        labels_q,
+        work_items,
+        workload_info,
+        colids,
+        tree_ids,
+        m_in,
+        n_sampled_cols_in,
+        n_acc_in,
+        seed,
+        sabotage_in,
+        n_cols_in,
+        row_w,
+    )
+
+
+def node_feature_score_weighted_reg_kernel[
+    TPB: Int, MAX_ACC: Int, ROW_MAJOR: Bool = False
+](
+    out_n_left: MutPointer[Int32, MutAnyOrigin],
+    out_n_total: MutPointer[Int32, MutAnyOrigin],
+    out_acc_left: MutPointer[Int32, MutAnyOrigin],
+    out_acc_total: MutPointer[Int32, MutAnyOrigin],
+    out_n_blocks: MutPointer[Int32, MutAnyOrigin],
+    in_min: MutPointer[Float32, MutAnyOrigin],
+    in_max: MutPointer[Float32, MutAnyOrigin],
+    in_n_missing: MutPointer[Int32, MutAnyOrigin],
+    data: MutPointer[Float32, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    n_sampled_cols_in: Int32,
+    n_acc_in: Int32,
+    seed: UInt64,
+    sabotage_in: Int32,
+    n_cols_in: Int32,
+    row_w: MutPointer[Int32, MutAnyOrigin],
+):
+    """The regression score pass with row weights (lane sk-final):
+    `labels_q[row]` is the row's quantized `w * y`, `row_w[row]` its
+    quantized weight; each cell publishes the two sums in slots 0 and 1
+    (`n_acc_in` = 2)."""
+    _node_feature_score_body[TPB, MAX_ACC, False, ROW_MAJOR, True](
         out_n_left,
         out_n_total,
         out_acc_left,
