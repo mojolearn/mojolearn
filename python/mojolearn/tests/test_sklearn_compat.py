@@ -491,8 +491,8 @@ WEIGHT_EQUIVALENCE_FLOAT32 = {
     # accuracy weighted by the raw weights (x_linear/logcv.mojo); the
     # accuracies are exact integer ratios, so both fits pick the same C, and
     # float32 L-BFGS stopping at tol=1e-4 sets the gap
-    "LogisticRegressionCV": "float32 L-BFGS fit (tol=1e-4): predict_proba max absolute gap 3.8e-5 (0.86843020 vs "
-                            "0.86842579), relative 4.2e-4; same weighted problem and C",
+    "LogisticRegressionCV": "float32 L-BFGS fit (tol=1e-4): predict_proba max absolute gap 3.8e-5, max "
+                            "relative 4.2e-4, every entry; same weighted problem and C",
 }
 
 
