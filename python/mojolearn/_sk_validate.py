@@ -433,7 +433,7 @@ def after_fit(est, check):
     names = _column_names(check.X)
     if names is None:
         state.pop("feature_names_in_", None)
-    elif "feature_names_in_" not in state:
+    else:
         from ._optional_numpy import require_numpy
         np = require_numpy("feature_names_in_")
         est.feature_names_in_ = np.asarray(names, dtype=object)
