@@ -153,7 +153,7 @@ balance() {
 up_lock() {
     local t0; t0=$(date +%s)
     until mkdir "$NVC_HOME/up.lock" 2>/dev/null; do
-        [ $(( $(date +%s) - $(stat -f %m "$NVC_HOME/up.lock" 2>/dev/null || stat -c %Y "$NVC_HOME/up.lock" 2>/dev/null || echo 0) )) -lt 7200 ] \
+        [ $(( $(date +%s) - $(stat -c %Y "$NVC_HOME/up.lock" 2>/dev/null || stat -f %m "$NVC_HOME/up.lock" 2>/dev/null || echo 0) )) -lt 7200 ] \
             || { rm -rf "$NVC_HOME/up.lock"; continue; }
         [ $(( $(date +%s) - t0 )) -lt 60 ] || die "another nvidia_central.sh up holds $NVC_HOME/up.lock; it is bringing the pods up (wait for it, then status)"
         sleep 2

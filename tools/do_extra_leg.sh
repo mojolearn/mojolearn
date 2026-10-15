@@ -322,7 +322,7 @@ release_lock() {
 
 lock_age() {  # seconds since the lock directory was made; returns 1 when it is absent
   local m
-  m=$(stat -f %m "$GPU_LOCK" 2>/dev/null || stat -c %Y "$GPU_LOCK" 2>/dev/null) || return 1
+  m=$(stat -c %Y "$GPU_LOCK" 2>/dev/null || stat -f %m "$GPU_LOCK" 2>/dev/null) || return 1
   echo $(( $(date +%s) - m ))
 }
 
@@ -499,7 +499,7 @@ _env_ok=1
 token_hygiene() {  # prints a reason and returns 1 when the file must not be used
   local perm
   [ -f "$TOKFILE" ] || { echo "token file $TOKFILE does not exist"; return 1; }
-  perm=$(stat -f '%OLp' "$TOKFILE" 2>/dev/null || stat -c '%a' "$TOKFILE" 2>/dev/null || echo '?')
+  perm=$(stat -c '%a' "$TOKFILE" 2>/dev/null || stat -f '%OLp' "$TOKFILE" 2>/dev/null || echo '?')
   [ "$perm" = 600 ] || { echo "token file $TOKFILE is mode $perm, must be 600"; return 1; }
   case "$(cd "$(dirname "$TOKFILE")" && pwd)/" in "$REPO"/*) echo "token file $TOKFILE is INSIDE the repository"; return 1 ;; esac
   if git -C "$REPO" ls-files --error-unmatch "$TOKFILE" > /dev/null 2>&1; then

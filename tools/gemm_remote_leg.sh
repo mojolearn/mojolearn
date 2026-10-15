@@ -1320,7 +1320,7 @@ leg_load_key() {
 
 leg_assert_keyfile_hygiene() {
     _f="$1"
-    _perm=$(stat -f '%OLp' "$_f" 2>/dev/null || stat -c '%a' "$_f" 2>/dev/null || echo "?")
+    _perm=$(stat -c '%a' "$_f" 2>/dev/null || stat -f '%OLp' "$_f" 2>/dev/null || echo "?")
     [ "$_perm" = "600" ] || leg_die "key file $_f is mode $_perm, must be 600.  chmod 600 '$_f'"
     case "$_f" in
         "$REPO"/*)

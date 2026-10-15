@@ -413,7 +413,7 @@ HD="$STATE_ROOT/$HOST_KEY"
 host_lock() {  # serializes host extends and slot takes on this Mac
     _t0=$(now)
     until mkdir "$HD/.lock" 2>/dev/null; do
-        _m=$(stat -f %m "$HD/.lock" 2>/dev/null || stat -c %Y "$HD/.lock" 2>/dev/null || echo 0)
+        _m=$(stat -c %Y "$HD/.lock" 2>/dev/null || stat -f %m "$HD/.lock" 2>/dev/null || echo 0)
         [ $(( $(now) - _m )) -lt 900 ] || { rm -rf "$HD/.lock"; continue; }
         [ $(( $(now) - _t0 )) -lt 900 ] || die "the host lock $HD/.lock stayed held for 15 minutes"
         sleep 2

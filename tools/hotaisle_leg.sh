@@ -557,7 +557,7 @@ J() { python3 "$TMPD/j.py" "$@"; }
 key_hygiene() {
   local perm
   [ -f "$KEYFILE" ] || { echo "key file $KEYFILE does not exist"; return 1; }
-  perm=$(stat -f '%OLp' "$KEYFILE" 2>/dev/null || stat -c '%a' "$KEYFILE" 2>/dev/null || echo '?')
+  perm=$(stat -c '%a' "$KEYFILE" 2>/dev/null || stat -f '%OLp' "$KEYFILE" 2>/dev/null || echo '?')
   [ "$perm" = 600 ] || { echo "key file $KEYFILE is mode $perm, must be 600"; return 1; }
   case "$(cd "$(dirname "$KEYFILE")" && pwd)/" in "$REPO"/*) echo "key file $KEYFILE is INSIDE the repository"; return 1 ;; esac
   return 0
@@ -660,7 +660,7 @@ delete_and_verify() {  # <ref> <other ref or ""> <expected description or ""> <v
 }
 
 # ------------------------------------------------------------------ slots
-slot_age() { local m; m=$(stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null) || return 1; echo $(( $(date +%s) - m )); }
+slot_age() { local m; m=$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null) || return 1; echo $(( $(date +%s) - m )); }
 slot_field() { sed -n "s/^$2=//p" "$1/owner" 2>/dev/null | tail -1; }
 slot_cap() {  # min(MAX_SLOTS, the team's maximum_virtual_machines)
   local cap=$MAX_SLOTS
