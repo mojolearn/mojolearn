@@ -88,12 +88,14 @@ from extratrees.impl.decisiontree.flatnode import (
 )
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     DEVICE_MAX_ACC,
+    DeviceDataset,
     train_classification_device,
     train_forest_classification_device,
     train_forest_regression_device,
     upload_dataset,
     upload_dataset_labels_f32,
     upload_dataset_labels_quantized,
+    upload_dataset_labels_quantized_weighted,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.checks.pcg_rng import row_sample_seed
@@ -458,28 +460,46 @@ def fit_regression_device_f32(
     x_addr: Int = 0,
     x_row_major: Bool = False,
     tree_start: Int = 0,
+    weights_addr: Int = 0,
+    min_weight_fraction: Float64 = 0.0,
 ) raises -> Forest:
     """`fit_regression_device` from the caller's FLOAT labels: the scale's
     `sum |y|` and the DEVIATION 135 quantization run on the device
     (`upload_dataset_labels_quantized`, cpu3-trees), so no host pass over
     the rows remains in the GPU fit. Same Int32 labels and scale as the host
-    column's `quantize_labels_host`."""
+    column's `quantize_labels_host`.
+
+    lane sk-final: `weights_addr` (0: none) is scikit-learn's per-row
+    sample_weight, `n_rows` Float32 words borrowed through this call
+    (`upload_dataset_labels_quantized_weighted`). When they are all 1.0 the
+    fit is the unweighted one, and `min_weight_fraction` (which the caller
+    did not fold) is folded here, as `fit_classification_device` does."""
     if tree_start < 0 or tree_start + Int(n_trees) > 2147483647:
         raise Error("invalid global tree range")
     error_checking(n_rows, n_cols, n_trees)
     validity_check(params)
     var scale = Float64(1.0)
-    var dataset = upload_dataset_labels_quantized(
-        ctx, x_col_major, y, n_rows, n_cols, scale, x_addr=x_addr,
-        x_row_major=x_row_major,
-    )
+    var tree_params = params
+    var dataset: DeviceDataset
+    if weights_addr != 0:
+        dataset = upload_dataset_labels_quantized_weighted(
+            ctx, x_col_major, y, n_rows, n_cols, weights_addr,
+            min_weight_fraction, scale, x_addr=x_addr, x_row_major=x_row_major,
+        )
+    else:
+        dataset = upload_dataset_labels_quantized(
+            ctx, x_col_major, y, n_rows, n_cols, scale, x_addr=x_addr,
+            x_row_major=x_row_major,
+        )
     var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
+    if weights_addr != 0 and not dataset.weighted:
+        fold_min_weight_count(tree_params, min_weight_fraction, Int(n_sampled))
     var tree_ids = List[Int32]()
     for tree_id in range(Int(n_trees)):  # small-loop(n_trees: forest member tree ids): one id per tree, launch parameter list
         tree_ids.append(Int32(tree_start + tree_id))
     var forest = Forest(1)
     forest.trees = train_forest_regression_device(
-        ctx, dataset, scale, params, tree_ids, seed,
+        ctx, dataset, scale, tree_params, tree_ids, seed,
         bootstrap=bootstrap, n_sampled_rows=n_sampled,
     )
     forest.n_trees = n_trees
