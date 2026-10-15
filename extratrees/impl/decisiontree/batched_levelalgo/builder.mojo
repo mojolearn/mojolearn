@@ -1476,7 +1476,7 @@ def set_leaf_predictions_exact_host(
             if row_w_addr != 0:
                 den = w_seen
             for c in range(k):
-                if den == Int32(0):
+                if row_w_addr != 0 and den == Int32(0):
                     tree.vector_leaf[base + c] = Float32(0.0)
                 else:
                     tree.vector_leaf[base + c] = ftz(

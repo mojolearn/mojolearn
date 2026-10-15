@@ -3129,7 +3129,7 @@ def _leaf_body[
             var num = Float32(Int(tot[unsafe_offset=c]))
             if sabotage == LEAF_SAB_NO_NORMALIZE:
                 out_leaves[unsafe_offset = base + c] = num * inv_scale
-            elif den == Int32(0):
+            elif WEIGHTED and den == Int32(0):
                 # lane sk-final: a weighted leaf holding no weight
                 out_leaves[unsafe_offset = base + c] = Float32(0.0)
             else:
