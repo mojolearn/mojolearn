@@ -1,0 +1,46 @@
+{
+ "arm": "fp32-fast",
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "binary": "/Users/andrewhendel/mojolearn-evidence/bf16-vs-fp32fast-20261015/pkg/mojolearn/_mojolearn_linalg.so",
+ "binary_sha256": "1f9e5e1eb11915344ec4abbad6a5a6fbe84f7b731ed18e2429915e23f753c701",
+ "warmup": 1,
+ "scored": 1,
+ "cases": [
+  {
+   "shape": [
+    2048,
+    2048,
+    2048
+   ],
+   "warmup_ms": 88.958792,
+   "scored_ms": 39.117083,
+   "finite": true,
+   "max_abs_error": 0.0005265109516017219,
+   "rel_rms_error": 8.096247922961026e-07
+  },
+  {
+   "shape": [
+    4096,
+    4096,
+    4096
+   ],
+   "warmup_ms": 171.041208,
+   "scored_ms": 119.435917,
+   "finite": true,
+   "max_abs_error": 0.0010292993861185096,
+   "rel_rms_error": 1.145344261784363e-06
+  },
+  {
+   "shape": [
+    3000,
+    5000,
+    2500
+   ],
+   "warmup_ms": 1104.829625,
+   "scored_ms": 1094.544125,
+   "finite": true,
+   "max_abs_error": 0.0007227189257719147,
+   "rel_rms_error": 8.944233716215304e-07
+  }
+ ]
+}
