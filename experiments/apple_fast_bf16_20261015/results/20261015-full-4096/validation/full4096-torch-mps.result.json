@@ -1,0 +1,14 @@
+{
+  "started": 1792034726.081671,
+  "command": [
+    "/Users/andrewhendel/mojolearn-evidence/apple-smoke-20261014/cache/venv/bin/python",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-apple-fast-bf16/experiments/apple_fast_bf16_20261015/local_benchmark.py",
+    "torch-mps",
+    "--output",
+    "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/local-full-4096"
+  ],
+  "source_commit": "30b9c0f3d65ceb5cdd5769b0a63df99d1d1d326a",
+  "scope": "one full configured BF16 GEMM primitive; no estimator or full-board claim",
+  "exit_code": 0,
+  "elapsed_s": 5.335747957229614
+}

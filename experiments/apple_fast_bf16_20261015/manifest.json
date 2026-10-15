@@ -28,11 +28,12 @@
   "affected_current_public_operation": "mojolearn.linalg_fast explicit BF16 operations; newly wired generic mojolearn.linalg BF16 operations in FAST only",
   "affected_estimators": "No production estimator BF16 caller established; no implicit FP32 quantization or broad wiring",
   "full_workload_recipe": null,
-  "full_workload_status": "full GEMM primitive 4096^3 recipe identified but unrun; estimator mappings and datasets pending",
+  "full_workload_status": "full4096 GEMM primitive measured locally with five scored samples per arm; full estimator mappings and datasets remain pending",
   "build_owner": "orchestrator only; runner never compiles, installs or publishes",
-  "generic_wiring_status": "source_ready_uncompiled",
+  "generic_wiring_status": "enabled_apple_target_compiled_and_gpu_correctness_passed",
   "runner_presets": {
     "screen": "original three-shape local screening, seed 82471 uniform",
     "full": "GEMM_SHAPES.full 4096^3, seed 7 standard_normal; full primitive only, not estimator or board coverage"
-  }
+  },
+  "full_primitive_results": "results/20261015-full-4096/comparison.json"
 }

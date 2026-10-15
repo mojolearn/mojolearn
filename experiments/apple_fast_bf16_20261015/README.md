@@ -22,10 +22,36 @@ These are local operation screens, not full-dataset estimator measurements or
 a same-source default-promotion A/B. The small case lost 7.2%; the medium cases
 took 8.6–13.9% less time. No statistical significance or empty system caches are
 claimed. Generic `mojolearn.linalg` routing and an installed-capability guard
-have since been added as source; their changed native boundary needs a new frozen
-build and qualification. Other builds, installed-release qualification and
-full-workload evidence remain pending.
+were subsequently compiled and qualified on Apple at frozen `30b9c0f3d` with
+23 passing GPU correctness tests and no skips. Other builds, installed-release
+qualification and full-estimator evidence remain pending.
 No existing estimator has been wired to use this candidate implicitly.
+
+The same frozen generic boundary then ran the full 4096 × 4096 × 4096 GEMM
+primitive with seed-7 standard-normal inputs. Each arm recorded one first call,
+one excluded warmup and five scored samples. Its retained controller is the
+portable runner at that freeze; the earlier three cases above remain unchanged.
+
+| Full primitive arm | First call ms | Scored median ms | Scored min–max ms | Maximum absolute error | RMS error |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Shipped 0.8.45 IDENTICAL | 257.059500 | 158.584500 | 154.399500–159.014417 | 0.000041820575 | 0.000006082485 |
+| FAST candidate `30b9c0f3d` | 170.914792 | 133.247791 | 128.562917–152.106584 | 0.000786586199 | 0.000039119954 |
+| PyTorch 2.13.0 MPS | 831.108000 | 356.609042 | 352.400042–361.400333 | 0.000786586199 | 0.000039119954 |
+
+All 21 outputs were finite and passed the recorded FP64 error bound. The
+candidate used 16.0% less time than shipped IDENTICAL and 62.6% less than this
+matched Torch operation. Its numerical error was larger than IDENTICAL's;
+every sample's quality is retained. Torch receives the same BF16 host bits,
+widens them exactly on the GPU, and uses real FP32 `torch.mm` accumulation and
+output, with the transfers and widening inside its clock. This does not compare
+against a BF16-output Torch multiply. CPU fallback is disabled.
+
+This completes a full-size primitive screen, not an estimator measurement or
+full-board run. It compares a shipped IDENTICAL arm with candidate FAST, not
+the same-source baseline/candidate configuration required for default
+promotion. The switch remains off. See
+`results/20261015-full-4096/comparison.json` for all samples, source/binary/input
+hashes, process exit status, qualification and durable artifact references.
 
 ## Select an arm
 
@@ -75,14 +101,13 @@ Historical timings were produced by those retained controller bytes, not the
 portable adaptation. Binary, input/output array bytes and full logs remain in
 the recorded evidence directory; hashes alone are not replacement retention.
 
-The portable runner has CPU-only preparation/argument checks; its GPU path has
-not been rerun. The historical compile/correctness evidence qualifies the frozen
-`6cec6320d` native boundary. Subsequent generic wiring preserves keyword operands
-through new native argument parsing, so it requires a new frozen build and the
-expanded 23-test suite; the historical timing is not a claim about new bytes.
+The portable runner has CPU preparation/argument checks and the completed
+full-primitive GPU comparison at frozen `30b9c0f3d`. The earlier three-case
+compile/correctness and timing evidence still refers to frozen `6cec6320d`;
+the later compile06 and 23-test qualification refer to `30b9c0f3d` separately.
 The full primitive recipe is `tools/bench_board_neural.py`'s `GEMM_SHAPES.full`,
 4096 by 4096 by 4096 from seed 7, with input hashes retained when materialized.
-It is unrun here and is not an estimator dataset. Existing transformer/Mamba
+It is not an estimator dataset. Existing transformer/Mamba
 packed BF16 weights are unpacked to FP32, and training is FP32-only: broader
 wiring needs native packed-weight retention or an explicit precision opt-in,
 actual caller mapping, and full-workload recipes.
@@ -92,6 +117,15 @@ output and failed-attempt logs, to bucket `mojolearn-data`, key
 `measurements/records/v1/a2397742b2a1cba2865940141d63cc8f2b0483b096cfb72d9b7ad4c16a8e4558.tar.gz`.
 The 181,871,269 bytes were independently GET/SHA256 verified; see the durable
 reference in `result_summary.json`. This archive predates generic wiring.
+
+The full-primitive archive is separately GET/SHA256 verified in the same bucket:
+`measurements/records/v1/7f44cb98392244faad9795b85783ce60ed421df94da819a27f1db5082a8664b2.tar.gz`
+(1,595,961,388 bytes). It retains the new frozen source and candidate binary,
+inputs, all 21 output arrays, executed controllers and full logs. The reused
+shipped IDENTICAL binary and wheel manifest are retained in a supplementary
+GET/SHA256-verified archive referenced by the full-primitive comparison record.
+Both summaries and archive inventories are portable repository artifacts;
+original absolute paths remain in the byte-for-byte historical receipts.
 
 Keep the candidate off until the applicable whole-workload evidence supports
 promotion. A Mac-only new-version release is technically possible, but no

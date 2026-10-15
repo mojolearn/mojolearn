@@ -117,6 +117,13 @@ comptime AFN_GEMM_TILESHAPE = AFN_GEMM_ALL or (
 # native tests: 22 passed, no skips, plus 35 cold one-hot probes. Shape-dependent
 # preliminary operation screening, not full-workload/default-promotion evidence;
 # no cross-vendor identity claim. Other builds and estimator coverage pending.
+# Follow-up frozen 30b9c0f3d: full 4096^3 primitive, 5 scored samples/arm,
+# 133.247791 ms candidate vs 158.584500 ms shipped IDENTICAL (16.0% less time),
+# and 356.609042 ms real Torch MPS with matching BF16-input/FP32-output contract.
+# All 21 outputs passed the FP64 bound, with larger error than IDENTICAL;
+# enabled Apple compile06 and 23 GPU tests passed with no skips. Separate
+# results/20261015-full-4096/comparison.json retains errors, samples and hashes.
+# Still OFF: no same-source promotion A/B or full-estimator qualification.
 comptime AFN_GEMM_BF16_MMA = AFN_GEMM_ALL or AFN_GEMM2_ON or (
     AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_BF16_MMA"]()
 )
