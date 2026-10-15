@@ -68,8 +68,9 @@ def quality(name, model, x):
     if name == 'ivf_sq':
         q = x[:2000]
         _, got = model.search(q)
-        d = (q * q).sum(1)[:, None] - 2 * q @ x.T + (x * x).sum(1)[None, :]
-        exact = np.argpartition(d, 8, axis=1)[:, :8]
+        xx = (x * x).sum(1)[None, :]
+        exact = np.concatenate([np.argpartition(xx - 2 * c @ x.T, 8, axis=1)[:, :8]
+                                for c in np.array_split(q, 16)])
         hits = sum(len(set(a.tolist()) & set(b.tolist())) for a, b in zip(np.asarray(got), exact))
         return dict(recall_at_8=hits / (8 * len(q)))
     return dict(explained_variance_ratio_sum=float(np.asarray(model.explained_variance_ratio_).sum()))
