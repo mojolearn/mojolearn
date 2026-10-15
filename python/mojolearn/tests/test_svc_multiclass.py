@@ -51,7 +51,7 @@ def test_one_class_is_refused():
 
 def test_each_pair_is_the_binary_solver_on_its_rows():
     x, y = _data()
-    m = _fit_or_skip(x, y, kernel="rbf", gamma=0.1)
+    m = _fit_or_skip(x, y, kernel="rbf", gamma=0.1, decision_function_shape="ovo")
     q = x[:50]
     ovo = np.asarray(m.decision_function(q))
     assert ovo.shape == (50, 6) and ovo.dtype == np.float32
@@ -75,7 +75,7 @@ def test_gamma_scale_is_resolved_on_the_whole_x():
 def test_matches_scikit_learn_layout_and_votes():
     sk = pytest.importorskip("sklearn.svm")
     x, y = _data()
-    m = _fit_or_skip(x, y, kernel="rbf", gamma=0.1, tol=1e-4)
+    m = _fit_or_skip(x, y, kernel="rbf", gamma=0.1, tol=1e-4, decision_function_shape="ovo")
     r = sk.SVC(kernel="rbf", gamma=0.1, tol=1e-4, decision_function_shape="ovo").fit(x, y)
     assert list(np.asarray(m.n_support_)) == list(r.n_support_)
     assert np.asarray(m.dual_coef_).shape == r.dual_coef_.shape
