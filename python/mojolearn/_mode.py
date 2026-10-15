@@ -175,6 +175,9 @@ def _loader(method):
         out = method(cls, *args, **kwargs)
         if isinstance(out, cls):
             vars(out)["_mojolearn_fitted"] = True
+            after = getattr(out, "_mojolearn_after_fit", None)
+            if after is not None:
+                after()
         return out
 
     return classmethod(load)

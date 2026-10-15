@@ -140,6 +140,11 @@ def forest_estimator(kind):
     return decorate
 
 
+def _frozen_copy(a):
+    """A read-only copy of a flat int32 or float32 model array."""
+    return Array.from_buffer(memoryview(a.tobytes()).cast("i" if a.dtype == "<i4" else "f"))
+
+
 class ForestProtocol:
     def get_params(self, deep=True):
         for owner in type(self).__mro__:  # glue: walks the class hierarchy
@@ -445,17 +450,55 @@ class ForestProtocol:
                     or arrays[4].size != nodes * dimensions[2]
                     or int(arrays[0][-1]) != nodes):
                 raise ValueError("forest model array shapes do not match metadata")
-            frozen = tuple(Array.from_buffer(memoryview(a.tobytes()).cast("i" if a.dtype == "<i4" else "f")) for a in arrays)  # glue: freezes the five model arrays
+            # A fit leaves its arrays frozen already (`_mojolearn_after_fit`),
+            # so a predict after a fit stores nothing new on the instance.
+            frozen = tuple(a if not a.flags["WRITEABLE"] else _frozen_copy(a) for a in arrays)  # glue: freezes the five model arrays
             resident = _ResidentForest(native, frozen, dimensions, mode, ordered)
             for name, a in zip(_FOREST_ARRAYS, frozen):  # glue: stores the five model arrays
-                setattr(self, name, a)
+                if getattr(self, name) is not a:
+                    setattr(self, name, a)
             self._resident_forest = resident
         return resident
 
+    # The device snapshot lives in a holder dict the fit creates, not in an
+    # attribute of its own: a predict that prepares the snapshot changes
+    # the holder's contents, never `__dict__` (scikit-learn's
+    # check_dict_unchanged compares `__dict__` around predict).
+    @property
+    def _resident_forest(self):
+        holder = self.__dict__.get("_resident_holder")
+        if not holder or "forest" not in holder:
+            raise AttributeError("_resident_forest")
+        return holder["forest"]
+
+    @_resident_forest.setter
+    def _resident_forest(self, value):
+        holder = self.__dict__.get("_resident_holder")
+        if holder is None:
+            holder = self.__dict__["_resident_holder"] = {}
+        holder["forest"] = value
+
+    def _mojolearn_after_fit(self):
+        """After every fit: freeze the five model arrays (the copy the first
+        predict used to take, so a caller's alias cannot change the model)
+        and give the instance an empty snapshot holder, dropping the last
+        fit's device snapshot."""
+        self.__dict__["_resident_holder"] = {}
+        for name in _FOREST_ARRAYS:  # glue: freezes the five model arrays
+            a = self.__dict__.get(name)
+            if (isinstance(a, Array) and a.ndim == 1 and a.dtype in ("<i4", "<f4")
+                    and a.flags["WRITEABLE"]):
+                self.__dict__[name] = _frozen_copy(a)
+
     def __getstate__(self):
         state = self.__dict__.copy()
+        state.pop("_resident_holder", None)
         state.pop("_resident_forest", None)
         return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.__dict__["_resident_holder"] = {}
 
     def _archive_inference_metadata(self, arrays, sequential_format):
         if self._prediction_engine() == "parallel_groves":
