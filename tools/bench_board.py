@@ -258,6 +258,55 @@ for _v, _arms in (("apple", _TASK_APPLE), ("nvidia", _TASK_NVIDIA), ("amd", _TAS
     for _task in ("gbdt-categorical", "gbdt-rank-pairlogit", "gbdt-rank-yetirank"):
         TREE_OPPONENTS[_v][_task] = TREE_OPPONENTS[_v]["gbdt-symmetric"]
 DATA_FILES["istella-rank"] = "istella/istella_rank.npz"
+
+#: FAIRNESS FIX (lane quality-fix-identical, 2026-10-15): opponent arms a trees task lane refuses by
+#: name in tools/speed_gbdt_arm.py (2026-10-13 audit) are refused on every board too. The rosters above
+#: stopped racing them, but cells measured before the audit still came back through the main-board
+#: ingest's opponent copy (tools/main_board_ingest.py copy_opponents): trees/gbdt-rank-pairlogit/istella
+#: showed xgboost-gpu (depthwise rank:pairwise, sampled pairs) as its best opponent, ndcg10 0.7384 vs
+#: ours 0.7200; against CatBoost's PairLogit on oblivious trees ours is NEAR (0.71995 vs 0.71962).
+#: Unconditional refusals only (gbdt-categorical's depends on declared categorical columns).
+#: lane -> ((arm prefix, reason), ...)
+REFUSED_LANE_ARMS = {
+    "gbdt-rank-pairlogit": (
+        ("xgboost-", "DIFFERENT-ALGORITHM: XGBoost rank:pairwise grows depthwise trees over sampled pairs; "
+                     "ours and CatBoost fit PairLogit over every pair on oblivious trees (2026-10-13 audit)"),
+        ("lightgbm-", "DIFFERENT-ALGORITHM: LightGBM has no pairwise logistic objective without NDCG "
+                      "weighting (2026-10-13 audit)"),
+    ),
+    "gbdt-rank-yetirank": (
+        ("xgboost-", "DIFFERENT-ALGORITHM: XGBoost rank:ndcg on depthwise trees vs YetiRank on oblivious "
+                     "trees (2026-10-13 audit)"),
+        ("lightgbm-", "DIFFERENT-ALGORITHM: LightGBM lambdarank on leaf-wise trees vs YetiRank on oblivious "
+                      "trees (2026-10-13 audit)"),
+    ),
+    "gbdt-multiclass": (
+        ("xgboost-", "DIFFERENT-GROWER: one depthwise tree per class per round vs one oblivious vector-leaf "
+                     "tree (2026-10-13 audit)"),
+        ("lightgbm-", "DIFFERENT-GROWER: one leaf-wise tree per class per round vs one oblivious vector-leaf "
+                      "tree (2026-10-13 audit)"),
+    ),
+}
+
+
+def refused_lane_arm(lane, arm):
+    """The refusal reason when `lane` refuses opponent `arm` by name (REFUSED_LANE_ARMS), else None."""
+    for prefix, why in REFUSED_LANE_ARMS.get(lane, ()):
+        if str(arm or "").startswith(prefix):
+            return why
+    return None
+
+
+def refuse_lane_arm_cells(lane, cells):
+    """Mark every cell of an arm `lane` refuses REFUSED(reason) (`_refuse_cell`: times and quality
+    withdrawn, kept under `withdrawn`). Returns the number refused."""
+    n = 0
+    for c in cells or []:
+        why = refused_lane_arm(lane, c.get("arm"))
+        if why and not str(c.get("status", "")).startswith("REFUSED"):
+            _refuse_cell(c, why)
+            n += 1
+    return n
 R2_KEYS["istella-rank"] = "gbm-bench/istella/istella_rank.npz"
 
 

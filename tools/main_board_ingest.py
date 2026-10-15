@@ -1044,6 +1044,9 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
                 HW.opponent_fields(c, ob.get("paired_box"), "paired session")
         else:
             opps, src_rr, why = copy_opponents(BB, sources, ob["family"], ob["lane"], rid, archive, backfill)
+        # FAIRNESS FIX (2026-10-15): an opponent the lane refuses by name never stands as its opponent,
+        # whatever board it was copied from (tools/bench_board.py REFUSED_LANE_ARMS)
+        BB.refuse_lane_arm_cells(ob["lane"], opps)
         # our cell without a quality (the host reference refused) whose output hash equals a copied opponent's:
         # quality {"identical_to": <arm>} (tools/bench_board.py stored_identity_quality; a digest compare only)
         cells = BB.add_ratios(BB.stored_identity_quality([cell] + opps))
