@@ -9,18 +9,24 @@ spec=importlib.util.spec_from_file_location('board',Path(__file__).with_name('be
 B=importlib.util.module_from_spec(spec);spec.loader.exec_module(B)
 
 class Capabilities(unittest.TestCase):
-    def test_fast_454_eligible_2_explicit_unsupported_identical_456(self):
+    def test_fast_plan_int8_unsupported_bf16_probed_identical_none(self):
+        # 0509dcc94: FAST BF16 is an optional native Apple capability, decided per run by the worker's binding
+        # (probe_fast_bf16_capability), so planning only marks it pending; FAST INT8 always requires IDENTICAL.
         fast=B.plan_races('apple',['fast']); identical=B.plan_races('apple',['identical'])
-        self.assertEqual(len(fast),456);self.assertEqual(len(identical),456)
-        self.assertEqual(B.plan_summary(fast)['unsupported_races'],2)
+        self.assertEqual(len(fast),len(identical))
+        self.assertEqual(B.plan_summary(fast)['unsupported_races'],1)
         self.assertEqual(B.plan_summary(identical)['unsupported_races'],0)
-        self.assertEqual({r['lane'] for r in fast if B.unsupported_our_arms(r)}, {'gemm-bf16','gemm-int8'})
+        self.assertEqual({r['lane'] for r in fast if B.unsupported_our_arms(r)}, {'gemm-int8'})
+        self.assertEqual({r['lane'] for r in fast if r.get('capability_checks_pending')}, {'gemm-bf16'})
 
     def test_unsupported_is_recorded_without_running_any_driver(self):
         for lane in ('gemm-bf16','gemm-int8'):
             race=B.plan_races('apple',['fast'],families=['neural'],lanes=[lane],neural_shape='small')[0]
             ctx=dict(vendor='apple',rounds=1,with_opponents=False,retime=False,store_path=None,box={})
-            with patch.object(B,'stored_opponents',return_value={}),patch.object(B,'_run_race',side_effect=AssertionError('must not time unsupported API')):
+            # the BF16 capability probe runs the worker's binding; here it reports the native path absent
+            probe=dict(supported=False,reason='FAST BF16 native path not in this binding')
+            with patch.object(B,'stored_opponents',return_value={}),patch.object(B,'_run_race',side_effect=AssertionError('must not time unsupported API')),\
+                    patch.object(B,'probe_fast_bf16_capability',return_value=probe):
                 result=B.run_race(ctx,race)
             self.assertEqual(result['status'],'unsupported')
             self.assertIsNone(result['cells'][0]['median_ms'])

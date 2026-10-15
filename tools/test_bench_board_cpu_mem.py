@@ -101,7 +101,9 @@ def test_run_memory_and_no_ours_cpu_cells(env):
     assert rf["sklearn-rf-cpu"]["peak_gpu_mb"] is None
     assert rf["sklearn-rf-cpu"]["memory"]["gpu_method"] == "cpu arm"
     km = {c["arm"]: c for c in res["races"]["classical/kmeans/taxi/rows=1000"]["cells"]}
-    assert bb.CPU_ARM not in km and "sklearn-cpu" not in km      # torch-gpu races, so no CPU one
+    # FAIRNESS FIX (2026-10-13): Apple kmeans has no library GPU opponent (torch-gpu was harness-written and
+    # is refused), so scikit-learn on the CPU is its only opponent; our CPU arm is still never raced
+    assert bb.CPU_ARM not in km and set(km) == {"ours", "ours-fast", "sklearn-cpu"}
     assert km["ours"]["peak_host_mb"] == pytest.approx(103.0)
     for rec in res["races"].values():
         for c in rec["cells"]:
