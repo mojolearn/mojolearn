@@ -7083,7 +7083,7 @@ class EllipticEnvelope(MinCovDet):
 
         Returns
         -------
-        ndarray of shape (n_samples,), float32
+        ndarray of shape (n_samples,), float64
         """
         k = self._kit()
         d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
@@ -7098,7 +7098,7 @@ class EllipticEnvelope(MinCovDet):
 
         Returns
         -------
-        ndarray of shape (n_samples,), float32
+        ndarray of shape (n_samples,), float64
         """
         k = self._kit()
         d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)

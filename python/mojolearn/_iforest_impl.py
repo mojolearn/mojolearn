@@ -513,12 +513,12 @@ class IsolationForest(NumericModeMixin):
 
         Returns
         -------
-        Array of shape (n_samples,), float32
+        Array of shape (n_samples,), float64
         """
         return self._run(X, _WANT_SCORE_SAMPLES)
 
     def decision_function(self, X):
-        """`score_samples(X) - offset_`, computed in float32; negative means
+        """`score_samples(X) - offset_`, computed in float32 and returned as float64; negative means
         predicted anomalous.
 
         Returns

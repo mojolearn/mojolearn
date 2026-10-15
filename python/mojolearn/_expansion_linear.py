@@ -2288,7 +2288,7 @@ class SGDOneClassSVM(NumericModeMixin):
 
         Returns
         -------
-        scores : float32 array of shape (n_samples,)
+        scores : float64 array of shape (n_samples,)
             ``X @ coef_ - offset_``.
         """
         _check_fitted(self)
@@ -2305,7 +2305,7 @@ class SGDOneClassSVM(NumericModeMixin):
 
         Returns
         -------
-        scores : float32 array of shape (n_samples,)
+        scores : float64 array of shape (n_samples,)
             Raw scores; higher is more normal.
         """
         _check_fitted(self)

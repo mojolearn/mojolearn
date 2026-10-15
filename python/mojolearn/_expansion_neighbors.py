@@ -560,7 +560,7 @@ class LocalOutlierFactor(_XNeighbors):
 
         Returns
         -------
-        scores : Array of shape (n_queries,), float32
+        scores : Array of shape (n_queries,), float64
         """
         self._novelty("score_samples")
         Q = _f32(X)
@@ -586,7 +586,7 @@ class LocalOutlierFactor(_XNeighbors):
 
         Returns
         -------
-        scores : Array of shape (n_queries,), float32
+        scores : Array of shape (n_queries,), float64
         """
         self._novelty("decision_function")
         return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
@@ -1173,7 +1173,7 @@ class OneClassSVM(_XNeighbors):
 
         Returns
         -------
-        scores : Array of shape (n_queries,), float32
+        scores : Array of shape (n_queries,), float64
         """
         Q = _f32(X)
         n_sv = self.dual_coef_.shape[1]
@@ -1206,7 +1206,7 @@ class OneClassSVM(_XNeighbors):
 
         Returns
         -------
-        scores : Array of shape (n_queries,), float32
+        scores : Array of shape (n_queries,), float64
         """
         return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
 
