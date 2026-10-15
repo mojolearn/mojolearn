@@ -67,3 +67,19 @@ def test_spectral_kernel_parameters_map_only_when_inactive():
         assert _spectral(param, None)
         assert _spectral(param, 3) is None
         assert _spectral(param, None, theirs_aff="precomputed") is None
+
+
+def test_spectral_every_ours_only_setting_is_mapped():
+    """Every setting ours' SpectralClustering reads back and cuML's lacks maps at the raced values."""
+    ours = dict(affinity="nearest_neighbors", assign_labels="kmeans", eigen_solver=None, gamma=None,
+                degree=None, coef0=None, kernel_params=None, prediction_data=False, eigen_tol=1e-5,
+                n_clusters=8, n_components=8, n_init=1, n_neighbors=10, random_state=42, n_jobs=None,
+                verbose=False)
+    theirs = dict(affinity="nearest_neighbors", eigen_tol=1e-5, n_clusters=8, n_components=8, n_init=1,
+                  n_neighbors=10, output_type=None, random_state=42, verbose=False)
+    report = BP.check("spectral", {"ours": dict(ours, __library__="mojolearn"),
+                                   "cuml-gpu": dict(theirs, __library__="cuml")}, seed=42)
+    assert report["verdict"] == "MATCHED", report["problems"]
+    report = BP.check("spectral", {"ours": dict(ours, eigen_solver="arpack", __library__="mojolearn"),
+                                   "cuml-gpu": dict(theirs, __library__="cuml")}, seed=42)
+    assert any("eigen_solver" in p for p in report["problems"])
