@@ -1786,17 +1786,22 @@ class IncrementalPCA(_Base):
     def _partial(self, Xb, publish=True, dev=False):
         k = self._kit()
         n, d = Xb.r, Xb.c
+        seen = getattr(self, "n_samples_seen_", 0)
+        prev = getattr(self, "components_m_", None) if seen else None
+        # scikit-learn's rule: the batch must hold n_components rows on the
+        # FIRST call only; a later batch stacks onto the kept components
+        # (nc + n + 1 rows), so fit's last short batch is fine.
         if self.n_components is None:
-            nc = d if not hasattr(self, "components_") else self.components_m_.r
+            nc = min(n, d) if prev is None else prev.r
         else:
             nc = int(self.n_components)
-        if not 1 <= nc <= d:
-            raise ValueError(f"n_components={nc} must be between 1 and n_features={d}")
-        if nc > n:
-            raise ValueError(f"n_components={nc} must be less or equal to the batch number of samples {n}")
-        if hasattr(self, "components_") and self.components_m_.c != d:
+            if not 1 <= nc <= d:
+                raise ValueError(f"n_components={nc} must be between 1 and n_features={d}")
+            if nc > n and prev is None:
+                raise ValueError(f"n_components={nc} must be less or equal to the batch number "
+                                 f"of samples {n} for the first partial_fit call.")
+        if prev is not None and prev.c != d:
             raise ValueError("Number of input features has changed from the previous batch")
-        seen = getattr(self, "n_samples_seen_", 0)
         if seen + n < 2:
             # the explained variance divides by n_samples_seen - 1
             raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required.")
