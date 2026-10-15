@@ -1,0 +1,2385 @@
+{
+ "amd|algos/cagra/istella/rows=full": {
+  "arms": {
+   "hipvs-gpu": {
+    "implementation": {
+     "module": "cuvs.neighbors.cagra.cagra",
+     "name": "build"
+    },
+    "library": "cuvs",
+    "params": {
+     "graph_degree": 32,
+     "intermediate_graph_degree": 64,
+     "itopk_size": 64,
+     "n_neighbors": 10
+    },
+    "source": "declared"
+   },
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "graph_degree": 32,
+     "intermediate_graph_degree": 64,
+     "itopk_size": 64,
+     "n_neighbors": 10,
+     "random_state": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/cagra",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "amd|algos/cagra/taxi/rows=full": {
+  "arms": {
+   "hipvs-gpu": {
+    "implementation": {
+     "module": "cuvs.neighbors.cagra.cagra",
+     "name": "build"
+    },
+    "library": "cuvs",
+    "params": {
+     "graph_degree": 32,
+     "intermediate_graph_degree": 64,
+     "itopk_size": 64,
+     "n_neighbors": 10
+    },
+    "source": "declared"
+   },
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "graph_degree": 32,
+     "intermediate_graph_degree": 64,
+     "itopk_size": 64,
+     "n_neighbors": 10,
+     "random_state": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/cagra",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "amd|algos/clip-grad-norm/synthetic/rows=full": {
+  "arms": {
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "error_if_nonfinite": true,
+     "max_norm": 1.0,
+     "norm_type": 2.0
+    },
+    "source": "declared"
+   },
+   "torch-compile-fp32": {
+    "implementation": {
+     "module": "torch.nn.utils.clip_grad",
+     "name": "clip_grad_norm_"
+    },
+    "library": "torch",
+    "params": {
+     "error_if_nonfinite": true,
+     "max_norm": 1.0,
+     "norm_type": 2.0,
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-fp32": {
+    "implementation": {
+     "module": "torch.nn.utils.clip_grad",
+     "name": "clip_grad_norm_"
+    },
+    "library": "torch",
+    "params": {
+     "error_if_nonfinite": true,
+     "max_norm": 1.0,
+     "norm_type": 2.0,
+     "seed": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/clip-grad-norm",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "amd|algos/cross-entropy/synthetic/rows=full": {
+  "arms": {
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "ignore_index": -100,
+     "label_smoothing": 0.0,
+     "reduction": "mean"
+    },
+    "source": "declared"
+   },
+   "torch-compile-fp32": {
+    "implementation": {
+     "module": "torch.nn.functional",
+     "name": "cross_entropy"
+    },
+    "library": "torch",
+    "params": {
+     "ignore_index": -100,
+     "label_smoothing": 0.0,
+     "reduction": "mean",
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-fp32": {
+    "implementation": {
+     "module": "torch.nn.functional",
+     "name": "cross_entropy"
+    },
+    "library": "torch",
+    "params": {
+     "ignore_index": -100,
+     "label_smoothing": 0.0,
+     "reduction": "mean",
+     "seed": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/cross-entropy",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "amd|neural/mamba3-forward/gaussian/shape=full": {
+  "arms": {
+   "mamba-ssm-fp32": {
+    "implementation": {
+     "module": "mamba_ssm.modules.block",
+     "name": "Block"
+    },
+    "library": "mamba-ssm",
+    "params": {
+     "seed": 7,
+     "ssm_chunk_size": 64,
+     "ssm_d_state": 128,
+     "ssm_expand": 2,
+     "ssm_headdim": 64,
+     "ssm_ngroups": 1,
+     "ssm_rope_angles": 32
+    },
+    "source": "declared"
+   },
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "ssm_chunk_size": 64,
+     "ssm_d_state": 128,
+     "ssm_expand": 2,
+     "ssm_headdim": 64,
+     "ssm_ngroups": 1,
+     "ssm_rope_angles": 32
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "neural",
+  "lane": "mamba3-forward",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "amd|neural/mlp-predict/gaussian/shape=full": {
+  "arms": {
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {},
+    "source": "declared"
+   },
+   "torch-compile-bf16": {
+    "implementation": {
+     "module": "torch.nn.modules.container",
+     "name": "Sequential"
+    },
+    "library": "torch",
+    "params": {
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-compile-fp32": {
+    "implementation": {
+     "module": "torch.nn.modules.container",
+     "name": "Sequential"
+    },
+    "library": "torch",
+    "params": {
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-bf16": {
+    "implementation": {
+     "module": "torch.nn.modules.container",
+     "name": "Sequential"
+    },
+    "library": "torch",
+    "params": {
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-fp32": {
+    "implementation": {
+     "module": "torch.nn.modules.container",
+     "name": "Sequential"
+    },
+    "library": "torch",
+    "params": {
+     "seed": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "neural",
+  "lane": "mlp-predict",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "amd|neural/transformer-decode/gaussian/shape=full": {
+  "arms": {
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "eps": 1e-06,
+     "rope_theta": 10000.0
+    },
+    "source": "declared"
+   },
+   "torch-eager-bf16": {
+    "implementation": {
+     "module": "transformers.models.llama.modeling_llama",
+     "name": "LlamaDecoderLayer"
+    },
+    "library": "torch",
+    "params": {
+     "eps": 1e-06,
+     "rope_theta": 10000.0,
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-fp32": {
+    "implementation": {
+     "module": "transformers.models.llama.modeling_llama",
+     "name": "LlamaDecoderLayer"
+    },
+    "library": "torch",
+    "params": {
+     "eps": 1e-06,
+     "rope_theta": 10000.0,
+     "seed": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "neural",
+  "lane": "transformer-decode",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/als/taxi-zones/rows=full": {
+  "arms": {
+   "implicit-gpu": {
+    "implementation": {
+     "module": "implicit.gpu.als",
+     "name": "AlternatingLeastSquares"
+    },
+    "library": "implicit",
+    "params": {
+     "alpha": 1.0,
+     "calculate_training_loss": false,
+     "cg_steps": 3,
+     "factors": 64,
+     "iterations": 15,
+     "random_state": 7,
+     "regularization": 0.01,
+     "use_cg": true,
+     "use_gpu": true
+    },
+    "source": "declared"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._expansion_decomp",
+     "name": "AlternatingLeastSquares"
+    },
+    "library": "mojolearn",
+    "params": {
+     "alpha": 1.0,
+     "calculate_training_loss": false,
+     "cg_steps": 3,
+     "factors": 64,
+     "iterations": 15,
+     "numeric_mode": null,
+     "random_state": 7,
+     "regularization": 0.01,
+     "use_cg": true
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/als",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/als/text/rows=full": {
+  "arms": {
+   "implicit-gpu": {
+    "implementation": {
+     "module": "implicit.gpu.als",
+     "name": "AlternatingLeastSquares"
+    },
+    "library": "implicit",
+    "params": {
+     "alpha": 1.0,
+     "calculate_training_loss": false,
+     "cg_steps": 3,
+     "factors": 64,
+     "iterations": 15,
+     "random_state": 7,
+     "regularization": 0.01,
+     "use_cg": true,
+     "use_gpu": true
+    },
+    "source": "declared"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._expansion_decomp",
+     "name": "AlternatingLeastSquares"
+    },
+    "library": "mojolearn",
+    "params": {
+     "alpha": 1.0,
+     "calculate_training_loss": false,
+     "cg_steps": 3,
+     "factors": 64,
+     "iterations": 15,
+     "numeric_mode": null,
+     "random_state": 7,
+     "regularization": 0.01,
+     "use_cg": true
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/als",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/cagra/istella/rows=full": {
+  "arms": {
+   "cuvs-gpu": {
+    "implementation": {
+     "module": "cuvs.neighbors.cagra.cagra",
+     "name": "build"
+    },
+    "library": "cuvs",
+    "params": {
+     "graph_degree": 32,
+     "intermediate_graph_degree": 64,
+     "itopk_size": 64,
+     "n_neighbors": 10
+    },
+    "source": "declared"
+   },
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "graph_degree": 32,
+     "intermediate_graph_degree": 64,
+     "itopk_size": 64,
+     "n_neighbors": 10,
+     "random_state": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/cagra",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/cagra/taxi/rows=full": {
+  "arms": {
+   "cuvs-gpu": {
+    "implementation": {
+     "module": "cuvs.neighbors.cagra.cagra",
+     "name": "build"
+    },
+    "library": "cuvs",
+    "params": {
+     "graph_degree": 32,
+     "intermediate_graph_degree": 64,
+     "itopk_size": 64,
+     "n_neighbors": 10
+    },
+    "source": "declared"
+   },
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "graph_degree": 32,
+     "intermediate_graph_degree": 64,
+     "itopk_size": 64,
+     "n_neighbors": 10,
+     "random_state": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/cagra",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/clip-grad-norm/synthetic/rows=full": {
+  "arms": {
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "error_if_nonfinite": true,
+     "max_norm": 1.0,
+     "norm_type": 2.0
+    },
+    "source": "declared"
+   },
+   "torch-compile-fp32": {
+    "implementation": {
+     "module": "torch.nn.utils.clip_grad",
+     "name": "clip_grad_norm_"
+    },
+    "library": "torch",
+    "params": {
+     "error_if_nonfinite": true,
+     "max_norm": 1.0,
+     "norm_type": 2.0,
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-fp32": {
+    "implementation": {
+     "module": "torch.nn.utils.clip_grad",
+     "name": "clip_grad_norm_"
+    },
+    "library": "torch",
+    "params": {
+     "error_if_nonfinite": true,
+     "max_norm": 1.0,
+     "norm_type": 2.0,
+     "seed": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/clip-grad-norm",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/cross-entropy/synthetic/rows=full": {
+  "arms": {
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "ignore_index": -100,
+     "label_smoothing": 0.0,
+     "reduction": "mean"
+    },
+    "source": "declared"
+   },
+   "torch-compile-fp32": {
+    "implementation": {
+     "module": "torch.nn.functional",
+     "name": "cross_entropy"
+    },
+    "library": "torch",
+    "params": {
+     "ignore_index": -100,
+     "label_smoothing": 0.0,
+     "reduction": "mean",
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-fp32": {
+    "implementation": {
+     "module": "torch.nn.functional",
+     "name": "cross_entropy"
+    },
+    "library": "torch",
+    "params": {
+     "ignore_index": -100,
+     "label_smoothing": 0.0,
+     "reduction": "mean",
+     "seed": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/cross-entropy",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/decision-tree-clf/istella/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.ensemble.randomforestclassifier",
+     "name": "RandomForestClassifier"
+    },
+    "library": "cuml",
+    "params": {
+     "bootstrap": false,
+     "class_weight": null,
+     "max_batch_size": 4096,
+     "max_depth": 16,
+     "max_features": 1.0,
+     "max_leaves": -1,
+     "max_samples": 1.0,
+     "min_impurity_decrease": 0.0,
+     "min_samples_leaf": 1,
+     "min_samples_split": 2,
+     "n_bins": 128,
+     "n_estimators": 1,
+     "n_streams": 1,
+     "oob_score": false,
+     "output_type": null,
+     "random_state": 7,
+     "split_criterion": "gini",
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._expansion_trees",
+     "name": "DecisionTreeClassifier"
+    },
+    "library": "mojolearn",
+    "params": {
+     "bootstrap": false,
+     "ccp_alpha": 0.0,
+     "class_weight": null,
+     "criterion": "gini",
+     "device": "gpu",
+     "inference_engine": "auto",
+     "max_batch_size": 4096,
+     "max_depth": 16,
+     "max_features": 1.0,
+     "max_leaf_nodes": null,
+     "max_samples": 1.0,
+     "min_impurity_decrease": 0.0,
+     "min_samples_leaf": 1,
+     "min_samples_split": 2,
+     "min_weight_fraction_leaf": 0.0,
+     "monotonic_cst": null,
+     "n_bins": 128,
+     "n_estimators": 1,
+     "n_streams": 1,
+     "numeric_mode": null,
+     "oob_score": false,
+     "random_state": 7,
+     "splitter": "best"
+    },
+    "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/decision-tree-clf",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/decision-tree-clf/taxi/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.ensemble.randomforestclassifier",
+     "name": "RandomForestClassifier"
+    },
+    "library": "cuml",
+    "params": {
+     "bootstrap": false,
+     "class_weight": null,
+     "max_batch_size": 4096,
+     "max_depth": 16,
+     "max_features": 1.0,
+     "max_leaves": -1,
+     "max_samples": 1.0,
+     "min_impurity_decrease": 0.0,
+     "min_samples_leaf": 1,
+     "min_samples_split": 2,
+     "n_bins": 128,
+     "n_estimators": 1,
+     "n_streams": 1,
+     "oob_score": false,
+     "output_type": null,
+     "random_state": 7,
+     "split_criterion": "gini",
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._expansion_trees",
+     "name": "DecisionTreeClassifier"
+    },
+    "library": "mojolearn",
+    "params": {
+     "bootstrap": false,
+     "ccp_alpha": 0.0,
+     "class_weight": null,
+     "criterion": "gini",
+     "device": "gpu",
+     "inference_engine": "auto",
+     "max_batch_size": 4096,
+     "max_depth": 16,
+     "max_features": 1.0,
+     "max_leaf_nodes": null,
+     "max_samples": 1.0,
+     "min_impurity_decrease": 0.0,
+     "min_samples_leaf": 1,
+     "min_samples_split": 2,
+     "min_weight_fraction_leaf": 0.0,
+     "monotonic_cst": null,
+     "n_bins": 128,
+     "n_estimators": 1,
+     "n_streams": 1,
+     "numeric_mode": null,
+     "oob_score": false,
+     "random_state": 7,
+     "splitter": "best"
+    },
+    "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/decision-tree-clf",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/decision-tree-reg/istella/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.ensemble.randomforestregressor",
+     "name": "RandomForestRegressor"
+    },
+    "library": "cuml",
+    "params": {
+     "bootstrap": false,
+     "max_batch_size": 4096,
+     "max_depth": 16,
+     "max_features": 1.0,
+     "max_leaves": -1,
+     "max_samples": 1.0,
+     "min_impurity_decrease": 0.0,
+     "min_samples_leaf": 1,
+     "min_samples_split": 2,
+     "n_bins": 128,
+     "n_estimators": 1,
+     "n_streams": 1,
+     "oob_score": false,
+     "output_type": null,
+     "random_state": 7,
+     "split_criterion": "mse",
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._expansion_trees",
+     "name": "DecisionTreeRegressor"
+    },
+    "library": "mojolearn",
+    "params": {
+     "bootstrap": false,
+     "ccp_alpha": 0.0,
+     "criterion": "squared_error",
+     "device": "gpu",
+     "inference_engine": "auto",
+     "max_batch_size": 4096,
+     "max_depth": 16,
+     "max_features": 1.0,
+     "max_leaf_nodes": null,
+     "max_samples": 1.0,
+     "min_impurity_decrease": 0.0,
+     "min_samples_leaf": 1,
+     "min_samples_split": 2,
+     "min_weight_fraction_leaf": 0.0,
+     "monotonic_cst": null,
+     "n_bins": 128,
+     "n_estimators": 1,
+     "n_streams": 1,
+     "numeric_mode": null,
+     "oob_score": false,
+     "random_state": 7,
+     "splitter": "best"
+    },
+    "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/decision-tree-reg",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/decision-tree-reg/taxi/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.ensemble.randomforestregressor",
+     "name": "RandomForestRegressor"
+    },
+    "library": "cuml",
+    "params": {
+     "bootstrap": false,
+     "max_batch_size": 4096,
+     "max_depth": 16,
+     "max_features": 1.0,
+     "max_leaves": -1,
+     "max_samples": 1.0,
+     "min_impurity_decrease": 0.0,
+     "min_samples_leaf": 1,
+     "min_samples_split": 2,
+     "n_bins": 128,
+     "n_estimators": 1,
+     "n_streams": 1,
+     "oob_score": false,
+     "output_type": null,
+     "random_state": 7,
+     "split_criterion": "mse",
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._expansion_trees",
+     "name": "DecisionTreeRegressor"
+    },
+    "library": "mojolearn",
+    "params": {
+     "bootstrap": false,
+     "ccp_alpha": 0.0,
+     "criterion": "squared_error",
+     "device": "gpu",
+     "inference_engine": "auto",
+     "max_batch_size": 4096,
+     "max_depth": 16,
+     "max_features": 1.0,
+     "max_leaf_nodes": null,
+     "max_samples": 1.0,
+     "min_impurity_decrease": 0.0,
+     "min_samples_leaf": 1,
+     "min_samples_split": 2,
+     "min_weight_fraction_leaf": 0.0,
+     "monotonic_cst": null,
+     "n_bins": 128,
+     "n_estimators": 1,
+     "n_streams": 1,
+     "numeric_mode": null,
+     "oob_score": false,
+     "random_state": 7,
+     "splitter": "best"
+    },
+    "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/decision-tree-reg",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/ivf-sq/istella/rows=full": {
+  "arms": {
+   "cuvs-gpu": {
+    "implementation": {
+     "module": "cuvs.neighbors.ivf_sq.ivf_sq",
+     "name": "build"
+    },
+    "library": "cuvs",
+    "params": {
+     "kmeans_n_iters": 20,
+     "max_train_points_per_cluster": 195,
+     "n_lists": 1024,
+     "n_neighbors": 10,
+     "n_probes": 32
+    },
+    "source": "declared"
+   },
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "kmeans_n_iters": 20,
+     "max_train_points_per_cluster": 195,
+     "n_lists": 1024,
+     "n_neighbors": 10,
+     "n_probes": 32,
+     "random_state": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/ivf-sq",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/qn-reg/istella/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.solvers.qn",
+     "name": "QN"
+    },
+    "library": "cuml",
+    "params": {
+     "delta": 1.0000000000000002e-06,
+     "fit_intercept": true,
+     "l1_strength": 0.0,
+     "l2_strength": 0.0,
+     "lbfgs_memory": 5,
+     "linesearch_max_iter": 50,
+     "loss": "l2",
+     "max_iter": 1000,
+     "output_type": null,
+     "penalty_normalized": true,
+     "tol": 0.0001,
+     "verbose": false,
+     "warm_start": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "delta": 1.0000000000000002e-06,
+     "fit_intercept": true,
+     "l1_strength": 0.0,
+     "l2_strength": 0.0,
+     "lbfgs_memory": 5,
+     "linesearch_max_iter": 50,
+     "loss": "squared_error",
+     "max_iter": 1000,
+     "penalty_normalized": true,
+     "tol": 0.0001,
+     "warm_start": false
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/qn-reg",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/qn-reg/taxi/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.solvers.qn",
+     "name": "QN"
+    },
+    "library": "cuml",
+    "params": {
+     "delta": 1.0000000000000002e-06,
+     "fit_intercept": true,
+     "l1_strength": 0.0,
+     "l2_strength": 0.0,
+     "lbfgs_memory": 5,
+     "linesearch_max_iter": 50,
+     "loss": "l2",
+     "max_iter": 1000,
+     "output_type": null,
+     "penalty_normalized": true,
+     "tol": 0.0001,
+     "verbose": false,
+     "warm_start": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "delta": 1.0000000000000002e-06,
+     "fit_intercept": true,
+     "l1_strength": 0.0,
+     "l2_strength": 0.0,
+     "lbfgs_memory": 5,
+     "linesearch_max_iter": 50,
+     "loss": "squared_error",
+     "max_iter": 1000,
+     "penalty_normalized": true,
+     "tol": 0.0001,
+     "warm_start": false
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/qn-reg",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/sgd-reg/istella/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.linear_model.mbsgd_regressor",
+     "name": "MBSGDRegressor"
+    },
+    "library": "cuml",
+    "params": {
+     "alpha": 0.0001,
+     "batch_size": 4096,
+     "epochs": 100,
+     "eta0": 0.005,
+     "fit_intercept": true,
+     "l1_ratio": 0.15,
+     "learning_rate": "constant",
+     "loss": "squared_loss",
+     "n_iter_no_change": 5,
+     "output_type": null,
+     "penalty": "l2",
+     "power_t": 0.25,
+     "shuffle": true,
+     "tol": 0.0,
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._expansion_linear",
+     "name": "SGDRegressor"
+    },
+    "library": "mojolearn",
+    "params": {
+     "alpha": 0.0001,
+     "average": false,
+     "batch_size": 4096,
+     "early_stopping": false,
+     "epsilon": 0.1,
+     "eta0": 0.005,
+     "fit_intercept": true,
+     "l1_ratio": 0.15,
+     "learning_rate": "constant",
+     "loss": "squared_error",
+     "max_iter": 100,
+     "n_iter_no_change": 5,
+     "numeric_mode": null,
+     "penalty": "l2",
+     "power_t": 0.25,
+     "random_state": 7,
+     "shuffle": true,
+     "tol": null,
+     "warm_start": false
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/sgd-reg",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|algos/sgd-reg/taxi/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.linear_model.mbsgd_regressor",
+     "name": "MBSGDRegressor"
+    },
+    "library": "cuml",
+    "params": {
+     "alpha": 0.0001,
+     "batch_size": 4096,
+     "epochs": 100,
+     "eta0": 0.005,
+     "fit_intercept": true,
+     "l1_ratio": 0.15,
+     "learning_rate": "constant",
+     "loss": "squared_loss",
+     "n_iter_no_change": 5,
+     "output_type": null,
+     "penalty": "l2",
+     "power_t": 0.25,
+     "shuffle": true,
+     "tol": 0.0,
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._expansion_linear",
+     "name": "SGDRegressor"
+    },
+    "library": "mojolearn",
+    "params": {
+     "alpha": 0.0001,
+     "average": false,
+     "batch_size": 4096,
+     "early_stopping": false,
+     "epsilon": 0.1,
+     "eta0": 0.005,
+     "fit_intercept": true,
+     "l1_ratio": 0.15,
+     "learning_rate": "constant",
+     "loss": "squared_error",
+     "max_iter": 100,
+     "n_iter_no_change": 5,
+     "numeric_mode": null,
+     "penalty": "l2",
+     "power_t": 0.25,
+     "random_state": 7,
+     "shuffle": true,
+     "tol": null,
+     "warm_start": false
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "algos",
+  "lane": "algos/sgd-reg",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|classical2/agglomerative/istella/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.cluster.agglomerative",
+     "name": "AgglomerativeClustering"
+    },
+    "library": "cuml",
+    "params": {
+     "c": 15,
+     "connectivity": "pairwise",
+     "linkage": "single",
+     "metric": "euclidean",
+     "n_clusters": 8,
+     "output_type": "cupy",
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._hierarchy_impl",
+     "name": "AgglomerativeClustering"
+    },
+    "library": "mojolearn",
+    "params": {
+     "c": 15,
+     "compute_distances": false,
+     "compute_full_tree": "auto",
+     "connectivity": "pairwise",
+     "distance_threshold": null,
+     "linkage": "single",
+     "memory": null,
+     "metric": "euclidean",
+     "n_clusters": 8,
+     "prediction_data": false
+    },
+    "source": "attributes"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "classical2",
+  "lane": "agglomerative",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|classical2/agglomerative/taxi/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.cluster.agglomerative",
+     "name": "AgglomerativeClustering"
+    },
+    "library": "cuml",
+    "params": {
+     "c": 15,
+     "connectivity": "pairwise",
+     "linkage": "single",
+     "metric": "euclidean",
+     "n_clusters": 8,
+     "output_type": "cupy",
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._hierarchy_impl",
+     "name": "AgglomerativeClustering"
+    },
+    "library": "mojolearn",
+    "params": {
+     "c": 15,
+     "compute_distances": false,
+     "compute_full_tree": "auto",
+     "connectivity": "pairwise",
+     "distance_threshold": null,
+     "linkage": "single",
+     "memory": null,
+     "metric": "euclidean",
+     "n_clusters": 8,
+     "prediction_data": false
+    },
+    "source": "attributes"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "classical2",
+  "lane": "agglomerative",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|classical2/arima/synthetic/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.tsa.arima",
+     "name": "ARIMA"
+    },
+    "library": "cuml",
+    "params": {
+     "fit_intercept": true,
+     "maxiter": 1000,
+     "method": "ml",
+     "n_exog": 0,
+     "order": [
+      1,
+      0,
+      1
+     ],
+     "output_type": "numpy",
+     "seasonal_order": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "simple_differencing": true,
+     "verbose": false
+    },
+    "source": "declared"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._arima_impl",
+     "name": "ARIMA"
+    },
+    "library": "mojolearn",
+    "params": {
+     "maxiter": 1000,
+     "method": "ml",
+     "numeric_mode": null,
+     "order": [
+      1,
+      0,
+      1
+     ],
+     "output_type": null,
+     "seasonal_order": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "trend": "c",
+     "verbose": false
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "classical2",
+  "lane": "arima",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|classical2/ets/synthetic/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.tsa.holtwinters",
+     "name": "ExponentialSmoothing"
+    },
+    "library": "cuml",
+    "params": {
+     "endog": "array sha256:fb48f601e1efde9f",
+     "eps": 0.00224,
+     "output_type": null,
+     "seasonal": "add",
+     "seasonal_periods": 24,
+     "start_periods": 2,
+     "ts_num": 64,
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._tsa_impl",
+     "name": "ExponentialSmoothing"
+    },
+    "library": "mojolearn",
+    "params": {
+     "endog": "array sha256:fb48f601e1efde9f",
+     "eps": 0.00224,
+     "initialization_method": "heuristic",
+     "seasonal": "additive",
+     "seasonal_periods": 24,
+     "start_periods": 2,
+     "ts_num": 64
+    },
+    "source": "attributes"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "classical2",
+  "lane": "ets",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|classical2/spectral-embedding/istella/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.manifold.spectral_embedding",
+     "name": "SpectralEmbedding"
+    },
+    "library": "cuml",
+    "params": {
+     "affinity": "nearest_neighbors",
+     "n_components": 2,
+     "n_neighbors": 10,
+     "output_type": null,
+     "random_state": 7,
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._spectral_impl",
+     "name": "SpectralEmbedding"
+    },
+    "library": "mojolearn",
+    "params": {
+     "affinity": "nearest_neighbors",
+     "eigen_solver": null,
+     "eigen_tol": 1e-05,
+     "gamma": null,
+     "n_components": 2,
+     "n_jobs": null,
+     "n_neighbors": 10,
+     "random_state": 7,
+     "verbose": false
+    },
+    "source": "attributes"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "classical2",
+  "lane": "spectral-embedding",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|classical2/spectral-embedding/taxi/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.manifold.spectral_embedding",
+     "name": "SpectralEmbedding"
+    },
+    "library": "cuml",
+    "params": {
+     "affinity": "nearest_neighbors",
+     "n_components": 2,
+     "n_neighbors": 10,
+     "output_type": null,
+     "random_state": 7,
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._spectral_impl",
+     "name": "SpectralEmbedding"
+    },
+    "library": "mojolearn",
+    "params": {
+     "affinity": "nearest_neighbors",
+     "eigen_solver": null,
+     "eigen_tol": 1e-05,
+     "gamma": null,
+     "n_components": 2,
+     "n_jobs": null,
+     "n_neighbors": 10,
+     "random_state": 7,
+     "verbose": false
+    },
+    "source": "attributes"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "classical2",
+  "lane": "spectral-embedding",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|classical2/spectral/istella/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.cluster.spectral_clustering",
+     "name": "SpectralClustering"
+    },
+    "library": "cuml",
+    "params": {
+     "affinity": "nearest_neighbors",
+     "eigen_tol": 1e-05,
+     "n_clusters": 8,
+     "n_components": 8,
+     "n_init": 1,
+     "n_neighbors": 10,
+     "output_type": null,
+     "random_state": 42,
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._spectral_impl",
+     "name": "SpectralClustering"
+    },
+    "library": "mojolearn",
+    "params": {
+     "affinity": "nearest_neighbors",
+     "assign_labels": "kmeans",
+     "eigen_tol": 1e-05,
+     "gamma": null,
+     "n_clusters": 8,
+     "n_components": 8,
+     "n_init": 1,
+     "n_neighbors": 10,
+     "prediction_data": false,
+     "random_state": 42
+    },
+    "source": "attributes"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "classical2",
+  "lane": "spectral",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 42
+ },
+ "nvidia|classical2/spectral/taxi/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.cluster.spectral_clustering",
+     "name": "SpectralClustering"
+    },
+    "library": "cuml",
+    "params": {
+     "affinity": "nearest_neighbors",
+     "eigen_tol": 1e-05,
+     "n_clusters": 8,
+     "n_components": 8,
+     "n_init": 1,
+     "n_neighbors": 10,
+     "output_type": null,
+     "random_state": 42,
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._spectral_impl",
+     "name": "SpectralClustering"
+    },
+    "library": "mojolearn",
+    "params": {
+     "affinity": "nearest_neighbors",
+     "assign_labels": "kmeans",
+     "eigen_tol": 1e-05,
+     "gamma": null,
+     "n_clusters": 8,
+     "n_components": 8,
+     "n_init": 1,
+     "n_neighbors": 10,
+     "prediction_data": false,
+     "random_state": 42
+    },
+    "source": "attributes"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "classical2",
+  "lane": "spectral",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 42
+ },
+ "nvidia|classical2/umap/istella/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.manifold.umap.umap",
+     "name": "UMAP"
+    },
+    "library": "cuml",
+    "params": {
+     "a": null,
+     "b": null,
+     "build_algo": "brute_force_knn",
+     "build_kwds": null,
+     "callback": null,
+     "device_ids": null,
+     "force_serial_epochs": true,
+     "hash_input": false,
+     "init": "spectral",
+     "learning_rate": 1.0,
+     "local_connectivity": 1.0,
+     "metric": "euclidean",
+     "metric_kwds": null,
+     "min_dist": 0.1,
+     "n_components": 2,
+     "n_epochs": 500,
+     "n_neighbors": 5,
+     "negative_sample_rate": 5,
+     "output_type": "cupy",
+     "precomputed_knn": null,
+     "random_state": 7,
+     "repulsion_strength": 1.0,
+     "set_op_mix_ratio": 1.0,
+     "spread": 1.0,
+     "target_metric": "categorical",
+     "target_n_neighbors": -1,
+     "target_weight": 0.5,
+     "transform_queue_size": 4.0,
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._umap_impl",
+     "name": "UMAP"
+    },
+    "library": "mojolearn",
+    "params": {
+     "a": null,
+     "b": null,
+     "densmap": false,
+     "init": "spectral",
+     "learning_rate": 1.0,
+     "local_connectivity": 1.0,
+     "metric": "euclidean",
+     "metric_kwds": null,
+     "min_dist": 0.1,
+     "n_components": 2,
+     "n_epochs": 500,
+     "n_neighbors": 5,
+     "negative_sample_rate": 5,
+     "numeric_mode": null,
+     "output_metric": "euclidean",
+     "random_state": 7,
+     "repulsion_strength": 1.0,
+     "set_op_mix_ratio": 1.0,
+     "spread": 1.0,
+     "target_metric": "categorical",
+     "target_n_neighbors": -1,
+     "target_weight": 0.5
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "classical2",
+  "lane": "umap",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|classical2/umap/taxi/rows=full": {
+  "arms": {
+   "cuml-gpu": {
+    "implementation": {
+     "module": "cuml.manifold.umap.umap",
+     "name": "UMAP"
+    },
+    "library": "cuml",
+    "params": {
+     "a": null,
+     "b": null,
+     "build_algo": "brute_force_knn",
+     "build_kwds": null,
+     "callback": null,
+     "device_ids": null,
+     "force_serial_epochs": true,
+     "hash_input": false,
+     "init": "spectral",
+     "learning_rate": 1.0,
+     "local_connectivity": 1.0,
+     "metric": "euclidean",
+     "metric_kwds": null,
+     "min_dist": 0.1,
+     "n_components": 2,
+     "n_epochs": 500,
+     "n_neighbors": 5,
+     "negative_sample_rate": 5,
+     "output_type": "cupy",
+     "precomputed_knn": null,
+     "random_state": 7,
+     "repulsion_strength": 1.0,
+     "set_op_mix_ratio": 1.0,
+     "spread": 1.0,
+     "target_metric": "categorical",
+     "target_n_neighbors": -1,
+     "target_weight": 0.5,
+     "transform_queue_size": 4.0,
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn._umap_impl",
+     "name": "UMAP"
+    },
+    "library": "mojolearn",
+    "params": {
+     "a": null,
+     "b": null,
+     "densmap": false,
+     "init": "spectral",
+     "learning_rate": 1.0,
+     "local_connectivity": 1.0,
+     "metric": "euclidean",
+     "metric_kwds": null,
+     "min_dist": 0.1,
+     "n_components": 2,
+     "n_epochs": 500,
+     "n_neighbors": 5,
+     "negative_sample_rate": 5,
+     "numeric_mode": null,
+     "output_metric": "euclidean",
+     "random_state": 7,
+     "repulsion_strength": 1.0,
+     "set_op_mix_ratio": 1.0,
+     "spread": 1.0,
+     "target_metric": "categorical",
+     "target_n_neighbors": -1,
+     "target_weight": 0.5
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "classical2",
+  "lane": "umap",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|neural/mlp-predict/gaussian/shape=full": {
+  "arms": {
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {},
+    "source": "declared"
+   },
+   "torch-compile-bf16": {
+    "implementation": {
+     "module": "torch.nn.modules.container",
+     "name": "Sequential"
+    },
+    "library": "torch",
+    "params": {
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-compile-fp32": {
+    "implementation": {
+     "module": "torch.nn.modules.container",
+     "name": "Sequential"
+    },
+    "library": "torch",
+    "params": {
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-compile-tf32": {
+    "implementation": {
+     "module": "torch.nn.modules.container",
+     "name": "Sequential"
+    },
+    "library": "torch",
+    "params": {
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-bf16": {
+    "implementation": {
+     "module": "torch.nn.modules.container",
+     "name": "Sequential"
+    },
+    "library": "torch",
+    "params": {
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-fp32": {
+    "implementation": {
+     "module": "torch.nn.modules.container",
+     "name": "Sequential"
+    },
+    "library": "torch",
+    "params": {
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-tf32": {
+    "implementation": {
+     "module": "torch.nn.modules.container",
+     "name": "Sequential"
+    },
+    "library": "torch",
+    "params": {
+     "seed": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "neural",
+  "lane": "mlp-predict",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|neural/transformer-decode/gaussian/shape=full": {
+  "arms": {
+   "ours": {
+    "implementation": null,
+    "library": "mojolearn",
+    "params": {
+     "eps": 1e-06,
+     "rope_theta": 10000.0
+    },
+    "source": "declared"
+   },
+   "torch-eager-bf16": {
+    "implementation": {
+     "module": "transformers.models.llama.modeling_llama",
+     "name": "LlamaDecoderLayer"
+    },
+    "library": "torch",
+    "params": {
+     "eps": 1e-06,
+     "rope_theta": 10000.0,
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-fp32": {
+    "implementation": {
+     "module": "transformers.models.llama.modeling_llama",
+     "name": "LlamaDecoderLayer"
+    },
+    "library": "torch",
+    "params": {
+     "eps": 1e-06,
+     "rope_theta": 10000.0,
+     "seed": 7
+    },
+    "source": "declared"
+   },
+   "torch-eager-tf32": {
+    "implementation": {
+     "module": "transformers.models.llama.modeling_llama",
+     "name": "LlamaDecoderLayer"
+    },
+    "library": "torch",
+    "params": {
+     "eps": 1e-06,
+     "rope_theta": 10000.0,
+     "seed": 7
+    },
+    "source": "declared"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "neural",
+  "lane": "transformer-decode",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|trees/gbdt-rank-pairlogit/istella/rows=full": {
+  "arms": {
+   "catboost-gpu": {
+    "implementation": {
+     "module": "catboost.core",
+     "name": "CatBoostRanker"
+    },
+    "library": "catboost",
+    "params": {
+     "allow_writing_files": false,
+     "boost_from_average": false,
+     "boosting_type": "Plain",
+     "bootstrap_type": "No",
+     "border_count": 254,
+     "depth": 6,
+     "devices": "0",
+     "feature_border_type": "GreedyLogSum",
+     "grow_policy": "SymmetricTree",
+     "iterations": 100,
+     "l2_leaf_reg": 1.0,
+     "leaf_estimation_iterations": 1,
+     "leaf_estimation_method": "Newton",
+     "learning_rate": 0.1,
+     "loss_function": "PairLogit",
+     "max_leaves": 64,
+     "min_data_in_leaf": 1,
+     "nan_mode": "Min",
+     "random_seed": 7,
+     "random_strength": 1.0,
+     "score_function": "Cosine",
+     "subsample": null,
+     "task_type": "GPU",
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn.ensemble",
+     "name": "GradientBoosting"
+    },
+    "library": "mojolearn",
+    "params": {
+     "bagging_temperature": 1.0,
+     "best_model_min_trees": 1,
+     "boost_from_average": false,
+     "boosting_type": "Plain",
+     "bootstrap_type": "No",
+     "border_build_max_samples": 200000,
+     "border_count": 254,
+     "cat_features": null,
+     "class_weights": null,
+     "ctr_estimation_permutation_id": null,
+     "feature_border_type": "GreedyLogSum",
+     "feature_fraction": 1.0,
+     "fold_len_multiplier": 2.0,
+     "fold_permutation_block": null,
+     "grow_policy": "SymmetricTree",
+     "l2_leaf_reg": 1.0,
+     "leaf_estimation_iterations": 1,
+     "leaf_estimation_method": "Newton",
+     "learning_rate": 0.1,
+     "loss": "PairLogit",
+     "loss_alpha": null,
+     "loss_border": null,
+     "loss_delta": null,
+     "loss_q": null,
+     "loss_variance_power": null,
+     "max_depth": 6,
+     "max_leaves": 64,
+     "min_child_hessian": null,
+     "min_data_in_leaf": 1,
+     "min_split_gain": null,
+     "n_estimators": 100,
+     "nan_mode": "Min",
+     "numeric_mode": null,
+     "od_pvalue": null,
+     "od_type": null,
+     "od_wait": null,
+     "one_hot_features": null,
+     "permutation_count": null,
+     "random_state": 7,
+     "random_strength": 1.0,
+     "score_function": "Cosine",
+     "subsample": null,
+     "use_best_model": null,
+     "use_pointwise_searcher": false
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [
+   "catboost-gpu: scale_pos_weight missing from catboost-gpu read-back; explicit semantic mapping required",
+   "catboost-gpu: use_pointwise_searcher missing from catboost-gpu read-back; explicit semantic mapping required"
+  ],
+  "box_verdict": "REFUSED",
+  "family": "trees",
+  "lane": "gbdt-rank-pairlogit",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|trees/gbdt-rank-yetirank/istella/rows=full": {
+  "arms": {
+   "catboost-gpu": {
+    "implementation": {
+     "module": "catboost.core",
+     "name": "CatBoostRanker"
+    },
+    "library": "catboost",
+    "params": {
+     "allow_writing_files": false,
+     "boost_from_average": false,
+     "boosting_type": "Plain",
+     "bootstrap_type": "No",
+     "border_count": 254,
+     "depth": 6,
+     "devices": "0",
+     "feature_border_type": "GreedyLogSum",
+     "grow_policy": "SymmetricTree",
+     "iterations": 100,
+     "l2_leaf_reg": 1.0,
+     "leaf_estimation_iterations": 1,
+     "leaf_estimation_method": "Newton",
+     "learning_rate": 0.1,
+     "loss_function": "YetiRank",
+     "max_leaves": 64,
+     "min_data_in_leaf": 1,
+     "nan_mode": "Min",
+     "random_seed": 7,
+     "random_strength": 1.0,
+     "score_function": "Cosine",
+     "subsample": null,
+     "task_type": "GPU",
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn.ensemble",
+     "name": "GradientBoosting"
+    },
+    "library": "mojolearn",
+    "params": {
+     "bagging_temperature": 1.0,
+     "best_model_min_trees": 1,
+     "boost_from_average": false,
+     "boosting_type": "Plain",
+     "bootstrap_type": "No",
+     "border_build_max_samples": 200000,
+     "border_count": 254,
+     "cat_features": null,
+     "class_weights": null,
+     "ctr_estimation_permutation_id": null,
+     "feature_border_type": "GreedyLogSum",
+     "feature_fraction": 1.0,
+     "fold_len_multiplier": 2.0,
+     "fold_permutation_block": null,
+     "grow_policy": "SymmetricTree",
+     "l2_leaf_reg": 1.0,
+     "leaf_estimation_iterations": 1,
+     "leaf_estimation_method": "Newton",
+     "learning_rate": 0.1,
+     "loss": "YetiRank",
+     "loss_alpha": null,
+     "loss_border": null,
+     "loss_delta": null,
+     "loss_q": null,
+     "loss_variance_power": null,
+     "max_depth": 6,
+     "max_leaves": 64,
+     "min_child_hessian": null,
+     "min_data_in_leaf": 1,
+     "min_split_gain": null,
+     "n_estimators": 100,
+     "nan_mode": "Min",
+     "numeric_mode": null,
+     "od_pvalue": null,
+     "od_type": null,
+     "od_wait": null,
+     "one_hot_features": null,
+     "permutation_count": null,
+     "random_state": 7,
+     "random_strength": 1.0,
+     "score_function": "Cosine",
+     "subsample": null,
+     "use_best_model": null,
+     "use_pointwise_searcher": false
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [
+   "catboost-gpu: scale_pos_weight missing from catboost-gpu read-back; explicit semantic mapping required",
+   "catboost-gpu: use_pointwise_searcher missing from catboost-gpu read-back; explicit semantic mapping required"
+  ],
+  "box_verdict": "REFUSED",
+  "family": "trees",
+  "lane": "gbdt-rank-yetirank",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|trees/gbdt-symmetric-1000/istella/rows=full": {
+  "arms": {
+   "catboost-gpu": {
+    "implementation": {
+     "module": "catboost.core",
+     "name": "CatBoostClassifier"
+    },
+    "library": "catboost",
+    "params": {
+     "allow_writing_files": false,
+     "boost_from_average": false,
+     "boosting_type": "Plain",
+     "bootstrap_type": "No",
+     "border_count": 254,
+     "data_partition": "DocParallel",
+     "depth": 8,
+     "dev_max_subset_size_for_build_borders": 200000,
+     "devices": "0",
+     "feature_border_type": "GreedyLogSum",
+     "grow_policy": "SymmetricTree",
+     "iterations": 1000,
+     "l2_leaf_reg": 1.0,
+     "leaf_estimation_iterations": 1,
+     "leaf_estimation_method": "Newton",
+     "learning_rate": 0.1,
+     "loss_function": "Logloss",
+     "max_leaves": 256,
+     "min_data_in_leaf": 1,
+     "nan_mode": "Min",
+     "random_seed": 7,
+     "random_strength": 1.0,
+     "rsm": 1.0,
+     "scale_pos_weight": 8.85789592328634,
+     "score_function": "Cosine",
+     "subsample": null,
+     "task_type": "GPU",
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn.ensemble",
+     "name": "GradientBoosting"
+    },
+    "library": "mojolearn",
+    "params": {
+     "bagging_temperature": 1.0,
+     "best_model_min_trees": 1,
+     "boost_from_average": false,
+     "boosting_type": "Plain",
+     "bootstrap_type": "No",
+     "border_build_max_samples": 200000,
+     "border_count": 254,
+     "cat_features": null,
+     "class_weights": [
+      1.0,
+      8.85789592328634
+     ],
+     "ctr_estimation_permutation_id": null,
+     "feature_border_type": "GreedyLogSum",
+     "feature_fraction": 1.0,
+     "fold_len_multiplier": 2.0,
+     "fold_permutation_block": null,
+     "grow_policy": "SymmetricTree",
+     "l2_leaf_reg": 1.0,
+     "leaf_estimation_iterations": 1,
+     "leaf_estimation_method": "Newton",
+     "learning_rate": 0.1,
+     "loss": "Logloss",
+     "loss_alpha": null,
+     "loss_border": null,
+     "loss_delta": null,
+     "loss_q": null,
+     "loss_variance_power": null,
+     "max_depth": 8,
+     "max_leaves": 256,
+     "min_child_hessian": null,
+     "min_data_in_leaf": 1,
+     "min_split_gain": null,
+     "n_estimators": 1000,
+     "nan_mode": "Min",
+     "numeric_mode": null,
+     "od_pvalue": null,
+     "od_type": null,
+     "od_wait": null,
+     "one_hot_features": null,
+     "permutation_count": null,
+     "random_state": 7,
+     "random_strength": 1.0,
+     "score_function": "Cosine",
+     "subsample": null,
+     "use_best_model": null,
+     "use_pointwise_searcher": true
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "trees",
+  "lane": "gbdt-symmetric-1000",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ },
+ "nvidia|trees/gbdt-symmetric-1000/taxi/rows=full": {
+  "arms": {
+   "catboost-gpu": {
+    "implementation": {
+     "module": "catboost.core",
+     "name": "CatBoostClassifier"
+    },
+    "library": "catboost",
+    "params": {
+     "allow_writing_files": false,
+     "boost_from_average": false,
+     "boosting_type": "Plain",
+     "bootstrap_type": "No",
+     "border_count": 254,
+     "data_partition": "DocParallel",
+     "depth": 8,
+     "dev_max_subset_size_for_build_borders": 200000,
+     "devices": "0",
+     "feature_border_type": "GreedyLogSum",
+     "grow_policy": "SymmetricTree",
+     "iterations": 1000,
+     "l2_leaf_reg": 1.0,
+     "leaf_estimation_iterations": 1,
+     "leaf_estimation_method": "Newton",
+     "learning_rate": 0.1,
+     "loss_function": "Logloss",
+     "max_leaves": 256,
+     "min_data_in_leaf": 1,
+     "nan_mode": "Min",
+     "random_seed": 7,
+     "random_strength": 1.0,
+     "rsm": 1.0,
+     "scale_pos_weight": 1.3101271632087197,
+     "score_function": "Cosine",
+     "subsample": null,
+     "task_type": "GPU",
+     "verbose": false
+    },
+    "source": "get_params"
+   },
+   "ours": {
+    "implementation": {
+     "module": "mojolearn.ensemble",
+     "name": "GradientBoosting"
+    },
+    "library": "mojolearn",
+    "params": {
+     "bagging_temperature": 1.0,
+     "best_model_min_trees": 1,
+     "boost_from_average": false,
+     "boosting_type": "Plain",
+     "bootstrap_type": "No",
+     "border_build_max_samples": 200000,
+     "border_count": 254,
+     "cat_features": null,
+     "class_weights": [
+      1.0,
+      1.3101271632087197
+     ],
+     "ctr_estimation_permutation_id": null,
+     "feature_border_type": "GreedyLogSum",
+     "feature_fraction": 1.0,
+     "fold_len_multiplier": 2.0,
+     "fold_permutation_block": null,
+     "grow_policy": "SymmetricTree",
+     "l2_leaf_reg": 1.0,
+     "leaf_estimation_iterations": 1,
+     "leaf_estimation_method": "Newton",
+     "learning_rate": 0.1,
+     "loss": "Logloss",
+     "loss_alpha": null,
+     "loss_border": null,
+     "loss_delta": null,
+     "loss_q": null,
+     "loss_variance_power": null,
+     "max_depth": 8,
+     "max_leaves": 256,
+     "min_child_hessian": null,
+     "min_data_in_leaf": 1,
+     "min_split_gain": null,
+     "n_estimators": 1000,
+     "nan_mode": "Min",
+     "numeric_mode": null,
+     "od_pvalue": null,
+     "od_type": null,
+     "od_wait": null,
+     "one_hot_features": null,
+     "permutation_count": null,
+     "random_state": 7,
+     "random_strength": 1.0,
+     "score_function": "Cosine",
+     "subsample": null,
+     "use_best_model": null,
+     "use_pointwise_searcher": true
+    },
+    "source": "get_params"
+   }
+  },
+  "box_problems": [],
+  "box_verdict": "MATCHED",
+  "family": "trees",
+  "lane": "gbdt-symmetric-1000",
+  "our_arms": [
+   "ours"
+  ],
+  "pairing": null,
+  "reference": "ours",
+  "seed": 7
+ }
+}

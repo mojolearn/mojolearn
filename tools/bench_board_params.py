@@ -464,10 +464,9 @@ EXCEPTIONS = [
     for lane in ("ivf-pq", "ivf-sq", "ivf-refine", "cagra")
     for arm in ("cuvs-gpu", "hipvs-gpu")    # hipvs-gpu: FAIRNESS FIX (2026-10-13 audit), hipVS on AMD
 ] + [
-    ("algos/decision-tree-*", "max_leaves", "cuml-gpu", "no leaf cap on any arm: ours and "
-     "scikit-learn max_leaf_nodes None (a value would switch both to best-first growth; ours "
-     "refuses it with splitter='best'), cuML max_leaves -1, its unlimited sentinel "
-     "(decisiontree.hpp); depth 16 bounds every arm"),
+    # refused-param-mappings (2026-10-15): the unconditional ("algos/decision-tree-*", "max_leaves",
+    # "cuml-gpu") row waived ANY leaf cap on either arm; it is now the value-conditional mapping in
+    # semantic_exception (ours None <-> cuML -1 only).
     ("algos/dart", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, no "
      "leaf cap); ours and LightGBM leaf-wise with num_leaves 255"),
     ("algos/dart-reg", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, "
@@ -509,12 +508,65 @@ EXCEPTIONS = [
      "and scikit-learn tol=None"),
     ("algos/sgd-reg", "tol", "cuml-gpu", "cuML MBSGD tol=0.0 is its no-early-stop value; ours "
      "and scikit-learn tol=None"),
-    ("algos/sgd-reg", "loss", "cuml-gpu", "cuML spells squared error 'squared_loss'"),
-    ("algos/qn-reg", "loss", "cuml-gpu", "cuML QN spells squared error 'l2'"),
+    # refused-param-mappings (2026-10-15): the unconditional sgd-reg and qn-reg "loss" rows for
+    # cuml-gpu waived ANY loss on either arm (ours 'huber' against cuML 'l2' matched); they are now
+    # the value-conditional spellings in semantic_exception (ours 'squared_error' only).
     ("algos/qn-reg", "tol", "sklearn-cpu", "scikit-learn LinearRegression's tol is read only by "
      "the sparse lsqr path; on dense X it solves in closed form (scipy lstsq) and has no "
      "stopping tolerance"),
 ]
+
+
+def _no_row_sampling(ours, theirs):
+    """gbdt-* subsample: ours bootstrap 'No' with subsample unset, and the opponent either CatBoost
+    bootstrap 'No' with subsample unset or a library whose subsample is exactly 1.0 (every row)."""
+    if not (_r6_is(ours.get("bootstrap_type"), "No") and ours.get("subsample") is None):
+        return False
+    if _r6_is(theirs.get("bootstrap_type"), "No") and theirs.get("subsample") is None:
+        return True
+    return theirs.get("bootstrap_type") is None and _r6_is(theirs.get("subsample"), 1.0)
+
+
+#: refused-param-mappings (2026-10-15): the values each EXCEPTIONS row was reviewed for. A row
+#: listed here applies only when (ours, theirs) is one of its pairs, or its predicate over the two
+#: arms' canonical settings holds; any other difference on that parameter is compared and refuses.
+#: Before this, every row applied to ANY two values (e.g. "class_weight" None/None also waived
+#: ours 'balanced' against cuML None; "boosting_type" Plain/gbtree also waived ours Ordered or
+#: XGBoost dart). The pairs are the ones the rows fired on in the 0.8.45 smoke read-backs
+#: (smoke-0845, NVIDIA f4c365b4c and AMD), the values each row's reason describes. Rows not listed
+#: (seed rows and data-dependent values: tsne init/learning_rate, pagerank tol) keep their
+#: source-reviewed reason only; tools/test_refused_param_mappings.py replays those read-backs.
+EXCEPTION_VALUES = {
+    ("gbdt-ordered", "permutation_count", "catboost-*"): [(4, None)],
+    ("gbdt-*", "subsample", "*"): _no_row_sampling,
+    ("gbdt-*", "boosting_type", "xgboost-*"): [("Plain", "gbtree")],
+    ("pca", "tol", "cuml-gpu"): [(0.0, 1e-7)],
+    ("tsvd", "algorithm", "cuml-gpu"): [("covariance_eigh", "full")],
+    ("tsvd", "n_iter", "cuml-gpu"): [(5, 15)],
+    ("tsvd", "tol", "cuml-gpu"): [(0.0, 1e-7)],
+    ("algos/sgd-clf", "tol", "cuml-gpu"): [(None, 0.0)],
+    ("algos/sgd-reg", "tol", "cuml-gpu"): [(None, 0.0)],
+    ("iforest", "max_depth", "*"): [(None, None), (None, 8)],
+    ("logreg", "l1_ratio", "*"): [(None, None), (None, 0.0)],
+    ("linearsvc", "class_weight", "*"): [(None, None)],
+    ("logreg", "class_weight", "*"): [(None, None)],
+    ("svc", "class_weight", "*"): [(None, None)],
+    ("rf", "class_weight", "*"): [(None, None)],
+    ("et", "class_weight", "*"): [(None, None)],
+}
+
+
+def _row_values_hold(row, ours, theirs, param):
+    """Whether an EXCEPTIONS row's reviewed values (EXCEPTION_VALUES) hold for this difference."""
+    pins = EXCEPTION_VALUES.get(row)
+    if pins is None:
+        return True
+    if ours is None or theirs is None:
+        return False
+    if callable(pins):
+        return bool(pins(ours, theirs))
+    o, t = ours.get(param), theirs.get(param)
+    return any(_r6_is(o, po) and _r6_is(t, pt) for po, pt in pins)
 
 
 class ParamsRefused(RuntimeError):
@@ -828,9 +880,12 @@ def has_no_seed_argument(obj, raw):
     return not any(n in params for n in names)
 
 
-def exception_for(lane, param, arm):
+def exception_for(lane, param, arm, ours=None, theirs=None):
+    """The EXCEPTIONS reason for this difference. `ours` / `theirs`: the two arms' canonical
+    settings; a row with reviewed values (EXCEPTION_VALUES) applies only when they hold."""
     for lg, p, ag, why in EXCEPTIONS:
-        if p == param and fnmatch.fnmatch(lane, lg) and fnmatch.fnmatch(arm, ag):
+        if p == param and fnmatch.fnmatch(lane, lg) and fnmatch.fnmatch(arm, ag) \
+                and _row_values_hold((lg, p, ag), ours, theirs, param):
             return why
     return None
 
@@ -1678,7 +1733,9 @@ def _semantic_r15(lane, param, arm, ours, theirs, library):
     (the race places it). Fires only when both arms read back the same use_cg and cg_steps."""
     if lane != "algos/als" or library != "implicit" or param != "use_gpu" or param in ours:
         return None
-    if isinstance(theirs.get("use_gpu"), bool) and ours.get("use_cg") is not None \
+    # refused-param-mappings (2026-10-15): any bool used to pass, so an implicit-gpu arm reading back
+    # use_gpu=False (implicit's CPU class) matched; the class must be the one the arm is named for.
+    if theirs.get("use_gpu") is arm.endswith("-gpu") and ours.get("use_cg") is not None \
             and ours.get("use_cg") == theirs.get("use_cg") and ours.get("cg_steps") == theirs.get("cg_steps"):
         return ("use_gpu only selects implicit's CUDA or CPU class; the solver both run is compared (use_cg=%s, "
                 "cg_steps=%s)" % (ours.get("use_cg"), ours.get("cg_steps")))
@@ -2015,6 +2072,15 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
                 # implementation only: the prediction kernel that walks the same fitted tree
                 # (_expansion_trees.py: 'auto' predicts as 'sequential' in identical mode)
                 return "ours' prediction-kernel choice walks the same fitted tree; cuML predicts its own forest; not a model setting"
+        # refused-param-mappings (2026-10-15; replaces an unconditional EXCEPTIONS row): no leaf cap on
+        # either arm. Ours and scikit-learn max_leaf_nodes None (a value switches both to best-first
+        # growth; ours refuses it with splitter='best'), cuML max_leaves -1, its unlimited sentinel
+        # (cuML 26.08 decisiontree.hpp); max_depth (compared) bounds every arm. Any other value on
+        # either side is a real leaf cap and is compared.
+        if param == "max_leaves" and param in ours and param in theirs and ours[param] is None \
+                and theirs[param] == -1 and not isinstance(theirs[param], bool):
+            return ("no leaf cap on either arm: ours max_leaf_nodes=None, cuML max_leaves=-1 (its unlimited "
+                    "sentinel); max_depth compared")
         if param == "class_weight" and lane == "algos/decision-tree-clf" and param in ours and param in theirs \
                 and ours[param] is None and theirs[param] is None:
             # cuML 26.08 common/classification.py process_class_weight: None returns the
@@ -2022,6 +2088,14 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
             # gives no row weights. A dict of unit weights would route both through their weighted
             # kernels instead, so None is the explicit unweighted setting on both.
             return "None is unweighted on both (cuML process_class_weight; ours _class_weight_rows); no class weights"
+    # refused-param-mappings (2026-10-15; replaces two unconditional EXCEPTIONS rows): cuML spells
+    # squared error 'squared_loss' (MBSGD, cuML 26.08 linear_model/mbsgd_regressor.pyx) and 'l2'
+    # (QN, linear_model/qn.pyx); ours spells it 'squared_error'. Only that pair maps; any other
+    # loss on either arm is compared and refuses.
+    _sq_loss = {"algos/sgd-reg": "squared_loss", "algos/qn-reg": "l2"}.get(lane)
+    if _sq_loss and arm == "cuml-gpu" and param == "loss" and _r6_is(ours.get(param), "squared_error") \
+            and _r6_is(theirs.get(param), _sq_loss):
+        return "the same squared-error loss, spelled differently: ours 'squared_error', cuML %r" % _sq_loss
     # smoke-fixes (2026-10-14; sgd-clf/-reg: "epochs missing from ours read-back", "max_iter, average,
     # early_stopping, epsilon, warm_start (and sgd-clf class_weight) missing from cuml-gpu read-back"):
     # cuML 26.08 cpp/src/solver/sgd.cuh: `for (i = 0; i < epochs; i++)` runs full passes of
@@ -2092,7 +2166,7 @@ def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions
         theirs = {k: v[0] for k, v in resolved.get(arm, {}).items()}
         why = semantic_exception(lane, param, arm, own, theirs, libs.get(arm))
         if why is None:
-            why = exception_for(lane, param, arm)
+            why = exception_for(lane, param, arm, own, theirs)
         if why is None:
             for p, ag, r in extra_exceptions:
                 if p == param and fnmatch.fnmatch(arm, ag):

@@ -3005,6 +3005,17 @@ def params_probe(ctx, race, arms, scorer=None):
     return out
 
 
+def real_implementation(record):
+    """Whether an opponent arm's parameter record names the real library class it constructed: a module
+    that is not the harness itself (__main__, bench_*, tools.*). A wrapper defined in the harness is
+    not the library, so its read-back cannot show what the library ran (preflight_check refuses it).
+    refused-param-mappings (2026-10-15): split out of preflight_check so the replayed 0.8.45 smoke
+    read-backs (tools/test_refused_param_mappings.py) are checked by the same rule."""
+    impl = (record or {}).get("implementation") or {}
+    module = impl.get("module") or ""
+    return bool(module) and module != "__main__" and not module.startswith(("bench_", "tools."))
+
+
 def preflight_check(ctx, race, arms):
     """Construct both arms and audit the complete parameter union before timing."""
     scorer = {} if ctx.get("scorer_preflight") else None
@@ -3057,9 +3068,7 @@ def preflight_check(ctx, race, arms):
                 hardware = actual
         if arm in race.get("our_arms", {}):
             continue
-        impl = (records.get(arm) or {}).get("implementation") or {}
-        module = impl.get("module") or ""
-        if not module or module == "__main__" or module.startswith(("bench_", "tools.")):
+        if not real_implementation(records.get(arm)):
             report["problems"].append("missing real library implementation read-back: " + arm)
         exclusions = _load_tool("race_fairness").exclusions(dict(lane=race["lane"], cells=[
             dict(arm=arm, mode="opponent", params=records.get(arm),

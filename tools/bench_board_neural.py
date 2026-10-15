@@ -1184,7 +1184,16 @@ ARCH_FIELDS = {
            "param_dtype"),
     "samba": ("layers", "d_model", "n_heads", "n_kv_heads", "head_dim", "intermediate", "vocab", "tied_head",
               "norm_eps"),
+    # refused-param-mappings (2026-10-15): the MLP lanes compared no setting at all (ours' record was empty,
+    # the torch arm's only its seed), so a twin of another width or activation would have matched. Both arms
+    # now read back the network they run: Linear(d_in, hidden) -> activation -> Linear(hidden, d_out).
+    "mlp": ("d_in", "hidden", "d_out", "activation", "bias"),
 }
+
+
+def mlp_arch(d_in, hidden, d_out, activation, bias):
+    """The config_readback of a two-layer MLP lane (ARCH_FIELDS['mlp'])."""
+    return arch_readback("mlp", dict(d_in=d_in, hidden=hidden, d_out=d_out, activation=activation, bias=bias))
 
 
 def arch_readback(model, values):
@@ -1791,6 +1800,12 @@ class OursMLP(Ours):
                                mode, dev)
         self.info.update(call=LANE_TEXT[lane][0])
         self.record = _ours_record(lane)
+        # refused-param-mappings (2026-10-15): ours' network, from the weights its constructor accepted (it
+        # refuses any shape but its fixed (16, 8), (16,), (3, 16), (3,): python/mojolearn/_mlp_impl.py _SHAPES)
+        # and its one activation, ReLU (the class has no other: _mlp_impl.py "Linear(8, 16) -> ReLU ->
+        # Linear(16, 3)"); compared with the torch twin's modules (_build_mlp).
+        self.record["config_readback"] = mlp_arch(int(w[0].shape[1]), int(w[0].shape[0]), int(w[2].shape[0]),
+                                                  "relu", True)
         self.x0 = np.ascontiguousarray(self.X[0])
         self.k = 0
         self.losses = []
@@ -2458,6 +2473,10 @@ class TorchArm:
 
         self.module = MLP()
         self.library_impl = type(seq)
+        # refused-param-mappings (2026-10-15): the network this arm built, read from its own modules
+        self.config_readback = mlp_arch(seq[0].in_features, seq[0].out_features, seq[2].out_features,
+                                        type(seq[1]).__name__.lower(),
+                                        seq[0].bias is not None and seq[2].bias is not None)
         if not train:
             self.host = [self._t(self.data["X"][0])]
         self.info["twin"] = "torch.nn.Sequential(Linear, ReLU, Linear) (mean CE, AdamW for the step)"
