@@ -367,14 +367,6 @@ EXPECTED_FAILED_CHECKS = {
     "check_dtype_object": "object-dtype X exports no numeric buffer (NumPy-free input contract)",
     "check_estimators_data_not_an_array": "an __array__-only object is not a buffer or a sequence "
                                           "(NumPy-free input contract)",
-    "check_classifier_data_not_an_array": "an __array__-only object is not a buffer or a sequence "
-                                          "(NumPy-free input contract)",
-    "check_regressor_data_not_an_array": "an __array__-only object is not a buffer or a sequence "
-                                         "(NumPy-free input contract)",
-    "check_transformer_data_not_an_array": "an __array__-only object is not a buffer or a sequence "
-                                           "(NumPy-free input contract)",
-    "check_sample_weights_not_an_array": "an __array__-only object is not a buffer or a sequence "
-                                         "(NumPy-free input contract)",
 }
 
 _WEQ = ("check_sample_weight_equivalence_on_dense_data", "check_sample_weight_equivalence_on_sparse_data")
@@ -480,6 +472,12 @@ WEIGHT_EQUIVALENCE_FLOAT32 = {
     # same alpha on both fits
     "RidgeCV": "float32 fit: predict max absolute gap 7.2e-7 (3 float32 ulps at 2.0), relative 1.9e-4 only on "
                "an entry near 0; same weighted problem and alpha",
+    # weighted coordinate descent over scikit-learn's check setting (max_iter=5,
+    # cv=3); the same alpha on both fits (predictions agree to six digits)
+    "LassoCV": "float32 fit: predict max absolute gap 1.3e-6 (about 10 float32 ulps at 1-2), relative "
+               "1.8e-5 only on an entry near 0.04; same weighted problem and alpha (L40S, 0.8.47)",
+    "ElasticNetCV": "float32 fit: the same coordinate descent and gap class as LassoCV's entry; predictions "
+                    "agree to six digits, same alpha (L40S, 0.8.47)",
     # final_estimator RidgeCV() over the members' cross-validated predictions
     "StackingRegressor": "float32 fit of its final RidgeCV: predict gap 3.7e-8 absolute, 1.7e-6 relative "
                          "(0.02137140 vs 0.02137136), 3 of 15 entries; same weighted problem",
