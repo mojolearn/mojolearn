@@ -17,6 +17,7 @@ from x_ann.host.cagra_host import cagra_prune
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.io import upload_i32, download_i32
 from x_ann.checks.cagra_oracle import co_prune, co_reverse_merge, co_search
+from x_ann.cagra_core import cg_search_budget
 from x_ann.checks.tsne_oracle import to_knn
 from x_ann.checks.ann_check_fixtures import fixture_ties, fixture_wide, report, same_f32, same_i32
 
@@ -122,6 +123,14 @@ def main() raises:
         co_search(x, n, d, g, deg, q, m, k, L, width, iters, n_seeds, pd, pi, seed_offset=1)
         if not same_i32(oi, pi):
             sep_seed += 1
+        # ---- device == oracle. The device search applies the seed and
+        # iteration floors (`cg_search_budget`, every mode since 2026-10-15),
+        # so the oracle runs at the same budget; the separations above keep
+        # the raw budget, where a seed offset still moves the walk.
+        var budget = cg_search_budget(n, d, deg, L, n_seeds, iters)
+        od = List[Float32]()
+        oi = List[Int32]()
+        co_search(x, n, d, g, deg, q, m, k, L, width, budget[1], budget[0], od, oi)
         # ---- device == oracle
         var dg = cagra_build_device(x, n, d, kdeg, deg)
         trace.record_list_i32(String("cagra.") + name + ".graph", dg)

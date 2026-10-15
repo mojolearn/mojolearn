@@ -6,7 +6,7 @@ tasks by `ann_rows`, the exact k-NN's distances scored eight candidates per
 vector step; every value and every tie is the cell's)."""
 
 from checks.numerics import ftz
-from x_ann.cagra_core import cg_search_row
+from x_ann.cagra_core import cg_search_row, cg_search_budget
 from x_ann.host.ann_host_cells import ann_span, ann_task_count, ann_tasks, ftz_v, mul_add_v
 from x_ann.host.ivf_pq_host import fp, ip
 from x_ann.ivf_pq_core import F32P, I32P
@@ -247,10 +247,14 @@ def cagra_build_host(x: F32P, n: Int, d: Int, kdeg: Int, deg: Int) raises -> Lis
 
 def cagra_search_host(
     x: F32P, n: Int, d: Int, graph: I32P, deg: Int, queries: F32P, m: Int,
-    k: Int, L: Int, width: Int, max_iter: Int, n_seeds: Int, out_d: F32P, out_i: I32P, rs: Int = 0,
+    k: Int, L: Int, width: Int, max_iter_in: Int, n_seeds_in: Int, out_d: F32P, out_i: I32P, rs: Int = 0,
 ):
     """`cg_search_cell` per query on the caller's arrays; each task keeps one
-    itopk buffer and one visited bitset (`cg_search_row` at offset 0)."""
+    itopk buffer and one visited bitset (`cg_search_row` at offset 0). The
+    seed and iteration floors are the device search's (`cg_search_budget`)."""
+    var budget = cg_search_budget(n, d, deg, L, n_seeds_in, max_iter_in)
+    var n_seeds = budget[0]
+    var max_iter = budget[1]
     var words = (n + 31) // 32
     var tasks = ann_task_count(m, (n_seeds + max_iter * width * deg) * d)
 

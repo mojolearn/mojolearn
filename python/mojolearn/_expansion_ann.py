@@ -758,11 +758,15 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     search_width : int, default 1
         Number of candidates whose neighbors are expanded per iteration.
     max_iterations : int, default 0
-        Search iterations; 0 means `itopk_size`.
+        Search iterations; 0 means `itopk_size`. The search runs at least
+        ``2 * itopk_size + ceil(log(n_samples) / log(graph_degree / 2))``
+        iterations, so the walk can converge.
     n_seeds : int, default 0
         Number of start nodes; 0 means cuVS's default,
-        ``itopk_size + search_width * graph_degree`` (capped at the number of
-        rows).
+        ``itopk_size + search_width * graph_degree``. The search uses at
+        least ``262144 // n_features`` start nodes, so graphs that split into
+        separate components are still reached; the count is capped at the
+        number of rows.
     random_state : int or None, default None
         Seed for the start nodes, in the role of cuVS's ``rand_xor_mask``.
         None takes evenly spaced nodes; a non-negative int takes seeded

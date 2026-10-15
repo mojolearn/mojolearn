@@ -31,6 +31,7 @@ THE FIXED-ORDER DESIGN vs cuVS's NONDETERMINISM
 """
 
 from checks.numerics import ftz, identical_mul_add
+from x_ann.fast_env import CAGRA_FAST_SEEDS, CAGRA_FAST_SEED_WORK, CAGRA_FAST_ITERS
 
 
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
@@ -38,6 +39,34 @@ comptime I32P = MutPointer[Int32, MutAnyOrigin]
 
 
 @always_inline
+def cg_search_budget(n: Int, d: Int, deg: Int, L: Int, n_seeds_in: Int, max_iter_in: Int) -> Tuple[Int, Int]:
+    """The search's (n_seeds, max_iter) after the seed and iteration floors
+    of x_ann/fast_env.mojo (`CAGRA_FAST_SEEDS`, `CAGRA_FAST_ITERS`): at least
+    CAGRA_FAST_SEED_WORK / d seeds (never above n), so the start set covers
+    graphs that split into near-isolated components, and at least
+    2 * itopk + log_{deg/2}(n) iterations (cuVS's auto rule adds the log
+    term). Size-scaled rules, no board shape. One source for the device
+    search and the host column."""
+    var n_seeds = n_seeds_in
+    var max_iter = max_iter_in
+    comptime if CAGRA_FAST_SEEDS:
+        var floor = CAGRA_FAST_SEED_WORK // (d if d > 0 else 1)
+        if floor > n:
+            floor = n
+        if n_seeds < floor:
+            n_seeds = floor
+    comptime if CAGRA_FAST_ITERS:
+        var it = 2 * L
+        var reach = 1
+        var fan = deg // 2 if deg // 2 > 2 else 2
+        while reach < n:
+            reach *= fan
+            it += 1
+        if max_iter < it:
+            max_iter = it
+    return (n_seeds, max_iter)
+
+
 def cg_seed_node(t: Int, n: Int, n_seeds: Int, rs: Int) -> Int:
     """Seed node `t` of every query's walk. `rs == 0` (random_state=None):
     the evenly spaced `(t * n) // n_seeds` (DEVIATION 5824). `rs > 0`

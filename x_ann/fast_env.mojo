@@ -11,7 +11,8 @@
 """The ann family's FAST-on-Apple defaults (lane/apple-fast-ann, 2026-10-02).
 
 Each switch is `True` only in a FAST build on the Apple column
-(`ANN_FAST_APPLE`) unless its `-D MOJOLEARN_<NAME>_OFF` build define is
+(`ANN_FAST_APPLE`; CAGRA_FAST_SEEDS and CAGRA_FAST_ITERS in every mode since
+2026-10-15, see there) unless its `-D MOJOLEARN_<NAME>_OFF` build define is
 given; an IDENTICAL build compiles each to `False`, so the old path is the
 only path there and its bits never move. No switch is an environment read
 (a `getenv` would be a host step on a fit or search path). The old
@@ -109,6 +110,17 @@ comptime CAGRA_FAST_IVFG_LOWD = _CAGRA_LOWD_SEEDS4
 # Tried: 4x search seeds as a standalone opt-in, never judged alone (gapcagra-seeds4-taxi). The 4x seeds stay as part of the LOWD_SEEDS4 default.
 # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_SEEDS4.patch; record in docs/TOMBSTONES.md.
 comptime _CAGRA_SEEDS4 = _CAGRA_LOWD_SEEDS4
-comptime CAGRA_FAST_SEEDS = ANN_FAST_APPLE and (not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS_OFF"]() or _CAGRA_SEEDS4)
+#: IDENTICAL TOO (lane quality-fix-identical, 2026-10-15): SEEDS (at the 1x
+#: seed work) and ITERS are now the search budget in every mode, on every
+#: vendor and in the host column (`cg_search_budget` in x_ann/cagra_core.mojo,
+#: called by the device search and `cagra_search_host`). Cause: identical
+#: CAGRA taxi recall@10 .4838 (istella .9838) on NVIDIA, AMD and Apple with
+#: cuVS's default seed count, the same isolated-component miss as above
+#: (quality-vs-opponent-20261015). Only the walk's budget moves, not its
+#: order, so identical stays the same bits on every column; the bits of
+#: identical CAGRA search change from the last version. The 4x seed work
+#: (SEEDS4) stays FAST + Apple. `-D MOJOLEARN_CAGRA_FAST_SEEDS_OFF` /
+#: `_ITERS_OFF` (A arms) restore cuVS's defaults in every mode.
+comptime CAGRA_FAST_SEEDS = (not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS_OFF"]()) or _CAGRA_SEEDS4
 comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if _CAGRA_SEEDS4 else 262144
-comptime CAGRA_FAST_ITERS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_CAGRA_FAST_ITERS_OFF"]()
+comptime CAGRA_FAST_ITERS = not is_defined["MOJOLEARN_CAGRA_FAST_ITERS_OFF"]()

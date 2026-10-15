@@ -17,12 +17,11 @@ from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 from x_ann.fast_env import CAGRA_FAST_IVFG, CAGRA_FAST_IVFG_PROBES, CAGRA_FAST_IVFG_EXACTD, CAGRA_FAST_IVFG_LOWD
-from x_ann.fast_env import CAGRA_FAST_SEEDS, CAGRA_FAST_SEED_WORK, CAGRA_FAST_ITERS
 from x_ann.cagra_fast_knn import cg_ivfg_enqueue
 from max.gpu.host import DeviceBuffer
 
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
-from x_ann.cagra_core import F32P, I32P, cg_dist, cg_search_cell, cg_seed_node
+from x_ann.cagra_core import F32P, I32P, cg_dist, cg_search_cell, cg_seed_node, cg_search_budget
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
@@ -610,24 +609,10 @@ def cagra_search_on(
     them): the queries up, the walk, the two outputs down."""
     var words = (n + 31) // 32
     var st = AnnStages("cagra_search")
-    # lane/apple-fast-gap-cagra, FAST on Apple by default (x_ann/fast_env.mojo)
-    var n_seeds = n_seeds_in
-    var max_iter = max_iter_in
-    comptime if CAGRA_FAST_SEEDS:
-        var floor = CAGRA_FAST_SEED_WORK // (d if d > 0 else 1)
-        if floor > n:
-            floor = n
-        if n_seeds < floor:
-            n_seeds = floor
-    comptime if CAGRA_FAST_ITERS:
-        var it = 2 * L
-        var reach = 1
-        var fan = deg // 2 if deg // 2 > 2 else 2
-        while reach < n:
-            reach *= fan
-            it += 1
-        if max_iter < it:
-            max_iter = it
+    # the seed and iteration floors, every mode (x_ann/fast_env.mojo)
+    var budget = cg_search_budget(n, d, deg, L, n_seeds_in, max_iter_in)
+    var n_seeds = budget[0]
+    var max_iter = budget[1]
     var dq = upload_f32(ctx, queries)
     var bd = ctx.enqueue_create_buffer[DType.float32](m * L)
     var bi = ctx.enqueue_create_buffer[DType.int32](m * L)
