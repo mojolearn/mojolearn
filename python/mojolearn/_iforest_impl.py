@@ -36,6 +36,7 @@ one; `numpy.asarray(result)` is a zero-copy view for a caller who has
 NumPy. Nothing in this module imports NumPy.
 """
 
+import array
 import numbers
 import weakref
 
@@ -408,7 +409,9 @@ class IsolationForest(NumericModeMixin):
             addr(info, name="info"),
             params,
         )
-        self.offset_ = float(info[0])
+        # the float32 the device subtracts (`Float32(offset_)`), so
+        # decision_function is exactly score_samples - offset_ rounded once
+        self.offset_ = array.array("f", [float(info[0])])[0]
         self.max_samples_ = int(info[1])
         if resident:
             token = int(info[3])

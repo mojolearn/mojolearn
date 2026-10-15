@@ -7069,7 +7069,9 @@ class EllipticEnvelope(MinCovDet):
         o = k.order(dm)
         vlo = -k.word(dm, int(k.word(o, nv - 1 - lo)))
         vhi = -k.word(dm, int(k.word(o, nv - 1 - hi)))
-        self.offset_ = vlo + (vhi - vlo) * (q - lo)
+        # held as the float32 the device subtracts, so decision_function is
+        # exactly score_samples - offset_ rounded once
+        self.offset_ = _f32(vlo + (vhi - vlo) * (q - lo))
         return self
 
     def score_samples(self, X):

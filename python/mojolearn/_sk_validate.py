@@ -487,6 +487,25 @@ def after_fit(est, check):
         state["classes_"] = ClassLabels(classes)
 
 
+#: The scores an outlier detector returns as float64, as scikit-learn's do
+#: (check_outliers_train: `decision_function` and `score_samples` are
+#: float). The values are the float32 ones, widened exactly; and since
+#: `decision_function` is the float32 rounding of `score_samples - offset_`
+#: with an `offset_` that float32 holds exactly, it stays within 2**-24 of
+#: the float64 difference.
+_OUTLIER_SCORES = ("decision_function", "score_samples")
+
+
+def after_call(est, method, out):
+    """The output of a validated predict-side call, as scikit-learn's
+    callers expect it."""
+    if method in _OUTLIER_SCORES and _kind(est) == "outlier_detector":
+        from ._array import Array
+        if isinstance(out, Array) and out.dtype == "<f4":
+            return out.astype("<f8")
+    return out
+
+
 def reraise(est, check, err):
     """Re-raise `err` as scikit-learn's callers expect it, or return to let
     it propagate unchanged: a binding's plain-`Exception` refusal of NaN or

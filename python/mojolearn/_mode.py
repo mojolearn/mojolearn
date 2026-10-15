@@ -196,10 +196,11 @@ def _needs_fit(method, name, require_fit=True):
         if check is None:
             return method(self, *args, **kwargs)
         try:
-            return method(self, *args, **kwargs)
+            out = method(self, *args, **kwargs)
         except Exception as err:
             _sk_validate.reraise(self, check, err)
             raise
+        return _sk_validate.after_call(self, name, out)
 
     guarded._mojolearn_needs_fit = require_fit
     guarded._mojolearn_validates = True
