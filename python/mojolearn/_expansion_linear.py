@@ -2782,8 +2782,7 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
     Follows scikit-learn's LassoCV, solved by coordinate descent: each fold
     fits the regularization path, the alpha with the lowest mean squared
     error across folds is chosen, and the model is refit on all rows.
-    ``cv`` must be None or an int (unshuffled K-fold); ``selection='random'``
-    raises ValueError.
+    ``selection='random'`` raises ValueError.
 
     Parameters
     ----------
@@ -2803,8 +2802,11 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
         Coordinate-descent stopping tolerance.
     copy_X : bool, default True
         Accepted for compatibility; ``X`` is never modified.
-    cv : int or None, default None
-        Number of folds; None means 5.
+    cv : int, cross-validation splitter, iterable or None, default None
+        None means 5 folds; an int is the number of unshuffled K-fold folds;
+        a splitter (an object with ``split``) or an iterable of
+        ``(train, test)`` index arrays gives the folds, whose test sets must
+        cover every row exactly once.
     verbose : bool, default False
         Accepted for compatibility; ignored.
     n_jobs : int or None, default None
@@ -2880,8 +2882,8 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
         Raises
         ------
         ValueError
-            If ``selection`` is not 'cyclic', ``cv`` is not None or an int
-            in [2, n_samples], or no alpha is given.
+            If ``selection`` is not 'cyclic', an int ``cv`` is outside
+            [2, n_samples], or no alpha is given.
         """
         _enetcv_fit(self, X, y, [1.0], sample_weight)
         return self
@@ -2893,8 +2895,7 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
     Follows scikit-learn's ElasticNetCV, solved by coordinate descent: for
     each ``l1_ratio`` every fold fits the regularization path, the pair with
     the lowest mean squared error across folds is chosen, and the model is
-    refit on all rows. ``cv`` must be None or an int (unshuffled K-fold);
-    ``selection='random'`` raises ValueError.
+    refit on all rows. ``selection='random'`` raises ValueError.
 
     Parameters
     ----------
@@ -2914,8 +2915,11 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
         Maximum number of coordinate-descent passes per alpha.
     tol : float, default 1e-4
         Coordinate-descent stopping tolerance.
-    cv : int or None, default None
-        Number of folds; None means 5.
+    cv : int, cross-validation splitter, iterable or None, default None
+        None means 5 folds; an int is the number of unshuffled K-fold folds;
+        a splitter (an object with ``split``) or an iterable of
+        ``(train, test)`` index arrays gives the folds, whose test sets must
+        cover every row exactly once.
     copy_X : bool, default True
         Accepted for compatibility; ``X`` is never modified.
     verbose : int, default 0
@@ -2996,8 +3000,8 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
         ------
         ValueError
             If an ``l1_ratio`` is outside (0, 1], ``selection`` is not
-            'cyclic', ``cv`` is not None or an int in [2, n_samples], or no
-            alpha is given.
+            'cyclic', an int ``cv`` is outside [2, n_samples], or no alpha
+            is given.
         """
         ratios = list(self.l1_ratio) if hasattr(self.l1_ratio, "__len__") else [self.l1_ratio]
         self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios], sample_weight)  # glue: converts the l1_ratio argument
