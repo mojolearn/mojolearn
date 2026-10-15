@@ -252,3 +252,47 @@ def test_overlay_extracts_only_verified_target_when_both_vendor_metadata_install
     assert (site / 'mojolearn/__init__.py').read_bytes() == b'verified core'
     unchanged = 'mojolearn/' + directory + '/' + arch + '/identical/_mojolearn_linalg.so'
     assert evidence['before'][unchanged] == evidence['after'][unchanged]
+
+
+@pytest.mark.parametrize('code', [0, 1, -9])
+def test_read_structured_controller_exit_preserves_record_and_hash(tmp_path, code):
+    path = tmp_path / 'controller-exit.json'
+    record = dict(exit_code=code, started=time.time()-2, finished=time.time()-1)
+    V.write(path, record)
+    result = V.read_controller_exit(path)
+    assert result['exit_status'] == code
+    assert result['format'] == 'structured-json'
+    assert result['record'] == record
+    assert result['sha256'] == V.sha(path)
+
+
+@pytest.mark.parametrize('record', [dict(exit_code=False, started=1, finished=2),
+    dict(exit_code='0', started=1, finished=2), dict(exit_code=0, started=1),
+    dict(exit_code=0, started=3, finished=2), dict(exit_code=0, started=True, finished=2), False, '0'])
+def test_read_controller_exit_rejects_malformed_or_boolean_status(tmp_path, record):
+    path = tmp_path / 'controller-exit.json'; V.write(path, record)
+    with pytest.raises(ValueError):
+        V.read_controller_exit(path)
+
+
+def test_completed_campaign_accepts_actual_structured_exit(tmp_path):
+    ack, proc = boundary(tmp_path)
+    campaign = tmp_path / 'campaign.json'
+    data = V.read(campaign); data.update(status='finished', expected=0, recorded=0, recipes={}); V.write(campaign, data)
+    exit_path = tmp_path / 'controller-exit.json'
+    V.write(exit_path, dict(exit_code=0, started=time.time()-2, finished=time.time()-1))
+    a = V.read(ack); a['campaigns'] = [dict(path=str(campaign), controller_exit=str(exit_path))]; V.write(ack, a)
+    result = V.check_boundary(ack, 'nvidia', 90, proc)
+    assert V.boundary_still_held(result)
+    assert result['campaigns'][0]['controller_exit_evidence']['record']['exit_code'] == 0
+
+
+def test_stopped_campaign_accepts_actual_structured_failed_exit(tmp_path):
+    ack, proc = failed_boundary(tmp_path)
+    path = tmp_path / 'controller.exit'
+    V.write(path, dict(exit_code=1, started=time.time()-2, finished=time.time()-1))
+    result = V.check_boundary(ack, 'nvidia', 90, proc)
+    assert V.boundary_still_held(result)
+    assert result['campaigns'][0]['controller_exit_evidence']['exit_status'] == 1
+    V.write(path, dict(exit_code=1, started=time.time()-2, finished=time.time()))
+    assert not V.boundary_still_held(result)
