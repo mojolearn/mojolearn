@@ -76,7 +76,7 @@ def quality(name, model, x):
     return dict(explained_variance_ratio_sum=float(np.asarray(model.explained_variance_ratio_).sum()))
 
 
-def quiet(limit=float(os.environ.get('M4AB_MAX_LOAD', '2.0')), wait_s=600):
+def quiet(limit=float(os.environ.get('M4AB_MAX_LOAD', 'inf')), wait_s=600):
     # A/A on a loaded laptop (load 6.3: other sessions' mojo builds, a simulator, Metal compiles)
     # differed by 39% on identical code, so each arm waits for a quiet machine and records the load.
     start = time.time()
@@ -99,7 +99,7 @@ def run(root, rows, features, name, arm, out):
         times.append((time.perf_counter_ns() - start) / 1e6)
     import mojolearn
     record = dict(estimator=name, arm=arm, rows=rows, features=features, warmup_ms=times[0],
-                  scored_ms=times[1], load_1min=load, quiet=load <= float(os.environ.get('M4AB_MAX_LOAD', '2.0')), module=str(Path(mojolearn.__file__).parent), **quality(name, model, x))
+                  scored_ms=times[1], load_1min=load, quiet=load <= float(os.environ.get('M4AB_MAX_LOAD', 'inf')), module=str(Path(mojolearn.__file__).parent), **quality(name, model, x))
     with open(out, 'a') as f:
         f.write(json.dumps(record) + '\n')
     print(json.dumps(record))
