@@ -1,4 +1,0 @@
-optimizer_resident_check kind adamw floats 5657740 tensors 20 steps 32 mode identical
-  per-call step (moments on the host): median 37.310 ms (first 56.586 ms)
-  resident moments:                    median 10.271 ms (first 18.521 ms)  ratio 3.63x
-OPTIMIZER_RESIDENT_CHECK PASS (32 steps, every byte equal)
