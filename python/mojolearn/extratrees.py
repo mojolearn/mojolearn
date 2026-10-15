@@ -254,7 +254,7 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         _validate_device(device)
         self.device = device
 
-    def _fit_arrays(self, X, ya, n_classes, fit_fn, rowmajor_fit_fn=None):
+    def _fit_arrays(self, X, ya, n_classes, fit_fn, rowmajor_fit_fn=None, cfg=None):
         # Column-major is the builder's layout (cuML's `data` is
         # column-major); `as_f32_colmajor` is that copy, named in the
         # module docstring, and zero for a float32 F-order input
@@ -288,8 +288,8 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         if not device_scan and not all_finite(Xf):
             raise ValueError(_NONFINITE_REFUSAL)
         params = _fit_params(
-            n_rows, n_features, n_classes, self._cfg, self.device,
-            self._criterion_code,
+            n_rows, n_features, n_classes, self._cfg if cfg is None else cfg,
+            self.device, self._criterion_code,
         )
         # DEVIATION 2480: host-only clocks, disabled on the shipping path.
         import os
@@ -566,7 +566,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
             monotonic_cst=monotonic_cst,
         )
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         """Fit the forest.
 
         Parameters
@@ -575,30 +575,51 @@ class ExtraTreesClassifier(_ExtraTreesBase):
             Training data, converted to float32.
         y : array-like of shape (n_samples,)
             Targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Per-row weights, multiplied into the ``class_weight`` row
+            weights.
 
         Returns
         -------
         self
         """
-        return self._fit_with_tree_start(X, y)
+        return self._fit_with_tree_start(X, y, sample_weight=sample_weight)
 
-    def _fit_with_tree_start(self, X, y, tree_start=None):
+    def _fit_with_tree_start(self, X, y, tree_start=None, sample_weight=None):
         self._refresh_config()
         self._capture_fit_mode()
         # DEVIATION 2340: `classes_` is a Python list of the caller's
         # label objects under `_labels.sorted_classes`'s order rule, and
         # the codes are one dict lookup per row (the permitted O(rows)
         # label-encoding loop). The codes cross as float32, as before.
-        if self._cfg["class_weight"] is not None:
-            # The native builder raised a bare Exception for this; refuse it
-            # by name with the type every other unimplemented knob uses.
-            raise NotImplementedError(
-                "class_weight is not implemented for ExtraTreesClassifier: it"
-                " becomes a per-sample weight, and sample_weight is"
-                " unimplemented. See NOT_IMPLEMENTED.tsv."
-            )
         self.classes_, codes = encode_labels(y)  # DEVIATION 2500, int32 codes
         self.n_classes_ = int(len(self.classes_))
+        if sample_weight is not None or self._cfg["class_weight"] is not None:
+            # lane sk-kernels: sample_weight times the class_weight row
+            # weight (`_trees_weighted_rows`, native) through the weighted
+            # builder (`et_classifier_fit_weighted`); the class weights
+            # are already in the rows, so the params carry none.
+            from ._expansion_trees import _trees_weighted_rows
+            weights = _trees_weighted_rows(sample_weight, self._cfg["class_weight"],
+                                           self.classes_, codes, self)
+            if tree_start is not None:
+                raise NotImplementedError(
+                    "sample_weight and class_weight are not implemented for a"
+                    " tree-ID shard fit")
+            binding = self._bind("_mojolearn_trees")
+            if not callable(getattr(binding, "et_classifier_fit_weighted_export", None)):
+                raise RuntimeError("rebuild the trees binding for weighted ExtraTrees fits")
+            weighted = _forest_fit_function(binding, "et_classifier_fit_weighted")
+            weighted_rm = _rowmajor_fit_function(binding, "et_classifier_fit_weighted")
+
+            def fit_fn(x, y, params):
+                return weighted(x, y, params, addr_ro(weights, name="sample_weight"))
+            rowmajor_fn = None
+            if weighted_rm is not None:
+                def rowmajor_fn(x, y, params):
+                    return weighted_rm(x, y, params, addr_ro(weights, name="sample_weight"))
+            return self._fit_arrays(X, codes.astype("<f4"), self.n_classes_, fit_fn,
+                                    rowmajor_fn, cfg=dict(self._cfg, class_weight=None))
         if tree_start is not None:
             binding = self._bind('_mojolearn_trees')
             if not callable(getattr(binding, 'et_classifier_fit_shard', None)):
