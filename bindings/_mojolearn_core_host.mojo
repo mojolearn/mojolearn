@@ -100,6 +100,7 @@ from std.sys.compile import is_defined
 from bindings.host_helpers import (
     all_finite_f32_binding,
     all_finite_f64_binding,
+    argmax_last_rows_f32_binding,
     argmax_rows_f32_binding,
     argmax_rows_f64_binding,
     cast_f64_to_f32_binding,
@@ -1490,6 +1491,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
+        module.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
         module.def_function[probability_rows_f32_binding]("probability_rows_f32")
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
         # of bindings/hotpath_helpers.mojo, and the ORDER RULE's encoder the
