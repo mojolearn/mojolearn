@@ -1,0 +1,121 @@
+{
+  "arm": "released-identical",
+  "status": "finished",
+  "python": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "input_manifest_sha256": "afa824769c1ebde129befb3d4275458528465f9e380276aef49da080c6be3f37",
+  "cases": [
+    {
+      "m": 4096,
+      "n": 4096,
+      "k": 4096,
+      "samples": [
+        {
+          "index": -2,
+          "role": "first",
+          "milliseconds": 257.0595,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 4.1820574551820755e-05,
+          "rms_error": 6.082485278908091e-06,
+          "path": "output-4096-4096-4096--2.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992
+        },
+        {
+          "index": -1,
+          "role": "excluded-warmup",
+          "milliseconds": 155.129292,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 4.1820574551820755e-05,
+          "rms_error": 6.082485278908091e-06,
+          "path": "output-4096-4096-4096--1.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992
+        },
+        {
+          "index": 0,
+          "role": "scored",
+          "milliseconds": 159.014417,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 4.1820574551820755e-05,
+          "rms_error": 6.082485278908091e-06,
+          "path": "output-4096-4096-4096-0.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992
+        },
+        {
+          "index": 1,
+          "role": "scored",
+          "milliseconds": 154.3995,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 4.1820574551820755e-05,
+          "rms_error": 6.082485278908091e-06,
+          "path": "output-4096-4096-4096-1.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992
+        },
+        {
+          "index": 2,
+          "role": "scored",
+          "milliseconds": 158.586125,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 4.1820574551820755e-05,
+          "rms_error": 6.082485278908091e-06,
+          "path": "output-4096-4096-4096-2.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992
+        },
+        {
+          "index": 3,
+          "role": "scored",
+          "milliseconds": 158.5845,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 4.1820574551820755e-05,
+          "rms_error": 6.082485278908091e-06,
+          "path": "output-4096-4096-4096-3.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992
+        },
+        {
+          "index": 4,
+          "role": "scored",
+          "milliseconds": 157.547625,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 4.1820574551820755e-05,
+          "rms_error": 6.082485278908091e-06,
+          "path": "output-4096-4096-4096-4.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992
+        }
+      ],
+      "input_sha256": "26460b62a0964ef96bd7a451976203c5ec7fd681d50d893020a9a24174c65410",
+      "median_ms": 158.5845,
+      "min_ms": 154.3995,
+      "max_ms": 159.014417
+    }
+  ],
+  "controller_sha256": "915c2df0f8c44ba4115810e64a83bfb6f07839fba78f61828565fd6808089333",
+  "controller_source": "controller.py",
+  "boundary": "ready BF16 host operands through fully materialized float32 host output; native packing, allocation, upload, widening, compute, sync and download included",
+  "excluded": "library import, test-data generation, oracle, hashing, evidence serialization",
+  "first_call": "first recorded call per shape; only first shape is first in process; system caches not claimed empty",
+  "warmup": 1,
+  "scored_samples": 5,
+  "cross_vendor_identity": "not compared",
+  "scope": "local operation screening only",
+  "version": "0.8.45",
+  "numeric_mode": "identical",
+  "module": "/Users/andrewhendel/mojolearn-evidence/apple-smoke-20261014/cache/venv/lib/python3.14/site-packages/mojolearn/identical/_mojolearn_linalg.so",
+  "binary_sha256": "66213386a21a1dd19df3724deec72b14447eb3d914cfca1027f5b96c0843f832",
+  "wheel_manifest": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/reviews/hour-4/apple-moe-0845/wheel-manifest.json",
+  "wheel_manifest_sha256": "24fa9a504b56e81fdded97eef9a2211080ce02ffd828257df982deb29baae19c",
+  "complete": true,
+  "failures": []
+}

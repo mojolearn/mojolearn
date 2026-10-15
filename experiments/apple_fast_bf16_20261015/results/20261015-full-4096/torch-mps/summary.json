@@ -1,0 +1,124 @@
+{
+  "arm": "torch-mps",
+  "status": "finished",
+  "python": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "input_manifest_sha256": "afa824769c1ebde129befb3d4275458528465f9e380276aef49da080c6be3f37",
+  "cases": [
+    {
+      "m": 4096,
+      "n": 4096,
+      "k": 4096,
+      "samples": [
+        {
+          "index": -2,
+          "role": "first",
+          "milliseconds": 831.108,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 0.0007865861989557743,
+          "rms_error": 3.911995427744273e-05,
+          "path": "output-4096-4096-4096--2.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992
+        },
+        {
+          "index": -1,
+          "role": "excluded-warmup",
+          "milliseconds": 361.196292,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 0.0007865861989557743,
+          "rms_error": 3.911995427744273e-05,
+          "path": "output-4096-4096-4096--1.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992
+        },
+        {
+          "index": 0,
+          "role": "scored",
+          "milliseconds": 361.400333,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 0.0007865861989557743,
+          "rms_error": 3.911995427744273e-05,
+          "path": "output-4096-4096-4096-0.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992
+        },
+        {
+          "index": 1,
+          "role": "scored",
+          "milliseconds": 356.609042,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 0.0007865861989557743,
+          "rms_error": 3.911995427744273e-05,
+          "path": "output-4096-4096-4096-1.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992
+        },
+        {
+          "index": 2,
+          "role": "scored",
+          "milliseconds": 358.856,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 0.0007865861989557743,
+          "rms_error": 3.911995427744273e-05,
+          "path": "output-4096-4096-4096-2.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992
+        },
+        {
+          "index": 3,
+          "role": "scored",
+          "milliseconds": 356.132084,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 0.0007865861989557743,
+          "rms_error": 3.911995427744273e-05,
+          "path": "output-4096-4096-4096-3.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992
+        },
+        {
+          "index": 4,
+          "role": "scored",
+          "milliseconds": 352.400042,
+          "accuracy_pass": true,
+          "finite": true,
+          "max_abs_error": 0.0007865861989557743,
+          "rms_error": 3.911995427744273e-05,
+          "path": "output-4096-4096-4096-4.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992
+        }
+      ],
+      "input_sha256": "26460b62a0964ef96bd7a451976203c5ec7fd681d50d893020a9a24174c65410",
+      "median_ms": 356.609042,
+      "min_ms": 352.400042,
+      "max_ms": 361.400333
+    }
+  ],
+  "controller_sha256": "915c2df0f8c44ba4115810e64a83bfb6f07839fba78f61828565fd6808089333",
+  "controller_source": "controller.py",
+  "boundary": "ready BF16 host operands through fully materialized float32 host output; native packing, allocation, upload, widening, compute, sync and download included",
+  "excluded": "library import, test-data generation, oracle, hashing, evidence serialization",
+  "first_call": "first recorded call per shape; only first shape is first in process; system caches not claimed empty",
+  "warmup": 1,
+  "scored_samples": 5,
+  "cross_vendor_identity": "not compared",
+  "scope": "local operation screening only",
+  "version": "2.13.0",
+  "device": "mps",
+  "matmul": "torch.mm float32",
+  "mps_environment": {
+    "PYTORCH_ENABLE_MPS_FALLBACK": "0",
+    "PYTORCH_MPS_FAST_MATH": "0",
+    "PYTORCH_MPS_PREFER_METAL": "0"
+  },
+  "precision": "BF16 input bits widened exactly on GPU; FP32 multiplication, accumulation and output",
+  "complete": true,
+  "failures": []
+}

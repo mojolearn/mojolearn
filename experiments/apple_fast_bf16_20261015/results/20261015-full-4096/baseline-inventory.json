@@ -1,0 +1,23 @@
+{
+  "files": {
+    "measurement/full4096-released-identical-summary.json": {
+      "bytes": 4801,
+      "sha256": "863a64acf084180e6a3da69ecbea50f64da370154a214283c415760ed82f29d6"
+    },
+    "measurement/original-three-case-released-identical-summary.json": {
+      "bytes": 13377,
+      "sha256": "3f760259572dce8a2dc07fbf7c677fe28ba35d5d05b6af2737d3476fbcafe5c1"
+    },
+    "released-identical/_mojolearn_linalg.so": {
+      "bytes": 3089136,
+      "sha256": "66213386a21a1dd19df3724deec72b14447eb3d914cfca1027f5b96c0843f832"
+    },
+    "released-identical/wheel-manifest.json": {
+      "bytes": 1675,
+      "sha256": "24fa9a504b56e81fdded97eef9a2211080ce02ffd828257df982deb29baae19c"
+    }
+  },
+  "numeric_mode": "identical",
+  "scope": "Exact reused 0.8.45 Apple IDENTICAL linalg binary and wheel manifest, hashes verified against full4096 measurement receipt; supplementary retention only, no rerun",
+  "version": "0.8.45"
+}

@@ -1,0 +1,16 @@
+{
+  "started": 1792034602.032594,
+  "commit": "30b9c0f3d65ceb5cdd5769b0a63df99d1d1d326a",
+  "command": [
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "python/mojolearn/tests/test_linalg_fast_bf16.py",
+    "--junitxml=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-lane/correctness-06.xml"
+  ],
+  "status": "finished",
+  "build_defines": "MOJOLEARN_AFN_GEMM_BF16_MMA=1",
+  "exit_code": 0,
+  "elapsed_s": 0.6408560276031494
+}

@@ -3,7 +3,7 @@
   "experiment": "apple-fast-bf16-public-20261015",
   "status": "local_operation_screening_complete",
   "decision": "retain candidate disabled by default",
-  "reason": "Five scored samples per shape show 13.9% and 8.6% less time on the medium and neighboring-tail cases, 7.2% more time on the small case. Scope and noise are insufficient for full-workload/default promotion.",
+  "reason": "Five scored samples per shape show 13.9% and 8.6% less time on the medium and neighboring-tail cases, 7.2% more time on the small case. Scope and noise are insufficient for full-workload/default promotion. Follow-up frozen 30b9c0f3d full4096 primitive: five scored medians show 16.0% less time versus shipped IDENTICAL, with larger recorded numerical error but all outputs within the FP64 bound; estimator/default qualification remains pending.",
   "source_commit": "6cec6320d1d76b5ef3569794115ffe525a5df98d",
   "candidate_define": "MOJOLEARN_AFN_GEMM_BF16_MMA=1",
   "numeric_mode": "fast",
@@ -179,7 +179,7 @@
     "full-workload estimator mapping and measurements before default promotion",
     "cross-vendor IDENTICAL same-release qualification; this FAST path makes no cross-vendor bitwise claim",
     "public documentation/release qualification",
-    "generic BF16 wiring source added after the measured native commit; new boundary requires frozen compilation and 23-test GPU qualification"
+    "Apple FAST BF16 board pairing requires explicit FP32-output opponent contract and effective read-back; no board race performed"
   ],
   "retention": "Original executed controller and summaries are retained byte-for-byte in git; full logs, binaries, inputs and output arrays remain in raw_evidence_directory. Artifact hashes do not by themselves replace retained bytes.",
   "portable_runner_validation": {
@@ -214,7 +214,7 @@
     "scope": "Original frozen experiment including original executed source, binaries, inputs, scored outputs and complete build/test logs including failed attempts; excludes later generic-wiring edits"
   },
   "generic_wiring": {
-    "status": "source_ready_uncompiled",
+    "status": "enabled_apple_target_compiled_and_gpu_correctness_passed",
     "default_enabled": false,
     "public_operations": [
       "mojolearn.linalg.matmul_bf16",
@@ -231,9 +231,10 @@
       "k": 4096,
       "seed": 7,
       "operation": "NN BF16 input, FP32 accumulation/output, same host-to-consumed-host boundary",
-      "status": "pending; no new measurement authorized",
+      "status": "completed local full-primitive operation screening; estimator coverage pending",
       "runner": "local_benchmark.py prepare --preset full --output NEW_DIRECTORY",
-      "distribution": "default_rng(7).standard_normal float32, A then B, rounded to BF16"
+      "distribution": "default_rng(7).standard_normal float32, A then B, rounded to BF16",
+      "result_summary": "results/20261015-full-4096/comparison.json"
     },
     "estimators": "No direct BF16 GEMM estimator caller established. Existing Transformer/Mamba packed weights are unpacked to FP32; training is FP32-only. Further wiring requires native packed-weight retention or explicit new precision opt-in and full-workload recipes.",
     "cpu_validation": {
@@ -251,8 +252,74 @@
       },
       "gpu_calls": 0,
       "full_fixture_allocated": false,
-      "native_compile": "pending",
-      "native_gpu_correctness": "23-test suite pending"
+      "native_compile": "separate root qualification: compile06 rc0 on Apple",
+      "native_gpu_correctness": "separate root qualification: 23 passed, zero failures/errors/skips"
+    },
+    "qualification": {
+      "source_commit": "30b9c0f3d65ceb5cdd5769b0a63df99d1d1d326a",
+      "enabled_apple_linalg_compile": {
+        "exit_code": 0,
+        "elapsed_s": 35.861682176589966,
+        "receipt": "validation/compile-06.result.json"
+      },
+      "gpu_correctness": {
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 23,
+        "exit_code": 0,
+        "junit": "validation/correctness-06.xml"
+      },
+      "other_targets": "pending",
+      "candidate_off_and_identical_current_source_builds": "pending"
     }
+  },
+  "full_primitive_followup": {
+    "status": "full_primitive_operation_screening_complete",
+    "source_commit": "30b9c0f3d65ceb5cdd5769b0a63df99d1d1d326a",
+    "result_summary": "results/20261015-full-4096/comparison.json",
+    "sha256": "12f30c391808cd4cef6e56eef260e360d909e33fa008ec548f136495242b0e26",
+    "scope": "shipped 0.8.45 IDENTICAL versus frozen candidate FAST and real PyTorch 2.13.0 MPS; not same-source default-promotion A/B",
+    "shape_m_n_k": [
+      4096,
+      4096,
+      4096
+    ],
+    "scored_samples_each": 5,
+    "all_outputs_checked": 21,
+    "all_outputs_accuracy_passed": 21,
+    "medians_ms": {
+      "released-identical": 158.5845,
+      "candidate-fast": 133.247791,
+      "torch-mps": 356.609042
+    },
+    "candidate_over_shipped_identical": 0.8402321223070351,
+    "candidate_over_torch_mps": 0.3736523063259849,
+    "durable_retention": {
+      "bytes": 1595961388,
+      "r2_bucket": "mojolearn-data",
+      "r2_key": "measurements/records/v1/7f44cb98392244faad9795b85783ce60ed421df94da819a27f1db5082a8664b2.tar.gz",
+      "sha256": "7f44cb98392244faad9795b85783ce60ed421df94da819a27f1db5082a8664b2",
+      "status": "verified",
+      "verification": "GET sha256"
+    },
+    "default_enabled": false,
+    "baseline_durable_retention": {
+      "bytes": 1408608,
+      "r2_bucket": "mojolearn-data",
+      "r2_key": "measurements/records/v1/67ca42cd622efde5c3658c2e67e1aee2b6d88df1315d4291a1e5aa178b22250b.tar.gz",
+      "sha256": "67ca42cd622efde5c3658c2e67e1aee2b6d88df1315d4291a1e5aa178b22250b",
+      "status": "verified",
+      "verification": "GET sha256"
+    }
+  },
+  "reused_baseline_durable_retention": {
+    "bytes": 1408608,
+    "r2_bucket": "mojolearn-data",
+    "r2_key": "measurements/records/v1/67ca42cd622efde5c3658c2e67e1aee2b6d88df1315d4291a1e5aa178b22250b.tar.gz",
+    "sha256": "67ca42cd622efde5c3658c2e67e1aee2b6d88df1315d4291a1e5aa178b22250b",
+    "status": "verified",
+    "verification": "GET sha256"
   }
 }

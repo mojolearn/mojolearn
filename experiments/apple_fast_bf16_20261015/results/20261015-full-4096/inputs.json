@@ -1,0 +1,21 @@
+{
+  "seed": 7,
+  "preset": "full",
+  "cases": [
+    {
+      "m": 4096,
+      "n": 4096,
+      "k": 4096,
+      "path": "input-4096-4096-4096.npz",
+      "sha256": "26460b62a0964ef96bd7a451976203c5ec7fd681d50d893020a9a24174c65410",
+      "bytes": 335545316
+    }
+  ],
+  "distribution": "standard_normal float32",
+  "recipe_source": "tools/bench_board_neural.py GEMM_SHAPES.full and SEED",
+  "shapes_reason": "explicit test shapes; full is the declared full GEMM primitive, not an estimator dataset; no dispatch changes",
+  "input": "prepacked BF16 uint16 host buffers",
+  "accumulation": "float32",
+  "output": "float32 host array",
+  "scope": "local preliminary operation screening; no training/default-promotion/full-board claim"
+}

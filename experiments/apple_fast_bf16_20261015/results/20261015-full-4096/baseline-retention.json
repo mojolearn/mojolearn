@@ -1,0 +1,9 @@
+{
+  "bytes": 1408608,
+  "local_path": "/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/apple-fast-bf16-baseline-retention/all-evidence.tar.gz",
+  "r2_bucket": "mojolearn-data",
+  "r2_key": "measurements/records/v1/67ca42cd622efde5c3658c2e67e1aee2b6d88df1315d4291a1e5aa178b22250b.tar.gz",
+  "sha256": "67ca42cd622efde5c3658c2e67e1aee2b6d88df1315d4291a1e5aa178b22250b",
+  "status": "verified",
+  "verification": "GET sha256"
+}

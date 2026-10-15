@@ -1,0 +1,428 @@
+{
+  "schema": 1,
+  "id": "apple-fast-bf16-full-primitive-20261015",
+  "status": "full_primitive_operation_screening_complete",
+  "default_enabled": false,
+  "decision": "retain candidate disabled pending applicable full-estimator evidence and remaining qualification",
+  "source_commit": "30b9c0f3d65ceb5cdd5769b0a63df99d1d1d326a",
+  "candidate_define": "MOJOLEARN_AFN_GEMM_BF16_MMA=1",
+  "source_archive": {
+    "bytes": 25089151,
+    "sha256": "45dd6ec86fbc2d61a3ed9e02b40c9f1575c7063d2d43f5caa18f4bf3e54e39c9",
+    "archive_path": "source/source.tar.gz"
+  },
+  "executed_controller": {
+    "path": "executed_controller.py",
+    "sha256": "915c2df0f8c44ba4115810e64a83bfb6f07839fba78f61828565fd6808089333",
+    "portable_runner_executed": true
+  },
+  "input_manifest": {
+    "path": "inputs.json",
+    "sha256": "afa824769c1ebde129befb3d4275458528465f9e380276aef49da080c6be3f37"
+  },
+  "recipe": {
+    "shape_m_n_k": [
+      4096,
+      4096,
+      4096
+    ],
+    "source": "tools/bench_board_neural.py GEMM_SHAPES.full and SEED",
+    "seed": 7,
+    "distribution": "standard_normal float32",
+    "input": "prepacked BF16 uint16 host buffers",
+    "accumulation": "float32",
+    "output": "float32 host array",
+    "transpose_a": false,
+    "transpose_b": false,
+    "input_archive_path": "full-primitive/input-4096-4096-4096.npz",
+    "input_sha256": "26460b62a0964ef96bd7a451976203c5ec7fd681d50d893020a9a24174c65410",
+    "input_bytes": 335545316,
+    "timed_boundary": "ready BF16 host operands through fully materialized float32 host output; native packing, allocation, upload, widening, compute, sync and download included",
+    "excluded": "library import, test-data generation, oracle, hashing, evidence serialization",
+    "oracle": "independent float64 dot of exactly widened BF16 values",
+    "error_bound": "4*K*float32_epsilon*sum(abs(A)*abs(B)) + 1e-6",
+    "first_call_scope": "first recorded call per shape; only first shape is first in process; system caches not claimed empty",
+    "scored_samples_each": 5,
+    "excluded_warmups_each": 1,
+    "first_calls_each": 1,
+    "arm_order": [
+      "released-identical",
+      "candidate-fast",
+      "torch-mps"
+    ],
+    "execution": "separate serial processes"
+  },
+  "comparison": {
+    "candidate_over_shipped_identical": 0.8402321223070351,
+    "candidate_time_change_vs_shipped_identical_percent": -15.976787769296486,
+    "candidate_over_torch_mps": 0.3736523063259849,
+    "candidate_time_change_vs_torch_mps_percent": -62.63476936740151,
+    "scope": "shipped 0.8.45 IDENTICAL versus frozen candidate FAST and real PyTorch 2.13.0 MPS; not same-source default-promotion A/B",
+    "torch_contract": "Both operands begin as identical BF16 uint16 host buffers. Real PyTorch view(bfloat16), transfer to MPS, exact widening to FP32, torch.mm FP32 accumulation/output, download, synchronization and consumed host result occur inside the clock. No BF16-output matmul or harness-written GEMM; CPU fallback disabled.",
+    "cross_vendor_identity": "not compared; FAST has no cross-vendor identity promise",
+    "estimator_coverage": "none; no production estimator BF16 caller established",
+    "full_board_coverage": "none; one full primitive only",
+    "statistical_significance": "not established"
+  },
+  "arms": {
+    "released-identical": {
+      "status": "finished",
+      "complete": true,
+      "numeric_mode": "identical",
+      "version": "0.8.45",
+      "binary_sha256": "66213386a21a1dd19df3724deec72b14447eb3d914cfca1027f5b96c0843f832",
+      "exit_code": 0,
+      "controller_elapsed_s": 2.9057741165161133,
+      "scored_samples": 5,
+      "first_calls": 1,
+      "excluded_warmups": 1,
+      "median_ms": 158.5845,
+      "min_ms": 154.3995,
+      "max_ms": 159.014417,
+      "first_ms": 257.0595,
+      "excluded_warmup_ms": 155.129292,
+      "scored_ms": [
+        159.014417,
+        154.3995,
+        158.586125,
+        158.5845,
+        157.547625
+      ],
+      "accuracy": {
+        "passed": 7,
+        "failed": 0,
+        "finite": 7,
+        "max_abs_error": 4.1820574551820755e-05,
+        "max_rms_error": 6.082485278908091e-06
+      },
+      "failures": [],
+      "raw_summary": "results/20261015-full-4096/released-identical/summary.json",
+      "outputs": [
+        {
+          "archive_path": "full-primitive/released-identical/output-4096-4096-4096--2.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992,
+          "role": "first"
+        },
+        {
+          "archive_path": "full-primitive/released-identical/output-4096-4096-4096--1.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992,
+          "role": "excluded-warmup"
+        },
+        {
+          "archive_path": "full-primitive/released-identical/output-4096-4096-4096-0.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/released-identical/output-4096-4096-4096-1.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/released-identical/output-4096-4096-4096-2.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/released-identical/output-4096-4096-4096-3.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/released-identical/output-4096-4096-4096-4.npy",
+          "sha256": "8c5f460cde2941a5e7f9e7d9e6acb25217890b9f7d5e1828abe384140fa473b7",
+          "bytes": 67108992,
+          "role": "scored"
+        }
+      ]
+    },
+    "candidate-fast": {
+      "status": "finished",
+      "complete": true,
+      "numeric_mode": "fast",
+      "public_api": "mojolearn.linalg.matmul_bf16",
+      "binary_sha256": "68fe7c24d2dd496ab65591741fa76d0a79041144a19e71c64f086e14103d8633",
+      "source": "30b9c0f3d65ceb5cdd5769b0a63df99d1d1d326a",
+      "exit_code": 0,
+      "controller_elapsed_s": 2.9268276691436768,
+      "scored_samples": 5,
+      "first_calls": 1,
+      "excluded_warmups": 1,
+      "median_ms": 133.247791,
+      "min_ms": 128.562917,
+      "max_ms": 152.106584,
+      "first_ms": 170.914792,
+      "excluded_warmup_ms": 124.471708,
+      "scored_ms": [
+        130.9325,
+        152.106584,
+        145.31025,
+        133.247791,
+        128.562917
+      ],
+      "accuracy": {
+        "passed": 7,
+        "failed": 0,
+        "finite": 7,
+        "max_abs_error": 0.0007865861989557743,
+        "max_rms_error": 3.911995427744273e-05
+      },
+      "failures": [],
+      "raw_summary": "results/20261015-full-4096/candidate-fast/summary.json",
+      "outputs": [
+        {
+          "archive_path": "full-primitive/candidate-fast/output-4096-4096-4096--2.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "first"
+        },
+        {
+          "archive_path": "full-primitive/candidate-fast/output-4096-4096-4096--1.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "excluded-warmup"
+        },
+        {
+          "archive_path": "full-primitive/candidate-fast/output-4096-4096-4096-0.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/candidate-fast/output-4096-4096-4096-1.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/candidate-fast/output-4096-4096-4096-2.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/candidate-fast/output-4096-4096-4096-3.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/candidate-fast/output-4096-4096-4096-4.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "scored"
+        }
+      ]
+    },
+    "torch-mps": {
+      "status": "finished",
+      "complete": true,
+      "version": "2.13.0",
+      "matmul": "torch.mm float32",
+      "precision": "BF16 input bits widened exactly on GPU; FP32 multiplication, accumulation and output",
+      "mps_environment": {
+        "PYTORCH_ENABLE_MPS_FALLBACK": "0",
+        "PYTORCH_MPS_FAST_MATH": "0",
+        "PYTORCH_MPS_PREFER_METAL": "0"
+      },
+      "exit_code": 0,
+      "controller_elapsed_s": 5.335747957229614,
+      "scored_samples": 5,
+      "first_calls": 1,
+      "excluded_warmups": 1,
+      "median_ms": 356.609042,
+      "min_ms": 352.400042,
+      "max_ms": 361.400333,
+      "first_ms": 831.108,
+      "excluded_warmup_ms": 361.196292,
+      "scored_ms": [
+        361.400333,
+        356.609042,
+        358.856,
+        356.132084,
+        352.400042
+      ],
+      "accuracy": {
+        "passed": 7,
+        "failed": 0,
+        "finite": 7,
+        "max_abs_error": 0.0007865861989557743,
+        "max_rms_error": 3.911995427744273e-05
+      },
+      "failures": [],
+      "raw_summary": "results/20261015-full-4096/torch-mps/summary.json",
+      "outputs": [
+        {
+          "archive_path": "full-primitive/torch-mps/output-4096-4096-4096--2.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "first"
+        },
+        {
+          "archive_path": "full-primitive/torch-mps/output-4096-4096-4096--1.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "excluded-warmup"
+        },
+        {
+          "archive_path": "full-primitive/torch-mps/output-4096-4096-4096-0.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/torch-mps/output-4096-4096-4096-1.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/torch-mps/output-4096-4096-4096-2.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/torch-mps/output-4096-4096-4096-3.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "scored"
+        },
+        {
+          "archive_path": "full-primitive/torch-mps/output-4096-4096-4096-4.npy",
+          "sha256": "cea2187b118fd5d5268b1afb2af6c327259da1c1031d0d9349a2a3af2c4472a5",
+          "bytes": 67108992,
+          "role": "scored"
+        }
+      ]
+    }
+  },
+  "qualification": {
+    "source_commit": "30b9c0f3d65ceb5cdd5769b0a63df99d1d1d326a",
+    "enabled_apple_linalg_compile": {
+      "exit_code": 0,
+      "elapsed_s": 35.861682176589966,
+      "receipt": "validation/compile-06.result.json"
+    },
+    "gpu_correctness": {
+      "tests": 23,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 23,
+      "exit_code": 0,
+      "junit": "validation/correctness-06.xml"
+    },
+    "other_targets": "pending",
+    "candidate_off_and_identical_current_source_builds": "pending"
+  },
+  "durable_retention": {
+    "bytes": 1595961388,
+    "r2_bucket": "mojolearn-data",
+    "r2_key": "measurements/records/v1/7f44cb98392244faad9795b85783ce60ed421df94da819a27f1db5082a8664b2.tar.gz",
+    "sha256": "7f44cb98392244faad9795b85783ce60ed421df94da819a27f1db5082a8664b2",
+    "status": "verified",
+    "verification": "GET sha256"
+  },
+  "retention_scope": "Full primitive archive retains frozen source, enabled candidate binary, input and all 21 output arrays, executed controllers and complete preparation/build/test/timing logs. Supplemental baseline archive retains the exact reused released IDENTICAL binary and wheel manifest, verified against recorded measurement SHA256s, plus original and full-primitive baseline summaries. Both archives are GET/SHA256 verified; no benchmark rerun.",
+  "artifact_manifest": {
+    "results/20261015-full-4096/inputs.json": {
+      "sha256": "afa824769c1ebde129befb3d4275458528465f9e380276aef49da080c6be3f37",
+      "bytes": 733,
+      "archive_path": "full-primitive/inputs.json"
+    },
+    "results/20261015-full-4096/executed_controller.py": {
+      "sha256": "915c2df0f8c44ba4115810e64a83bfb6f07839fba78f61828565fd6808089333",
+      "bytes": 11942,
+      "archive_path": "full-primitive/candidate-fast/controller.py"
+    },
+    "results/20261015-full-4096/validation/compile-06.result.json": {
+      "sha256": "700352c71521ba74ccbd76abf0fcec03271782d30bfdef5d82051811c366879d",
+      "bytes": 357,
+      "archive_path": "evidence/compile-06.result.json"
+    },
+    "results/20261015-full-4096/validation/correctness-06.result.json": {
+      "sha256": "ae783503f0d40da268dc29754b8dc82d08792ccf47c21ebb3c5c4f773f2d8ebc",
+      "bytes": 528,
+      "archive_path": "evidence/correctness-06.result.json"
+    },
+    "results/20261015-full-4096/validation/correctness-06.xml": {
+      "sha256": "89168047289ad0213220411454e9e6803c4ab51d95446c63f53f5ecfd7a68036",
+      "bytes": 3776,
+      "archive_path": "evidence/correctness-06.xml"
+    },
+    "results/20261015-full-4096/validation/compile-06-binary.json": {
+      "sha256": "de7e52e54fdc86c593c7e8ec2b5a9887e5628fed7d68b8ac0d0520a1591da915",
+      "bytes": 262,
+      "archive_path": "evidence/compile-06-binary.json"
+    },
+    "results/20261015-full-4096/released-identical/summary.json": {
+      "sha256": "863a64acf084180e6a3da69ecbea50f64da370154a214283c415760ed82f29d6",
+      "bytes": 4801,
+      "archive_path": "full-primitive/released-identical/summary.json"
+    },
+    "results/20261015-full-4096/validation/full4096-released-identical.result.json": {
+      "sha256": "2d3a77d4b686f70df5756a44d14ec3d9b7619640babbbef4e3c39745fdb6f54e",
+      "bytes": 763,
+      "archive_path": "evidence/full4096-released-identical.result.json"
+    },
+    "results/20261015-full-4096/candidate-fast/summary.json": {
+      "sha256": "d5c9b8edba55a84ef223a1a18b6ff8649acbee4729a52c9ce9d3c9f277421a30",
+      "bytes": 4602,
+      "archive_path": "full-primitive/candidate-fast/summary.json"
+    },
+    "results/20261015-full-4096/validation/full4096-candidate-fast.result.json": {
+      "sha256": "b748c2ba541c8e193098d43433b056ce6eed7ed0ae30ad32e0c88233abba2de5",
+      "bytes": 686,
+      "archive_path": "evidence/full4096-candidate-fast.result.json"
+    },
+    "results/20261015-full-4096/torch-mps/summary.json": {
+      "sha256": "75757197c13d710216487dc66e83e8785ec4ce0b99c328b698c1436f951f5e29",
+      "bytes": 4577,
+      "archive_path": "full-primitive/torch-mps/summary.json"
+    },
+    "results/20261015-full-4096/validation/full4096-torch-mps.result.json": {
+      "sha256": "e2f7117ae0ca2905503295808934ba734aed44ddf57116f1990537e5329f19b7",
+      "bytes": 609,
+      "archive_path": "evidence/full4096-torch-mps.result.json"
+    }
+  },
+  "pending": [
+    "full affected estimator recipes and measurements before promotion",
+    "other-target and installed-release qualification",
+    "Apple FAST board-opponent contract/effective-parameter pairing; no board race run",
+    "no implicit FP32-to-BF16 quantization or training changes"
+  ],
+  "baseline_durable_retention": {
+    "bytes": 1408608,
+    "r2_bucket": "mojolearn-data",
+    "r2_key": "measurements/records/v1/67ca42cd622efde5c3658c2e67e1aee2b6d88df1315d4291a1e5aa178b22250b.tar.gz",
+    "sha256": "67ca42cd622efde5c3658c2e67e1aee2b6d88df1315d4291a1e5aa178b22250b",
+    "status": "verified",
+    "verification": "GET sha256"
+  },
+  "baseline_artifacts": {
+    "measurement/full4096-released-identical-summary.json": {
+      "bytes": 4801,
+      "sha256": "863a64acf084180e6a3da69ecbea50f64da370154a214283c415760ed82f29d6"
+    },
+    "measurement/original-three-case-released-identical-summary.json": {
+      "bytes": 13377,
+      "sha256": "3f760259572dce8a2dc07fbf7c677fe28ba35d5d05b6af2737d3476fbcafe5c1"
+    },
+    "released-identical/_mojolearn_linalg.so": {
+      "bytes": 3089136,
+      "sha256": "66213386a21a1dd19df3724deec72b14447eb3d914cfca1027f5b96c0843f832"
+    },
+    "released-identical/wheel-manifest.json": {
+      "bytes": 1675,
+      "sha256": "24fa9a504b56e81fdded97eef9a2211080ce02ffd828257df982deb29baae19c"
+    }
+  }
+}
