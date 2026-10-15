@@ -65,7 +65,9 @@ def test_constructor_refuses_by_name():
     _raises(NotImplementedError, "n_restarts_optimizer", G, n_restarts_optimizer=2)
     _raises(NotImplementedError, "warm_start", G, warm_start=True)
     _raises(NotImplementedError, "copy_X_train", G, copy_X_train=False)
-    _raises(NotImplementedError, "random_state", G, random_state=0)
+    # random_state is accepted and unused, as in scikit-learn when the
+    # optimizer (the only random step) is off (04bb03dff)
+    assert G(random_state=0).random_state == 0
     _raises(NotImplementedError, "one_vs_one", G, multi_class="one_vs_one")
     _raises(ValueError, "multi_class", G, multi_class="crammer_singer")
     _raises(NotImplementedError, "n_jobs", G, n_jobs=2)
