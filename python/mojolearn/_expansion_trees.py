@@ -647,8 +647,20 @@ def _trees_member_weights(active, sample_weight, n_rows):
         except (TypeError, ValueError):
             takes = False
         if not takes:
-            raise ValueError(f"Underlying estimator {name} does not support sample weights.")
+            who = "" if name is None else f" {name}"
+            raise ValueError(f"Underlying estimator{who} does not support sample weights.")
     return check_sample_weight(sample_weight, n_rows)
+
+
+def _trees_multioutput_y(Y):
+    """scikit-learn's MultiOutput refusal of a 1-D target, in its words
+    (glue: reads the shape, or the first row's type for a nested list)."""
+    nd = getattr(Y, "ndim", None)
+    if nd is None and isinstance(Y, (list, tuple)):
+        nd = 2 if (len(Y) and isinstance(Y[0], (list, tuple))) else 1
+    if nd is not None and int(nd) < 2:
+        raise ValueError("y must have at least two dimensions for multi-output regression "
+                         "but has only one.")
 
 
 def _trees_clone(est, **overrides):
@@ -3603,9 +3615,11 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
         """
         self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
+        _trees_multioutput_y(Y)
         Ya, _ = as_f32_c(Y, ndim=2, name="Y")
         if Ya.shape[0] != Xa.shape[0]:
             raise ValueError(f"Y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
+        sample_weight = _trees_member_weights([(None, self.estimator)], sample_weight, Xa.shape[0])
         self._multi_ridge = None
         b = _multiout_ridge_entry(self.estimator, sample_weight)
         if b is not None and Ya.shape[1] > 0:
@@ -3709,6 +3723,8 @@ class MultiOutputClassifier(_TreesWrapperBase):
         """
         self._validate_params()
         Xa, _ = as_f32_c(X, ndim=2, name="X")
+        _trees_multioutput_y(Y)
+        sample_weight = _trees_member_weights([(None, self.estimator)], sample_weight, Xa.shape[0])
         W = _trees_label_words(Y)
         if W is not None:
             return self._fit_words(Xa, W, sample_weight)
