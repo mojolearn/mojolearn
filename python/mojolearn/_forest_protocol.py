@@ -119,6 +119,12 @@ def forest_estimator(kind):
             # scikit-learn's convention: the constructor stores its
             # parameters verbatim and checks nothing; `_validate_params`
             # (run by `_refresh_config` at the start of every fit) does.
+            # Inside `_validate_params` a subclass constructor's
+            # `super().__init__` must reach the parent's checking constructor,
+            # or the parent's native configuration (`_cfg`) is never derived
+            # (DecisionTree* on top of RandomForest*).
+            if self.__dict__.get("_forest_validating"):
+                return original(self, *args, **kwargs)
             bound = signature.bind(self, *args, **kwargs)
             bound.apply_defaults()
             for name in cls._parameter_names:  # glue: copies constructor parameter names
@@ -173,7 +179,11 @@ class ForestProtocol:
                 mode.strip().lower() not in ("fast", "identical")):
             raise ValueError("numeric_mode must be fast, identical or None")
         self._validate_inference_engine(params.get("inference_engine", "sequential"))
-        type(self)._forest_original_init(self, **params)
+        self._forest_validating = True
+        try:
+            type(self)._forest_original_init(self, **params)
+        finally:
+            self.__dict__.pop("_forest_validating", None)
         for name, value in params.items():  # glue: restores constructor parameters verbatim
             setattr(self, name, value)
 
