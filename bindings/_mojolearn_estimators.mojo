@@ -400,8 +400,9 @@ def _pca_whiten_apply(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     var nfit = Int(py=params[3])
-    if nr < 1 or nf < 2 or nc < 1 or nc > nf or nfit < 2:
-        raise Error("PCA whitening requires positive rows/components, features>=2 and fit_rows>=2")
+    if nr < 1 or nf < 1 or nc < 1 or nc > nf or nfit < 2:
+        # one feature admitted with the one-column PCA fit (lane sk-kernels)
+        raise Error("PCA whitening requires positive rows/features/components and fit_rows>=2")
     if nr > 2147483647 or nf > 2147483647 or nc > 2147483647 or nfit > 2147483647:
         raise Error("PCA whitening dimensions exceed Int32")
     if nr > 2147483647 // nf or nc > 2147483647 // nf:

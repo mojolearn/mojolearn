@@ -328,7 +328,7 @@ class PCA(NumericModeMixin):
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Training data; at least 2 rows and 2 features. Must be finite
+            Training data; at least 2 rows. Must be finite
             when ``whiten=True``.
         y : ignored
 
@@ -364,15 +364,21 @@ class PCA(NumericModeMixin):
             self._whiten_binding()
         if self.svd_solver in self._RANDOM_SOLVERS:
             return self._fit_randomized(X)
-        dense = self.svd_solver in self._DENSE_SOLVERS
+        x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
+        # One feature is a fit scikit-learn makes (check_fit2d_1feature): the
+        # covariance arm takes the 1 x 1 covariance without a rotation
+        # (decomposition/impl/linalg/detail/pca.mojo `_eig_and_truncate_one`).
+        # 'full' sends it there too: at one column the R-SVD and the
+        # covariance eigenvalue are the same number, the column's variance,
+        # and the R-SVD kernels keep their two-column floor.
+        dense = self.svd_solver in self._DENSE_SOLVERS and x.shape[1] >= 2
         if dense:
             binding = self._dense_binding()
         else:
             binding = self._bind("_mojolearn_estimators")
-        x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
         if self.whiten and not all_finite(x):
             raise ValueError("mojolearn PCA whitening requires finite X")
-        if x.shape[0] < 2 or x.shape[1] < 2:
+        if x.shape[0] < 2:
             raise ValueError(_too_small(x.shape, "PCA"))
         if dense and x.shape[0] < x.shape[1] and self.numeric_mode_used() != "identical":
             # DEVIATION 593, raised HERE as well as in the Mojo validator so

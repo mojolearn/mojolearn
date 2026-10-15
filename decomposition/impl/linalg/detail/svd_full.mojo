@@ -395,6 +395,11 @@ def svd_of_r[wide_rotation: Bool = False](
 
 def pca_full_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
     """Shared shape checks; wide IDENTICAL additionally bounds k by rows."""
+    if n_cols <= 1:
+        # cuML's two-column floor, kept for this arm: `pca_validate` admits
+        # one column for the covariance arm only, and the Python layer sends
+        # a one-feature PCA there (lane sk-kernels, 2026-10-15)
+        raise Error("Parameter n_cols: number of columns cannot be less than two")
     pca_validate(n_rows, n_cols, n_components)
     if n_rows < n_cols:
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:

@@ -89,23 +89,48 @@ def _splitmix(state: UInt64) -> UInt64:
     return z ^ (z >> 31)
 
 
-def tsne_init_y0(mode: Int, y0: List[Float32], n: Int, seed: UInt64) raises -> List[Float32]:
+def tsne_init_y0(
+    mode: Int, y0: List[Float32], n: Int, seed: UInt64, n_components: Int = 2
+) raises -> List[Float32]:
     """The start (n x 2 float32): mode 0 `y0` as given, 1 random, 2 the PCA
-    embedding `y0` scaled (module docstring)."""
+    embedding `y0` scaled (module docstring).
+
+    `n_components == 1` (lane sk-kernels, 2026-10-15): `y0` holds n values
+    (the given column, or the one-component PCA embedding) and the start is
+    still n x 2 with the second column +0. The fit then runs the
+    two-dimensional kernels on it: every term of that column is
+    q * (0 - 0) = +0 (attraction, repulsion, gradient, update), so it stays
+    +0 for the whole run, every q is the one-dimensional Student-t kernel
+    (degrees of freedom max(n_components - 1, 1) = 1 either way) and
+    the first column is exactly the one-dimensional t-SNE.
+    `tsne_first_components` takes it back out."""
+    if n_components != 1 and n_components != 2:
+        raise Error(
+            "mojolearn TSNE: n_components must be 1 or 2, got " + String(n_components)
+        )
+    var k = n_components
     if mode == TSNE_INIT_GIVEN:
-        return y0.copy()
+        if k == 2:
+            return y0.copy()
+        var given = List[Float32](capacity=2 * n)
+        for i in range(n):
+            given.append(y0[i])
+            given.append(Float32(0.0))
+        return given^
     var out = List[Float32](capacity=2 * n)
     if mode == TSNE_INIT_RANDOM:
-        for t in range(2 * n):
+        for t in range(k * n):
             var z = _splitmix(seed + UInt64(t + 1) * UInt64(0x9E3779B97F4A7C15))
             var u = Float64(z >> 11) * Float64(1.1102230246251565e-16)  # 2^-53
             out.append(Float32(identical_mul64(u - Float64(0.5), Float64(1e-4))))
+            if k == 1:
+                out.append(Float32(0.0))
         return out^
     if mode != TSNE_INIT_PCA:
         raise Error("mojolearn TSNE: unknown init mode " + String(mode))
     var col = List[Float64](capacity=n)
     for i in range(n):
-        col.append(Float64(y0[2 * i]))
+        col.append(Float64(y0[k * i]))
     var mean = fsum(col) / Float64(n)
     var sq = List[Float64](capacity=n)
     for i in range(n):
@@ -116,6 +141,19 @@ def tsne_init_y0(mode: Int, y0: List[Float32], n: Int, seed: UInt64) raises -> L
         raise Error("mojolearn TSNE: init='pca' gave a constant first component; pass init='random'")
     var s32 = Float32(std)
     var c = Float32(1e-4)
-    for t in range(2 * n):
+    for t in range(k * n):
         out.append((y0[t] / s32) * c)
+        if k == 1:
+            out.append(Float32(0.0))
+    return out^
+
+
+def tsne_first_components(y: List[Float32], n: Int, n_components: Int) -> List[Float32]:
+    """The fitted n x 2 embedding as the caller's n x n_components: the
+    whole list at 2, its first column at 1 (see `tsne_init_y0`)."""
+    if n_components == 2:
+        return y.copy()
+    var out = List[Float32](capacity=n)
+    for i in range(n):
+        out.append(y[2 * i])
     return out^
