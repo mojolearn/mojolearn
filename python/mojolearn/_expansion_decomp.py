@@ -28,6 +28,7 @@ from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
 from ._buffer import addr as _addr, empty as _empty
+from ._mode import SklearnTagsMixin
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
@@ -1561,7 +1562,7 @@ def _gram_svd(k, Z):
     return S, _svd_flip_v(Vt)
 
 
-class _Base:
+class _Base(SklearnTagsMixin):
     _parameters = ()
 
     def get_params(self, deep=True):
@@ -2477,6 +2478,8 @@ class NMF(_Base):
     >>> W = model.fit_transform(X)
     >>> H = model.components_
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"positive_only": True}
     _parameters = ("n_components", "init", "solver", "beta_loss", "tol", "max_iter", "random_state",
                    "alpha_W", "alpha_H", "l1_ratio", "verbose", "shuffle", "numeric_mode")
 
@@ -4021,6 +4024,9 @@ class _PLS(_Base):
     `_get_first_singular_vectors_power_method`, `_center_scale_xy`,
     `_get_first_singular_vectors_svd` (PLSCanonical algorithm='svd'),
     `_svd_flip_1d`, `transform`, `inverse_transform`, `predict`."""
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "regressor"
+    _sklearn_target_tags = {"multi_output": True}
     _parameters = ("n_components", "scale", "max_iter", "tol", "copy", "numeric_mode")
     _deflation = "regression"
     _pmode = "A"
@@ -5219,6 +5225,8 @@ class LatentDirichletAllocation(_Base):
     >>> lda = mojolearn.LatentDirichletAllocation(n_components=4, random_state=0).fit(X)
     >>> doc_topics = lda.transform(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _sklearn_input_tags = {"positive_only": True}
     _parameters = ("n_components", "doc_topic_prior", "topic_word_prior", "learning_method", "learning_decay",
                    "learning_offset", "max_iter", "batch_size", "evaluate_every", "total_samples", "perp_tol",
                    "mean_change_tol", "max_doc_update_iter", "random_state", "numeric_mode")
@@ -6965,6 +6973,8 @@ class EllipticEnvelope(MinCovDet):
     >>> X = np.random.default_rng(0).normal(size=(500, 3)).astype(np.float32)
     >>> labels = mojolearn.EllipticEnvelope(contamination=0.05, random_state=0).fit(X).predict(X)
     """
+    # scikit-learn tags, read by `_mode.sklearn_tags`
+    _estimator_type = "outlier_detector"
     _parameters = ("store_precision", "assume_centered", "support_fraction", "contamination", "random_state",
                    "numeric_mode")
 
@@ -7379,6 +7389,8 @@ class SparseCoder(_SparseCoding):
     >>> coder = mojolearn.SparseCoder(rng.random((5, 8), dtype=np.float32), transform_n_nonzero_coefs=2)
     >>> code = coder.transform(rng.random((100, 8), dtype=np.float32))
     """
+    # stateless: the dictionary is a constructor parameter, so transform needs no fit
+    _sklearn_requires_fit = False
     _parameters = ("dictionary", "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha",
                    "split_sign", "positive_code", "transform_max_iter", "numeric_mode")
 
