@@ -543,9 +543,11 @@ def test_only_the_slow_table_recipes_get_a_longer_timer_and_rows_record_it(monke
     assert C.recipe_timeout(SimpleNamespace(smoke_timeout=60.0), slow) == (60.0, 'default --smoke-timeout')
 
 
-def test_the_slow_table_is_empty_after_r16():
-    # smoke-fixes r16 (2026-10-14): "slow" = broken until proven otherwise; an entry needs a measured reason
-    assert C.SMOKE_SLOW == {}
+def test_slow_table_entries_carry_a_measured_reason():
+    # Andrew, 2026-10-15: slow is not broken; every entry still names the measurement that set its timer
+    for seconds, reason in C.SMOKE_SLOW.values():
+        assert seconds > 5 and reason
+    assert C.SMOKE_SLOW["neural/gemm/gaussian/shape=full"][0] == 10
 
 
 def test_mamba_ssm_is_prepared_once_per_box_only_when_a_planned_arm_needs_it(tmp_path, monkeypatch):

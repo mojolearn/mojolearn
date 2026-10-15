@@ -238,7 +238,11 @@ DRIVERS = ("bench_board", "bench_board_algos", "bench_board_neural", "bench_boar
 #:   (stage_request -> bench_board_neural.stage_inputs), make_inputs links it, the arms share its staged arrays
 #:   (read_inputs) and each array is hashed once (_array_sha); timed races write, read and hash as before.
 #: A recipe that again needs a longer timer gets an entry here with its measured check time and reason.
-SMOKE_SLOW = {}
+#: Andrew, 2026-10-15: a slow check is not by itself broken; a recipe whose check needs longer gets a timer here.
+SMOKE_SLOW = {
+    # NVIDIA smoke-0845: STARTED at 5 s, check 6.79 s (arms re-read the 128 MB input; staged since lane/smoke-gemm-5s).
+    "neural/gemm/gaussian/shape=full": (10, "NVIDIA smoke-0845 check took 6.79 s"),
+}
 
 
 #: the board's --rounds under the smoke (one preflight-only round; stage_request derives neural steps from it)
