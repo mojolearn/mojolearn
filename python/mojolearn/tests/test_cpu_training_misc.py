@@ -21,8 +21,8 @@ runs only the record set on a CPU-only install; the core host binding
 registers `gather_rows_bytes` (cross_val_score's fold rows) under the base
 binding's name, and the oracle refuses an unsupported metric in the device's
 words; the resample family routes `_mojolearn_resample` to its own host
-binding, which registers the GPU binding's three entries and read-backs and
-not the multi-GPU range probe, and whose oracle imports no GPU module, calls
+binding, which registers the GPU binding's three entries, read-backs and
+the one-device range probe, and whose oracle imports no GPU module, calls
 the device path's own host stages and carries the sabotage arm; the training
 family declares the four neural lanes, its host binding registers the GPU
 binding's clip, accumulate and Samba operation names, the new oracle imports
@@ -35,7 +35,7 @@ device's sentence, by its name on the Python side and by its code on the
 Mojo side; the fold-row gather returns the rows a Python index
 returns, byte for byte, and refuses an out-of-range index before writing;
 a bootstrap run twice returns the same bytes and its `r_first` slice equals
-the whole run's, and the range probe refuses by name; the host embedding
+the whole run's, and the range probe answers one device; the host embedding
 forward is the gather, the two-piece accumulate is the elementwise sum, and
 the clip refuses max_norm <= 0 by name.
 The bit claim against the GPU columns is the CPU identity gate's.
@@ -363,12 +363,10 @@ def test_bootstrap_runs_on_the_host_when_built():
     assert 0.0 < p.pvalue <= 1.0
     m = rs.monte_carlo_integrate("const", [0.0, 0.0], [1.0, 2.0], 1000)
     assert m.integral == 2.0 and m.closed_form == 2.0
-    try:
-        _backend.binding("_mojolearn_resample").resample_ranges_parallel_available
-    except ImportError as exc:
-        assert "resample_ranges_parallel_available" in str(exc)
-    else:
-        raise AssertionError("the host binding exported the multi-GPU range probe")
+    # The host binding serves the range probe since f90ad45de (par-resample's
+    # CPU arm): 1, the one-device cooperative shard; two or more devices
+    # refuse by name in the driver before reaching it.
+    assert int(_backend.binding("_mojolearn_resample").resample_ranges_parallel_available()) == 1
 
 
 @reference_training()
