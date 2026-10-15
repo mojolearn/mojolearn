@@ -1308,9 +1308,9 @@ _add("decision-tree-clf", xlane="trees", ours="DecisionTreeClassifier", task="cl
 # QUALITY/FAIRNESS FIX (lane quality-fix-apple-fast, 2026-10-15): ours' trees split on per-feature
 # quantile bins and scikit-learn's on exact thresholds. At n_bins=128 the bins are 128 quantiles of a
 # 512-row sample (cuML's rule, 4 x n_bins rows: ensemble/decisiontree/batched_levelalgo/quantiles.mojo
-# compute_quantiles), which merges taxi's location-id columns (up to 265 values): r2 taxi on the M3
-# 0.8.34 board, decision-tree-reg 0.8626 (ours, 128 bins) / 0.8792 (ours-fast, 256) vs scikit-learn
-# 0.8915. Ours now races n_bins=1024, the finest split search it (and cuML) accepts
+# compute_quantiles): coarse split candidates on taxi's continuous columns (distance, duration) for a
+# depth-16 tree. r2 taxi on the M3 0.8.34 board, decision-tree-reg 0.8626 (ours, 128 bins) / 0.8792
+# (ours-fast, 256) vs scikit-learn 0.8915; bagging-reg 0.9170 / 0.9233 vs 0.9388. Ours now races n_bins=1024, the finest split search it (and cuML) accepts
 # (ensemble/decisiontree/decisiontree.mojo max_n_bins <= 1024), the nearest to exact thresholds; the
 # same explicit value in both ours arms (identical and fast) and on cuML. Not a shape rule: the
 # maximum, whatever the dataset. Results raced before this change used 128 (256 FAST default).
