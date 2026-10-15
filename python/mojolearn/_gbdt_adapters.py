@@ -49,7 +49,11 @@ class _GBDTAdapter:
         values.pop('self')
         for name, value in values.items():  # glue: stores constructor keyword arguments
             setattr(self, name, value)
-        self._new_learner(numeric_mode)
+
+    def _validate_params(self):
+        """The parameter checks, run at fit (scikit-learn's convention): the
+        learner's constructor refuses what it does not accept."""
+        self._new_learner(self.numeric_mode)
 
     def _new_learner(self, mode):
         if mode is not None and (not isinstance(mode, str) or
@@ -212,6 +216,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
         -------
         self
         """
+        self._validate_params()
         self._clear_fit()
         target, kind = metrics._classification_encoded(y, 'y')
         classes = sorted(metrics._label_set(target))  # glue: orders the binary class labels (two expected)
@@ -368,6 +373,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
         -------
         self
         """
+        self._validate_params()
         self._clear_fit()
         target = materialize_f32_lists(y, "y")[0]
         self._regression_target(target, 'y')
