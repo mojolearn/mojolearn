@@ -43,12 +43,35 @@ def make(name):
     if name == 'pca':
         from mojolearn.decomposition import PCA
         return PCA(n_components=16)
+    if name == 'dtree_reg':
+        from mojolearn import DecisionTreeRegressor
+        return DecisionTreeRegressor(random_state=0)
+    if name == 'ivf_sq':
+        from mojolearn import IVFSQIndex
+        return IVFSQIndex(n_lists=1024, n_probes=32, n_neighbors=8, random_state=0)
     raise ValueError(name)
+
+
+def target(x):
+    # Nonlinear synthetic target, not a board dataset (testing code only).
+    rng = np.random.default_rng(11)
+    return (3 * np.sin(x[:, 0]) + x[:, 1] * x[:, 2] + np.abs(x[:, 3]) + 0.1 * rng.standard_normal(len(x))).astype(np.float32)
 
 
 def quality(name, model, x):
     if name == 'kmeans':
         return dict(inertia=float(model.inertia_))
+    if name == 'dtree_reg':
+        from sklearn.metrics import r2_score
+        held = x[-50000:]
+        return dict(heldout_r2=float(r2_score(target(held), np.asarray(model.predict(held)))))
+    if name == 'ivf_sq':
+        q = x[:2000]
+        _, got = model.search(q)
+        d = (q * q).sum(1)[:, None] - 2 * q @ x.T + (x * x).sum(1)[None, :]
+        exact = np.argpartition(d, 8, axis=1)[:, :8]
+        hits = sum(len(set(a.tolist()) & set(b.tolist())) for a, b in zip(np.asarray(got), exact))
+        return dict(recall_at_8=hits / (8 * len(q)))
     return dict(explained_variance_ratio_sum=float(np.asarray(model.explained_variance_ratio_).sum()))
 
 
@@ -67,8 +90,11 @@ def run(root, rows, features, name, arm, out):
     times = []
     for _ in range(2):
         model = make(name)
+        fit_x, fit_args = x, ()
+        if name == 'dtree_reg':
+            fit_x, fit_args = x[:-50000], (target(x[:-50000]),)
         start = time.perf_counter_ns()
-        model.fit(x)
+        model.fit(fit_x, *fit_args)
         times.append((time.perf_counter_ns() - start) / 1e6)
     import mojolearn
     record = dict(estimator=name, arm=arm, rows=rows, features=features, warmup_ms=times[0],
