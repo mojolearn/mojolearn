@@ -667,8 +667,13 @@ class TSNE(NumericModeMixin):
         max_iter = _ann_int("TSNE", "max_iter", self.max_iter)
         seed = _ann_int("TSNE", "random_state", self.random_state)
         perplexity = float(self.perplexity)
-        if not 0.0 < perplexity < n:
-            raise ValueError(f"mojolearn TSNE: perplexity must be in (0, {n}), got {perplexity}")
+        # scikit-learn's rules: perplexity > 0 (its parameter constraint) and
+        # perplexity < n_samples (`_check_params_vs_input`), in its words
+        if not perplexity > 0.0:
+            raise ValueError(f"The 'perplexity' parameter of TSNE must be a float in the range "
+                             f"(0.0, inf). Got {self.perplexity!r} instead.")
+        if perplexity >= n:
+            raise ValueError(f"perplexity ({self.perplexity}) must be less than n_samples ({n})")
         exag = float(self.early_exaggeration)
         if self.learning_rate == "auto":
             lr = max(n / exag / 4.0, 50.0)
