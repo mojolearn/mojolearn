@@ -30,11 +30,12 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes, zeros
 from ._labels import argmax_rows, decode_labels, encode_labels, sorted_classes, threshold_codes
 from ._mode import NumericModeMixin
+from ._sample_weight import check_sample_weight
 from ._svm_impl import SVC, SVR
 from .linear_model import (
     _QN_LOSS_SVC_L1, _QN_LOSS_SVC_L2, _QN_LOSS_SVR_L1, _QN_LOSS_SVR_L2,
     _accuracy_host, _check_qn_solver_fields, _labels_1d, _qn_fit_one_target,
-    _qn_scores, _r2_host, _target_1d, _py2mojo_flags, _PY2MOJO_ROWS,
+    _qn_row_weights, _qn_scores, _r2_host, _target_1d, _py2mojo_flags, _PY2MOJO_ROWS,
 )
 
 __all__ = ["SVC", "SVR", "LinearSVC", "LinearSVR"]
@@ -86,11 +87,8 @@ class _LinearSVMBase(NumericModeMixin):
         inv_c = 1.0 / self.C
         return (inv_c, 0.0) if self.penalty == "l1" else (0.0, inv_c)
 
-    # No `fit` here takes sample_weight: the quasi-Newton solver has no
-    # weighted loss (GLMBase::add_sample_weights, glm_base.cuh:115; the qn_fit
-    # binding refuses has_sample_weight by name; glm/NOT_IMPLEMENTED.tsv).
-    # Advertising it only to raise would tell scikit-learn's
-    # has_fit_parameter it works (lane sk-edges).
+    # sample_weight (and LinearSVC's class_weight) are the solver's per-row
+    # weights (glm_base.mojo::qn_row_weight_kernel; lane sk-kernels).
 
 
 class LinearSVC(_LinearSVMBase):
@@ -118,8 +116,10 @@ class LinearSVC(_LinearSVMBase):
         Whether to fit an (unpenalized) intercept.
     penalized_intercept : bool, default False
         Only False is supported; True raises ``NotImplementedError``.
-    class_weight : None
-        Must be None; anything else raises ``NotImplementedError``.
+    class_weight : dict, 'balanced' or None, default None
+        Weights per class: row ``i`` of class ``c`` has its loss multiplied
+        by ``class_weight[c]`` (times its ``sample_weight``) in every
+        machine. ``'balanced'`` uses ``n_samples / (n_classes * count(c))``.
     tol : float, default 1e-4
         Gradient tolerance, > 0.
     max_iter : int, default 1000
@@ -186,14 +186,9 @@ class LinearSVC(_LinearSVMBase):
         if multi_class != "ovr":
             raise ValueError(
                 f"mojolearn LinearSVC: multi_class must be 'ovr', got {multi_class!r}")
-        if self.class_weight is not None:
-            raise NotImplementedError(
-                "mojolearn LinearSVC: class_weight is not implemented (it becomes "
-                "a sample_weight in the reference, and sample_weight is not "
-                "implemented; glm/NOT_IMPLEMENTED.tsv)")
         self._check_common()
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         """Fit the classifier.
 
         Parameters
@@ -203,6 +198,9 @@ class LinearSVC(_LinearSVMBase):
         y : array-like of shape (n_samples,)
             Class labels, at least two distinct values. A 2-D ``y``, a
             single class or a length mismatch raises ``ValueError``.
+        sample_weight : array-like of shape (n_samples,) or None
+            Per-sample weights; each row's loss is multiplied by its
+            weight. None weighs every row 1.
 
         Returns
         -------
@@ -223,6 +221,8 @@ class LinearSVC(_LinearSVMBase):
         if n_classes < 2:
             raise ValueError("mojolearn LinearSVC: y has one class")
         l1, l2 = self._strengths()
+        sw = _qn_row_weights(self, sample_weight, self.class_weight,
+                             self.classes_, codes, rows)
         # `OvrSelector` (linear.cu:50-54): y is 1 on the selected class and 0
         # elsewhere; two classes select class 1 and fit once.
         selected = [1] if n_classes == 2 else list(range(n_classes))
@@ -238,15 +238,17 @@ class LinearSVC(_LinearSVMBase):
             w_all = zeros((n_fits, n_coefs), "<f4")
             info = zeros((n_fits, 3), "<f4")
             codes_c = codes._as_c()
+            params = [rows, cols, selected[0], n_fits, float(l1), float(l2),
+                      float(self.tol), float(0.1 * self.tol), int(self.max_iter),
+                      int(self.linesearch_max_iter), int(self.lbfgs_memory),
+                      1 if self.fit_intercept else 0,
+                      1 if self.penalty_normalized else 0,
+                      int(self._LOSSES[self.loss])]
+            if sw is not None:
+                params.append(addr_ro(sw, name="sample_weight"))  # field 15
             ovr(
                 addr_ro(x, name="X"), addr_ro(codes_c, name="codes"),
-                addr(w_all, name="coef_"), addr(info, name="info"),
-                [rows, cols, selected[0], n_fits, float(l1), float(l2),
-                 float(self.tol), float(0.1 * self.tol), int(self.max_iter),
-                 int(self.linesearch_max_iter), int(self.lbfgs_memory),
-                 1 if self.fit_intercept else 0,
-                 1 if self.penalty_normalized else 0,
-                 int(self._LOSSES[self.loss])])
+                addr(w_all, name="coef_"), addr(info, name="info"), params)
             for k, (fx, rc, it) in enumerate(info.tolist()):  # glue: unpacks one result row per fit
                 blocks.append(w_all[k])
                 n_iter = max(n_iter, int(it))
@@ -258,7 +260,7 @@ class LinearSVC(_LinearSVMBase):
             y_enc = (codes == cls).astype("<f4")
             w, k, fx, rc = _qn_fit_one_target(
                 self, x, y_enc, 2, self._LOSSES[self.loss], l1, l2,
-                self.tol, 0.1 * self.tol)
+                self.tol, 0.1 * self.tol, sw=sw)
             blocks.append(w)
             n_iter = max(n_iter, k)
             objectives.append(fx)
@@ -467,7 +469,7 @@ class LinearSVR(_LinearSVMBase):
                 f"mojolearn LinearSVR: epsilon must be finite and non-negative, got {epsilon}")
         self._check_common()
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         """Fit the regressor.
 
         Parameters
@@ -477,6 +479,9 @@ class LinearSVR(_LinearSVMBase):
         y : array-like of shape (n_samples,)
             Target values. A 2-D ``y`` or a length mismatch raises
             ``ValueError``.
+        sample_weight : array-like of shape (n_samples,) or None
+            Per-sample weights; each row's loss is multiplied by its
+            weight. None weighs every row 1.
 
         Returns
         -------
@@ -489,9 +494,10 @@ class LinearSVR(_LinearSVMBase):
         t = _target_1d(y, rows, "mojolearn LinearSVR requires a 1-D y",
                        "mojolearn LinearSVR X and y lengths differ")
         l1, l2 = self._strengths()
+        sw = None if sample_weight is None else check_sample_weight(sample_weight, rows)
         w, n_iter, self.objective_, self.retcode_ = _qn_fit_one_target(
             self, x, t, 1, self._LOSSES[self.loss], l1, l2,
-            self.tol, 0.1 * self.tol, svr_eps=self.epsilon)
+            self.tol, 0.1 * self.tol, svr_eps=self.epsilon, sw=sw)
         self._w = w
         self.coef_ = w[:cols]
         self.intercept_ = float(w[cols]) if self.fit_intercept else 0.0
