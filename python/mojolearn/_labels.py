@@ -403,6 +403,49 @@ def _decode_labels_native(classes, codes, kind):
     return Array._owned(store, (n,), "<i8" if kind == "int" else "<f8", "C")
 
 
+_INDEX_DTYPES = ("<i8", "<i4", "<u4", "<u2", "<u1", "<i1")
+
+
+class ClassLabels(list):
+    """`classes_` of a fitted classifier: the class list of the ORDER RULE
+    above (a `list`, so every internal use stays a list use), which also
+    takes an integer array as an index, as an ndarray `classes_` does:
+    `clf.classes_[codes]` gives the label of each code, the idiom
+    scikit-learn's callers use to turn `decision_function` columns or an
+    argmax back into labels. The lookup is `decode_labels`: the native
+    gather for int and float classes, the label output step for str."""
+
+    __slots__ = ()
+
+    def __getitem__(self, key):
+        try:
+            return list.__getitem__(self, key)
+        except TypeError:
+            if key is None or isinstance(key, (str, bytes, float, tuple, dict)):
+                raise
+        from ._buffer import _materialize
+        codes, _ = _materialize(key, "index")
+        if codes.dtype not in _INDEX_DTYPES:
+            raise TypeError("classes_ takes an integer array as an index, "
+                            f"not an array of {codes.dtype}")
+        if codes.ndim != 1:
+            raise TypeError("classes_ takes a 1-D integer array as an index, "
+                            f"not one of shape {codes.shape}")
+        if codes.dtype not in ("<i8", "<i4"):
+            codes = codes.astype("<i8")
+        return decode_labels(list(self), codes)
+
+    def __reduce__(self):
+        return (ClassLabels, (list(self),))
+
+
+def as_class_labels(classes):
+    """`classes` as a `ClassLabels` when it is a plain list, else unchanged."""
+    if type(classes) is list:
+        return ClassLabels(classes)
+    return classes
+
+
 def classes_member(classes):
     """`classes_` as the npz member `save` writes: int64 for integer
     labels, float64 for real labels, the list of str for str labels
