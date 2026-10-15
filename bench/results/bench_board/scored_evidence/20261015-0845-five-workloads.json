@@ -1,0 +1,2103 @@
+{
+  "schema": "mojolearn.scored-output-identity-evidence/1",
+  "date": "2026-10-15",
+  "release": "0.8.45",
+  "scope": "Five full-workload NVIDIA/AMD pairs, one excluded warmup and one scored sample each; consumed output arrays only. No Apple, FAST, whole-release or complete-model identity claim.",
+  "verification": {
+    "actual_output_bytes": "Archive SHA256, exact output NPZ archive membership and file SHA256, typed canonical SHA256 recomputed from retained arrays.",
+    "actual_input_bytes": "Full saved NPZ array names/shapes/dtypes/bytes match scored worker parameter readbacks on both vendors; physical input archive and file checksums verified.",
+    "canonical_hash": "tools/bench_board_state.py:canonical_hash, mojolearn-benchmark-state-v1; names, nested structure, shape, dtype and contiguous array bytes.",
+    "performance": "One scored call, no noise estimate or performance default decision. Both quality records shown; quality does not gate pairing.",
+    "opponents": "No opponent re-score or cache-key rewriting. Original AMD torch timing, readback and output bytes retained; other pairings remain pending."
+  },
+  "workloads": [
+    {
+      "recipe": "algos/lu-solve/synthetic/rows=full",
+      "verdict": "MATCH: retained scored consumed output bytes",
+      "outputs": [
+        {
+          "name": "x",
+          "shape": [
+            524288
+          ],
+          "dtype": "float64"
+        }
+      ],
+      "scope": "Final solve result x, flattened and converted to float64 by existing scorer; LU factors and pivot vectors are NOT retained or certified.",
+      "vendors": {
+        "nvidia": {
+          "measurement_id": "af8f4d182cd066e74e4de22385663f4fa96e5d95e2ac6bc27f2cd8a7d9bfc2d5",
+          "board": "../main-nvidia-l40s/board.json",
+          "board_snapshot_sha256": "4d92463e8103a525164a4a1235b4ddbcd5b1526e8e4d0c88fc702e06b6ee1811",
+          "library": {
+            "library": "mojolearn",
+            "version": "0.8.45"
+          },
+          "phase": "fit",
+          "numeric_mode": "identical",
+          "hardware": {
+            "gpu_driver_identity": "GPU-06ea114e-523b-5336-4a75-b8f63cf4213d, NVIDIA L40S, 8.9, 580.159.03",
+            "host": "0522757c4413",
+            "kernel": "6.8.0-134-generic",
+            "machine": "x86_64",
+            "os": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
+            "status": "verified",
+            "vendor": "nvidia"
+          },
+          "parameters": {
+            "implementation": {
+              "module": "mojolearn._expansion_decomp",
+              "name": "solve"
+            },
+            "library": "mojolearn",
+            "params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                },
+                {
+                  "dtype": "float32",
+                  "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                  "shape": [
+                    8192,
+                    64
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "raw_params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                },
+                {
+                  "dtype": "float32",
+                  "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                  "shape": [
+                    8192,
+                    64
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "source": {
+            "bytes": 25077731,
+            "commit": "9c8c53fb2ef392f66bc4faec177d60ba207734f7",
+            "manifest_sha256": "207a90071c95fd1f60fa1a512780203aa9f461ed9c0bc47b90b9f9e28ff9f5b0",
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28.tar.gz",
+            "sha256": "8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "artifacts": {
+            "bytes": 51310215,
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/b494193776fe72da2a602e0ecb937e490b2268ca090b631a54fbb9dc3b0dc628.tar.gz",
+            "sha256": "b494193776fe72da2a602e0ecb937e490b2268ca090b631a54fbb9dc3b0dc628",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "saved_inputs": {
+            "archive": {
+              "bytes": 251292867,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/39ecd6717f5f4574b139be4e6133318e217fa16209aba5a2fe2239b6e6c73e28.tar.gz",
+              "sha256": "39ecd6717f5f4574b139be4e6133318e217fa16209aba5a2fe2239b6e6c73e28",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "member": "arrays.npz",
+            "file_sha256": "74a46ad4045f06439bfc4ca4960a2cc3217312f2a90a0bf9e9fd3753a351eadb",
+            "arrays": [
+              {
+                "dtype": "float32",
+                "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                "shape": [
+                  8192,
+                  8192
+                ]
+              },
+              {
+                "dtype": "float32",
+                "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                "shape": [
+                  8192,
+                  64
+                ]
+              }
+            ]
+          },
+          "scored_output": {
+            "bytes": 4194560,
+            "canonical_sha256": "420d8626da216adb90e1ca8e48c21d7c114046d3e59a006767761c585a9e8219",
+            "encoding": "numpy output arrays",
+            "member": "scored/8763-516nbnr2/outputs.npz",
+            "sha256": "1d66a1bb806ddb6d188150095d65cf316a0c74f75593b214a8824ffe9db4006c",
+            "status": "verified"
+          },
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "times_ms": [
+            456.27753797452897
+          ],
+          "timing": {
+            "rounds": 1,
+            "span": {
+              "fit_minus_upload_ms": 437.55254498682916,
+              "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
+              "input_home": "host",
+              "inside_clock": "LU factor + solve",
+              "pre_clock_fit": false,
+              "upload_bytes_separate": 270532608,
+              "upload_inputs_separate": [
+                "arg0",
+                "arg1"
+              ],
+              "upload_ms_separate": 18.724992987699807,
+              "upload_ms_untimed": null,
+              "upload_scope_separate": "host_to_device_upload_separate",
+              "upload_separate_unavailable": null
+            },
+            "times_ms": [
+              456.27753797452897
+            ],
+            "warmup_ms": 1820.5652040196583
+          },
+          "quality": {
+            "relative_residual": 3.2563003656344963e-06
+          },
+          "admitted_opponents": [],
+          "pairing_verdict": "INSUFFICIENT",
+          "pairing_reason": "no opponent with sufficient valid comparison evidence"
+        },
+        "amd": {
+          "measurement_id": "7ed87b11b8f3c1b051ac8060b72f20053c38c1b283aab719ee019fc7746e7bff",
+          "board": "../main-amd-mi325x/board.json",
+          "board_snapshot_sha256": "65af9e2117c702f719832309c0159fac2a07ebaefe954ca1ed727baa392c6bd1",
+          "library": {
+            "library": "mojolearn",
+            "version": "0.8.45"
+          },
+          "phase": "fit",
+          "numeric_mode": "identical",
+          "hardware": {
+            "gpu_driver_identity": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x72ee3cc9a53836c1\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+            "host": "mojolearn-steward-do-amd",
+            "kernel": "6.8.0-59-generic",
+            "machine": "x86_64",
+            "os": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+            "rocm_version": "7.2.3",
+            "status": "verified",
+            "vendor": "amd"
+          },
+          "parameters": {
+            "implementation": {
+              "module": "mojolearn._expansion_decomp",
+              "name": "solve"
+            },
+            "library": "mojolearn",
+            "params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                },
+                {
+                  "dtype": "float32",
+                  "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                  "shape": [
+                    8192,
+                    64
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "raw_params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                },
+                {
+                  "dtype": "float32",
+                  "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                  "shape": [
+                    8192,
+                    64
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "source": {
+            "bytes": 25077731,
+            "commit": "9c8c53fb2ef392f66bc4faec177d60ba207734f7",
+            "manifest_sha256": "207a90071c95fd1f60fa1a512780203aa9f461ed9c0bc47b90b9f9e28ff9f5b0",
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28.tar.gz",
+            "sha256": "8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "artifacts": {
+            "bytes": 42685852,
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/d250c50eb5861d4733e9e9fca62035c662c37770061cf68763fabeb0c54ebcec.tar.gz",
+            "sha256": "d250c50eb5861d4733e9e9fca62035c662c37770061cf68763fabeb0c54ebcec",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "saved_inputs": {
+            "archive": {
+              "bytes": 251292867,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/39ecd6717f5f4574b139be4e6133318e217fa16209aba5a2fe2239b6e6c73e28.tar.gz",
+              "sha256": "39ecd6717f5f4574b139be4e6133318e217fa16209aba5a2fe2239b6e6c73e28",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "member": "arrays.npz",
+            "file_sha256": "74a46ad4045f06439bfc4ca4960a2cc3217312f2a90a0bf9e9fd3753a351eadb",
+            "arrays": [
+              {
+                "dtype": "float32",
+                "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                "shape": [
+                  8192,
+                  8192
+                ]
+              },
+              {
+                "dtype": "float32",
+                "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                "shape": [
+                  8192,
+                  64
+                ]
+              }
+            ]
+          },
+          "scored_output": {
+            "bytes": 4194560,
+            "canonical_sha256": "420d8626da216adb90e1ca8e48c21d7c114046d3e59a006767761c585a9e8219",
+            "encoding": "numpy output arrays",
+            "member": "scored/138154-rn2xsboh/outputs.npz",
+            "sha256": "1d66a1bb806ddb6d188150095d65cf316a0c74f75593b214a8824ffe9db4006c",
+            "status": "verified"
+          },
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "times_ms": [
+            318.6675639990426
+          ],
+          "timing": {
+            "rounds": 1,
+            "span": {
+              "fit_minus_upload_ms": 313.7765819992637,
+              "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
+              "input_home": "host",
+              "inside_clock": "LU factor + solve",
+              "pre_clock_fit": false,
+              "upload_bytes_separate": 270532608,
+              "upload_inputs_separate": [
+                "arg0",
+                "arg1"
+              ],
+              "upload_ms_separate": 4.890981999778887,
+              "upload_ms_untimed": null,
+              "upload_scope_separate": "host_to_device_upload_separate",
+              "upload_separate_unavailable": null
+            },
+            "times_ms": [
+              318.6675639990426
+            ],
+            "warmup_ms": 709.8963619991991
+          },
+          "quality": {
+            "relative_residual": 3.256297894717335e-06
+          },
+          "admitted_opponents": [
+            "torch-gpu"
+          ],
+          "pairing_verdict": "MATCHED",
+          "pairing_reason": "recorded effective settings match",
+          "retained_opponent": {
+            "arm": "torch-gpu",
+            "stored": {
+              "box": "mojolearn-steward-do-amd",
+              "commit": "dabf8ac17d34bd327805fd4c9c597709887026a5",
+              "device": "gpu (AMD Instinct Mi325X VF)",
+              "key_id": "a5806eec114e4c75fff9515e091d07288e239bf445d1f92db7aa17ec2a2d57e2",
+              "measured_at": "2026-10-14T17:55:18Z"
+            },
+            "measurement_id": "acb5c23690d93d2e7d08c870ea64a45e81913d9faecc17fdca289cc55945adb0",
+            "source": {
+              "bytes": 24892826,
+              "commit": "dabf8ac17d34bd327805fd4c9c597709887026a5",
+              "manifest_sha256": "d1ee12fe466f8a417e5dd0468de5172f72a56c825268b231642981640e228c6a",
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/32c3d5124588533d44fcb8d8e8f754035abb3c38bf19a3d49c06daa3b470146c.tar.gz",
+              "sha256": "32c3d5124588533d44fcb8d8e8f754035abb3c38bf19a3d49c06daa3b470146c",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "artifacts": {
+              "bytes": 42683316,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/8d5ca56515cdff4be781e16720af147fa44650a6b8eb3d50077676cbed50868c.tar.gz",
+              "sha256": "8d5ca56515cdff4be781e16720af147fa44650a6b8eb3d50077676cbed50868c",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "output_member": "run/work/lu-solve-synthetic-torch-gpu.npz",
+            "legacy_output_digest": "0bcc2572ab146ad5",
+            "physical_npz_and_archive_verified": true,
+            "parameters": {
+              "implementation": {
+                "module": "torch._C._linalg",
+                "name": "linalg_solve"
+              },
+              "library": "torch",
+              "params": {
+                "input_arrays": [
+                  {
+                    "dtype": "float32",
+                    "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                    "shape": [
+                      8192,
+                      8192
+                    ]
+                  },
+                  {
+                    "dtype": "float32",
+                    "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                    "shape": [
+                      8192,
+                      64
+                    ]
+                  }
+                ],
+                "seed": 7
+              },
+              "raw_params": {
+                "input_arrays": [
+                  {
+                    "dtype": "float32",
+                    "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                    "shape": [
+                      8192,
+                      8192
+                    ]
+                  },
+                  {
+                    "dtype": "float32",
+                    "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                    "shape": [
+                      8192,
+                      64
+                    ]
+                  }
+                ],
+                "seed": 7
+              },
+              "source": "declared"
+            },
+            "timing": {
+              "rounds": 1,
+              "span": {
+                "input_home": "device",
+                "inside_clock": "LU factor + solve",
+                "pre_clock_fit": false,
+                "upload_ms_untimed": 83.64797100011856
+              },
+              "times_ms": [
+                81.17893500002538
+              ],
+              "warmup_ms": 301.4200549996531
+            },
+            "quality": {
+              "relative_residual": 4.003413492599298e-07
+            }
+          }
+        }
+      }
+    },
+    {
+      "recipe": "algos/lu-factor/synthetic/rows=full",
+      "verdict": "MATCH: retained scored consumed output bytes",
+      "outputs": [
+        {
+          "name": "x",
+          "shape": [
+            524288
+          ],
+          "dtype": "float64"
+        }
+      ],
+      "scope": "Final solve result x, flattened and converted to float64 by existing scorer; LU factors and pivot vectors are NOT retained or certified.",
+      "vendors": {
+        "nvidia": {
+          "measurement_id": "54c1c07b4cdcb4fa8c72983936fb512fe06e344fca124a547ba628043a49453e",
+          "board": "../main-nvidia-l40s/board.json",
+          "board_snapshot_sha256": "ee0b45f4d6e10be3bcdf26f25255d2f28189b12399c9fd3f64a29d10bdf46619",
+          "library": {
+            "library": "mojolearn",
+            "version": "0.8.45"
+          },
+          "phase": "fit",
+          "numeric_mode": "identical",
+          "hardware": {
+            "gpu_driver_identity": "GPU-06ea114e-523b-5336-4a75-b8f63cf4213d, NVIDIA L40S, 8.9, 580.159.03",
+            "host": "0522757c4413",
+            "kernel": "6.8.0-134-generic",
+            "machine": "x86_64",
+            "os": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
+            "status": "verified",
+            "vendor": "nvidia"
+          },
+          "parameters": {
+            "implementation": {
+              "module": "mojolearn._expansion_decomp",
+              "name": "lu_factor"
+            },
+            "library": "mojolearn",
+            "params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                },
+                {
+                  "dtype": "float32",
+                  "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                  "shape": [
+                    8192,
+                    64
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "raw_params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                },
+                {
+                  "dtype": "float32",
+                  "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                  "shape": [
+                    8192,
+                    64
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "source": {
+            "bytes": 25077731,
+            "commit": "9c8c53fb2ef392f66bc4faec177d60ba207734f7",
+            "manifest_sha256": "207a90071c95fd1f60fa1a512780203aa9f461ed9c0bc47b90b9f9e28ff9f5b0",
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28.tar.gz",
+            "sha256": "8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "artifacts": {
+            "bytes": 51310228,
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/b99aa91e9f8392811067e67dfc5bb09c62d812d1553c5162fea12f89c4aa2ad6.tar.gz",
+            "sha256": "b99aa91e9f8392811067e67dfc5bb09c62d812d1553c5162fea12f89c4aa2ad6",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "saved_inputs": {
+            "archive": {
+              "bytes": 251292867,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/39ecd6717f5f4574b139be4e6133318e217fa16209aba5a2fe2239b6e6c73e28.tar.gz",
+              "sha256": "39ecd6717f5f4574b139be4e6133318e217fa16209aba5a2fe2239b6e6c73e28",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "member": "arrays.npz",
+            "file_sha256": "74a46ad4045f06439bfc4ca4960a2cc3217312f2a90a0bf9e9fd3753a351eadb",
+            "arrays": [
+              {
+                "dtype": "float32",
+                "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                "shape": [
+                  8192,
+                  8192
+                ]
+              },
+              {
+                "dtype": "float32",
+                "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                "shape": [
+                  8192,
+                  64
+                ]
+              }
+            ]
+          },
+          "scored_output": {
+            "bytes": 4194560,
+            "canonical_sha256": "420d8626da216adb90e1ca8e48c21d7c114046d3e59a006767761c585a9e8219",
+            "encoding": "numpy output arrays",
+            "member": "scored/9369-ea2a2cdr/outputs.npz",
+            "sha256": "1d66a1bb806ddb6d188150095d65cf316a0c74f75593b214a8824ffe9db4006c",
+            "status": "verified"
+          },
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "times_ms": [
+            476.73471190501004
+          ],
+          "timing": {
+            "rounds": 1,
+            "span": {
+              "fit_minus_upload_ms": 454.78967600502074,
+              "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
+              "input_home": "host",
+              "inside_clock": "lu_factor(A) then lu_solve(., B)",
+              "pre_clock_fit": false,
+              "upload_bytes_separate": 270532608,
+              "upload_inputs_separate": [
+                "arg0",
+                "arg1"
+              ],
+              "upload_ms_separate": 21.945035899989307,
+              "upload_ms_untimed": null,
+              "upload_scope_separate": "host_to_device_upload_separate",
+              "upload_separate_unavailable": null
+            },
+            "times_ms": [
+              476.73471190501004
+            ],
+            "warmup_ms": 1945.2911079861224
+          },
+          "quality": {
+            "relative_residual": 3.2563003656344963e-06
+          },
+          "admitted_opponents": [],
+          "pairing_verdict": "INSUFFICIENT",
+          "pairing_reason": "no opponent with sufficient valid comparison evidence"
+        },
+        "amd": {
+          "measurement_id": "00a9de2d225e6d6cac985b274a7bcd063970d9fa541ec3908cfd88d321b7a619",
+          "board": "../main-amd-mi325x/board.json",
+          "board_snapshot_sha256": "9ee2c8cdec9aee02c765d0d3a75801e5a4570961a10501418259a8aeca83e9a8",
+          "library": {
+            "library": "mojolearn",
+            "version": "0.8.45"
+          },
+          "phase": "fit",
+          "numeric_mode": "identical",
+          "hardware": {
+            "gpu_driver_identity": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x72ee3cc9a53836c1\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+            "host": "mojolearn-steward-do-amd",
+            "kernel": "6.8.0-59-generic",
+            "machine": "x86_64",
+            "os": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+            "rocm_version": "7.2.3",
+            "status": "verified",
+            "vendor": "amd"
+          },
+          "parameters": {
+            "implementation": {
+              "module": "mojolearn._expansion_decomp",
+              "name": "lu_factor"
+            },
+            "library": "mojolearn",
+            "params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                },
+                {
+                  "dtype": "float32",
+                  "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                  "shape": [
+                    8192,
+                    64
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "raw_params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                },
+                {
+                  "dtype": "float32",
+                  "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                  "shape": [
+                    8192,
+                    64
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "source": {
+            "bytes": 25077731,
+            "commit": "9c8c53fb2ef392f66bc4faec177d60ba207734f7",
+            "manifest_sha256": "207a90071c95fd1f60fa1a512780203aa9f461ed9c0bc47b90b9f9e28ff9f5b0",
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28.tar.gz",
+            "sha256": "8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "artifacts": {
+            "bytes": 42685906,
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/b62e69c2ba1fb18801f4508ec2bd5efb3bad1e4a5c740134ad498edadabee1b1.tar.gz",
+            "sha256": "b62e69c2ba1fb18801f4508ec2bd5efb3bad1e4a5c740134ad498edadabee1b1",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "saved_inputs": {
+            "archive": {
+              "bytes": 251292867,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/39ecd6717f5f4574b139be4e6133318e217fa16209aba5a2fe2239b6e6c73e28.tar.gz",
+              "sha256": "39ecd6717f5f4574b139be4e6133318e217fa16209aba5a2fe2239b6e6c73e28",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "member": "arrays.npz",
+            "file_sha256": "74a46ad4045f06439bfc4ca4960a2cc3217312f2a90a0bf9e9fd3753a351eadb",
+            "arrays": [
+              {
+                "dtype": "float32",
+                "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                "shape": [
+                  8192,
+                  8192
+                ]
+              },
+              {
+                "dtype": "float32",
+                "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                "shape": [
+                  8192,
+                  64
+                ]
+              }
+            ]
+          },
+          "scored_output": {
+            "bytes": 4194560,
+            "canonical_sha256": "420d8626da216adb90e1ca8e48c21d7c114046d3e59a006767761c585a9e8219",
+            "encoding": "numpy output arrays",
+            "member": "scored/138924-emjkreg9/outputs.npz",
+            "sha256": "1d66a1bb806ddb6d188150095d65cf316a0c74f75593b214a8824ffe9db4006c",
+            "status": "verified"
+          },
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "times_ms": [
+            321.94171300034213
+          ],
+          "timing": {
+            "rounds": 1,
+            "span": {
+              "fit_minus_upload_ms": 317.06845900043845,
+              "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
+              "input_home": "host",
+              "inside_clock": "lu_factor(A) then lu_solve(., B)",
+              "pre_clock_fit": false,
+              "upload_bytes_separate": 270532608,
+              "upload_inputs_separate": [
+                "arg0",
+                "arg1"
+              ],
+              "upload_ms_separate": 4.873253999903682,
+              "upload_ms_untimed": null,
+              "upload_scope_separate": "host_to_device_upload_separate",
+              "upload_separate_unavailable": null
+            },
+            "times_ms": [
+              321.94171300034213
+            ],
+            "warmup_ms": 625.8702649993211
+          },
+          "quality": {
+            "relative_residual": 3.256297894717335e-06
+          },
+          "admitted_opponents": [
+            "torch-gpu"
+          ],
+          "pairing_verdict": "MATCHED",
+          "pairing_reason": "recorded effective settings match",
+          "retained_opponent": {
+            "arm": "torch-gpu",
+            "stored": {
+              "box": "mojolearn-steward-do-amd",
+              "commit": "dabf8ac17d34bd327805fd4c9c597709887026a5",
+              "device": "gpu (AMD Instinct Mi325X VF)",
+              "key_id": "b9e3bf022d39c722ef44e93ff0ffe43d1e444ab2429de5d91ec2f08361d96863",
+              "measured_at": "2026-10-14T17:58:15Z"
+            },
+            "measurement_id": "41f81a6e0fb76cbeea558bb4f8da58bfac46ae07b6bab06d623b1902243d862f",
+            "source": {
+              "bytes": 24892826,
+              "commit": "dabf8ac17d34bd327805fd4c9c597709887026a5",
+              "manifest_sha256": "d1ee12fe466f8a417e5dd0468de5172f72a56c825268b231642981640e228c6a",
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/32c3d5124588533d44fcb8d8e8f754035abb3c38bf19a3d49c06daa3b470146c.tar.gz",
+              "sha256": "32c3d5124588533d44fcb8d8e8f754035abb3c38bf19a3d49c06daa3b470146c",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "artifacts": {
+              "bytes": 42683342,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/ec83dc2d087a2bbeda22b39a45b8ec9e5c751f307622850ce7a29512dbd7f2a2.tar.gz",
+              "sha256": "ec83dc2d087a2bbeda22b39a45b8ec9e5c751f307622850ce7a29512dbd7f2a2",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "output_member": "run/work/lu-factor-synthetic-torch-gpu.npz",
+            "legacy_output_digest": "0bcc2572ab146ad5",
+            "physical_npz_and_archive_verified": true,
+            "parameters": {
+              "implementation": {
+                "module": "torch._C._linalg",
+                "name": "linalg_lu_factor"
+              },
+              "library": "torch",
+              "params": {
+                "input_arrays": [
+                  {
+                    "dtype": "float32",
+                    "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                    "shape": [
+                      8192,
+                      8192
+                    ]
+                  },
+                  {
+                    "dtype": "float32",
+                    "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                    "shape": [
+                      8192,
+                      64
+                    ]
+                  }
+                ],
+                "seed": 7
+              },
+              "raw_params": {
+                "input_arrays": [
+                  {
+                    "dtype": "float32",
+                    "sha256": "e3500eebc0f84bfe008ee69884a10df5fab41e5bec2a57ae24d76cb8dbddeb20",
+                    "shape": [
+                      8192,
+                      8192
+                    ]
+                  },
+                  {
+                    "dtype": "float32",
+                    "sha256": "56589d513ac0c940e300abfd9e69b92d6fe1b6ba3f08b861624290d33b5b50ff",
+                    "shape": [
+                      8192,
+                      64
+                    ]
+                  }
+                ],
+                "seed": 7
+              },
+              "source": "declared"
+            },
+            "timing": {
+              "rounds": 1,
+              "span": {
+                "input_home": "device",
+                "inside_clock": "lu_factor(A) then lu_solve(., B)",
+                "pre_clock_fit": false,
+                "upload_ms_untimed": 83.0728949999866
+              },
+              "times_ms": [
+                82.03627800003233
+              ],
+              "warmup_ms": 178.04216400008954
+            },
+            "quality": {
+              "relative_residual": 4.003413492599298e-07
+            }
+          }
+        }
+      }
+    },
+    {
+      "recipe": "algos/eigh/synthetic/rows=full",
+      "verdict": "MATCH: retained scored consumed output bytes",
+      "outputs": [
+        {
+          "name": "w",
+          "shape": [
+            4096
+          ],
+          "dtype": "float64"
+        },
+        {
+          "name": "V",
+          "shape": [
+            4096,
+            4096
+          ],
+          "dtype": "float64"
+        }
+      ],
+      "scope": "Retained consumed eigenvalues w[4096] and eigenvectors V[4096,4096], converted to float64 by existing scorer. No broader model, Apple, all-lane or whole-release certificate.",
+      "vendors": {
+        "nvidia": {
+          "measurement_id": "e591cbc0a2163d44b800ba4418ab313eea15cc70d08a7d6e5dd7c469a272d0f8",
+          "board": "../main-nvidia-l40s/board.json",
+          "board_snapshot_sha256": "53008b26da725c69140700c31d184e76f9191876d32e9c4870e8037b3498f8cc",
+          "library": {
+            "library": "mojolearn",
+            "version": "0.8.45"
+          },
+          "phase": "fit",
+          "numeric_mode": "identical",
+          "hardware": {
+            "gpu_driver_identity": "GPU-06ea114e-523b-5336-4a75-b8f63cf4213d, NVIDIA L40S, 8.9, 580.159.03",
+            "host": "0522757c4413",
+            "kernel": "6.8.0-134-generic",
+            "machine": "x86_64",
+            "os": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
+            "status": "verified",
+            "vendor": "nvidia"
+          },
+          "parameters": {
+            "implementation": {
+              "module": "mojolearn._linalg_impl",
+              "name": "eigh"
+            },
+            "library": "mojolearn",
+            "params": {
+              "UPLO": "L",
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "raw_params": {
+              "UPLO": "L",
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "source": {
+            "bytes": 25077731,
+            "commit": "9c8c53fb2ef392f66bc4faec177d60ba207734f7",
+            "manifest_sha256": "207a90071c95fd1f60fa1a512780203aa9f461ed9c0bc47b90b9f9e28ff9f5b0",
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28.tar.gz",
+            "sha256": "8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "artifacts": {
+            "bytes": 207659132,
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/e41958fcf7de08900b3be25ba7332279ebca137c4761fe149730bed50396a62e.tar.gz",
+            "sha256": "e41958fcf7de08900b3be25ba7332279ebca137c4761fe149730bed50396a62e",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "saved_inputs": {
+            "archive": {
+              "bytes": 62294149,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/67c341e00667c3465bc44d5c1f5b55cc7ef032af37dc79d5335210b78ebbbf44.tar.gz",
+              "sha256": "67c341e00667c3465bc44d5c1f5b55cc7ef032af37dc79d5335210b78ebbbf44",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "member": "arrays.npz",
+            "file_sha256": "aed8b5c07672a2c6d6c43021684e8b2666ea767b23b7dfb234a19c74bb9013be",
+            "arrays": [
+              {
+                "dtype": "float32",
+                "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb",
+                "shape": [
+                  4096,
+                  4096
+                ]
+              }
+            ]
+          },
+          "scored_output": {
+            "bytes": 134250986,
+            "canonical_sha256": "426d165b97f3a7f355524e09b59b7e016ce37ad84ede9f84f45d2ebe89917283",
+            "encoding": "numpy output arrays",
+            "member": "scored/9939-r32h7rh5/outputs.npz",
+            "sha256": "57b30cdcad7e3f0064d5b69656800b5b17550a0ce8d312eb1a83dc49c6b9348f",
+            "status": "verified"
+          },
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "times_ms": [
+            533.0764000536874
+          ],
+          "timing": {
+            "rounds": 1,
+            "span": {
+              "fit_minus_upload_ms": 527.4593400536105,
+              "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
+              "input_home": "host",
+              "inside_clock": "symmetric eigendecomposition",
+              "pre_clock_fit": false,
+              "upload_bytes_separate": 67108864,
+              "upload_inputs_separate": [
+                "arg0"
+              ],
+              "upload_ms_separate": 5.61706000007689,
+              "upload_ms_untimed": null,
+              "upload_scope_separate": "host_to_device_upload_separate",
+              "upload_separate_unavailable": null
+            },
+            "times_ms": [
+              533.0764000536874
+            ],
+            "warmup_ms": 1817.0488720061257
+          },
+          "quality": {
+            "max_eigenvalue_error": 3.691887215748312e-07,
+            "relative_residual": 6.672270099315204e-07
+          },
+          "admitted_opponents": [],
+          "pairing_verdict": "INSUFFICIENT",
+          "pairing_reason": "no opponent with sufficient valid comparison evidence"
+        },
+        "amd": {
+          "measurement_id": "053f014c028c0397e981aa3b45a28284e98eb66df9d5b2f46362453e70b44f14",
+          "board": "../main-amd-mi325x/board.json",
+          "board_snapshot_sha256": "ca3f457ff6a05b371eb43a1c4f4bdf20d3541f1d4f7e7ebdd058883046474970",
+          "library": {
+            "library": "mojolearn",
+            "version": "0.8.45"
+          },
+          "phase": "fit",
+          "numeric_mode": "identical",
+          "hardware": {
+            "gpu_driver_identity": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x72ee3cc9a53836c1\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+            "host": "mojolearn-steward-do-amd",
+            "kernel": "6.8.0-59-generic",
+            "machine": "x86_64",
+            "os": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+            "rocm_version": "7.2.3",
+            "status": "verified",
+            "vendor": "amd"
+          },
+          "parameters": {
+            "implementation": {
+              "module": "mojolearn._linalg_impl",
+              "name": "eigh"
+            },
+            "library": "mojolearn",
+            "params": {
+              "UPLO": "L",
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "raw_params": {
+              "UPLO": "L",
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                }
+              ],
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "source": {
+            "bytes": 25077731,
+            "commit": "9c8c53fb2ef392f66bc4faec177d60ba207734f7",
+            "manifest_sha256": "207a90071c95fd1f60fa1a512780203aa9f461ed9c0bc47b90b9f9e28ff9f5b0",
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28.tar.gz",
+            "sha256": "8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "artifacts": {
+            "bytes": 199033709,
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/faedc7dc15c147ec45dda6e36b0a94a0ce03d4ba63afc478d8eb498f64c0817c.tar.gz",
+            "sha256": "faedc7dc15c147ec45dda6e36b0a94a0ce03d4ba63afc478d8eb498f64c0817c",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "saved_inputs": {
+            "archive": {
+              "bytes": 62294149,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/67c341e00667c3465bc44d5c1f5b55cc7ef032af37dc79d5335210b78ebbbf44.tar.gz",
+              "sha256": "67c341e00667c3465bc44d5c1f5b55cc7ef032af37dc79d5335210b78ebbbf44",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "member": "arrays.npz",
+            "file_sha256": "aed8b5c07672a2c6d6c43021684e8b2666ea767b23b7dfb234a19c74bb9013be",
+            "arrays": [
+              {
+                "dtype": "float32",
+                "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb",
+                "shape": [
+                  4096,
+                  4096
+                ]
+              }
+            ]
+          },
+          "scored_output": {
+            "bytes": 134250986,
+            "canonical_sha256": "426d165b97f3a7f355524e09b59b7e016ce37ad84ede9f84f45d2ebe89917283",
+            "encoding": "numpy output arrays",
+            "member": "scored/139756-3pkre0jj/outputs.npz",
+            "sha256": "57b30cdcad7e3f0064d5b69656800b5b17550a0ce8d312eb1a83dc49c6b9348f",
+            "status": "verified"
+          },
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "times_ms": [
+            531.0902419987542
+          ],
+          "timing": {
+            "rounds": 1,
+            "span": {
+              "fit_minus_upload_ms": 529.5034009977826,
+              "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
+              "input_home": "host",
+              "inside_clock": "symmetric eigendecomposition",
+              "pre_clock_fit": false,
+              "upload_bytes_separate": 67108864,
+              "upload_inputs_separate": [
+                "arg0"
+              ],
+              "upload_ms_separate": 1.5868410009716172,
+              "upload_ms_untimed": null,
+              "upload_scope_separate": "host_to_device_upload_separate",
+              "upload_separate_unavailable": null
+            },
+            "times_ms": [
+              531.0902419987542
+            ],
+            "warmup_ms": 819.9052839991054
+          },
+          "quality": {
+            "max_eigenvalue_error": 3.691887216398624e-07,
+            "relative_residual": 6.672270099313161e-07
+          },
+          "admitted_opponents": [
+            "torch-gpu"
+          ],
+          "pairing_verdict": "MATCHED",
+          "pairing_reason": "recorded effective settings match",
+          "retained_opponent": {
+            "arm": "torch-gpu",
+            "stored": {
+              "box": "mojolearn-steward-do-amd",
+              "commit": "dabf8ac17d34bd327805fd4c9c597709887026a5",
+              "device": "gpu (AMD Instinct Mi325X VF)",
+              "key_id": "824282290db81da3d5c9640ce47c0bb80e103bb62827dcf2588471bb480c7f30",
+              "measured_at": "2026-10-14T18:04:55Z"
+            },
+            "measurement_id": "7499c7b087c929c96d306883e9679f27b9c109cff5d91a55d448a83e0bf72317",
+            "source": {
+              "bytes": 24892826,
+              "commit": "dabf8ac17d34bd327805fd4c9c597709887026a5",
+              "manifest_sha256": "d1ee12fe466f8a417e5dd0468de5172f72a56c825268b231642981640e228c6a",
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/32c3d5124588533d44fcb8d8e8f754035abb3c38bf19a3d49c06daa3b470146c.tar.gz",
+              "sha256": "32c3d5124588533d44fcb8d8e8f754035abb3c38bf19a3d49c06daa3b470146c",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "artifacts": {
+              "bytes": 198983455,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/045ffd24995c51ebae370a343e826bdb4b9e1ed054868d6071d4b76585e42a3f.tar.gz",
+              "sha256": "045ffd24995c51ebae370a343e826bdb4b9e1ed054868d6071d4b76585e42a3f",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "output_member": "run/work/eigh-synthetic-torch-gpu.npz",
+            "legacy_output_digest": "dcbc4d451473bbb3",
+            "physical_npz_and_archive_verified": true,
+            "parameters": {
+              "implementation": {
+                "module": "torch._C._linalg",
+                "name": "linalg_eigh"
+              },
+              "library": "torch",
+              "params": {
+                "UPLO": "L",
+                "input_arrays": [
+                  {
+                    "dtype": "float32",
+                    "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb",
+                    "shape": [
+                      4096,
+                      4096
+                    ]
+                  }
+                ],
+                "seed": 7
+              },
+              "raw_params": {
+                "UPLO": "L",
+                "input_arrays": [
+                  {
+                    "dtype": "float32",
+                    "sha256": "2c4b0bf4609c4d52caa9d6bc06c51bfea085fc0f03a7b31ab31b9d26214119cb",
+                    "shape": [
+                      4096,
+                      4096
+                    ]
+                  }
+                ],
+                "seed": 7
+              },
+              "source": "declared"
+            },
+            "timing": {
+              "rounds": 1,
+              "span": {
+                "input_home": "device",
+                "inside_clock": "symmetric eigendecomposition",
+                "pre_clock_fit": false,
+                "upload_ms_untimed": 79.80573099985122
+              },
+              "times_ms": [
+                116.98250400013421
+              ],
+              "warmup_ms": 259.7115379999195
+            },
+            "quality": {
+              "max_eigenvalue_error": 1.0440680754790996e-06,
+              "relative_residual": 9.613883338456243e-07
+            }
+          }
+        }
+      }
+    },
+    {
+      "recipe": "algos/cholesky/synthetic/rows=full",
+      "verdict": "MATCH: retained scored consumed output bytes",
+      "outputs": [
+        {
+          "name": "L",
+          "shape": [
+            8192,
+            8192
+          ],
+          "dtype": "float64"
+        }
+      ],
+      "scope": "Retained consumed Cholesky factor L[8192,8192], converted to float64 by existing scorer. No broader model, Apple, all-lane or whole-release certificate.",
+      "vendors": {
+        "nvidia": {
+          "measurement_id": "618215375692b7246b3c8594d5d116fea888defa1afb498dc8ca4a8bc6e0ac03",
+          "board": "../main-nvidia-l40s/board.json",
+          "board_snapshot_sha256": "5580e7299efdf6db75d990b290bc743346ed3a82b7c857d9aafbe61e59af0f72",
+          "library": {
+            "library": "mojolearn",
+            "version": "0.8.45"
+          },
+          "phase": "fit",
+          "numeric_mode": "identical",
+          "hardware": {
+            "gpu_driver_identity": "GPU-06ea114e-523b-5336-4a75-b8f63cf4213d, NVIDIA L40S, 8.9, 580.159.03",
+            "host": "0522757c4413",
+            "kernel": "6.8.0-134-generic",
+            "machine": "x86_64",
+            "os": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
+            "status": "verified",
+            "vendor": "nvidia"
+          },
+          "parameters": {
+            "implementation": {
+              "module": "mojolearn._cholesky_impl",
+              "name": "Cholesky"
+            },
+            "library": "mojolearn",
+            "params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e1cc202332be3803baafedd32dff310e4af25316f9711e8522028b15962d0054",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                }
+              ],
+              "jitter": 0.0,
+              "seed": 7
+            },
+            "raw_params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e1cc202332be3803baafedd32dff310e4af25316f9711e8522028b15962d0054",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                }
+              ],
+              "jitter": 0.0,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "source": {
+            "bytes": 25077731,
+            "commit": "9c8c53fb2ef392f66bc4faec177d60ba207734f7",
+            "manifest_sha256": "207a90071c95fd1f60fa1a512780203aa9f461ed9c0bc47b90b9f9e28ff9f5b0",
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28.tar.gz",
+            "sha256": "8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "artifacts": {
+            "bytes": 373797721,
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/d887c6c3e3595d69238aa1d535139d14343cc6ec5989df5d5bbcf9032e8769b8.tar.gz",
+            "sha256": "d887c6c3e3595d69238aa1d535139d14343cc6ec5989df5d5bbcf9032e8769b8",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "saved_inputs": {
+            "archive": {
+              "bytes": 249177828,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/bd3d117543105bbbd375affaccd1b39ced8c517927c9b029231c73fe9755f8fc.tar.gz",
+              "sha256": "bd3d117543105bbbd375affaccd1b39ced8c517927c9b029231c73fe9755f8fc",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "member": "arrays.npz",
+            "file_sha256": "716c98b148ffd0617255b423e026b5832391877208fe86d09898712188d6f21f",
+            "arrays": [
+              {
+                "dtype": "float32",
+                "sha256": "e1cc202332be3803baafedd32dff310e4af25316f9711e8522028b15962d0054",
+                "shape": [
+                  8192,
+                  8192
+                ]
+              }
+            ]
+          },
+          "scored_output": {
+            "bytes": 536871168,
+            "canonical_sha256": "39f4c0a7156c5f666cee5d38a9544f8c589f000e034e1adbd7b69c868b3bc201",
+            "encoding": "numpy output arrays",
+            "member": "scored/10509-yatfcczt/outputs.npz",
+            "sha256": "4734762e5a643e4dce0b71afa574ddb609e13a023eac281a96cff4d4fef7916c",
+            "status": "verified"
+          },
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "times_ms": [
+            312.992129009217
+          ],
+          "timing": {
+            "rounds": 1,
+            "span": {
+              "fit_minus_upload_ms": 294.2752259550616,
+              "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
+              "input_home": "host",
+              "inside_clock": "Cholesky factor",
+              "pre_clock_fit": false,
+              "upload_bytes_separate": 268435456,
+              "upload_inputs_separate": [
+                "arg0"
+              ],
+              "upload_ms_separate": 18.71690305415541,
+              "upload_ms_untimed": null,
+              "upload_scope_separate": "host_to_device_upload_separate",
+              "upload_separate_unavailable": null
+            },
+            "times_ms": [
+              312.992129009217
+            ],
+            "warmup_ms": 1604.008986032568
+          },
+          "quality": {
+            "relative_residual": 2.900069991650983e-07
+          },
+          "admitted_opponents": [],
+          "pairing_verdict": "INSUFFICIENT",
+          "pairing_reason": "no opponent with sufficient valid comparison evidence"
+        },
+        "amd": {
+          "measurement_id": "f416682614822772463619595afae92fb6c665d8a39c3a103aed240af2324ae5",
+          "board": "../main-amd-mi325x/board.json",
+          "board_snapshot_sha256": "feb25800c3812ea02bced44e48d98c353d2bed0602357a809120c12894571a0f",
+          "library": {
+            "library": "mojolearn",
+            "version": "0.8.45"
+          },
+          "phase": "fit",
+          "numeric_mode": "identical",
+          "hardware": {
+            "gpu_driver_identity": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x72ee3cc9a53836c1\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+            "host": "mojolearn-steward-do-amd",
+            "kernel": "6.8.0-59-generic",
+            "machine": "x86_64",
+            "os": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+            "rocm_version": "7.2.3",
+            "status": "verified",
+            "vendor": "amd"
+          },
+          "parameters": {
+            "implementation": {
+              "module": "mojolearn._cholesky_impl",
+              "name": "Cholesky"
+            },
+            "library": "mojolearn",
+            "params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e1cc202332be3803baafedd32dff310e4af25316f9711e8522028b15962d0054",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                }
+              ],
+              "jitter": 0.0,
+              "seed": 7
+            },
+            "raw_params": {
+              "input_arrays": [
+                {
+                  "dtype": "float32",
+                  "sha256": "e1cc202332be3803baafedd32dff310e4af25316f9711e8522028b15962d0054",
+                  "shape": [
+                    8192,
+                    8192
+                  ]
+                }
+              ],
+              "jitter": 0.0,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "source": {
+            "bytes": 25077731,
+            "commit": "9c8c53fb2ef392f66bc4faec177d60ba207734f7",
+            "manifest_sha256": "207a90071c95fd1f60fa1a512780203aa9f461ed9c0bc47b90b9f9e28ff9f5b0",
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28.tar.gz",
+            "sha256": "8edd6022f36518520b85dfe4e6d7e856361b5a3d427c05d2b42a17bacba11a28",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "artifacts": {
+            "bytes": 365173676,
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/0313ccd3f2bce1cc997a15747409a54101eb1a60c90707db1255a1c7d457db27.tar.gz",
+            "sha256": "0313ccd3f2bce1cc997a15747409a54101eb1a60c90707db1255a1c7d457db27",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "saved_inputs": {
+            "archive": {
+              "bytes": 249177828,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/bd3d117543105bbbd375affaccd1b39ced8c517927c9b029231c73fe9755f8fc.tar.gz",
+              "sha256": "bd3d117543105bbbd375affaccd1b39ced8c517927c9b029231c73fe9755f8fc",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "member": "arrays.npz",
+            "file_sha256": "716c98b148ffd0617255b423e026b5832391877208fe86d09898712188d6f21f",
+            "arrays": [
+              {
+                "dtype": "float32",
+                "sha256": "e1cc202332be3803baafedd32dff310e4af25316f9711e8522028b15962d0054",
+                "shape": [
+                  8192,
+                  8192
+                ]
+              }
+            ]
+          },
+          "scored_output": {
+            "bytes": 536871168,
+            "canonical_sha256": "39f4c0a7156c5f666cee5d38a9544f8c589f000e034e1adbd7b69c868b3bc201",
+            "encoding": "numpy output arrays",
+            "member": "scored/140556-02kb8hml/outputs.npz",
+            "sha256": "4734762e5a643e4dce0b71afa574ddb609e13a023eac281a96cff4d4fef7916c",
+            "status": "verified"
+          },
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "times_ms": [
+            164.44828799831157
+          ],
+          "timing": {
+            "rounds": 1,
+            "span": {
+              "fit_minus_upload_ms": 158.62367199770233,
+              "fit_minus_upload_ms_source": "derived: scored median - separate upload median",
+              "input_home": "host",
+              "inside_clock": "Cholesky factor",
+              "pre_clock_fit": false,
+              "upload_bytes_separate": 268435456,
+              "upload_inputs_separate": [
+                "arg0"
+              ],
+              "upload_ms_separate": 5.82461600060924,
+              "upload_ms_untimed": null,
+              "upload_scope_separate": "host_to_device_upload_separate",
+              "upload_separate_unavailable": null
+            },
+            "times_ms": [
+              164.44828799831157
+            ],
+            "warmup_ms": 483.55591200015624
+          },
+          "quality": {
+            "relative_residual": 2.9000699916434393e-07
+          },
+          "admitted_opponents": [
+            "torch-gpu"
+          ],
+          "pairing_verdict": "MATCHED",
+          "pairing_reason": "recorded effective settings match",
+          "retained_opponent": {
+            "arm": "torch-gpu",
+            "stored": {
+              "box": "mojolearn-steward-do-amd",
+              "commit": "dabf8ac17d34bd327805fd4c9c597709887026a5",
+              "device": "gpu (AMD Instinct Mi325X VF)",
+              "key_id": "734cd27be518d99cfaddf836f65eb9fc4ab5c7100a522cd72f3302092526a34c",
+              "measured_at": "2026-10-14T17:59:15Z"
+            },
+            "measurement_id": "adebe9b84c4acee22b0024dbaa40e1631c525a9955479bdc9057228a7c93778f",
+            "source": {
+              "bytes": 24892826,
+              "commit": "dabf8ac17d34bd327805fd4c9c597709887026a5",
+              "manifest_sha256": "d1ee12fe466f8a417e5dd0468de5172f72a56c825268b231642981640e228c6a",
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/32c3d5124588533d44fcb8d8e8f754035abb3c38bf19a3d49c06daa3b470146c.tar.gz",
+              "sha256": "32c3d5124588533d44fcb8d8e8f754035abb3c38bf19a3d49c06daa3b470146c",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "artifacts": {
+              "bytes": 365179043,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/d39d39c3c4e92b13cda453892a89d6c8ae4be8886ad2df0cb2cb058e3d8c390e.tar.gz",
+              "sha256": "d39d39c3c4e92b13cda453892a89d6c8ae4be8886ad2df0cb2cb058e3d8c390e",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "output_member": "run/work/cholesky-synthetic-torch-gpu.npz",
+            "legacy_output_digest": "7d74cd39327b489e",
+            "physical_npz_and_archive_verified": true,
+            "parameters": {
+              "implementation": {
+                "module": "torch._C._linalg",
+                "name": "linalg_cholesky"
+              },
+              "library": "torch",
+              "params": {
+                "input_arrays": [
+                  {
+                    "dtype": "float32",
+                    "sha256": "e1cc202332be3803baafedd32dff310e4af25316f9711e8522028b15962d0054",
+                    "shape": [
+                      8192,
+                      8192
+                    ]
+                  }
+                ],
+                "jitter": 0.0,
+                "seed": 7
+              },
+              "raw_params": {
+                "input_arrays": [
+                  {
+                    "dtype": "float32",
+                    "sha256": "e1cc202332be3803baafedd32dff310e4af25316f9711e8522028b15962d0054",
+                    "shape": [
+                      8192,
+                      8192
+                    ]
+                  }
+                ],
+                "jitter": 0.0,
+                "seed": 7
+              },
+              "source": "declared"
+            },
+            "timing": {
+              "rounds": 1,
+              "span": {
+                "input_home": "device",
+                "inside_clock": "Cholesky factor",
+                "pre_clock_fit": false,
+                "upload_ms_untimed": 81.19802400005938
+              },
+              "times_ms": [
+                32.125425999765866
+              ],
+              "warmup_ms": 246.78150799991272
+            },
+            "quality": {
+              "relative_residual": 2.51863168732312e-07
+            }
+          }
+        }
+      }
+    },
+    {
+      "recipe": "neural/gemm/gaussian/shape=full",
+      "verdict": "MATCH: retained scored consumed output bytes",
+      "outputs": {
+        "y": {
+          "shape": [
+            4096,
+            4096
+          ],
+          "dtype": "float32"
+        }
+      },
+      "scope": "Product matmul output y[4096,4096] float32; no fitted model.",
+      "vendors": {
+        "nvidia": {
+          "measurement_id": "0be97e69f89f87da33bc1191a137485e4770ab746554117378fffef6e4c34829",
+          "board": "../main-nvidia-l40s/board.json",
+          "board_snapshot_sha256": "ad7d6ddece6782a7561aee8990990d3f7c6cc38f03b246eae759cd6a329a9d9b",
+          "library": {
+            "library": "mojolearn",
+            "version": "0.8.45"
+          },
+          "phase": "fit",
+          "numeric_mode": "identical",
+          "hardware": {
+            "gpu_driver_identity": "GPU-06ea114e-523b-5336-4a75-b8f63cf4213d, NVIDIA L40S, 8.9, 580.159.03",
+            "host": "0522757c4413",
+            "kernel": "6.8.0-134-generic",
+            "machine": "x86_64",
+            "os": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
+            "status": "verified",
+            "vendor": "nvidia"
+          },
+          "parameters": {
+            "implementation": {
+              "module": "mojolearn._linalg_impl",
+              "name": "matmul"
+            },
+            "library": "mojolearn",
+            "params": {
+              "input_arrays": {
+                "a": {
+                  "dtype": "float32",
+                  "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                },
+                "b": {
+                  "dtype": "float32",
+                  "sha256": "3f38db408e287e78e700728b77d904ea5344de168156ad74431c2148fc961104",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                }
+              },
+              "operand_value_type": "float32",
+              "operation": "matmul",
+              "seed": 7,
+              "transpose_b": false
+            },
+            "raw_params": {
+              "input_arrays": {
+                "a": {
+                  "dtype": "float32",
+                  "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                },
+                "b": {
+                  "dtype": "float32",
+                  "sha256": "3f38db408e287e78e700728b77d904ea5344de168156ad74431c2148fc961104",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                }
+              },
+              "operand_value_type": "float32",
+              "operation": "matmul",
+              "seed": 7,
+              "transpose_b": false
+            },
+            "source": "declared"
+          },
+          "source": {
+            "bytes": 25083133,
+            "commit": "feee1b453a8b694b192767e698dde4e623f44bda",
+            "manifest_sha256": "0ad1eee8ddf71ef8f599d05de1984c4e16781691c6f64d6031eba25ae546519a",
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/b2dd1e7e18613ba596c71e192bebfcd09179295bf76aa60a008f26c2ea443596.tar.gz",
+            "sha256": "b2dd1e7e18613ba596c71e192bebfcd09179295bf76aa60a008f26c2ea443596",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "artifacts": {
+            "bytes": 295252745,
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/57e21a2d2e391102d08bcf31a785a7c7e4e125d6059c9adb118e442fbb9d0f59.tar.gz",
+            "sha256": "57e21a2d2e391102d08bcf31a785a7c7e4e125d6059c9adb118e442fbb9d0f59",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "saved_inputs": {
+            "archive": {
+              "bytes": 124670665,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/e683827744cd1bb1bb16c1a21810357fc980efec798607fb11bf9ceb57e4f59c.tar.gz",
+              "sha256": "e683827744cd1bb1bb16c1a21810357fc980efec798607fb11bf9ceb57e4f59c",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "member": "arrays.npz",
+            "file_sha256": "85d49e590306db143602baa49165ad78a7308762406fd033543b251b2986b611",
+            "arrays": {
+              "a": {
+                "dtype": "float32",
+                "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d",
+                "shape": [
+                  4096,
+                  4096
+                ]
+              },
+              "b": {
+                "dtype": "float32",
+                "sha256": "3f38db408e287e78e700728b77d904ea5344de168156ad74431c2148fc961104",
+                "shape": [
+                  4096,
+                  4096
+                ]
+              }
+            }
+          },
+          "scored_output": {
+            "bytes": 67109120,
+            "canonical_sha256": "f7bdf9b31daade463c02b5ce80ce61d35c2ec44f92a2050a3ddf897dbca64552",
+            "encoding": "numpy output arrays",
+            "member": "scored/12565-nb_cf9c_/outputs.npz",
+            "sha256": "fe62072015016be905dea1c96d2da8e394ae4c3893b9fe8d61d10d1fed9d15b6",
+            "status": "verified"
+          },
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "times_ms": [
+            76.95052295457572
+          ],
+          "timing": {
+            "rounds": 1,
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "times_ms": [
+              76.95052295457572
+            ],
+            "warmup_ms": 1511.1707280157134
+          },
+          "quality": {
+            "max_rel_err_vs_fp64": 2.398716980845031e-07
+          },
+          "admitted_opponents": [],
+          "pairing_verdict": "INSUFFICIENT",
+          "pairing_reason": "no opponent with sufficient valid comparison evidence"
+        },
+        "amd": {
+          "measurement_id": "cba9721d1103a9d547493bb241ec9eec598f34d5144b01dbc4877255fbeeca82",
+          "board": "../main-amd-mi325x/board.json",
+          "board_snapshot_sha256": "55499afe209fbc42daac214df851d8cee34f54bc6b5540581ee3d8e7f7430171",
+          "library": {
+            "library": "mojolearn",
+            "version": "0.8.45"
+          },
+          "phase": "fit",
+          "numeric_mode": "identical",
+          "hardware": {
+            "gpu_driver_identity": "{\"card0\": {\"Card Model\": \"0x74b9\", \"Card SKU\": \"M3250101\", \"Card Series\": \"AMD Instinct Mi325X VF\", \"Card Vendor\": \"Advanced Micro Devices, Inc. [AMD/ATI]\", \"Device Rev\": \"0x00\", \"GFX Version\": \"gfx942\", \"GUID\": \"43855\", \"Node ID\": \"1\", \"Subsystem ID\": \"0x74a5\", \"Unique ID\": \"0x72ee3cc9a53836c1\"}, \"system\": {\"Driver version\": \"6.12.12\"}}",
+            "host": "mojolearn-steward-do-amd",
+            "kernel": "6.8.0-59-generic",
+            "machine": "x86_64",
+            "os": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+            "rocm_version": "7.2.3",
+            "status": "verified",
+            "vendor": "amd"
+          },
+          "parameters": {
+            "implementation": {
+              "module": "mojolearn._linalg_impl",
+              "name": "matmul"
+            },
+            "library": "mojolearn",
+            "params": {
+              "input_arrays": {
+                "a": {
+                  "dtype": "float32",
+                  "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                },
+                "b": {
+                  "dtype": "float32",
+                  "sha256": "3f38db408e287e78e700728b77d904ea5344de168156ad74431c2148fc961104",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                }
+              },
+              "operand_value_type": "float32",
+              "operation": "matmul",
+              "seed": 7,
+              "transpose_b": false
+            },
+            "raw_params": {
+              "input_arrays": {
+                "a": {
+                  "dtype": "float32",
+                  "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                },
+                "b": {
+                  "dtype": "float32",
+                  "sha256": "3f38db408e287e78e700728b77d904ea5344de168156ad74431c2148fc961104",
+                  "shape": [
+                    4096,
+                    4096
+                  ]
+                }
+              },
+              "operand_value_type": "float32",
+              "operation": "matmul",
+              "seed": 7,
+              "transpose_b": false
+            },
+            "source": "declared"
+          },
+          "source": {
+            "bytes": 25083133,
+            "commit": "feee1b453a8b694b192767e698dde4e623f44bda",
+            "manifest_sha256": "0ad1eee8ddf71ef8f599d05de1984c4e16781691c6f64d6031eba25ae546519a",
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/b2dd1e7e18613ba596c71e192bebfcd09179295bf76aa60a008f26c2ea443596.tar.gz",
+            "sha256": "b2dd1e7e18613ba596c71e192bebfcd09179295bf76aa60a008f26c2ea443596",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "artifacts": {
+            "bytes": 286616997,
+            "r2_bucket": "mojolearn-data",
+            "r2_key": "measurements/records/v1/ad22d6bb4a73f141b84722f4d63c2c052371cd9a5be55481ecd41dc4e5bc1b98.tar.gz",
+            "sha256": "ad22d6bb4a73f141b84722f4d63c2c052371cd9a5be55481ecd41dc4e5bc1b98",
+            "status": "verified",
+            "verification": "GET sha256"
+          },
+          "saved_inputs": {
+            "archive": {
+              "bytes": 124670665,
+              "r2_bucket": "mojolearn-data",
+              "r2_key": "measurements/records/v1/e683827744cd1bb1bb16c1a21810357fc980efec798607fb11bf9ceb57e4f59c.tar.gz",
+              "sha256": "e683827744cd1bb1bb16c1a21810357fc980efec798607fb11bf9ceb57e4f59c",
+              "status": "verified",
+              "verification": "GET sha256"
+            },
+            "member": "arrays.npz",
+            "file_sha256": "85d49e590306db143602baa49165ad78a7308762406fd033543b251b2986b611",
+            "arrays": {
+              "a": {
+                "dtype": "float32",
+                "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d",
+                "shape": [
+                  4096,
+                  4096
+                ]
+              },
+              "b": {
+                "dtype": "float32",
+                "sha256": "3f38db408e287e78e700728b77d904ea5344de168156ad74431c2148fc961104",
+                "shape": [
+                  4096,
+                  4096
+                ]
+              }
+            }
+          },
+          "scored_output": {
+            "bytes": 67109120,
+            "canonical_sha256": "f7bdf9b31daade463c02b5ce80ce61d35c2ec44f92a2050a3ddf897dbca64552",
+            "encoding": "numpy output arrays",
+            "member": "scored/144413-wcv3g6ty/outputs.npz",
+            "sha256": "fe62072015016be905dea1c96d2da8e394ae4c3893b9fe8d61d10d1fed9d15b6",
+            "status": "verified"
+          },
+          "model": {
+            "reason": "runner does not retain an exportable model",
+            "status": "unavailable"
+          },
+          "times_ms": [
+            28.174151999337482
+          ],
+          "timing": {
+            "rounds": 1,
+            "span": {
+              "input_home": "host",
+              "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+              "pre_clock_fit": false
+            },
+            "times_ms": [
+              28.174151999337482
+            ],
+            "warmup_ms": 329.79520300068543
+          },
+          "quality": {
+            "max_rel_err_vs_fp64": 2.398716979667606e-07
+          },
+          "admitted_opponents": [],
+          "pairing_verdict": "INSUFFICIENT",
+          "pairing_reason": "no opponent with sufficient valid comparison evidence"
+        }
+      }
+    }
+  ],
+  "gemm_original_failed_attempts": {
+    "nvidia": {
+      "status": "failed",
+      "returncode": 1,
+      "failures": [
+        "timed driver did not finish successfully",
+        "missing completed scored own call: ours",
+        "retained_outputs not durably verified: ours"
+      ],
+      "stop_reason": "ValueError: timed driver did not finish successfully; missing completed scored own call: ours; retained_outputs not durably verified: ours",
+      "source_commit": "9c8c53fb2ef392f66bc4faec177d60ba207734f7",
+      "retention": {
+        "bytes": 37808,
+        "r2_bucket": "mojolearn-data",
+        "r2_key": "measurements/records/v1/df4d26ed6471b1b502aa700ad85ebdd2f1bb91cbf624631c9648d3851f08dc56.tar.gz",
+        "sha256": "df4d26ed6471b1b502aa700ad85ebdd2f1bb91cbf624631c9648d3851f08dc56",
+        "status": "verified",
+        "verification": "GET sha256"
+      },
+      "final_retention": {
+        "bytes": 11674,
+        "r2_bucket": "mojolearn-data",
+        "r2_key": "measurements/records/v1/8811b5f6ff79764aa967131eac2494a1e90a9a50265d566291e11875a8ed5717.tar.gz",
+        "sha256": "8811b5f6ff79764aa967131eac2494a1e90a9a50265d566291e11875a8ed5717",
+        "status": "verified",
+        "verification": "GET sha256"
+      },
+      "retry_scope": "only this failed recipe, after harness repair; full-size inputs unchanged"
+    },
+    "amd": {
+      "status": "failed",
+      "returncode": 1,
+      "failures": [
+        "timed driver did not finish successfully",
+        "missing completed scored own call: ours",
+        "retained_outputs not durably verified: ours"
+      ],
+      "stop_reason": "ValueError: timed driver did not finish successfully; missing completed scored own call: ours; retained_outputs not durably verified: ours",
+      "source_commit": "9c8c53fb2ef392f66bc4faec177d60ba207734f7",
+      "retention": {
+        "bytes": 33410,
+        "r2_bucket": "mojolearn-data",
+        "r2_key": "measurements/records/v1/1269ae70f95309eda149cfb239de0a0e065d50cef26dd5e54e4a332a5094f296.tar.gz",
+        "sha256": "1269ae70f95309eda149cfb239de0a0e065d50cef26dd5e54e4a332a5094f296",
+        "status": "verified",
+        "verification": "GET sha256"
+      },
+      "final_retention": {
+        "bytes": 11538,
+        "r2_bucket": "mojolearn-data",
+        "r2_key": "measurements/records/v1/dc03389149518edef7322be31446af11b163929a3bb06cbb57f927fcd3677478.tar.gz",
+        "sha256": "dc03389149518edef7322be31446af11b163929a3bb06cbb57f927fcd3677478",
+        "status": "verified",
+        "verification": "GET sha256"
+      },
+      "retry_scope": "only this failed recipe, after harness repair; full-size inputs unchanged"
+    }
+  },
+  "accepted_shipped_binaries": {
+    "scope": "Accepted shipped 0.8.45 Linux core and vendor wheels installed for these measurements; exact archive and every wheel/manifest member verified.",
+    "archive": {
+      "bytes": 145778944,
+      "r2_bucket": "mojolearn-data",
+      "r2_key": "measurements/records/v1/0d6d7f6b1b99f62d567a088a858572016557e376e5ade9b4466f77a82135fbd0.tar.gz",
+      "sha256": "0d6d7f6b1b99f62d567a088a858572016557e376e5ade9b4466f77a82135fbd0",
+      "status": "verified",
+      "verification": "GET sha256"
+    },
+    "members": [
+      {
+        "bytes": 2509,
+        "name": "nvidia/wheel-manifest.json",
+        "sha256": "fd0bcb463cf07a36f5fc8c3a8cdc01e205620d37d5433deb06176ba10d74f541"
+      },
+      {
+        "bytes": 14782228,
+        "name": "nvidia/mojolearn-0.8.45-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "452b17a8b7a7f2bbd58ffa72e8e367107eb35d599ff44bc2c2a026ce07803e3f"
+      },
+      {
+        "bytes": 66321118,
+        "name": "nvidia/mojolearn_nvidia-0.8.45-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "092aed52995873469261169fb7c3f8c0df7b896fc2f356312719be6400db75fe"
+      },
+      {
+        "bytes": 2472,
+        "name": "amd/wheel-manifest.json",
+        "sha256": "3cff3283309892283d456bab0080484cbe43acbab0ef73f94cbb017b1024bbb6"
+      },
+      {
+        "bytes": 14782228,
+        "name": "amd/mojolearn-0.8.45-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "452b17a8b7a7f2bbd58ffa72e8e367107eb35d599ff44bc2c2a026ce07803e3f"
+      },
+      {
+        "bytes": 51353684,
+        "name": "amd/mojolearn_amd-0.8.45-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "3894ae566cc730bd3ddcdce169bf6f50795e2b1cbde7fa3d9662ceedc160549b"
+      }
+    ]
+  }
+}
