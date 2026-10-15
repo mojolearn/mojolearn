@@ -144,9 +144,13 @@ def test_clone_named_gamma(name, gamma):
     from mojolearn.model_selection import _clone
     est = getattr(mojolearn, name)(gamma=gamma)
     twin = _clone(est)
-    assert twin.get_params(deep=False)["gamma"] == gamma.lower()
+    # The constructor stores the parameter exactly as given, as scikit-learn
+    # does (check_no_attributes_set_in_init; sklearn.svm.SVC(gamma='AUTO')
+    # .get_params() answers 'AUTO'); the name is resolved, case-insensitively,
+    # at fit.
+    assert twin.get_params(deep=False)["gamma"] == gamma
     base = pytest.importorskip("sklearn.base")
-    assert base.clone(est).get_params(deep=False)["gamma"] == gamma.lower()
+    assert base.clone(est).get_params(deep=False)["gamma"] == gamma
 
 
 def test_set_params_rebuilds_through_the_constructor():
