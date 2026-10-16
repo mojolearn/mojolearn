@@ -1,0 +1,22 @@
+{
+  "files": {
+    "mojolearn_nvidia-0.8.48-py3-none-manylinux_2_35_x86_64.whl": "4493b4ddce50ece940ada49c69e86a49f795b9b6905e8db80d870ff1932dced1"
+  },
+  "linux_qualification": null,
+  "manifest_sha256": "7231365f9e8b72c8030822b3b247d5a7e104ff92f16ed2e9ef33fd12bdd7590b",
+  "passed": true,
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "5f636ccbff6568ce097d7ec7a857fc84ad596706"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-artifact-verification.v1",
+  "scope": "File integrity, alpha metadata and recorded overlay provenance only; no package execution. A listed fresh Linux payload additionally requires its exact final-wheel three-architecture installed admission; overlay artifacts inherit no current numerical qualification",
+  "tags": {
+    "mojolearn_nvidia-0.8.48-py3-none-manylinux_2_35_x86_64.whl": [
+      "py3-none-manylinux_2_35_x86_64"
+    ]
+  },
+  "version": "0.8.48"
+}
