@@ -535,13 +535,24 @@ def _git_commit(start):
     return None
 
 
+# A batched verify worker reports provenance after every cell; the loaded
+# binding files do not change between cells, so each is hashed once per
+# process. The key carries size and mtime, so a replaced file is rehashed.
+_SHA256_MEMO = {}
+
+
 def _sha256(path):
     try:
+        st = os.stat(path)
+        key = (os.path.abspath(path), st.st_size, st.st_mtime_ns)
+        if key in _SHA256_MEMO:
+            return _SHA256_MEMO[key]
         h = hashlib.sha256()
         with open(path, "rb") as fh:
             for chunk in iter(lambda: fh.read(1 << 16), b""):
                 h.update(chunk)
-        return h.hexdigest()
+        _SHA256_MEMO[key] = h.hexdigest()
+        return _SHA256_MEMO[key]
     except OSError:
         return None
 
