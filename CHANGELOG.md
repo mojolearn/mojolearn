@@ -2,6 +2,15 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.49 (published 2026-10-16)
+
+- On AMD GPUs, each process now starts in under a second, and several processes can share one GPU. MAX's device memory
+  manager is bounded to 1 GiB per process (`MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE`; your own setting takes precedence).
+- `python -m mojolearn verify` runs about 3 to 20 times faster: cells run in batches inside one worker process, and a
+  crashed batch's remaining cells rerun one per process. `--fresh-process-per-cell` keeps the previous behavior.
+- The bundled reference covers this release: `verify` reports every lane, including the ones whose results changed in
+  0.8.47 and 0.8.48. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+
 ## 0.8.48 (published 2026-10-16)
 
 - scikit-learn's own estimator checks (`sklearn.utils.estimator_checks`) pass for every public estimator, except the checks
