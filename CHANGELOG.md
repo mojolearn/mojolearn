@@ -2,7 +2,7 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## 0.8.47 (published 2026-10-15)
+## 0.8.48 (published 2026-10-16)
 
 - scikit-learn's own estimator checks (`sklearn.utils.estimator_checks`) pass for every public estimator, except the checks
   scikit-learn itself excuses for its estimator of the same name, and float32 results compared at float64 tolerance.
