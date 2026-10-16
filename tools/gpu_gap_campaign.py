@@ -89,6 +89,7 @@ def retain(archive, members):
     """Archive `members` ({name: bytes}) at `archive` and upload it to R2 (bench_board_evidence: PUT, then
     GET and sha256 check). Returns the public ref; raises ValueError when retention failed (local bytes
     kept)."""
+    Path(archive).parent.mkdir(parents=True, exist_ok=True)
     ref = E.archive(str(archive), members)
     return E.public_ref(E.upload(ref))
 
