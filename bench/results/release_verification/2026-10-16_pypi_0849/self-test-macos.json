@@ -1,0 +1,22 @@
+{
+ "clean": {
+  "reference": "122c819cae30ae06",
+  "state": "IDENTICAL",
+  "value": "122c819cae30ae06"
+ },
+ "command": "python -m mojolearn verify --self-test --cpu-threads 3 --json",
+ "format": "mojolearn.wheel-self-test.v1",
+ "install_rc": 0,
+ "perturbed": {
+  "reference": "122c819cae30ae06",
+  "state": "DIVERGENT",
+  "value": "37d4bc0f7cbe833b"
+ },
+ "problems": [],
+ "rc": 0,
+ "self_test_passed": true,
+ "started": "2026-10-16T03:54:30+00:00",
+ "status": "PASSED",
+ "wheel": "mojolearn-0.8.49-py3-none-macosx_11_0_arm64.whl",
+ "wheel_sha256": "f95ec5a5c5a0f5e3ffc4bfb26f02afa8a98ce15b1d2190f111df9a081dc9800c"
+}

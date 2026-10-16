@@ -1,0 +1,19 @@
+{
+ "columns": {
+  "amd": null,
+  "nvidia": null,
+  "nvidia-hopper": null
+ },
+ "earlier_commits": [],
+ "legs": {},
+ "published": [
+  "macos",
+  "linux",
+  "nvidia",
+  "amd"
+ ],
+ "schema": "mojolearn.release-provenance.v1",
+ "source_commit": "62b015a2d291d29c9ebb69d3e6c11855fe889503",
+ "tooling_commit": "62b015a2d291d29c9ebb69d3e6c11855fe889503",
+ "version": "0.8.49"
+}
