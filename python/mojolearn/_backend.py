@@ -1888,6 +1888,20 @@ def _cpu_only_binding(name, requested):
     return module
 
 
+def _bound_amd_memory_manager():
+    """On an AMD GPU host (ROCm's /dev/kfd), bound MAX's device memory manager
+    before any DeviceContext exists. Its default reserves 90% of FREE VRAM in
+    every process (one 185 GB hipMalloc on an MI300X): each new process waits
+    seconds for the previous one's chunk to be released and cleared, and a
+    second process on the same GPU starves, fails its allocations and then
+    segfaults inside libamdhip64 (2026-10-16, amd-investigate). 1 GiB is the
+    pool tools/gemm_remote_leg.sh already qualified on AMD; a caller's own
+    setting wins (setdefault). NVIDIA keeps MAX's defaults: pool-only
+    overrides refused small CUDA allocations there."""
+    if sys.platform.startswith("linux") and os.path.exists("/dev/kfd"):
+        os.environ.setdefault("MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE", str(1 << 30))
+
+
 def select():
     """Install the requested binary set under the canonical module names.
     Called once from `mojolearn/__init__.py` before any submodule imports a
@@ -1895,6 +1909,7 @@ def select():
     global _SELECTED
     if _SELECTED is not None:
         return _SELECTED
+    _bound_amd_memory_manager()
     mode = requested_mode()
     pkg_dir = _pkg_dir()
     pkg = sys.modules[__name__.rsplit(".", 1)[0]]
