@@ -209,3 +209,241 @@ def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_pa
 @pytest.mark.parametrize("message", ["Failed to create Metal command queue", "DEVIATION 2002", "GPU context is not trustworthy"])
 def test_metal_health_markers(message):
     assert worker.unhealthy({"error": message})
+
+
+# ---------------------------------------------------------------------------
+# Batched cell workers: one process answers several cells; a crash, timeout
+# or unhealthy-device signal stops the batch at the first unanswered cell.
+# ---------------------------------------------------------------------------
+
+BATCH_CHILD = '''
+import json, os, sys, time
+requests = json.load(open(sys.argv[1]))["batch"]
+results = sys.argv[2]
+def answer(i, value, log=""):
+    open(os.path.join(results, "cell-%d.log" % i), "w").write(log)
+    tmp = os.path.join(results, ".tmp-%d" % i)
+    json.dump({"value": value, "bindings": [{"module": "m", "sha256": "s"}]}, open(tmp, "w"))
+    os.replace(tmp, os.path.join(results, "result-%d.json" % i))
+'''
+
+
+def batch_requests(n):
+    return [dict(action="cell", lane=f"lane{i}", fixture="base") for i in range(n)]
+
+
+def test_batch_streams_every_result_in_order(monkeypatch):
+    children = substitute_child(monkeypatch, BATCH_CHILD + '''
+for i, r in enumerate(requests):
+    print("native diagnostic, not JSON")
+    answer(i, r["lane"])
+''')
+    seen = []
+    stop = worker.run_batch(batch_requests(5), timeout=5, on_result=lambda i, r: seen.append((i, r["value"])))
+    assert stop is None
+    assert seen == [(i, f"lane{i}") for i in range(5)]
+    assert len(children) == 1 and children[0].poll() == 0
+
+
+@pytest.mark.parametrize("tail, kind, index", [
+    ("answer(0, 'a'); answer(1, 'b'); sys.exit(9)", "crash", 2),
+    ("answer(0, 'a'); open(os.path.join(results, 'cell-1.log'), 'w').write('device lost'); sys.exit(9)", "unhealthy", 1),
+    ("answer(0, 'a'); answer(1, 'b', log='dead/saturated-device signature')", "unhealthy", 1),
+    ("answer(0, 'device lost')", "unhealthy", 0),
+    ("answer(0, 'a'); json.dump({'error': 'boom'}, open(os.path.join(results, 'result-1.json'), 'w'))", "failure", 1),
+    ("answer(0, 'a')", "failure", 1),
+])
+def test_batch_stops_at_first_unanswered_cell(monkeypatch, tail, kind, index):
+    children = substitute_child(monkeypatch, BATCH_CHILD + tail)
+    seen = []
+    stop = worker.run_batch(batch_requests(4), timeout=5, on_result=lambda i, r: seen.append(i))
+    assert (stop.kind, stop.index) == (kind, index)
+    assert seen == list(range(index))
+    assert f"lane{index}" in stop.message
+    assert children[0].poll() is not None
+
+
+def test_batch_timeout_is_per_cell_and_reaps_worker(monkeypatch):
+    # Each cell takes 0.3 s, under the 1 s limit, though the batch takes
+    # longer than 1 s in total; the third cell hangs and times out.
+    children = substitute_child(monkeypatch, BATCH_CHILD + '''
+for i in range(2):
+    time.sleep(0.3); answer(i, i)
+time.sleep(0.3); answer(2, 2)
+time.sleep(0.3); answer(3, 3)
+time.sleep(30)
+''')
+    seen = []
+    stop = worker.run_batch(batch_requests(6), timeout=1, on_result=lambda i, r: seen.append(i))
+    assert (stop.kind, stop.index) == ("timeout", 4)
+    assert seen == [0, 1, 2, 3]
+    assert children[0].poll() is not None
+
+
+def test_batch_worker_main_writes_one_log_and_result_per_cell(tmp_path):
+    """The real worker entry point: per-cell output files, and it stops after
+    the first failing cell (the controller runs the rest fresh)."""
+    requests = tmp_path / "requests.json"
+    results = tmp_path / "results"
+    results.mkdir()
+    requests.write_text(json.dumps(dict(batch=[dict(lane="a"), dict(lane="bad"), dict(lane="c")])))
+    script = '''
+import os, sys
+import mojolearn._verify_worker as w
+def execute(request):
+    if request["lane"] == "bad":
+        raise RuntimeError("cell failed")
+    os.write(1, ("native says " + request["lane"]).encode())
+    return dict(value=request["lane"], bindings=[])
+w.execute = execute
+w.batch_main(sys.argv[1], sys.argv[2])
+'''
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.path.dirname(os.path.dirname(os.path.abspath(worker.__file__)))
+    subprocess.run([sys.executable, "-c", script, str(requests), str(results)], env=env, check=True,
+                   timeout=60)
+    assert json.loads((results / "result-0.json").read_text())["value"] == "a"
+    assert (results / "cell-0.log").read_text() == "native says a"
+    assert "cell failed" in json.loads((results / "result-1.json").read_text())["error"]
+    assert not (results / "result-2.json").exists()
+
+
+def fake_batch(answer, stops=None):
+    """A run_batch stand-in: answers each request with `answer(request)` or
+    stops at `stops(request)` -> kind."""
+    calls = []
+
+    def run_batch(requests, timeout, log=None, on_result=None):
+        calls.append([r["lane"] for r in requests])
+        for index, request in enumerate(requests):
+            kind = stops(request) if stops else None
+            if kind:
+                return worker.BatchStop(index, kind, f"cell/{request['lane']}/base: {kind}")
+            on_result(index, dict(value=answer(request), bindings=[dict(module="m", sha256="s")]))
+        return None
+
+    return run_batch, calls
+
+
+def fresh_runs(fail=None):
+    calls = []
+
+    def run(request, timeout, log):
+        calls.append(request.get("lane", request["action"]))
+        if request["action"] == "self-test":
+            return dict(value=dict(passed=True), bindings=[])
+        if fail:
+            fail(request)
+        return dict(value=good_value(request["lane"]), bindings=[])
+
+    return run, calls
+
+
+LANES = ("one", "two", "three", "four", "five")
+
+
+def test_batched_sweep_one_process_per_batch(monkeypatch, tmp_path):
+    run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
+    batch, batch_calls = fake_batch(lambda r: good_value(r["lane"]))
+    run, fresh_calls = fresh_runs()
+    monkeypatch.setattr(worker, "run_batch", batch)
+    monkeypatch.setattr(worker, "run", run)
+    code, report, progress, journal = run_verify(batch_cells=2)
+    execution = progress["execution"]
+    assert code == verifier.EXIT_VERIFIED
+    assert batch_calls == [["one", "two"], ["three", "four"], ["five"]]
+    assert fresh_calls == ["self-test"]
+    assert (execution["mode"], execution["batch_cells"], execution["batches"]) == ("batched-worker", 2, 3)
+    assert (execution["batched_cells"], execution["fresh_cells"], execution["fallback_cells"]) == (5, 0, [])
+    assert execution["completed_cells"] == execution["total_cells"] == 5
+    # the journal is per cell and in order
+    assert [row["lane"] for row in journal[::len(verifier.vref.PARTS)]] == list(LANES)
+    assert len(journal) == 5 * len(verifier.vref.PARTS)
+    assert report["bindings"] == [dict(module="m", sha256="s")]
+
+
+def test_cell_values_do_not_depend_on_execution_mode(monkeypatch, tmp_path):
+    run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
+    batch, _ = fake_batch(lambda r: good_value(r["lane"]))
+    run, _ = fresh_runs()
+    monkeypatch.setattr(worker, "run_batch", batch)
+    monkeypatch.setattr(worker, "run", run)
+    keep = ("lane", "fixture", "part", "value", "error", "state")
+    _, batched, _, _ = run_verify(batch_cells=2)
+    _, fresh, _, _ = run_verify(fresh_process_per_cell=True)
+    assert [{k: r[k] for k in keep} for r in batched["cells"]] == [{k: r[k] for k in keep} for r in fresh["cells"]]
+    assert batched["exit"] == fresh["exit"] == verifier.EXIT_VERIFIED
+
+
+@pytest.mark.parametrize("kind", ["crash", "timeout", "unhealthy", "failure"])
+def test_batch_stop_runs_remaining_cells_fresh(monkeypatch, tmp_path, kind):
+    run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
+    batch, batch_calls = fake_batch(lambda r: good_value(r["lane"]),
+                                    stops=lambda r: kind if r["lane"] == "two" else None)
+    run, fresh_calls = fresh_runs()
+    monkeypatch.setattr(worker, "run_batch", batch)
+    monkeypatch.setattr(worker, "run", run)
+    code, report, progress, journal = run_verify(batch_cells=3)
+    execution = progress["execution"]
+    assert code == verifier.EXIT_VERIFIED
+    # batch 1 answered "one", stopped at "two"; "two" and "three" ran fresh;
+    # the next batch is batched again
+    assert batch_calls == [["one", "two", "three"], ["four", "five"]]
+    assert fresh_calls == ["self-test", "two", "three"]
+    assert execution["fallback_cells"] == ["two/base", "three/base"]
+    assert [(s["lane"], s["kind"], s["index"]) for s in execution["batch_stops"]] == [("two", kind, 1)]
+    assert (execution["batched_cells"], execution["fresh_cells"]) == (3, 2)
+    assert execution["interrupted"] is None and execution["crashed_cells"] == []
+    assert [row["lane"] for row in journal[::len(verifier.vref.PARTS)]] == ["one", "two", "three", "four", "five"]
+    assert all(r["state"] == verifier.vref.IDENTICAL for r in report["cells"])
+
+
+def test_fallback_crash_refuses_cell_and_streak_stops(monkeypatch, tmp_path):
+    run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
+    batch, batch_calls = fake_batch(lambda r: good_value(r["lane"]), stops=lambda r: "crash")
+
+    def crash(request):
+        raise worker.WorkerCrash(f"cell/{request['lane']}/base: worker exited -5; ")
+
+    run, fresh_calls = fresh_runs(crash)
+    monkeypatch.setattr(worker, "run_batch", batch)
+    monkeypatch.setattr(worker, "run", run)
+    code, report, progress, journal = run_verify(batch_cells=24)
+    execution = progress["execution"]
+    assert code == verifier.EXIT_CANNOT_RUN
+    assert batch_calls == [list(LANES)]
+    assert fresh_calls == ["self-test", "one", "two", "three"]
+    assert [c["lane"] for c in execution["crashed_cells"]] == ["one", "two", "three"]
+    assert "3 consecutive cell workers crashed" in execution["interrupted"]
+    assert {r["lane"] for r in report["cells"]} == set(LANES)
+    assert all(r["state"] == verifier.vref.REFUSED for r in report["cells"])
+
+
+def test_fallback_timeout_stops_sweep(monkeypatch, tmp_path):
+    run_verify = controller(monkeypatch, tmp_path, lanes=LANES)
+    batch, batch_calls = fake_batch(lambda r: good_value(r["lane"]),
+                                    stops=lambda r: "timeout" if r["lane"] == "two" else None)
+
+    def hang(request):
+        raise worker.WorkerFailure(f"cell/{request['lane']}/base: exceeded 1s worker limit")
+
+    run, fresh_calls = fresh_runs(hang)
+    monkeypatch.setattr(worker, "run_batch", batch)
+    monkeypatch.setattr(worker, "run", run)
+    code, report, progress, journal = run_verify(batch_cells=2)
+    assert code == verifier.EXIT_CANNOT_RUN
+    assert batch_calls == [["one", "two"]]
+    assert fresh_calls == ["self-test", "two"]
+    assert "exceeded" in progress["execution"]["interrupted"]
+    refused = {r["lane"] for r in report["cells"] if r["state"] == verifier.vref.REFUSED}
+    assert refused == {"two", "three", "four", "five"}
+
+
+@pytest.mark.parametrize("bad", [0, -2])
+def test_batch_cells_must_be_positive(monkeypatch, tmp_path, bad):
+    run_verify = controller(monkeypatch, tmp_path)
+    run, _ = fresh_runs()
+    monkeypatch.setattr(worker, "run", run)
+    args = SimpleNamespace(all=True, quick=False, lanes="one,two", repeats=1, no_models=True, json=True,
+                           json_out=None, cell_timeout=1, reference_table=None, batch_cells=bad)
+    assert verifier.cmd_verify_all(args) == verifier.EXIT_USAGE

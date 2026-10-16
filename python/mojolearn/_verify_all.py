@@ -3881,7 +3881,8 @@ def cmd_verify_all(args):
     # in the same process is a library bug, found by `verify --compare`
     # between a `--fresh-process-per-cell` run and a batched one.
     fresh_only = bool(getattr(args, "fresh_process_per_cell", False))
-    batch_cells = getattr(args, "batch_cells", None) or VERIFY_BATCH_CELLS
+    batch_cells = getattr(args, "batch_cells", None)
+    batch_cells = VERIFY_BATCH_CELLS if batch_cells is None else batch_cells
     if not isinstance(batch_cells, int) or batch_cells < 1:
         return _finish(args, EXIT_USAGE, "USAGE", "--batch-cells must be a positive integer")
     execution = dict(mode="fresh-process-per-cell" if fresh_only else "batched-worker",
