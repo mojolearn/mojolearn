@@ -689,6 +689,13 @@ def _read_params_object(obj):
             # its fit hands the binding (python/mojolearn/randomforest.py _RandomForestBase._fit_params);
             # read them from there. An absent key stays absent.
             cfg = getattr(obj, "_cfg", None) or {}
+            if not cfg and hasattr(obj, "_validate_params") and hasattr(obj, "get_params"):
+                # 0.8.47 (scikit-learn's convention): the constructor stores parameters verbatim and
+                # `_validate_params` derives `_cfg` at fit; derive it here the same way, on a fresh
+                # copy, so an unfitted estimator reads back what its fit would use. Nothing is fitted.
+                fresh = type(obj)(**obj.get_params())
+                fresh._validate_params()
+                cfg = getattr(fresh, "_cfg", None) or {}
             names = ("n_estimators", "bootstrap", "max_samples", "oob_score", "n_streams", "max_batch_size")
             got = dict(got)
             recovered = [name for name in names if name not in got and name in cfg]
