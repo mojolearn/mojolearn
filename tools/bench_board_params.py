@@ -1908,7 +1908,10 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     # execution variants from changes to the update equation. Source:
     # torch.optim.{adam,adamw,sgd,...}, _training_impl.py and
     # _x_sequence_optim.py. Never waive an unknown or active algorithm option.
-    optimizer = lane.removeprefix("algos/")
+    # The neural train-step lanes arrive as "neural/<lane>" (bench_board_neural.py BP.enforce), the
+    # optimizer lanes as "algos/<lane>"; _TORCH_OPTIMIZER_LANES names both bare. Stripping only "algos/"
+    # refused every neural train step on torch 2.13 (foreach/fused/capturable/differentiable read back).
+    optimizer = lane.removeprefix("algos/").removeprefix("neural/")
     if library == "torch" and arm.startswith("torch-"):
         unset = {"avgpool2d": {"divisor_override": "None selects the kernel-area divisor on both AvgPool2d implementations"},
                  "embedding": {"padding_idx": "None means there is no padding token on either embedding",
