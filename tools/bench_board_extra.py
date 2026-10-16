@@ -222,6 +222,45 @@ def _ce_inputs(np, seed):
     return x, t
 
 
+def _text_arrays(np, docs):
+    """[(name, array)]: the documents an arm is handed, as arrays the input record can hash: their
+    UTF-8 bytes back to back and each document's byte length (the same lists every arm reads)."""
+    raw = [d.encode("utf-8") for d in docs]
+    return [("docs_utf8", np.frombuffer(b"".join(raw), dtype=np.uint8)),
+            ("doc_bytes", np.array([len(b) for b in raw], dtype=np.int64))]
+
+
+def input_arrays(lane, D, A, arrays=None):
+    """The input-array record (bench_board_algos._input_array_records: name, shape, dtype, sha256) of the
+    arrays lane `lane`'s arms are handed, the same names in the same order on every arm, so the board's
+    measured-shape evidence (bench_board_evidence.measured_shape) and the parameter fairness check read
+    them. The synthetic `tensor` and `corpus` blocks stage no dataset arrays, so without this record
+    their cells carried no measured input shape (0.8.49 AMD board: algos/clip-grad-norm stopped on
+    "incomplete worker evidence"). `arrays` passes arrays the arm already built (the clip gradients,
+    the corpus documents); the rest are rebuilt by the same seeded functions the arms use. Hashed
+    while the arm is built, before any clock."""
+    np = A["_np"]()
+    t = A["LANES"][lane]["task"]
+    if arrays is None:
+        if t == "qn":
+            arrays = [("X", D["X"]), ("y", np.ascontiguousarray(D["y"], dtype=np.float32)), ("Xq", D["Xq"])]
+        elif t in ("kpss", "selectd"):
+            arrays = [("Y", np.ascontiguousarray(D["Yfit"], dtype=np.float32))]
+        elif t == "xent":
+            x, tg = _ce_inputs_once(np, A["SEED"], A)
+            arrays = [("logits", x), ("targets", tg)]
+        elif t == "sched":
+            # the steps every arm evaluates the schedule at (1 .. SCHED_STEPS)
+            arrays = [("steps", np.arange(1, SCHED_STEPS + 1, dtype=np.int64))]
+        elif t == "jl":
+            grid = jl_grid(np)
+            arrays = [("n_samples", np.array([n for n, _ in grid], dtype=np.int64)),
+                      ("eps", np.array([e for _, e in grid], dtype=np.float64))]
+        else:
+            raise SystemExit("bench_board_extra: no input record for lane %r task %r" % (lane, t))
+    return A["_input_array_records"](arrays)
+
+
 def _ce_inputs_once(np, seed, A):
     """_ce_inputs(np, seed). Inside the smoke worker (smoke-fixes r14, 2026-10-14; cross-entropy STARTED at 5 s
     in this 8192 x 8192 draw, once per arm) it is drawn once per process by the same function
@@ -259,7 +298,9 @@ def build(lane, arm, D, A):
     # ---- QN regression
     if t == "qn":
         X, y, Xq = D["X"], np.ascontiguousarray(D["y"], dtype=np.float32), D["Xq"]
+        ins = input_arrays(lane, D, A)
         if ours:
+            rec["input_arrays"] = ins
             def fit():
                 m = fn(**p).fit(X, y)
                 S["pred"] = A["_arr"](m.predict(Xq), np.float32)
@@ -279,7 +320,9 @@ def build(lane, arm, D, A):
             def fit():
                 m = TweedieRegressor(**kw).fit(X, y)
                 S["pred"] = m.predict(Xq).astype(np.float32)
-            return Runner(info, fit, lambda: {"pred": S["pred"]}, record=A["_BP"]().arm_record(est))
+            r = A["_BP"]().arm_record(est)
+            r["params"]["input_arrays"] = ins
+            return Runner(info, fit, lambda: {"pred": S["pred"]}, record=r)
         from cuml.solvers import QN as CumlQN
         kw = dict(p, loss="l2")
         est = CumlQN(**kw)
@@ -293,13 +336,15 @@ def build(lane, arm, D, A):
             w = np.asarray(A["_host"](m.coef_), dtype=np.float64).reshape(-1)[:X.shape[1]]
             b = float(np.asarray(A["_host"](m.intercept_), dtype=np.float64).reshape(-1)[0])
             S["pred"] = (Xq.astype(np.float64) @ w + b).astype(np.float32)
-        return Runner(info, fit, lambda: {"pred": S["pred"]}, sync=cupy_sync,
-                      record=A["_BP"]().arm_record(est))
+        r = A["_BP"]().arm_record(est)
+        r["params"]["input_arrays"] = ins
+        return Runner(info, fit, lambda: {"pred": S["pred"]}, sync=cupy_sync, record=r)
 
     # ---- KPSS and select_d
     if t in ("kpss", "selectd"):
         Y = np.ascontiguousarray(D["Yfit"], dtype=np.float32)       # (series, n)
         n = Y.shape[1]
+        rec["input_arrays"] = input_arrays(lane, D, A)
         if ours:
             def fit():
                 if t == "kpss":
@@ -346,6 +391,7 @@ def build(lane, arm, D, A):
             if t == "clip":
                 G = _grads(np, SEED)
                 G0 = [g.copy() for g in G]          # FAIRNESS FIX (2026-10-13 audit): the unclipped
+                rec["input_arrays"] = input_arrays(lane, D, A, [("grad%d" % i, g) for i, g in enumerate(G)])
 
                 def fit():
                     S["norm"] = float(fn(G, p["max_norm"], norm_type=p["norm_type"],
@@ -359,6 +405,8 @@ def build(lane, arm, D, A):
                 return Runner(info, fit, outputs, record=rec)
             x, tg = _ce_inputs_once(np, SEED, A)
             tg32 = tg.astype(np.int32)
+            # the drawn logits and int64 targets, as on the torch arms (ours hands the same values as int32)
+            rec["input_arrays"] = input_arrays(lane, D, A)
 
             def fit():
                 loss, g = fn(x, tg32, reduction=p["reduction"], label_smoothing=p["label_smoothing"],
@@ -376,6 +424,7 @@ def build(lane, arm, D, A):
         sync = (lambda: A["_torch_sync"](torch, dev))
         if t == "clip":
             G = _grads(np, SEED)
+            rec["input_arrays"] = input_arrays(lane, D, A, [("grad%d" % i, g) for i, g in enumerate(G)])
             params = [torch.nn.Parameter(torch.zeros(GRAD_SIZE, device=dev)) for _ in G]
             for q, g in zip(params, G):
                 q.grad = torch.from_numpy(g).to(dev)
@@ -404,6 +453,7 @@ def build(lane, arm, D, A):
             return Runner(info, fit, outputs, sync=sync, record=dict(
                 rec, __implementation__=torch.nn.utils.clip_grad_norm_, seed=SEED, **p))
         x_np, tg = _ce_inputs_once(np, SEED, A)
+        rec["input_arrays"] = input_arrays(lane, D, A)
         xt = torch.from_numpy(x_np).to(dev).requires_grad_(True)
         tt = torch.from_numpy(tg).to(dev)
         F = torch.nn.functional
@@ -431,6 +481,8 @@ def build(lane, arm, D, A):
     # ---- BPE encode and train
     if t in ("bpeencode", "bpetrain"):
         docs, train = corpus_docs(A)
+        # the documents the timed call reads: encode the 2,048-character documents, train the first 1 MiB
+        rec["input_arrays"] = input_arrays(lane, D, A, _text_arrays(np, docs if t == "bpeencode" else train))
         if t == "bpeencode":
             import mojolearn as ml
             vocab = ml.tokenizer.BpeVocabularyTrainer(vocab_size=p["vocab_size"],
@@ -487,6 +539,7 @@ def build(lane, arm, D, A):
 
     # ---- learning-rate schedules
     if t == "sched":
+        rec["input_arrays"] = input_arrays(lane, D, A)
         if ours:
             sched = fn(**p)
 
@@ -538,6 +591,7 @@ def build(lane, arm, D, A):
     # ---- Johnson-Lindenstrauss bound
     if t == "jl":
         grid = jl_grid(np)
+        rec["input_arrays"] = input_arrays(lane, D, A)
         if ours:
             def fit():
                 S["k"] = np.array([fn(n, eps=e) for n, e in grid], dtype=np.int64)
