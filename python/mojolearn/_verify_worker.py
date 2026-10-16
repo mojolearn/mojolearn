@@ -279,12 +279,11 @@ def execute(request):
                 for b in _verify.binding_artifacts()]
     # Do not hash every installed host family in every disposable process.
     # Only bindings actually loaded by this worker contribute provenance.
-    import hashlib
     for name, module in tuple(sys.modules.items()):
         path = getattr(module, "__file__", "") or ""
         if name.startswith("mojolearn._host.") and path.endswith((".so", ".pyd")):
-            with open(path, "rb") as stream:
-                digest = hashlib.file_digest(stream, "sha256").hexdigest() if hasattr(hashlib, "file_digest") else hashlib.sha256(stream.read()).hexdigest()
+            # Memoized per process (a batched worker hashes each file once).
+            digest = _verify._sha256(path)
             bindings.append(dict(module=name, sha256=digest, size=os.path.getsize(path), path=path, kind="host"))
     return dict(value=value, bindings=bindings)
 
