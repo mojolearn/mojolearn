@@ -12,7 +12,9 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-import yaml
+import pytest
+
+yaml = pytest.importorskip("yaml", reason="PyYAML not installed: these tests read the GitHub workflow YAML")
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('gpu_release_projects_tested', ROOT / 'tools/gpu_release_projects.py')
