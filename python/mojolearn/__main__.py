@@ -294,7 +294,7 @@ def build_parser():
                    help="with --all: fits per cell; two or more also catch a "
                         "cell that moves on this box (default %(default)s)")
     v.add_argument("--cell-timeout", type=float, default=120.0,
-                   help="with --all: seconds allowed for each isolated cell, self-test, "
+                   help="with --all: seconds allowed for each cell, self-test, "
                         "or portable-model worker; timeout stops the sweep (default %(default)s)")
     v.add_argument("--batch-cells", dest="batch_cells", type=int, default=None, metavar="N",
                    help="with --all: cells per worker process (default 24); a crash, timeout or "
