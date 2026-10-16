@@ -595,6 +595,14 @@ def _native_sigmoid_train(binding, dec, labels):
 #     raises AttributeError otherwise, as scikit-learn does.
 # n_features_in_ : int
 #
+def _check_proba(self):
+    """scikit-learn's `SVC._check_proba`: the AttributeError names why, and
+    `available_if` chains it under "has no attribute 'predict_proba'"."""
+    if not self.probability:
+        raise AttributeError("predict_proba is not available when probability=False")
+    return True
+
+
 class SVC(NumericModeMixin):
     """C-support vector classification.
 
@@ -1510,7 +1518,7 @@ class SVC(NumericModeMixin):
 
     # Maintainer note: libsvm's `svm_predict_probability`; the coupling is
     # `_multiclass_probability`.
-    @available_if(lambda self: bool(self.probability))
+    @available_if(_check_proba)
     def predict_proba(self, X):
         """Class probabilities from the fitted Platt scaling.
 
@@ -1555,7 +1563,7 @@ class SVC(NumericModeMixin):
     # Maintainer note: the portable binary64 log (its Mojo twin, `pm_log`, in
     # the same epilogue call); a probability <= 0 raises as
     # `_portable_math.log` does.
-    @available_if(lambda self: bool(self.probability))
+    @available_if(_check_proba)
     def predict_log_proba(self, X):
         """Natural log of `predict_proba(X)`.
 

@@ -68,9 +68,22 @@ from ._cholesky_impl import Cholesky
 # switch reports unavailable. Other vendors and IDENTICAL stay gated out.
 from . import _backend as _linalg_backend
 
+_bf16_native = None
 if _linalg_backend.default_mode() == "fast":
     from ._linalg_impl import _load as _load_selected_linalg
-    _bf16_native = _load_selected_linalg()
+    # A fast request on an install without a fast linalg binary (a partial
+    # build, a source checkout with no fast set, a CPU-only install) must not
+    # take `import mojolearn` down: `_backend.select()` stubs a missing binding
+    # so the package imports and its users refuse BY NAME on use. Loading the
+    # binding here, at import, raised that refusal at package import instead
+    # (`python -m mojolearn verify --compare` under MOJOLEARN_NUMERIC_MODE=fast,
+    # test_verify_all). Without a binding the names below stay the identical
+    # surface's, whose own `_load()` raises the same refusal when called.
+    try:
+        _bf16_native = _load_selected_linalg()
+    except (ImportError, ValueError):
+        _bf16_native = None
+if _bf16_native is not None:
     _fast_bf16_available = _bf16_native.fast_bf16_available
     to_bf16 = _bf16_native.public_fast_to_bf16
     from_bf16 = _bf16_native.public_fast_from_bf16

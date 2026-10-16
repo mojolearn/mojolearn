@@ -460,6 +460,10 @@ TRAINING_LANE_NAMES = {
     "agglomerative": "agglomerative clustering",
     "et-clf": "the Extra Trees classifier",
     "et-reg": "the Extra Trees regressor",
+    # lanes sk-kernels / sk-final (2026-10-15): sample_weight through the
+    # weighted Extra Trees fits, exported by _mojolearn_trees_host.
+    "et-clf-weighted": "the Extra Trees classifier with sample_weight",
+    "et-reg-weighted": "the Extra Trees regressor with sample_weight",
     "iforest": "the isolation forest",
     # Workstream E (lane/cpu-training-e, 2026-09-14). The k-NN lanes' fit
     # stores the index and their train cell is the host search the knn host
@@ -1720,7 +1724,7 @@ FAMILIES = (
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
-            "argmax_rows_f64", "probability_rows_f32",
+            "argmax_rows_f64", "argmax_last_rows_f32", "probability_rows_f32",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
             # of bindings/hotpath_helpers.mojo that stand in for per-row Python,
             # and the ORDER RULE's label encoder (DEVIATION 2500) a CPU-only
@@ -2153,7 +2157,8 @@ FAMILIES = (
         routes="_mojolearn_trees",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel", "par-forest-et", "par-forest-et-clf"),
+        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel", "par-forest-et", "par-forest-et-clf",
+                        "et-clf-weighted", "et-reg-weighted"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ExtraTreesClassifier", "ExtraTreesRegressor"),
@@ -2171,6 +2176,12 @@ FAMILIES = (
             "et_regressor_fit_rowmajor", "et_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "et_classifier_fit_shard", "et_regressor_fit_shard",
+            # the weighted fits (sample_weight; lanes sk-kernels / sk-final)
+            "et_classifier_fit_weighted", "et_classifier_fit_weighted_export",
+            "et_classifier_fit_weighted_rowmajor", "et_classifier_fit_weighted_rowmajor_export",
+            "et_regressor_fit_weighted", "et_regressor_fit_weighted_export",
+            "et_regressor_fit_weighted_rowmajor", "et_regressor_fit_weighted_rowmajor_export",
+            "et_classifier_fit_weighted_shard", "et_regressor_fit_weighted_shard",
             "et_predict", "forest_prepare_gpu", "forest_predict_resident_reuse_gpu",
             "forest_release_gpu",
         ),
@@ -3672,6 +3683,17 @@ PUBLIC_PENDING_LANES = {
     # the shipped table has no cell for it. It leaves at the next record.
     # lane/prep (merged by lane/merged, 2026-09-28): covered resample option
     # lanes; CPU and NVIDIA agree (lane/apple-merged), no release record yet.
+    # lanes sk-kernels / sk-final (2026-10-15): the weighted Extra Trees fits
+    # have a CPU column (_mojolearn_trees_host) and no release record yet.
+    "et-clf-weighted": "no reference",
+    "et-reg-weighted": "no reference",
+    # f63ef2235 (2026-10-14): PairLogit and YetiRank on the pointwise searcher.
+    # The gbdt host binding's pointwise arm trains Logloss only and refuses
+    # every other loss by name (bindings/_mojolearn_gbdt_host.mojo,
+    # `_refuse_pointwise`), so the lane's fit has no CPU arithmetic
+    # (identity_break.GPU_ONLY_LANES).
+    "gbdt-pair-logit-pointwise": "no cpu route",
+    "gbdt-yeti-rank-pointwise": "no cpu route",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
 # carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped

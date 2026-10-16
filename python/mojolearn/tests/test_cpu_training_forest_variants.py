@@ -109,7 +109,9 @@ def test_rf_oracle_carries_the_new_arms():
     for gain in ("def host_poisson_gain(", "def host_gamma_gain(", "def host_inverse_gaussian_gain("):
         assert gain in text, gain
     assert "_dequantize_wide(" in text, "the right label sum is subtracted at storage width"
-    assert text.count("<= RF_REG_EPS or left_label_sum <= RF_REG_EPS") == 3
+    # three unweighted gains plus the weighted regression objective's guard
+    # (WeightedRegressionBin, 4f13a3f42)
+    assert text.count("<= RF_REG_EPS or left_label_sum <= RF_REG_EPS") == 4
     assert "no host restatement yet (ensemble/host/rf_oracle.mojo)" not in text
     assert "if weight_cdf[mid] <= d:" in text, "the weighted draw is an upper_bound over the CDF"
     assert "run += Float64(weights[i])" in text

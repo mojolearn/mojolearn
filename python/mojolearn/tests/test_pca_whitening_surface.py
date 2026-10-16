@@ -113,13 +113,13 @@ def test_nonfinite_input_and_output_refused(fake):
     x = np.zeros((8, 2), dtype=np.float32)
     bad = x.copy()
     bad[0, 0] = np.nan
-    with pytest.raises(ValueError, match='finite X'):
+    with pytest.raises(ValueError, match='Input X contains NaN'):
         PCA(2, whiten=True).fit(bad)
     assert not fake.calls
     model = PCA(2, whiten=True).fit(x)
-    with pytest.raises(ValueError, match='finite X'):
+    with pytest.raises(ValueError, match='Input X contains NaN'):
         model.transform(bad)
-    with pytest.raises(ValueError, match='finite scores'):
+    with pytest.raises(ValueError, match='Input X contains NaN'):
         model.inverse_transform(bad)
     fake.nonfinite = True
     with pytest.raises(ValueError, match='nonfinite output'):

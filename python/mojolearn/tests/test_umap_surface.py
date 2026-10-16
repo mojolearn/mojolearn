@@ -184,7 +184,7 @@ class UMAPSurfaceTests(unittest.TestCase):
         model.n_components = 33
         with self.assertRaises(ValueError):
             model.fit(self.x)
-        with self.assertRaisesRegex(ValueError, "successful fit"):
+        with self.assertRaisesRegex(ValueError, "not fitted yet"):
             self.estimator().transform(self.x)
 
     def test_supported_option_controls_and_supervision(self):

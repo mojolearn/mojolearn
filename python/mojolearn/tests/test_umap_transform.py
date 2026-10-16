@@ -16,7 +16,7 @@ class UMAPTransformTests(unittest.TestCase):
         return UMAP(n_neighbors=3, n_epochs=12, random_state=19, **kwargs)
 
     def test_requires_fit_and_valid_queries(self):
-        with self.assertRaisesRegex(ValueError, "successful fit"):
+        with self.assertRaisesRegex(ValueError, "not fitted yet"):
             self.model().transform(self.x)
         model = self.model().fit(self.x)
         for value in (np.nan, np.inf, -np.inf):

@@ -57,8 +57,9 @@ def test_coupling_is_a_distribution():
 
 
 def test_random_state_needs_probability():
-    with pytest.raises(NotImplementedError, match="random_state"):
-        SVC(random_state=1).fit([[0.0], [1.0]], [0, 1])
+    # random_state without probability is accepted and unused, as in
+    # scikit-learn (04bb03dff); a bad value is still refused
+    assert SVC(random_state=1).get_params()["random_state"] == 1
     with pytest.raises(ValueError, match="random_state"):
         SVC(probability=True, random_state=-1).fit([[0.0], [1.0]], [0, 1])
 
@@ -66,8 +67,11 @@ def test_random_state_needs_probability():
 def test_predict_proba_needs_probability():
     x, y = _data(n=60, k=2)
     m = _fit_or_skip(x, y, kernel="rbf", gamma=0.1)
-    with pytest.raises(AttributeError, match="probability"):
+    # scikit-learn's wording: "This 'SVC' has no attribute 'predict_proba'",
+    # raised from "predict_proba is not available when probability=False"
+    with pytest.raises(AttributeError, match="predict_proba") as info:
         m.predict_proba(x)
+    assert "probability=False" in str(info.value.__cause__)
 
 
 @pytest.mark.parametrize("k", [2, 3])

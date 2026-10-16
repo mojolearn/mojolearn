@@ -55,7 +55,7 @@ AdditiveChi2Sampler ClassicalMDS ComplementNB DictionaryLearning EllipticEnvelop
 FactorAnalysis FastICA IncrementalPCA Isomap KNNImputer KNeighborsClassifier
 KNeighborsRegressor KernelDensity KernelPCA KernelRidge LatentDirichletAllocation
 LocalOutlierFactor LocallyLinearEmbedding MDS MinCovDet MiniBatchDictionaryLearning
-MiniBatchSparsePCA MultinomialNB NMF NearestCentroid NearestNeighbors OneClassSVM
+MiniBatchSparsePCA MultinomialNB NMF NearestCentroid NearestNeighbors Nystroem OneClassSVM
 PCA PLSRegression PolynomialCountSketch RBFSampler SVC SVR SkewedChi2Sampler
 SparsePCA TruncatedSVD
 """.split())
@@ -145,7 +145,15 @@ def _allows_nan_now(est):
     return bool(hook()) if hook is not None else False
 
 
-def _target_tag(cls, name, default):
+def _target_tag(cls, name, default, est=None):
+    """A target tag of `cls`; with `est`, its parameter-dependent override
+    (`_sklearn_instance_target_tags`, the same one its scikit-learn tags read)
+    wins."""
+    own = getattr(est, "_sklearn_instance_target_tags", None) if est is not None else None
+    if callable(own):
+        tags = own()
+        if name in tags:
+            return tags[name]
     return getattr(cls, "_sklearn_target_tags", {}).get(name, default)
 
 
@@ -414,7 +422,7 @@ def _check_y(est, y):
     if vkind == "complex":
         raise ValueError(f"Complex data not supported: {name} got a complex y.")
     if (len(shape) == 2 and shape[1] == 1 and container != "list"
-            and not _target_tag(cls, "multi_output", False) and hasattr(y, "reshape")):
+            and not _target_tag(cls, "multi_output", False, est) and hasattr(y, "reshape")):
         warnings.warn(
             "A column-vector y was passed when a 1d array was expected. Please change "
             "the shape of y to (n_samples, ), for example using ravel().",
@@ -455,18 +463,40 @@ class Check:
         self.X, self.info, self.fitting = X, info, fitting
 
 
+def _array_like(obj):
+    """An `__array__`-only object (scikit-learn's _NotAnArray, a pandas object:
+    no buffer, not a sequence) as the array it exports, else `obj` itself, so
+    X, y and sample_weight take the same paths as their arrays. Glue: one
+    conversion call, no per-element work (the rule `_buffer._materialize`
+    applies to X)."""
+    if (obj is None or isinstance(obj, (list, tuple, str, bytes))
+            or not callable(getattr(obj, "__array__", None))):
+        return obj
+    try:
+        memoryview(obj).release()
+        return obj
+    except TypeError:
+        return obj.__array__()
+
+
 def before_fit(est, method, slots, args, kwargs):
     """Validate a fit's X and y; return `(args, kwargs, check)`."""
     ix, iy, yname = slots
     X = _get(args, kwargs, ix, "X")
     if X is _MISSING:
         return args, kwargs, None
+    X2 = _array_like(X)
+    if X2 is not X:
+        args, kwargs = _put(args, kwargs, ix, "X", X2)
+        X = X2
+    if "sample_weight" in kwargs:
+        kwargs = dict(kwargs, sample_weight=_array_like(kwargs["sample_weight"]))
     info = _check_X(est, X)
     if method == "partial_fit" and "n_features_in_" in vars(est):
         _check_width(est, X, info)
     y = _get(args, kwargs, iy, yname)
     if y is not _MISSING:
-        y2 = _check_y(est, y)
+        y2 = _check_y(est, _array_like(y))
         if y2 is not y:
             args, kwargs = _put(args, kwargs, iy, yname, y2)
         _check_lengths(info, y2)
@@ -474,17 +504,22 @@ def before_fit(est, method, slots, args, kwargs):
 
 
 def before_call(est, method, slots, args, kwargs):
-    """Validate the X of a predict, transform or score call; return a check."""
+    """Validate the X of a predict, transform or score call; return
+    `(args, kwargs, check)` (X unwrapped when it is an `__array__`-only object)."""
     ix = slots[0]
     X = _get(args, kwargs, ix, "X")
     if X is _MISSING or X is None:
-        return None
+        return args, kwargs, None
+    X2 = _array_like(X)
+    if X2 is not X:
+        args, kwargs = _put(args, kwargs, ix, "X", X2)
+        X = X2
     info = _check_X(est, X, fitting=False)
     # inverse_transform takes the transformed space (n_components columns), not
     # the fit's features; scikit-learn checks n_features_in_ only on the latter.
     if method != "inverse_transform":
         _check_width(est, X, info)
-    return Check(X, info, False)
+    return args, kwargs, Check(X, info, False)
 
 
 def after_fit(est, check):

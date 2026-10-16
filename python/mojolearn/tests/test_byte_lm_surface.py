@@ -47,10 +47,18 @@ def state_digest(model):
     return hashlib.sha256(impl._canonical(state)).hexdigest()
 
 
+def admitted_vendor():
+    """The vendor `_load` admits on the install this process loaded: the CPU
+    byte LM binding reads back 'cpu' on a CPU-only install (no GPU set under
+    python/mojolearn/identical), a GPU set reads back its device vendor. The
+    fake stands in for whichever binding the install would serve."""
+    return 'cpu' if impl._backend._CPU_ONLY is not None else 'cuda'
+
+
 class FakeByteLM:
     def __init__(self):
         self.mode = 1
-        self.vendor = 'cuda'
+        self.vendor = admitted_vendor()
         self.profile = impl.PROFILE
         self.calls = []
         self.fail_after_write = False
@@ -472,9 +480,16 @@ def test_native_mode_vendor_profile_witnesses_refuse_before_model(host, field, v
     assert host.calls == []
 
 
-def test_metal_witness_is_admitted_without_weakening_profile_or_mode(host):
+def test_metal_witness_is_admitted_without_weakening_profile_or_mode(host, monkeypatch):
     host.vendor = 'metal'
+    # A GPU install (no CPU-only set loaded) admits the Metal witness ...
+    monkeypatch.setattr(impl._backend, '_CPU_ONLY', None)
     assert impl._load() is host
+    # ... a CPU-only install admits only the CPU byte LM binding.
+    monkeypatch.setattr(impl._backend, '_CPU_ONLY', 'no GPU set')
+    with pytest.raises(RuntimeError, match='native profile'):
+        impl._load()
+    monkeypatch.setattr(impl._backend, '_CPU_ONLY', None)
     host.profile = 'wrong-profile'
     with pytest.raises(RuntimeError, match='native profile'):
         impl._load()
@@ -585,7 +600,7 @@ def test_run_metadata_retains_binding_source_profile_dataset_and_config(host):
     model = trainer()
     metadata = model.run_metadata()
     assert metadata['profile'] == metadata['native_profile'] == impl.PROFILE
-    assert metadata['native_vendor'] == 'cuda' and metadata['native_numeric_mode'] == 1
+    assert metadata['native_vendor'] == admitted_vendor() and metadata['native_numeric_mode'] == 1
     assert metadata['binding_sha256'] == '0' * 64 and metadata['source_sha256']
     assert metadata['config'] == model.state_dict()['config']
     assert metadata['data_schedule']['corpus_sha256'] == '1' * 64

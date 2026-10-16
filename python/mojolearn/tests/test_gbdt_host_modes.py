@@ -166,7 +166,10 @@ def test_four_modes_predict_through_host_model_when_built():
             od_wait=2, use_best_model=True).fit(
                 x, yc, sample_weight=rng.uniform(0.5, 1.5, 1200).astype(np.float32), eval_set=(xe, ye)), x, True),
         ("GradientBoosting", mojolearn.GradientBoosting(
-            n_estimators=3, max_depth=3, loss="Logloss", cat_features=[0], one_hot_features=[1]).fit(coded, yc),
+            n_estimators=3, max_depth=3, loss="Logloss", cat_features=[0], one_hot_features=[1],
+            # the deterministic configuration the host's one-hot arm restates
+            # (identity_break._gbdt_legacy_kw); the stochastic defaults refuse
+            bootstrap_type="No", random_strength=0.0).fit(coded, yc),
          coded, True),
     ]
     with tempfile.TemporaryDirectory() as d:

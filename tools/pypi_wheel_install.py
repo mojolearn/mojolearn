@@ -27,6 +27,14 @@ import urllib.request
 
 INDEX_URL = "https://pypi.org/simple"
 JSON_API = "https://pypi.org/pypi/%s/%s/json"
+#: MOJOLEARN_WHEEL_INDEX=testpypi: the release candidate (`release.py --publish testpypi`), with the same
+#: byte provenance checked against TestPyPI's own digests; its dependencies still come from PyPI, and the
+#: other GPU plugin the core requires from TestPyPI.
+EXTRA_INDEX = []
+if os.environ.get("MOJOLEARN_WHEEL_INDEX", "pypi") == "testpypi":
+    INDEX_URL = "https://test.pypi.org/simple"
+    JSON_API = "https://test.pypi.org/pypi/%s/%s/json"
+    EXTRA_INDEX = ["--extra-index-url", INDEX_URL]
 SCHEMA = "mojolearn-pypi-wheel-manifest/1"
 #: Apple has no plugin package: the macOS core wheel carries the Metal bindings (Andrew 2026-10-14: the
 #: M4 smoke runs against `pip install mojolearn==<version>`; core only).
@@ -116,7 +124,7 @@ def install(args):
     paths = [f["path"] for f in manifest["files"]]
     # Pass 1 resolves the dependencies; pass 2 puts exactly these bytes in place even when the
     # same version was already installed from somewhere else.
-    if run(pip + ["install"] + common + paths, log):
+    if run(pip + ["install"] + common + EXTRA_INDEX + paths, log):
         raise SystemExit("pypi_wheel_install: pip install failed; see " + log)
     if run(pip + ["install"] + common + ["--force-reinstall", "--no-deps"] + paths, log):
         raise SystemExit("pypi_wheel_install: pip reinstall of the verified files failed; see " + log)

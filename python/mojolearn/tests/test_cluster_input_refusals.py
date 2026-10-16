@@ -49,7 +49,7 @@ def test_kmeans_refuses_non_finite():
     _raises(ValueError, "init_centroids contains a NaN", KMeans(3, init="array", init_centroids=xn[4:7]).fit, x)
     w = np.ones(64)
     w[0] = np.nan
-    _raises(ValueError, "sample_weight contains a NaN", KMeans(3).fit, x, sample_weight=w)
+    _raises(ValueError, "Input sample_weight contains NaN", KMeans(3).fit, x, sample_weight=w)
     m = KMeans(3, random_state=0).fit(x)
     _raises(ValueError, "X contains a NaN or an infinity", m.predict, xn)
     _raises(ValueError, "X contains a NaN or an infinity", m.transform, xi)

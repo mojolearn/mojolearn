@@ -192,7 +192,7 @@ def _needs_fit(method, name, require_fit=True):
                 f"appropriate arguments before using {name}.")
         if vars(self).get("_mojolearn_fitting"):
             return method(self, *args, **kwargs)
-        check = _sk_validate.before_call(self, name, slots, args, kwargs)
+        args, kwargs, check = _sk_validate.before_call(self, name, slots, args, kwargs)
         if check is None:
             return method(self, *args, **kwargs)
         try:
@@ -327,10 +327,16 @@ def _caller_outside(frame):
         frame = frame.f_back
     if frame is None:
         return True
-    mod = frame.f_globals.get("__name__") or ""
-    # The verifier loads its harness by path as `mojolearn_verify_all_*`
-    # (_verify_all._load_by_path): it is mojolearn's own code and must see the
-    # native results the identity records hash, not the widened public ones.
+    globs = frame.f_globals
+    mod = globs.get("__name__") or ""
+    # The identity harness (tools/identity_break.py) is mojolearn's own code
+    # under any module name: `__main__` when run directly, and
+    # `mojolearn_verify_all_*` when the verifier loads it by path
+    # (_verify_all._load_by_path). It marks itself `__mojolearn_internal__` and
+    # must see the native results the identity records hash, not the widened
+    # public ones, or the harness and the verifier hash different bytes.
+    if globs.get("__mojolearn_internal__") is True:
+        return False
     return mod != _PKG and not mod.startswith(_PKG_DOT) and not mod.startswith("mojolearn_verify_all_")
 
 

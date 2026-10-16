@@ -4056,6 +4056,8 @@ class _PLS(RegressorScoreMixin, _Base):
         self.numeric_mode = numeric_mode
 
     def _xy(self, X, Y):
+        from ._sk_validate import _array_like
+        Y = _array_like(Y)  # an `__array__`-only Y (scikit-learn's _NotAnArray) as its array
         M = _M.from_input(X)
         vec = Y is not None and (len(getattr(Y, "shape", ())) == 1 or
                                  (not hasattr(Y, "shape") and not isinstance(Y[0], (list, tuple))))

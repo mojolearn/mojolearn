@@ -36,7 +36,7 @@ def test_refusals():
         KernelRidge(kernel="precomputed").fit(a, y)
     with pytest.raises(ValueError, match="sample_weight"):
         KernelRidge().fit(a, y, sample_weight=-np.ones(len(y)))
-    with pytest.raises(ValueError, match="entries"):
+    with pytest.raises(ValueError, match=r"sample_weight.shape == \(3,\), expected"):
         KernelRidge().fit(a, y, sample_weight=np.ones(3))
 
 

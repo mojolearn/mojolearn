@@ -93,6 +93,7 @@ def test_dense_knn_affinity_matches_the_python_loops(seed):
     m = _matrix(n, 100 + seed, plant=seed % 2 == 0)
     X = frombytes(m.s.tobytes(), "<f4", (n, n))
     se = SpectralEmbedding(affinity="precomputed_nearest_neighbors", n_neighbors=3 + seed)
+    se._validate_params()  # the fit-time parameter checks derive the private settings
     assert se._precomputed_knn_affinity(X).s.tobytes() == _knn_oracle(3 + seed, X)
 
 
@@ -110,6 +111,7 @@ def test_sparse_knn_affinity_matches_the_python_loops(seed):
     rnd.shuffle(rnd_order)
     X = _Coo(n, [r[q] for q in rnd_order], [c[q] for q in rnd_order], [v[q] for q in rnd_order])
     se = SpectralEmbedding(affinity="precomputed_nearest_neighbors", n_neighbors=k)
+    se._validate_params()  # the fit-time parameter checks derive the private settings
     assert se._precomputed_knn_affinity(X).s.tobytes() == _knn_oracle(k, X)
 
 
@@ -118,6 +120,7 @@ def test_refusals_follow_the_row_order():
     X = _Coo(n, [0, 0, 1, 2, 2, 3, 3, 4, 4, 5, 5], [1, 2, 0, 1, 3, 0, 1, 2, 3, 0, 4],
              [1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, float("nan"), 1.0, 1.0])
     se = SpectralEmbedding(affinity="precomputed_nearest_neighbors", n_neighbors=2)
+    se._validate_params()  # the fit-time parameter checks derive the private settings
     with pytest.raises(ValueError, match="row 1 of the precomputed graph has 1 stored"):
         se._precomputed_knn_affinity(X)
     X2 = _Coo(n, [0, 0, 1, 1, 2, 2], [1, 2, 0, 2, 0, -0 + 1], [1.0, -1.0, 1.0, 1.0, 1.0, 1.0])

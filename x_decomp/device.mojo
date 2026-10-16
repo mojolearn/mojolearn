@@ -1075,13 +1075,28 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
                 a.unsafe_store(i * nn + j, acc[r * LU_RB + c])
 
 
-def chol_step_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
+def chol_diag_copy_kernel(a: F32Ptr, adiag: F32Ptr, n: Int32):
+    """adiag[k] = a[k, k], one thread per k: the input diagonal's untouched
+    copy that `chol_step_kernel`'s rows below the pivot start their chain from."""
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nn = Int(n)
+    if k < nn:
+        adiag.unsafe_store(k, a.unsafe_load(k * nn + k))
+
+
+def chol_step_kernel(a: F32Ptr, adiag: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
     """Column step j of `chol_serial`, one thread per row i >= j. Row j's
     thread is `chol_diag` (the info store, a[j, j] = sqrt(acc)); every row
     i > j forms the same pivot chain itself (the same fma chain, so the same
     d that `chol_diag` stores) and runs `chol_col_elem`'s statements with
-    it. Reads only columns 0..j-1, final since their own steps; a[j, j] is
-    written by row j's thread and read by none."""
+    it. Reads only columns 0..j-1, final since their own steps.
+    The chain starts from adiag[j], the input diagonal's untouched copy
+    (`chol_diag_copy_kernel`), never from a[j, j]: row j's thread overwrites
+    a[j, j] with sqrt(acc) in this same launch, so a row thread that read
+    a[j, j] after that store started its chain from the root instead of the
+    input and the device factor differed from the host's `chol_serial`
+    (test_x_decomp_repeat chol GPU != host; the same race glm/impl/gram_solve.mojo
+    `gs_chol_step_kernel` removed with its adiag copy on 2026-10-07)."""
     var jj = Int(j)
     var nn = Int(n)
     var i = jj + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -1090,7 +1105,7 @@ def chol_step_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
     if i == jj:
         chol_diag(a, info, jj, nn)
         return
-    var acc = ftz(a.unsafe_load(jj * nn + jj))
+    var acc = ftz(adiag.unsafe_load(jj))
     for p in range(jj):
         var l = ftz(a.unsafe_load(jj * nn + p))
         acc = ftz(identical_mul_add(-l, l, acc))
@@ -2869,16 +2884,24 @@ struct DevExec(Exec):
         # TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
         # Tried: launch_chol_blocked for n > 32 here.
         # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
+        # lane chol-host (2026-10-15): the rows below the pivot start their
+        # chain from `dg`, the input diagonal's copy, because row j's thread
+        # rewrites a[j, j] in the same launch (see `chol_step_kernel`).
+        var dg = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
         ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+        ctx.enqueue_function[chol_diag_copy_kernel](
+            da.unsafe_ptr(), dg.unsafe_ptr(), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+        )
         for j in range(n):
             ctx.enqueue_function[chol_step_kernel](
-                da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j), block_dim=TPB
+                da.unsafe_ptr(), dg.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j), block_dim=TPB
             )
         _down(ctx, da, a, n * n)
         _down(ctx, di, info, 1)
         ctx.synchronize()
         _ = da^
         _ = di^
+        _ = dg^
         ctx.synchronize()
         _ = ctx^
 
