@@ -64,6 +64,14 @@ def _kill(process):
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        except PermissionError:
+            # macOS answers EPERM, not ESRCH, for the group of a worker that
+            # already exited and was reaped (seen live on an Apple M4 at a
+            # batch boundary, 0.8.48). An exited worker is gone. A worker that
+            # is still alive must still be stopped: signal it directly, and
+            # let a failure to do that raise.
+            if process.poll() is None:
+                process.kill()
     elif process.poll() is None:
         process.kill()
     process.wait()

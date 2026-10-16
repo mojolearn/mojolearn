@@ -447,3 +447,51 @@ def test_batch_cells_must_be_positive(monkeypatch, tmp_path, bad):
     args = SimpleNamespace(all=True, quick=False, lanes="one,two", repeats=1, no_models=True, json=True,
                            json_out=None, cell_timeout=1, reference_table=None, batch_cells=bad)
     assert verifier.cmd_verify_all(args) == verifier.EXIT_USAGE
+
+
+def test_cleanup_of_exited_worker_tolerates_macos_eperm(monkeypatch):
+    """A worker that exited (and was reaped) before cleanup is gone, even when
+    killpg answers EPERM as macOS does for such a group."""
+    child = subprocess.Popen([sys.executable, "-c", "pass"], start_new_session=os.name == "posix")
+    child.wait()
+    if os.name == "posix":
+        def killpg(pid, signum):
+            raise PermissionError(1, "Operation not permitted")
+        monkeypatch.setattr(worker.os, "killpg", killpg)
+    worker._kill(child)
+    assert child.returncode == 0
+
+
+def test_cleanup_of_exited_worker_real_killpg():
+    child = subprocess.Popen([sys.executable, "-c", "pass"], start_new_session=os.name == "posix")
+    child.wait()
+    worker._kill(child)
+    assert child.returncode == 0
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process groups are POSIX")
+def test_cleanup_still_stops_live_worker_when_group_signal_refused(monkeypatch):
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True)
+
+    def killpg(pid, signum):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(worker.os, "killpg", killpg)
+    worker._kill(child)
+    assert child.returncode is not None and child.returncode != 0
+
+
+def test_batch_worker_exiting_cleanly_before_cleanup(monkeypatch):
+    """The live failure: a batch whose worker answered every cell and exited
+    before the controller's cleanup, with killpg refusing the reaped group."""
+    substitute_child(monkeypatch, BATCH_CHILD + '''
+for i, r in enumerate(requests):
+    answer(i, r["lane"])
+''')
+    if os.name == "posix":
+        def killpg(pid, signum):
+            raise PermissionError(1, "Operation not permitted")
+        monkeypatch.setattr(worker.os, "killpg", killpg)
+    seen = []
+    assert worker.run_batch(batch_requests(3), timeout=5, on_result=lambda i, r: seen.append(i)) is None
+    assert seen == [0, 1, 2]
