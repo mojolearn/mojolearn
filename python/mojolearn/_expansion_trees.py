@@ -37,6 +37,7 @@ from ._buffer import _has_buffer, memory_at
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin, available_if
 from ._sample_weight import ZERO_WEIGHTS_MSG, check_sample_weight
+from ._class_weights import _trees_x_bind  # noqa: F401  re-exported: callers import it from this door
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit_function,
                                forest_data_session_choice, open_forest_data_session)
@@ -70,11 +71,6 @@ __all__ = [
 
 
 # ----------------------------------------------------------------- helpers
-def _trees_x_bind(est=None):
-    from . import _backend
-    return _backend.binding("_mojolearn_x_trees", getattr(est, "numeric_mode", None))
-
-
 def _trees_f32_weights(values, n, name, est=None):
     """`values` (buffer or sequence) as a float32 Array of n entries,
     refusing non-finite and negative entries and an all-zero vector (a

@@ -1851,8 +1851,9 @@ def _qn_row_weights(est, sample_weight, class_weight, classes, codes, n):
             f"The 'class_weight' parameter of {type(est).__name__} must be an "
             "instance of 'dict', a str among {'balanced'} or None. "
             f"Got {class_weight!r} instead.")
-    from ._expansion_trees import _trees_x_bind
-    from .randomforest import _class_weight_rows
+    # the shared class-weight module, not the tree doors: importing those
+    # would put every forest and their bindings behind each linear lane
+    from ._class_weights import _class_weight_rows, _trees_x_bind
     xb = _trees_x_bind(est)
     codes32 = codes if codes.dtype == "<i4" else codes.astype("<i4")
     cw = _class_weight_rows(class_weight, list(classes), codes32, xb)
