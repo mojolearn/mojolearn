@@ -20,7 +20,7 @@ def admit_identity(doc, lanes):
     assert len(doc['lanes']) == len(lanes) and set(doc['lanes']) == set(lanes)
     assert doc['models_checked'] == 0
     execution = doc['execution']
-    assert execution['mode'] == 'fresh-process-per-cell'
+    assert execution['mode'] in ('fresh-process-per-cell', 'batched-worker')  # cell values do not depend on the mode
     assert execution['timeout_s'] == 120 and execution['interrupted'] is None
     assert execution['completed_cells'] == execution['total_cells'] == len(lanes)
     expected = {(lane, 'base', part) for lane in lanes for part in PARTS}

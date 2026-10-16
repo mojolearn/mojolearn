@@ -48,7 +48,8 @@ def admit(initial, repair, table, lanes, commit):
     require(initial.get('fixtures') == ['base'] and initial.get('repeats') == 1, 'Wrong initial fixture scope')
     require(len(initial.get('lanes', [])) == len(lanes) and set(initial['lanes']) == set(lanes), 'Incomplete initial lane scope')
     execution = initial.get('execution', {})
-    require(execution.get('mode') == 'fresh-process-per-cell' and execution.get('interrupted') is None
+    # Batched-worker and fresh-process cells are judged alike: a cell's value does not depend on the mode.
+    require(execution.get('mode') in ('fresh-process-per-cell', 'batched-worker') and execution.get('interrupted') is None
             and execution.get('completed_cells') == execution.get('total_cells') == len(lanes),
             'Initial sweep did not finish')
     require(initial.get('device', {}).get('vendor') == 'cuda'

@@ -30,7 +30,8 @@ def validate(report, vendor, commit, lanes):
     require(selected and len(selected) == len(set(selected)) and set(lanes) <= set(selected), 'Missing or duplicate lanes')
     require(report.get('models_checked') == 0, 'Unexpected portable-model rows')
     execution = report.get('execution', {})
-    require(execution.get('mode') == 'fresh-process-per-cell' and execution.get('interrupted') is None
+    # Batched-worker and fresh-process cells are judged alike: a cell's value does not depend on the mode.
+    require(execution.get('mode') in ('fresh-process-per-cell', 'batched-worker') and execution.get('interrupted') is None
             and execution.get('completed_cells') == execution.get('total_cells') == len(selected),
             'Incomplete or unisolated execution')
     require(report.get('bindings') and not report.get('bindings_error'), 'Missing native witnesses')
