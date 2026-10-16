@@ -57,6 +57,14 @@ The previous release is the newest bench/results/release_verification/
 their sha256, its light-smoke receipts the source commit); its identities
 come from binding-identities.json in that record when the release wrote one,
 otherwise from `git archive` of its commit.
+
+A PUBLISHED CANDIDATE (2026-10-15): a freeze tools/release.py published to
+TestPyPI (or PyPI) under <evidence>/release/<version>/<commit12>/ records every
+binding's identity in its reuse/plan.json and its wheels' sha256 in its
+publish manifests (candidate_builds). make_plan plans against the PyPI record
+and every newer candidate and keeps the source that reuses the most; its
+bytes come from the candidate's own build directory, else its TestPyPI
+wheels, verified the same way. Each REUSE row names its build (reuse_from).
 """
 import argparse
 import datetime as dt
@@ -1468,7 +1476,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     ev = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expanduser("~/mojolearn-evidence")))
     cache = Path(a.cache) if a.cache else ev / "release" / "identities"
-    plan = make_plan(a.commit, cache)
+    plan = make_plan(a.commit, cache, evidence_root=ev)
     print(render(plan, a.full))
     if a.json:
         Path(a.json).parent.mkdir(parents=True, exist_ok=True)
