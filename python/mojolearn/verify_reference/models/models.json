@@ -51,6 +51,7 @@
    "trained_on": {
     "classes_agreeing": [
      "amd",
+     "apple",
      "nvidia"
     ],
     "vendor": "cuda"
