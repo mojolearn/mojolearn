@@ -1374,8 +1374,11 @@ class Release:
             if self.readonly:
                 return None
             override = self.builders_override()
+            # evidence_root: a published candidate of this tree (a TestPyPI freeze under
+            # <evidence>/release/<version>/<commit12>/) is weighed beside the PyPI record and
+            # wins when it reuses more (release_reuse.candidate_builds, Andrew 2026-10-15)
             self._plan = release_reuse.make_plan(self.commit, self.evidence / "release" / "identities",
-                                                 builders_override=override or None)
+                                                 builders_override=override or None, evidence_root=self.evidence)
             return self._plan
 
     def step_reuse_plan(self):
@@ -1394,11 +1397,13 @@ class Release:
         old = read_json(self.plan_path) or {}
         if old.get("commit") != self.commit or old.get("builders_override") != plan.get("builders_override"):
             write_json(self.plan_path, plan)
-        return f"against {prev.get('version', 'no published release')}: {summary}; {self.plan_path}"
+        return (f"against {prev.get('version', 'no published release')}"
+                f"{' ' + (prev.get('channel') or 'pypi') if prev else ''}: {summary}; {self.plan_path}")
 
     def previous_wheel(self, platform):
-        """The last published wheel for `platform`, verified against the
-        record (a local copy, else PyPI)."""
+        """The plan's source build's wheel for `platform` (the last PyPI
+        release or a published candidate), verified against its record (a
+        local copy, else the index it was published to)."""
         prev = (self.plan().get("previous") or {})
         if self.dry:
             info = prev.get(platform) or {}

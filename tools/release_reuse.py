@@ -726,7 +726,102 @@ def previous_release(root=ROOT):
                                     or doc.get("qualification_reuse", {}).get("source_commit"))
     idents = d / "binding-identities.json"
     rec["identities"] = str(idents) if idents.is_file() else None
+    rec["channel"] = "pypi"
     return rec
+
+
+# ---------------------------------------------------------------- published candidates
+# A RELEASE AFTER A TESTED CANDIDATE (Andrew 2026-10-15): 0.8.48 rebuilt 124
+# bindings against 0.8.46 although the 0.8.47 TestPyPI candidate had built 123
+# of them from the same source. A candidate is any freeze under
+# <evidence>/release/<version>/<commit12>/ that tools/release.py published
+# (to TestPyPI or PyPI) and whose reuse/plan.json records the identity of every
+# binding it shipped. make_plan weighs it beside the newest PyPI record and
+# takes the source that reuses the most (ties to the newer build). Nothing else
+# changes: the identity must match exactly, the wheel is verified by the
+# sha256 the candidate's publish manifest recorded, and every member by the
+# wheel's own payload/RECORD.
+#: The release step that publishes each platform (tools/release.py STEP_TABLE).
+PUBLISH_STEP = {"linux": "publish-core-linux", "macos": "publish-macos"}
+CHANNELS = ("testpypi", "pypi")
+INDEX_JSON = {"pypi": "https://pypi.org/pypi/{project}/{version}/json",
+              "testpypi": "https://test.pypi.org/pypi/{project}/{version}/json"}
+
+
+def version_tuple(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v or ""))
+
+
+def _platforms():
+    import runpy
+    registry = runpy.run_path(str(ROOT / "python/mojolearn/gpu_plugins.py"))
+    return ("linux", "macos", *(row["profile"] for row in registry["distribution_rows"]()))
+
+
+def candidate_builds(evidence_root, platforms=None):
+    """Every published freeze recorded under <evidence>/release, newest
+    version first: [{version, source_commit, channel, record_dir, build_dir,
+    identities (its reuse/plan.json), linux, macos, <plugins>}]. A freeze
+    counts only when its state.json names it as the version's frozen commit,
+    its plan is of that commit, and each platform it carries was published
+    (the step done, its result naming testpypi or pypi) with a manifest of
+    that version and commit listing exactly one wheel and its sha256."""
+    base = Path(evidence_root) / "release"
+    platforms = platforms or _platforms()
+    out = []
+    for state_path in sorted(base.glob("*/state.json")) if base.is_dir() else []:
+        try:
+            state = json.loads(state_path.read_text())
+        except (OSError, ValueError):
+            continue
+        commit, version = state.get("commit") or "", state_path.parent.name
+        if not re.fullmatch(r"[0-9a-f]{40}", commit) or (state.get("version") or version) != version:
+            continue
+        d = state_path.parent / commit[:12]
+        try:
+            plan = json.loads((d / "reuse" / "plan.json").read_text())
+        except (OSError, ValueError):
+            continue
+        if plan.get("schema") != PLAN_SCHEMA or plan.get("commit") != commit:
+            continue
+        rec = dict(version=version, source_commit=commit, record_dir=str(d), build_dir=str(d),
+                   identities=str(d / "reuse" / "plan.json"), channel=None)
+        channels = set()
+        for platform in platforms:
+            rec[platform] = None
+            step = (state.get("steps") or {}).get(PUBLISH_STEP.get(platform, "publish-" + platform)) or {}
+            channel = str(step.get("result") or "").split(" ")[0]
+            if not step.get("done") or channel not in CHANNELS:
+                continue
+            try:
+                doc = json.loads((d / f"publish-{platform}" / "artifact" / "alpha-manifest.json").read_text())
+            except (OSError, ValueError):
+                continue
+            src = ((doc.get("light_smoke") or {}).get("source_commit")
+                   or (doc.get("qualification_reuse") or {}).get("source_commit"))
+            files = [(n, s) for n, s in (doc.get("files") or {}).items() if n.endswith(".whl")]
+            if doc.get("version") != version or src != commit or len(files) != 1 or not SHA_RE.match(files[0][1] or ""):
+                continue
+            rec[platform] = dict(wheel=files[0][0], sha256=files[0][1])
+            channels.add(channel)
+        if not channels:
+            continue
+        # one channel names the build; a freeze published to both is the PyPI release
+        rec["channel"] = "pypi" if "pypi" in channels else "testpypi"
+        out.append(rec)
+    out.sort(key=lambda r: version_tuple(r["version"]), reverse=True)
+    return out
+
+
+def reuse_sources(prev, candidates, commit):
+    """The builds a plan of `commit` may take bytes from, newest first: the
+    PyPI record `prev` and every candidate newer than it (not `commit` itself,
+    not a version PyPI already has)."""
+    floor = version_tuple((prev or {}).get("version"))
+    newer = [c for c in candidates or [] if c.get("source_commit") != commit
+             and version_tuple(c.get("version")) > floor]
+    newer.sort(key=lambda r: version_tuple(r["version"]), reverse=True)
+    return newer + ([prev] if prev else [])
 
 
 def previous_identities(prev, cache_dir, root=ROOT):
@@ -736,6 +831,13 @@ def previous_identities(prev, cache_dir, root=ROOT):
     if prev.get("identities"):
         doc = json.loads(Path(prev["identities"]).read_text())
         rows = {r["key"]: r.get("identity") for r in doc.get("rows", [])}
+        # A row that build shipped by MOJOLEARN_RELEASE_BUILD_ONLY carries the
+        # identity of ITS source, not of the older bytes it packed: never a
+        # match for those bytes.
+        for r in doc.get("rows", []):
+            if r.get("identity") and str(r.get("reason") or "").startswith("release owner:"):
+                rows[r["key"]] = dict(r["identity"], upgrade_refused="its bytes were reused by the release owner's "
+                                      "MOJOLEARN_RELEASE_BUILD_ONLY, so its recorded identity is not theirs")
         runtime = doc.get("runtime", {}).get("identity")
         source = "record " + prev["identities"]
         commit = doc.get("commit") or prev.get("source_commit")
@@ -787,14 +889,25 @@ def upgrade_v1(rows, runtime, commit, cache_dir, root=ROOT):
 
 
 # ---------------------------------------------------------------- the plan
-def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, builders_override=None):
+def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, builders_override=None,
+              evidence_root=None, candidates=None):
     """The REUSE/BUILD plan of COMMIT. `builders_override` ({builder: sha256})
     replaces a builder's bytes in every identity: the release's route overlay
     runs the tooling checkout's copy of a builder on the box
-    (tools/release_tooling.py), so the identity is the bytes that ran."""
+    (tools/release_tooling.py), so the identity is the bytes that ran.
+
+    THE SOURCE OF REUSED BYTES. `prev` (default: the newest PyPI record) and,
+    when `candidates` is given or `evidence_root` holds published freezes
+    (candidate_builds: a TestPyPI candidate, say), every one newer than it are
+    each planned against; the plan takes the one that reuses the most
+    bindings (runtime closure included), ties going to the newer build. With
+    no candidate the plan is exactly the PyPI one. Every REUSE row names its
+    build in `reuse_from`; `considered` lists every source weighed."""
     commit = git("rev-parse", commit + "^{commit}", root=root).strip()
     if prev is None:
         prev = previous_release(root)
+    if candidates is None and evidence_root is not None:
+        candidates = candidate_builds(evidence_root)
     facts = facts_for_commit(commit, cache_dir, root)
     if builders_override:
         unknown = set(builders_override) - set(facts["builders"])
@@ -812,58 +925,27 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         facts = dict(facts, builders=dict(facts["builders"], **builders_override), builder_views=views)
     if host_toolchain is None:
         host_toolchain = darwin_toolchain()
-    if prev:
-        prev_rows, prev_runtime, prev_source = previous_identities(prev, cache_dir, root)
-        changed_files = set(git("diff", "--name-only", prev["source_commit"], commit, root=root).split()) \
-            if prev.get("source_commit") else set()
-    else:
-        prev_rows, prev_runtime, prev_source, changed_files = {}, None, "no published release record", set()
-    rows = []
-    for target in (LINUX, MACOS):
-        for b in bindings(target):
-            cur = identity(b, facts, host_toolchain)
-            old = prev_rows.get(b.key) if prev else None
-            if prev is None:
-                decision, reason = "BUILD", "no published release record"
-            elif prev.get("linux" if target == LINUX else "macos") is None:
-                decision, reason = "BUILD", "the previous release published no %s wheel" % target
-            elif (b.vendor, b.arch) == PTX_SET:
-                # THE PTX SET IS BUILT EVERY RELEASE: its PTX_BASELINE.json binds the
-                # source commit (the pack and the loader refuse another commit's), and
-                # a set rebuilt from the published wheel carries no manifest.
-                decision, reason = "BUILD", "the PTX set's manifest binds this release's source commit"
-            else:
-                decision, reason = compare(cur, old)
-            if decision == "BUILD" and reason.startswith("changed: closure"):
-                closure = facts["closures"].get(b.script) or {}
-                moved = [s for s in closure.get("sources", []) if s in changed_files][:6]
-                if moved:
-                    reason += " (" + ", ".join(moved) + ")"
-            # RELEASE OWNER OVERRIDE (Andrew 2026-10-13): MOJOLEARN_RELEASE_BUILD_ONLY=gbdt,x_decomp,...
-            # names the bindings whose output really changed; every other binding whose only
-            # change is source (e.g. deleting a dead tier's code) ships the published bytes.
-            if decision == "BUILD" and reason.startswith("changed:") and BUILD_ONLY is not None:
-                stem = b.name[len("_mojolearn_"):] if b.name != "_mojolearn" else "core"
-                if stem not in BUILD_ONLY and stem.removesuffix("_host") not in BUILD_ONLY:
-                    decision, reason = "REUSE", "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (" + reason + ")"
-            rows.append(dict(b.row(), decision=decision, reason=reason,
-                             identity=cur, identity_digest=digest_of(cur) if cur else None,
-                             previous_digest=digest_of(old) if old else None))
+    current = [(b, identity(b, facts, host_toolchain)) for target in (LINUX, MACOS) for b in bindings(target)]
     rt = runtime_identity(facts)
-    if prev is None or prev.get("linux") is None:
-        rt_decision, rt_reason = "BUILD", "no published Linux wheel"
-    elif prev_runtime is None:
-        rt_decision, rt_reason = "BUILD", "previous release: no runtime identity"
-    elif unreadable(prev_runtime) or prev_runtime.get("schema") != rt.get("schema"):
-        rt_decision, rt_reason = "BUILD", "previous release: " + (
-            unreadable(prev_runtime) or "identity recorded as %s" % prev_runtime.get("schema"))
-    elif digest_of(rt) == digest_of(prev_runtime):
-        rt_decision, rt_reason = "REUSE", "identity unchanged"
-    else:
-        rt_decision, rt_reason = "BUILD", "changed: " + ", ".join(
-            k for k in sorted(set(rt) | set(prev_runtime)) if rt.get(k) != prev_runtime.get(k))
-    runtime = dict(decision=rt_decision, reason=rt_reason, identity=rt, identity_digest=digest_of(rt),
-                   previous_digest=digest_of(prev_runtime) if prev_runtime else None)
+    sources = reuse_sources(prev, candidates, commit) or [None]
+    plans = []
+    for src in sources:
+        try:
+            plans.append(_decide(commit, root, cache_dir, facts, current, rt, src))
+        except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
+            if src is prev:
+                raise
+            # an unreadable candidate record is passed over, never fatal: the PyPI record still plans
+            plans.append(dict(source=src, unusable="%s: %s" % (type(exc).__name__, exc)))
+    usable = [p for p in plans if "unusable" not in p]
+    # newest first, so max() keeps the newer build on a tie
+    best = max(usable, key=lambda p: p["score"]) if usable else None
+    considered = [dict(version=(p["source"] or {}).get("version"), channel=(p["source"] or {}).get("channel"),
+                       source_commit=(p["source"] or {}).get("source_commit"),
+                       reuse=None if "unusable" in p else p["score"], unusable=p.get("unusable"),
+                       chosen=p is best) for p in plans if p["source"] is not None]
+    rows, runtime, prev, prev_source = best["rows"], best["runtime"], best["source"], best["prev_source"]
+    rt_decision = runtime["decision"]
     legs, why = [], {}
     for vendor, arch in LINUX_SETS:
         need = [r for r in rows if r["target"] == LINUX and not r["tier"] == "host"
@@ -878,9 +960,70 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         why[name] = ("%d host binding(s)" % len(host_build) if host_build else "the runtime closure") + \
             " need a build box and no set does: the cheapest leg builds them"
     return dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                previous=prev, previous_identities_from=prev_source, rows=rows, runtime=runtime,
+                previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
                 legs=legs, leg_reasons=why, host_toolchain=host_toolchain,
                 builders_override=dict(sorted((builders_override or {}).items())))
+
+
+def _decide(commit, root, cache_dir, facts, current, rt, prev):
+    """Rows and runtime of a plan of `commit` against one source build `prev`
+    (None: no published record), and its score (REUSE rows + runtime)."""
+    if prev:
+        prev_rows, prev_runtime, prev_source = previous_identities(prev, cache_dir, root)
+        changed_files = set(git("diff", "--name-only", prev["source_commit"], commit, root=root).split()) \
+            if prev.get("source_commit") else set()
+    else:
+        prev_rows, prev_runtime, prev_source, changed_files = {}, None, "no published release record", set()
+    origin = dict(version=prev.get("version"), channel=prev.get("channel") or "pypi",
+                  source_commit=prev.get("source_commit")) if prev else None
+    rows = []
+    for b, cur in current:
+        target = b.target
+        old = prev_rows.get(b.key) if prev else None
+        if prev is None:
+            decision, reason = "BUILD", "no published release record"
+        elif prev.get("linux" if target == LINUX else "macos") is None:
+            decision, reason = "BUILD", "the previous release published no %s wheel" % target
+        elif (b.vendor, b.arch) == PTX_SET:
+            # THE PTX SET IS BUILT EVERY RELEASE: its PTX_BASELINE.json binds the
+            # source commit (the pack and the loader refuse another commit's), and
+            # a set rebuilt from the published wheel carries no manifest.
+            decision, reason = "BUILD", "the PTX set's manifest binds this release's source commit"
+        else:
+            decision, reason = compare(cur, old)
+        if decision == "BUILD" and reason.startswith("changed: closure"):
+            closure = facts["closures"].get(b.script) or {}
+            moved = [s for s in closure.get("sources", []) if s in changed_files][:6]
+            if moved:
+                reason += " (" + ", ".join(moved) + ")"
+        # RELEASE OWNER OVERRIDE (Andrew 2026-10-13): MOJOLEARN_RELEASE_BUILD_ONLY=gbdt,x_decomp,...
+        # names the bindings whose output really changed; every other binding whose only
+        # change is source (e.g. deleting a dead tier's code) ships the published bytes.
+        if decision == "BUILD" and reason.startswith("changed:") and BUILD_ONLY is not None:
+            stem = b.name[len("_mojolearn_"):] if b.name != "_mojolearn" else "core"
+            if stem not in BUILD_ONLY and stem.removesuffix("_host") not in BUILD_ONLY:
+                decision, reason = "REUSE", "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (" + reason + ")"
+        rows.append(dict(b.row(), decision=decision, reason=reason,
+                         identity=cur, identity_digest=digest_of(cur) if cur else None,
+                         previous_digest=digest_of(old) if old else None,
+                         reuse_from=dict(origin) if decision == "REUSE" else None))
+    if prev is None or prev.get("linux") is None:
+        rt_decision, rt_reason = "BUILD", "no published Linux wheel"
+    elif prev_runtime is None:
+        rt_decision, rt_reason = "BUILD", "previous release: no runtime identity"
+    elif unreadable(prev_runtime) or prev_runtime.get("schema") != rt.get("schema"):
+        rt_decision, rt_reason = "BUILD", "previous release: " + (
+            unreadable(prev_runtime) or "identity recorded as %s" % prev_runtime.get("schema"))
+    elif digest_of(rt) == digest_of(prev_runtime):
+        rt_decision, rt_reason = "REUSE", "identity unchanged"
+    else:
+        rt_decision, rt_reason = "BUILD", "changed: " + ", ".join(
+            k for k in sorted(set(rt) | set(prev_runtime)) if rt.get(k) != prev_runtime.get(k))
+    runtime = dict(decision=rt_decision, reason=rt_reason, identity=rt, identity_digest=digest_of(rt),
+                   previous_digest=digest_of(prev_runtime) if prev_runtime else None,
+                   reuse_from=dict(origin) if rt_decision == "REUSE" else None)
+    score = sum(r["decision"] == "REUSE" for r in rows) + (rt_decision == "REUSE")
+    return dict(source=prev, rows=rows, runtime=runtime, prev_source=prev_source, score=score)
 
 
 def set_identity(plan, vendor, arch):
@@ -928,9 +1071,13 @@ def render(plan, full=False):
     line under --full, counted otherwise."""
     prev = plan.get("previous") or {}
     out = ["== binding reuse plan for %s against %s" % (
-        plan["commit"][:12], f"{prev.get('version')} ({(prev.get('source_commit') or '?')[:12]})" if prev
-        else "NO PUBLISHED RELEASE RECORD")]
+        plan["commit"][:12], f"{prev.get('version')} {prev.get('channel') or 'pypi'} "
+        f"({(prev.get('source_commit') or '?')[:12]})" if prev else "NO PUBLISHED RELEASE RECORD")]
     out.append("   previous identities from: " + plan["previous_identities_from"])
+    for c in plan.get("considered") or []:
+        out.append("   source %s %-8s %s: %s%s" % (
+            "*" if c["chosen"] else " ", c.get("version"), c.get("channel"), (c.get("source_commit") or "?")[:12],
+            f" unusable ({c['unusable']})" if c.get("unusable") else f" reuses {c['reuse']}"))
     groups = {}
     for r in plan["rows"]:
         groups.setdefault(set_name(r), []).append(r)
@@ -953,26 +1100,33 @@ def render(plan, full=False):
             out.append("     %-5s %-20s %-44s %s" % ("BUILD", set_name(r), r["set_rel"], r["reason"]))
     reuses = plan_rows(plan, decision="REUSE")
     if reuses and full:
-        out.append("   REUSE (from %s, identity digest):" % prev.get("version"))
+        out.append("   REUSE (from %s %s, identity digest):" % (prev.get("version"), prev.get("channel") or "pypi"))
         for r in reuses:
             out.append("     %-5s %-20s %-44s %s" % ("REUSE", set_name(r), r["set_rel"], r["identity_digest"][:16]))
     elif reuses:
-        out.append("   REUSE: %d bindings from %s (--full lists them)" % (len(reuses), prev.get("version")))
+        out.append("   REUSE: %d bindings from %s %s (--full lists them)" % (
+            len(reuses), prev.get("version"), prev.get("channel") or "pypi"))
     return "\n".join(out)
 
 
 # ---------------------------------------------------------------- published bytes
 def published_wheel(prev, platform, evidence_root, download=True):
     """The previous release's wheel for `platform`, verified by sha256 against
-    the record: a local copy under the evidence root when one is there,
-    otherwise fetched from PyPI. Refuses anything whose digest differs."""
+    the record: a local copy under the evidence root when one is there (a
+    candidate's own build directory first), otherwise fetched from the index
+    it was published to (PyPI, or TestPyPI for a candidate). Refuses anything
+    whose digest differs."""
     info = prev.get(platform)
     if not info:
         raise SystemExit(f"release_reuse: the previous release published no {platform} wheel")
     name, want = info["wheel"], info["sha256"]
     ev = Path(evidence_root)
     store = ev / "release" / "published"
-    candidates = [store / name]
+    candidates = []
+    if prev.get("build_dir"):
+        own = Path(prev["build_dir"])
+        candidates += [own / "linux" / "final" / name, own / "macos" / name]
+    candidates += [store / name]
     candidates += sorted((ev / "release" / prev["version"]).glob(f"*/linux/final/{name}"))
     candidates += sorted((ev / "release" / prev["version"]).glob(f"*/macos/{name}"))
     passed_over = []
@@ -990,11 +1144,15 @@ def published_wheel(prev, platform, evidence_root, download=True):
                              f"passed over {len(passed_over)} of another freeze: {', '.join(str(c) for c in passed_over)}")
         return None
     project = name.split("-")[0].replace("_", "-")      # mojolearn, mojolearn-nvidia, mojolearn-amd
-    with urllib.request.urlopen(f"https://pypi.org/pypi/{project}/{prev['version']}/json", timeout=30) as r:
+    channel = prev.get("channel") or "pypi"
+    index = INDEX_JSON.get(channel)
+    if index is None:
+        raise SystemExit(f"release_reuse: no index for channel {channel!r}; refusing to reuse")
+    with urllib.request.urlopen(index.format(project=project, version=prev["version"]), timeout=30) as r:
         files = json.load(r).get("urls", [])
     urls = [f["url"] for f in files if f.get("filename") == name and f.get("digests", {}).get("sha256") == want]
     if not urls:
-        raise SystemExit(f"release_reuse: PyPI does not serve {name} with sha256 {want[:12]}; refusing to reuse")
+        raise SystemExit(f"release_reuse: {channel} does not serve {name} with sha256 {want[:12]}; refusing to reuse")
     store.mkdir(parents=True, exist_ok=True)
     tmp = store / (name + ".part")
     with urllib.request.urlopen(urls[0], timeout=120) as r, open(tmp, "wb") as fh:
@@ -1068,7 +1226,7 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
             raise SystemExit("release_reuse: the published wheel's payload names commit %s, the record %s" % (
                 (payload.get("source_commit") or "?")[:12], (prev.get("source_commit") or "?")[:12]))
         origin = dict(version=prev["version"], source_commit=prev["source_commit"], wheel=Path(whl).name,
-                      wheel_sha256=sha256(whl))
+                      wheel_sha256=sha256(whl), channel=prev.get("channel") or "pypi")
     dest = Path(dest)
     if dest.exists():
         shutil.rmtree(dest)
@@ -1257,8 +1415,8 @@ def assemble_macos(plan, whl, dest, say=print):
             got = extract_member(z, r["archive_path"], dest / package_rel, want)
             files[package_rel] = dict(sha256=got, archive_path=r["archive_path"], identity_digest=r.get("identity_digest"))
     doc = dict(schema="mojolearn.macos.reused-bindings.v1", from_release=dict(
-        version=prev["version"], source_commit=prev["source_commit"], wheel=Path(whl).name, wheel_sha256=sha256(whl)),
-        files=files)
+        version=prev["version"], source_commit=prev["source_commit"], wheel=Path(whl).name, wheel_sha256=sha256(whl),
+        channel=prev.get("channel") or "pypi"), files=files)
     (dest / "macos-plan.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
     say(f"  macOS: {len(files)} binding(s) taken from {Path(whl).name}")
     return dest / "macos-plan.json"
@@ -1290,9 +1448,11 @@ def record_identities(plan, linux_wheel, macos_wheel, out):
     for r in plan["rows"]:
         rows.append(dict(key=r["key"], target=r["target"], archive_path=r["archive_path"], decision=r["decision"],
                          reason=r["reason"], identity=r["identity"], identity_digest=r["identity_digest"],
-                         shipped_sha256=shipped.get(r["archive_path"])))
+                         shipped_sha256=shipped.get(r["archive_path"]), reuse_from=r.get("reuse_from")))
+    prev = plan.get("previous") or {}
     doc = dict(schema="mojolearn.binding-identities.v1", commit=plan["commit"], rows=rows, runtime=plan["runtime"],
-               previous=(plan.get("previous") or {}).get("version"))
+               previous=prev.get("version"), previous_channel=prev.get("channel") or ("pypi" if prev else None),
+               considered=plan.get("considered"))
     Path(out).write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
     return doc
 
