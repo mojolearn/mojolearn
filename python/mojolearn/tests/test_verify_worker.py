@@ -100,22 +100,16 @@ def test_device_failure_stops_remaining_probes():
     assert all(value is None and "dead/saturated" in error for value, error in parts.values())
 
 
-@pytest.mark.parametrize("failure", ["timeout", "crash", "preflight", "mismatch", None])
-def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_path, failure):
-    """Exercise actual controller/report assembly with disposable workers mocked.
-
-    The timeout case must not dispatch the second lane, while a legitimate
-    comparison mismatch must still dispatch it. Neither may return VERIFIED.
-    """
+def controller(monkeypatch, tmp_path, lanes=("one", "two"), divergent=()):
+    """Mock everything around cmd_verify_all except the cell scheduling."""
     from mojolearn import _backend, _verification_coverage, _verify
     reference = verifier.vref
     harness_file = tmp_path / "harness.py"
     harness_file.write_text("# fixture witness\n")
     table_file = tmp_path / "table.json"
     table_file.write_text("{}")
-    output = tmp_path / "evidence.json"
     table = dict(fixtures={}, heldout={}, records=[], format="test", harness_sha256="test")
-    harness = SimpleNamespace(LANES={"one": None, "two": None}, FIXTURES=("base",),
+    harness = SimpleNamespace(LANES={lane: None for lane in lanes}, FIXTURES=("base",),
                               fixture=lambda f: ([], [], []), heldout=lambda f: [], _h=lambda value: "hash")
     monkeypatch.setattr(_backend, "numeric_mode", lambda: "identical")
     monkeypatch.setattr(_backend, "vendor", lambda: "cpu")
@@ -125,23 +119,54 @@ def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_pa
     monkeypatch.setattr(reference, "stale_reference_lanes", lambda *args: [])
     monkeypatch.setattr(verifier, "harness_path", lambda: (str(harness_file), "test"))
     monkeypatch.setattr(verifier, "load_harness", lambda path: harness)
-    monkeypatch.setattr(verifier, "select_lanes", lambda *args, **kwargs: (["one", "two"], ["base"]))
+    monkeypatch.setattr(verifier, "select_lanes", lambda *args, **kwargs: (list(lanes), ["base"]))
     monkeypatch.setattr(verifier, "family_map", lambda lanes: {lane: "test" for lane in lanes})
     monkeypatch.setattr(verifier, "_device_block", lambda *args: {"numpy": "test"})
     monkeypatch.setattr(verifier, "verification_contract", lambda *args: {"harness_sha256": "test"})
     monkeypatch.setattr(_verification_coverage, "inventory", lambda *args: {"lanes": {}})
     monkeypatch.setattr(verifier, "host_surface", lambda: SimpleNamespace(lane_exposure=lambda *args: {}, FAMILIES=()))
     monkeypatch.setattr(verifier, "lane_accounting", lambda *args, **kwargs: {"lanes": {}})
-    monkeypatch.setattr(verifier, "lane_scope", lambda *args: {"gaps": {}, "checked": 2})
+    monkeypatch.setattr(verifier, "lane_scope", lambda *args: {"gaps": {}, "checked": len(lanes)})
     monkeypatch.setattr(verifier, "lane_scope_clause", lambda *args: "")
     monkeypatch.setattr(verifier, "reference_evidence", lambda rows: [])
 
     def judge(rows, *args, **kwargs):
         return [dict(row, state=reference.REFUSED if row["error"] else
-                     reference.DIVERGENT if failure == "mismatch" and row["lane"] == "one" else reference.IDENTICAL,
+                     reference.DIVERGENT if row["lane"] in divergent else reference.IDENTICAL,
                      detail=row["error"] or "", reference=None) for row in rows]
 
     monkeypatch.setattr(verifier, "judge_rows", judge)
+    output = tmp_path / "evidence.json"
+
+    def run_verify(**extra):
+        args = SimpleNamespace(all=True, quick=False, lanes=",".join(lanes), repeats=1, no_models=True,
+                               json=True, json_out=str(output), cell_timeout=1,
+                               reference_table=str(table_file), **extra)
+        code = verifier.cmd_verify_all(args)
+        report = json.loads(output.read_text())
+        progress = json.loads((tmp_path / "evidence.json.progress.json").read_text())
+        journal = [json.loads(line) for line in
+                   (tmp_path / "evidence.json.cells.jsonl").read_text().splitlines()]
+        return code, report, progress, journal
+
+    return run_verify
+
+
+def good_value(lane):
+    return {part: [lane.ljust(16, "0")[:16], None] for part in verifier.vref.PARTS}
+
+
+@pytest.mark.parametrize("failure", ["timeout", "crash", "preflight", "mismatch", None])
+def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_path, failure):
+    """Exercise actual controller/report assembly with disposable workers mocked
+    (fresh-process-per-cell mode).
+
+    The timeout case must not dispatch the second lane, while a legitimate
+    comparison mismatch must still dispatch it. Neither may return VERIFIED.
+    """
+    reference = verifier.vref
+    run_verify = controller(monkeypatch, tmp_path, divergent=("one",) if failure == "mismatch" else ())
+    monkeypatch.setattr(worker, "run_batch", lambda *args, **kwargs: pytest.fail("fresh mode must not batch"))
     calls = []
 
     def run(request, timeout, log):
@@ -155,12 +180,9 @@ def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_pa
         return dict(value={part: ["abcdef0123456789", None] for part in reference.PARTS}, bindings=[])
 
     monkeypatch.setattr(worker, "run", run)
-    args = SimpleNamespace(all=True, quick=False, lanes="one,two", repeats=1, no_models=True,
-                           json=True, json_out=str(output), cell_timeout=1, reference_table=str(table_file))
-    code = verifier.cmd_verify_all(args)
-    report = json.loads(output.read_text())
-    progress = json.loads((tmp_path / "evidence.json.progress.json").read_text())
+    code, report, progress, journal = run_verify(fresh_process_per_cell=True)
     assert progress["complete"] is True
+    assert progress["execution"]["mode"] == "fresh-process-per-cell"
     assert progress["exit"] == code == report["exit"]
     cells_dispatched = [r for r in calls if r["action"] == "cell"]
     if failure == "timeout":
@@ -181,7 +203,6 @@ def test_controller_checkpoints_and_stops_without_false_pass(monkeypatch, tmp_pa
     else:
         assert len(cells_dispatched) == 2
         assert code == (verifier.EXIT_MISMATCH if failure else verifier.EXIT_VERIFIED)
-        journal = (tmp_path / "evidence.json.cells.jsonl").read_text().splitlines()
         assert len(journal) == 2 * len(reference.PARTS)
 
 
