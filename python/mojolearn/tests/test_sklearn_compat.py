@@ -168,9 +168,32 @@ SKLEARN = {n: c for n, c in all_estimators()}
 SHARED_NAMES = sorted(n for n in ESTIMATOR_NAMES if n in SKLEARN)
 
 
+#: Size-only settings scikit-learn's own suite uses to keep its checks fast (its INIT_PARAMS):
+#: fewer trees, iterations, CV folds and restarts. A correctness check needs the code paths, not the
+#: size; the library's defaults are untouched.
+_FAST_KEYS = ("n_estimators", "max_iter", "n_iter", "cv", "n_init")
+
+
+def _sklearn_fast_params(name, cls):
+    try:
+        from sklearn.utils._test_common.instance_generator import INIT_PARAMS
+    except ImportError:
+        return {}
+    twin = dict(all_estimators()).get(name)
+    spec = INIT_PARAMS.get(twin) if twin is not None else None
+    if not isinstance(spec, dict):
+        return {}
+    ours = _constructor_params(cls)
+    return {k: v for k, v in spec.items()
+            if k in _FAST_KEYS and k in ours and isinstance(v, int) and not isinstance(v, bool)}
+
+
 def _make(name):
     factory = _factories().get(name)
-    return factory() if factory is not None else PUBLIC[name]()
+    if factory is not None:
+        return factory()
+    cls = PUBLIC[name]
+    return cls(**_sklearn_fast_params(name, cls))
 
 
 def _constructor_params(cls):
