@@ -547,8 +547,15 @@ def seal(ctx, directory, recipe, rec):
         missing.append("preflight did not pass")
     if (rec.get("params") or {}).get("schema") != "mojolearn.parameter-parity.v2":
         missing.append("strict timed-worker parameter audit")
+    # An arm whose every cell the board refused (e.g. the pure-PyTorch twin of mamba1-forward, not an
+    # opponent) never runs a timed call, so it has no timed read-back to retain. Without this exemption its
+    # absence marked the measured arms' cells incomplete and stopped the 0.8.49 AMD race (2026-10-16).
+    refused = {}
+    for cell in (rec.get("cells") or []) + (rec.get("infer_cells") or []):
+        arm = cell.get("arm")
+        refused[arm] = refused.get(arm, True) and str(cell.get("status") or "").startswith("REFUSED")
     for arm in rec.get("arms", []):
-        if arm in rec.get("stored_arms", []) or arm in rec.get("unsupported_arms", {}):
+        if arm in rec.get("stored_arms", []) or arm in rec.get("unsupported_arms", {}) or refused.get(arm):
             continue
         params = after.get(arm)
         if not params or not before.get(arm):

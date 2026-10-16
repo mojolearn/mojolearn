@@ -463,6 +463,19 @@ def library_version(library):
         mod = sys.modules.get(name) or importlib.import_module(name)
         v = getattr(mod, "__version__", None)
         if v:
+            # mamba-ssm is a pinned git build: its arm and probe report "<version>+g<commit>"
+            # (bench_board_neural._mamba_ssm_source). The worker receipt must name the same text, or
+            # the evidence check reads the same build as a changed library (0.8.49 AMD race, 2026-10-16).
+            if library == "mamba-ssm" and "+g" not in str(v):
+                import importlib.metadata as md
+                import json as _json
+                try:
+                    url = _json.loads(md.distribution(name).read_text("direct_url.json") or "null")
+                except Exception:  # noqa: BLE001
+                    url = None
+                commit = ((url or {}).get("vcs_info") or {}).get("commit_id")
+                if commit:
+                    return str(v) + "+g" + commit[:12]
             return str(v)
     except Exception:  # noqa: BLE001
         pass
