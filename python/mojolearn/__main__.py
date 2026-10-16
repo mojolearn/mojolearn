@@ -296,6 +296,11 @@ def build_parser():
     v.add_argument("--cell-timeout", type=float, default=120.0,
                    help="with --all: seconds allowed for each isolated cell, self-test, "
                         "or portable-model worker; timeout stops the sweep (default %(default)s)")
+    v.add_argument("--batch-cells", dest="batch_cells", type=int, default=None, metavar="N",
+                   help="with --all: cells per worker process (default 24); a crash, timeout or "
+                        "unhealthy-device signal runs the rest of that batch one cell per process")
+    v.add_argument("--fresh-process-per-cell", dest="fresh_process_per_cell", action="store_true",
+                   help="with --all: run every cell in its own process (slower; for diagnosis)")
     v.add_argument("--no-models", dest="no_models", action="store_true",
                    help="with --all: skip the portable models")
     v.add_argument("--self-test", dest="self_test", action="store_true",

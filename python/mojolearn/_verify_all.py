@@ -1110,6 +1110,10 @@ def _cmd_self_test(args, ml):
 CROSS_CHECK_DEFAULT_LANES = 24
 #: Full checks use fresh, sequential processes to bound accumulated resources.
 CROSS_CHECK_BATCH_LANES = 24
+#: `verify --all` cells per batched worker process (the same bound as the
+#: cross-check batches): startup is paid once per batch, and a batch's
+#: accumulated native state is dropped with its process.
+VERIFY_BATCH_CELLS = 24
 # Saved-model CPU loaders for these public tree algorithms already ship.
 # Their host family has no inference_lanes entry, so the old selector omitted
 # them despite being able to compare the same GPU-trained model on the CPU.
@@ -3864,14 +3868,34 @@ def cmd_verify_all(args):
     if not isinstance(timeout, (int, float)) or not 0 < timeout < float("inf"):
         return _finish(args, EXIT_USAGE, "USAGE", "--cell-timeout must be finite and positive")
     lane_seconds, cell_seconds = {}, {}
-    execution = dict(mode="fresh-process-per-cell", timeout_s=timeout, completed_cells=0,
+    # BATCHED CELL WORKERS (lane/verify-fast, 2026-10-15). A fresh process per
+    # cell paid `import mojolearn` plus GPU-runtime startup ~450 times per
+    # default sweep (~5 s per process on ROCm: 41 min on an MI300X). Cells now
+    # run VERIFY_BATCH_CELLS at a time in one worker process, each result
+    # judged and journaled as it lands. Crash isolation is kept: on a crash,
+    # timeout or unhealthy-device signal inside a batch, the cells already
+    # answered stand and the batch's remaining cells (the failing one first)
+    # each run in a fresh process, exactly as before, so their verdicts and
+    # the crash-streak stop are the fresh-process ones. A cell's value never
+    # depends on the mode; a lane whose bits change with what ran before it
+    # in the same process is a library bug, found by `verify --compare`
+    # between a `--fresh-process-per-cell` run and a batched one.
+    fresh_only = bool(getattr(args, "fresh_process_per_cell", False))
+    batch_cells = getattr(args, "batch_cells", None) or VERIFY_BATCH_CELLS
+    if not isinstance(batch_cells, int) or batch_cells < 1:
+        return _finish(args, EXIT_USAGE, "USAGE", "--batch-cells must be a positive integer")
+    execution = dict(mode="fresh-process-per-cell" if fresh_only else "batched-worker",
+                     batch_cells=None if fresh_only else batch_cells, batches=0, batch_stops=[],
+                     batched_cells=0, fresh_cells=0, fallback_cells=[],
+                     timeout_s=timeout, completed_cells=0,
                      total_cells=len(lanes) * len(fixtures), interrupted=None, crashed_cells=[])
     # A crashed cell worker (non-zero exit or signal, no timeout and no
     # unhealthy-device signal) refuses its own cell and the sweep goes on:
-    # every cell runs in a fresh process, so one crash cannot taint the
-    # next. The 0.8.43 run on an Apple M4 stopped 315 lanes on a single
-    # SIGTRAP. Consecutive crashes still stop the sweep: past this many in a
-    # row the device or the install is the likelier cause than one cell.
+    # that cell ran in a fresh process (directly, or as a batch fallback), so
+    # one crash cannot taint the next. The 0.8.43 run on an Apple M4 stopped
+    # 315 lanes on a single SIGTRAP. Consecutive crashes still stop the
+    # sweep: past this many in a row the device or the install is the
+    # likelier cause than one cell.
     crash_streak_limit = 3
     crash_streak = 0
     worker_bindings = {}
@@ -3915,43 +3939,87 @@ def cmd_verify_all(args):
         except worker.WorkerFailure as exc:
             preflight = dict(passed=None, error=str(exc))
             execution["interrupted"] = str(exc)
-    for lane in lanes:
-        t0 = time.monotonic()
-        for f in fixtures:
+    def cell_request(lane, f):
+        X, yc, yr = data[f]
+        return dict(action="cell", harness=os.path.abspath(harness_file),
+                    table=os.path.abspath(table_file), lane=lane, fixture=f, repeats=repeats,
+                    extra_parts=extra_parts,
+                    fixture_hashes=dict(X=harness._h(X), y_clf=harness._h(yc),
+                                        y_reg=harness._h(yr), held=harness._h(held[f])))
+
+    def record(lane, f, parts, seconds):
+        cell_seconds[(lane, f)] = round(seconds, 4)
+        cell = [dict(lane=lane, fixture=f, part=part, value=value, error=error,
+                     seconds=cell_seconds[(lane, f)]) for part, (value, error) in parts.items()]
+        raw.extend(cell)
+        judged = judge_rows(cell, table, families, unreferenced_lanes=stale, device_class=vclass,
+                            batch_revisions=getattr(harness, "BATCH_REVISIONS", {}))
+        execution["completed_cells"] += 1
+        cell_counts = {state: sum(r["state"] == state for r in judged) for state in vref.STATES}
+        log(f"  [{execution['completed_cells']}/{execution['total_cells']}] {lane}/{f} "
+            f"{cell_seconds[(lane, f)]:.1f}s: {detail_line(cell_counts)}")
+        progress(f"{lane}/{f}", judged)
+
+    def fresh_cell(lane, f):
+        nonlocal crash_streak
+        c0 = time.monotonic()
+        log(f"  [{execution['completed_cells'] + 1}/{execution['total_cells']}] {lane}/{f} (fresh process)")
+        try:
+            parts = isolated("cell", **{k: v for k, v in cell_request(lane, f).items()
+                                        if k not in ("action", "harness", "table")})
+            crash_streak = 0
+        except worker.WorkerCrash as exc:
+            crash_streak += 1
+            execution["crashed_cells"].append(dict(lane=lane, fixture=f, error=str(exc)[:500]))
+            log(f"    CRASHED (cell refused, sweep continues): {str(exc)[:300]}")
+            if crash_streak >= crash_streak_limit:
+                execution["interrupted"] = f"{crash_streak} consecutive cell workers crashed; last: {exc}"
+            parts = {p: (None, str(exc)) for p in tuple(vref.PARTS) + tuple(extra_parts)}
+        except worker.WorkerFailure as exc:
+            execution["interrupted"] = str(exc)
+            parts = {p: (None, str(exc)) for p in tuple(vref.PARTS) + tuple(extra_parts)}
+        execution["fresh_cells"] += 1
+        record(lane, f, parts, time.monotonic() - c0)
+
+    cells = [(lane, f) for lane in lanes for f in fixtures]
+    position = 0
+    while position < len(cells) and not execution["interrupted"]:
+        if fresh_only:
+            fresh_cell(*cells[position])
+            position += 1
+            continue
+        chunk = cells[position:position + batch_cells]
+        position += len(chunk)
+        execution["batches"] += 1
+        progress(f"batch {execution['batches']}: {chunk[0][0]}/{chunk[0][1]} .. {chunk[-1][0]}/{chunk[-1][1]}")
+        last = [time.monotonic()]
+
+        def answered(index, result, chunk=chunk, last=last):
+            nonlocal crash_streak
+            for binding in result.get("bindings", []):
+                worker_bindings[(binding["module"], binding["sha256"])] = binding
+            crash_streak = 0
+            execution["batched_cells"] += 1
+            now = time.monotonic()
+            record(*chunk[index], result["value"], now - last[0])
+            last[0] = now
+
+        stop = worker.run_batch([cell_request(lane, f) for lane, f in chunk], timeout, log, answered)
+        if stop is None:
+            continue
+        lane, f = chunk[stop.index]
+        execution["batch_stops"].append(dict(stop.as_dict(), lane=lane, fixture=f))
+        log(f"    BATCH STOPPED at {lane}/{f} ({stop.kind}): {stop.message[:300]}; "
+            f"{len(chunk) - stop.index} remaining cell(s) of this batch run in fresh processes")
+        for lane, f in chunk[stop.index:]:
             if execution["interrupted"]:
                 break
-            c0 = time.monotonic()
-            log(f"  [{execution['completed_cells'] + 1}/{execution['total_cells']}] {lane}/{f}")
-            try:
-                X, yc, yr = data[f]
-                parts = isolated("cell", lane=lane, fixture=f, repeats=repeats,
-                                 extra_parts=extra_parts,
-                                 fixture_hashes=dict(X=harness._h(X), y_clf=harness._h(yc),
-                                                     y_reg=harness._h(yr), held=harness._h(held[f])))
-                crash_streak = 0
-            except worker.WorkerCrash as exc:
-                crash_streak += 1
-                execution["crashed_cells"].append(dict(lane=lane, fixture=f, error=str(exc)[:500]))
-                log(f"    CRASHED (cell refused, sweep continues): {str(exc)[:300]}")
-                if crash_streak >= crash_streak_limit:
-                    execution["interrupted"] = f"{crash_streak} consecutive cell workers crashed; last: {exc}"
-                parts = {p: (None, str(exc)) for p in tuple(vref.PARTS) + tuple(extra_parts)}
-            except worker.WorkerFailure as exc:
-                execution["interrupted"] = str(exc)
-                parts = {p: (None, str(exc)) for p in tuple(vref.PARTS) + tuple(extra_parts)}
-            cell_seconds[(lane, f)] = round(time.monotonic() - c0, 4)
-            cell = [dict(lane=lane, fixture=f, part=part, value=value, error=error,
-                         seconds=cell_seconds[(lane, f)]) for part, (value, error) in parts.items()]
-            raw.extend(cell)
-            judged = judge_rows(cell, table, families, unreferenced_lanes=stale, device_class=vclass,
-                                batch_revisions=getattr(harness, "BATCH_REVISIONS", {}))
-            execution["completed_cells"] += 1
-            cell_counts = {state: sum(r["state"] == state for r in judged) for state in vref.STATES}
-            log(f"    {cell_seconds[(lane, f)]:.1f}s: {detail_line(cell_counts)}")
-            progress(f"{lane}/{f}", judged)
-        lane_seconds[lane] = round(time.monotonic() - t0, 3)
-        if execution["interrupted"]:
-            break
+            execution["fallback_cells"].append(f"{lane}/{f}")
+            fresh_cell(lane, f)
+    for lane in lanes:
+        spent = [cell_seconds[(lane, f)] for f in fixtures if (lane, f) in cell_seconds]
+        if spent:
+            lane_seconds[lane] = round(sum(spent), 3)
     if execution["crashed_cells"]:
         log(f"# CRASHED: {len(execution['crashed_cells'])} cell worker(s), each refused: "
             + ", ".join(f"{c['lane']}/{c['fixture']}" for c in execution["crashed_cells"][:20]))
