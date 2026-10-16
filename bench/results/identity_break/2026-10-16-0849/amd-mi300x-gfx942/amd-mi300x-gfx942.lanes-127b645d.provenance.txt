@@ -1,0 +1,9 @@
+commit=5f636ccbff6568ce097d7ec7a857fc84ad596706
+label=amd-mi300x-gfx942
+backend=hip
+scope=routine shard= lanes_override=yes
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-124-generic x86_64 enc1-gpuvm005
+date=2026-10-16T03:47:02Z
+dirty_tracked=none
+record_sha256=d18b58cb98340c4caaa396eed9d1e65202978e0a20ea6614d9b8555aa4b94470
