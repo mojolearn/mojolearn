@@ -271,7 +271,10 @@ def world(tmp_path, cloud):
     w.key.chmod(0o600)
     (tmp_path / "t").mkdir()
     w.shim_log = tmp_path / "ssh_commands.jsonl"
-    w.env = dict(os.environ,
+    # Hermetic: a host's own MOJOLEARN_* settings (a CPU leg exports MOJOLEARN_BUILD_JOBS=8) must not
+    # reach the leg under test; it sees only what this world sets.
+    host_env = {k: v for k, v in os.environ.items() if not k.startswith("MOJOLEARN_")}
+    w.env = dict(host_env,
                  PATH=str(w.bin) + ":" + os.environ["PATH"],
                  TMPDIR=str(tmp_path / "t"),
                  BOXBIN=str(w.bin), SHIM_LOG=str(w.shim_log), FAKE_KFD=str(tmp_path / "kfd"),
