@@ -127,6 +127,10 @@ def _factories():
         "LassoCV": lambda: ml.LassoCV(max_iter=5, cv=3),
         "ElasticNetCV": lambda: ml.ElasticNetCV(max_iter=5, cv=3),
         "HDBSCAN": lambda: ml.HDBSCAN(min_samples=1),
+        # scikit-learn's own suite checks these with n_estimators=5 (its INIT_PARAMS); our default is
+        # CatBoost's 1000 rounds by design (Andrew, 2026-10-15), which only makes every check slower.
+        "GradientBoostingClassifier": lambda: ml.GradientBoostingClassifier(n_estimators=5),
+        "GradientBoostingRegressor": lambda: ml.GradientBoostingRegressor(n_estimators=5),
         # scikit-learn's own test settings for these two (its
         # _test_common/instance_generator.py INIT_PARAMS): with the default
         # 'omp' transform, or NMF's default 200 iterations, fit_transform and
