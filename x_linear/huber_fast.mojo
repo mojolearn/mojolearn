@@ -355,6 +355,32 @@ def hf_step_kernel(lb: FP, ls: IP, gc: FP, sums: FP, nf: Float32, d: Int32, p: I
     witness_end(wf, woff, nonce)
 
 
+def hf_result_kernel(lb: FP, ls: IP, res: FP, d: Int32, p: Int32, fi: Int32, m: Int32):
+    """huber_fit's result words from the device state, one thread per word:
+    coef d | intercept | scale | n_iter | 0 | theta P, every other word
+    zero (the layout `hg_result_kernel` writes). Copies plus one `fexp` (the
+    portable exp of x_linear/ops.mojo, the same bits as the host spelling it
+    replaces), so no bit changes."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var dd = Int(d)
+    var pp = Int(p)
+    if j >= Int(m):
+        return
+    var v = Float32(0)
+    if j < dd:
+        v = ld(lb, j)
+    elif j == dd:
+        v = ld(lb, dd) if fi != 0 else Float32(0)
+    elif j == dd + 1:
+        v = fexp(ld(lb, pp - 1))
+    elif j == dd + 2:
+        var it = ldi(ls, 1)
+        v = i2f(it if it >= 0 else -it)
+    elif j >= dd + 4 and j - dd - 4 < pp:
+        v = ld(lb, j - dd - 4)
+    st(res, j, v)
+
+
 def huber_fit_fast(
     ctx0: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, res: FP,
@@ -455,22 +481,19 @@ def huber_fit_fast(
         units += HF_BATCH
         if Int(hls[0]) != 0 or units >= max_units:
             break
-    var hlb = List[Float32](length=words, fill=Float32(0))
-    ctx.enqueue_copy(dst_ptr=hlb.unsafe_ptr(), src_buf=dlb)
+    # main's huber_fit words (coef, intercept, scale, n_iter, theta P after
+    # n_iter) written on the device by `hf_result_kernel`, then one copy
+    # into `res`: no host loop over the coefficients. `m` covers the three
+    # words after coef that the layout always holds, as before.
+    var m = max(n_out, d + 3)
+    var dres = ctx.enqueue_create_buffer[DType.float32](m)
+    ctx.enqueue_function[hf_result_kernel](
+        dlb.unsafe_ptr(), dls.unsafe_ptr(), dres.unsafe_ptr(), Int32(d), Int32(p),
+        Int32(1 if fi else 0), Int32(m), grid_dim=_hf_blocks(m), block_dim=HG_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=res, src_buf=dres)
     ctx.synchronize()
-    for i in range(n_out):
-        res.unsafe_store(i, Float32(0))
-    for j in range(d):
-        res.unsafe_store(j, hlb[j])
-    res.unsafe_store(d, hlb[d] if fi else Float32(0))
-    res.unsafe_store(d + 1, fexp(hlb[p - 1]))
-    var it = Int(hls[1])
-    res.unsafe_store(d + 2, i2f(it if it >= 0 else -it))
-    # main's huber_fit words: theta P after n_iter (hg_result_kernel)
-    for j in range(p):
-        if d + 4 + j < n_out:
-            res.unsafe_store(d + 4 + j, hlb[j])
-    _ = hlb^
+    _ = dres^
     _ = hls^
     _ = dx^
     _ = dy^
