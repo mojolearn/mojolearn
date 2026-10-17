@@ -1617,6 +1617,19 @@ def multiclass_hessian_batch_for[column: Int]() -> Bool:
 
 comptime MULTICLASS_HESSIAN_BATCH = multiclass_hessian_batch_for[TARGET_COLUMN]()
 
+
+def _check_removed_defines() -> Bool:
+    """Refusals for retired GBDT oracle defines. They live here, next to the code they named, not in
+    core/six_lane_experiment_guards.mojo: a line there marks every binding that imports core as changed
+    (a full rebuild and identity re-record for one GBDT refusal)."""
+    # Deleted 2026-10-17 (lane gbdt-host-loops-12): the multi-dimensional GBDT walk runs on the device; the oracle reads no
+    # Hessian row back, so the one-wait schedule has no arm. Recoverable at 13299f759^ (docs/TOMBSTONES.md).
+    comptime assert not is_defined["MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF"](), "removed: IDN_MULTI_HESS_ONE_WAIT retired with the oracle's host Hessian readback (the device walk reads the row stash)"
+    return True
+
+
+comptime GBDT_ORACLE_REMOVED_DEFINES_OK = _check_removed_defines()
+
 # TOMBSTONE: MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF (retired with its host arm) deleted 2026-10-17 by
 # lane/gbdt-host-loops-12; code recoverable at the deletion sha's parent. IDN_MULTI_HESS_ONE_WAIT (lane/fam-gbdt,
 # default on) waited once for all the blocked Hessian's per-row readbacks instead of once per row; the rows are no
@@ -2209,6 +2222,7 @@ def make_bin_optimized_oracle(
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
     the weights never move during estimation."""
+    comptime assert GBDT_ORACLE_REMOVED_DEFINES_OK, "retired GBDT oracle define"
     # `SingleBinDim()` and `Cursor.GetColumnCount()` (`pointwise_oracle.h
     # :57-64`): MultiClass carries `numClasses - 1` cursor planes and
     # `numClasses` leaf dimensions; everything else is 1 and 1.

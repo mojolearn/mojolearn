@@ -3171,4 +3171,4 @@ the parent of its deletion commit.
 - Patch: `experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch` (the deletion commit reversed, `pointwise_oracle.mojo` and
   `oracle_interface.mojo`; it also removes the host-interface kernels that commit added). Restoring it alone does not route a fit
   to the host walker: `_estimate_and_apply` refuses any walk no device walker takes.
-- Guard: `MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF` refused in `core/six_lane_experiment_guards.mojo`.
+- Guard: `MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF` refused in `gbdt/methods/leaves_estimation/pointwise_oracle.mojo` (`_check_removed_defines`, forced by `make_bin_optimized_oracle`), not in core: a core line rebuilds every binding.
