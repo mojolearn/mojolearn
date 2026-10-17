@@ -1,0 +1,13 @@
+{
+  "files": {
+    "mojolearn_amd-0.8.50-py3-none-manylinux_2_35_x86_64.whl": "71c7ee8f116760ff2ff9b674e8acafa78c1ade51fd3a4e7914926d349d76a7f1"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "f2bfd69ee5819c90887382e133c98b181fd2e75b"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.50"
+}
