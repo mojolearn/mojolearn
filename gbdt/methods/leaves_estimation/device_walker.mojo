@@ -776,14 +776,14 @@ def device_walk_enqueue_speculative(
     ctx: DeviceContext,
     mut oracle: BinOptimizedOracle,
     mut w: WalkBuffers,
-    count: Int,
+    evaluations: Int,
 ) raises:
-    """GBDT_WALK_DEV_STEP: `count` line-search evaluations, each at the
+    """GBDT_WALK_DEV_STEP: `evaluations` line-search evaluations, each at the
     control word's step (`walker_accept_kernel` formed it from the last
     flag), then the control word's copy home; no flag readback, no drain.
     The caller drains, then reads `device_walk_ctl_updated` /
     `device_walk_ctl_step`."""
-    for _ in range(count):  # driver-loop: over the walk's line-search evaluations
+    for _ in range(evaluations):  # driver-loop: over the walk's line-search evaluations
         _enqueue_move(ctx, oracle, w, Float64(0.0), True, step_from_dev=True)
         _enqueue_eval_and_decide(ctx, oracle, w, False, WALK_CTL_LINE)
     ctx.enqueue_copy(dst_ptr=w.h_ctl.unsafe_ptr(), src_buf=w.d_ctl)
