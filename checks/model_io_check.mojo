@@ -799,11 +799,32 @@ def evaluator_predict(
     launch_eval(ctx, gpu_model, quantized, n_feats, n_rows, results)
     ctx.enqueue_copy(dst_ptr=h_res.unsafe_ptr(), src_buf=results)
     ctx.synchronize()
+    # Past the drain, every buffer an enqueued copy or kernel touched (the
+    # step-33 race class). Mojo frees a local at its LAST NAMED USE: `hx`
+    # and `h1`..`h4` died right after their uploads were enqueued, so the
+    # next host allocation (`h1` reusing `hx`'s pinned block, then the
+    # border fill) could overwrite X before the async copy read it. On the
+    # MI325X that moved rows between two runs of the SAME model and put
+    # whole rows on wrong leaves (k = 3: 1822 of 3000 rows, |diff| 1.68);
+    # the evaluator kernels themselves are deterministic.
+    _ = hx^
+    _ = h1^
+    _ = h2^
+    _ = h3^
+    _ = h4^
+    _ = xdev^
+    _ = ev_borders^
+    _ = ev_off^
+    _ = ev_cnt^
+    _ = ev_bucket^
+    _ = quantized^
+    _ = gpu_model^
+    _ = results^
 
-    var out = List[Float32]()
+    var preds = List[Float32]()
     for r in range(n_rows):
-        out.append(h_res.unsafe_ptr().unsafe_load(r))
-    return out^
+        preds.append(h_res.unsafe_ptr().unsafe_load(r))
+    return preds^
 
 
 def check_evaluator_agrees(ctx: DeviceContext) raises:

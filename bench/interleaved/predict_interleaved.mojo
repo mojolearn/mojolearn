@@ -206,6 +206,18 @@ def main() raises:
     var cursor = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var h_cur = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     ctx.synchronize()
+    # past the drain, every staging buffer an upload above was enqueued
+    # from (step-33 race class: Mojo frees a local at its last named use,
+    # which for each of these was the enqueue of its async copy)
+    _ = hb^
+    _ = ht^
+    _ = hw^
+    _ = hx^
+    _ = hbo^
+    _ = he1^
+    _ = he2^
+    _ = he3^
+    _ = he4^
 
     # ---- train both models ONCE (untimed) ---------------------------------
     print(
