@@ -2175,46 +2175,34 @@ def train(
                     column_dev_slot.append(-1)
                     continue
             else:
-                var col = List[Float32]()
-                col.resize(n_rows, Float32(0.0))
-                memcpy(
-                    dest=col.unsafe_ptr(),
-                    src=x_src + f * n_rows,
-                    count=n_rows,
-                )
-                var maxc = 0
-                var seen = List[Bool]()
-                seen.resize(1, False)
-                for r in range(n_rows):
-                    var c = dense_category_code(col[r], f, r)
-                    if c > maxc:
-                        maxc = c
-                        seen.resize(maxc + 1, False)
-                    seen[c] = True
-                    codes.append(UInt32(c))
-                host_codes = True
-                unique_values = maxc + 1
-                if unique_values <= 1:
-                    raise Error(
-                        "Error: useless catFeature found (feature "
-                        + String(f)
-                        + " has one category)"
-                    )
-                for c in range(unique_values):
-                    if not seen[c]:
-                        raise Error(
-                            "cat_features column " + String(f)
-                            + " is not densely coded: category "
-                            + String(c)
-                            + " is absent from 0.." + String(maxc)
-                        )
+                # the dense-code pass on the device (`device_dense_codes`:
+                # `dense_category_code` per row, the cardinality, the
+                # one-category and denseness refusals by a reduce, the codes
+                # left resident): no host loop over the rows. Exact integers,
+                # so the codes, the cardinality and every table built from
+                # them are the host loop's.
+                var dc = device_dense_codes(ctx, x_src + f * n_rows, n_rows, f)
+                unique_values = dc.unique_values
+                dcodes = dc.codes
+                have_dcodes = True
                 if unique_values <= cat_params.one_hot_max_size:
+                    # the raw column is the code column (validated above)
+                    var col = List[Float32]()
+                    col.resize(unsafe_uninit_length=n_rows)
+                    memcpy(
+                        dest=col.unsafe_ptr(),
+                        src=x_src + f * n_rows,
+                        count=n_rows,
+                    )
                     columns.append(col^)
                     column_src_feature.append(-1)
                     column_one_hot.append(True)
                     column_ctr_grid.append(-1)
                     column_dev_slot.append(-1)
                     continue
+                # the host table builder's copy of the codes: one bulk copy
+                codes = read_codes(ctx, dcodes, n_rows)
+                host_codes = True
 
             # lane cpu4-gbdt: every calcer below reads the codes on the
             # device; the host codes feed only the host table builder
