@@ -224,15 +224,40 @@ def fa_gram_tiles(d: Int) -> Int:
     return (d + FG_TILE - 1) // FG_TILE
 
 
-def fa_gram_parts(nrows: Int) -> Int:
-    """Partials (grid y) over nrows rows."""
-    return (nrows + FG_ROWS - 1) // FG_ROWS if nrows > 0 else 1
+#: (FAST + Apple, default OFF, lane apple-slow-paths 2026-10-17; A/B owed)
+#: rows per Gram partial shrink with n so the tile pass has at least
+#: FG_MIN_PARTS threadgroups per tile pair: at the fixed FG_ROWS a small n
+#: (n <= 2 FG_ROWS) ran the whole pass on 1-3 threadgroups of a 19-80 core
+#: GPU, each walking 8192 rows of double-float adds in series. The row count
+#: is ceil(n / FG_MIN_PARTS) rounded up to a slab, at least FG_MIN_ROWS
+#: (16 slabs: the fold's nz partial reads stay below n / FG_MIN_ROWS) and at
+#: most FG_ROWS (large n keeps the old partials). FG_MIN_PARTS = 64 covers
+#: the threadgroup slots of the Apple GPUs we run (a hardware count, not a
+#: dataset shape). Moves FAST bits (the fold order over partials) only.
+comptime FA_GRAM_SPREAD = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_FAST_GRAM_SPREAD"]()
+comptime FG_MIN_PARTS = 64
+comptime FG_MIN_ROWS = 16 * FG_SLAB
 
 
-def fa_gram_tile_kernel(x: F32Ptr, mean: F32Ptr, part: F32Ptr, n_in: Int32, d_in: Int32, nt_in: Int32):
+def fa_gram_rows(nrows: Int) -> Int:
+    """Rows per partial (see FA_GRAM_SPREAD); FG_ROWS without it."""
+    comptime if FA_GRAM_SPREAD:
+        var want = (nrows + FG_MIN_PARTS - 1) // FG_MIN_PARTS
+        want = ((want + FG_SLAB - 1) // FG_SLAB) * FG_SLAB
+        return min(FG_ROWS, max(FG_MIN_ROWS, want))
+    else:
+        return FG_ROWS
+
+
+def fa_gram_parts(nrows: Int, rows: Int) -> Int:
+    """Partials (grid y) over nrows rows, `rows` rows each."""
+    return (nrows + rows - 1) // rows if nrows > 0 else 1
+
+
+def fa_gram_tile_kernel(x: F32Ptr, mean: F32Ptr, part: F32Ptr, n_in: Int32, d_in: Int32, nt_in: Int32, rows_in: Int32):
     """Block (pair, z): pair = block_idx.x names an upper-triangle tile
     (ti <= tj) of the nt x nt tile grid, z = block_idx.y the partial over rows
-    [z FG_ROWS, min(n, (z + 1) FG_ROWS)). Slabs of FG_SLAB rows of the tile's
+    [z rows, min(n, (z + 1) rows)), rows = `fa_gram_rows(n)`. Slabs of FG_SLAB rows of the tile's
     two column ranges, centered at the mean as they are loaded (columns past
     d and rows past the range load 0), go to threadgroup memory; thread
     (tr, tc) accumulates its 4 x 4 cells over the slab. part[z d d + i d + j]
@@ -250,8 +275,9 @@ def fa_gram_tile_kernel(x: F32Ptr, mean: F32Ptr, part: F32Ptr, n_in: Int32, d_in
     var tj = ti + rem
     var i0 = ti * FG_TILE
     var j0 = tj * FG_TILE
-    var r0 = z * FG_ROWS
-    var r1 = min(n, r0 + FG_ROWS)
+    var rows = Int(rows_in)
+    var r0 = z * rows
+    var r1 = min(n, r0 + rows)
     var tid = Int(thread_idx.x)
     var tr = tid // 16
     var tc = tid - tr * 16
@@ -412,7 +438,7 @@ def _df_sqrt(x: DF) -> DF:
     return _df_fts(s, r[0] / _rn(s, s))
 
 
-def fa_gram_tile_df_kernel(x: F32Ptr, mean: F32Ptr, part: F32Ptr, n_in: Int32, d_in: Int32, nt_in: Int32):
+def fa_gram_tile_df_kernel(x: F32Ptr, mean: F32Ptr, part: F32Ptr, n_in: Int32, d_in: Int32, nt_in: Int32, rows_in: Int32):
     """`fa_gram_tile_kernel` (same tiles, slabs and partials) with every cell
     accumulated in double-float: each product exact (`_df_prod`), added by
     `_df_add`. part[z 2 d d + i d + j] the hi words, part[z 2 d d + d d +
@@ -430,8 +456,9 @@ def fa_gram_tile_df_kernel(x: F32Ptr, mean: F32Ptr, part: F32Ptr, n_in: Int32, d
     var tj = ti + rem
     var i0 = ti * FG_TILE
     var j0 = tj * FG_TILE
-    var r0 = z * FG_ROWS
-    var r1 = min(n, r0 + FG_ROWS)
+    var rows = Int(rows_in)
+    var r0 = z * rows
+    var r1 = min(n, r0 + rows)
     var tid = Int(thread_idx.x)
     var tr = tid // 16
     var tc = tid - tr * 16
@@ -573,7 +600,8 @@ def fa_gram_py(x: PythonObject, mean: PythonObject, g: PythonObject, var_: Pytho
     if d > FA_MAX_D:
         raise Error("x_decomp fa_gram: more than " + String(FA_MAX_D) + " features")
     var nt = fa_gram_tiles(d)
-    var nz = fa_gram_parts(n)
+    var rows = fa_gram_rows(n)
+    var nz = fa_gram_parts(n, rows)
     var px = _ptr(_id(x), n * d)
     var pm = _ptr(_id(mean), d)
     var words = 2 if FA_GRAM_DF else 1
@@ -584,14 +612,14 @@ def fa_gram_py(x: PythonObject, mean: PythonObject, g: PythonObject, var_: Pytho
     var ctx = xd_ctx()
     comptime if FA_GRAM_DF:
         ctx.enqueue_function[fa_gram_tile_df_kernel](
-            px, pm, pp, Int32(n), Int32(d), Int32(nt), grid_dim=(nt * (nt + 1) // 2, nz, 1), block_dim=FG_TPB
+            px, pm, pp, Int32(n), Int32(d), Int32(nt), Int32(rows), grid_dim=(nt * (nt + 1) // 2, nz, 1), block_dim=FG_TPB
         )
         ctx.enqueue_function[fa_gram_fold_df_kernel](
             pp, pg, pv, Int32(d), Int32(nz), Float32(1.0 / Float64(n)), grid_dim=_blocks(d * d), block_dim=TPB
         )
     else:
         ctx.enqueue_function[fa_gram_tile_kernel](
-            px, pm, pp, Int32(n), Int32(d), Int32(nt), grid_dim=(nt * (nt + 1) // 2, nz, 1), block_dim=FG_TPB
+            px, pm, pp, Int32(n), Int32(d), Int32(nt), Int32(rows), grid_dim=(nt * (nt + 1) // 2, nz, 1), block_dim=FG_TPB
         )
         ctx.enqueue_function[fa_gram_fold_kernel](
             pp, pg, pv, Int32(d), Int32(nz), Float32(1.0 / Float64(n)), grid_dim=_blocks(d * d), block_dim=TPB
@@ -1216,6 +1244,8 @@ def fa_defines_py() raises -> PythonObject:
     # (python/mojolearn/_expansion_decomp.py sizes G's buffer from it)
     comptime if FA_GRAM_DF:
         s += "MOJOLEARN_FA_GRAM_DF,"
+    comptime if FA_GRAM_SPREAD:
+        s += "MOJOLEARN_FA_FAST_GRAM_SPREAD,"
     comptime if FA_FAST_APPLE and FA_GRAM_QOLD:
         s += "MOJOLEARN_FA_GRAM_QOLD,"
     return PythonObject(s)
