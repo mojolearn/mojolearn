@@ -66,5 +66,5 @@ trait LeavesEstimationOracle:
         """
         ...
 
-    def regularize(self, mut point: List[Float32]):
+    def regularize(self, mut point: List[Float32]) raises:
         ...

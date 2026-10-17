@@ -150,7 +150,15 @@ from gbdt.targets.kernel.yeti_rank import (
 )
 from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
-from std.gpu import block_idx, thread_idx
+from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast, memcpy
+from checks.soft_f64 import (
+    sf64_add,
+    sf64_from_f32,
+    sf64_from_int,
+    sf64_is_nan,
+    sf64_lt,
+)
 
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -233,33 +241,116 @@ def merge_stage_times(mut dst: StageTimes, src: StageTimes):
             dst.ns.append(src.ns[i])
 
 
-def _mirror_second_der_row(
-    mut second_der: List[Float64],
-    h_stats: HostBuffer[DType.float32],
-    off: Int,
-    bin_stride: Int,
-    row: Int,
-    hbs: Int,
-    bin_count: Int,
-    lambda_reg: Float64,
+# TOMBSTONE: the GPU oracle's multi-dimensional host walk readbacks (no define) deleted 2026-10-17 by lane/gbdt-host-loops-12
+# (`_mirror_second_der_row`, the host Hessian mirror); code recoverable at the deletion sha's parent (docs/TOMBSTONES.md,
+# "GPU oracle multi-dimensional host walk"). The walk runs on the device: `device_walker.device_multi_walk_estimate`.
+# Restore: git apply experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch.
+
+
+# ===========================================================================
+# THE HOST-INTERFACE KERNELS (lane gbdt-host-loops-12)
+#
+# `LeavesEstimationOracle`'s host interface (`write_value_and_first_
+# derivatives`, `write_second_derivatives`, `regularize`) is what
+# `descent_helpers.newton_like_walker_estimate` reads. No GPU fit walks on the
+# host any more (every walk is `device_walker.mojo`'s); the interface stays for
+# the checks that drive the oracle through the host walker. Its per-leaf
+# arithmetic runs in these kernels, in soft-float64 (the bits of a hardware
+# double unit: correctly rounded), and comes home in one bulk copy.
+# ===========================================================================
+
+
+def single_dim_derivatives_kernel(
+    part_stats: MutPointer[Float32, MutAnyOrigin],
+    lambda_bits: UInt64,
+    n_leaves_in: Int32,
+    out: MutPointer[UInt64, MutAnyOrigin],
 ):
-    """Mirror Hessian row `row` of every bin from the read-back partition
-    stats (`h_stats[off + bin * bin_stride + col]`, `col <= row`) into both
-    triangles of the per-bin `hbs x hbs` blocks (`:166-180`); the diagonal
-    takes `+ lambda` (`:178`). Shared by the per-row wait path and the
-    IDENTICAL one-wait arm (`IDN_MULTI_HESS_ONE_WAIT`) so both mirror the
-    same way."""
-    var matrix_size = hbs * hbs
-    var column_count = row + 1
-    for bin in range(bin_count):  # small-loop(bin_count: feature borders, never rows): the per-bin Hessian block of one class row
-        var base = bin * matrix_size
-        for col in range(column_count):
-            var val = Float64(h_stats[off + bin * bin_stride + col])
-            if col == row:
-                second_der[base + row * hbs + row] = val + lambda_reg
-            else:
-                second_der[base + row * hbs + col] = val
-                second_der[base + col * hbs + row] = val
+    """`out[leaf] = double(sum der)`, `out[n + leaf] = double(sum der2) +
+    lambda` (`finish_single_dim_evaluation`'s gradient and the cached
+    `Der2AtPoint`, `pointwise_oracle.cpp:86-89`), one thread per leaf."""
+    var n = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n:
+        return
+    out.unsafe_store(leaf, sf64_from_f32(part_stats.unsafe_load(2 * leaf)))
+    out.unsafe_store(
+        n + leaf,
+        sf64_add(sf64_from_f32(part_stats.unsafe_load(2 * leaf + 1)), lambda_bits),
+    )
+
+
+def gradient_hessian_fill_kernel(
+    weight_bits: MutPointer[UInt64, MutAnyOrigin],
+    lambda_bits: UInt64,
+    n_leaves_in: Int32,
+    dim_in: Int32,
+    out: MutPointer[UInt64, MutAnyOrigin],
+):
+    """GRADIENT's `WriteSecondDerivatives` (`:185-193`): `out[leaf * dim + d]
+    = WeightsCpu[leaf] + lambda` for every approx dimension, one thread per
+    slot. `weight_bits` are the host doubles' bit patterns."""
+    var dim = Int(dim_in)
+    var total = Int(n_leaves_in) * dim
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= total:
+        return
+    out.unsafe_store(i, sf64_add(weight_bits.unsafe_load(i // dim), lambda_bits))
+
+
+def regularize_point_f64_kernel(
+    point: MutPointer[Float32, MutAnyOrigin],
+    weight_bits: MutPointer[UInt64, MutAnyOrigin],
+    min_leaf_weight_bits: UInt64,
+    n_leaves_in: Int32,
+    dim_in: Int32,
+):
+    """`RegularizeImpl` (`oracle_interface.h:43-52`) over `WeightsCpu`'s bit
+    patterns: every component of a leaf whose weight is under
+    `MinLeafWeight` becomes +0.0 (a NaN weight compares false: keep), one
+    thread per leaf."""
+    var n = Int(n_leaves_in)
+    var dim = Int(dim_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n:
+        return
+    var w = weight_bits.unsafe_load(leaf)
+    if (not sf64_is_nan(w)) and sf64_lt(w, min_leaf_weight_bits):
+        for d in range(dim):
+            point.unsafe_store(leaf * dim + d, Float32(0.0))
+
+
+def regularize_point_device_kernel(
+    point: MutPointer[Float32, MutAnyOrigin],
+    weight_stats: MutPointer[Float32, MutAnyOrigin],
+    leaf_sizes: MutPointer[UInt32, MutAnyOrigin],
+    has_weights: Int32,
+    min_leaf_weight_bits: UInt64,
+    n_leaves_in: Int32,
+    dim_in: Int32,
+):
+    """`regularize_point_f64_kernel` with `WeightsCpu` formed on the device
+    from what it is made of: the weight fold's float32 sum widened
+    (`weight_stats`, a weighted fit) or the leaf's row count (`leaf_sizes`),
+    the constructor's two arms bit for bit."""
+    var n = Int(n_leaves_in)
+    var dim = Int(dim_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n:
+        return
+    var w: UInt64
+    if has_weights != Int32(0):
+        w = sf64_from_f32(weight_stats.unsafe_load(leaf))
+    else:
+        w = sf64_from_int(Int(leaf_sizes.unsafe_load(leaf)))
+    if (not sf64_is_nan(w)) and sf64_lt(w, min_leaf_weight_bits):
+        for d in range(dim):
+            point.unsafe_store(leaf * dim + d, Float32(0.0))
+
+
+def _leaf_blocks(n: Int) -> Int:
+    var g = (n + 255) // 256
+    return g if g > 0 else 1
 
 @fieldwise_init
 struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
@@ -410,6 +501,26 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: every oracle built the ordinary way.
     var bin_keyed: Bool
     var bk_partials: Optional[DeviceBuffer[DType.float32]]
+    #: lane gbdt-host-loops-12: the host interface's double staging (the
+    #: soft-float64 bit patterns the interface kernels write, read home in
+    #: one bulk copy), allocated on the interface's first use. None on every
+    #: GPU fit: no fit walks through the host interface.
+    var d_f64: Optional[DeviceBuffer[DType.uint64]]
+    var h_f64: Optional[HostBuffer[DType.uint64]]
+
+    def _f64_staging(mut self) raises:
+        """Allocate `d_f64` / `h_f64` once, at the widest length the host
+        interface writes: the single-dim derivatives (`2 * bin_count`) or the
+        Gradient arm's weights plus Hessian (`bin_count * (1 + dims)`)."""
+        if self.d_f64.__bool__():
+            return
+        var n = self.bin_count * (1 + self.single_bin_dim)
+        if 2 * self.bin_count > n:
+            n = 2 * self.bin_count
+        if n < 1:
+            n = 1
+        self.d_f64 = Optional(self.ctx.enqueue_create_buffer[DType.uint64](n))
+        self.h_f64 = Optional(self.ctx.enqueue_create_host_buffer[DType.uint64](n))
 
     def settle_weights(mut self) raises:
         """Retired with the host walk (lane cpu4-gbdt): a deferred-weights
@@ -615,7 +726,15 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             self.times.end(self.ctx, "est.readback")
             self.finish_single_dim_evaluation(value, gradient)
             return
-        self._write_multi_dim_value_and_first_derivatives(value, gradient)
+        # lane gbdt-host-loops-12: the multi-dimensional walk runs on the
+        # device (`enqueue_multi_dim_evaluation`,
+        # `device_walker.device_multi_walk_estimate`); its host readback arm
+        # is deleted (TOMBSTONE above `multi_value_blocks`)
+        raise Error(
+            "WriteValueAndFirstDerivatives: a multi-dimensional oracle"
+            " (SingleBinDim " + String(self.single_bin_dim) + ") walks on the"
+            " device (device_walker.device_multi_walk_estimate)"
+        )
 
     def enqueue_single_dim_evaluation(mut self, readback: Bool = True) raises:
         """The single-dim arm of `write_value_and_first_derivatives` up to
@@ -778,9 +897,21 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 grid_dim=(1, 1, 1),
                 block_dim=(REDUCE_LANES_BLOCK, 1, 1),
             )
+            # lane gbdt-host-loops-12: the gradient and the cached der2 +
+            # lambda formed on the device (soft-float64, the host's bits),
+            # one copy home; `finish_single_dim_evaluation` copies them in
+            self._f64_staging()
+            self.ctx.enqueue_function[single_dim_derivatives_kernel](
+                self.d_part_stats.unsafe_ptr(),
+                bitcast[DType.uint64](self.lambda_reg),
+                Int32(self.bin_count),
+                self.d_f64.value().unsafe_ptr(),
+                grid_dim=(_leaf_blocks(self.bin_count), 1, 1),
+                block_dim=(256, 1, 1),
+            )
             self.ctx.enqueue_copy(
-                dst_ptr=self.h_part_stats.unsafe_ptr(),
-                src_buf=self.d_part_stats,
+                dst_ptr=self.h_f64.value().unsafe_ptr(),
+                src_buf=self.d_f64.value(),
             )
             self.ctx.enqueue_copy(
                 dst_ptr=self.h_fv.unsafe_ptr(),
@@ -793,24 +924,25 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         """The host half of the single-dim arm, after the drain that made
         `enqueue_single_dim_evaluation`'s copies runs."""
         if True:
+            # `ReadReduce(der)` and `(*Der2AtPoint)[i] += lambda` (`:86-89`),
+            # formed on the device (`single_dim_derivatives_kernel`): two bulk
+            # copies of the doubles' bit patterns, no element loop
+            var n = self.bin_count
             gradient.clear()
             self.cached_der2.clear()
-            for leaf in range(self.bin_count):
-                gradient.append(
-                    Float64(
-                        self.h_part_stats.unsafe_ptr().unsafe_load(
-                            2 * leaf
-                        )
-                    )
+            if n > 0:
+                var hp = self.h_f64.value().unsafe_ptr()
+                gradient.resize(unsafe_uninit_length=n)
+                memcpy(
+                    dest=gradient.unsafe_ptr().bitcast[UInt64](),
+                    src=hp,
+                    count=n,
                 )
-                # `(*Der2AtPoint)[i] += lambda` (`:86-89`)
-                self.cached_der2.append(
-                    Float64(
-                        self.h_part_stats.unsafe_ptr().unsafe_load(
-                            2 * leaf + 1
-                        )
-                    )
-                    + self.lambda_reg
+                self.cached_der2.resize(unsafe_uninit_length=n)
+                memcpy(
+                    dest=self.cached_der2.unsafe_ptr().bitcast[UInt64](),
+                    src=hp + n,
+                    count=n,
                 )
             # `(*value) = static_cast<float>(ReadReduce(valueGpu)[0]);`
             # (`pointwise_oracle.cpp:106`). THE VALUE IS A FLOAT32 NUMBER
@@ -829,11 +961,29 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # (`enqueue_single_dim_evaluation`), one float read here
             value = Float64(self.h_fv.unsafe_ptr().unsafe_load(0))
 
-    def _write_multi_dim_value_and_first_derivatives(
-        mut self, mut value: Float64, mut gradient: List[Float64]
+    # TOMBSTONE: the GPU oracle's multi-dimensional host walk readbacks (no define) deleted 2026-10-17 by lane/gbdt-host-loops-12
+    # (`_write_multi_dim_value_and_first_derivatives`: the der readback, the MultiClass reconstruction on the host and
+    # the host float32 value fold); code recoverable at the deletion sha's parent (docs/TOMBSTONES.md, "GPU oracle
+    # multi-dimensional host walk"). Restore: git apply experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch.
+
+    def multi_value_blocks(self) -> Int:
+        """How many value partials the multi-dimensional evaluation writes
+        into `d_fv` (one per multilogit block of rows)."""
+        return multilogit_blocks(self.n_rows)
+
+    def enqueue_multi_dim_evaluation(
+        mut self, mut d_der_stash: DeviceBuffer[DType.float32]
     ) raises:
-        """The rowSize > 1 arm of `write_value_and_first_derivatives`."""
-        # ---- the rowSize > 1 arm: the multiclass family --------------
+        """The rowSize > 1 arm of `write_value_and_first_derivatives`
+        (`pointwise_oracle.cpp:59-112`) for the device walk, ENQUEUED with no
+        wait and no host read: the value-and-der launch of the loss, the
+        per-leaf reduce of the `cursorDim` der planes
+        (`ComputePartitionStats(der, Offsets, &reducedDer)`, `:83`), and its
+        stash into `d_der_stash[leaf * cursor_dim + d]` (the next reduce, a
+        Hessian row's, rewrites `d_multi_stats`). The value partials stay in
+        `d_fv` (`multi_value_blocks()` of them). MultiClass's pinned gradient
+        component and the value fold are the device walk's
+        (`device_walker.mojo`)."""
         var is_ova = self.objective == OBJECTIVE_MULTICLASS_OVA
         var is_multi_rmse = self.objective == OBJECTIVE_MULTIRMSE
         if (
@@ -846,7 +996,6 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 " family only; objective " + String(self.objective)
                 + " has SingleBinDim > 1 without a der calcer"
             )
-        var ml_blocks = multilogit_blocks(self.n_rows)
         self.times.begin(self.ctx)
         if is_multi_rmse:
             # `MultiRMSEValueAndDer` (`multiclass_targets.cpp:100-108`): the
@@ -889,8 +1038,6 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 self.d_mag_dummy, False,
             )
         self.times.end(self.ctx, "est.approx")
-        # `ComputePartitionStats(der, Offsets, &reducedDer)` (`:83`), with
-        # `cursorDim` columns instead of one
         self.times.begin(self.ctx)
         compute_partition_stats(
             self.ctx, self.bin_count, 0, self.cursor_dim, self.n_rows,
@@ -898,62 +1045,120 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             self.d_multi_der, self.d_multi_partials, self.d_multi_stats,
             sm_count=self.sm_count,
         )
+        self._stash_multi_stats(
+            d_der_stash, 0, self.bin_count * self.cursor_dim
+        )
         self.times.end(self.ctx, "est.pstats")
-        self.times.begin(self.ctx)
-        self.ctx.enqueue_copy(
-            dst_ptr=self.h_multi_stats.unsafe_ptr(),
-            src_buf=self.d_multi_stats,
-        )
-        self.ctx.enqueue_copy(
-            dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
-        )
-        self.ctx.synchronize()
-        self.times.end(self.ctx, "est.readback")
-
-        # `DerAtPoint = ReadReduce(reducedDer)` (`:84`)
+        # `DerAtPoint` / `Der2AtPoint` live on the device on this arm
         self.der_at_point.clear()
-        for i in range(self.bin_count * self.cursor_dim):
-            self.der_at_point.append(
-                Float64(self.h_multi_stats.unsafe_ptr().unsafe_load(i))
-            )
-
-        # their MultiClass reconstruction (`:93-101`), gated on the LOSS
-        # exactly as theirs is: `if (DerCalcer->GetType() ==
-        # ELossFunction::MultiClass)`. MultiClassOneVsAll has no pinned
-        # class, so `SingleBinDim() == cursorDim` and the gradient is
-        # their `(*gradient) = *DerAtPoint` (`:102-104`) unchanged.
-        gradient.clear()
-        # driver-loop: over the leaf gradient slots (bins x dims)
-        for _ in range(self.bin_count * self.single_bin_dim):
-            gradient.append(Float64(0.0))
-        if is_ova or is_multi_rmse:
-            # MultiRMSE: `SingleBinDim() == cursorDim` too, no pinned plane
-            for i in range(self.bin_count * self.cursor_dim):
-                gradient[i] = self.der_at_point[i]
-        else:
-            for bin in range(self.bin_count):
-                var total = Float64(0.0)
-                for dim in range(self.cursor_dim):
-                    var val = self.der_at_point[
-                        bin * self.cursor_dim + dim
-                    ]
-                    gradient[bin * self.single_bin_dim + dim] = val
-                    total += val
-                # `sum of der is equal to zero` (`:100`)
-                gradient[
-                    bin * self.single_bin_dim + self.cursor_dim
-                ] = -total
-
-        # der2 is NOT cached on this arm; `write_second_derivatives`
-        # recomputes it row by row, exactly as theirs does
         self.cached_der2.clear()
 
-        # the same `static_cast<float>` (`pointwise_oracle.cpp:106`) as the
-        # single-dim arm: fold the block partials in FLOAT32, their width.
-        var mfv32 = Float32(0.0)
-        for b in range(ml_blocks):
-            mfv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
-        value = Float64(mfv32)
+    def enqueue_multi_dim_hessian(
+        mut self, mut d_hess_stash: DeviceBuffer[DType.float32]
+    ) raises -> Int:
+        """NEWTON's `WriteSecondDerivatives` on the multi-dimensional arm
+        (`pointwise_oracle.cpp:125-184`) at the current cursor, ENQUEUED, the
+        per-leaf float32 reductions stashed for the device walk's direction
+        kernels. Returns the stash's layout:
+
+          0  BLOCKED, row by row (MultiClass, MultiRMSE; DEVIATION 75's one
+             reduce per row at the row's own column count, which sets the
+             fold's chunking): row `r` (columns `0..r`) at
+             `bin_count * r (r + 1) / 2 + leaf * (r + 1) + c`, the layout
+             `multiclass_one_step_kernel` reads;
+          1  BLOCKED, every row in one reduce (`MULTICLASS_HESSIAN_BATCH`,
+             FAST Apple): `leaf * tri + r (r + 1) / 2 + c`;
+          2  DIAGONAL (MultiClassOneVsAll, `hessianBlockSize == 1` with
+             `rowSize > 1`, `:129-133`): `leaf * cursor_dim + d`.
+
+        `lambda` is the direction kernel's (one add on the diagonal, the
+        host mirror's `val + lambda`).
+
+        NOTE WHICH ROWS EXIST (MultiClass): the loop runs over all
+        `numClasses` rows, the last one the PINNED class's
+        (`multilogit.cu:157-158`); a loop stopped at `cursorDim` would build
+        a matrix one row short."""
+        if self.estimation_method != LEAF_ESTIMATION_NEWTON:
+            raise Error(
+                "enqueue_multi_dim_hessian: Newton only; Gradient's Hessian"
+                " is the leaf weight (the device walk forms it)"
+            )
+        self.times.begin(self.ctx)
+        if self.objective == OBJECTIVE_MULTICLASS_OVA:
+            launch_one_vs_all_second_der(
+                self.ctx, self.num_classes, self.n_rows,
+                self.d_weights, self.has_weights,
+                self.d_cursor, self.n_rows,
+                self.d_multi_der, self.n_rows,
+            )
+            compute_partition_stats(
+                self.ctx, self.bin_count, 0, self.cursor_dim,
+                self.n_rows,
+                self.d_leaves, self.d_p_off, self.d_p_sz,
+                self.d_multi_der, self.d_multi_partials,
+                self.d_multi_stats,
+                sm_count=self.sm_count,
+            )
+            self._stash_multi_stats(
+                d_hess_stash, 0, self.bin_count * self.cursor_dim
+            )
+            self.times.end(self.ctx, "est.pstats")
+            return 2
+        var hbs = self.hessian_block_size()
+        comptime if MULTICLASS_HESSIAN_BATCH:
+            # FAST Apple: every row in one launch into the lower-triangle
+            # planes the scratch was sized for (`_oracle_tri_planes`), one
+            # reduce over all of them
+            var tri = _oracle_tri_planes(self.objective, hbs, self.n_rows)
+            if tri != hbs:
+                launch_multilogit_second_der_all_rows(
+                    self.ctx, self.num_classes, self.n_rows,
+                    self.d_weights, self.has_weights,
+                    self.d_cursor, self.n_rows,
+                    self.d_multi_der, self.n_rows,
+                )
+                compute_partition_stats(
+                    self.ctx, self.bin_count, 0, tri, self.n_rows,
+                    self.d_leaves, self.d_p_off, self.d_p_sz,
+                    self.d_multi_der, self.d_multi_partials,
+                    self.d_multi_stats,
+                    sm_count=self.sm_count,
+                )
+                self._stash_multi_stats(d_hess_stash, 0, self.bin_count * tri)
+                self.times.end(self.ctx, "est.pstats")
+                return 1
+        # driver-loop: over the Hessian rows of one leaf block (the class dimensions)
+        for row in range(hbs):
+            var column_count = row + 1
+            if self.objective == OBJECTIVE_MULTIRMSE:
+                # `MultiRMSESecondDerRow` (`multiclass_targets.cpp:146-156`):
+                # zeros left of the diagonal, `weight` on it
+                launch_multi_rmse_second_der(
+                    self.ctx, self.n_rows,
+                    self.d_weights, self.has_weights,
+                    self.d_multi_der, row, self.n_rows,
+                )
+            else:
+                launch_multilogit_second_der(
+                    self.ctx, self.num_classes, self.n_rows,
+                    self.d_weights, self.has_weights,
+                    self.d_cursor, self.n_rows,
+                    self.d_multi_der, row, self.n_rows,
+                )
+            compute_partition_stats(
+                self.ctx, self.bin_count, 0, column_count, self.n_rows,
+                self.d_leaves, self.d_p_off, self.d_p_sz,
+                self.d_multi_der, self.d_multi_partials,
+                self.d_multi_stats,
+                sm_count=self.sm_count,
+            )
+            self._stash_multi_stats(
+                d_hess_stash,
+                self.bin_count * ((row * (row + 1)) // 2),
+                self.bin_count * column_count,
+            )
+        self.times.end(self.ctx, "est.pstats")
+        return 0
 
     def _stash_multi_stats(
         mut self,
@@ -1075,12 +1280,51 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # `:185-193`, and note the INNER LOOP over `rowSize`: the
             # weight is repeated across every approx dimension, so a
             # multi-dimensional Gradient fit gets `rowSize` copies of its
-            # leaf weight rather than one.
+            # leaf weight rather than one. Formed on the device
+            # (`gradient_hessian_fill_kernel`) from `WeightsCpu`'s bit
+            # patterns, one bulk copy each way.
+            var n = self.bin_count
+            var dim = self.single_bin_dim
+            if len(self.weights_cpu) != n:
+                raise Error(
+                    "WriteSecondDerivatives (Gradient): WeightsCpu holds "
+                    + String(len(self.weights_cpu)) + " for "
+                    + String(n) + " bins (a deferred-weights oracle walks"
+                    " on the device)"
+                )
             second_der.clear()
-            for leaf in range(self.bin_count):
-                var w = self.weights_cpu[leaf] + self.lambda_reg
-                for _ in range(self.single_bin_dim):
-                    second_der.append(w)
+            if n == 0:
+                return
+            self._f64_staging()
+            var hp = self.h_f64.value().unsafe_ptr()
+            memcpy(
+                dest=hp,
+                src=self.weights_cpu.unsafe_ptr().bitcast[UInt64](),
+                count=n,
+            )
+            self.ctx.enqueue_copy(
+                dst_buf=self.d_f64.value(), src_ptr=hp
+            )
+            var dp = self.d_f64.value().unsafe_ptr()
+            self.ctx.enqueue_function[gradient_hessian_fill_kernel](
+                dp,
+                bitcast[DType.uint64](self.lambda_reg),
+                Int32(n),
+                Int32(dim),
+                dp + n,
+                grid_dim=(_leaf_blocks(n * dim), 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            self.ctx.enqueue_copy(
+                dst_ptr=hp, src_buf=self.d_f64.value()
+            )
+            self.ctx.synchronize()
+            second_der.resize(unsafe_uninit_length=n * dim)
+            memcpy(
+                dest=second_der.unsafe_ptr().bitcast[UInt64](),
+                src=hp + n,
+                count=n * dim,
+            )
             return
         if self.estimation_method != LEAF_ESTIMATION_NEWTON:
             raise Error(
@@ -1088,56 +1332,26 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 " the walker; Exact replaces it"
             )
 
-        # ---- the BLOCKED arm (`pointwise_oracle.cpp:125-184`) --------
-        if self.hessian_block_size() > 1:
-            self._write_blocked_second_derivatives(second_der)
-            return
-
-        # ---- DIAGONAL but MULTI-COLUMN: MultiClassOneVsAll -----------
-        # `hessianBlockSize == 1` with `rowSize > 1` is their generic
-        # blocked path at `blockCount == rowSize` (`:129-133`), which
-        # degenerates to one launch of `ComputeSecondDerRowLowerTriangle`
-        # at row 0 producing `rowSize` columns. That IS the OneVsAll
-        # second-der kernel, which writes every class plane in one go
-        # because its Hessian has no off-diagonal.
-        if self.objective == OBJECTIVE_MULTICLASS_OVA:
-            launch_one_vs_all_second_der(
-                self.ctx, self.num_classes, self.n_rows,
-                self.d_weights, self.has_weights,
-                self.d_cursor, self.n_rows,
-                self.d_multi_der, self.n_rows,
+        # TOMBSTONE: the GPU oracle's multi-dimensional host walk readbacks (no define) deleted 2026-10-17 by
+        # lane/gbdt-host-loops-12 (the BLOCKED arm's host mirror, `_write_blocked_second_derivatives`, and the
+        # MultiClassOneVsAll arm's host lambda add); code recoverable at the deletion sha's parent (docs/TOMBSTONES.md,
+        # "GPU oracle multi-dimensional host walk"). Newton's multi-dimensional Hessian is
+        # `enqueue_multi_dim_hessian`, read by the device walk's direction kernels.
+        # Restore: git apply experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch.
+        if self.single_bin_dim > 1:
+            raise Error(
+                "WriteSecondDerivatives: the multi-dimensional Newton"
+                " Hessian is formed on the device (enqueue_multi_dim_hessian,"
+                " device_walker.device_multi_walk_estimate)"
             )
-            compute_partition_stats(
-                self.ctx, self.bin_count, 0, self.cursor_dim,
-                self.n_rows,
-                self.d_leaves, self.d_p_off, self.d_p_sz,
-                self.d_multi_der, self.d_multi_partials,
-                self.d_multi_stats,
-                sm_count=self.sm_count,
-            )
-            self.ctx.enqueue_copy(
-                dst_ptr=self.h_multi_stats.unsafe_ptr(),
-                src_buf=self.d_multi_stats,
-            )
-            self.ctx.synchronize()
-            second_der.clear()
-            for i in range(self.bin_count * self.cursor_dim):
-                second_der.append(
-                    Float64(
-                        self.h_multi_stats.unsafe_ptr().unsafe_load(i)
-                    )
-                    + self.lambda_reg
-                )
-            return
 
         if len(self.cached_der2) != self.bin_count:
             raise Error(
                 "WriteSecondDerivatives before WriteValueAndFirst"
                 "Derivatives: the der2 cache is empty, the call order broke"
             )
-        second_der.clear()
-        for leaf in range(self.bin_count):
-            second_der.append(self.cached_der2[leaf])
+        # the cache `finish_single_dim_evaluation` filled (one bulk copy)
+        second_der = self.cached_der2.copy()
 
     def estimate_exact(mut self) raises -> List[Float32]:
         """`TBinOptimizedOracle::EstimateExact`
@@ -1207,188 +1421,41 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             if self.pending_shift:
                 self._launch_shift_abmv()
                 self.pending_shift = False
-        # `MakeEstimationResult(point)` -> `RegularizeImpl`
-        self.regularize(point)
-        return point^
-
-    def _write_blocked_second_derivatives(
-        mut self, mut second_der: List[Float64]
-    ) raises:
-        """The blocked lower-triangular Hessian (`:125-184`).
-
-        Their shape, and every constant in it:
-
-            hessianBlockSize          = SingleBinDim()  = numClasses
-            matrixSize                = hbs * hbs
-            blockCount                = rowSize / hbs   = 1 here
-            lowTriangleMatrixSize     = hbs * (hbs + 1) / 2
-
-        then one launch per Hessian ROW (`:140-151`), each producing
-        `hessianBlockRow + 1` columns, each reduced per bin; then the
-        lower triangle is MIRRORED into the upper one and `lambda` is
-        added to the diagonal (`:159-181`).
-
-        NOTE WHICH ROWS EXIST. The loop runs `hessianBlockRow` over
-        `[0, numClasses)`, so its LAST iteration asks
-        `MultiLogitSecondDerRowImpl` for row `numClasses - 1`, which is
-        `der2Row == effectiveClassCount` -- the arm that reads
-        `exp(-maxApprox)` instead of a prediction plane
-        (`multilogit.cu:157-158`). That branch is not defensive: it is the
-        PINNED class's row, and the Hessian is `numClasses x numClasses`
-        even though the cursor has `numClasses - 1` planes. An implementation that
-        stopped the loop at `cursorDim` would build a matrix one row
-        short and the Cholesky would solve a different system.
-
-        ================= DEVIATION BLOCK =================
-        DEVIATION 75: ONE REDUCE PER ROW INTO ITS OWN BUFFER, where theirs
-        reduces every row into disjoint SLICES of one
-        `reducedHessianGpu` and reads the whole thing back once
-        (`:135-157`). Their slice arithmetic exists because `ReadReduce`
-        is one call over one buffer; ours reads each row's reduce as it is
-        produced, which is `numClasses` copies of `binCount * (row + 1)`
-        floats instead of one copy of `binCount * lowTriangleMatrixSize`.
-        SAME NUMBERS, same order within a row. It costs `numClasses - 1`
-        extra device-to-host copies per estimation iteration and buys not
-        having to reproduce the reference `offset` bookkeeping, which is the part
-        of that function most likely to be reproduced wrong.
-        ===================================================
-        """
-        var hbs = self.single_bin_dim
-        var matrix_size = hbs * hbs
-
-        # `secondDer->resize(singleBinBlockedMatrixSize * BinCount)`
-        second_der.clear()
-        # driver-loop: over the per-leaf Hessian blocks (bins x matrix size)
-        for _ in range(matrix_size * self.bin_count):
-            second_der.append(Float64(0.0))
-
-        # TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_EST (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1
-        # (the cached-triangle mirror here); code recoverable at b639a2bd2.
-        comptime if MULTICLASS_HESSIAN_BATCH:
-            # FAST Apple: every row in one launch into the lower-triangle
-            # planes the scratch was sized for (`_oracle_tri_planes`),
-            # one reduce over all of them, one copy, one wait; then the
-            # same mirror per row from the row's slot
-            var tri = _oracle_tri_planes(self.objective, hbs, self.n_rows)
-            if tri != hbs:
-                # TOMBSTONE: MOJOLEARN_MC_CLASS_BATCH_DERIV (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1
-                # (the register Hessian arm here); code recoverable at b639a2bd2.
-                # Restore: git apply experiments/removed/MOJOLEARN_MC_CLASS_BATCH_DERIV.patch.
-                launch_multilogit_second_der_all_rows(
-                    self.ctx, self.num_classes, self.n_rows,
-                    self.d_weights, self.has_weights,
-                    self.d_cursor, self.n_rows,
-                    self.d_multi_der, self.n_rows,
-                )
-                compute_partition_stats(
-                    self.ctx, self.bin_count, 0, tri, self.n_rows,
-                    self.d_leaves, self.d_p_off, self.d_p_sz,
-                    self.d_multi_der, self.d_multi_partials,
-                    self.d_multi_stats,
-                    sm_count=self.sm_count,
-                )
-                self.ctx.enqueue_copy(
-                    dst_ptr=self.h_multi_stats.unsafe_ptr(),
-                    src_buf=self.d_multi_stats,
-                )
-                self.ctx.synchronize()
-                for row in range(hbs):
-                    var column_count = row + 1
-                    var slot = row * (row + 1) // 2
-                    for bin in range(self.bin_count):
-                        var base = bin * matrix_size
-                        for col in range(column_count):
-                            var val = Float64(
-                                self.h_multi_stats.unsafe_ptr().unsafe_load(
-                                    bin * tri + slot + col
-                                )
-                            )
-                            if col == row:
-                                second_der[base + row * hbs + row] = (
-                                    val + self.lambda_reg
-                                )
-                            else:
-                                second_der[base + row * hbs + col] = val
-                                second_der[base + col * hbs + row] = val
-                return
-
-        comptime if IDN_MULTI_HESS_ONE_WAIT:
-            # lane/fam-gbdt: the loop below with ONE wait. Row `row`'s copy
-            # of the whole `d_multi_stats` (`hbs * bin_count` floats, the
-            # scratch's `multi_planes * bin_count`) goes to slot `row` of
-            # `h_multi_stats` (`_oracle_multi_host_len`).
-            var stats_len = hbs * self.bin_count
-            for row in range(hbs):
-                var column_count = row + 1
-                if self.objective == OBJECTIVE_MULTIRMSE:
-                    launch_multi_rmse_second_der(
-                        self.ctx, self.n_rows,
-                        self.d_weights, self.has_weights,
-                        self.d_multi_der, row, self.n_rows,
-                    )
-                else:
-                    launch_multilogit_second_der(
-                        self.ctx, self.num_classes, self.n_rows,
-                        self.d_weights, self.has_weights,
-                        self.d_cursor, self.n_rows,
-                        self.d_multi_der, row, self.n_rows,
-                    )
-                compute_partition_stats(
-                    self.ctx, self.bin_count, 0, column_count, self.n_rows,
-                    self.d_leaves, self.d_p_off, self.d_p_sz,
-                    self.d_multi_der, self.d_multi_partials,
-                    self.d_multi_stats,
-                    sm_count=self.sm_count,
-                )
-                self.ctx.enqueue_copy(
-                    dst_ptr=self.h_multi_stats.unsafe_ptr() + row * stats_len,
-                    src_buf=self.d_multi_stats,
-                )
-            self.ctx.synchronize()
-            for row in range(hbs):  # small-loop(hbs: class dimensions of one cursor): one mirror call per class row
-                _mirror_second_der_row(
-                    second_der, self.h_multi_stats, row * stats_len, row + 1,
-                    row, hbs, self.bin_count, self.lambda_reg,
-                )
-            return
-
-        for row in range(hbs):
-            var column_count = row + 1
-            if self.objective == OBJECTIVE_MULTIRMSE:
-                # `MultiRMSESecondDerRow` (`multiclass_targets.cpp:146-156`):
-                # zeros left of the diagonal, `weight` on it. MultiRMSE has
-                # no pinned plane, so `hbs == cursorDim` and every row is a
-                # real one.
-                launch_multi_rmse_second_der(
-                    self.ctx, self.n_rows,
-                    self.d_weights, self.has_weights,
-                    self.d_multi_der, row, self.n_rows,
-                )
-            else:
-                launch_multilogit_second_der(
-                    self.ctx, self.num_classes, self.n_rows,
-                    self.d_weights, self.has_weights,
-                    self.d_cursor, self.n_rows,
-                    self.d_multi_der, row, self.n_rows,
-                )
-            compute_partition_stats(
-                self.ctx, self.bin_count, 0, column_count, self.n_rows,
-                self.d_leaves, self.d_p_off, self.d_p_sz,
-                self.d_multi_der, self.d_multi_partials,
-                self.d_multi_stats,
-                sm_count=self.sm_count,
+        # `MakeEstimationResult(point)` -> `RegularizeImpl`, on the device
+        # (lane gbdt-host-loops-12): the point is still in the Exact
+        # scratch's `point` buffer and `WeightsCpu` is formed from what it is
+        # made of (the weight fold, still in `d_part_stats` because Exact runs
+        # no evaluation, or the leaf sizes); one copy home, one bulk copy in
+        var n = self.bin_count
+        if n > 0:
+            self.ctx.enqueue_function[regularize_point_device_kernel](
+                self.exact.value().point.unsafe_ptr(),
+                self.d_part_stats.unsafe_ptr(),
+                self.d_p_sz.unsafe_ptr(),
+                Int32(1) if self.has_weights else Int32(0),
+                bitcast[DType.uint64](self.min_leaf_weight),
+                Int32(n),
+                Int32(1),
+                grid_dim=(_leaf_blocks(n), 1, 1),
+                block_dim=(256, 1, 1),
             )
             self.ctx.enqueue_copy(
-                dst_ptr=self.h_multi_stats.unsafe_ptr(),
-                src_buf=self.d_multi_stats,
+                dst_ptr=self.exact.value().h_point.unsafe_ptr(),
+                src_buf=self.exact.value().point,
             )
             self.ctx.synchronize()
-
-            # mirror this row into both triangles (`:166-180`)
-            _mirror_second_der_row(
-                second_der, self.h_multi_stats, 0, column_count,
-                row, hbs, self.bin_count, self.lambda_reg,
+            memcpy(
+                dest=point.unsafe_ptr(),
+                src=self.exact.value().h_point.unsafe_ptr(),
+                count=n,
             )
+        return point^
+
+    # TOMBSTONE: the GPU oracle's multi-dimensional host walk readbacks (no define) deleted 2026-10-17 by lane/gbdt-host-loops-12
+    # (`_write_blocked_second_derivatives`: the per-row Hessian readback and host mirror, its IDN_MULTI_HESS_ONE_WAIT
+    # one-wait arm and its MULTICLASS_HESSIAN_BATCH arm); code recoverable at the deletion sha's parent
+    # (docs/TOMBSTONES.md, "GPU oracle multi-dimensional host walk"). The rows are `enqueue_multi_dim_hessian`'s.
+    # Restore: git apply experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch.
 
     def make_estimation_result(
         self, point: List[Float32]
@@ -1423,18 +1490,58 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 )
         return out^
 
-    def regularize(self, mut point: List[Float32]):
+    def regularize(self, mut point: List[Float32]) raises:
         """`RegularizeImpl` (`oracle_interface.h:43-52`), with their
         `approxDim` argument (`pointwise_oracle.cpp:13-16`).
 
         A leaf under `MinLeafWeight` is zeroed in EVERY approx dimension,
         not only the first -- their inner `for dim` loop (`:48-50`).
+
+        The host interface (the checks' host walker; no GPU fit calls it):
+        the compare runs on the device (`regularize_point_f64_kernel`, over
+        `WeightsCpu`'s bit patterns), the point goes up and comes home in one
+        bulk copy each way. The buffers are this call's: the interface is
+        immutable here and no fit pays for them.
         """
-        var dim_count = self.single_bin_dim
-        for bin in range(self.bin_count):
-            if self.weights_cpu[bin] < self.min_leaf_weight:
-                for dim in range(dim_count):
-                    point[bin * dim_count + dim] = Float32(0.0)
+        var n = self.bin_count
+        var dim = self.single_bin_dim
+        if n == 0:
+            return
+        if len(self.weights_cpu) != n or len(point) != n * dim:
+            raise Error(
+                "Regularize: WeightsCpu holds " + String(len(self.weights_cpu))
+                + " and the point " + String(len(point)) + " for "
+                + String(n) + " bins x " + String(dim) + " dims"
+            )
+        var h_w = self.ctx.enqueue_create_host_buffer[DType.uint64](n)
+        var d_w = self.ctx.enqueue_create_buffer[DType.uint64](n)
+        var h_p = self.ctx.enqueue_create_host_buffer[DType.float32](n * dim)
+        var d_p = self.ctx.enqueue_create_buffer[DType.float32](n * dim)
+        self.ctx.synchronize()
+        memcpy(
+            dest=h_w.unsafe_ptr(),
+            src=self.weights_cpu.unsafe_ptr().bitcast[UInt64](),
+            count=n,
+        )
+        memcpy(dest=h_p.unsafe_ptr(), src=point.unsafe_ptr(), count=n * dim)
+        self.ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
+        self.ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
+        self.ctx.enqueue_function[regularize_point_f64_kernel](
+            d_p.unsafe_ptr(),
+            d_w.unsafe_ptr(),
+            bitcast[DType.uint64](self.min_leaf_weight),
+            Int32(n),
+            Int32(dim),
+            grid_dim=(_leaf_blocks(n), 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        self.ctx.enqueue_copy(dst_ptr=h_p.unsafe_ptr(), src_buf=d_p)
+        self.ctx.synchronize()
+        memcpy(dest=point.unsafe_ptr(), src=h_p.unsafe_ptr(), count=n * dim)
+        _ = h_w^
+        _ = d_w^
+        _ = d_p^
+        _ = h_p^
 
 
 # ================= DEVIATION 3041: the oracle's device buffers belong to the FIT =================
@@ -1509,50 +1616,18 @@ def multiclass_hessian_batch_for[column: Int]() -> Bool:
 
 comptime MULTICLASS_HESSIAN_BATCH = multiclass_hessian_batch_for[TARGET_COLUMN]()
 
-#: lane/fam-gbdt (2026-10-04), IDN_MULTI_HESS_ONE_WAIT: IDENTICAL, every
-#: vendor, default on. The blocked Hessian's row loop
-#: (`_write_blocked_second_derivatives`, DEVIATION 75) keeps its launch and
-#: its reduce PER ROW, at the row's own column count, but waits ONCE for all
-#: `numClasses` rows instead of once per row: each row's whole-buffer copy
-#: of `d_multi_stats` lands in its own slot of `h_multi_stats` (the stream
-#: orders the copy before the next row's reduce rewrites the buffer), and
-#: the mirror reads the slots after the one wait. Same kernels, same grids,
-#: same order: no bit moves on any column and the host column is untouched.
-#: The host staging buffer is `multi_planes` times longer (floats per leaf,
-#: not per row). `-D MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF` (or the
-#: master `-D MOJOLEARN_IDN_ALL_OFF`) restores the wait per row.
-comptime IDN_MULTI_HESS_ONE_WAIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not MULTICLASS_HESSIAN_BATCH
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF (retired with its host arm) deleted 2026-10-17 by
+# lane/gbdt-host-loops-12; code recoverable at the deletion sha's parent. IDN_MULTI_HESS_ONE_WAIT (lane/fam-gbdt,
+# default on) waited once for all the blocked Hessian's per-row readbacks instead of once per row; the rows are no
+# longer read back at all (the device walk reads their stash), so both arms and the `h_multi_stats` slots per row
+# are gone. Schedule only: no bit moved with it.
+# Restore: git apply experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch.
 
 
 def _oracle_multi_host_len(multi_planes: Int, bin_count: Int) -> Int:
-    """The length of `h_multi_stats`: `d_multi_stats`' own length, times one
-    slot per Hessian row under `IDN_MULTI_HESS_ONE_WAIT`."""
-    comptime if IDN_MULTI_HESS_ONE_WAIT:
-        return multi_planes * multi_planes * bin_count
-    else:
-        return multi_planes * bin_count
-#: the widest class count batched under `-D
-#: MOJOLEARN_LEGACY_NARROW_MC_HESS_BATCH`: `d_multi_der` is `K (K + 1) / 2`
-#: planes of `n_rows` floats under the batch (36 at 8), the row loop above
-#: that. Removed as benchmark-tuned on 2026-10-04 (it admitted the board's
-#: small class counts; no kernel needs it: the all-rows kernel loops the
-#: triangle and the partition reduce loops planes), replacement UNMEASURED.
-comptime MULTICLASS_HESSIAN_BATCH_MAX_CLASSES = 8
-comptime LEGACY_NARROW_MC_HESS_BATCH = is_defined[
-    "MOJOLEARN_LEGACY_NARROW_MC_HESS_BATCH"
-]()
-#: The general rule: batch while the triangle scratch (K (K + 1) / 2 planes
-#: of `n_rows` float32) fits a fixed 1 GiB device-memory budget; above it the
-#: row loop serves with K planes. The batch does the same arithmetic as the
-#: row loop (one launch instead of K); only its memory grows with K^2.
-comptime MULTICLASS_HESSIAN_BATCH_MAX_BYTES = 1 << 30
+    """The length of `h_multi_stats`: `d_multi_stats`' own length (kept as
+    the host staging's shape key; the oracle reads nothing back into it)."""
+    return multi_planes * bin_count
 
 
 def _mc_hess_batch_takes(single_bin_dim: Int, n_rows: Int) -> Bool:
@@ -2456,4 +2531,6 @@ def make_bin_optimized_oracle(
         h_weight_stats^,
         bin_keyed,
         bk_partials^,
+        Optional[DeviceBuffer[DType.uint64]](),  # d_f64: host interface only
+        Optional[HostBuffer[DType.uint64]](),  # h_f64
     )

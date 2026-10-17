@@ -7,7 +7,12 @@
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 
 WHAT IS UNDER TEST. `BinOptimizedOracle`'s `rowSize > 1` arm -- the branches
-of `pointwise_oracle.cpp` that every pointwise loss skips:
+of `pointwise_oracle.cpp` that every pointwise loss skips. Since lane
+gbdt-host-loops-12 the arm is enqueue-only (`enqueue_multi_dim_evaluation`,
+`enqueue_multi_dim_hessian`, read by the device walk); this check reads its
+stashes and assembles the gradient and the mirrored Hessian the way the device
+walk's kernels do, so gates 1 and 4 now pin that assembly and gates 2 and 3
+pin the device reductions:
 
     WriteValueAndFirstDerivatives   the multi-column reduce and the
                                     gradient's RECONSTRUCTED last
@@ -203,11 +208,49 @@ def run_case(
         Float32(0.5), lam, -1, LEAF_ESTIMATION_NEWTON, num_classes,
     )
 
-    var value = Float64(0.0)
-    var gradient = List[Float64]()
-    oracle.write_value_and_first_derivatives(value, gradient)
-    var hessian = List[Float64]()
-    oracle.write_second_derivatives(hessian)
+    # lane gbdt-host-loops-12: the oracle's multi-dimensional host readback
+    # arm is deleted (the walk runs on the device). The device evaluation and
+    # Hessian rows are stashed exactly as the device walk reads them; this
+    # check reads the stashes and assembles the walker's gradient
+    # (MultiClass's pinned component `-total`) and the mirrored blocked
+    # Hessian with the ORACLE's lambda on the diagonal, the statements of
+    # `device_walker.multi_walker_*_kernel`.
+    var tri = (num_classes * (num_classes + 1)) // 2
+    var d_der = ctx.enqueue_create_buffer[DType.float32](n_leaves * eff)
+    var d_hess = ctx.enqueue_create_buffer[DType.float32](n_leaves * tri)
+    var h_der = ctx.enqueue_create_host_buffer[DType.float32](n_leaves * eff)
+    var h_hess = ctx.enqueue_create_host_buffer[DType.float32](n_leaves * tri)
+    oracle.enqueue_multi_dim_evaluation(d_der)
+    var layout = oracle.enqueue_multi_dim_hessian(d_hess)
+    ctx.enqueue_copy(dst_ptr=h_der.unsafe_ptr(), src_buf=d_der)
+    ctx.enqueue_copy(dst_ptr=h_hess.unsafe_ptr(), src_buf=d_hess)
+    ctx.synchronize()
+    var gradient = List[Float64](length=n_leaves * num_classes, fill=0.0)
+    for leaf in range(n_leaves):
+        var gtot = Float64(0.0)
+        for d in range(eff):
+            var v = Float64(h_der.unsafe_ptr().unsafe_load(leaf * eff + d))
+            gradient[leaf * num_classes + d] = v
+            gtot += v
+        gradient[leaf * num_classes + eff] = -gtot
+    var hessian = List[Float64](
+        length=n_leaves * num_classes * num_classes, fill=0.0
+    )
+    for leaf in range(n_leaves):
+        var hb = leaf * num_classes * num_classes
+        for r in range(num_classes):
+            for c in range(r + 1):
+                var at: Int
+                if layout == 0:
+                    at = n_leaves * ((r * (r + 1)) // 2) + leaf * (r + 1) + c
+                else:
+                    at = leaf * tri + (r * (r + 1)) // 2 + c
+                var val = Float64(h_hess.unsafe_ptr().unsafe_load(at))
+                if c == r:
+                    hessian[hb + r * num_classes + r] = val + oracle.lambda_reg
+                else:
+                    hessian[hb + r * num_classes + c] = val
+                    hessian[hb + c * num_classes + r] = val
 
     var bad = 0
     var shown = 0

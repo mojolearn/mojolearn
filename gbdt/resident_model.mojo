@@ -122,7 +122,12 @@ from gbdt.gpu_data.kernel.binarize import (
     pack_cindex_words_kernel,
 )
 from gbdt.methods.doc_parallel_boosting import model_approx_dim, predict
-from gbdt.models.ctr_value_table import expand_raw_columns
+from gbdt.models.kernel.resident_ctr import (
+    ResidentCtrPlan,
+    enqueue_resident_ctr_expand,
+    resident_ctr_raise_if_bad,
+)
+from gbdt.models.tensor_ctr_apply import TTensorCtrApplyTable
 from gbdt.apple_fast_classical import AFCL_PREDICT_BLOCK
 from gbdt.models.kernel.add_bin_values import (
     IDN_APPLY_WIDE,
@@ -344,6 +349,10 @@ struct ResidentGbdtModel(Movable):
     var d_out_f32: Optional[DeviceBuffer[DType.float32]]
     var d_out_u64: Optional[DeviceBuffer[DType.uint64]]
     var d_out_i64: Optional[DeviceBuffer[DType.int64]]
+    #: lane gbdt-host-loops-12: the CTR expansion's device plan
+    #: (`gbdt/models/kernel/resident_ctr.mojo`), built on the first predict
+    #: of a model that needs it
+    var ctr: Optional[ResidentCtrPlan]
 
     def __init__(out self, text: String) raises:
         var tm = load_model_text(text)
@@ -537,10 +546,12 @@ struct ResidentGbdtModel(Movable):
         self.d_out_f32 = Optional[DeviceBuffer[DType.float32]]()
         self.d_out_u64 = Optional[DeviceBuffer[DType.uint64]]()
         self.d_out_i64 = Optional[DeviceBuffer[DType.int64]]()
+        self.ctr = Optional[ResidentCtrPlan]()
         self.ctx = ctx^
 
     def __deinit__(deinit self):
         # every buffer before the context it was created on (DEVIATION 1946)
+        _ = self.ctr^
         _ = self.d_out_i64^
         _ = self.d_out_u64^
         _ = self.d_out_f32^
@@ -823,6 +834,7 @@ struct ResidentGbdtModel(Movable):
         out_f64: MutPointer[Float64, MutUntrackedOrigin],
         out_i64: MutPointer[Int64, MutUntrackedOrigin],
         mode: Int,
+        input_on_device: Bool = False,
     ) raises -> Int:
         """Lane hr2-gbdt-host: the whole call on the device. The input
         goes up as handed over, `resident_stage_kernel` substitutes and
@@ -863,10 +875,14 @@ struct ResidentGbdtModel(Movable):
             enqueue_fill(ctx, self.d_bad.value(), STAGE_NO_BAD)
             enqueue_fill(ctx, self.d_cindex.value(), UInt32(0))
             if n_rows * n_cols > 0:
-                ctx.enqueue_copy(
-                    dst_buf=self.d_raw.value(),
-                    src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](src),
-                )
+                # `input_on_device`: the CTR expansion already wrote the model
+                # columns into `d_raw` (column-major), stream-ordered before
+                # this staging
+                if not input_on_device:
+                    ctx.enqueue_copy(
+                        dst_buf=self.d_raw.value(),
+                        src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](src),
+                    )
                 var total = n_rows * n_cols
                 var blocks = min((total + STAGE_BLOCK - 1) // STAGE_BLOCK, 65535)
                 ctx.enqueue_function[resident_stage_kernel](
@@ -1009,46 +1025,50 @@ struct ResidentGbdtModel(Movable):
         write int64 codes."""
         if n_rows <= 0:
             raise Error("gbdt_resident_predict: n_rows must be positive")
-        var expanded = List[Float32]()
-        var src = x
-        var staged_row_major = row_major
-        if self.needs_expansion:
-            # their CalcCtrs ahead of the quantizer, the same host
-            # functions `predict_floats` calls over the same column-major
-            # copy; a row-major input is transposed into that copy
-            var n_x = n_rows * self.n_input_features
-            var xs = List[Float32]()
-            xs.resize(n_x, Float32(0.0))
-            if row_major:
-                var nf = self.n_input_features
-                for r in range(n_rows):
-                    for f in range(nf):
-                        xs[f * n_rows + r] = x.unsafe_load(r * nf + f)
-            else:
-                memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
-            staged_row_major = False
-            if len(self.tm.tensor_ctr_registry.features) != 0:
-                expanded = self.tm.tensor_ctr_registry.expand_for_model_apply(
-                    xs, n_rows, self.tm.borders, self.tm.one_hot
-                )
-            else:
-                expanded = expand_raw_columns(
-                    self.tm.ctr_tables, self.n_columns, xs, n_rows
-                )
-            if len(expanded) != n_rows * self.n_columns:
-                raise Error("x_colmajor size mismatch")
-            src = rebind[MutPointer[Float32, MutUntrackedOrigin]](
-                expanded.unsafe_ptr()
+        if not self.needs_expansion:
+            self._prepare_workspace(n_rows)
+            # lane hr2-gbdt-host's device staging and link are the only route
+            # (cpu-gpu-cleanup t-gbdt: the `MOJOLEARN_HR2_OLD_LINK` host staging
+            # and host link across the thread pool are deleted)
+            return self._predict_device(
+                x, n_rows, row_major, out_f32, out_f64, out_i64, mode
+            )
+        # their CalcCtrs ahead of the quantizer, ON THE DEVICE (lane
+        # gbdt-host-loops-12, `gbdt/models/kernel/resident_ctr.mojo`): the raw
+        # input goes up as handed over (row- or column-major: no host
+        # transpose), the expansion writes the model columns column-major into
+        # `d_raw`, and the staging below reads them there. The same statements
+        # as `predict_floats`' host `expand_raw_columns` /
+        # `expand_for_model_apply`, so the same words. The refusal words come
+        # home with one drain, before the predict, so a bad category code is
+        # refused before anything else (the host order).
+        if not self.ctr:
+            var tensor_tables = List[TTensorCtrApplyTable]()
+            ref reg = self.tm.tensor_ctr_registry
+            # driver-loop: over the registered tensor CTR model columns (model structure)
+            for i in range(len(reg.features)):  # small-loop(features: registered tensor CTR model columns): builds the apply plan once per model
+                if reg.features[i].model_column != reg.first_model_column + i:
+                    raise Error("tensor CTR registry model columns are not contiguous")
+                tensor_tables.append(reg.features[i].table.apply_table())
+            self.ctr = ResidentCtrPlan(
+                self.ctx, self.tm.ctr_tables, tensor_tables, self.n_columns,
+                self.tm.one_hot, self.n_input_features,
             )
         self._prepare_workspace(n_rows)
-        # lane hr2-gbdt-host's device staging and link are the only route
-        # (cpu-gpu-cleanup t-gbdt: the `MOJOLEARN_HR2_OLD_LINK` host staging
-        # and host link across the thread pool are deleted)
-        var width = self._predict_device(
-            src, n_rows, staged_row_major, out_f32, out_f64, out_i64, mode
+        try:
+            enqueue_resident_ctr_expand(
+                self.ctx, self.ctr.value(), x, n_rows, row_major,
+                self.d_borders, self.d_raw.value(),
+            )
+            self.ctx.synchronize()
+        except e:
+            self.ctx.synchronize()
+            raise e
+        resident_ctr_raise_if_bad(self.ctr.value(), x, n_rows, row_major)
+        return self._predict_device(
+            x, n_rows, False, out_f32, out_f64, out_i64, mode,
+            input_on_device=True,
         )
-        _ = len(expanded)
-        return width
 
 
 struct GbdtModelRegistry(Movable):

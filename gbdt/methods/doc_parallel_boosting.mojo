@@ -37,7 +37,6 @@ from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
 from gbdt.methods.leaves_estimation.descent_helpers import (
     _move,
     _update_move_direction,
-    newton_like_walker_estimate,
 )
 from gbdt.methods.leaves_estimation.apple_fast_est import (
     EST_APPLE_ANY,
@@ -157,6 +156,10 @@ from gbdt.methods.leaves_estimation.device_walker import (
     device_walk_estimate,
     device_walk_flag,
     device_walk_supported,
+    MultiWalkBuffers,
+    device_multi_walk_estimate,
+    device_multi_walk_not_pd,
+    device_multi_walk_supported,
     enqueue_copy_values,
     enqueue_zero_average,
     weight_keep_mask_strided_kernel,
@@ -1040,6 +1043,10 @@ struct TEstimationWorkspace(Movable):
     var walk: WalkBuffers
     var d_count: DeviceBuffer[DType.uint32]
     var h_count: HostBuffer[DType.uint32]
+    #: lane gbdt-host-loops-12: the multi-dimensional device walk's state
+    #: (`device_walker.MultiWalkBuffers`) for up to `n_leaves_cap` leaves of
+    #: up to `approx_dim + 1` components (MultiClass's pinned plane)
+    var mwalk: MultiWalkBuffers
     #: lane/apple-fast-sym-est: the FAST + Apple estimation task's buffers
     #: (`apple_fast_est.AppleEstScratch`), pool of one; empty in every
     #: build without one of its defines
@@ -1080,6 +1087,9 @@ struct TEstimationWorkspace(Movable):
         self.walk = WalkBuffers(ctx, arena, n_leaves)
         self.d_count = arena.device[DType.uint32](ctx, 1)
         self.h_count = arena.host_buffer[DType.uint32](ctx, 1)
+        # the batched path is single-dimensional: a one-leaf placeholder
+        # (`device_multi_walk_supported` refuses any task it cannot hold)
+        self.mwalk = MultiWalkBuffers(ctx, 1, 1)
         self.apple_est = List[AppleEstScratch]()
 
     def __init__(
@@ -1142,6 +1152,10 @@ struct TEstimationWorkspace(Movable):
         self.walk = WalkBuffers(ctx, n_leaves)
         self.d_count = ctx.enqueue_create_buffer[DType.uint32](1)
         self.h_count = ctx.enqueue_create_host_buffer[DType.uint32](1)
+        # a two-class MultiClass oracle is `approx_dim == 1` with two
+        # components, so the walk is sized at `approx_dim + 1` always (leaf
+        # sized; a one-leaf placeholder where no tree has leaves)
+        self.mwalk = MultiWalkBuffers(ctx, n_leaves, approx_dim + 1)
         self.apple_est = List[AppleEstScratch]()
 
 
@@ -1801,16 +1815,76 @@ def _estimate_and_apply(
         _ = mc_not_pd^
         _ = oracle^  # past the drain (step-33 race class, device side)
         return
-    var estimated: List[Float32]
-    if leaf_estimation_method == LEAF_ESTIMATION_EXACT:
-        estimated = oracle.estimate_exact()
-        trace.record_list_f32(leaf_tag, estimated)
-    else:
-        estimated = newton_like_walker_estimate(
-            oracle, iters, BACKTRACKING_ANY_IMPROVEMENT,
-            List[Float32](), not_pd_blocks,
-            stage_times, trace, leaf_tag,
+    # lane gbdt-host-loops-12: THE MULTI-DIMENSIONAL WALK ON THE DEVICE.
+    # Every multiclass-family walk the one-step kernel above does not take
+    # (MultiClass above `MC_ONE_STEP_MAX_CLASSES` or at more than one
+    # iteration, or under Gradient, or with deferred weights, or in FAST;
+    # MultiClassOneVsAll; MultiRMSE) runs `device_walker.
+    # device_multi_walk_estimate`: the walker's state and statements in
+    # kernels, one accept word per line-search evaluation, the leaves handed
+    # to the cursor add without a host round trip. It replaces
+    # `descent_helpers.newton_like_walker_estimate`, the host walk, on every
+    # GPU route; the oracle's multi-dimensional host readbacks are deleted.
+    if leaf_estimation_method != LEAF_ESTIMATION_EXACT and (
+        oracle.single_bin_dim > 1 or oracle.cursor_dim > 1
+    ):
+        if not device_multi_walk_supported(oracle, n_leaves, est_ws[0].mwalk):
+            raise Error(
+                "_estimate_and_apply: no device walk for objective "
+                + String(objective) + " with " + String(oracle.single_bin_dim)
+                + " leaf components over " + String(n_leaves) + " leaves"
+            )
+        oracle.times.enabled = stage_times.enabled
+        var mwalk = est_ws[0].mwalk.handles()
+        device_multi_walk_estimate(ctx, oracle, mwalk, iters)
+        stage_times.begin(ctx)
+        var mw_len = n_leaves * approx_dim
+        enqueue_copy_values(ctx, mwalk.d_res, mw_len, d_est)
+        var mw_gx = 2 * oracle.sm_count
+        if mw_gx < 1:
+            mw_gx = 1
+        ctx.enqueue_function[add_model_value_kernel](
+            oracle.d_p_off.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            row_index.unsafe_ptr(),
+            d_est.unsafe_ptr(),
+            learning_rate,
+            cursor.unsafe_ptr(),
+            Int32(approx_dim), Int32(n_rows),
+            grid_dim=(mw_gx, n_leaves, approx_dim),
+            block_dim=(256, 1, 1),
         )
+        ctx.enqueue_copy(dst_ptr=h_est.unsafe_ptr(), src_buf=d_est)
+        # the task's one settle point (DEVIATION 1891's holds)
+        ctx.synchronize()
+        # DEVIATION 74's counter, counted on the device
+        not_pd_blocks += device_multi_walk_not_pd(mwalk)
+        not_pd_total += not_pd_blocks
+        # one bulk copy of the read-back leaf values (no element loop)
+        leaf_values.clear()
+        if mw_len > 0:
+            leaf_values.resize(unsafe_uninit_length=mw_len)
+            memcpy(
+                dest=leaf_values.unsafe_ptr(),
+                src=h_est.unsafe_ptr(),
+                count=mw_len,
+            )
+        merge_stage_times(stage_times, oracle.times)
+        trace.record_list_f32(leaf_tag, leaf_values)
+        stage_times.end(ctx, "est.tail_apply")
+        _ = mwalk^
+        _ = oracle^  # past the drain (step-33 race class, device side)
+        return
+    if leaf_estimation_method != LEAF_ESTIMATION_EXACT:
+        # every single-dimensional walk is `device_walk_estimate`'s above and
+        # every multi-dimensional one `device_multi_walk_estimate`'s: no GPU
+        # fit walks on the host
+        raise Error(
+            "_estimate_and_apply: a walk reached no device walker (objective "
+            + String(objective) + ", " + String(n_leaves) + " leaves)"
+        )
+    var estimated = oracle.estimate_exact()
+    trace.record_list_f32(leaf_tag, estimated)
     not_pd_total += not_pd_blocks
     # `LeavesEstimationConfig.MakeZeroAverage`
     # (`doc_parallel_leaves_estimator.cpp:25-37`), on for PairLogit through
