@@ -2,6 +2,16 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.52 (unreleased)
+
+- `SGDClassifier`, `SGDRegressor`, `Perceptron` and the passive-aggressive estimators fit small and unscaled datasets as
+  well as scikit-learn with the default `batch_size='auto'`: each epoch takes more update steps, and `SGDClassifier` sums
+  its rows' updates on scikit-learn's learning-rate schedule.
+- Arrays of `dtype=object` holding numbers are accepted the way scikit-learn accepts them.
+- Gradient boosting: multiclass, one-vs-all and multi-target (`MultiRMSE`) leaf values are computed entirely on the GPU, and
+  categorical-feature predictions expand their features on the GPU. Fewer waits between boosting rounds.
+- Factor analysis in `fast` mode on Apple GPUs waits less often during its decomposition.
+
 ## 0.8.51 (published 2026-10-17)
 
 - `SGDClassifier` and `Perceptron` default to `batch_size='auto'` again: the fixed default of 0.8.50 (`4096` and `256`)
