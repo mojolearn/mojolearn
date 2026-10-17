@@ -220,6 +220,25 @@ _CPU_ROUTE = re.compile(r"#\s*cpu-route:\s*(\S+\s+){2,}\S+")
 # the `for` line, naming the bound (as small-launch does for launches):
 #     # small-loop(<bound>: <what it counts>): <why it is bounded>
 _SMALL_LOOP = re.compile(r"#\s*small-loop\(\s*([^:()]+?)\s*:\s*([^()]+?)\s*\)\s*:\s*(\S+\s+){2,}\S+")
+# THE DRIVER-LOOP RULE (Andrew, 2026-10-17; docs/plans/GPU_PATH_HOST_LOOPS.md).
+# A host loop on the GPU path that walks model or launch structure (features,
+# columns, words, classes, layers, leaves, depth, trees, iterations, configs,
+# argument spans, buffer handles) carries, on its `for` line or the line above:
+#     # driver-loop: over <what it walks>
+# The tag is checked, not trusted: its range must name no data dimension
+# (_DRIVER_DENY, or the length of a buffer a d2h copy filled) and its body must
+# index no downloaded buffer (_downloaded_names). A tag that fails either is a
+# `mojo-host-loop` finding ("false driver-loop tag"). Accepted tags are a count
+# in the --tree summary (class `driver-loop`), never debt and never baseline
+# rows. The older `# small-loop(<bound>: ...)` note keeps working on the for
+# line; new Mojo loops use the driver-loop tag (readback reductions and data
+# loops are defects to fix, never tagged).
+_DRIVER_TAG = re.compile(r"#\s*driver-loop:\s*over\s+\S")
+# data dimensions a driver loop may never run over (extend as cases appear)
+_DRIVER_DENY = re.compile(
+    r"(?<!\w)(n|rows|n_rows|n_samples|samples|elements|n_elements|tokens|n_tokens|nnz|n_nnz|count|numel"
+    r"|n_elems|n_obs|n_points|n_queries|n_q|\w+_rows|\w+_samples|\w+_elements|\w+_tokens|\w+_nnz)(?!\w)"
+    r"|\blen\(\s*(x|y|X|Y)\s*\)")
 
 # --------------------------------------------------------------- git io ----
 
@@ -284,6 +303,7 @@ def _code_lines(text, lang):
     """[(line_no, code_text)] with comments and docstrings blanked."""
     out = []
     in_doc = None
+    tag = None  # a Mojo `# driver-loop:` line waiting for its `for` line
     for no, raw in enumerate(text.splitlines(), 1):
         line = raw
         if in_doc:
@@ -305,8 +325,14 @@ def _code_lines(text, lang):
                 break
             line = line[:m.start()] + line[k + 3:]
         s = line.lstrip()
+        if lang == "mojo" and s.startswith("#") and _DRIVER_TAG.match(s):
+            tag = s.strip()
+            continue
         if not s or s.startswith("#") or s.startswith("//"):
             continue
+        if tag is not None and s.startswith("for ") and not _DRIVER_TAG.search(line):
+            line = line.rstrip() + "  " + tag
+        tag = None
         out.append((no, line.rstrip()))
     return out
 
@@ -900,8 +926,9 @@ _PREFILTER = re.compile(r"host|HOST|Host|parallel|MOJOLEARN_|_MIN|np\.|sklearn|r
 _SCAN_CACHE = {}
 
 
-def scan_file(tree, path):
-    """[(rule, line_no, code_text)] for one scoped file."""
+def scan_file(tree, path, with_driver=False):
+    """[(rule, line_no, code_text)] for one scoped file; with_driver: also the
+    accepted driver-loop tags, as (findings, [(line_no, text)])."""
     lang = "py" if path.endswith(".py") else "mojo"
     lines = tree.lines.get(path, [])
     out = []
@@ -932,16 +959,18 @@ def scan_file(tree, path):
           tuple(sorted((k, tuple(v)) for k, v in import_of.items())), frozenset(local_host),
           native, impl)
     if sha is not None and ck in _SCAN_CACHE:
-        return _SCAN_CACHE[ck]
+        res, acc = _SCAN_CACHE[ck]
+        return (res, acc) if with_driver else res
+    acc = []
     res = _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host,
-                      native=native, impl=impl, path=path)
+                      native=native, impl=impl, path=path, accepted=acc)
     if sha is not None:
-        _SCAN_CACHE[ck] = res
-    return res
+        _SCAN_CACHE[ck] = (res, acc)
+    return (res, acc) if with_driver else res
 
 
 def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host,
-                native=frozenset(), impl=frozenset(), path=""):
+                native=frozenset(), impl=frozenset(), path="", accepted=None):
     out = []
     alias_re = (re.compile(r"\b(" + "|".join(map(re.escape, sorted(host_thread_names))) + r")\b")
                 if host_thread_names else None)
@@ -1062,7 +1091,7 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
     for no, t in _d2h_host_work(lines):
         add("d2h-host-work", no, t)
         d2h_lines.add(no)
-    for no, t in _mojo_host_loops(lines, path, impl, d2h_lines):
+    for no, t in _mojo_host_loops(lines, path, impl, d2h_lines, accepted):
         add("mojo-host-loop", no, t)
     # one-block / one-thread launches over a runtime size
     for i, txt in _launch_statements(lines):
@@ -1290,7 +1319,122 @@ def _device_helpers(lines, owner, top, skipdef):
                 changed = True
 
 
-def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
+_HOST_BUF_DECL = re.compile(r"\b(\w+)\s*(?::[^=]*)?=\s*[\w.]*enqueue_create_host_buffer\b|\b(\w+)\s*:\s*HostBuffer\[")
+
+
+def _copy_statement(lines, i):
+    """The enqueue_copy statement starting on lines[i], joined (at most 12 lines)."""
+    txt, depth = "", 0
+    for j in range(i, min(i + 12, len(lines))):
+        seg = lines[j][1].split("#", 1)[0]
+        txt += " " + seg.strip()
+        depth += seg.count("(") - seg.count(")")
+        if depth <= 0 and "(" in txt:
+            break
+    return txt
+
+
+def _buf_name(expr):
+    """(name, is_field) of the host buffer an argument expression names:
+    `h.unsafe_ptr() + k` -> ("h", False), `s.h_est.unsafe_ptr()` -> ("h_est", True)."""
+    e = expr.strip().split("+", 1)[0].strip()
+    e = re.sub(r"\.unsafe_ptr\(\s*\)", "", e).strip(" ()")
+    m = re.fullmatch(r"([\w.\[\]]+)", e)
+    if not m:
+        return None, False
+    parts = re.findall(r"\w+", re.sub(r"\[[^\]]*\]", "", e))
+    if not parts:
+        return None, False
+    return parts[-1], len(parts) > 1
+
+
+def _downloaded_names(lines, topidx):
+    """({top-level def index: local names}, file-wide field names) of host
+    buffers a device-to-host copy fills (enqueue_copy with a host destination,
+    a download/readback/to_host helper's result, a map_to_host alias), plus
+    local pointer aliases of them."""
+    hostbufs = set()
+    for _, t in lines:
+        for m in _HOST_BUF_DECL.finditer(t.split("#", 1)[0]):
+            hostbufs.add(m.group(1) or m.group(2))
+    local, fields = {}, set()
+
+    def add(fn, expr):
+        name, field = _buf_name(expr)
+        if name:
+            (fields.add(name) if field else local.setdefault(fn, set()).add(name))
+
+    for i, (_, t) in enumerate(lines):
+        code = t.split("#", 1)[0]
+        fn = topidx[i]
+        if fn is None:
+            continue
+        if "enqueue_copy(" in code:
+            st = _copy_statement(lines, i)
+            args = st[st.find("enqueue_copy(") + len("enqueue_copy("):]
+            kw = dict(re.findall(r"\b(dst_ptr|dst_buf|src_buf|src_ptr)\s*=\s*([^,]+?)\s*(?=,|\)\s*$|\)\s*\Z)", args))
+            if "dst_ptr" in kw:
+                add(fn, kw["dst_ptr"])
+            elif "dst_buf" in kw and "src_buf" in kw:
+                name, _f = _buf_name(kw["dst_buf"])
+                if name and (name in hostbufs or name.startswith("h_")):
+                    add(fn, kw["dst_buf"])
+            elif not kw:
+                first = _top_args(args)[0] if args else ""
+                name, _f = _buf_name(first)
+                if name and (name in hostbufs or name.startswith("h_")):
+                    add(fn, first)
+        m = re.search(r"enqueue_copy_from_device\(\s*([^,]+),", code)
+        if m:
+            add(fn, m.group(1))
+        m = re.match(r"\s*var\s+(\w+)\s*(?::[^=]*)?=\s*.*\b(\w*download\w*|\w*readback\w*|to_host\w*)\s*\(", code)
+        if m:
+            local.setdefault(fn, set()).add(m.group(1))
+        m = re.search(r"map_to_host\(\s*\)\s+as\s+(\w+)", code)
+        if m:
+            local.setdefault(fn, set()).add(m.group(1))
+    # pointer aliases: `var hp = h.unsafe_ptr()`, `var hp = F32Ptr(... h.unsafe_ptr() ...)`
+    for i, (_, t) in enumerate(lines):
+        fn = topidx[i]
+        if fn is None or fn not in local and not fields:
+            continue
+        m = re.match(r"\s*var\s+(\w+)\s*(?::[^=]*)?=\s*(.*)$", t.split("#", 1)[0])
+        if not m or re.search(r"unsafe_load|\[", m.group(2)):
+            continue
+        rhs = m.group(2)
+        if not re.search(r"unsafe_ptr\(|bitcast|^\s*\w+\s*$", rhs):
+            continue
+        names = local.get(fn, set())
+        if any(re.search(r"(?<![\w.])" + re.escape(n) + r"\b", rhs) for n in names) or \
+                any(re.search(r"\." + re.escape(n) + r"\b", rhs) for n in fields):
+            local.setdefault(fn, set()).add(m.group(1))
+    return local, fields
+
+
+def _driver_tag_reason(rng, inner, local, fields):
+    """None when a tagged loop is a driver loop, else why the tag is false."""
+    dm = _DRIVER_DENY.search(rng)
+    if dm:
+        return f"its range names the data size `{dm.group(0)}`"
+    for n in sorted(local):
+        if re.search(r"\blen\(\s*" + re.escape(n) + r"\s*\)", rng):
+            return f"its range is the length of the downloaded buffer `{n}`"
+    for x in inner:
+        code = x.split("#", 1)[0]
+        for n in sorted(local):
+            if re.search(r"(?<![\w.])" + re.escape(n) + r"\b", code):
+                return f"its body reads the downloaded buffer `{n}`"
+        for n in sorted(fields):
+            if re.search(r"\." + re.escape(n) + r"\b", code):
+                return f"its body reads the downloaded buffer `.{n}`"
+    return None
+
+
+# why each false driver-loop tag was refused, by (path, normalized line)
+_FALSE_TAG_WHY = {}
+
+
+def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset(), accepted=None):
     """[(line_no, text)] of host `for` loops over a runtime data size whose body
     touches data (indexes it with the loop variable, appends, or computes), in
     a non-kernel function of a GPU binding (bindings/) or a module that drives
@@ -1298,7 +1442,9 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
     (charged at the Python call site), host-column functions, check replays
     (checks/), trace-only and debug blocks, comptime loops, loops already
     charged as d2h-host-work, loops marked `# small-loop(...)`, and the
-    bodies of verified `# device-helper:` functions (_device_helpers)."""
+    bodies of verified `# device-helper:` functions (_device_helpers).
+    A `# driver-loop: over <what>` tag is checked (_driver_tag_reason): a
+    true tag goes to `accepted` (the --tree count), a false one is a finding."""
     if "/checks/" in "/" + path:
         return []
     if not (path.startswith("bindings/") or any(_DEVICE_MODULE.search(t) for _, t in lines)):
@@ -1307,6 +1453,7 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
     # trace recorder, a host-column function, or (by itself or its top-level
     # function) the body of a native host helper
     stack, owner, top, skipdef = [], [], {}, {}
+    topidx = []  # each line's top-level def index (the scope of a download)
     for i, (_, t) in enumerate(lines):
         ind = len(t) - len(t.lstrip())
         while stack and ind <= stack[-1][0] and not t.strip().startswith((")", "]", "@")):
@@ -1318,14 +1465,17 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
             top[i] = outer
             skipdef[i] = bool(name in impl or outer in impl or _HOST_COLUMN_FN.search(name)
                               or _HOST_COLUMN_FN.search(outer) or _KERNEL_NAME.search(name))
+            topidx.append(stack[0][1] if stack else i)
             stack.append((ind, i))
             owner.append(None)
             continue
         o = stack[-1][1] if stack else None
         owner.append(o)
+        topidx.append(stack[0][1] if stack else None)
         if o is not None and (_KERNEL_TOK.search(t) or _KERNEL_IDX.search(t) or _TRACE_ONLY.match(t)):
             skipdef[o] = True
     _device_helpers(lines, owner, top, skipdef)
+    dl = None  # downloaded buffers, computed on the first driver-loop tag
     out = []
     ifs = []  # (indent, is_debug)
     until = None  # indent of a flagged loop whose body is skipped
@@ -1346,6 +1496,25 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
         if o is None or skipdef.get(o) or not t.lstrip().startswith("for "):
             continue
         if no in skip or any(d for _, d in ifs) or lines[k - 1][1].strip().startswith("@parameter"):
+            continue
+        if _DRIVER_TAG.search(t):
+            code = t.split("#", 1)[0]
+            dr = re.match(r"\s*for\s+.+?\s+in\s+(.*):\s*$", code)
+            rng = dr.group(1) if dr else code
+            inner = []
+            for _, t2 in lines[k + 1:]:
+                if len(t2) - len(t2.lstrip()) <= ind:
+                    break
+                inner.append(t2)
+            if dl is None:
+                dl = _downloaded_names(lines, topidx)
+            why = _driver_tag_reason(rng, inner, dl[0].get(topidx[k], set()), dl[1])
+            if why is None:
+                if accepted is not None:
+                    accepted.append((no, t))
+            else:
+                _FALSE_TAG_WHY[(path, _norm(t))] = why
+                out.append((no, t))
             continue
         # the owner's rule counts rows, features, classes and members alike:
         # any runtime bound is data-sized; a walk over a List is too
@@ -1396,6 +1565,24 @@ def tree_findings(tree, paths=None):
             seen[(rule, n)] += 1
             res.append(((rule, p, n, occ), no))
     return res
+
+def tree_driver_loops(tree, paths=None):
+    """Counter {path: accepted driver-loop tags}."""
+    c = collections.Counter()
+    for p in (paths if paths is not None else tree.scoped()):
+        if p.endswith(".mojo"):
+            _, acc = scan_file(tree, p, with_driver=True)
+            if acc:
+                c[p] += len(acc)
+    return c
+
+
+def _why(rule, path, text):
+    """The refusal reason of one finding (a false driver-loop tag says why)."""
+    w = _FALSE_TAG_WHY.get((path, text))
+    if rule == "mojo-host-loop" and w:
+        return f"false driver-loop tag: {w}"
+    return _RULE_WHY.get(rule, "")
 
 # ------------------------------------------------------------- baseline ----
 
@@ -1577,11 +1764,16 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False, branch=False)
     if not quiet:
         summary(rows)
         owed_summary(owed)
+        drv = tree_driver_loops(tree)
+        if drv:
+            print(f"no-host-routes driver-loop (allowed, not debt): {sum(drv.values())} tagged host loops over "
+                  "model structure; top files: "
+                  + ", ".join(f"{k} {v}" for k, v in drv.most_common(8)), file=sys.stderr)
     if new:
         print(f"no-host-routes: REFUSED. {len(new)} finding(s) of CPU work in GPU code "
               "are not in the baseline:", file=sys.stderr)
         for (rule, p, n, _), no in new:
-            print(f"  {p}:{no}: [{rule}] {_RULE_WHY.get(rule, '')}: {n[:120]}", file=sys.stderr)
+            print(f"  {p}:{no}: [{rule}] {_why(rule, p, n)}: {n[:120]}", file=sys.stderr)
         print("  Put the step on the GPU, in parallel. The baseline never grows.", file=sys.stderr)
     if stale:
         print(f"no-host-routes: REFUSED. {len(stale)} baseline row(s) no longer match "
@@ -1763,7 +1955,7 @@ def diff_mode(base, tip, main_ref):
             continue
         for rule, no, t in scan_file(tree, p):
             if no in added[p] and (p, _norm(t)) not in infl:
-                out.append(f"{p}:{no}: [{rule}] {_RULE_WHY.get(rule, '')}: {_norm(t)[:120]}")
+                out.append(f"{p}:{no}: [{rule}] {_why(rule, p, _norm(t))}: {_norm(t)[:120]}")
     if not out:
         return 0
     print("no-host-routes: REFUSED. These added lines add CPU work to GPU code:", file=sys.stderr)
