@@ -1144,7 +1144,29 @@ comptime SGD_OC_IDN_MB_DEFAULT = (
 # restores the fixed `cap` (the A/B arm B). New bits for every fit with
 # n < SGD_AUTO_STEPS * cap on the host column and every device together.
 comptime SGD_ADAPTIVE_BATCH = not is_defined["MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF"]()
-comptime SGD_AUTO_STEPS = 32
+# lane sgd-quality (2026-10-17): the step floor is 256 steps an epoch (was 32).
+# Quality: the live test of 0.8.50/0.8.51 (Apple M4, raw breast_cancer, 569
+# rows, 3-fold cv accuracy) had 'auto' at 32 steps trail per-sample updates
+# and scikit-learn (SGDClassifier 0.687 vs 0.807 vs 0.849); a float64 model
+# of `sgd_mb_one` (lane notes, docs/plans/SGD_QUALITY_2026-10-17.md) puts the
+# loss on the step count on unscaled data at every size (synthetic 10k rows,
+# features scaled up to 1000x: hinge accuracy 0.75 at 32 steps, 0.79 at 128,
+# 0.86 at 512, 0.87 per-sample, scikit-learn 0.89; SGDRegressor on raw
+# diabetes R2 0.16 at 32 steps, 0.39 at 256 and per-sample, scikit-learn
+# 0.39). Cost reasoning: while a batch fits one block (batch <= XG_TPB) the
+# device runs SGD_CHUNK_DEFAULT (64) steps in one launch (x_linear/device.mojo
+# chunk arm), so a step costs a block barrier, not a launch: 256 steps an
+# epoch is four launches. From n > 256 * XG_TPB (65,536) rows the batch
+# outgrows one block and each step is three grid launches again, so the SGD
+# pair (cap 4096) pays up to 8x the 32-step floor's launches between 65,536
+# and 1,048,576 rows (speed A/B owed against the _OFF arm). Any n below
+# 2 * 256 rows trains on single rows (the
+# per-sample fit's steps); the cap binds from n >= 256 * cap (65,536 rows at
+# cap 256, 1,048,576 at cap 4096), a smooth rule with no shape threshold.
+# `-D MOJOLEARN_SGD_AUTO_STEPS_256_OFF` restores the 32-step floor (the A/B
+# arm B). New bits for 'auto' fits of every SGD-family estimator except
+# SGDOneClassSVM, on the host column and every device together.
+comptime SGD_AUTO_STEPS = 32 if is_defined["MOJOLEARN_SGD_AUTO_STEPS_256_OFF"]() else 256
 
 
 @always_inline
