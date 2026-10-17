@@ -41,6 +41,14 @@ zero=0000000000000000000000000000000000000000
 bad=0
 refs=$(cat)
 here=$(dirname "$0")
+# installed copies never update themselves (an Oct 8 copy refused tagged driver loops on 2026-10-17): say so when the
+# checkout's hooks differ from the installed ones
+top=$(git rev-parse --show-toplevel 2>/dev/null)
+for f in pre-push no_host_routes.py rebuild_fence.py; do
+    if [ -f "$top/tools/hooks/$f" ] && ! cmp -s "$top/tools/hooks/$f" "$here/$f"; then
+        echo "pre-push: the installed $f differs from tools/hooks/$f in this checkout; run bash tools/hooks/install.sh" >&2
+    fi
+done
 echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     [ -z "$local_sha" ] && continue
     [ "$local_sha" = "$zero" ] && continue
@@ -60,6 +68,8 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     mode=--branch
     [ "$remote_ref" = "refs/heads/main" ] && mode=
     python3 "$here/no_host_routes.py" --tree "$local_sha" $mode || exit 4
+    # the rebuild fence (2026-10-17): a lane change to a module most bindings import is refused
+    if [ -f "$here/rebuild_fence.py" ]; then python3 "$here/rebuild_fence.py" "$local_sha" $mode || exit 4; fi
 done
 [ $? -eq 4 ] && bad=1
 echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do

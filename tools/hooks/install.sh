@@ -23,4 +23,7 @@ done
 # pre-push runs this beside itself, so branches that predate it are checked too
 cp "$here/no_host_routes.py" "$hooks/no_host_routes.py"
 chmod +x "$hooks/no_host_routes.py"
+# the rebuild fence (2026-10-17): refuses a lane change to a module most bindings import
+cp "$here/rebuild_fence.py" "$hooks/rebuild_fence.py"
+chmod +x "$hooks/rebuild_fence.py"
 echo "installed $hooks/no_host_routes.py"
