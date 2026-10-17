@@ -9,8 +9,8 @@ requires the two models to agree.
 ## What the two arms share and what they do not
 
     shared     the compressed index, the target, the weak-target
-               computation, the bootstrap, leaf estimation, the apply,
-               the loss
+               computation, the bootstrap, leaf estimation (Gradient on
+               both arms, see LEAF_METHOD), the apply, the loss
     different  the STRUCTURE SEARCHER, and nothing else
 
 `check-pointwise-vs-greedy` already showed the two searchers pick identical
@@ -53,9 +53,23 @@ from gbdt.gpu_data.kernel.binarize import (
 )
 from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit
 from gbdt.options.catboost_options import (
+    LEAF_ESTIMATION_GRADIENT,
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
 )
+
+#: The leaf estimator BOTH arms run. Not the default Newton x 1: at RMSE +
+#: Newton x 1 + one permutation, DEVIATION 64 skips estimation on the greedy
+#: arm and keeps the searcher's histogram leaf, while the pointwise arm,
+#: whose searcher returns structure only, must run the estimator
+#: (`gbdt/methods/doc_parallel_boosting.mojo`, the `need_estimation or
+#: use_pointwise_searcher` block). Those are two float32 folds of the same
+#: Newton step, so under the default the arms do NOT share leaf estimation
+#: and tree 0's leaves differed in the 7th digit (3.5301485 vs 3.530147,
+#: 2026-10-17) with identical splits, and 15 of 20 loss iterations moved.
+#: Gradient makes `need_estimation` true on both arms, so the estimator is
+#: the same code on both and the searcher is again the only difference.
+comptime LEAF_METHOD = LEAF_ESTIMATION_GRADIENT
 
 comptime N_ROWS = 3000
 comptime N_ITERS = 20
@@ -132,6 +146,7 @@ def main() raises:
     var l_greedy = fit(
         m_greedy, ctx, N_ROWS, folds, MAX_DEPTH, cindex, targets, weights,
         False, N_ITERS, Float32(0.3), Float32(3.0), True,
+        leaf_estimation_method=LEAF_METHOD,
     )
 
     # ---- arm B: CatBoost's single-target symmetric learner -----------
@@ -139,6 +154,7 @@ def main() raises:
     var l_pw = fit(
         m_pw, ctx, N_ROWS, folds, MAX_DEPTH, cindex, targets, weights,
         False, N_ITERS, Float32(0.3), Float32(3.0), True,
+        leaf_estimation_method=LEAF_METHOD,
         use_pointwise_searcher=True,
     )
 
@@ -228,6 +244,7 @@ def main() raises:
         m_l2, ctx, N_ROWS, folds, MAX_DEPTH, cindex, targets, weights,
         False, N_ITERS, Float32(0.3), Float32(3.0), True,
         score_function=SCORE_FUNCTION_L2,
+        leaf_estimation_method=LEAF_METHOD,
         use_pointwise_searcher=True,
     )
     var moved = 0
