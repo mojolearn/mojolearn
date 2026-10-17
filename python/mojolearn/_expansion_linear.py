@@ -481,8 +481,15 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
     # at least 32 steps an epoch, at most auto_cap rows a step.
     # Defaults (A/B 2026-10-17, L40S + MI325X, docs/plans/SGD_BATCH_AB_2026-10-17.md):
     # 'auto' lost for SGDClassifier (1.7-11.9x slower, lower accuracy at 1k) and
-    # Perceptron (2.8-3.3x slower at 1k, lower accuracy at 1k/10k), so they default
-    # to 4096 / 256 again; SGDRegressor and PassiveAggressiveClassifier keep 'auto'
+    # Perceptron (2.8-3.3x slower at 1k, lower accuracy at 1k/10k) on synthetic
+    # standard-normal data, so 0.8.50 defaulted them to 4096 / 256.
+    # Live test of the published 0.8.50 (2026-10-17, Apple M4, breast_cancer
+    # unscaled, 569 rows, 3-fold cv accuracy): a fixed batch larger than the data
+    # is one full-batch step an epoch and collapses: SGDClassifier 4096 0.373 vs
+    # 'auto' 0.687 vs per-sample 0.807 (scikit-learn 0.849); Perceptron 256 0.373
+    # vs 'auto' 0.759 vs per-sample 0.907 (scikit-learn 0.791). Quality before
+    # speed: all four (SGDClassifier, SGDRegressor, Perceptron and
+    # PassiveAggressiveClassifier) default to 'auto' again (0.8.51).
     auto = isinstance(batch_size, str) and batch_size == "auto"
     if auto:
         batch_size = -int(auto_cap)
@@ -514,9 +521,10 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
 
     Follows scikit-learn's SGDClassifier: a binary linear model, one-vs-rest
     for more than two classes. Two defaults differ from scikit-learn and
-    change results: the fit runs minibatch SGD with ``batch_size=4096`` rows
-    per step (``batch_size='auto'`` picks the batch from the row count and
-    ``batch_size=0`` gives scikit-learn's per-sample updates), and
+    change results: the fit runs minibatch SGD with ``batch_size='auto'``,
+    which picks the batch from the row count (``n_samples // 32`` rows per
+    step, at most 4096; ``batch_size=0`` gives scikit-learn's per-sample
+    updates), and
     ``random_state=None`` means seed 0, so a fit is reproducible by default.
 
     Parameters
@@ -557,7 +565,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         Not supported: True raises ValueError.
     warm_start : bool, default False
         Not supported: True raises ValueError.
-    batch_size : int or 'auto', default 4096
+    batch_size : 'auto' or int, default 'auto'
         Rows per minibatch step; 'auto' picks the batch from the row count
         (``n_samples // 32``, at least 1, at most 4096), 0 runs per-sample SGD.
     numeric_mode : str or None, default None
@@ -596,7 +604,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True,
                  epsilon=0.1, random_state=None, learning_rate="optimal", eta0=0.0,
                  power_t=0.5, early_stopping=False, n_iter_no_change=5,
-                 class_weight=None, average=False, warm_start=False, batch_size=4096):
+                 class_weight=None, average=False, warm_start=False, batch_size="auto"):
         self.loss, self.penalty, self.alpha, self.l1_ratio = loss, penalty, alpha, l1_ratio
         self.fit_intercept, self.max_iter, self.tol, self.shuffle = fit_intercept, max_iter, tol, shuffle
         self.epsilon, self.random_state, self.learning_rate = epsilon, random_state, learning_rate
@@ -1774,10 +1782,10 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
 
     Follows scikit-learn's Perceptron: SGD with the perceptron loss and a
     constant step ``eta0``, one-vs-rest for more than two classes. Unlike
-    scikit-learn, the default fit runs minibatches of ``batch_size=256``
-    rows, each step the sum of its rows' updates; ``batch_size='auto'`` picks
-    the batch from the row count and ``batch_size=0`` gives scikit-learn's
-    per-sample updates.
+    scikit-learn, the default fit runs minibatches with ``batch_size='auto'``,
+    which picks the batch from the row count (``n_samples // 32`` rows, at
+    most 256), each step the sum of its rows' updates; ``batch_size=0`` gives
+    scikit-learn's per-sample updates.
 
     Parameters
     ----------
@@ -1813,7 +1821,7 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
         Per-class weights; 'balanced' weighs classes inversely to their frequency.
     warm_start : bool, default False
         Not supported: True raises ValueError.
-    batch_size : int or 'auto', default 256
+    batch_size : 'auto' or int, default 'auto'
         Rows per minibatch step; 'auto' picks the batch from the row count
         (``n_samples // 32``, at least 1, at most 256), 0 runs per-sample updates.
     numeric_mode : str or None, default None
@@ -1850,7 +1858,7 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
     def __init__(self, *, penalty=None, alpha=0.0001, l1_ratio=0.15, fit_intercept=True, max_iter=1000,
                  tol=1e-3, shuffle=True, verbose=0, eta0=1.0, n_jobs=None, random_state=0,
                  early_stopping=False, validation_fraction=0.1, n_iter_no_change=5, class_weight=None,
-                 warm_start=False, batch_size=256):
+                 warm_start=False, batch_size="auto"):
         self.batch_size = batch_size
         self.penalty, self.alpha, self.l1_ratio, self.fit_intercept = penalty, alpha, l1_ratio, fit_intercept
         self.max_iter, self.tol, self.shuffle, self.verbose, self.eta0 = max_iter, tol, shuffle, verbose, eta0

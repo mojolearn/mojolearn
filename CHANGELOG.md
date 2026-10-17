@@ -2,6 +2,11 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.51 (published 2026-10-17)
+
+- `SGDClassifier` and `Perceptron` default to `batch_size='auto'` again: the fixed default of 0.8.50 (`4096` and `256`)
+  took one full-batch step per epoch on datasets smaller than the batch and underfit unscaled small datasets.
+
 ## 0.8.50 (published 2026-10-17)
 
 - `SGDClassifier` and `Perceptron` default to a fixed minibatch again (`batch_size=4096` and `batch_size=256`): on these two,

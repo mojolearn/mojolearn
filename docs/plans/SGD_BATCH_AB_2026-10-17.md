@@ -33,3 +33,26 @@ Quality: holdout accuracy (classifiers) or R2 (SGDRegressor); quality is identic
 
 - `~/mojolearn-evidence/sgd-batch-ab-20261017/nvidia/summary.txt` (failures=0, rc=0)
 - `~/mojolearn-evidence/sgd-batch-ab-20261017/amd/summary.txt` (failures=0, rc=0)
+
+## Live test finding and final decision
+
+The live test of the published 0.8.50 on Apple (M4, published 0.8.49 and 0.8.50 wheels; `breast_cancer`, 569 rows,
+raw feature scales, 3-fold cross-validated accuracy, `random_state=0`) showed the fixed default collapsing on real
+unscaled data. A fixed batch larger than the dataset is one full-batch step per epoch, which underfits or diverges on
+raw feature scales. The A/B above used synthetic standard-normal data and could not show this.
+
+| Estimator | fixed default (0.8.50) | 'auto' | 0 (per-sample) | scikit-learn | scaled data, all |
+|---|---|---|---|---|---|
+| SGDClassifier | 0.373 (4096) | 0.687 | 0.807 | 0.849 | 0.96-0.97 |
+| Perceptron | 0.373 (256) | 0.759 | 0.907 | 0.791 | 0.95-0.97 |
+
+Decision (orchestrator, 2026-10-17; quality before speed): 'auto' is the default again on all four estimators
+(SGDClassifier, SGDRegressor, Perceptron, PassiveAggressiveClassifier), released as 0.8.51. The A/B verdict above for
+SGDClassifier and Perceptron is superseded.
+
+Open follow-up: even 'auto' trails per-sample and scikit-learn on unscaled small data (SGDClassifier 0.69 vs 0.81 vs
+0.85), so the row-count rule itself (`n_samples // 32`, at least 32 steps an epoch) deserves a later lane: more steps per
+epoch at small `n_samples`.
+
+Evidence: `~/mojolearn-evidence/live-0850-apple/status.txt`, `~/mojolearn-evidence/live-0850-apple-fa/` (the venvs),
+`~/mojolearn-evidence/briefs-2026-10-17/sgd-batch-auto-restore.md`.
