@@ -1353,6 +1353,15 @@ def sgd_mb_one(
     scratch: dl batch | loss batch | partials (d + 2) * subs, then (avg_from
     >= 0, SGD_PERC_AVG) d + 1 sums of the epoch-end weights and intercept.
     Returns epochs, -1 on a non-finite weight."""
+    # lane sgd-quality (2026-10-17): the penalty's l1_ratio as the device
+    # drivers take it (x_linear/device.mojo `_sgd_mb_grid`: 0 for 'l2', 1 for
+    # 'l1'). The summed step (`mb_step` bsum) reads it for 'l2' and 'l1' too,
+    # where the host used the raw l1_ratio (default 0.15): its decay was
+    # (1 - 0.15) alpha against the device's alpha, so a summed fit with
+    # penalty 'l2' or 'l1' (Perceptron(penalty=...), SGDClassifier's 'auto')
+    # differed between the host column and the devices. New host bits for
+    # those fits only (the mean step reads l1_ratio for 'elasticnet' only).
+    var l1e = Float32(0) if penalty == P_L2 else (Float32(1) if penalty == P_L1 else l1r)
     var dlv = scratch
     var lv = scratch + batch
     var parts = lv + batch
@@ -1415,7 +1424,7 @@ def sgd_mb_one(
                 var g = Float32(0)
                 for s in range(subs):
                     g = fa(g, ld(parts, j * nsub + s))
-                st(w, woff + j, mb_step(ld(w, woff + j), g, bs, et, alpha, l1r, penalty, bsum))
+                st(w, woff + j, mb_step(ld(w, woff + j), g, bs, et, alpha, l1e, penalty, bsum))
             if fit_intercept:
                 var gb = Float32(0)
                 for s in range(subs):

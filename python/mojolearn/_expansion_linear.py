@@ -515,6 +515,35 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
     return coef, intercept
 
 
+#: lane sgd-quality (2026-10-17): the losses whose per-row gradient is bounded
+#: (|dloss| <= 1, modified_huber <= 4), so a batch's summed per-sample steps
+#: are the per-sample fit's steps taken at the batch's start and cannot
+#: overshoot past what those steps would; squared_hinge's gradient grows with
+#: the margin and keeps the mean step
+_SGD_SUM_LOSSES = frozenset(("hinge", "log_loss", "modified_huber", "perceptron"))
+
+
+def _sgd_auto_sum(batch_size, loss, learning_rate):
+    """Whether SGDClassifier's fit takes the summed batch step (`mb_step`
+    bsum: scikit-learn's per-sample update summed over the batch, the rate
+    schedule counting rows). Only for batch_size='auto' with a bounded-gradient
+    loss and a gradient rate: an explicit batch size keeps the mean step
+    (cuML MBSGD's form, which the board races), and the passive-aggressive
+    rates keep theirs.
+
+    Why (lane sgd-quality, 2026-10-17): with the mean step and the schedule
+    counting batches, a batch of b rows moves the weights about as far as ONE
+    per-sample update, so an epoch of n // b steps makes b times less
+    progress than scikit-learn's epoch; on unscaled data the fit stops
+    (n_iter_no_change) far from it. A float64 model of `sgd_mb_one` on raw
+    breast_cancer (3-fold cv, 8 seeds; docs/plans/SGD_QUALITY_2026-10-17.md):
+    hinge 'optimal' accuracy 0.747 mean step vs 0.860 summed at 32 steps an
+    epoch, per-sample 0.858, scikit-learn 0.844. MOJOLEARN_SGD_BATCH_SUM=0
+    restores the mean step (the A/B arm B)."""
+    return (isinstance(batch_size, str) and batch_size == "auto" and loss in _SGD_SUM_LOSSES
+            and learning_rate not in ("pa1", "pa2"))
+
+
 # Reference: sklearn/linear_model/_stochastic_gradient.py; kernel x_linear/sgd.mojo.
 class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
     """Linear classifier trained by stochastic gradient descent.
@@ -522,9 +551,11 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
     Follows scikit-learn's SGDClassifier: a binary linear model, one-vs-rest
     for more than two classes. Two defaults differ from scikit-learn and
     change results: the fit runs minibatch SGD with ``batch_size='auto'``,
-    which picks the batch from the row count (``n_samples // 32`` rows per
-    step, at most 4096; ``batch_size=0`` gives scikit-learn's per-sample
-    updates), and
+    which picks the batch from the row count (``n_samples // 256`` rows per
+    step, at least 1, at most 4096; with the 'hinge', 'log_loss',
+    'modified_huber' and 'perceptron' losses each step applies the sum of its
+    rows' per-sample updates on scikit-learn's learning-rate schedule;
+    ``batch_size=0`` gives scikit-learn's per-sample updates), and
     ``random_state=None`` means seed 0, so a fit is reproducible by default.
 
     Parameters
@@ -567,7 +598,9 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         Not supported: True raises ValueError.
     batch_size : 'auto' or int, default 'auto'
         Rows per minibatch step; 'auto' picks the batch from the row count
-        (``n_samples // 32``, at least 1, at most 4096), 0 runs per-sample SGD.
+        (``n_samples // 256``, at least 1, at most 4096), 0 runs per-sample
+        SGD. A positive batch size takes the mean of its rows' gradients each
+        step.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
@@ -647,7 +680,8 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS[self.loss], self.penalty, self.learning_rate,
             self.alpha, self.l1_ratio, self.eta0, self.power_t, self.epsilon, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, icodes, batch_size=self.batch_size)
+            sample_weight, self.class_weight, classes, icodes, batch_size=self.batch_size,
+            batch_sum=_sgd_auto_sum(self.batch_size, self.loss, self.learning_rate))
         return self
 
     @available_if(lambda self: self.loss == "log_loss")
@@ -685,7 +719,7 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
 
     Follows scikit-learn's SGDRegressor. Two defaults differ from
     scikit-learn and change results: the fit runs minibatch SGD with
-    ``n_samples // 32`` rows per step by default, at most 4096
+    ``n_samples // 256`` rows per step by default, at most 4096
     (``batch_size=0`` gives scikit-learn's per-sample updates), and
     ``random_state=None`` means seed 0, so a fit is
     reproducible by default.
@@ -727,7 +761,7 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
     warm_start : bool, default False
         Not supported: True raises ValueError.
     batch_size : 'auto' or int, default 'auto'
-        Rows per minibatch step; 'auto' is ``n_samples // 32`` (at least 1,
+        Rows per minibatch step; 'auto' is ``n_samples // 256`` (at least 1,
         at most 4096), 0 runs per-sample SGD.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
@@ -1783,7 +1817,7 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
     Follows scikit-learn's Perceptron: SGD with the perceptron loss and a
     constant step ``eta0``, one-vs-rest for more than two classes. Unlike
     scikit-learn, the default fit runs minibatches with ``batch_size='auto'``,
-    which picks the batch from the row count (``n_samples // 32`` rows, at
+    which picks the batch from the row count (``n_samples // 256`` rows, at
     most 256), each step the sum of its rows' updates; ``batch_size=0`` gives
     scikit-learn's per-sample updates.
 
@@ -1823,7 +1857,7 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
         Not supported: True raises ValueError.
     batch_size : 'auto' or int, default 'auto'
         Rows per minibatch step; 'auto' picks the batch from the row count
-        (``n_samples // 32``, at least 1, at most 256), 0 runs per-sample updates.
+        (``n_samples // 256``, at least 1, at most 256), 0 runs per-sample updates.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
         or ``'fast'``, which runs on Apple GPUs only); None uses the process
@@ -1914,7 +1948,7 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
     Follows scikit-learn's PassiveAggressiveClassifier, one-vs-rest for more
     than two classes: ``loss='hinge'`` is PA-I and ``'squared_hinge'`` is
     PA-II. Unlike scikit-learn, the default fit runs minibatches of
-    ``n_samples // 32`` rows (at most 256); ``batch_size=0`` gives scikit-learn's
+    ``n_samples // 256`` rows (at most 256); ``batch_size=0`` gives scikit-learn's
     per-sample updates.
 
     Parameters
@@ -1950,7 +1984,7 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
     average : bool, default False
         Not supported: True raises ValueError.
     batch_size : 'auto' or int, default 'auto'
-        Rows per minibatch step; 'auto' is ``n_samples // 32`` (at least 1,
+        Rows per minibatch step; 'auto' is ``n_samples // 256`` (at least 1,
         at most 256), 0 runs per-sample updates.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
@@ -2045,7 +2079,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
     Follows scikit-learn's PassiveAggressiveRegressor:
     ``loss='epsilon_insensitive'`` is PA-I and
     ``'squared_epsilon_insensitive'`` is PA-II. Unlike scikit-learn, the
-    default fit runs minibatches of ``n_samples // 32`` rows (at most 256);
+    default fit runs minibatches of ``n_samples // 256`` rows (at most 256);
     ``batch_size=0`` gives scikit-learn's per-sample updates.
 
     Parameters
@@ -2079,7 +2113,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
     average : bool, default False
         Not supported: True raises ValueError.
     batch_size : 'auto' or int, default 'auto'
-        Rows per minibatch step; 'auto' is ``n_samples // 32`` (at least 1,
+        Rows per minibatch step; 'auto' is ``n_samples // 256`` (at least 1,
         at most 256), 0 runs per-sample updates.
     numeric_mode : str or None, default None
         Numeric mode for this model (``'identical'``
