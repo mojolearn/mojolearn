@@ -394,7 +394,7 @@ EXPECTED_FAILED_CHECKS = {
     # lane sgd-quality (2026-10-17): an object-dtype array of numbers is now
     # converted like scikit-learn's check_array (`_buffer._materialize`), and
     # a non-number leaf raises its TypeError; SGDClassifier, Perceptron,
-    # SGDRegressor and PassiveAggressiveClassifier pass check_dtype_object
+    # SGDRegressor and PassiveAggressiveClassifier are checked against it
     # (tools/sgd_quality_check.py). The entry stays (non-strict) for the
     # estimators whose fit refuses another part of the check; drop it once a
     # full run shows XPASS everywhere.

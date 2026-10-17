@@ -1150,7 +1150,7 @@ comptime SGD_ADAPTIVE_BATCH = not is_defined["MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF"]
 # and scikit-learn (SGDClassifier 0.687 vs 0.807 vs 0.849); a float64 model
 # of `sgd_mb_one` (lane notes, docs/plans/SGD_QUALITY_2026-10-17.md) puts the
 # loss on the step count on unscaled data at every size (synthetic 10k rows,
-# features scaled up to 1000x: hinge accuracy 0.75 at 32 steps, 0.79 at 128,
+# features scaled up to 1000x, summed step: hinge accuracy 0.75 at 32 steps, 0.79 at 128,
 # 0.86 at 512, 0.87 per-sample, scikit-learn 0.89; SGDRegressor on raw
 # diabetes R2 0.16 at 32 steps, 0.39 at 256 and per-sample, scikit-learn
 # 0.39). Cost reasoning: while a batch fits one block (batch <= XG_TPB) the
