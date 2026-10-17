@@ -36,19 +36,24 @@ Python changed, and no bits changed.
 - `fa_fast` (FAST + Apple only): the sweep flag folded on the device; the
   log-likelihood sums use a fixed blocked soft-float64 order (FAST bits).
 
-Still owed, with the reason:
+Closed by lane gbdt-host-loops-12 (2026-10-17); `no_host_routes.py --owed` lists no `mojo-host-loop` site:
 
-- `pointwise_oracle.mojo` (11 sites): the multi-dimensional host Newton
-  walker (`descent_helpers.newton_like_walker_estimate`) reads them. It
-  regularizes, steps and backtracks on host lists, so moving these readbacks
-  alone does not remove the host walk. The fix is to extend
-  `device_walker.mojo` to the multi-dimensional walk (blocked Hessian,
-  per-leaf Cholesky, MultiClass gauge), with the host column in
-  `gbdt/host/gbdt_oracle_multiclass.mojo`. That needs its own lane.
-- `resident_model.mojo:1024`: the transpose feeds the host CTR expansion
-  (`expand_raw_columns`, `expand_for_model_apply`). Both have to move to
-  the device together; a device transpose followed by a download would only
-  add a round trip.
+- `pointwise_oracle.mojo` (11 sites): the multi-dimensional walk runs on the device
+  (`device_walker.device_multi_walk_estimate`: MultiClass, MultiClassOneVsAll, MultiRMSE; Newton or Gradient; any
+  iteration count; weighted, deferred weights included; IDENTICAL and FAST). Move, regularize and MoveTo, the gradient
+  with MultiClass's pinned component, the value fold (`deterministic_sum_lanes_kernel[1]`'s order, as the
+  single-dimensional walk), the AnyImprovement test, the blocked Cholesky (block per leaf in 32 KiB threadgroup memory;
+  a wider system per thread over a global scratch, same chains) or the diagonal direction, all soft-float64. The
+  oracle's multi-dimensional readbacks are deleted (TOMBSTONES.md "GPU oracle multi-dimensional host walk"); its arm is
+  enqueue-only (`enqueue_multi_dim_evaluation`, `enqueue_multi_dim_hessian`). The single-dimensional host interface
+  the checks' host walker reads (`:798`, `:1080`, `:1139`, `:1433`) runs its arithmetic in kernels and copies home in
+  bulk; Exact's Regularize runs on the device. `_estimate_and_apply` refuses a walk no device walker takes: no GPU
+  fit runs `descent_helpers`' host walker. Host column: `gbdt_oracle_multiclass._estimate_multi` (one Newton
+  iteration) restates the same statements; unchanged.
+- `resident_model.mojo:1024`: the row-major transpose and the CTR expansion (`expand_raw_columns`,
+  `expand_for_model_apply`) run on the device together (`gbdt/models/kernel/resident_ctr.mojo`): the input goes up as
+  handed over and the model columns land column-major in `d_raw`. Every float32 operation is the correctly rounded
+  soft-float64 result narrowed once, so the host's words. Host column: `predict_floats`, unchanged.
 
 Line numbers below are at this lane's head (tags add one line above each
 tagged loop).
