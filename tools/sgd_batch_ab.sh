@@ -21,7 +21,8 @@ unset PYTHONPATH
 if [ -x /usr/bin/python3 ]; then base=/usr/bin/python3; else base=$(command -v python3); fi
 cd "$O" || exit 3
 echo "sgd_batch_ab: vendor=$vendor version=$version base=$base out=$O" | tee -a "$log"
-[ -x "$O/venv/bin/python" ] || "$base" -m venv "$O/venv" >>"$log" 2>&1 || { echo "sgd_batch_ab: venv failed rc=$?" | tee -a "$log"; exit 3; }
+rm -rf "$O/venv"   # a fresh venv every run: a half-made one from an earlier base python is never reused
+"$base" -m venv "$O/venv" >>"$log" 2>&1 || { echo "sgd_batch_ab: venv failed rc=$?" | tee -a "$log"; exit 3; }
 P=$O/venv/bin/python
 "$P" -m pip install --no-input --disable-pip-version-check -q numpy >>"$log" 2>&1 || { echo "sgd_batch_ab: numpy install failed" | tee -a "$log"; exit 3; }
 wheels=$O/wheels-$(date -u +%Y%m%dT%H%M%SZ)
