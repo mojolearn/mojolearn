@@ -2,6 +2,12 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## Unreleased
+
+- `SGDClassifier` and `Perceptron` default to a fixed minibatch again (`batch_size=4096` and `batch_size=256`): on these two,
+  the row-count choice was slower and less accurate on small datasets. `batch_size='auto'` is still accepted.
+  `SGDRegressor` and `PassiveAggressiveClassifier` keep `batch_size='auto'` as their default.
+
 ## 0.8.49 (published 2026-10-16)
 
 - On AMD GPUs, each process now starts in under a second, and several processes can share one GPU. MAX's device memory
