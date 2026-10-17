@@ -31,7 +31,7 @@ for c in check-multiclass-oracle check-newton-walker check-logloss-estimator che
 # SKIP_IDREC=1: a rerun of the other steps after the record already landed
 [ "${SKIP_IDREC:-0}" = 1 ] || step idrec env ONLY_CHANGED=table REPEATS=1 bash tools/record_identity_column.sh "$label" "$out/idrec"
 # the SGD check compares against scikit-learn, which the default env does not carry
-step sk-install $PY -m pip install -q scikit-learn pytest
+step sk-install bash -c "$PY -m ensurepip -q >/dev/null 2>&1; $PY -m pip install -q scikit-learn pytest"
 step sgd-quality $PY tools/sgd_quality_check.py "$out/sgd"
 step gbdt-default $PY tools/apple_slow_paths_check.py gbdt --n-estimators 50 --mode identical
 cat > "$out/mcdig.py" <<'EOF'
