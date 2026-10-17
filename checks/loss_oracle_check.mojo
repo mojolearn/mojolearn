@@ -67,7 +67,8 @@ were: tree-0 leaf gap 2.1e-05 (Poisson), prediction relative RMS 8.3e-05
 splits out of 48 in every arm but MAPE. The bands sit roughly an order of
 magnitude above each.
 
-THE MAPE DEFECT, found by this check and still open.
+THE MAPE DEFECT, found by this check; CLOSED 2026-08-21 (ac88e5c06), the
+estimator's alpha now rides separately as `estimator_alpha`.
 
   Their `ComputeWeightedQuantile` reads the quantile level it solves for
   out of the LOSS PARAMS MAP, defaulting to 0.5 when the map has no
@@ -106,12 +107,11 @@ THE MAPE DEFECT, found by this check and still open.
   had no caller in any check -- `CONTRIBUTING.md` (Non-default paths), a non-default path is
   an unchecked path.
 
-  THE FIX is to carry the estimator's alpha separately from the kernel's:
+  THE FIX carries the estimator's alpha separately from the kernel's:
   `GetAlpha(lossDescription)` (`options/loss_description.cpp:95-102`,
-  0.5 when the key is absent) is `TLossDescription.get_alpha()` here and
-  already exists. It has to reach `BinOptimizedOracle` as its own field
-  rather than riding on `kernel_alpha()`. That is under `gbdt/`, which
-  this session does not write.
+  0.5 when the key is absent) is `TLossDescription.get_alpha()` here, and
+  it reaches `BinOptimizedOracle` as its own `estimator_alpha` field
+  (`gbdt/train.mojo`, `estimator_alpha=loss_desc.get_alpha()`).
 
 THE TWEEDIE ROW CLOSES DEVIATION 62. Their GPU
 reads `variance_power` into a member nothing reads again
@@ -519,6 +519,16 @@ def run_arm(
         loss_variance_power=vp,
         leaf_estimation_iterations=a.iters,
         leaf_estimation_method=a.method,
+        # The generator pins `boost_from_average=False`
+        # (`tools/catboost_loss_oracle.py:291`). Our unset default resolves
+        # TRUE for MAE, Quantile and MAPE since 980017564 (their
+        # `AdjustBoostFromAverageDefaultValue` rule, `gbdt/train.mojo:2832`),
+        # which started our cursor at the target quantile: every tree-0
+        # leaf of Quantile/MAE moved by exactly lr * median (0.3 x
+        # -0.0094071 = -0.0028221, the measured constant offset on all
+        # non-empty leaves), and MAPE's tree 0 was grown at a non-zero
+        # cursor. Pin it here too: same options on both arms.
+        boost_from_average=0,
     )
 
     # 1. THE GRID, per cell, exact.
@@ -865,15 +875,10 @@ def main() raises:
     if failures != 0:
         raise Error(
             "loss oracle check FAILED with " + String(failures)
-            + " -- read the FAIL lines above. As of 2026-08-21 the expected"
-            " failures are the FOUR on the MAPE arm and nothing else, and"
-            " they are real: MAPE's Exact leaf estimator runs at alpha 0"
-            " because `gbdt/train.mojo:715` feeds it the TARGET KERNEL's"
-            " alpha, where CatBoost reads the estimator's alpha from the"
-            " loss params map with a 0.5 default"
-            " (`leaves_estimation_helper.h:72-74`). Every MAPE leaf value"
-            " is the leaf's MINIMUM residual as a result. A failure on any"
-            " other arm is new. See this file's docstring."
+            + " -- read the FAIL lines above. No arm is expected to fail:"
+            " the MAPE alpha defect is closed (`estimator_alpha`), and every"
+            " arm trains at `boost_from_average=0` as the generator pins it."
+            " See this file's docstring."
         )
     print(
         "loss oracle check: nine objectives against CatBoost's own CPU"
