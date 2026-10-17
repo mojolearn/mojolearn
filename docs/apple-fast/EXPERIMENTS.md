@@ -2129,7 +2129,7 @@ Source: ~/mojolearn-evidence/quality-vs-opponent-20261015.md (M3 0.8.34 board WO
 
 ## FAST Apple slow paths (lane/apple-slow-paths, 2026-10-17)
 
-Live finding (M2 Pro, pip 0.8.49 and 0.8.50, FactorAnalysis 20k x 64): fast 7016 ms, identical 316 ms, score equal (-39.8428). M3 board 0.8.34 had fast ahead (istella 9052 -> 5636, taxi 324 -> 158).
+Live finding (M4, pip 0.8.49 and 0.8.50, FactorAnalysis 20k x 64): fast 7016 ms, identical 316 ms, score equal (-39.8428). M3 board 0.8.34 had fast ahead (istella 9052 -> 5636, taxi 324 -> 158).
 
 | define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
 |---|---|---|---|---|---|---|
