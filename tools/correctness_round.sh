@@ -24,10 +24,14 @@ label=$1; out=$2; mkdir -p "$out"; S=$out/summary.txt; : > "$S"
 PY="pixi run -e default python"
 step() { local name=$1; shift; ( "$@" ) > "$out/$name.log" 2>&1; echo "STEP $name rc=$?" >> "$S"; }
 
-step mojo-checks pixi run check-multiclass-oracle check-newton-walker check-logloss-estimator check-loss-oracle \
+# one pixi task per call: `pixi run a b c` passes b and c to a as arguments
+for c in check-multiclass-oracle check-newton-walker check-logloss-estimator check-loss-oracle \
   check-logloss-leaf-oracle check-exact-estimation check-fit-pointwise check-ordered-boosting check-multiclass-train \
-  check-ctr-apply check-ctr-device
-step idrec env ONLY_CHANGED=table REPEATS=1 bash tools/record_identity_column.sh "$label" "$out/idrec"
+  check-ctr-apply check-ctr-device; do step "mojo-$c" pixi run "$c"; done
+# SKIP_IDREC=1: a rerun of the other steps after the record already landed
+[ "${SKIP_IDREC:-0}" = 1 ] || step idrec env ONLY_CHANGED=table REPEATS=1 bash tools/record_identity_column.sh "$label" "$out/idrec"
+# the SGD check compares against scikit-learn, which the default env does not carry
+step sk-install $PY -m pip install -q scikit-learn pytest
 step sgd-quality $PY tools/sgd_quality_check.py "$out/sgd"
 step gbdt-default $PY tools/apple_slow_paths_check.py gbdt --n-estimators 50 --mode identical
 cat > "$out/mcdig.py" <<'EOF'
@@ -37,14 +41,16 @@ rng = np.random.default_rng(7)
 for k in (3, 17, 33, 62, 63, 64, 65):
     X = rng.standard_normal((4000, 12)).astype(np.float32)
     y = (np.abs(X[:, 0] * 7 + X[:, 1] * 3).astype(np.int64) + np.arange(4000)) % k
-    m = ml.GradientBoostingClassifier(n_estimators=5).fit(X, y)
-    print(f"MCDIG multiclass k={k} {h(m.predict_proba(X))}", flush=True)
+    m = ml.GradientBoosting(loss="MultiClass", n_estimators=5).fit(X, y)
+    print(f"MCDIG multiclass k={k} {h(m.predict(X))}", flush=True)
 X = rng.standard_normal((4000, 12)).astype(np.float32)
 y = (np.arange(4000) % 5)
-m = ml.GradientBoostingClassifier(n_estimators=5, leaf_estimation_iterations=3).fit(X, y)
-print(f"MCDIG multiclass k=5 leaf_iters=3 {h(m.predict_proba(X))}", flush=True)
+m = ml.GradientBoosting(loss="MultiClass", n_estimators=5, leaf_estimation_iterations=3).fit(X, y)
+print(f"MCDIG multiclass k=5 leaf_iters=3 {h(m.predict(X))}", flush=True)
+m = ml.GradientBoosting(loss="MultiClassOneVsAll", n_estimators=5).fit(X, y)
+print(f"MCDIG onevsall k=5 {h(m.predict(X))}", flush=True)
 Y = np.stack([X[:, 0] * 2 + X[:, 1], X[:, 2] - X[:, 3], X[:, 4] * X[:, 5]], axis=1).astype(np.float32)
-m = ml.GradientBoostingRegressor(n_estimators=5, loss="MultiRMSE").fit(X, Y)
+m = ml.GradientBoosting(loss="MultiRMSE", n_estimators=5).fit(X, Y)
 print(f"MCDIG multirmse dim=3 {h(m.predict(X))}", flush=True)
 EOF
 step multiclass-digests $PY "$out/mcdig.py"
