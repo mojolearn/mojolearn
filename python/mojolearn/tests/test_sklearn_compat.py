@@ -389,9 +389,16 @@ FLOAT32_ONLY = {"MinMaxScaler", "StandardScaler"}
 EXPECTED_FAILED_CHECKS = {
     # NUMPY-FREE INPUT CONTRACT (NUMPY_FREE_CONTRACT.md): X crosses into the
     # kernels through the buffer protocol or nested Python sequences of
-    # numbers. An object-dtype array exports no numeric buffer, and
-    # scikit-learn's _NotAnArray exposes only __array__ (no buffer, no len).
-    "check_dtype_object": "object-dtype X exports no numeric buffer (NumPy-free input contract)",
+    # numbers. scikit-learn's _NotAnArray exposes only __array__ (no buffer,
+    # no len).
+    # lane sgd-quality (2026-10-17): an object-dtype array of numbers is now
+    # converted like scikit-learn's check_array (`_buffer._materialize`), and
+    # a non-number leaf raises its TypeError; SGDClassifier, Perceptron,
+    # SGDRegressor and PassiveAggressiveClassifier are checked against it
+    # (tools/sgd_quality_check.py). The entry stays (non-strict) for the
+    # estimators whose fit refuses another part of the check; drop it once a
+    # full run shows XPASS everywhere.
+    "check_dtype_object": "object-dtype X: kept non-strict until every estimator is shown to pass",
     "check_estimators_data_not_an_array": "an __array__-only object is not a buffer or a sequence "
                                           "(NumPy-free input contract)",
 }
