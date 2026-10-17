@@ -9,33 +9,42 @@ install) on a box:
     python tools/sgd_quality_check.py <outdir> [--no-checks]
 
 Part 1, quality: 3-fold cross-validated accuracy (classifiers) or R2
-(SGDRegressor), shuffled folds with random_state 0, every estimator at its
-defaults with random_state=0, on
+(the regressors), shuffled folds with random_state 0, every estimator at its
+defaults, on
 
   breast_cancer  raw feature scales (569 rows, 30 features; the live finding)
-  diabetes       scikit-learn's copy (442 rows, 10 features; SGDRegressor)
+  diabetes       scikit-learn's copy (442 rows, 10 features; the regressors)
   normal-1k/10k  standard-normal features, 64 columns, y = x w + 0.5 noise
                  (tools/sgd_batch_ab.py's generator; classes y > 0)
 
 for SGDClassifier, Perceptron and PassiveAggressiveClassifier (the
-classification sets) and SGDRegressor (the regression sets): ours at the
-default batch_size='auto', ours at batch_size=0 (per-sample updates) and
-scikit-learn's twin. Both arms are scored by sklearn.metrics on their
-predictions. One line per cell:
+classification sets) and SGDRegressor and PassiveAggressiveRegressor (the
+regression sets): ours at the default batch_size='auto', ours at batch_size=0
+(per-sample updates) and scikit-learn's twin. Both arms are scored by
+sklearn.metrics on their predictions.
 
-  SGDQ <estimator> <dataset> ours=<q> ours_ps=<q> sklearn=<q> delta=<ours-sklearn> verdict=OK|LOW
+Seeds: the two small real sets (breast_cancer, diabetes) score every arm as
+the mean over estimator random_state 0..REAL_SEEDS-1 (the folds stay
+random_state 0); the synthetic sets use random_state 0 alone. On raw
+breast_cancer one shuffle order decides the online fit (lane pa-quality,
+2026-10-17): a float32 model of our PA-I fit with our exact epoch order
+reproduces our L40S cell (0.7367 at seed 0) and scikit-learn's own fit ranges
+0.772 to 0.912 over random_state 0..19 (mean 0.869; ours 0.864), so a
+one-seed cell is a lottery, not a quality verdict. One line per cell:
+
+  SGDQ <estimator> <dataset> ours=<q> ours_ps=<q> sklearn=<q> delta=<ours-sklearn> seeds=<s> verdict=OK|LOW
 
 LOW: ours below scikit-learn by more than QUALITY_MARGIN (0.02 accuracy or R2,
 about one fold's sampling noise on 569 rows: one fold holds ~190 rows, so one
 row is 0.005 and four rows are 0.02).
 
 Part 2, scikit-learn's estimator checks (check_estimator, on_fail=None) for
-the four, twice each: the instance the library's own test suite checks
+the five, twice each: the instance the library's own test suite checks
 (`test_sklearn_compat._make`) and the default constructor. Expected failures
 are the test suite's (`test_sklearn_compat._expected_failed_checks`: scikit-
 learn's own xfails for the same estimator name, e.g. its
 check_sample_weight_equivalence_on_dense_data for SGDClassifier, Perceptron and
-SGDRegressor) minus check_dtype_object, which these four must pass. One line
+SGDRegressor) minus check_dtype_object, which these five must pass. One line
 per instance:
 
   SKCHECK <estimator> <instance> checks=<n> passed=<p> xfail=<x> skipped=<s> failed=<f> [names]
@@ -60,10 +69,13 @@ import mojolearn as ml
 
 QUALITY_MARGIN = 0.02
 SEED = 0
+#: estimator seeds averaged on the small real sets (see the docstring)
+REAL_SEEDS = 10
+REAL_SETS = ("breast_cancer", "diabetes")
 FEATURES = 64  # tools/sgd_batch_ab.py
 CLASSIFIERS = ("SGDClassifier", "Perceptron", "PassiveAggressiveClassifier")
-REGRESSORS = ("SGDRegressor",)
-#: checks the four must pass even though the suite xfails them for others
+REGRESSORS = ("SGDRegressor", "PassiveAggressiveRegressor")
+#: checks the five must pass even though the suite xfails them for others
 MUST_PASS = ("check_dtype_object",)
 
 
@@ -86,12 +98,15 @@ def datasets():
     return out
 
 
-def sklearn_twin(name):
+def sklearn_twin(name, seed=SEED):
     if name == "PassiveAggressiveClassifier" and not hasattr(sk_lm, name):
         # scikit-learn 1.10 removed it; its documented replacement
         return sk_lm.SGDClassifier(loss="hinge", penalty=None, learning_rate="pa1", eta0=1.0,
-                                   random_state=SEED)
-    return getattr(sk_lm, name)(random_state=SEED)
+                                   random_state=seed)
+    if name == "PassiveAggressiveRegressor" and not hasattr(sk_lm, name):
+        return sk_lm.SGDRegressor(loss="epsilon_insensitive", penalty=None, learning_rate="pa1", eta0=1.0,
+                                  random_state=seed)
+    return getattr(sk_lm, name)(random_state=seed)
 
 
 def cv_score(make, x, y, task):
@@ -112,12 +127,17 @@ def quality(out_dir):
         for name in names:
             cls = getattr(ml, name)
             cell = {"estimator": name, "dataset": dname}
+            seeds = range(REAL_SEEDS) if dname in REAL_SETS else (SEED,)
             try:
-                cell["ours"] = cv_score(lambda: cls(random_state=SEED), x, y, task)
-                cell["ours_ps"] = cv_score(lambda: cls(random_state=SEED, batch_size=0), x, y, task)
+                cell["ours"] = float(np.mean([cv_score(lambda: cls(random_state=s), x, y, task)
+                                              for s in seeds]))
+                cell["ours_ps"] = float(np.mean([cv_score(lambda: cls(random_state=s, batch_size=0), x, y, task)
+                                                 for s in seeds]))
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    cell["sklearn"] = cv_score(lambda: sklearn_twin(name), x, y, task)
+                    cell["sklearn"] = float(np.mean([cv_score(lambda: sklearn_twin(name, s), x, y, task)
+                                                     for s in seeds]))
+                cell["seeds"] = len(seeds)
                 cell["delta"] = cell["ours"] - cell["sklearn"]
                 cell["verdict"] = "LOW" if cell["delta"] < -QUALITY_MARGIN else "OK"
                 low += cell["verdict"] == "LOW"
@@ -131,9 +151,10 @@ def quality(out_dir):
                 print(f"SGDQ {name} {dname} verdict=ERROR {cell['error']}", flush=True)
             else:
                 print(f"SGDQ {name} {dname} ours={cell['ours']:.4f} ours_ps={cell['ours_ps']:.4f} "
-                      f"sklearn={cell['sklearn']:.4f} delta={cell['delta']:+.4f} verdict={cell['verdict']}",
+                      f"sklearn={cell['sklearn']:.4f} delta={cell['delta']:+.4f} seeds={cell['seeds']} "
+                      f"verdict={cell['verdict']}",
                       flush=True)
-    keys = ("estimator", "dataset", "ours", "ours_ps", "sklearn", "delta", "verdict", "error")
+    keys = ("estimator", "dataset", "ours", "ours_ps", "sklearn", "delta", "seeds", "verdict", "error")
     with open(os.path.join(out_dir, "sgd_quality.tsv"), "w") as f:
         f.write("\t".join(keys) + "\n")
         for cell in rows:

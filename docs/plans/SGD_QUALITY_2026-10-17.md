@@ -49,4 +49,28 @@ Standard-normal data (sim3a.out): every form within 0.025 of scikit-learn at 1k 
 ## Check (orchestrator, CPU box, built tree)
 
 `python tools/sgd_quality_check.py <outdir>`: SGDQ lines (ours 'auto', ours per-sample, scikit-learn) and
-SKCHECK lines for the four estimators; `SGDQ_SUMMARY ... rc=`.
+SKCHECK lines for the five estimators; `SGDQ_SUMMARY ... rc=`.
+
+## Passive-aggressive audit (lane pa-quality, 2026-10-17)
+
+The L40S check had PassiveAggressiveClassifier on raw breast_cancer at 0.7367 ('auto' and per-sample alike;
+'auto' is batch 1 at 379 training rows) against scikit-learn's 0.8981.
+
+- Line by line against scikit-learn 1.9.1 (`_sgd_fast.pyx.tp` `_plain_sgd`, `_passive_aggressive.py`), our
+  `sgd_one` and `mb_row_dot` PA paths agree: PA-I tau = min(C, loss / |x|^2) with the row skipped when
+  |x|^2 = 0, PA-II tau = loss / (|x|^2 + 0.5 / C); |x|^2 excludes the intercept; the intercept moves by the same
+  signed tau (intercept_decay 1 on dense data); hinge (threshold 1) for both classifier rates and
+  epsilon_insensitive for both regressor rates; the sign is y (hinge) or -1 when y - p < 0; class_weight
+  multiplies tau; no penalty; the epoch objective is the loss alone and stops on n_iter_no_change epochs above
+  best - tol; `average` and sample_weight are refused (scikit-learn's PA fit takes no sample_weight).
+- Float64 and float32 models of that update, unshuffled, give scikit-learn's exact cv accuracy (0.8613); the
+  regressor's PA-II gives its exact R2, PA-I matches its coefficients over the first 50 epochs and then drifts
+  on summation-order rounding (the clamped tau = C steps are chaotic on raw targets).
+- A float32 model with our exact epoch order (`perm_at` / `perm_key`) reproduces the L40S cell, 0.7367 at
+  seed 0. Over estimator seeds 0..19: ours 0.864 (min 0.737, max 0.909), scikit-learn 0.869 (min 0.772, max
+  0.912). PassiveAggressiveRegressor on diabetes, seeds 0..7: PA-I R2 ours 0.459, scikit-learn 0.453.
+- No kernel change: seed 0 is an unlucky shuffle order, not a semantic difference. `tools/sgd_quality_check.py`
+  now scores breast_cancer and diabetes as the mean over random_state 0..9 for every arm and adds a
+  PassiveAggressiveRegressor cell (raw diabetes and the synthetic regression sets).
+- Models and outputs: `~/mojolearn-evidence/pa-quality-20261017/sim/` (pa_sim.py, pa_ours.py, par_ours.py,
+  seeds20.out, par1.out).
