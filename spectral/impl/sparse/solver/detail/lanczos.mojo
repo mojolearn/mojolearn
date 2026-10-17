@@ -2721,18 +2721,9 @@ def _residual(
 # ---------------------------------------------------------------------------
 
 
-def lanczos_v0(seed: UInt64, n: Int) -> List[Float32]:
-    """DEVIATION 772's start vector: hashed uniform `[0, 1)`, 24 bits,
-    exact."""
-    var out = List[Float32]()
-    for i in range(n):
-        var z = seed * UInt64(0x9E3779B97F4A7C15) + UInt64(i) + UInt64(1)
-        z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-        z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
-        z = z ^ (z >> 31)
-        var top = UInt32((z >> 40) & UInt64(0xFFFFFF))
-        out.append(Float32(top) * Float32(5.9604644775390625e-08))
-    return out^
+# `lanczos_v0` (the host loop over n) moved: the start vector is drawn on
+# the device (`lanczos_v0_kernel`, the same hash: exact), and the host column
+# keeps its own spelling in spectral/host/spectral_oracle.mojo.
 
 
 def lanczos_compute_eigenpairs(
@@ -2750,18 +2741,41 @@ def lanczos_compute_eigenpairs(
 ) raises -> Int:
     """`lanczos_compute_eigenpairs` (`:756-796`): the optional `v0`, else
     the seeded start vector (DEVIATION 772), then `lanczos_smallest`."""
-    var start: List[Float32]
     if has_v0:
-        start = v0.copy()
+        trace.record_list_f32("spectral.lanczos.v0", v0)
+        return lanczos_smallest(
+            ctx,
+            A,
+            config.n_components,
+            config.max_iterations,
+            config.ncv,
+            config.tolerance,
+            config.which,
+            eigenvalues,
+            eigenvectors,
+            v0,
+            trace,
+            tpb,
+            scratch_pad,
+            scratch_poison,
+        )
     else:
         if not config.has_seed:
             raise Error(
                 "lanczos: seed=None selects std::random_device, which is not"
                 " reproducible; pass a seed (DEVIATION 772)"
             )
-        start = lanczos_v0(config.seed, A.n)
-    trace.record_list_f32("spectral.lanczos.v0", start)
-    return lanczos_smallest(
+    # the seeded start vector drawn on the device (`lanczos_v0_kernel`, the
+    # same hash as the host column's `lanczos_v0`: exact), recorded from
+    # there; the solver draws its own copy in place (no host loop over n)
+    if trace.enabled:
+        var no_start = List[Float32]()
+        var d_v0 = _lanczos_start_vector(ctx, no_start, config.seed, True, A.n, tpb)
+        trace.record_device(ctx, "spectral.lanczos.v0", d_v0, A.n)
+        _ = d_v0^
+    var no_v0 = List[Float32]()
+    var no_dev = ctx.enqueue_create_buffer[DType.float32](1)
+    var restarts = lanczos_smallest_dev(
         ctx,
         A,
         config.n_components,
@@ -2771,12 +2785,18 @@ def lanczos_compute_eigenpairs(
         config.which,
         eigenvalues,
         eigenvectors,
-        start,
+        no_v0,
+        config.seed,
+        True,
+        no_dev,
+        False,
         trace,
         tpb,
         scratch_pad,
         scratch_poison,
     )
+    _ = no_dev^
+    return restarts
 
 
 def lanczos_compute_eigenpairs_dev(

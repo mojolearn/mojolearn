@@ -162,6 +162,8 @@ from gbdt.methods.leaves_estimation.device_walker import (
     weight_keep_mask_strided_kernel,
 )
 from std.memory import bitcast, memcpy
+from std.gpu import block_dim, block_idx, thread_idx
+from checks.soft_f64 import sf64_div, sf64_from_f32, sf64_from_int, sf64_neg
 from gbdt.methods.kernel.two_level_leaves import (
     TL_BLOCK,
     TL_GRID,
@@ -681,6 +683,27 @@ def _test_loss_enqueue(
     )
 
 
+def _test_loss_div_kernel(
+    fv: MutPointer[Float32, MutAnyOrigin],
+    pending_in: Int32,
+    n_in: Int32,
+    losses: MutPointer[UInt64, MutAnyOrigin],
+):
+    """One thread a pending slot: `-double(fv[j]) / double(n)` in
+    soft-float64 (`checks/soft_f64.mojo`: negation flips the sign bit, the
+    divide is correctly rounded), the bits of the host expression it
+    replaces, written as double bit patterns."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(pending_in):
+        losses.unsafe_store(
+            j,
+            sf64_div(
+                sf64_neg(sf64_from_f32(fv.unsafe_load(j))),
+                sf64_from_int(Int(n_in)),
+            ),
+        )
+
+
 def _test_loss_flush(
     ctx: DeviceContext,
     mut test: TestArm,
@@ -696,16 +719,29 @@ def _test_loss_flush(
     no stop is ever decided late."""
     if pending <= 0:
         return
-    ctx.enqueue_copy(dst_ptr=test.h_fv.unsafe_ptr(), src_buf=test.fv)
-    ctx.synchronize()
+    # the losses divided on the device (`_test_loss_div_kernel`), one bulk
+    # copy into their placeholders; the host only feeds the detector
     var n = test.n_rows
     var base = len(test_losses) - pending
+    var d_losses = ctx.enqueue_create_buffer[DType.uint64](pending)
+    var h_losses = ctx.enqueue_create_host_buffer[DType.uint64](pending)
+    ctx.enqueue_function[_test_loss_div_kernel](
+        test.fv.unsafe_ptr(), Int32(pending), Int32(n),
+        d_losses.unsafe_ptr(),
+        grid_dim=(pending + 63) // 64, block_dim=64,
+    )
+    ctx.enqueue_copy(dst_ptr=h_losses.unsafe_ptr(), src_buf=d_losses)
+    ctx.synchronize()
+    memcpy(
+        dest=(test_losses.unsafe_ptr() + base).bitcast[UInt64](),
+        src=h_losses.unsafe_ptr(),
+        count=pending,
+    )
+    _ = d_losses^  # past the drain
+    _ = h_losses^
+    # driver-loop: over the pending iterations (one held-out loss each)
     for j in range(pending):
-        var t_loss = (
-            -Float64(test.h_fv.unsafe_ptr().unsafe_load(j)) / Float64(n)
-        )
-        test_losses[base + j] = t_loss
-        detector.add_error(t_loss)
+        detector.add_error(test_losses[base + j])
 
 
 @fieldwise_init
@@ -1230,9 +1266,15 @@ def finish_deferred_estimation(
     if tail.count_not_pd:
         # the per-leaf fallback flags counted on the device (one word)
         not_pd_total += Int(est_ws[0].h_count.unsafe_ptr().unsafe_load(0))
+    # one bulk copy of the read-back leaf values (no element loop)
     leaf_values.clear()
-    for i in range(tail.n_values):
-        leaf_values.append(est_ws[0].h_est.unsafe_ptr().unsafe_load(i))
+    if tail.n_values > 0:
+        leaf_values.resize(unsafe_uninit_length=tail.n_values)
+        memcpy(
+            dest=leaf_values.unsafe_ptr(),
+            src=est_ws[0].h_est.unsafe_ptr(),
+            count=tail.n_values,
+        )
     merge_stage_times(stage_times, tail.oracle.times)
     trace.record_list_f32(tail.leaf_tag, leaf_values)
     _ = tail^  # past the drain (step-33 race class, device side)
@@ -1602,9 +1644,15 @@ def _estimate_and_apply(
                 return
         # the task's one settle point (DEVIATION 1891's holds)
         ctx.synchronize()
+        # one bulk copy of the read-back leaf values (no element loop)
         leaf_values.clear()
-        for i in range(n_leaves):
-            leaf_values.append(h_est.unsafe_ptr().unsafe_load(i))
+        if n_leaves > 0:
+            leaf_values.resize(unsafe_uninit_length=n_leaves)
+            memcpy(
+                dest=leaf_values.unsafe_ptr(),
+                src=h_est.unsafe_ptr(),
+                count=n_leaves,
+            )
         merge_stage_times(stage_times, oracle.times)
         trace.record_list_f32(leaf_tag, leaf_values)
         stage_times.end(ctx, "est.tail_apply")
@@ -1735,9 +1783,15 @@ def _estimate_and_apply(
         # DEVIATION 74's counter, counted on the device
         not_pd_blocks += Int(est_ws[0].h_count.unsafe_ptr().unsafe_load(0))
         not_pd_total += not_pd_blocks
+        # one bulk copy of the read-back leaf values (no element loop)
         leaf_values.clear()
-        for i in range(n_leaves * approx_dim):
-            leaf_values.append(h_est.unsafe_ptr().unsafe_load(i))
+        if n_leaves * approx_dim > 0:
+            leaf_values.resize(unsafe_uninit_length=n_leaves * approx_dim)
+            memcpy(
+                dest=leaf_values.unsafe_ptr(),
+                src=h_est.unsafe_ptr(),
+                count=n_leaves * approx_dim,
+            )
         merge_stage_times(stage_times, oracle.times)
         trace.record_list_f32(leaf_tag, leaf_values)
         stage_times.end(ctx, "est.tail_apply")

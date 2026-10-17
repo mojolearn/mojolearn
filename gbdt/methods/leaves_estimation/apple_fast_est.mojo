@@ -44,7 +44,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import fma
-from std.memory import stack_allocation
+from std.memory import memcpy, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -597,10 +597,12 @@ def apple_fast_estimate_and_apply(
     if mse_blocks < 1:
         mse_blocks = 1
     var hw = Int32(1) if has_weights else Int32(0)
-    var max_leaf = 1
-    for i in range(n_leaves):
-        if sizes[i] > max_leaf:
-            max_leaf = sizes[i]
+    # the partition-stats launch bound: `n_rows` bounds every leaf with no
+    # scan of the read-back sizes. `compute_partition_stats` documents a
+    # bound as launch shape only (the stripe is the full grid's whatever
+    # runs), so the bits are the widest-leaf bound's; a leaf narrower than
+    # `n_rows` launches empty chunks whose partial is +0.0.
+    var max_leaf = max(n_rows, 1)
     var gx = 2 * sm
     if gx < 1:
         gx = 1
@@ -753,7 +755,13 @@ def apple_fast_estimate_and_apply(
             )
             ctx.synchronize()
 
+    # one bulk copy of the read-back leaf values (no element loop)
     leaf_values.clear()
-    for i in range(n_leaves):
-        leaf_values.append(s.h_est.unsafe_ptr().unsafe_load(i))
+    if n_leaves > 0:
+        leaf_values.resize(unsafe_uninit_length=n_leaves)
+        memcpy(
+            dest=leaf_values.unsafe_ptr(),
+            src=s.h_est.unsafe_ptr(),
+            count=n_leaves,
+        )
     trace.record_list_f32(leaf_tag, leaf_values)

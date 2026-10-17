@@ -17,6 +17,39 @@ After tagging, `--owed` lists exactly the 36 class-2 and class-3 sites, and
 `--tree` reports 67 accepted driver-loop tags. No kernel, host column or
 Python changed, and no bits changed.
 
+## Status after lane/host-loops-fix (2026-10-17)
+
+24 of the 36 owed sites are fixed; `--owed` lists the 12 below.
+
+- Copies: one `memcpy` (`doc_parallel_boosting` x3, `apple_fast_est:757`,
+  `leaves_estimation_helper`), or widened on the device and copied in bulk
+  (`fast_prep` counts and histogram, `ordered_boosting` snapshots).
+- Integer reductions and scans on the device: first absent category
+  (`Atomic.min`), the partition total, task offsets and task table
+  (`ordered_boosting`), leaf sizes and offsets (`leaf_sizes_scan_kernel`).
+- Float folds on the device in soft-float64, same order and same bits:
+  the lossguide replay sums (`dw_lg_final_sums_kernel`), the deferred
+  held-out losses (`_test_loss_div_kernel`), Huber's result words.
+- `apple_fast_est:601`: the launch bound is `n_rows` (launch shape only).
+- Data loops: `train.mojo` dense codes through `device_dense_codes`; the
+  Lanczos start vector by `lanczos_v0_kernel`.
+- `fa_fast` (FAST + Apple only): the sweep flag folded on the device; the
+  log-likelihood sums use a fixed blocked soft-float64 order (FAST bits).
+
+Still owed, with the reason:
+
+- `pointwise_oracle.mojo` (11 sites): the multi-dimensional host Newton
+  walker (`descent_helpers.newton_like_walker_estimate`) reads them. It
+  regularizes, steps and backtracks on host lists, so moving these readbacks
+  alone does not remove the host walk. The fix is to extend
+  `device_walker.mojo` to the multi-dimensional walk (blocked Hessian,
+  per-leaf Cholesky, MultiClass gauge), with the host column in
+  `gbdt/host/gbdt_oracle_multiclass.mojo`. That needs its own lane.
+- `resident_model.mojo:1024`: the transpose feeds the host CTR expansion
+  (`expand_raw_columns`, `expand_for_model_apply`). Both have to move to
+  the device together; a device transpose followed by a download would only
+  add a round trip.
+
 Line numbers below are at this lane's head (tags add one line above each
 tagged loop).
 

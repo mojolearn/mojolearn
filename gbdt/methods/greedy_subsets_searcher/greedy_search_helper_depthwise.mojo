@@ -1691,6 +1691,49 @@ def dw_leaf_values_kernel(
             )
 
 
+def dw_lg_final_sums_kernel(
+    part_stats: MutPointer[Float32, MutAnyOrigin],
+    slot_off: MutPointer[Int32, MutAnyOrigin],
+    slots: MutPointer[Int32, MutAnyOrigin],
+    kept_node: MutPointer[Int32, MutAnyOrigin],
+    node_stats: MutPointer[Float32, MutAnyOrigin],
+    n_final_in: Int32,
+    stat_count_in: Int32,
+    sums64: MutPointer[UInt64, MutAnyOrigin],
+):
+    """The lossguide exact replay's per-final-leaf double sums, one thread
+    per (final leaf, stat), in soft-float64 (`checks/soft_f64.mojo`, the
+    same bits on every vendor and as the host double add it replaces):
+
+        kept (folded back):  s = double(node_stats[node][stat])
+        otherwise:           s = +0.0; for each slot of the leaf, in the
+                             host walk's left-first order:
+                             s += double(part_stats[slot][stat])
+
+    `slot_off`/`slots` list each final leaf's slots in that order (the
+    host's walk of the tree's node lists: model structure, no data). The
+    trip count is the leaf's slot count, never a row count."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var sc = Int(stat_count_in)
+    if i >= Int(n_final_in) * sc:
+        return
+    var fi = i // sc
+    var st = i - fi * sc
+    var kn = Int(kept_node.unsafe_load(fi))
+    var acc = UInt64(0)
+    if kn >= 0:
+        acc = sf64_from_f32(node_stats.unsafe_load(kn * sc + st))
+    else:
+        var lo = Int(slot_off.unsafe_load(fi))
+        var hi = Int(slot_off.unsafe_load(fi + 1))
+        for j in range(lo, hi):
+            var slot = Int(slots.unsafe_load(j))
+            acc = sf64_add(
+                acc, sf64_from_f32(part_stats.unsafe_load(slot * sc + st))
+            )
+    sums64.unsafe_store(i, acc)
+
+
 def _stats_through_index_kernel(
     stats: MutPointer[Float32, MutAnyOrigin],
     row_index: MutPointer[UInt32, MutAnyOrigin],
@@ -4050,7 +4093,11 @@ def fit_non_symmetric_tree[
             # LG_EXACT_BATCH: one result per leaf of the best-first tree. A
             # leaf the device split ahead of time is the sum of the leaf
             # slots below it (its rows are their rows), in Float64.
-            var lg_sums = List[Float64]()
+            # (the sums are folded on the device by `dw_lg_final_sums_kernel`
+            # over the slots the walk below lists, in the walk's order)
+            var lg_slot_off = List[Int32]()
+            var lg_slots = List[Int32]()
+            var lg_kept_node = List[Int32]()
             # the rows of each result leaf (NS_INHERIT_PARTITION)
             var final_rows = List[Int]()
             # NS_INHERIT_ID_GUARD: a result leaf was split ahead of time and
@@ -4059,25 +4106,21 @@ def fit_non_symmetric_tree[
             comptime if LG_EXACT_BATCH:
                 if lg_exact:
                     num_leaves = len(lg_final)
+                    # driver-loop: over the final leaves of the best-first tree (a walk of its node lists)
                     for fi in range(num_leaves):
                         var stack = List[Int]()
                         stack.append(lg_final[fi])
-                        var base = len(lg_sums)
-                        for _ in range(stat_count):
-                            lg_sums.append(Float64(0.0))
+                        lg_slot_off.append(Int32(len(lg_slots)))
                         final_rows.append(0)
                         var lg_kept = False
                         comptime if LG_EXACT_ID:
                             # folded back: the stats it was scored with
                             if lg_node_left[lg_final[fi]] >= 0:
                                 lg_any_folded = True
-                                for st in range(stat_count):
-                                    lg_sums[base + st] = Float64(
-                                        lg_node_stats[
-                                            lg_final[fi] * stat_count + st
-                                        ]
-                                    )
                                 lg_kept = True
+                        lg_kept_node.append(
+                            Int32(lg_final[fi]) if lg_kept else Int32(-1)
+                        )
                         while len(stack) > 0:
                             var node = stack.pop()
                             if lg_node_left[node] >= 0:
@@ -4088,25 +4131,81 @@ def fit_non_symmetric_tree[
                                 final_rows[fi] += leaves[slot].size
                                 if lg_kept:
                                     continue
-                                for st in range(stat_count):
-                                    lg_sums[base + st] += Float64(
-                                        psp.unsafe_load(
-                                            slot * stat_count + st
-                                        )
-                                    )
+                                lg_slots.append(Int32(slot))
+                    lg_slot_off.append(Int32(len(lg_slots)))
             # lane cpu3-gbdt-a: the lossguide exact replay's per-final-leaf
             # sums (above) go to the device as double bit patterns and the
             # same kernel takes the Newton step on them; plain trees already
             # have their values home from the stats wait.
+            # the replay's double sums come home for the model weights
+            var h_sums64 = ctx.enqueue_create_host_buffer[DType.uint64](
+                lv_cap * stat_count if lv_on_sums else 1
+            )
             if lv_on_sums and num_leaves > 0:
-                var h_sums64 = ctx.enqueue_create_host_buffer[DType.uint64](
-                    lv_cap * stat_count
+                # the walk's slot lists and kept nodes (model structure) go
+                # up; the partition stats stay on the device, where
+                # `dw_lg_final_sums_kernel` folds them in the walk's order
+                var n_slots = len(lg_slots)
+                var n_nstats = len(lg_node_stats)
+                var h_slot_off = ctx.enqueue_create_host_buffer[DType.int32](
+                    num_leaves + 1
                 )
-                for i in range(len(lg_sums)):
-                    h_sums64.unsafe_ptr().unsafe_store(
-                        i, bitcast[DType.uint64](lg_sums[i])
+                var h_slots = ctx.enqueue_create_host_buffer[DType.int32](
+                    max(n_slots, 1)
+                )
+                var h_kept = ctx.enqueue_create_host_buffer[DType.int32](
+                    num_leaves
+                )
+                var h_nstats = ctx.enqueue_create_host_buffer[DType.float32](
+                    max(n_nstats, 1)
+                )
+                memcpy(
+                    dest=h_slot_off.unsafe_ptr(),
+                    src=lg_slot_off.unsafe_ptr(),
+                    count=num_leaves + 1,
+                )
+                if n_slots > 0:
+                    memcpy(
+                        dest=h_slots.unsafe_ptr(),
+                        src=lg_slots.unsafe_ptr(),
+                        count=n_slots,
                     )
-                ctx.enqueue_copy(dst_buf=d_sums64, src_ptr=h_sums64.unsafe_ptr())
+                memcpy(
+                    dest=h_kept.unsafe_ptr(),
+                    src=lg_kept_node.unsafe_ptr(),
+                    count=num_leaves,
+                )
+                if n_nstats > 0:
+                    memcpy(
+                        dest=h_nstats.unsafe_ptr(),
+                        src=lg_node_stats.unsafe_ptr(),
+                        count=n_nstats,
+                    )
+                var d_slot_off = ctx.enqueue_create_buffer[DType.int32](
+                    num_leaves + 1
+                )
+                var d_slots = ctx.enqueue_create_buffer[DType.int32](
+                    max(n_slots, 1)
+                )
+                var d_kept = ctx.enqueue_create_buffer[DType.int32](num_leaves)
+                var d_nstats = ctx.enqueue_create_buffer[DType.float32](
+                    max(n_nstats, 1)
+                )
+                ctx.enqueue_copy(dst_buf=d_slot_off, src_ptr=h_slot_off.unsafe_ptr())
+                ctx.enqueue_copy(dst_buf=d_slots, src_ptr=h_slots.unsafe_ptr())
+                ctx.enqueue_copy(dst_buf=d_kept, src_ptr=h_kept.unsafe_ptr())
+                ctx.enqueue_copy(dst_buf=d_nstats, src_ptr=h_nstats.unsafe_ptr())
+                ctx.enqueue_function[dw_lg_final_sums_kernel](
+                    part_stats.unsafe_ptr(), d_slot_off.unsafe_ptr(),
+                    d_slots.unsafe_ptr(), d_kept.unsafe_ptr(),
+                    d_nstats.unsafe_ptr(), Int32(num_leaves),
+                    Int32(stat_count), d_sums64.unsafe_ptr(),
+                    grid_dim=(
+                        (num_leaves * stat_count + DW_LEAF_VALUE_BLOCK - 1)
+                        // DW_LEAF_VALUE_BLOCK, 1, 1,
+                    ),
+                    block_dim=(DW_LEAF_VALUE_BLOCK, 1, 1),
+                )
                 ctx.enqueue_function[dw_leaf_values_kernel](
                     part_stats.unsafe_ptr(), d_sums64.unsafe_ptr(), Int32(1),
                     Int32(num_leaves), Int32(stat_count),
@@ -4121,8 +4220,18 @@ def fit_non_symmetric_tree[
                 ctx.enqueue_copy(
                     dst_ptr=h_leaf_vals.unsafe_ptr(), src_buf=d_leaf_vals
                 )
+                ctx.enqueue_copy(
+                    dst_ptr=h_sums64.unsafe_ptr(), src_buf=d_sums64
+                )
                 ctx.synchronize()
-                _ = h_sums64^  # past the drain (step-33 race class)
+                _ = h_slot_off^  # past the drain (step-33 race class)
+                _ = h_slots^
+                _ = h_kept^
+                _ = h_nstats^
+                _ = d_slot_off^
+                _ = d_slots^
+                _ = d_kept^
+                _ = d_nstats^
             _ = d_sums64^
             _ = d_leaf_vals^
             var hlv = h_leaf_vals.unsafe_ptr()
@@ -4139,7 +4248,11 @@ def fit_non_symmetric_tree[
                 )
                 comptime if LG_EXACT_BATCH:
                     if lg_exact:
-                        w = lg_sums[leaf_id * stat_count]
+                        w = bitcast[DType.float64](
+                            h_sums64.unsafe_ptr().unsafe_load(
+                                leaf_id * stat_count
+                            )
+                        )
                 result_weights.append(w)
 
                 var values = List[Float32]()
@@ -4161,6 +4274,7 @@ def fit_non_symmetric_tree[
                     result_paths.append(leaves[leaf_id].path.copy())
                     final_rows.append(leaves[leaf_id].size)
             _ = h_leaf_vals^  # `hlv` points into it (last-use rule)
+            _ = h_sums64^
             comptime if NS_INHERIT_PARTITION:
                 # the result leaves in the model's leaf order, which is
                 # their order along the row index; a total that is not
