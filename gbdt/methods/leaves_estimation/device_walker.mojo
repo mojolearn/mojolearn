@@ -17,8 +17,9 @@ SCOPE: the single-dimensional arm (`SingleBinDim() == 1`, `cursorDim == 1`:
 every pointwise loss, QueryRMSE, PairLogit, YetiRank) under Newton or
 Gradient with `AnyImprovement` backtracking, which is the only backtracking
 the GPU fit passes (`_estimate_and_apply`, `estimate_advance`). The
-multi-dimensional walk (MultiClass, MultiClassOneVsAll, MultiRMSE at more
-than one iteration) still runs `descent_helpers`' host walker.
+multi-dimensional walk (MultiClass, MultiClassOneVsAll, MultiRMSE) is
+`device_multi_walk_estimate` at the end of this file (lane
+gbdt-host-loops-12); no GPU fit runs `descent_helpers`' host walker.
 
 THE STATEMENTS, each the host walker's (`descent_helpers.mojo`,
 `pointwise_oracle.mojo`, `step_estimator.mojo`), with every double a
@@ -69,6 +70,7 @@ from checks.soft_f64 import (
     sf64_lt,
     sf64_mul,
     sf64_neg,
+    sf64_sqrt,
     sf64_sub,
     sf64_to_f32,
 )
@@ -81,6 +83,11 @@ from gbdt.methods.leaves_estimation.step_estimator import (
 from gbdt.options.catboost_options import (
     LEAF_ESTIMATION_GRADIENT,
     LEAF_ESTIMATION_NEWTON,
+)
+from gbdt.targets.kernel.pointwise_targets import (
+    OBJECTIVE_MULTICLASS,
+    OBJECTIVE_MULTICLASS_OVA,
+    OBJECTIVE_MULTIRMSE,
 )
 
 #: the per-leaf kernels' block
@@ -800,3 +807,799 @@ def enqueue_scale_in_place(
         grid_dim=(_leaf_grid(count), 1, 1),
         block_dim=(WALK_BLOCK, 1, 1),
     )
+
+
+# ===========================================================================
+# THE MULTI-DIMENSIONAL WALK (lane gbdt-host-loops-12)
+#
+# `descent_helpers.newton_like_walker_estimate` over the multiclass family
+# (MultiClass, MultiClassOneVsAll, MultiRMSE; Newton or Gradient; any
+# iteration count; weighted or not, deferred weights included) ON THE DEVICE,
+# the single-dimensional walk's shape: the walk's state lives in
+# `MultiWalkBuffers`, every statement runs in a kernel, and the host keeps
+# only the loop counters and reads ONE word per line-search evaluation (the
+# accept flag). It replaces the host walker on every GPU route; the host
+# column (`gbdt/host/gbdt_oracle_multiclass.mojo::_estimate_multi`, one
+# Newton iteration) restates the same statements.
+#
+# THE STATEMENTS, each the host walker's (doubles are `checks/soft_f64.mojo`
+# bit patterns, correctly rounded, so a hardware double unit's bits):
+#
+#   move       next[i] = float(fma(step, double(dir[i]), double(cur[i])))
+#              for the leaf's `SingleBinDim()` components; every component
+#              of a leaf whose weight is under MinLeafWeight is +0.0
+#   MoveTo     np = MakeEstimationResult(next) (MultiClass: next[d] -
+#              next[pinned] as a float difference); shift = np - CurrentPoint
+#              (float); CurrentPoint = np; the oracle's cursor add
+#   gradient   double(der[d]) per cursor plane; MultiClass's pinned component
+#              -(0 + der[0] + der[1] + ...) in dim order
+#   value      the evaluation's value partials folded in
+#              `deterministic_sum_lanes_kernel[1]`'s order (CHANGED from the
+#              host walker's ascending float32 chain, the single-dim walk's
+#              change; it decides acceptance only, at more than one iteration)
+#   accept     AnyImprovement (`walker_fold_decide_kernel`)
+#   direction  BLOCKED (MultiClass, MultiRMSE under Newton): sigma = the
+#              reduced lower-triangular Hessian, + lambda on the diagonal;
+#              `solve_linear_system_cholesky`'s dpotrf + dpotrs, every
+#              `x -= a * b` one fma, a non-positive pivot leaving the
+#              GRADIENT as the solution (DEVIATION 74, counted per leaf);
+#              dir = float(solution). DIAGONAL (OneVsAll under Newton:
+#              double(der2) + lambda; every loss under Gradient: double(weight)
+#              + lambda): dir = hess > 0 ? float(g / (hess + double(1e-20f))) : 0
+#   result     MakeEstimationResult of the final point
+# ===========================================================================
+
+#: the block-per-leaf solve's threads
+comptime WALK_SOLVE_BLOCK = 64
+#: the block-per-leaf solve keeps the leaf's system (`k * k` Hessian words
+#: plus `k` solution words, soft-float64) in threadgroup memory. 32 KiB is
+#: the smallest per-block budget of the three vendors (Apple's threadgroup
+#: limit; NVIDIA's static 48 KiB and AMD's 64 KiB LDS hold it too), so the
+#: system takes at most 4000 words (32,000 bytes) beside the 4-byte flag. A
+#: wider system runs the same statements in the per-thread kernel over a
+#: global scratch slice (same chains, same bits, slower). The cap is the
+#: hardware's memory size, not a class count.
+comptime WALK_SOLVE_SHARED_WORDS = 4000
+
+
+def _solve_shared_fits(k: Int) -> Bool:
+    return k * k + k <= WALK_SOLVE_SHARED_WORDS
+
+
+def multi_walker_move_kernel(
+    cur: MutPointer[Float32, MutAnyOrigin],
+    direction: MutPointer[Float32, MutAnyOrigin],
+    step_bits: UInt64,
+    weight_stats: MutPointer[Float32, MutAnyOrigin],
+    leaf_sizes: MutPointer[UInt32, MutAnyOrigin],
+    has_weights: Int32,
+    min_leaf_weight_bits: UInt64,
+    n_leaves_in: Int32,
+    cursor_dim_in: Int32,
+    k_in: Int32,
+    pinned: Int32,
+    oracle_point: MutPointer[Float32, MutAnyOrigin],
+    shift: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    apply_move: Int32,
+):
+    """`_move` + `regularize` over the leaf's `k` components (+ `MoveTo`'s
+    projection and shift when `apply_move`), one thread per leaf. `dst` is
+    never `cur`."""
+    var n = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n:
+        return
+    var cd = Int(cursor_dim_in)
+    var k = Int(k_in)
+    var w: UInt64
+    if has_weights != Int32(0):
+        w = sf64_from_f32(weight_stats.unsafe_load(leaf))
+    else:
+        w = sf64_from_int(Int(leaf_sizes.unsafe_load(leaf)))
+    var keep = not ((not sf64_is_nan(w)) and sf64_lt(w, min_leaf_weight_bits))
+    for i in range(k):
+        var p = sf64_to_f32(
+            sf64_fma(
+                step_bits,
+                sf64_from_f32(direction.unsafe_load(leaf * k + i)),
+                sf64_from_f32(cur.unsafe_load(leaf * k + i)),
+            )
+        )
+        if not keep:
+            p = Float32(0.0)
+        dst.unsafe_store(leaf * k + i, p)
+    if apply_move == Int32(0):
+        return
+    for d in range(cd):
+        var np = dst.unsafe_load(leaf * k + d)
+        if pinned != Int32(0):
+            # `make_estimation_result`: the float difference, computed as the
+            # double difference narrowed once (correctly rounded)
+            np = sf64_to_f32(
+                sf64_sub(
+                    sf64_from_f32(np),
+                    sf64_from_f32(dst.unsafe_load(leaf * k + cd)),
+                )
+            )
+        var o = oracle_point.unsafe_load(leaf * cd + d)
+        shift.unsafe_store(
+            leaf * cd + d,
+            sf64_to_f32(sf64_sub(sf64_from_f32(np), sf64_from_f32(o))),
+        )
+        oracle_point.unsafe_store(leaf * cd + d, np)
+
+
+def multi_walker_project_kernel(
+    point: MutPointer[Float32, MutAnyOrigin],
+    n_leaves_in: Int32,
+    cursor_dim_in: Int32,
+    k_in: Int32,
+    pinned: Int32,
+    out: MutPointer[Float32, MutAnyOrigin],
+):
+    """`make_estimation_result`: the walker's `k`-wide point to the cursor's
+    `cursor_dim` gauge (MultiClass subtracts the pinned component; every
+    other loss copies), one thread per leaf."""
+    var n = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n:
+        return
+    var cd = Int(cursor_dim_in)
+    var k = Int(k_in)
+    for d in range(cd):
+        var v = point.unsafe_load(leaf * k + d)
+        if pinned != Int32(0):
+            v = sf64_to_f32(
+                sf64_sub(
+                    sf64_from_f32(v),
+                    sf64_from_f32(point.unsafe_load(leaf * k + cd)),
+                )
+            )
+        out.unsafe_store(leaf * cd + d, v)
+
+
+def multi_walker_diag_direction_kernel(
+    der_stash: MutPointer[Float32, MutAnyOrigin],
+    hess_stash: MutPointer[Float32, MutAnyOrigin],
+    weight_stats: MutPointer[Float32, MutAnyOrigin],
+    leaf_sizes: MutPointer[UInt32, MutAnyOrigin],
+    has_weights: Int32,
+    lambda_bits: UInt64,
+    newton: Int32,
+    n_leaves_in: Int32,
+    cursor_dim_in: Int32,
+    k_in: Int32,
+    pinned: Int32,
+    direction: MutPointer[Float32, MutAnyOrigin],
+):
+    """`_diagonal_direction` over the leaf's `k` components, one thread per
+    leaf. NEWTON (OneVsAll): `hess = double(der2[d]) + lambda` from the
+    stashed reduce (`hess_stash[leaf * cursor_dim + d]`); GRADIENT:
+    `hess = double(WeightsCpu[leaf]) + lambda` for every component
+    (`write_second_derivatives`' inner loop over `rowSize`)."""
+    var n = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n:
+        return
+    var cd = Int(cursor_dim_in)
+    var k = Int(k_in)
+    var w: UInt64
+    if has_weights != Int32(0):
+        w = sf64_from_f32(weight_stats.unsafe_load(leaf))
+    else:
+        w = sf64_from_int(Int(leaf_sizes.unsafe_load(leaf)))
+    var eps = sf64_from_f32(Float32(1e-20))
+    var total = SF64_ZERO
+    for i in range(k):
+        var g: UInt64
+        if i < cd:
+            g = sf64_from_f32(der_stash.unsafe_load(leaf * cd + i))
+            total = sf64_add(total, g)
+        else:
+            # MultiClass's pinned component (`sum of der is equal to zero`)
+            g = sf64_neg(total)
+        var h: UInt64
+        if newton != Int32(0) and i < cd:
+            h = sf64_add(
+                sf64_from_f32(hess_stash.unsafe_load(leaf * cd + i)), lambda_bits
+            )
+        else:
+            h = sf64_add(w, lambda_bits)
+        var v = Float32(0.0)
+        if (not sf64_is_nan(h)) and sf64_gt(h, SF64_ZERO):
+            v = sf64_to_f32(sf64_div(g, sf64_add(h, eps)))
+        direction.unsafe_store(leaf * k + i, v)
+    _ = pinned
+
+
+def _hess_cell(
+    hess: MutPointer[Float32, MutAnyOrigin],
+    layout: Int,
+    n: Int,
+    tri: Int,
+    leaf: Int,
+    r: Int,
+    c: Int,
+) -> Float32:
+    """Lower-triangle cell `(r, c)`, `c <= r`, of leaf `leaf`'s reduced
+    Hessian in `enqueue_multi_dim_hessian`'s layout 0 (row by row) or 1
+    (every row in one reduce)."""
+    if layout == 0:
+        return hess.unsafe_load(n * ((r * (r + 1)) // 2) + leaf * (r + 1) + c)
+    return hess.unsafe_load(leaf * tri + (r * (r + 1)) // 2 + c)
+
+
+def multi_walker_block_solve_kernel(
+    der_stash: MutPointer[Float32, MutAnyOrigin],
+    hess_stash: MutPointer[Float32, MutAnyOrigin],
+    hess_layout_in: Int32,
+    tri_in: Int32,
+    lambda_bits: UInt64,
+    n_leaves_in: Int32,
+    cursor_dim_in: Int32,
+    k_in: Int32,
+    pinned: Int32,
+    not_pd_acc: MutPointer[UInt32, MutAnyOrigin],
+    direction: MutPointer[Float32, MutAnyOrigin],
+):
+    """The BLOCKED direction, one block of `WALK_SOLVE_BLOCK` threads per
+    leaf, the system in threadgroup memory (`_solve_shared_fits(k)`).
+
+    `solve_linear_system_cholesky`, chain for chain. Column `j`: thread 0
+    runs the pivot chain `s = fma(-L[j][kk], L[j][kk], s)` over `kk`
+    ascending and the sqrt (or records `info = j + 1` on `s <= 0`); after a
+    barrier the threads take rows `i > j` (strided) and each runs ITS row's
+    chain `t = fma(-L[i][kk], L[j][kk], t)` over `kk` ascending, then
+    `t / L[j][j]`. Every element's chain is the host's sequence of the same
+    correctly rounded operations; only the thread that runs it changes, so
+    the bits are the host's. The two triangular solves are thread 0's (each
+    a chain over the class count). A failed factorization leaves the
+    gradient as the solution (DEVIATION 74) and counts one fallback."""
+    var n = Int(n_leaves_in)
+    var leaf = Int(block_idx.x)
+    if leaf >= n:
+        return
+    var tid = Int(thread_idx.x)
+    var nt = Int(block_dim.x)
+    var cd = Int(cursor_dim_in)
+    var k = Int(k_in)
+    var layout = Int(hess_layout_in)
+    var tri = Int(tri_in)
+    var sg = stack_allocation[
+        WALK_SOLVE_SHARED_WORDS,
+        Scalar[DType.uint64],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var info = stack_allocation[
+        1,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    # the solution vector sits after the matrix
+    var sl = k * k
+    if tid == 0:
+        info[0] = Int32(0)
+        var total = SF64_ZERO
+        for d in range(cd):
+            var v = sf64_from_f32(der_stash.unsafe_load(leaf * cd + d))
+            sg[sl + d] = v
+            total = sf64_add(total, v)
+        if pinned != Int32(0):
+            sg[sl + cd] = sf64_neg(total)
+    var e = tid
+    while e < k * k:
+        var r = e // k
+        var c = e % k
+        if c <= r:
+            var h = sf64_from_f32(
+                _hess_cell(hess_stash, layout, n, tri, leaf, r, c)
+            )
+            if c == r:
+                h = sf64_add(h, lambda_bits)
+            sg[e] = h
+        e += nt
+    barrier()
+    if k == 1:
+        # `if (target->size() == 1) { (*target)[0] /= (*matrix)[0]; }`
+        if tid == 0:
+            sg[sl] = sf64_div(sg[sl], sg[0])
+    else:
+        for j in range(k):
+            if tid == 0:
+                var s = sg[j * k + j]
+                for kk in range(j):
+                    var ljk = sg[j * k + kk]
+                    s = sf64_fma(sf64_neg(ljk), ljk, s)
+                # the host's `s <= 0.0` (false for NaN)
+                if (not sf64_is_nan(s)) and (not sf64_gt(s, SF64_ZERO)):
+                    info[0] = Int32(j + 1)
+                else:
+                    sg[j * k + j] = sf64_sqrt(s)
+            barrier()
+            if info[0] != Int32(0):
+                break
+            var ljj = sg[j * k + j]
+            var i = j + 1 + tid
+            while i < k:
+                var t = sg[i * k + j]
+                for kk in range(j):
+                    t = sf64_fma(sf64_neg(sg[i * k + kk]), sg[j * k + kk], t)
+                sg[i * k + j] = sf64_div(t, ljj)
+                i += nt
+            barrier()
+        if tid == 0 and info[0] == Int32(0):
+            # dpotrs: L y = b, then L^T x = y
+            for i in range(k):
+                var t = sg[sl + i]
+                for kk in range(i):
+                    t = sf64_fma(sf64_neg(sg[i * k + kk]), sg[sl + kk], t)
+                sg[sl + i] = sf64_div(t, sg[i * k + i])
+            for ii in range(k):
+                var i = k - 1 - ii
+                var t = sg[sl + i]
+                for kk in range(i + 1, k):
+                    t = sf64_fma(sf64_neg(sg[kk * k + i]), sg[sl + kk], t)
+                sg[sl + i] = sf64_div(t, sg[i * k + i])
+    if tid == 0:
+        if info[0] != Int32(0):
+            not_pd_acc.unsafe_store(leaf, not_pd_acc.unsafe_load(leaf) + 1)
+        for i in range(k):
+            direction.unsafe_store(leaf * k + i, sf64_to_f32(sg[sl + i]))
+
+
+def multi_walker_thread_solve_kernel(
+    der_stash: MutPointer[Float32, MutAnyOrigin],
+    hess_stash: MutPointer[Float32, MutAnyOrigin],
+    hess_layout_in: Int32,
+    tri_in: Int32,
+    lambda_bits: UInt64,
+    n_leaves_in: Int32,
+    cursor_dim_in: Int32,
+    k_in: Int32,
+    pinned: Int32,
+    sigma: MutPointer[UInt64, MutAnyOrigin],
+    sol: MutPointer[UInt64, MutAnyOrigin],
+    not_pd_acc: MutPointer[UInt32, MutAnyOrigin],
+    direction: MutPointer[Float32, MutAnyOrigin],
+):
+    """`multi_walker_block_solve_kernel`'s statements for a system wider
+    than threadgroup memory holds: one thread per leaf over its own slice
+    of a global scratch (`sigma[leaf * k * k ...]`, `sol[leaf * k ...]`).
+    Same chains in the same order, so the same bits."""
+    var n = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n:
+        return
+    var cd = Int(cursor_dim_in)
+    var k = Int(k_in)
+    var layout = Int(hess_layout_in)
+    var tri = Int(tri_in)
+    var sg = sigma + leaf * k * k
+    var sv = sol + leaf * k
+    var total = SF64_ZERO
+    for d in range(cd):
+        var v = sf64_from_f32(der_stash.unsafe_load(leaf * cd + d))
+        sv[d] = v
+        total = sf64_add(total, v)
+    if pinned != Int32(0):
+        sv[cd] = sf64_neg(total)
+    for r in range(k):
+        for c in range(r + 1):
+            var h = sf64_from_f32(
+                _hess_cell(hess_stash, layout, n, tri, leaf, r, c)
+            )
+            if c == r:
+                h = sf64_add(h, lambda_bits)
+            sg[r * k + c] = h
+    var info = 0
+    if k == 1:
+        sv[0] = sf64_div(sv[0], sg[0])
+    else:
+        for j in range(k):
+            var s = sg[j * k + j]
+            for kk in range(j):
+                var ljk = sg[j * k + kk]
+                s = sf64_fma(sf64_neg(ljk), ljk, s)
+            if (not sf64_is_nan(s)) and (not sf64_gt(s, SF64_ZERO)):
+                info = j + 1
+                break
+            var ljj = sf64_sqrt(s)
+            sg[j * k + j] = ljj
+            for i in range(j + 1, k):
+                var t = sg[i * k + j]
+                for kk in range(j):
+                    t = sf64_fma(sf64_neg(sg[i * k + kk]), sg[j * k + kk], t)
+                sg[i * k + j] = sf64_div(t, ljj)
+        if info == 0:
+            for i in range(k):
+                var t = sv[i]
+                for kk in range(i):
+                    t = sf64_fma(sf64_neg(sg[i * k + kk]), sv[kk], t)
+                sv[i] = sf64_div(t, sg[i * k + i])
+            for ii in range(k):
+                var i = k - 1 - ii
+                var t = sv[i]
+                for kk in range(i + 1, k):
+                    t = sf64_fma(sf64_neg(sg[kk * k + i]), sv[kk], t)
+                sv[i] = sf64_div(t, sg[i * k + i])
+    if info != 0:
+        not_pd_acc.unsafe_store(leaf, not_pd_acc.unsafe_load(leaf) + 1)
+    for i in range(k):
+        direction.unsafe_store(leaf * k + i, sf64_to_f32(sv[i]))
+
+
+def sum_u32_kernel(
+    vals: MutPointer[UInt32, MutAnyOrigin],
+    n_in: Int32,
+    out_sum: MutPointer[UInt32, MutAnyOrigin],
+):
+    """ONE block of `WALK_FOLD_BLOCK`: the sum of `vals[0, n)` (DEVIATION
+    74's per-leaf fallback counts over the walk) into `out_sum[0]`. Integer,
+    so any order gives the same sum."""
+    var tid = Int(thread_idx.x)
+    var n = Int(n_in)
+    var acc = UInt32(0)
+    var i = tid
+    while i < n:
+        acc += vals.unsafe_load(i)
+        i += WALK_FOLD_BLOCK
+    var red = stack_allocation[
+        WALK_FOLD_BLOCK,
+        Scalar[DType.uint32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    red[tid] = acc
+    barrier()
+    var step = WALK_FOLD_BLOCK // 2
+    while step > 0:
+        if tid < step:
+            red[tid] = red[tid] + red[tid + step]
+        barrier()
+        step //= 2
+    if tid == 0:
+        out_sum.unsafe_store(0, red[0])
+
+
+struct MultiWalkBuffers(Movable):
+    """The multi-dimensional device walk's state for up to `cap` leaves of
+    up to `k_cap` components (`SingleBinDim()`), kept by the fit's
+    estimation workspace like `WalkBuffers`."""
+
+    var cap: Int
+    var k_cap: Int
+    var d_cur: DeviceBuffer[DType.float32]
+    var d_next: DeviceBuffer[DType.float32]
+    var d_dir: DeviceBuffer[DType.float32]
+    #: the oracle's `CurrentPoint` (the cursor's gauge)
+    var d_opt: DeviceBuffer[DType.float32]
+    #: the weighted fit's per-leaf weight fold (`WeightsCpu`), stashed
+    var d_w: DeviceBuffer[DType.float32]
+    var d_vals: DeviceBuffer[DType.float32]
+    var d_flag: DeviceBuffer[DType.uint32]
+    var h_flag: HostBuffer[DType.uint32]
+    #: the evaluation's reduced der planes (`leaf * cursor_dim + d`)
+    var d_der: DeviceBuffer[DType.float32]
+    #: the reduced Hessian (`enqueue_multi_dim_hessian`'s layouts)
+    var d_hess: DeviceBuffer[DType.float32]
+    #: the per-thread solve's global scratch (systems wider than
+    #: threadgroup memory)
+    var d_sigma: DeviceBuffer[DType.uint64]
+    var d_sol: DeviceBuffer[DType.uint64]
+    #: DEVIATION 74's per-leaf fallback counts over the walk, and their sum
+    var d_not_pd: DeviceBuffer[DType.uint32]
+    var d_count: DeviceBuffer[DType.uint32]
+    var h_count: HostBuffer[DType.uint32]
+    #: the walk's estimate in the cursor's gauge (`leaf * cursor_dim + d`)
+    var d_res: DeviceBuffer[DType.float32]
+
+    def __init__(out self, ctx: DeviceContext, cap: Int, k_cap: Int) raises:
+        var n = cap if cap > 0 else 1
+        var k = k_cap if k_cap > 0 else 1
+        self.cap = n
+        self.k_cap = k
+        self.d_cur = ctx.enqueue_create_buffer[DType.float32](n * k)
+        self.d_next = ctx.enqueue_create_buffer[DType.float32](n * k)
+        self.d_dir = ctx.enqueue_create_buffer[DType.float32](n * k)
+        self.d_opt = ctx.enqueue_create_buffer[DType.float32](n * k)
+        self.d_w = ctx.enqueue_create_buffer[DType.float32](n)
+        self.d_vals = ctx.enqueue_create_buffer[DType.float32](2)
+        self.d_flag = ctx.enqueue_create_buffer[DType.uint32](1)
+        self.h_flag = ctx.enqueue_create_host_buffer[DType.uint32](1)
+        self.d_der = ctx.enqueue_create_buffer[DType.float32](n * k)
+        self.d_hess = ctx.enqueue_create_buffer[DType.float32](
+            n * ((k * (k + 1)) // 2)
+        )
+        # the per-thread solve's scratch only where the block solve cannot
+        # hold the system
+        var wide = not _solve_shared_fits(k)
+        self.d_sigma = ctx.enqueue_create_buffer[DType.uint64](
+            n * k * k if wide else 1
+        )
+        self.d_sol = ctx.enqueue_create_buffer[DType.uint64](
+            n * k if wide else 1
+        )
+        self.d_not_pd = ctx.enqueue_create_buffer[DType.uint32](n)
+        self.d_count = ctx.enqueue_create_buffer[DType.uint32](1)
+        self.h_count = ctx.enqueue_create_host_buffer[DType.uint32](1)
+        self.d_res = ctx.enqueue_create_buffer[DType.float32](n * k)
+
+    def __init__(out self, *, handles_of: MultiWalkBuffers):
+        """Handle copies (the same device memory)."""
+        self.cap = handles_of.cap
+        self.k_cap = handles_of.k_cap
+        self.d_cur = handles_of.d_cur.copy()
+        self.d_next = handles_of.d_next.copy()
+        self.d_dir = handles_of.d_dir.copy()
+        self.d_opt = handles_of.d_opt.copy()
+        self.d_w = handles_of.d_w.copy()
+        self.d_vals = handles_of.d_vals.copy()
+        self.d_flag = handles_of.d_flag.copy()
+        self.h_flag = handles_of.h_flag.copy()
+        self.d_der = handles_of.d_der.copy()
+        self.d_hess = handles_of.d_hess.copy()
+        self.d_sigma = handles_of.d_sigma.copy()
+        self.d_sol = handles_of.d_sol.copy()
+        self.d_not_pd = handles_of.d_not_pd.copy()
+        self.d_count = handles_of.d_count.copy()
+        self.h_count = handles_of.h_count.copy()
+        self.d_res = handles_of.d_res.copy()
+
+    def handles(self) -> MultiWalkBuffers:
+        return MultiWalkBuffers(handles_of=self)
+
+
+def device_multi_walk_supported(
+    oracle: BinOptimizedOracle, n_leaves: Int, w: MultiWalkBuffers
+) -> Bool:
+    """The configurations the multi-dimensional walk restates: the
+    multiclass family under Newton or Gradient (AnyImprovement, the only
+    backtracking the GPU fit passes), a Newton Hessian that is blocked at
+    `SingleBinDim()` or OneVsAll's diagonal."""
+    var obj = oracle.objective
+    if (
+        obj != OBJECTIVE_MULTICLASS
+        and obj != OBJECTIVE_MULTICLASS_OVA
+        and obj != OBJECTIVE_MULTIRMSE
+    ):
+        return False
+    if (
+        oracle.estimation_method != LEAF_ESTIMATION_NEWTON
+        and oracle.estimation_method != LEAF_ESTIMATION_GRADIENT
+    ):
+        return False
+    var k = oracle.single_bin_dim
+    var cd = oracle.cursor_dim
+    if oracle.estimation_method == LEAF_ESTIMATION_NEWTON:
+        var hbs = oracle.hessian_block_size()
+        if obj == OBJECTIVE_MULTICLASS_OVA:
+            if hbs != 1 or k != cd:
+                return False
+        elif hbs != k:
+            return False
+    var pinned_ok = (k == cd + 1) if obj == OBJECTIVE_MULTICLASS else (k == cd)
+    return (
+        pinned_ok
+        and cd >= 1
+        and oracle.bin_count == n_leaves
+        and n_leaves <= w.cap
+        and k <= w.k_cap
+    )
+
+
+def _multi_move(
+    ctx: DeviceContext,
+    mut oracle: BinOptimizedOracle,
+    mut w: MultiWalkBuffers,
+    step: Float64,
+    apply_move: Bool,
+) raises:
+    """`_move(cur, dir, step)`, `regularize`, and (when `apply_move`)
+    `MoveTo`: the shift into `oracle.d_shift`, then the oracle's own cursor
+    add. The point lands in `d_next`."""
+    var n = oracle.bin_count
+    ctx.enqueue_function[multi_walker_move_kernel](
+        w.d_cur.unsafe_ptr(),
+        w.d_dir.unsafe_ptr(),
+        bitcast[DType.uint64](step),
+        w.d_w.unsafe_ptr(),
+        oracle.d_p_sz.unsafe_ptr(),
+        Int32(1) if oracle.has_weights else Int32(0),
+        bitcast[DType.uint64](oracle.min_leaf_weight),
+        Int32(n),
+        Int32(oracle.cursor_dim),
+        Int32(oracle.single_bin_dim),
+        Int32(1) if oracle.objective == OBJECTIVE_MULTICLASS else Int32(0),
+        w.d_opt.unsafe_ptr(),
+        oracle.d_shift.unsafe_ptr(),
+        w.d_next.unsafe_ptr(),
+        Int32(1) if apply_move else Int32(0),
+        grid_dim=(_leaf_grid(n), 1, 1),
+        block_dim=(WALK_BLOCK, 1, 1),
+    )
+    if apply_move:
+        oracle._launch_shift_abmv()
+
+
+def _multi_eval_decide(
+    ctx: DeviceContext,
+    mut oracle: BinOptimizedOracle,
+    mut w: MultiWalkBuffers,
+    always_accept: Bool,
+) raises:
+    """The evaluation at the moved point (no host readback; the der planes
+    stashed in `d_der`), the value fold and AnyImprovement's test."""
+    oracle.enqueue_multi_dim_evaluation(w.d_der)
+    ctx.enqueue_function[walker_fold_decide_kernel](
+        oracle.d_fv.unsafe_ptr(),
+        Int32(oracle.multi_value_blocks()),
+        w.d_vals.unsafe_ptr(),
+        w.d_flag.unsafe_ptr(),
+        Int32(1) if always_accept else Int32(0),
+        grid_dim=(1, 1, 1),
+        block_dim=(WALK_FOLD_BLOCK, 1, 1),
+    )
+
+
+def _multi_accept(
+    ctx: DeviceContext,
+    mut oracle: BinOptimizedOracle,
+    mut w: MultiWalkBuffers,
+) raises:
+    """An accepted evaluation (`descent_helpers.cpp:189-201`): `cur = next`,
+    the second derivatives at it (the cursor sits there), the new
+    direction."""
+    var n = oracle.bin_count
+    var k = oracle.single_bin_dim
+    var cd = oracle.cursor_dim
+    var pinned = Int32(1) if oracle.objective == OBJECTIVE_MULTICLASS else Int32(0)
+    enqueue_copy_values(ctx, w.d_next, n * k, w.d_cur)
+    var newton = oracle.estimation_method == LEAF_ESTIMATION_NEWTON
+    var blocked = newton and oracle.hessian_block_size() > 1
+    var layout = 0
+    if newton:
+        layout = oracle.enqueue_multi_dim_hessian(w.d_hess)
+    if not blocked:
+        ctx.enqueue_function[multi_walker_diag_direction_kernel](
+            w.d_der.unsafe_ptr(),
+            w.d_hess.unsafe_ptr(),
+            w.d_w.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            Int32(1) if oracle.has_weights else Int32(0),
+            bitcast[DType.uint64](oracle.lambda_reg),
+            Int32(1) if newton else Int32(0),
+            Int32(n),
+            Int32(cd),
+            Int32(k),
+            pinned,
+            w.d_dir.unsafe_ptr(),
+            grid_dim=(_leaf_grid(n), 1, 1),
+            block_dim=(WALK_BLOCK, 1, 1),
+        )
+        return
+    var tri = (k * (k + 1)) // 2
+    if _solve_shared_fits(k):
+        ctx.enqueue_function[multi_walker_block_solve_kernel](
+            w.d_der.unsafe_ptr(),
+            w.d_hess.unsafe_ptr(),
+            Int32(layout),
+            Int32(tri),
+            bitcast[DType.uint64](oracle.lambda_reg),
+            Int32(n),
+            Int32(cd),
+            Int32(k),
+            pinned,
+            w.d_not_pd.unsafe_ptr(),
+            w.d_dir.unsafe_ptr(),
+            grid_dim=(n if n > 0 else 1, 1, 1),
+            block_dim=(WALK_SOLVE_BLOCK, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[multi_walker_thread_solve_kernel](
+            w.d_der.unsafe_ptr(),
+            w.d_hess.unsafe_ptr(),
+            Int32(layout),
+            Int32(tri),
+            bitcast[DType.uint64](oracle.lambda_reg),
+            Int32(n),
+            Int32(cd),
+            Int32(k),
+            pinned,
+            w.d_sigma.unsafe_ptr(),
+            w.d_sol.unsafe_ptr(),
+            w.d_not_pd.unsafe_ptr(),
+            w.d_dir.unsafe_ptr(),
+            grid_dim=((n + 63) // 64 if n > 0 else 1, 1, 1),
+            block_dim=(64, 1, 1),
+        )
+
+
+def _multi_project(
+    ctx: DeviceContext,
+    oracle: BinOptimizedOracle,
+    mut w: MultiWalkBuffers,
+    from_next: Bool,
+) raises:
+    var n = oracle.bin_count
+    var src = w.d_next.unsafe_ptr() if from_next else w.d_cur.unsafe_ptr()
+    ctx.enqueue_function[multi_walker_project_kernel](
+        src,
+        Int32(n),
+        Int32(oracle.cursor_dim),
+        Int32(oracle.single_bin_dim),
+        Int32(1) if oracle.objective == OBJECTIVE_MULTICLASS else Int32(0),
+        w.d_res.unsafe_ptr(),
+        grid_dim=(_leaf_grid(n), 1, 1),
+        block_dim=(WALK_BLOCK, 1, 1),
+    )
+
+
+def device_multi_walk_estimate(
+    ctx: DeviceContext,
+    mut oracle: BinOptimizedOracle,
+    mut w: MultiWalkBuffers,
+    iterations: Int,
+) raises:
+    """`TNewtonLikeWalker::Estimate` (`descent_helpers.cpp:128-204`) with
+    AnyImprovement over the multiclass family, on the device. The host runs
+    only the loop counters and reads one word (the accept flag) per
+    line-search evaluation. ENQUEUED at the end: the estimate is
+    `w.d_res[leaf * cursor_dim + d]` (`MakeEstimationResult`, the cursor's
+    gauge) and DEVIATION 74's fallback count lands in `w.h_count[0]`
+    (`device_multi_walk_not_pd`) after the caller's drain. The weighted
+    fit's weight fold must still be in `oracle.d_part_stats` (the oracle
+    was just made; the deferred-weights oracle included)."""
+    var n = oracle.bin_count
+    w.d_cur.enqueue_fill(Float32(0.0))
+    w.d_dir.enqueue_fill(Float32(0.0))
+    w.d_opt.enqueue_fill(Float32(0.0))
+    w.d_not_pd.enqueue_fill(UInt32(0))
+    if oracle.has_weights:
+        # `WeightsCpu`: the constructor's per-leaf weight fold, before the
+        # evaluation below overwrites `d_part_stats`
+        enqueue_copy_values(ctx, oracle.d_part_stats, n, w.d_w)
+    # `MoveTo(startPoint)` at the zero point, the evaluation (always
+    # taken), the second derivatives and the first direction (`:135-147`)
+    _multi_move(ctx, oracle, w, Float64(0.0), True)
+    _multi_eval_decide(ctx, oracle, w, True)
+    _multi_accept(ctx, oracle, w)
+    if iterations == 1:
+        # `:151-156`: one full step, regularize, no re-evaluation
+        _multi_move(ctx, oracle, w, Float64(1.0), False)
+        _multi_project(ctx, oracle, w, True)
+    else:
+        var updated = False
+        var iteration = 0
+        while iteration < iterations:
+            var step = Float64(1.0)
+            var accepted = False
+            while iteration < iterations or ((not updated) and iteration < 100):
+                _multi_move(ctx, oracle, w, step, True)
+                _multi_eval_decide(ctx, oracle, w, False)
+                ctx.enqueue_copy(dst_ptr=w.h_flag.unsafe_ptr(), src_buf=w.d_flag)
+                # the walk's control flow: one word
+                ctx.synchronize()
+                if w.h_flag.unsafe_ptr().unsafe_load(0) != UInt32(0):
+                    _multi_accept(ctx, oracle, w)
+                    iteration += 1
+                    updated = True
+                    accepted = True
+                    break
+                iteration += 1
+                step /= 2
+            if not accepted:
+                break
+        _multi_project(ctx, oracle, w, False)
+    ctx.enqueue_function[sum_u32_kernel](  # small-launch(n: tree leaves): one 256-thread block strides the leaf counts and halves them, never rows
+        w.d_not_pd.unsafe_ptr(),
+        Int32(n),
+        w.d_count.unsafe_ptr(),
+        grid_dim=(1, 1, 1),
+        block_dim=(WALK_FOLD_BLOCK, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=w.h_count.unsafe_ptr(), src_buf=w.d_count)
+
+
+def device_multi_walk_not_pd(w: MultiWalkBuffers) -> Int:
+    """DEVIATION 74's fallback count of the last walk (after a drain)."""
+    return Int(w.h_count.unsafe_ptr().unsafe_load(0))
