@@ -264,38 +264,40 @@ def single_dim_derivatives_kernel(
     part_stats: MutPointer[Float32, MutAnyOrigin],
     lambda_bits: UInt64,
     n_leaves_in: Int32,
-    out: MutPointer[UInt64, MutAnyOrigin],
+    dst: MutPointer[UInt64, MutAnyOrigin],
 ):
-    """`out[leaf] = double(sum der)`, `out[n + leaf] = double(sum der2) +
+    """`dst[leaf] = double(sum der)`, `dst[n + leaf] = double(sum der2) +
     lambda` (`finish_single_dim_evaluation`'s gradient and the cached
     `Der2AtPoint`, `pointwise_oracle.cpp:86-89`), one thread per leaf."""
     var n = Int(n_leaves_in)
     var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if leaf >= n:
         return
-    out.unsafe_store(leaf, sf64_from_f32(part_stats.unsafe_load(2 * leaf)))
-    out.unsafe_store(
+    dst.unsafe_store(leaf, sf64_from_f32(part_stats.unsafe_load(2 * leaf)))
+    dst.unsafe_store(
         n + leaf,
         sf64_add(sf64_from_f32(part_stats.unsafe_load(2 * leaf + 1)), lambda_bits),
     )
 
 
 def gradient_hessian_fill_kernel(
-    weight_bits: MutPointer[UInt64, MutAnyOrigin],
+    buf: MutPointer[UInt64, MutAnyOrigin],
     lambda_bits: UInt64,
     n_leaves_in: Int32,
     dim_in: Int32,
-    out: MutPointer[UInt64, MutAnyOrigin],
 ):
-    """GRADIENT's `WriteSecondDerivatives` (`:185-193`): `out[leaf * dim + d]
+    """GRADIENT's `WriteSecondDerivatives` (`:185-193`): `dst[leaf * dim + d]
     = WeightsCpu[leaf] + lambda` for every approx dimension, one thread per
-    slot. `weight_bits` are the host doubles' bit patterns."""
+    slot. `buf[0, n)` holds the host doubles' bit patterns and `dst` is
+    `buf + n` (one pointer, so the launch passes no mutable alias)."""
+    var weight_bits = buf
+    var dst = buf + Int(n_leaves_in)
     var dim = Int(dim_in)
     var total = Int(n_leaves_in) * dim
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= total:
         return
-    out.unsafe_store(i, sf64_add(weight_bits.unsafe_load(i // dim), lambda_bits))
+    dst.unsafe_store(i, sf64_add(weight_bits.unsafe_load(i // dim), lambda_bits))
 
 
 def regularize_point_f64_kernel(
@@ -1311,7 +1313,6 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 bitcast[DType.uint64](self.lambda_reg),
                 Int32(n),
                 Int32(dim),
-                dp + n,
                 grid_dim=(_leaf_blocks(n * dim), 1, 1),
                 block_dim=(256, 1, 1),
             )
@@ -1628,6 +1629,24 @@ def _oracle_multi_host_len(multi_planes: Int, bin_count: Int) -> Int:
     """The length of `h_multi_stats`: `d_multi_stats`' own length (kept as
     the host staging's shape key; the oracle reads nothing back into it)."""
     return multi_planes * bin_count
+
+
+#: the widest class count batched under `-D
+#: MOJOLEARN_LEGACY_NARROW_MC_HESS_BATCH`: `d_multi_der` is `K (K + 1) / 2`
+#: planes of `n_rows` floats under the batch (36 at 8), the row loop above
+#: that. Removed as benchmark-tuned on 2026-10-04 (it admitted the board's
+#: small class counts; no kernel needs it: the all-rows kernel loops the
+#: triangle and the partition reduce loops planes), replacement UNMEASURED.
+comptime MULTICLASS_HESSIAN_BATCH_MAX_CLASSES = 8
+comptime LEGACY_NARROW_MC_HESS_BATCH = is_defined[
+    "MOJOLEARN_LEGACY_NARROW_MC_HESS_BATCH"
+]()
+#: The general rule: batch while the triangle scratch (K (K + 1) / 2 planes
+#: of `n_rows` float32) fits a fixed 1 GiB device-memory budget; above it the
+#: row loop serves with K planes. The batch does the same arithmetic as the
+#: row loop (one launch instead of K); only its memory grows with K^2.
+comptime MULTICLASS_HESSIAN_BATCH_MAX_BYTES = 1 << 30
+
 
 
 def _mc_hess_batch_takes(single_bin_dim: Int, n_rows: Int) -> Bool:

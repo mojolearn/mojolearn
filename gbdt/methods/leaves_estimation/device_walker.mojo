@@ -1051,7 +1051,7 @@ def multi_walker_project_kernel(
     cursor_dim_in: Int32,
     k_in: Int32,
     pinned: Int32,
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
 ):
     """`make_estimation_result`: the walker's `k`-wide point to the cursor's
     `cursor_dim` gauge (MultiClass subtracts the pinned component; every
@@ -1071,7 +1071,7 @@ def multi_walker_project_kernel(
                     sf64_from_f32(point.unsafe_load(leaf * k + cd)),
                 )
             )
-        out.unsafe_store(leaf * cd + d, v)
+        dst.unsafe_store(leaf * cd + d, v)
 
 
 def multi_walker_diag_direction_kernel(

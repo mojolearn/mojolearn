@@ -240,12 +240,12 @@ def ctr_simple_expand_kernel(
     meta_i: MutPointer[Int64, MutAnyOrigin],
     meta_f: MutPointer[Float32, MutAnyOrigin],
     counts: MutPointer[Int64, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     bad: MutPointer[Int32, MutAnyOrigin],
 ):
     """`expand_raw_columns`: one thread per (model column, row),
     grid-stride; `col_plan[2 c]` is the column's raw source, `col_plan[2 c +
-    1]` its table (-1: copied through). `out` is column-major."""
+    1]` its table (-1: copied through). `dst` is column-major."""
     var n = Int(n_rows_in)
     var n_raw = Int(n_raw_in)
     var total = Int(n_cols_in) * n
@@ -258,12 +258,12 @@ def ctr_simple_expand_kernel(
         var t = Int(col_plan[2 * c + 1])
         var v = _raw_at(x, n, n_raw, row_major, src, r)
         if t < 0:
-            out[i] = v
+            dst[i] = v
         elif not _code_ok(v):
             _flag_bad(bad, src, r)
-            out[i] = Float32(0.0)
+            dst[i] = Float32(0.0)
         else:
-            out[i] = _simple_value(meta_i, meta_f, counts, t, Int(v))
+            dst[i] = _simple_value(meta_i, meta_f, counts, t, Int(v))
         i += stride
 
 
@@ -274,12 +274,12 @@ def ctr_raw_bins_kernel(
     row_major: Int32,
     one_hot: MutPointer[Int32, MutAnyOrigin],
     borders: MutPointer[Float32, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     bins: MutPointer[UInt32, MutAnyOrigin],
     bad: MutPointer[Int32, MutAnyOrigin],
 ):
     """`expand_tensor_ctr_columns`' first pass: every raw column copied to
-    `out` (column-major) and quantized into `bins` (a categorical column's
+    `dst` (column-major) and quantized into `bins` (a categorical column's
     code is its bin), one thread per (raw column, row), grid-stride. A NaN
     anywhere, or a categorical value that is not a code, is a refusal."""
     var n = Int(n_rows_in)
@@ -291,7 +291,7 @@ def ctr_raw_bins_kernel(
         var f = i // n
         var r = i - f * n
         var v = _raw_at(x, n, n_raw, row_major, f, r)
-        out[i] = v
+        dst[i] = v
         var bin = UInt32(0)
         if v != v:
             _flag_bad(bad, f, r)
@@ -318,14 +318,14 @@ def ctr_tensor_column_kernel(
     counts: MutPointer[Int64, MutAnyOrigin],
     borders: MutPointer[Float32, MutAnyOrigin],
     column_in: Int32,
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     bins: MutPointer[UInt32, MutAnyOrigin],
     bad: MutPointer[Int32, MutAnyOrigin],
 ):
     """Tensor table `t` (model column `column`), one thread per row,
     grid-stride: `tensor_value_for_row` (the mixed-radix key over the
     sources' codes, -1 at a code past its cardinality; the split-history
-    bits off `bins`; `tensor_value_for_key`), the value into `out` and its
+    bits off `bins`; `tensor_value_for_key`), the value into `dst` and its
     bin into `bins`."""
     var n = Int(n_rows_in)
     var n_raw = Int(n_raw_in)
@@ -396,7 +396,7 @@ def ctr_tensor_column_kernel(
             value = _div32(
                 _add32(_int_to_f32(good), pn), _add32(_int_to_f32(total), pd)
             )
-        out[column * n + r] = value
+        dst[column * n + r] = value
         bins[column * n + r] = _bin_of(borders, column, value)
         r += stride
 
