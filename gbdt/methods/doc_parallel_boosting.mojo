@@ -1230,9 +1230,15 @@ def finish_deferred_estimation(
     if tail.count_not_pd:
         # the per-leaf fallback flags counted on the device (one word)
         not_pd_total += Int(est_ws[0].h_count.unsafe_ptr().unsafe_load(0))
+    # one bulk copy of the read-back leaf values (no element loop)
     leaf_values.clear()
-    for i in range(tail.n_values):
-        leaf_values.append(est_ws[0].h_est.unsafe_ptr().unsafe_load(i))
+    if tail.n_values > 0:
+        leaf_values.resize(unsafe_uninit_length=tail.n_values)
+        memcpy(
+            dest=leaf_values.unsafe_ptr(),
+            src=est_ws[0].h_est.unsafe_ptr(),
+            count=tail.n_values,
+        )
     merge_stage_times(stage_times, tail.oracle.times)
     trace.record_list_f32(tail.leaf_tag, leaf_values)
     _ = tail^  # past the drain (step-33 race class, device side)
@@ -1602,9 +1608,15 @@ def _estimate_and_apply(
                 return
         # the task's one settle point (DEVIATION 1891's holds)
         ctx.synchronize()
+        # one bulk copy of the read-back leaf values (no element loop)
         leaf_values.clear()
-        for i in range(n_leaves):
-            leaf_values.append(h_est.unsafe_ptr().unsafe_load(i))
+        if n_leaves > 0:
+            leaf_values.resize(unsafe_uninit_length=n_leaves)
+            memcpy(
+                dest=leaf_values.unsafe_ptr(),
+                src=h_est.unsafe_ptr(),
+                count=n_leaves,
+            )
         merge_stage_times(stage_times, oracle.times)
         trace.record_list_f32(leaf_tag, leaf_values)
         stage_times.end(ctx, "est.tail_apply")
@@ -1735,9 +1747,15 @@ def _estimate_and_apply(
         # DEVIATION 74's counter, counted on the device
         not_pd_blocks += Int(est_ws[0].h_count.unsafe_ptr().unsafe_load(0))
         not_pd_total += not_pd_blocks
+        # one bulk copy of the read-back leaf values (no element loop)
         leaf_values.clear()
-        for i in range(n_leaves * approx_dim):
-            leaf_values.append(h_est.unsafe_ptr().unsafe_load(i))
+        if n_leaves * approx_dim > 0:
+            leaf_values.resize(unsafe_uninit_length=n_leaves * approx_dim)
+            memcpy(
+                dest=leaf_values.unsafe_ptr(),
+                src=h_est.unsafe_ptr(),
+                count=n_leaves * approx_dim,
+            )
         merge_stage_times(stage_times, oracle.times)
         trace.record_list_f32(leaf_tag, leaf_values)
         stage_times.end(ctx, "est.tail_apply")
