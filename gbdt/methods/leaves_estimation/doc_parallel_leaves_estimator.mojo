@@ -47,7 +47,10 @@ would move every number in the fit for no reason.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.memory import memcpy, stack_allocation
 from std.sys.compile import is_defined
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
 from gbdt.gpu_util.copy import COPY_BLOCK, copy_u32_kernel
@@ -260,6 +263,56 @@ def leaf_bounds_kernel(
         i += stride
 
 
+#: Threads of `leaf_sizes_scan_kernel`'s one block.
+comptime LEAF_SCAN_TPB = 256
+
+
+def leaf_sizes_scan_kernel(
+    bounds: MutPointer[UInt32, MutAnyOrigin],
+    n_leaves_in: Int32,
+    words: MutPointer[Int64, MutAnyOrigin],
+):
+    """The host scan of `partition` on the device, ONE block: from the
+    bounds of `leaf_bounds_kernel`, `words[leaf]` the leaf's offset (the
+    exclusive scan of the sizes), `words[n_leaves + leaf]` its size
+    (`past - first`, 0 for an absent leaf), `words[2 * n_leaves]` the sum of
+    the sizes and `words[2 * n_leaves + 1]` the out-of-range flag. Thread i
+    scans a contiguous run of leaves; a shared scan of the runs' sums gives
+    each run its start. Integer sums: the words the host loop wrote. The
+    trip count is the leaf count (model structure), never the row count."""
+    var nl = Int(n_leaves_in)
+    var tid = Int(thread_idx.x)
+    var per = (nl + LEAF_SCAN_TPB - 1) // LEAF_SCAN_TPB
+    var lo = min(nl, tid * per)
+    var hi = min(nl, lo + per)
+    var s = Int64(0)
+    for leaf in range(lo, hi):
+        var first = Int64(bounds.unsafe_load(leaf))
+        var past = Int64(bounds.unsafe_load(nl + leaf))
+        s += past - first if past > first else Int64(0)
+    var sh = stack_allocation[LEAF_SCAN_TPB, Scalar[DType.int64], address_space = AddressSpace.SHARED]()
+    sh[tid] = s
+    barrier()
+    var off = 1
+    while off < LEAF_SCAN_TPB:
+        var v = sh[tid] + (sh[tid - off] if tid >= off else Int64(0))
+        barrier()
+        sh[tid] = v
+        barrier()
+        off *= 2
+    var run = sh[tid] - s
+    for leaf in range(lo, hi):
+        var first = Int64(bounds.unsafe_load(leaf))
+        var past = Int64(bounds.unsafe_load(nl + leaf))
+        var size = past - first if past > first else Int64(0)
+        words.unsafe_store(leaf, run)
+        words.unsafe_store(nl + leaf, size)
+        run += size
+    if tid == LEAF_SCAN_TPB - 1:
+        words.unsafe_store(2 * nl, sh[tid])
+        words.unsafe_store(2 * nl + 1, Int64(bounds.unsafe_load(2 * nl)))
+
+
 struct DeviceLeafPartitioner(Movable):
     """DEVIATION 2551: `partition_from_bins` on the device, owned by the
     fit (pool of one, like `TEstimationWorkspace`). `bins` is the buffer the
@@ -281,6 +334,9 @@ struct DeviceLeafPartitioner(Movable):
     var bsums: DeviceBuffer[DType.int32]
     var d_bounds: DeviceBuffer[DType.uint32]
     var h_bounds: HostBuffer[DType.uint32]
+    #: `leaf_sizes_scan_kernel`'s words: offsets, sizes, total, flag
+    var d_part: DeviceBuffer[DType.int64]
+    var h_part: HostBuffer[DType.int64]
 
     def __init__(
         out self, ctx: DeviceContext, n_rows: Int, n_leaves: Int
@@ -305,6 +361,10 @@ struct DeviceLeafPartitioner(Movable):
         )
         self.h_bounds = ctx.enqueue_create_host_buffer[DType.uint32](
             2 * n_leaves + 1
+        )
+        self.d_part = ctx.enqueue_create_buffer[DType.int64](2 * n_leaves + 2)
+        self.h_part = ctx.enqueue_create_host_buffer[DType.int64](
+            2 * n_leaves + 2
         )
         ctx.synchronize()
 
@@ -346,28 +406,46 @@ struct DeviceLeafPartitioner(Movable):
             Int32(n_rows), Int32(n_leaves),
             grid_dim=copy_blocks, block_dim=COPY_BLOCK,
         )
-        ctx.enqueue_copy(dst_ptr=hb, src_buf=self.d_bounds)
+        # the leaf sizes, offsets, total and flag scanned on the device;
+        # one copy home (no host loop over the bounds)
+        ctx.enqueue_function[leaf_sizes_scan_kernel](
+            self.d_bounds.unsafe_ptr(), Int32(n_leaves),
+            self.d_part.unsafe_ptr(),
+            grid_dim=1, block_dim=LEAF_SCAN_TPB,
+        )  # small-launch(n_leaves: leaves): one scan over the leaves, a model-structure size
+        ctx.enqueue_copy(dst_ptr=self.h_part.unsafe_ptr(), src_buf=self.d_part)
         ctx.synchronize()
-        if hb.unsafe_load(2 * n_leaves) != UInt32(0):
+        return self._collect_scanned(n_rows, n_leaves)
+
+    def _collect_scanned(
+        self, n_rows: Int, n_leaves: Int
+    ) raises -> LeafPartition:
+        """After the drain: the checks and the `sizes` / `offsets` lists
+        from `leaf_sizes_scan_kernel`'s words, one bulk copy each."""
+        var hp = self.h_part.unsafe_ptr()
+        if hp.unsafe_load(2 * n_leaves + 1) != Int64(0):
             raise Error(
                 "DeviceLeafPartitioner: a row fell in a leaf at or above "
                 + String(n_leaves)
             )
-        var sizes = List[Int]()
-        var offsets = List[Int]()
-        var running = 0
-        for leaf in range(n_leaves):
-            var first = Int(hb.unsafe_load(leaf))
-            var past = Int(hb.unsafe_load(n_leaves + leaf))
-            var size = past - first if past > first else 0
-            offsets.append(running)
-            sizes.append(size)
-            running += size
+        var running = Int(hp.unsafe_load(2 * n_leaves))
         if running != n_rows:
             raise Error(
                 "DeviceLeafPartitioner: leaf sizes sum to " + String(running)
                 + " for " + String(n_rows) + " rows"
             )
+        var sizes = List[Int]()
+        var offsets = List[Int]()
+        offsets.resize(unsafe_uninit_length=n_leaves)
+        sizes.resize(unsafe_uninit_length=n_leaves)
+        memcpy(
+            dest=offsets.unsafe_ptr().bitcast[Int64](), src=hp, count=n_leaves
+        )
+        memcpy(
+            dest=sizes.unsafe_ptr().bitcast[Int64](),
+            src=hp + n_leaves,
+            count=n_leaves,
+        )
         return LeafPartition(self.vals.copy(), offsets^, sizes^)
 
     def partition_enqueue(
@@ -411,7 +489,14 @@ struct DeviceLeafPartitioner(Movable):
             Int32(n_rows), Int32(n_leaves),
             grid_dim=copy_blocks, block_dim=COPY_BLOCK,
         )
-        ctx.enqueue_copy(dst_ptr=hb, src_buf=self.d_bounds)
+        # the leaf sizes, offsets, total and flag scanned on the device;
+        # one copy home (no host loop over the bounds)
+        ctx.enqueue_function[leaf_sizes_scan_kernel](
+            self.d_bounds.unsafe_ptr(), Int32(n_leaves),
+            self.d_part.unsafe_ptr(),
+            grid_dim=1, block_dim=LEAF_SCAN_TPB,
+        )  # small-launch(n_leaves: leaves): one scan over the leaves, a model-structure size
+        ctx.enqueue_copy(dst_ptr=self.h_part.unsafe_ptr(), src_buf=self.d_part)
 
     def partition_collect(
         self, ctx: DeviceContext, n_rows: Int, n_leaves: Int
@@ -419,25 +504,4 @@ struct DeviceLeafPartitioner(Movable):
         """The rest of `partition` after `partition_enqueue` and the caller's
         drain: the same checks, the same `sizes` / `offsets` from the same
         bounds."""
-        var hb = self.h_bounds.unsafe_ptr()
-        if hb.unsafe_load(2 * n_leaves) != UInt32(0):
-            raise Error(
-                "DeviceLeafPartitioner: a row fell in a leaf at or above "
-                + String(n_leaves)
-            )
-        var sizes = List[Int]()
-        var offsets = List[Int]()
-        var running = 0
-        for leaf in range(n_leaves):
-            var first = Int(hb.unsafe_load(leaf))
-            var past = Int(hb.unsafe_load(n_leaves + leaf))
-            var size = past - first if past > first else 0
-            offsets.append(running)
-            sizes.append(size)
-            running += size
-        if running != n_rows:
-            raise Error(
-                "DeviceLeafPartitioner: leaf sizes sum to " + String(running)
-                + " for " + String(n_rows) + " rows"
-            )
-        return LeafPartition(self.vals.copy(), offsets^, sizes^)
+        return self._collect_scanned(n_rows, n_leaves)

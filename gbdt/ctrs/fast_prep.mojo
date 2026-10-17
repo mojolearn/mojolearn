@@ -280,12 +280,12 @@ def _read_counts_wide(
     mut d_src: DeviceBuffer[DType.uint32],
     n: Int,
     check_absent: Bool,
-    mut out: List[Int],
+    mut dst: List[Int],
 ) raises -> Int:
-    """The u32 count buffer into the host `out` (widened on the device,
+    """The u32 count buffer into the host `dst` (widened on the device,
     one bulk copy, no host element loop) and, when `check_absent`, the
     first slot whose count is zero (-1 when none is). One sync."""
-    out.clear()
+    dst.clear()
     if n <= 0:
         return -1
     var d_wide = ctx.enqueue_create_buffer[DType.int64](n)
@@ -305,9 +305,9 @@ def _read_counts_wide(
     ctx.enqueue_copy(dst_ptr=h_wide.unsafe_ptr(), src_buf=d_wide)
     ctx.enqueue_copy(dst_ptr=h_absent.unsafe_ptr(), src_buf=d_absent)
     ctx.synchronize()
-    out.resize(unsafe_uninit_length=n)
+    dst.resize(unsafe_uninit_length=n)
     memcpy(
-        dest=out.unsafe_ptr().bitcast[Int64](),
+        dest=dst.unsafe_ptr().bitcast[Int64](),
         src=h_wide.unsafe_ptr(),
         count=n,
     )
