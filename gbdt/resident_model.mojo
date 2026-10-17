@@ -1046,7 +1046,7 @@ struct ResidentGbdtModel(Movable):
             var tensor_tables = List[TTensorCtrApplyTable]()
             ref reg = self.tm.tensor_ctr_registry
             # driver-loop: over the registered tensor CTR model columns (model structure)
-            for i in range(len(reg.features)):
+            for i in range(len(reg.features)):  # small-loop(features: registered tensor CTR model columns): builds the apply plan once per model
                 if reg.features[i].model_column != reg.first_model_column + i:
                     raise Error("tensor CTR registry model columns are not contiguous")
                 tensor_tables.append(reg.features[i].table.apply_table())

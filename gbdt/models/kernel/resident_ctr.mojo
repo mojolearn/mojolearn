@@ -200,9 +200,9 @@ def _simple_value(  # device-helper: one row's CTR value inside ctr_simple_expan
     if classes > 2:
         var total = 0
         var good = 0
-        for class_id in range(border_idx + 1):
+        for class_id in range(border_idx + 1):  # small-loop(border_idx: target classes of one Borders table): device statement, one row's histogram
             total += Int(counts[base + class_id])
-        for class_id in range(border_idx + 1, classes):
+        for class_id in range(border_idx + 1, classes):  # small-loop(classes: target classes of one Borders table): device statement, one row's histogram
             good += Int(counts[base + class_id])
         total += good
         return _calc(_int_to_f32(good), _int_to_f32(total), pn, pd, sh, sc)
@@ -219,7 +219,7 @@ def _bin_of(  # device-helper: one value's bin against one column's borders insi
     var slab = column * CTR_BORDER_SLAB
     var count = Int(borders[slab])
     var bin = 0
-    for b in range(count):
+    for b in range(count):  # small-loop(count: borders of one model column, under 256): device statement, one value's bin
         if v > borders[slab + 1 + b]:
             bin += 1
     return UInt32(bin)
@@ -455,7 +455,7 @@ struct ResidentCtrPlan(Movable):
             if len(one_hot) != 0 and len(one_hot) != n_columns:
                 raise Error("tensor CTR registry/model one-hot count mismatch")
             # driver-loop: over the model's tensor CTR tables (model structure)
-            for t in range(len(tensor_tables)):
+            for t in range(len(tensor_tables)):  # small-loop(tensor_tables: tensor CTR model columns): packs model metadata once per model
                 ref tab = tensor_tables[t]
                 var classes = tab.target_classes_count
                 if classes != 0 and (
@@ -467,7 +467,7 @@ struct ResidentCtrPlan(Movable):
                 mi.append(len(tab.source_features))
                 mi.append(len(aux))
                 # driver-loop: over one tensor table's source features
-                for s in range(len(tab.source_features)):
+                for s in range(len(tab.source_features)):  # small-loop(source_features: one tensor table's source features): packs model metadata once per model
                     var f = tab.source_features[s]
                     if f < 0 or f >= n_raw:
                         raise Error(
@@ -480,7 +480,7 @@ struct ResidentCtrPlan(Movable):
                 mi.append(len(tab.split_features))
                 mi.append(len(aux))
                 # driver-loop: over one tensor table's split history
-                for s in range(len(tab.split_features)):
+                for s in range(len(tab.split_features)):  # small-loop(split_features: one tensor table's split history, bounded by tree depth): packs model metadata once per model
                     var sf = tab.split_features[s]
                     var sb = tab.split_bins[s]
                     var st = tab.split_types[s]
@@ -511,11 +511,11 @@ struct ResidentCtrPlan(Movable):
                     + " raw input columns, the model reports " + String(n_raw)
                 )
             # driver-loop: over the model columns (model structure)
-            for c in range(n_columns):
+            for c in range(n_columns):  # small-loop(n_columns: model columns): packs the column plan once per model
                 aux.append(plan.source_of_column[c])
                 aux.append(plan.table_of_column[c])
             # driver-loop: over the model's CTR tables (model structure)
-            for t in range(len(ctr_tables)):
+            for t in range(len(ctr_tables)):  # small-loop(ctr_tables: CTR model columns): packs model metadata once per model
                 ref tab = ctr_tables[t]
                 if tab.ctr_type == CTR_BORDERS:
                     var classes = tab.target_classes_count
@@ -555,7 +555,7 @@ struct ResidentCtrPlan(Movable):
                 counts.extend(tab.counts.copy())
         var oh = List[Int32](length=max(n_columns, 1), fill=Int32(0))
         # driver-loop: over the model columns (their one-hot flags)
-        for c in range(len(one_hot)):
+        for c in range(len(one_hot)):  # small-loop(one_hot: model columns): packs the one-hot flags once per model
             if one_hot[c]:
                 oh[c] = Int32(1)
         self.d_aux = _upload_i64(ctx, aux)
