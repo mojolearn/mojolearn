@@ -2,11 +2,13 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## Unreleased
+## 0.8.50 (published 2026-10-17)
 
 - `SGDClassifier` and `Perceptron` default to a fixed minibatch again (`batch_size=4096` and `batch_size=256`): on these two,
   the row-count choice was slower and less accurate on small datasets. `batch_size='auto'` is still accepted.
   `SGDRegressor` and `PassiveAggressiveClassifier` keep `batch_size='auto'` as their default.
+- Gradient boosting, factor analysis, Huber regression and spectral embedding: per-leaf and per-coefficient reductions
+  and copies that ran on the CPU now run on the device. Results are unchanged in `identical` mode.
 
 ## 0.8.49 (published 2026-10-16)
 
