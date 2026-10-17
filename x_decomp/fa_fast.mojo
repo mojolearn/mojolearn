@@ -64,7 +64,7 @@ from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from checks.numerics import identical_mul_add, identical_sqrt
 from checks.soft_f64 import sf64_add, sf64_from_f32
 from x_decomp.cells import X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL, F32Ptr, add, div0, log_floor, mul, sqrt0
-from x_decomp.device import PJ_SYNC_ROUNDS, TPB, _blocks, _pj_blocks, _pj_off_blocks, xd_ctx
+from x_decomp.device import PJ_SYNC_ROUNDS, TPB, XD_NO_FLAG, _blocks, _pj_blocks, _pj_off_blocks, xd_ctx, xd_flag_first_kernel
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.eigh_scale import enqueue_es_scale_strided, enqueue_es_unscale_diag_ptr, enqueue_es_unscale_ptr, es_strided_words
 from x_decomp.jacobi_par import (
@@ -178,6 +178,19 @@ comptime FA_TRANSFORM_FUSED = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_TRANSFO
 #: beside it): see docs/apple-fast/EXPERIMENTS.md `FA_GRAM_DF`.
 comptime FA_GRAM_QOLD = is_defined["MOJOLEARN_FA_GRAM_QOLD"]()
 comptime FA_GRAM_DF = FA_ITER_DEVICE and not FA_GRAM_QOLD
+#: (FAST + Apple, lane apple-slow-paths 2026-10-17) the FA_GRAM_DF loop's
+#: grid SVD enqueues FA_SVD_GROUP sweeps between two convergence readbacks,
+#: each sweep on its own flag slice with its own lowest-flag word
+#: (`xd_flag_first_kernel`), as main's IDENTICAL `DevExec._svd_on` does since
+#: lane gap-tsqr (IDN_XD_SVD_GROUP): the FAST loop waited and read back once
+#: per sweep, a fixed wait per sweep of every EM iteration. No bit moves: a
+#: sweep with no rotation leaves R^T and V^T as they were, so the sweeps after
+#: the converging one are identities and the first sweep without a rotation
+#: (the same X_DECOMP_SVD_SWEEPS bound) is found from the same flags. 4 a
+#: group: a well-conditioned R converges in ~8-12 sweeps, so the waits fall
+#: 3-4x for at most 3 identity sweeps; a size rule, not a shape rule.
+#: `-D MOJOLEARN_FA_SVD_GROUP_OFF` restores one readback per sweep.
+comptime FA_SVD_GROUP = 1 if is_defined["MOJOLEARN_FA_SVD_GROUP_OFF"]() else 4
 #: a Cholesky pivot under this fraction of G_jj (2^-44, 16x the double-float
 #: word's 2^-48) drops its row: the residual left is 2^-22 of the column's
 #: norm, the float32 Householder QR's own backward error
@@ -864,17 +877,9 @@ def _fa_eigh_grid(
     return SIMD[DType.float32, 4](Float32(1.0) if converged else Float32(0.0), Float32(executed), off_last, fro_now)
 
 
-def fa_any_flag_kernel(flags: F32Ptr, h_in: Int32, any_out: F32Ptr):
-    """ONE block: `any_out[0] = 1` when any of the `h` pair flags of a sweep
-    is nonzero (a rotation ran). Every writer writes the same 1.0, so the
-    word does not depend on the order; the caller zeroes it first. The
-    flags are one per pair (at most FA_MAX_D / 2), a block strides them."""
-    var t = Int(thread_idx.x)
-    var j = t
-    while j < Int(h_in):
-        if flags.unsafe_load(j) != Float32(0.0):
-            any_out.unsafe_store(0, Float32(1.0))
-        j += FA_TPB
+# fa_any_flag_kernel (one word per sweep: any pair rotated) is replaced by
+# x_decomp/device.mojo `xd_flag_first_kernel` (one word per sweep of a
+# FA_SVD_GROUP group, the lowest rotated pair), main's IDENTICAL svd driver.
 
 
 def fa_ll_terms_kernel(small: F32Ptr, d_in: Int32, nc_in: Int32, sums: MutPointer[UInt64, MutAnyOrigin]):
@@ -913,12 +918,14 @@ def fa_ll_terms_kernel(small: F32Ptr, d_in: Int32, nc_in: Int32, sums: MutPointe
 
 def _fa_svd_grid(
     ctx: DeviceContext, mem: _FaMem, s_rt: Int, s_vt: Int, s_s: Int, s_flags: Int,
-    mut hflags: HostBuffer[DType.float32], d: Int, s_es: Int, s_any: Int,
+    mut dfirst: DeviceBuffer[DType.int32], mut hfirst: HostBuffer[DType.int32], d: Int, s_es: Int,
 ) raises -> SIMD[DType.float32, 4]:
-    """FA_GRAM_DF: main's `DevExec.svd_cells` rounds on the
-    loop's pointers (one `rs_round_kernel` launch a round, a pair a block,
-    the pair flags read once per sweep; a sweep with no rotation is
-    converged), then `rs_norm_kernel`. Returns (converged, sweeps run, 0, 0)."""
+    """FA_GRAM_DF: main's `DevExec._svd_on` rounds on the loop's pointers
+    (one `rs_round_kernel` launch a round, a pair a block), FA_SVD_GROUP
+    sweeps behind one wait, sweep g of a group on flag slice g and its
+    lowest-flag word g (`xd_flag_first_kernel`); the first sweep with no
+    rotation is converged. Then `rs_norm_kernel`. Returns (converged, sweeps
+    run, 0, 0)."""
     var dm = d + (d % 2)
     var h = dm // 2
     var prt = mem.ptr(s_rt)
@@ -932,26 +939,30 @@ def _fa_svd_grid(
     var converged = d < 2
     var executed = 0
     while not converged and executed < X_DECOMP_SVD_SWEEPS:
-        executed += 1
+        var group = min(FA_SVD_GROUP, X_DECOMP_SVD_SWEEPS - executed)
         var sfl = mem.sub(s_flags)
         enqueue_fill(ctx, sfl, Float32(0.0))
-        for rd in range(dm - 1):
-            ctx.enqueue_function[rs_round_kernel](
-                prt, pvt, pfl, Int32(d), Int32(dm), Int32(rd), X_DECOMP_SVD_TOL, grid_dim=h, block_dim=RS_TPB
+        enqueue_fill(ctx, dfirst, XD_NO_FLAG)
+        for sg in range(group):  # driver-loop: over the sweeps of one group (at most FA_SVD_GROUP)
+            var fl = pfl + sg * h
+            for rd in range(dm - 1):  # driver-loop: over the rounds of one Jacobi sweep
+                ctx.enqueue_function[rs_round_kernel](
+                    prt, pvt, fl, Int32(d), Int32(dm), Int32(rd), X_DECOMP_SVD_TOL, grid_dim=h, block_dim=RS_TPB
+                )
+                if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
+                    ctx.synchronize()
+            # the sweep's pair flags folded on the device into one word
+            ctx.enqueue_function[xd_flag_first_kernel](
+                fl, Int32(h), dfirst.unsafe_ptr() + sg, grid_dim=_blocks(h), block_dim=TPB
             )
-            if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
-                ctx.synchronize()
-        # the sweep's pair flags folded on the device into one word
-        # (`fa_any_flag_kernel`); one scalar readback per sweep
-        var sany = mem.sub(s_any)
-        enqueue_fill(ctx, sany, Float32(0.0))
-        ctx.enqueue_function[fa_any_flag_kernel](
-            pfl, Int32(h), mem.ptr(s_any), grid_dim=1, block_dim=FA_TPB
-        )
-        ctx.enqueue_copy(dst_ptr=hflags.unsafe_ptr(), src_buf=sany)
+        # one readback of `group` words per group
+        ctx.enqueue_copy(dst_buf=hfirst, src_buf=dfirst)
         ctx.synchronize()
-        if hflags.unsafe_ptr().unsafe_load(0) == Float32(0.0):
-            converged = True
+        for sg in range(group):  # small-loop(group: sweeps behind one wait, at most FA_SVD_GROUP = 4): one readback word per sweep
+            executed += 1
+            if hfirst.unsafe_ptr().unsafe_load(sg) == XD_NO_FLAG:
+                converged = True
+                break
     ctx.enqueue_function[rs_norm_kernel](prt, ps, Int32(d), grid_dim=d, block_dim=RS_TPB)
     enqueue_es_unscale_ptr(ctx, ps, pes, 1, d)
     return SIMD[DType.float32, 4](Float32(1.0) if converged else Float32(0.0), Float32(executed), 0.0, 0.0)
@@ -1022,14 +1033,15 @@ def fa_em_py(
     # (after W, psi A and psi B: LIVEBUF reads those three as one span)
     var s_r0 = mem.add(ctx, d * d if FA_GRAM_DF else 1)
     var s_s = mem.add(ctx, d if FA_GRAM_DF else 1)
-    var s_flags = mem.add(ctx, h if FA_GRAM_DF else 1)
-    var s_any = mem.add(ctx, 1)
+    var s_flags = mem.add(ctx, h * FA_SVD_GROUP if FA_GRAM_DF else 1)
     mem.seal(ctx)
     # the log-likelihood's three float64 sums (`fa_ll_terms_kernel`)
     var d_llsum = ctx.enqueue_create_buffer[DType.uint64](3)
     var h_llsum = ctx.enqueue_create_host_buffer[DType.uint64](3)
     var hfold = ctx.enqueue_create_host_buffer[DType.float32](3)
-    var hflags = ctx.enqueue_create_host_buffer[DType.float32](max(h, 1))
+    # the grid SVD's lowest-flag words, one per sweep of a group
+    var dfirst = ctx.enqueue_create_buffer[DType.int32](FA_SVD_GROUP)
+    var hfirst = ctx.enqueue_create_host_buffer[DType.int32](FA_SVD_GROUP)
     # psi0 up, the flag and the status words zero
     var spa = mem.sub(s_pa)
     ctx.enqueue_copy(dst_buf=spa, src_ptr=psi_src)
@@ -1063,7 +1075,7 @@ def fa_em_py(
                 mem.ptr(s_r0), mem.ptr(cur), mem.ptr(s_b), mem.ptr(s_sp), pllst, Int32(d), inv_sqrt_n,
                 grid_dim=_blocks(d * d), block_dim=TPB,
             )
-            est = _fa_svd_grid(ctx, mem, s_b, s_v, s_s, s_flags, hflags, d, s_es, s_any)
+            est = _fa_svd_grid(ctx, mem, s_b, s_v, s_s, s_flags, dfirst, hfirst, d, s_es)
             _fa_check_eigh(est[0], est[1], est[2], est[3], d)
             ctx.enqueue_function[fa_finish_kernel[True]](
                 mem.ptr(s_s), mem.ptr(s_v), mem.ptr(s_sp), mem.ptr(cur), mem.ptr(s_w), mem.ptr(nxt),
@@ -1123,7 +1135,8 @@ def fa_em_py(
     _ = h_llsum^
     _ = d_llsum^
     _ = hfold^
-    _ = hflags^
+    _ = dfirst^
+    _ = hfirst^
     _ = mem^
     ctx.synchronize()
     return PythonObject(it)
