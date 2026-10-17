@@ -254,6 +254,71 @@ def code_histogram_kernel(
             )
 
 
+def counts_widen_kernel(
+    src: MutPointer[UInt32, MutAnyOrigin],
+    n_in: Int32,
+    dst: MutPointer[Int64, MutAnyOrigin],
+    check_absent: Int32,
+    first_absent: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread per slot: widens a u32 count to the host `Int` width
+    (exact) so the host takes the whole list in one copy, and, when
+    `check_absent` is set, folds the smallest slot whose count is zero into
+    `first_absent` (an integer `Atomic.min`, so the result does not depend
+    on the arrival order; the caller seeds it with INT32_MAX)."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < n:
+        var k = src.unsafe_load(i)
+        dst.unsafe_store(i, Int64(k))
+        if check_absent != Int32(0) and k == UInt32(0):
+            _ = Atomic.min(first_absent, Int32(i))
+
+
+def _read_counts_wide(
+    ctx: DeviceContext,
+    mut d_src: DeviceBuffer[DType.uint32],
+    n: Int,
+    check_absent: Bool,
+    mut out: List[Int],
+) raises -> Int:
+    """The u32 count buffer into the host `out` (widened on the device,
+    one bulk copy, no host element loop) and, when `check_absent`, the
+    first slot whose count is zero (-1 when none is). One sync."""
+    out.clear()
+    if n <= 0:
+        return -1
+    var d_wide = ctx.enqueue_create_buffer[DType.int64](n)
+    var d_absent = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill(ctx, d_absent, Int32(0x7FFFFFFF))
+    ctx.enqueue_function[counts_widen_kernel](
+        d_src.unsafe_ptr(),
+        Int32(n),
+        d_wide.unsafe_ptr(),
+        Int32(1) if check_absent else Int32(0),
+        d_absent.unsafe_ptr(),
+        grid_dim=((n + HIST_BLOCK - 1) // HIST_BLOCK, 1, 1),
+        block_dim=(HIST_BLOCK, 1, 1),
+    )
+    var h_wide = ctx.enqueue_create_host_buffer[DType.int64](n)
+    var h_absent = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=h_wide.unsafe_ptr(), src_buf=d_wide)
+    ctx.enqueue_copy(dst_ptr=h_absent.unsafe_ptr(), src_buf=d_absent)
+    ctx.synchronize()
+    out.resize(unsafe_uninit_length=n)
+    memcpy(
+        dest=out.unsafe_ptr().bitcast[Int64](),
+        src=h_wide.unsafe_ptr(),
+        count=n,
+    )
+    var absent = Int(h_absent.unsafe_ptr().unsafe_load(0))
+    _ = d_wide^  # past the drain
+    _ = d_absent^
+    if absent == 0x7FFFFFFF:
+        absent = -1
+    return absent
+
+
 def minmax_stripe_kernel(
     src: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
@@ -396,19 +461,17 @@ def device_dense_codes(
         grid_dim=(blocks, 1, 1),
         block_dim=(HIST_BLOCK, 1, 1),
     )
-    var h_counts = ctx.enqueue_create_host_buffer[DType.uint32](unique_values)
-    ctx.enqueue_copy(dst_ptr=h_counts.unsafe_ptr(), src_buf=d_counts)
-    ctx.synchronize()
-    var counts = List[Int](capacity=unique_values)
-    for c in range(unique_values):
-        var k = Int(h_counts.unsafe_ptr().unsafe_load(c))
-        if k == 0:
-            raise Error(
-                "cat_features column " + String(feature)
-                + " is not densely coded: category " + String(c)
-                + " is absent from 0.." + String(unique_values - 1)
-            )
-        counts.append(k)
+    # the counts widened on the device and the first absent category
+    # folded there (`counts_widen_kernel`): one bulk copy and one scalar,
+    # no host loop over the categories
+    var counts = List[Int]()
+    var absent = _read_counts_wide(ctx, d_counts, unique_values, True, counts)
+    if absent >= 0:
+        raise Error(
+            "cat_features column " + String(feature)
+            + " is not densely coded: category " + String(absent)
+            + " is absent from 0.." + String(unique_values - 1)
+        )
     _ = d_dummy_hist^  # past the drain
     _ = d_dummy_target^
     return DeviceCodes(codes^, unique_values, counts^)
@@ -444,12 +507,10 @@ def device_target_histogram(
         grid_dim=(blocks, 1, 1),
         block_dim=(HIST_BLOCK, 1, 1),
     )
-    var h_hist = ctx.enqueue_create_host_buffer[DType.uint32](hist_len)
-    ctx.enqueue_copy(dst_ptr=h_hist.unsafe_ptr(), src_buf=d_hist)
-    ctx.synchronize()
-    var histogram = List[Int](capacity=hist_len)
-    for k in range(hist_len):
-        histogram.append(Int(h_hist.unsafe_ptr().unsafe_load(k)))
+    # widened on the device, one bulk copy (no host element loop); the
+    # host consumer is `build_ctr_tables_from_counts`
+    var histogram = List[Int]()
+    _ = _read_counts_wide(ctx, d_hist, hist_len, False, histogram)
     _ = d_counts^  # past the drain
     return histogram^
 
