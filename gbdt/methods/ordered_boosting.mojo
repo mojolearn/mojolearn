@@ -261,6 +261,20 @@ comptime ORDERED_BLOCK = 256
 #: the same arm (`GBDT_ORDERED_SABOTAGE`).
 comptime ORDERED_SABOTAGE = is_defined["MOJOLEARN_ORDERED_SABOTAGE"]()
 
+#: lane apple-slow-paths (2026-10-17; every vendor, every mode; default ON):
+#: the per-tree scratch of the Ordered loop off the FAST wide path (the two
+#: search planes, the tree's bins, the score-noise partials and terms, the
+#: bootstrap draws, the scale's |planes| and magnitudes) is allocated ONCE
+#: per fit and rewritten every tree, as `ord_wide`'s `fast_planes` /
+#: `fast_bins` already are: every cell a tree reads it writes first (the
+#: scatter covers [0, total), the bins every row, the fill and the reduce
+#: kernels their whole outputs), and the queue orders the last tree's reads
+#: before the next tree's writes (each tree ends on the learn-loss drain).
+#: No bit moves. On Metal each allocation is a fixed host cost per tree and
+#: a live buffer bound to the launches while it lives.
+#: `-D MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF` restores the allocations per tree.
+comptime GBDT_ORD_TREE_BUFS = not is_defined["MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF"]()
+
 #: Lane ml-gbdt T4 (roadmap T4; IDENTICAL, every vendor; default ON): the
 #: batched Ordered estimation tasks (`_ordered_estimate_prepare`) take
 #: `_estimate_prepare(one_step_device=True)`: a one-step diagonal Newton
@@ -2568,6 +2582,23 @@ def fit_ordered(
             ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
         )
         fast_bins.append(ctx.enqueue_create_buffer[DType.uint32](n_rows))
+    # GBDT_ORD_TREE_BUFS: [sw, sg, noise partials, noise terms, draws,
+    # |planes|, magnitudes] and the bins, once per fit (off the wide path)
+    var keep_f32 = List[DeviceBuffer[DType.float32]]()
+    var keep_bins = List[DeviceBuffer[DType.uint32]]()
+    comptime if GBDT_ORD_TREE_BUFS:
+        if not ord_wide:
+            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+            keep_f32.append(
+                ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
+            )
+            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](2 * total))
+            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](2))
+            keep_bins.append(ctx.enqueue_create_buffer[DType.uint32](n_rows))
+    var keep_on = len(keep_bins) > 0
     comptime if ORDERED_CAT_CURSORS:
         _ord_fast_init_cursors(
             ctx, offsets, total, folds, learn_count, opts.start_value,
@@ -2858,6 +2889,9 @@ def fit_ordered(
             # first
             sw = fast_planes[0].copy()
             sg = fast_planes[1].copy()
+        elif keep_on:
+            sw = keep_f32[0].copy()
+            sg = keep_f32[1].copy()
         else:
             sw = ctx.enqueue_create_buffer[DType.float32](total)
             sg = ctx.enqueue_create_buffer[DType.float32](total)
@@ -2958,6 +2992,8 @@ def fit_ordered(
             var part: DeviceBuffer[DType.float32]
             if ord_wide:
                 part = fast_planes[2].copy()
+            elif keep_on:
+                part = keep_f32[2].copy()
             else:
                 part = ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
             var std_done = False
@@ -3055,7 +3091,11 @@ def fit_ordered(
                     * Float64(opts.random_strength)
                 )
         elif opts.random_strength != Float32(0.0):
-            var terms = ctx.enqueue_create_buffer[DType.float32](total)
+            var terms: DeviceBuffer[DType.float32]
+            if keep_on:
+                terms = keep_f32[3].copy()
+            else:
+                terms = ctx.enqueue_create_buffer[DType.float32](total)
             ctx.enqueue_function[_ord_std_terms_kernel](
                 sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
                 terms.unsafe_ptr(), Int32(total),
@@ -3108,7 +3148,11 @@ def fit_ordered(
         # 4. the bootstrap, quality slices only
         times.begin(ctx)
         if bootstrap_on:
-            var draws = ctx.enqueue_create_buffer[DType.float32](total)
+            var draws: DeviceBuffer[DType.float32]
+            if keep_on:
+                draws = keep_f32[4].copy()
+            else:
+                draws = ctx.enqueue_create_buffer[DType.float32](total)
             enqueue_fill(ctx, draws, Float32(1.0))
             launch_bootstrap(
                 ctx, opts.bootstrap_kind, boot_seeds, draws, total,
@@ -3129,12 +3173,20 @@ def fit_ordered(
         # the fixed-point scale from the planes as the searcher reads them
         times.begin(ctx)
         if not fused_sums:
-            var absv = ctx.enqueue_create_buffer[DType.float32](2 * total)
+            var absv: DeviceBuffer[DType.float32]
+            if keep_on:
+                absv = keep_f32[5].copy()
+            else:
+                absv = ctx.enqueue_create_buffer[DType.float32](2 * total)
             ctx.enqueue_function[_ord_abs_planes_kernel](
                 sw.unsafe_ptr(), sg.unsafe_ptr(), absv.unsafe_ptr(), Int32(total),
                 grid_dim=(_grid(total), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
             )
-            var mags = ctx.enqueue_create_buffer[DType.float32](2)
+            var mags: DeviceBuffer[DType.float32]
+            if keep_on:
+                mags = keep_f32[6].copy()
+            else:
+                mags = ctx.enqueue_create_buffer[DType.float32](2)
             ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
                 absv.unsafe_ptr(), Int32(total), mags.unsafe_ptr(),
                 grid_dim=1, block_dim=256,
@@ -3234,6 +3286,8 @@ def fit_ordered(
         if ord_wide:
             # the fit's bins, every row rewritten by the fill or the model
             bins = fast_bins[0].copy()
+        elif keep_on:
+            bins = keep_bins[0].copy()
         else:
             bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
         if len(splits) == 0:
