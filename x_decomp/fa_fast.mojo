@@ -49,7 +49,7 @@ defines (docs/apple-fast/ab/fa.md):
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
 from std.python import PythonObject
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
@@ -62,6 +62,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
 from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from checks.numerics import identical_mul_add, identical_sqrt
+from checks.soft_f64 import sf64_add, sf64_from_f32
 from x_decomp.cells import X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL, F32Ptr, add, div0, log_floor, mul, sqrt0
 from x_decomp.device import PJ_SYNC_ROUNDS, TPB, _blocks, _pj_blocks, _pj_off_blocks, xd_ctx
 from x_decomp.jacobi2 import dev_barrier
@@ -863,9 +864,56 @@ def _fa_eigh_grid(
     return SIMD[DType.float32, 4](Float32(1.0) if converged else Float32(0.0), Float32(executed), off_last, fro_now)
 
 
+def fa_any_flag_kernel(flags: F32Ptr, h_in: Int32, any_out: F32Ptr):
+    """ONE block: `any_out[0] = 1` when any of the `h` pair flags of a sweep
+    is nonzero (a rotation ran). Every writer writes the same 1.0, so the
+    word does not depend on the order; the caller zeroes it first. The
+    flags are one per pair (at most FA_MAX_D / 2), a block strides them."""
+    var t = Int(thread_idx.x)
+    var j = t
+    while j < Int(h_in):
+        if flags.unsafe_load(j) != Float32(0.0):
+            any_out.unsafe_store(0, Float32(1.0))
+        j += FA_TPB
+
+
+def fa_ll_terms_kernel(small: F32Ptr, d_in: Int32, nc_in: Int32, sums: MutPointer[UInt64, MutAnyOrigin]):
+    """ONE block of FA_TPB threads: the log-likelihood's three float64 sums
+    of `fa_finish_kernel`'s float32 words, slog = sum small[0, nc), unexp =
+    sum small[nc, d), plog = sum small[d, 2 d), in soft-float64
+    (checks/soft_f64.mojo; the Apple GPU has no binary64). One fixed order on
+    every run: thread t folds the words t, t + FA_TPB, ... from +0.0, then a
+    pairwise tree over the threads (FA_TPB / 2 down to 1). FAST only: the
+    order differs from main's sequential host sum by rounding only. Each
+    sum is written as double bits to `sums[0..2]`."""
+    var t = Int(thread_idx.x)
+    var d = Int(d_in)
+    var nc = Int(nc_in)
+    var sh = stack_allocation[FA_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    for seg in range(3):
+        var lo = 0 if seg == 0 else (nc if seg == 1 else d)
+        var hi = nc if seg == 0 else (d if seg == 1 else 2 * d)
+        var acc = UInt64(0)
+        var j = lo + t
+        while j < hi:
+            acc = sf64_add(acc, sf64_from_f32(small.unsafe_load(j)))
+            j += FA_TPB
+        sh[t] = acc
+        barrier()
+        var off = FA_TPB // 2
+        while off > 0:
+            if t < off:
+                sh[t] = sf64_add(sh[t], sh[t + off])
+            barrier()
+            off //= 2
+        if t == 0:
+            sums.unsafe_store(seg, sh[0])
+        barrier()
+
+
 def _fa_svd_grid(
     ctx: DeviceContext, mem: _FaMem, s_rt: Int, s_vt: Int, s_s: Int, s_flags: Int,
-    mut hflags: HostBuffer[DType.float32], d: Int, s_es: Int,
+    mut hflags: HostBuffer[DType.float32], d: Int, s_es: Int, s_any: Int,
 ) raises -> SIMD[DType.float32, 4]:
     """FA_GRAM_DF: main's `DevExec.svd_cells` rounds on the
     loop's pointers (one `rs_round_kernel` launch a round, a pair a block,
@@ -893,34 +941,29 @@ def _fa_svd_grid(
             )
             if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
                 ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=hflags.unsafe_ptr(), src_buf=sfl)
+        # the sweep's pair flags folded on the device into one word
+        # (`fa_any_flag_kernel`); one scalar readback per sweep
+        var sany = mem.sub(s_any)
+        enqueue_fill(ctx, sany, Float32(0.0))
+        ctx.enqueue_function[fa_any_flag_kernel](
+            pfl, Int32(h), mem.ptr(s_any), grid_dim=1, block_dim=FA_TPB
+        )
+        ctx.enqueue_copy(dst_ptr=hflags.unsafe_ptr(), src_buf=sany)
         ctx.synchronize()
-        var hp = F32Ptr(unsafe_from_address=Int(hflags.unsafe_ptr()))
-        var rotated = False
-        for b in range(h):
-            if hp.unsafe_load(b) != Float32(0.0):
-                rotated = True
-        if not rotated:
+        if hflags.unsafe_ptr().unsafe_load(0) == Float32(0.0):
             converged = True
     ctx.enqueue_function[rs_norm_kernel](prt, ps, Int32(d), grid_dim=d, block_dim=RS_TPB)
     enqueue_es_unscale_ptr(ctx, ps, pes, 1, d)
     return SIMD[DType.float32, 4](Float32(1.0) if converged else Float32(0.0), Float32(executed), 0.0, 0.0)
 
 
-def _fa_ll(hp: F32Ptr, d: Int, nc: Int, llconst: Float64, neg_half_n: Float64) -> Float64:
-    """Main's log-likelihood from the readback: slog, unexp and plog each a
-    sequential float64 sum of float32 terms (`_dsum`), then
-    (llconst + slog + unexp + plog) * (-n / 2)."""
-    var slog = Float64(0.0)
-    for j in range(nc):
-        slog += Float64(hp.unsafe_load(j))
-    var unexp = Float64(0.0)
-    for j in range(nc, d):
-        unexp += Float64(hp.unsafe_load(j))
-    var plog = Float64(0.0)
-    var dd2 = 2 * d
-    for j in range(d, dd2):
-        plog += Float64(hp.unsafe_load(j))
+def _fa_ll(hs: MutPointer[UInt64, MutAnyOrigin], llconst: Float64, neg_half_n: Float64) -> Float64:
+    """Main's log-likelihood from the three device sums
+    (`fa_ll_terms_kernel`: slog, unexp, plog as double bits), then
+    (llconst + slog + unexp + plog) * (-n / 2), main's combination."""
+    var slog = bitcast[DType.float64](hs.unsafe_load(0))
+    var unexp = bitcast[DType.float64](hs.unsafe_load(1))
+    var plog = bitcast[DType.float64](hs.unsafe_load(2))
     return (llconst + slog + unexp + plog) * neg_half_n
 
 
@@ -980,8 +1023,11 @@ def fa_em_py(
     var s_r0 = mem.add(ctx, d * d if FA_GRAM_DF else 1)
     var s_s = mem.add(ctx, d if FA_GRAM_DF else 1)
     var s_flags = mem.add(ctx, h if FA_GRAM_DF else 1)
+    var s_any = mem.add(ctx, 1)
     mem.seal(ctx)
-    var hsmall = ctx.enqueue_create_host_buffer[DType.float32](2 * d + 4)
+    # the log-likelihood's three float64 sums (`fa_ll_terms_kernel`)
+    var d_llsum = ctx.enqueue_create_buffer[DType.uint64](3)
+    var h_llsum = ctx.enqueue_create_host_buffer[DType.uint64](3)
     var hfold = ctx.enqueue_create_host_buffer[DType.float32](3)
     var hflags = ctx.enqueue_create_host_buffer[DType.float32](max(h, 1))
     # psi0 up, the flag and the status words zero
@@ -1017,7 +1063,7 @@ def fa_em_py(
                 mem.ptr(s_r0), mem.ptr(cur), mem.ptr(s_b), mem.ptr(s_sp), pllst, Int32(d), inv_sqrt_n,
                 grid_dim=_blocks(d * d), block_dim=TPB,
             )
-            est = _fa_svd_grid(ctx, mem, s_b, s_v, s_s, s_flags, hflags, d, s_es)
+            est = _fa_svd_grid(ctx, mem, s_b, s_v, s_s, s_flags, hflags, d, s_es, s_any)
             _fa_check_eigh(est[0], est[1], est[2], est[3], d)
             ctx.enqueue_function[fa_finish_kernel[True]](
                 mem.ptr(s_s), mem.ptr(s_v), mem.ptr(s_sp), mem.ptr(cur), mem.ptr(s_w), mem.ptr(nxt),
@@ -1035,11 +1081,13 @@ def fa_em_py(
                 mem.ptr(s_small), pstat, pllst, pllrec, Int32(d), Int32(nc), Int32(i), half_n, tol32,
                 grid_dim=1, block_dim=FA_TPB,
             )
-        var ssm = mem.sub(s_small)
-        ctx.enqueue_copy(dst_ptr=hsmall.unsafe_ptr(), src_buf=ssm)
+        # the three log terms summed on the device; three words home
+        ctx.enqueue_function[fa_ll_terms_kernel](
+            mem.ptr(s_small), Int32(d), Int32(nc), d_llsum.unsafe_ptr(), grid_dim=1, block_dim=FA_TPB
+        )
+        ctx.enqueue_copy(dst_ptr=h_llsum.unsafe_ptr(), src_buf=d_llsum)
         ctx.synchronize()
-        var hp = F32Ptr(unsafe_from_address=Int(hsmall.unsafe_ptr()))
-        var ll = _fa_ll(hp, d, nc, llconst, neg_half_n)
+        var ll = _fa_ll(h_llsum.unsafe_ptr(), llconst, neg_half_n)
         ll_dst.unsafe_store(i, ll)
         if (ll - old_ll) < tol64:
             break
@@ -1069,7 +1117,8 @@ def fa_em_py(
         ctx.enqueue_copy(dst_ptr=w_dst, src_buf=mem.sub(s_w))
         ctx.enqueue_copy(dst_ptr=psi_dst, src_buf=mem.sub(cur))
         ctx.synchronize()
-    _ = hsmall^
+    _ = h_llsum^
+    _ = d_llsum^
     _ = hfold^
     _ = hflags^
     _ = mem^
