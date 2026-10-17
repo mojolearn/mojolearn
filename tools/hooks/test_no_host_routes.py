@@ -505,6 +505,91 @@ def test_device_helper_note_fails_with_a_host_caller():
     bare = _HELPER_SRC.replace("  # device-helper: one row per thread", "")
     assert [n for n, _ in nhr._mojo_host_loops(nhr._code_lines(bare, "mojo"), "x/y.mojo")] == [5]
 
+# ------------------------------------------------- driver-loop tags ----
+# docs/plans/GPU_PATH_HOST_LOOPS.md: a tagged host loop over model structure
+# is accepted (and counted); a tag over a data size or over a downloaded
+# buffer is refused as a false driver-loop tag.
+_DRV_SRC = (
+    "def build_table(ctx: DeviceContext, borders: List[List[Float32]], n_features: Int, n: Int) raises:\n"
+    "    var out = List[Int]()\n"
+    "    {above}\n"
+    "    for f in range({bound}):{inline}\n"
+    "        if len(borders[f]) > 0:\n"
+    "            out.append(len(borders[f]))\n"
+)
+
+
+def _drv(bound="n_features", inline="", above="pass"):
+    src = _DRV_SRC.format(bound=bound, inline=inline, above=above)
+    acc = []
+    found = nhr._mojo_host_loops(nhr._code_lines(src, "mojo"), "bindings/drv_fixture.mojo", accepted=acc)
+    return found, acc
+
+
+def test_untagged_structure_loop_is_still_owed():
+    found, acc = _drv()
+    assert [n for n, _ in found] == [4] and acc == []
+
+
+def test_true_driver_loop_tag_is_accepted_and_counted():
+    for kw in ({"inline": "  # driver-loop: over the features"},
+               {"above": "# driver-loop: over the features"}):
+        found, acc = _drv(**kw)
+        assert found == [] and [n for n, _ in acc] == [4], (kw, found, acc)
+
+
+def test_false_driver_loop_tag_over_n_is_refused():
+    for bound in ("n", "n_rows", "len(x)", "batch_samples"):
+        found, acc = _drv(bound=bound, inline="  # driver-loop: over the features")
+        assert [n for n, _ in found] == [4] and acc == [], (bound, found)
+        why = nhr._why("mojo-host-loop", "bindings/drv_fixture.mojo", nhr._norm(found[0][1]))
+        assert why.startswith("false driver-loop tag") and "data size" in why, why
+
+
+def test_false_driver_loop_tag_over_a_downloaded_buffer_is_refused():
+    src = (
+        "def read_leaves(ctx: DeviceContext, d_est: DeviceBuffer[DType.float32], n_leaves: Int) raises:\n"
+        "    var h_est = ctx.enqueue_create_host_buffer[DType.float32](n_leaves)\n"
+        "    ctx.enqueue_copy(\n"
+        "        dst_ptr=h_est.unsafe_ptr(), src_buf=d_est\n"
+        "    )\n"
+        "    ctx.synchronize()\n"
+        "    var hp = h_est.unsafe_ptr()\n"
+        "    var out = List[Float32]()\n"
+        "    # driver-loop: over the leaves\n"
+        "    for i in range(n_leaves):\n"
+        "        out.append(hp.unsafe_load(i))\n"
+        "    # driver-loop: over the leaves\n"
+        "    for i in range(len(h_est)):\n"
+        "        out[i] += 1.0\n"
+        "    # driver-loop: over the leaves\n"
+        "    for i in range(n_leaves):\n"
+        "        out[i] *= 2.0\n"
+    )
+    acc = []
+    path = "bindings/drv_fixture2.mojo"
+    found = nhr._mojo_host_loops(nhr._code_lines(src, "mojo"), path, accepted=acc)
+    assert [n for n, _ in found] == [10, 13], found
+    assert [n for n, _ in acc] == [16], acc
+    assert "downloaded buffer `hp`" in nhr._why("mojo-host-loop", path, nhr._norm(found[0][1]))
+    assert "downloaded buffer `h_est`" in nhr._why("mojo-host-loop", path, nhr._norm(found[1][1]))
+
+
+def test_driver_loop_tag_over_a_downloaded_field_is_refused():
+    src = (
+        "struct S:\n"
+        "    var h_stats: HostBuffer[DType.float32]\n"
+        "    def pull(mut self, ctx: DeviceContext, d: DeviceBuffer[DType.float32]) raises:\n"
+        "        ctx.enqueue_copy(dst_buf=self.h_stats, src_buf=d)\n"
+        "    def use(mut self, bins: Int) raises:\n"
+        "        var g = List[Float64]()\n"
+        "        for b in range(bins):  # driver-loop: over the leaf bins\n"
+        "            g.append(Float64(self.h_stats[b]))\n"
+    )
+    found = nhr._mojo_host_loops(nhr._code_lines(src, "mojo"), "bindings/drv_fixture3.mojo")
+    assert [n for n, _ in found] == [7], found
+
+
 # ------------------------------------------------- pre-push ref routing ----
 # The hook is run as git runs it (stdin "<local ref> <sha> <remote ref> <sha>")
 # from a scratch directory beside a stub checker that records its arguments
