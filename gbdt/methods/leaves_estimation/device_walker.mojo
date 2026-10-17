@@ -56,6 +56,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.sys.compile import is_defined
 
 from checks.soft_f64 import (
     SF64_ZERO,
@@ -85,6 +86,31 @@ from gbdt.options.catboost_options import (
 
 #: the per-leaf kernels' block
 comptime WALK_BLOCK = 256
+#: lane apple-slow-paths (2026-10-17; every vendor, every mode; default ON):
+#: the line-search step lives in a device word (`WalkBuffers.d_ctl`), so a
+#: walk enqueues its first `iterations` line-search evaluations behind ONE
+#: drain instead of draining after each to read its accept flag. The host
+#: walker always runs at least `iterations` evaluations (no exit test can
+#: pass before `iteration == iterations`), and the step each one takes is
+#: 1 after an accepted evaluation and half the last step after a rejected
+#: one, so the device forms the same step from the same flags
+#: (`walker_accept_kernel`'s control word, the exact double bits: a power of
+#: two halved by an exponent decrement, at most 100 halvings from 1.0). The
+#: kernels, their order and their inputs are the host-driven walk's: no bit
+#: moves. A walk that accepted nothing in those evaluations continues on the
+#: host loop as before (one drain per evaluation, up to 100). On Metal a
+#: drain is a fixed cost per evaluation of every leaf-estimation task, the
+#: per-tree cost of Logloss's 10 Newton iterations on small data.
+#: `-D MOJOLEARN_GBDT_WALK_DEV_STEP_OFF` restores the drain per evaluation.
+comptime GBDT_WALK_DEV_STEP = not is_defined["MOJOLEARN_GBDT_WALK_DEV_STEP_OFF"]()
+#: the double 1.0's bits, and one exponent step (a power of two halved)
+comptime WALK_STEP_ONE = UInt64(0x3FF0000000000000)
+comptime WALK_STEP_EXP1 = UInt64(0x0010000000000000)
+#: `walker_accept_kernel`'s control-word modes
+comptime WALK_CTL_NONE = Int32(0)
+comptime WALK_CTL_BEGIN = Int32(1)
+comptime WALK_CTL_LINE = Int32(2)
+
 #: the one-block folds; MUST equal `pointwise_targets.REDUCE_LANES_BLOCK`
 #: (the value fold is `deterministic_sum_lanes_kernel[1]`'s order) and the
 #: host columns' `GBDT_REDUCE_LANES_BLOCK`
@@ -100,6 +126,8 @@ def walker_move_kernel(
     cur: MutPointer[Float32, MutAnyOrigin],
     direction: MutPointer[Float32, MutAnyOrigin],
     step_bits: UInt64,
+    step_dev: MutPointer[UInt64, MutAnyOrigin],
+    step_from_dev: Int32,
     weight_stats: MutPointer[Float32, MutAnyOrigin],
     leaf_sizes: MutPointer[UInt32, MutAnyOrigin],
     has_weights: Int32,
@@ -111,14 +139,19 @@ def walker_move_kernel(
     apply_move: Int32,
 ):
     """`_move` + `regularize` (+ `MoveTo`'s shift when `apply_move`), one
-    thread per leaf. `dst` is never `cur` (no two arguments alias)."""
+    thread per leaf. `dst` is never `cur` (no two arguments alias). The
+    step is `step_bits`, or the control word `step_dev[0]` when
+    `step_from_dev` (GBDT_WALK_DEV_STEP: the same double)."""
     var n_leaves = Int(n_leaves_in)
     var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if leaf >= n_leaves:
         return
+    var sb = step_bits
+    if step_from_dev != Int32(0):
+        sb = step_dev.unsafe_load(0)
     var p = sf64_to_f32(
         sf64_fma(
-            step_bits,
+            sb,
             sf64_from_f32(direction.unsafe_load(leaf)),
             sf64_from_f32(cur.unsafe_load(leaf)),
         )
@@ -199,14 +232,34 @@ def walker_accept_kernel(
     newton: Int32,
     n_leaves_in: Int32,
     direction: MutPointer[Float32, MutAnyOrigin],
+    ctl: MutPointer[UInt64, MutAnyOrigin],
+    ctl_mode: Int32,
 ):
     """When the evaluation was taken (`flag[0]`): `cur = next` and the new
     direction from the evaluation's per-leaf sums `part_stats[2 * leaf]` =
     sum(der), `part_stats[2 * leaf + 1]` = sum(der2) (`finish_single_dim_
     evaluation`, `write_second_derivatives`, `_diagonal_direction`), one
-    thread per leaf."""
+    thread per leaf.
+
+    Thread 0 also runs the walk's control word `ctl` = [step bits,
+    updated] (GBDT_WALK_DEV_STEP): WALK_CTL_BEGIN (the walk's start) sets
+    step 1.0 and updated 0; WALK_CTL_LINE (a line-search evaluation) sets
+    step 1.0 and updated 1 when the point was taken, else halves the step,
+    the host walker's `step = 1` / `step /= 2`. No thread reads `ctl` here
+    but thread 0, and the next launch (`walker_move_kernel`) reads the step."""
     var n_leaves = Int(n_leaves_in)
     var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf == 0 and ctl_mode != WALK_CTL_NONE:
+        if ctl_mode == WALK_CTL_BEGIN:
+            ctl.unsafe_store(0, WALK_STEP_ONE)
+            ctl.unsafe_store(1, UInt64(0))
+        elif flag.unsafe_load(0) != UInt32(0):
+            ctl.unsafe_store(0, WALK_STEP_ONE)
+            ctl.unsafe_store(1, UInt64(1))
+        else:
+            # step / 2 exactly: a normal power of two (at most 100 halvings
+            # from 1.0) loses one from its exponent field
+            ctl.unsafe_store(0, ctl.unsafe_load(0) - WALK_STEP_EXP1)
     if leaf >= n_leaves:
         return
     if flag.unsafe_load(0) == UInt32(0):
@@ -439,6 +492,9 @@ struct WalkBuffers(Movable):
     var d_vals: DeviceBuffer[DType.float32]
     var d_flag: DeviceBuffer[DType.uint32]
     var h_flag: HostBuffer[DType.uint32]
+    #: GBDT_WALK_DEV_STEP's control word [step bits, updated] and its host copy
+    var d_ctl: DeviceBuffer[DType.uint64]
+    var h_ctl: HostBuffer[DType.uint64]
     #: `MakeZeroAverage`'s level-1 partials (`ceil(cap / 256)`) and bias
     var d_zpart: DeviceBuffer[DType.uint64]
     var d_zbias: DeviceBuffer[DType.uint64]
@@ -457,6 +513,8 @@ struct WalkBuffers(Movable):
         self.d_vals = ctx.enqueue_create_buffer[DType.float32](2)
         self.d_flag = ctx.enqueue_create_buffer[DType.uint32](1)
         self.h_flag = ctx.enqueue_create_host_buffer[DType.uint32](1)
+        self.d_ctl = ctx.enqueue_create_buffer[DType.uint64](2)
+        self.h_ctl = ctx.enqueue_create_host_buffer[DType.uint64](2)
         self.d_zpart = ctx.enqueue_create_buffer[DType.uint64](
             (n + WALK_FOLD_BLOCK - 1) // WALK_FOLD_BLOCK
         )
@@ -476,6 +534,8 @@ struct WalkBuffers(Movable):
         self.d_vals = arena.device[DType.float32](ctx, 2)
         self.d_flag = arena.device[DType.uint32](ctx, 1)
         self.h_flag = arena.host_buffer[DType.uint32](ctx, 1)
+        self.d_ctl = arena.device[DType.uint64](ctx, 2)
+        self.h_ctl = arena.host_buffer[DType.uint64](ctx, 2)
         self.d_zpart = arena.device[DType.uint64](
             ctx, (n + WALK_FOLD_BLOCK - 1) // WALK_FOLD_BLOCK
         )
@@ -493,6 +553,8 @@ struct WalkBuffers(Movable):
         self.d_vals = handles_of.d_vals.copy()
         self.d_flag = handles_of.d_flag.copy()
         self.h_flag = handles_of.h_flag.copy()
+        self.d_ctl = handles_of.d_ctl.copy()
+        self.h_ctl = handles_of.h_ctl.copy()
         self.d_zpart = handles_of.d_zpart.copy()
         self.d_zbias = handles_of.d_zbias.copy()
         self.result_next = handles_of.result_next
@@ -542,15 +604,19 @@ def _enqueue_move(
     mut w: WalkBuffers,
     step: Float64,
     apply_move: Bool,
+    step_from_dev: Bool = False,
 ) raises:
     """`_move(cur, dir, step)`, `regularize`, and (when `apply_move`) the
     oracle's `MoveTo`: the shift into `oracle.d_shift`, then the oracle's
-    own cursor add. The point lands in `d_next`."""
+    own cursor add. The point lands in `d_next`. `step_from_dev`: the step
+    is the control word's (`w.d_ctl[0]`), `step` unread."""
     var n = oracle.bin_count
     ctx.enqueue_function[walker_move_kernel](
         w.d_cur.unsafe_ptr(),
         w.d_dir.unsafe_ptr(),
         bitcast[DType.uint64](step),
+        w.d_ctl.unsafe_ptr(),
+        Int32(1) if step_from_dev else Int32(0),
         w.d_w.unsafe_ptr(),
         oracle.d_p_sz.unsafe_ptr(),
         Int32(1) if oracle.has_weights else Int32(0),
@@ -572,10 +638,11 @@ def _enqueue_eval_and_decide(
     mut oracle: BinOptimizedOracle,
     mut w: WalkBuffers,
     always_accept: Bool,
+    ctl_mode: Int32 = WALK_CTL_NONE,
 ) raises:
     """The evaluation at the moved point (no host readback), the value fold
     and AnyImprovement's test, and on acceptance `cur = next` and the new
-    direction."""
+    direction; `ctl_mode` runs the control word (`walker_accept_kernel`)."""
     oracle.enqueue_single_dim_evaluation(readback=False)
     ctx.enqueue_function[walker_fold_decide_kernel](
         oracle.d_fv.unsafe_ptr(),
@@ -599,6 +666,8 @@ def _enqueue_eval_and_decide(
         Int32(1) if oracle.estimation_method == LEAF_ESTIMATION_NEWTON else Int32(0),
         Int32(n),
         w.d_dir.unsafe_ptr(),
+        w.d_ctl.unsafe_ptr(),
+        ctl_mode,
         grid_dim=(_leaf_grid(n), 1, 1),
         block_dim=(WALK_BLOCK, 1, 1),
     )
@@ -669,7 +738,7 @@ def device_walk_begin(
     # through the regularizer, shift +0.0 - +0.0 = +0.0, and the cursor add
     # runs as the host walker's did
     _enqueue_move(ctx, oracle, w, Float64(0.0), True)
-    _enqueue_eval_and_decide(ctx, oracle, w, True)
+    _enqueue_eval_and_decide(ctx, oracle, w, True, WALK_CTL_BEGIN)
     if iterations == 1:
         _enqueue_move(ctx, oracle, w, Float64(1.0), False)
         w.result_next = True
@@ -687,13 +756,40 @@ def device_walk_enqueue_line_search(
     accept flag's one-word readback; `device_walk_flag` reads it after the
     caller's drain."""
     _enqueue_move(ctx, oracle, w, step, True)
-    _enqueue_eval_and_decide(ctx, oracle, w, False)
+    _enqueue_eval_and_decide(ctx, oracle, w, False, WALK_CTL_LINE)
     ctx.enqueue_copy(dst_ptr=w.h_flag.unsafe_ptr(), src_buf=w.d_flag)
 
 
 def device_walk_flag(mut w: WalkBuffers) -> Bool:
     """The last line-search evaluation's accept flag (after a drain)."""
     return w.h_flag.unsafe_ptr().unsafe_load(0) != UInt32(0)
+
+
+def device_walk_enqueue_speculative(
+    ctx: DeviceContext,
+    mut oracle: BinOptimizedOracle,
+    mut w: WalkBuffers,
+    count: Int,
+) raises:
+    """GBDT_WALK_DEV_STEP: `count` line-search evaluations, each at the
+    control word's step (`walker_accept_kernel` formed it from the last
+    flag), then the control word's copy home; no flag readback, no drain.
+    The caller drains, then reads `device_walk_ctl_updated` /
+    `device_walk_ctl_step`."""
+    for _ in range(count):  # driver-loop: over the walk's line-search evaluations
+        _enqueue_move(ctx, oracle, w, Float64(0.0), True, step_from_dev=True)
+        _enqueue_eval_and_decide(ctx, oracle, w, False, WALK_CTL_LINE)
+    ctx.enqueue_copy(dst_ptr=w.h_ctl.unsafe_ptr(), src_buf=w.d_ctl)
+
+
+def device_walk_ctl_updated(mut w: WalkBuffers) -> Bool:
+    """Whether any line-search evaluation was taken (after a drain)."""
+    return w.h_ctl.unsafe_ptr().unsafe_load(1) != UInt64(0)
+
+
+def device_walk_ctl_step(mut w: WalkBuffers) -> Float64:
+    """The step the next evaluation takes (after a drain)."""
+    return bitcast[DType.float64](w.h_ctl.unsafe_ptr().unsafe_load(0))
 
 
 def device_walk_estimate(
@@ -708,6 +804,25 @@ def device_walk_estimate(
     evaluation. The estimate is `w.result()` (the single-dimensional
     `MakeEstimationResult` is the identity), enqueued."""
     if device_walk_begin(ctx, oracle, w, iterations):
+        return
+    comptime if GBDT_WALK_DEV_STEP:
+        # the first `iterations` evaluations behind one drain (see
+        # GBDT_WALK_DEV_STEP); the host loop below takes over only when
+        # none of them was taken: then `iteration == iterations`, not
+        # updated, and the step is 2^-iterations
+        device_walk_enqueue_speculative(ctx, oracle, w, iterations)
+        ctx.synchronize()
+        if device_walk_ctl_updated(w):
+            return
+        var tail_step = device_walk_ctl_step(w)
+        var tail_it = iterations
+        while tail_it < 100:
+            device_walk_enqueue_line_search(ctx, oracle, w, tail_step)
+            ctx.synchronize()
+            tail_it += 1
+            if device_walk_flag(w):
+                return
+            tail_step /= 2
         return
     var updated = False
     var iteration = 0

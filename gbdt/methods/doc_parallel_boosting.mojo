@@ -149,11 +149,15 @@ from gbdt.methods.leaves_estimation.leaves_estimation import (
     weight_keep_mask_kernel,
 )
 from gbdt.methods.leaves_estimation.device_walker import (
+    GBDT_WALK_DEV_STEP,
     WALK_FOLD_BLOCK,
     WalkBuffers,
     count_nonzero_u32_kernel,
     device_walk_begin,
+    device_walk_ctl_step,
+    device_walk_ctl_updated,
     device_walk_enqueue_line_search,
+    device_walk_enqueue_speculative,
     device_walk_estimate,
     device_walk_flag,
     device_walk_supported,
@@ -1908,7 +1912,9 @@ struct PendingEstimation(Movable):
     var n_rows: Int
     var n_leaves: Int
     var iterations: Int
-    #: 1: a line-search evaluation is in flight; 2: the walk is finished
+    #: 1: a line-search evaluation is in flight; 2: the walk is finished;
+    #: 3: the walk's first `iterations` evaluations are in flight at the
+    #: device's step (GBDT_WALK_DEV_STEP), the control word coming home
     var phase: Int
     var iteration: Int
     var updated: Bool
@@ -1985,6 +1991,17 @@ def estimate_advance(mut p: PendingEstimation) raises -> Bool:
     order, are `descent_helpers.newton_like_walker_estimate`'s with
     `BACKTRACKING_ANY_IMPROVEMENT`, `_estimate_and_apply`'s choice; the
     acceptance itself (and the new direction) ran on the device."""
+    if p.phase == 3:
+        # GBDT_WALK_DEV_STEP: the first `iterations` evaluations ran; the
+        # host walker's counters are where they would be after them
+        p.iteration = p.iterations
+        if device_walk_ctl_updated(p.walk):
+            p.updated = True
+            _walk_finish(p)
+            return False
+        p.updated = False
+        p.step = device_walk_ctl_step(p.walk)
+        return _walk_line_search_or_finish(p)
     if p.phase != 1:
         return False
     if device_walk_flag(p.walk):
@@ -2298,6 +2315,15 @@ def _estimate_prepare(
     )
     if finished:
         _walk_finish(pending)
+        return pending^
+    comptime if GBDT_WALK_DEV_STEP:
+        # the walk's first `iterations` evaluations, enqueued at the device's
+        # step (device_walker.mojo GBDT_WALK_DEV_STEP); the caller's next
+        # drain settles all of them (`estimate_advance`, phase 3)
+        device_walk_enqueue_speculative(
+            ctx, pending.oracle, pending.walk, iterations
+        )
+        pending.phase = 3
         return pending^
     _ = _walk_line_search_or_finish(pending)
     return pending^
