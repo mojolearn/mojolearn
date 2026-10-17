@@ -1138,19 +1138,6 @@ def _ord_leaf_scan_block_kernel(
         totals.unsafe_store(b, sh[tid])
 
 
-def _ord_seg_start_kernel(
-    totals: MutPointer[UInt32, MutAnyOrigin],
-    seg_start: MutPointer[UInt32, MutAnyOrigin],
-    n_leaves_in: Int32,
-):
-    """One thread: the leaves' run starts, the exclusive scan of totals."""
-    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
-        var run = UInt32(0)
-        for b in range(Int(n_leaves_in)):
-            seg_start.unsafe_store(b, run)
-            run += totals.unsafe_load(b)
-
-
 def _ord_snap_kernel(
     prefix: MutPointer[UInt32, MutAnyOrigin],
     totals: MutPointer[UInt32, MutAnyOrigin],
@@ -1175,6 +1162,40 @@ def _ord_snap_kernel(
             snap.unsafe_store(i, totals.unsafe_load(b))
         else:
             snap.unsafe_store(i, prefix.unsafe_load(b * nc + c))
+
+
+def _ord_widen_kernel(
+    src: MutPointer[UInt32, MutAnyOrigin],
+    dst: MutPointer[Int64, MutAnyOrigin],
+    n_in: Int32,
+):
+    """One thread a word: a u32 count widened to the host `Int` width
+    (exact), so the host takes the whole list with one copy."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(i, Int64(src.unsafe_load(i)))
+
+
+def _ord_task_table_kernel(
+    snap: MutPointer[UInt32, MutAnyOrigin],
+    snap_off: MutPointer[UInt32, MutAnyOrigin],
+    seg_start: MutPointer[UInt32, MutAnyOrigin],
+    k_in: Int32,
+    n_leaves_in: Int32,
+    tab: MutPointer[UInt32, MutAnyOrigin],
+):
+    """One thread a leaf: the task table `_ord_segment_rows_kernel` reads,
+    `(offset, size, run start)` per leaf, for the task over the `k`-th
+    boundary's prefix. `snap_off` is the exclusive scan of `snap` over the
+    leaves (`_ord_leaf_scan_block_kernel`, integers), so the words are the
+    ones the host scan wrote."""
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nl = Int(n_leaves_in)
+    if b < nl:
+        var at = Int(k_in) * nl + b
+        tab.unsafe_store(3 * b, snap_off.unsafe_load(at))
+        tab.unsafe_store(3 * b + 1, snap.unsafe_load(at))
+        tab.unsafe_store(3 * b + 2, seg_start.unsafe_load(b))
 
 
 def _ord_chunk_scatter_kernel(
@@ -1240,11 +1261,20 @@ struct _PermPartition(Movable):
     var d_seg: DeviceBuffer[DType.uint32]
     var d_tot: DeviceBuffer[DType.uint32]
     var d_snap: DeviceBuffer[DType.uint32]
-    var h_seg: HostBuffer[DType.uint32]
-    var h_tot: HostBuffer[DType.uint32]
-    var h_snap: HostBuffer[DType.uint32]
-    var seg_start: List[Int]
+    #: the exclusive scan of `d_snap` over the leaves, per boundary
+    var d_snap_off: DeviceBuffer[DType.uint32]
+    #: per boundary, the rows below it (`_ord_leaf_scan_block_kernel`'s
+    #: totals); unread, the scan writes it
+    var d_snap_tot: DeviceBuffer[DType.uint32]
+    #: one word: the rows that landed in a leaf (the settle check)
+    var d_total: DeviceBuffer[DType.uint32]
+    var d_snap64: DeviceBuffer[DType.int64]
+    var d_snap_off64: DeviceBuffer[DType.int64]
+    var h_total: HostBuffer[DType.uint32]
+    var h_snap64: HostBuffer[DType.int64]
+    var h_snap_off64: HostBuffer[DType.int64]
     var snap: List[Int]
+    var snap_off: List[Int]
 
     def __init__(
         out self,
@@ -1322,11 +1352,18 @@ struct _PermPartition(Movable):
         self.d_seg = arena.device[DType.uint32](ctx, leaf_capacity)
         self.d_tot = arena.device[DType.uint32](ctx, leaf_capacity)
         self.d_snap = arena.device[DType.uint32](ctx, nb * leaf_capacity)
-        self.h_seg = arena.host_buffer[DType.uint32](ctx, leaf_capacity)
-        self.h_tot = arena.host_buffer[DType.uint32](ctx, leaf_capacity)
-        self.h_snap = arena.host_buffer[DType.uint32](ctx, nb * leaf_capacity)
-        self.seg_start = List[Int]()
+        self.d_snap_off = arena.device[DType.uint32](ctx, nb * leaf_capacity)
+        self.d_snap_tot = arena.device[DType.uint32](ctx, nb)
+        self.d_total = arena.device[DType.uint32](ctx, 1)
+        self.d_snap64 = arena.device[DType.int64](ctx, nb * leaf_capacity)
+        self.d_snap_off64 = arena.device[DType.int64](ctx, nb * leaf_capacity)
+        self.h_total = arena.host_buffer[DType.uint32](ctx, 1)
+        self.h_snap64 = arena.host_buffer[DType.int64](ctx, nb * leaf_capacity)
+        self.h_snap_off64 = arena.host_buffer[DType.int64](
+            ctx, nb * leaf_capacity
+        )
         self.snap = List[Int]()
+        self.snap_off = List[Int]()
 
     def enqueue_sort(
         mut self,
@@ -1365,10 +1402,15 @@ struct _PermPartition(Movable):
             Int32(n_chunks), Int32(n_leaves),
             grid_dim=(n_leaves, 1, 1), block_dim=(ORD_SCAN_TPB, 1, 1),
         )
-        ctx.enqueue_function[_ord_seg_start_kernel](
-            self.d_tot.unsafe_ptr(), self.d_seg.unsafe_ptr(), Int32(n_leaves),
-            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
-        )
+        # the leaves' run starts (the exclusive scan of the totals) and the
+        # rows that landed in any leaf, one block of the parallel scan
+        # (integers: the starts the former one-thread seg-start kernel
+        # wrote)
+        ctx.enqueue_function[_ord_leaf_scan_block_kernel](
+            self.d_tot.unsafe_ptr(), self.d_seg.unsafe_ptr(),
+            self.d_total.unsafe_ptr(), Int32(n_leaves), Int32(1),
+            grid_dim=(1, 1, 1), block_dim=(ORD_SCAN_TPB, 1, 1),
+        )  # small-launch(n_leaves: leaves): one scan over the leaf totals, a model-structure size
         var nb = len(self.bounds)
         ctx.enqueue_function[_ord_snap_kernel](
             prefix.unsafe_ptr(), self.d_tot.unsafe_ptr(),
@@ -1384,29 +1426,62 @@ struct _PermPartition(Movable):
             grid_dim=(_grid(n_chunks), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
         )
         if readback:
-            ctx.enqueue_copy(dst_buf=self.h_seg, src_buf=self.d_seg)
-            ctx.enqueue_copy(dst_buf=self.h_tot, src_buf=self.d_tot)
-            ctx.enqueue_copy(dst_buf=self.h_snap, src_buf=self.d_snap)
+            # every task's leaf offsets on the device (one block a
+            # boundary scans its snapshot row over the leaves), then the
+            # sizes and offsets widened for one copy each, and the total
+            ctx.enqueue_function[_ord_leaf_scan_block_kernel](
+                self.d_snap.unsafe_ptr(), self.d_snap_off.unsafe_ptr(),
+                self.d_snap_tot.unsafe_ptr(), Int32(n_leaves), Int32(nb),
+                grid_dim=(nb, 1, 1), block_dim=(ORD_SCAN_TPB, 1, 1),
+            )
+            ctx.enqueue_function[_ord_widen_kernel](
+                self.d_snap.unsafe_ptr(), self.d_snap64.unsafe_ptr(),
+                Int32(nb * n_leaves),
+                grid_dim=(_grid(nb * n_leaves), 1, 1),
+                block_dim=(ORDERED_BLOCK, 1, 1),
+            )
+            ctx.enqueue_function[_ord_widen_kernel](
+                self.d_snap_off.unsafe_ptr(), self.d_snap_off64.unsafe_ptr(),
+                Int32(nb * n_leaves),
+                grid_dim=(_grid(nb * n_leaves), 1, 1),
+                block_dim=(ORDERED_BLOCK, 1, 1),
+            )
+            ctx.enqueue_copy(dst_buf=self.h_total, src_buf=self.d_total)
+            ctx.enqueue_copy(dst_buf=self.h_snap64, src_buf=self.d_snap64)
+            ctx.enqueue_copy(
+                dst_buf=self.h_snap_off64, src_buf=self.d_snap_off64
+            )
 
     def settle(mut self, n_leaves: Int) raises:
         """After the caller's drain: the counts onto the host lists, and
         the check the host sort made row by row (every row in a leaf)."""
-        var total = 0
-        for b in range(n_leaves):
-            total += Int(self.h_tot[b])
+        # the total folded on the device (`d_total`): one scalar
+        var total = Int(self.h_total.unsafe_ptr().unsafe_load(0))
         if total != self.need:
             raise Error(
                 "partition_from_bins: " + String(self.need - total)
                 + " rows fell outside the tree's " + String(n_leaves)
                 + " leaves"
             )
-        self.seg_start = List[Int](length=n_leaves, fill=0)
-        for b in range(n_leaves):
-            self.seg_start[b] = Int(self.h_seg[b])
-        var nb = len(self.bounds)
-        self.snap = List[Int](length=nb * n_leaves, fill=0)
-        for i in range(nb * n_leaves):
-            self.snap[i] = Int(self.h_snap[i])
+        # the snapshots and their offsets, widened on the device: one bulk
+        # copy each (no host element loop); the run starts stay on the
+        # device for the task table
+        var m = len(self.bounds) * n_leaves
+        self.snap = List[Int]()
+        self.snap_off = List[Int]()
+        if m > 0:
+            self.snap.resize(unsafe_uninit_length=m)
+            self.snap_off.resize(unsafe_uninit_length=m)
+            memcpy(
+                dest=self.snap.unsafe_ptr().bitcast[Int64](),
+                src=self.h_snap64.unsafe_ptr(),
+                count=m,
+            )
+            memcpy(
+                dest=self.snap_off.unsafe_ptr().bitcast[Int64](),
+                src=self.h_snap_off64.unsafe_ptr(),
+                count=m,
+            )
 
     def task_partition(
         mut self,
@@ -1428,19 +1503,31 @@ struct _PermPartition(Movable):
                 k = i
         if k < 0:
             raise Error("ordered partition: no snapshot at the task's prefix")
+        # the estimator's host sizes and offsets: one copy of the row each
+        # (the offsets were scanned on the device in `enqueue_sort`); the
+        # task table is built on the device (`_ord_task_table_kernel`), so
+        # `htab` is no longer staged
         sizes.clear()
         offsets.clear()
-        var running = 0
-        var tp = htab.unsafe_ptr()
-        for b in range(n_leaves):
-            var c = self.snap[k * n_leaves + b]
-            sizes.append(c)
-            offsets.append(running)
-            tp.unsafe_store(3 * b, UInt32(running))
-            tp.unsafe_store(3 * b + 1, UInt32(c))
-            tp.unsafe_store(3 * b + 2, UInt32(self.seg_start[b]))
-            running += c
-        ctx.enqueue_copy(dst_buf=dtab, src_ptr=htab.unsafe_ptr())
+        if n_leaves > 0:
+            sizes.resize(unsafe_uninit_length=n_leaves)
+            offsets.resize(unsafe_uninit_length=n_leaves)
+            memcpy(
+                dest=sizes.unsafe_ptr(),
+                src=self.snap.unsafe_ptr() + k * n_leaves,
+                count=n_leaves,
+            )
+            memcpy(
+                dest=offsets.unsafe_ptr(),
+                src=self.snap_off.unsafe_ptr() + k * n_leaves,
+                count=n_leaves,
+            )
+        ctx.enqueue_function[_ord_task_table_kernel](
+            self.d_snap.unsafe_ptr(), self.d_snap_off.unsafe_ptr(),
+            self.d_seg.unsafe_ptr(), Int32(k), Int32(n_leaves),
+            dtab.unsafe_ptr(),
+            grid_dim=(_grid(n_leaves), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+        )
         ctx.enqueue_function[_ord_segment_rows_kernel](
             self.d_sorted.unsafe_ptr(), dtab.unsafe_ptr(), Int32(n_leaves),
             row_index.unsafe_ptr(), Int32(estimate_size),
