@@ -1,0 +1,9 @@
+commit=d813426e22392ac3f09a23898985722c10d39f7f
+label=amd-mi325x-gfx942
+backend=hip
+scope=routine shard= lanes_override=yes
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-59-generic x86_64 mojolearn-steward-do-amd
+date=2026-10-17T20:05:15Z
+dirty_tracked=none
+record_sha256=9de56b6d75bf538e8064877b01049cab09f28eed4deea41253c6856880fd1d31
