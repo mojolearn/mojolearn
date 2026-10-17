@@ -14,11 +14,12 @@ mkdir -p "$O"
 unset MOJOLEARN_VENDOR
 log=$O/run.log
 : > "$log"
-if command -v pixi >/dev/null 2>&1 && base=$(cd "$here" && pixi run python3 -c 'import sys;print(sys.executable)' 2>/dev/null | tail -1) && [ -x "$base" ]; then
-  :
-else
-  base=$(command -v python3)
-fi
+# The system interpreter is the venv base, never the checkout's pixi env, and the install runs from $O with no
+# PYTHONPATH: the installer's import check must load mojolearn from the venv's site-packages, not from the tree
+# (n0001 on 2026-10-17 imported tree/python/mojolearn and failed on its missing identical binaries).
+unset PYTHONPATH
+if [ -x /usr/bin/python3 ]; then base=/usr/bin/python3; else base=$(command -v python3); fi
+cd "$O" || exit 3
 echo "sgd_batch_ab: vendor=$vendor version=$version base=$base out=$O" | tee -a "$log"
 [ -x "$O/venv/bin/python" ] || "$base" -m venv "$O/venv" >>"$log" 2>&1 || { echo "sgd_batch_ab: venv failed rc=$?" | tee -a "$log"; exit 3; }
 P=$O/venv/bin/python
