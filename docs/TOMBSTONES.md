@@ -346,6 +346,8 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_LM_LOGITS_LEAN`](#wave-2-w2-decide-lm-2026-10-11) | Neural | NOISE | 2026-10-11 | [MOJOLEARN_IDN_LM_LOGITS_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch) |
 | [`MOJOLEARN_IDN_ATTN_DEFER_REGIME`](#wave-2-w2-decide-lm-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch) |
 | [`MOJOLEARN_IDN_TF_SESSION_LEAN`](#wave-2-w2-decide-lm-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_TF_SESSION_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch) |
+| [`MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF`](#gbdt-oracle-multi-dimensional-host-walk) | Trees | removed (host arm retired) | 2026-10-17 | [GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch](../experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch) |
+| GPU oracle multi-dimensional host walk (no define) | Trees | removed (host loops on the GPU path) | 2026-10-17 | [GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch](../experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch) |
 
 ## Restored
 
@@ -3151,3 +3153,22 @@ the parent of its deletion commit.
 - `MOJOLEARN_IDN_LM_LOGITS_LEAN`: tried logits non-finite scan folded after the download wait (H4). Files: training/byte_lm_logits.mojo. Result: lm-forward 0.925 (NV 0.829, AMD 1.021; the NV gain is common to all B arms), lm-train-step 0.999; nv2 v0120, amd a1702. Verdict NOISE. Deleted by 066722146, recoverable at 066722146^. Patch experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch.
 - `MOJOLEARN_IDN_ATTN_DEFER_REGIME`: tried device-side regime verdict + deferred corner window, estash gate for forward-only calls (H1). Files: transformer/impl/llama/fused_attention.mojo, modeling_llama.mojo, bindings/_mojolearn_transformer.mojo. Result: transformer-forward 1.376 (NV 1.647, AMD 1.104; NV confirmed by v0139), lm-forward 0.914, lm-train-step 0.989; nv2 v0117, amd a1699. Verdict LOSER. Deleted by 68d9654bb, recoverable at 68d9654bb^. Patch experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch. The patch also restores TF_SESSION_LEAN (shared commit).
 - `MOJOLEARN_IDN_TF_SESSION_LEAN`: tried skip the KV cache fill when the prefill covers the whole capacity (H9). Files: bindings/_mojolearn_transformer.mojo. Result: transformer-forward 1.350 (NV 1.689, AMD 1.011); nv2 v0118, amd a1700. Verdict LOSER. Deleted by 68d9654bb, recoverable at 68d9654bb^. Patch experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch. Deleted in the same commit as ATTN_DEFER_REGIME (they shared the session wiring commit 150df49d9); the patch is the same file and restores both.
+
+
+## GPU oracle multi-dimensional host walk
+
+- What it was: `gbdt/methods/leaves_estimation/pointwise_oracle.mojo`'s host readback arm for the multi-dimensional leaf walk
+  (`_write_multi_dim_value_and_first_derivatives`, `_write_blocked_second_derivatives`, `_mirror_second_der_row`, the OneVsAll
+  arm of `write_second_derivatives`): the der and Hessian rows read back, the MultiClass pinned component, the Hessian mirror
+  plus lambda, the float32 value chain and the regularize compare ran on the host for `descent_helpers.newton_like_walker_estimate`.
+  Its `IDN_MULTI_HESS_ONE_WAIT` switch (`MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF`, lane/fam-gbdt, a schedule-only winner) waited
+  once for the per-row readbacks; with no readbacks it has nothing to schedule.
+- Verdict: removed, not an A/B loser: 11 owed `mojo-host-loop` sites (host loops on the GPU path, docs/plans/GPU_PATH_HOST_LOOPS.md).
+  The walk runs on the device (`device_walker.device_multi_walk_estimate`, lane gbdt-host-loops-12); the oracle keeps an
+  enqueue-only arm (`enqueue_multi_dim_evaluation`, `enqueue_multi_dim_hessian`). No NV/AMD ratios: no measurement owed for a
+  deletion that the replacement path supersedes; quality is unchanged by construction (same statements, soft-float64).
+- Deleted 2026-10-17 by `13299f759` on lane/gbdt-host-loops-12; recoverable at `13299f759^`.
+- Patch: `experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch` (the deletion commit reversed, `pointwise_oracle.mojo` and
+  `oracle_interface.mojo`; it also removes the host-interface kernels that commit added). Restoring it alone does not route a fit
+  to the host walker: `_estimate_and_apply` refuses any walk no device walker takes.
+- Guard: `MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF` refused in `core/six_lane_experiment_guards.mojo`.

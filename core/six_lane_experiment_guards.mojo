@@ -47,6 +47,8 @@ def _check_configuration() -> Bool:
     comptime assert get_defined_int["MOJOLEARN_C58_TEAM_MIB",256]() == 64 or get_defined_int["MOJOLEARN_C58_TEAM_MIB",256]() == 256, "invalid MOJOLEARN_C58_TEAM_MIB (64|256)"
     # Deleted 2026-10-07 (lane serial-cleanup): forbidden serial shape; incumbent route is parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C20_ROW_CACHE"](), "removed: C20_ROW_CACHE was a host loop of 3 launches per working-set row (one 1x1); forbidden serial shape, incumbent square tile is parallel"
+    # Deleted 2026-10-17 (lane gbdt-host-loops-12): the multi-dimensional GBDT walk runs on the device; the oracle reads no Hessian row back, so the one-wait schedule has no arm. Recoverable at 13299f759^ (docs/TOMBSTONES.md).
+    comptime assert not is_defined["MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF"](), "removed: IDN_MULTI_HESS_ONE_WAIT retired with the oracle's host Hessian readback (the device walk reads the row stash)"
     comptime assert not is_defined["MOJOLEARN_C60_DIFF_REUSE"](), "removed: C60_DIFF_REUSE was dead code (select_d never reaches d == 2)"
     # Deleted 2026-10-08 (lane gap-graph, plan 5.3): the batched CC rounds + device relabel are the only path on every vendor; the C33 CC chunking (never compiled) went with it. Recoverable at origin/main 02f7aed95.
     comptime assert not (is_defined["MOJOLEARN_CC_FAST_OFF"]() or is_defined["MOJOLEARN_CC_FAST"]()), "removed: connected_components' batched rounds with the device relabel are the only path (lane gap-graph 2026-10-08); the per-round-wait path is gone"
