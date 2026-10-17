@@ -44,7 +44,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import fma
-from std.memory import stack_allocation
+from std.memory import memcpy, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -753,7 +753,13 @@ def apple_fast_estimate_and_apply(
             )
             ctx.synchronize()
 
+    # one bulk copy of the read-back leaf values (no element loop)
     leaf_values.clear()
-    for i in range(n_leaves):
-        leaf_values.append(s.h_est.unsafe_ptr().unsafe_load(i))
+    if n_leaves > 0:
+        leaf_values.resize(unsafe_uninit_length=n_leaves)
+        memcpy(
+            dest=leaf_values.unsafe_ptr(),
+            src=s.h_est.unsafe_ptr(),
+            count=n_leaves,
+        )
     trace.record_list_f32(leaf_tag, leaf_values)
