@@ -25,8 +25,9 @@ FEATURES = 64
 SEED = 20261017
 HOLDOUT = 0.2
 WARMUP_ROWS = 1_000
-#: x_linear/sgd.mojo SGD_AUTO_STEPS: 'auto' takes n // 32 rows a step, at least 1, at most the cap.
-AUTO_STEPS = 32
+#: x_linear/sgd.mojo SGD_AUTO_STEPS: 'auto' takes n // 256 rows a step, at least 1, at most the cap
+#: (32 before lane sgd-quality, 2026-10-17; -D MOJOLEARN_SGD_AUTO_STEPS_256_OFF builds the old rule).
+AUTO_STEPS = 256
 
 #: The fixed default each estimator had before d0064d844 (0.8.47), which is also its 'auto' cap.
 FIXED_DEFAULT = {

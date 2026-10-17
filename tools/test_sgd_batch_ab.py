@@ -34,8 +34,8 @@ def test_bad_inputs():
 
 def test_resolved_batch():
     assert S.resolved_batch("SGDClassifier", "fixed", 800) == 4096
-    assert S.resolved_batch("SGDClassifier", "auto", 800) == 25
-    assert S.resolved_batch("SGDClassifier", "auto", 80_000) == 2500
+    assert S.resolved_batch("SGDClassifier", "auto", 800) == 3
+    assert S.resolved_batch("SGDClassifier", "auto", 80_000) == 312
     assert S.resolved_batch("Perceptron", "auto", 80_000) == 256
     assert S.resolved_batch("Perceptron", "auto", 10) == 1
     assert S.n_train_rows(1_000) == 800 and S.n_train_rows(100_000) == 80_000
