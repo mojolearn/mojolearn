@@ -1,0 +1,56 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "apple-slow-paths",
+ "branch": "lane/apple-slow-paths",
+ "head": "5753b1e2a",
+ "controls": {
+  "gbdt_walk_dev_step": {
+   "define": "MOJOLEARN_GBDT_WALK_DEV_STEP_OFF",
+   "kind": "switch",
+   "arms": {"on": [], "off": ["MOJOLEARN_GBDT_WALK_DEV_STEP_OFF"]},
+   "default": "on",
+   "source": [
+    "gbdt/methods/leaves_estimation/device_walker.mojo:105",
+    "gbdt/methods/leaves_estimation/device_walker.mojo:808",
+    "gbdt/methods/doc_parallel_boosting.mojo:2319"
+   ],
+   "binding": "_mojolearn_gbdt (device) + _mojolearn_gbdt_host + _mojolearn_forest_host",
+   "bits_change": false,
+   "status": "new",
+   "note": "The leaf walk's line-search step lives in a device word formed by walker_accept_kernel from the accept flag (1 after a taken point, half after a rejected one, the host walker's statements); a walk enqueues its first iterations evaluations behind one drain instead of one drain per evaluation. Bit-neutral (same kernels, same inputs, same order). Logloss's 10 Newton iterations: 10 drains per estimation round -> 1. NOT COMPILED, NOT MEASURED."
+  },
+  "gbdt_ord_tree_bufs": {
+   "define": "MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF",
+   "kind": "switch",
+   "arms": {"on": [], "off": ["MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF"]},
+   "default": "on",
+   "source": ["gbdt/methods/ordered_boosting.mojo:276", "gbdt/methods/ordered_boosting.mojo:2589"],
+   "binding": "_mojolearn_gbdt (device) + _mojolearn_gbdt_host + _mojolearn_forest_host",
+   "bits_change": false,
+   "status": "new",
+   "note": "Ordered boosting's per-tree scratch (two search planes, bins, noise partials and terms, bootstrap draws, |planes|, magnitudes) allocated once per fit off the FAST wide path, as fast_planes/fast_bins are; every cell written before it is read each tree. Bit-neutral. NOT COMPILED, NOT MEASURED."
+  },
+  "fa_svd_group": {
+   "define": "MOJOLEARN_FA_SVD_GROUP_OFF",
+   "kind": "switch",
+   "arms": {"on": [], "off": ["MOJOLEARN_FA_SVD_GROUP_OFF"]},
+   "default": "on",
+   "source": ["x_decomp/fa_fast.mojo:193", "x_decomp/fa_fast.mojo:970"],
+   "binding": "_mojolearn_x_decomp (FAST Apple build only)",
+   "bits_change": false,
+   "status": "new",
+   "note": "FactorAnalysis FAST Apple grid SVD: 4 Jacobi sweeps behind one wait with xd_flag_first_kernel (main's IDENTICAL svd driver) instead of one wait and readback per sweep. Bit-neutral. NOT COMPILED, NOT MEASURED."
+  },
+  "fa_gram_spread": {
+   "define": "MOJOLEARN_FA_FAST_GRAM_SPREAD",
+   "kind": "switch",
+   "arms": {"on": ["MOJOLEARN_FA_FAST_GRAM_SPREAD"], "off": []},
+   "default": "off",
+   "source": ["x_decomp/fa_fast.mojo:237", "x_decomp/fa_fast.mojo:604"],
+   "binding": "_mojolearn_x_decomp (FAST Apple build only)",
+   "bits_change": true,
+   "status": "new",
+   "note": "FactorAnalysis FAST Apple Gram pass: rows per partial ceil(n / 64) rounded to a slab, between 256 and 8192, so small n runs on >= 64 threadgroups instead of 1-3. FAST bits move (fold order over partials); quality check mean_log_likelihood vs FAST main. NOT COMPILED, NOT MEASURED."
+  }
+ }
+}
