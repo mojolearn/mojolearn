@@ -832,7 +832,7 @@ def pq_score_tiled_kernel(
 
 
 @always_inline
-def _pq_fused_seq(
+def _pq_fused_seq(  # device-helper: the fused PQ kernel thread's NaN-order fallback for one query
     lq: Int, qi: Int, np: Int, queries: F32P, q_off: Int, dim: Int, centers: F32P, offsets: I32P,
     list_indices: I32P, codes: I32P, cb: F32P, pd: Int, pl: Int, nc: Int, mask: I32P, probes: I32P,
     kk: Int, out_d: F32P, out_i: I32P, out_n: I32P,

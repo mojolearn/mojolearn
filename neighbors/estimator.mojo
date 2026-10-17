@@ -993,7 +993,7 @@ def _knn_negate_device(ctx: DeviceContext, mut out_dist: DeviceBuffer[DType.floa
 
 
 @always_inline
-def _knn_refine_sq(qp: _KFP, xp: _KFP, d: Int) -> Float32:
+def _knn_refine_sq(qp: _KFP, xp: _KFP, d: Int) -> Float32:  # device-helper: one query-candidate distance per kernel thread
     """sum_j (q_j - x_j)^2 in float32 with an error-free product
     (`fma(df, df, -p)`) and Knuth's two-sum into a running compensation: the
     difference form has no cancellation, so the result is accurate to about
