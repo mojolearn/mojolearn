@@ -1,8 +1,8 @@
 # Roadmap
 
-mojolearn's direction is fixed by its default contract. Every algorithm returns
-the same bits on Apple, NVIDIA and AMD GPUs and on CPUs, in the `identical`
-mode, and every claim to that effect is checked by the shipped verifier. The
+mojolearn's direction is fixed by its default contract.
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+CPU coverage is documented per API, and claims are checked by the shipped verifier. The
 work below extends that contract to more algorithms, more hardware and more
 workloads, and makes each backend run closer to its hardware's best.
 
@@ -34,15 +34,75 @@ the [support matrix](SUPPORT_MATRIX.md) and [identity paths](IDENTITY_PATHS.md).
 
 ## Planned work
 
+For general neural model development, prioritize composable tensor operations
+and automatic differentiation, then build graph compilation, export and reusable
+distributed execution on that foundation. These are future capabilities;
+the support matrix describes the released API.
+
+- **General automatic differentiation.** Let users compose supported tensor
+  operations into their own models and losses and obtain gradients
+  automatically. Start with reverse-mode differentiation and reusable module
+  and parameter interfaces. Reuse compatible forward and backward kernels;
+  define saved-tensor lifetimes, mutation rules and a fixed gradient
+  accumulation order for shared parameters and branching graphs. Keep graph
+  recording, traversal, memory management and execution in compiled Mojo/native
+  code. Check derivative correctness independently from cross-vendor identity,
+  including complete optimizer steps on composed models.
+- **General model compilation and export.** Capture supported user-defined
+  model graphs, optimize them within the numerical contract, and export the
+  graph, parameters and numerical profile for inference. Define operator,
+  shape and control-flow coverage explicitly, and verify exported execution
+  against the original model. Use supported Mojo/Modular interfaces; record
+  missing upstream capabilities and wait for support rather than introducing
+  unsupported compiler modes or Python execution fallbacks.
+- **Broad distributed-training infrastructure.** Extend the existing
+  cross-vendor and multi-GPU plans into reusable execution for user-composed
+  models, including data parallelism, parameter sharding, tensor and pipeline
+  parallelism, and distributed checkpoints. Qualify each supported plan on
+  physical devices, with explicit gradient reduction order and complete
+  optimizer-state restoration under the `identical` contract.
+- **Developer tooling and ecosystem.** Add profiling of compute, transfers,
+  synchronization and memory; gradient and graph debugging; and clear shape
+  and operator diagnostics. Provide complete examples for custom models,
+  losses, training and deployment, then broaden documented integrations with
+  model and data tools as those paths are verified.
 - **Neural training.** Extend identical training for the transformer, Mamba
   and Samba stacks and the decoder language model to larger models and
-  longer runs, and broaden serving of models trained in other frameworks.
+  longer runs.
+- **Inference support and usability.** Make loading a saved model and
+  obtaining predictions or generated text a short, complete workflow.
+  First, provide an end-to-end example with a verified real checkpoint pinned
+  to a revision: load the model and tokenizer together, accept prompt text,
+  and return decoded text without requiring callers to construct token arrays.
+  Add end-of-sequence stopping with a maximum-token limit, then streaming and
+  reproducible sampling with explicit seeds and settings. Prioritize this
+  complete workflow before expanding the architecture list. Keep saved-model
+  prediction examples and the model/configuration support matrix clear.
+- **Checkpoint and hybrid inference coverage.** Broaden verified checkpoint
+  and tokenizer coverage for models trained in mojolearn and other frameworks.
+  Qualify whole hybrid models through prompt processing and incremental
+  decoding, including attention caches and recurrent state together. Loading
+  an already-trained, supported architecture should require no retraining;
+  architecture conversion is a separate task. Verify complete model outputs
+  across vendors as well as the individual blocks.
+- **Inference algorithms and performance.** Extend prediction and decoding
+  methods, and improve repeated inference through state reuse, batching and
+  memory management. Keep execution and orchestration in compiled Mojo/native
+  code. Measure loading, prompt processing, token generation, prediction
+  latency, throughput and memory use on real workloads, distinguishing cold
+  and repeated use. Each new path joins the verifier before it is documented
+  as supported, preserving the cross-vendor contract in `identical` mode.
+  After the basic generation workflow, evaluate speculative decoding: a draft
+  proposes tokens and the target model verifies them. Preserving the target's
+  output distribution alone does not establish bitwise identity; acceptance
+  also requires cross-vendor verification of outputs and sampling behavior.
 - **Cross-vendor and multi-GPU training.** Move the live cross-vendor
   training API beyond experimental status, and extend multi-GPU execution
-  plans to more estimators with a placement check for each.
+  plans to more estimators with a placement check for each. Use those verified
+  plans as the foundation for the broader distributed interfaces above.
 - **Algorithm breadth.** New estimators enter in the `identical` mode and
   join the verifier when they land. The `fast` mode stays
-  limited to the tree learners.
+  Apple only.
 - **Verifier usability.** Quicker checks, clearer coverage reports, and
   a verifier that states exactly what an installed wheel has and has not
   been checked for.

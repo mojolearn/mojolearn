@@ -10,7 +10,11 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 - Arrays of `dtype=object` holding numbers are accepted the way scikit-learn accepts them.
 - Gradient boosting: multiclass, one-vs-all and multi-target (`MultiRMSE`) leaf values are computed entirely on the GPU, and
   categorical-feature predictions expand their features on the GPU. Fewer waits between boosting rounds.
-- Factor analysis in `fast` mode on Apple GPUs waits less often during its decomposition.
+- Factor analysis in `fast` mode on Apple GPUs waits less often during its decomposition and is now faster than
+  `identical` mode once its GPU programs are compiled.
+- IVF-Flat searches with `k > 32` return the same distances as the other search paths in `identical` mode.
+- `parallel_ensemble.score_isolation_forest` and `parallel_classical.predict_svm` return exactly what the single-device
+  estimators return.
 
 ## 0.8.51 (published 2026-10-17)
 
