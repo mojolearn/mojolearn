@@ -597,10 +597,12 @@ def apple_fast_estimate_and_apply(
     if mse_blocks < 1:
         mse_blocks = 1
     var hw = Int32(1) if has_weights else Int32(0)
-    var max_leaf = 1
-    for i in range(n_leaves):
-        if sizes[i] > max_leaf:
-            max_leaf = sizes[i]
+    # the partition-stats launch bound: `n_rows` bounds every leaf with no
+    # scan of the read-back sizes. `compute_partition_stats` documents a
+    # bound as launch shape only (the stripe is the full grid's whatever
+    # runs), so the bits are the widest-leaf bound's; a leaf narrower than
+    # `n_rows` launches empty chunks whose partial is +0.0.
+    var max_leaf = max(n_rows, 1)
     var gx = 2 * sm
     if gx < 1:
         gx = 1
