@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole-tree data replication: global RNG IDs and canonical prediction order."""
-from ._parallel_pool import DevicePool, driver_read_shift
+import sys
+
+from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
 from ._array import Array
 from ._buffer import as_f32_c, empty, addr, addr_ro
 from ._bufcheck import memcopy
@@ -154,9 +156,11 @@ def score_isolation_forest(estimator, X, *, devices=(0,), method='score_samples'
         raise ValueError('method must be score_samples, decision_function or predict')
     pool = DevicePool(devices, cooperative=True)
     try:
-        return pool.map([('iforest_score', estimator, (X, method))])[0]
+        result = pool.map([('iforest_score', estimator, (X, method))])[0]
     finally:
         pool.close()
+    # what the plain estimator.<method>(X) returns to this caller
+    return public_method_result(estimator, method, result, sys._getframe(1))
 
 
 def fit_ordered_rmse(estimator, X, y, *, permutation, devices=(0,), sample_weight=None):
