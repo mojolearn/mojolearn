@@ -957,13 +957,13 @@ def _fa_svd_grid(
     return SIMD[DType.float32, 4](Float32(1.0) if converged else Float32(0.0), Float32(executed), 0.0, 0.0)
 
 
-def _fa_ll(hs: MutPointer[UInt64, MutAnyOrigin], llconst: Float64, neg_half_n: Float64) -> Float64:
+def _fa_ll(slog_bits: UInt64, unexp_bits: UInt64, plog_bits: UInt64, llconst: Float64, neg_half_n: Float64) -> Float64:
     """Main's log-likelihood from the three device sums
     (`fa_ll_terms_kernel`: slog, unexp, plog as double bits), then
     (llconst + slog + unexp + plog) * (-n / 2), main's combination."""
-    var slog = bitcast[DType.float64](hs.unsafe_load(0))
-    var unexp = bitcast[DType.float64](hs.unsafe_load(1))
-    var plog = bitcast[DType.float64](hs.unsafe_load(2))
+    var slog = bitcast[DType.float64](slog_bits)
+    var unexp = bitcast[DType.float64](unexp_bits)
+    var plog = bitcast[DType.float64](plog_bits)
     return (llconst + slog + unexp + plog) * neg_half_n
 
 
@@ -1087,7 +1087,10 @@ def fa_em_py(
         )
         ctx.enqueue_copy(dst_ptr=h_llsum.unsafe_ptr(), src_buf=d_llsum)
         ctx.synchronize()
-        var ll = _fa_ll(h_llsum.unsafe_ptr(), llconst, neg_half_n)
+        var ll = _fa_ll(
+            h_llsum.unsafe_ptr().unsafe_load(0), h_llsum.unsafe_ptr().unsafe_load(1),
+            h_llsum.unsafe_ptr().unsafe_load(2), llconst, neg_half_n,
+        )
         ll_dst.unsafe_store(i, ll)
         if (ll - old_ll) < tol64:
             break
