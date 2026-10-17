@@ -412,6 +412,7 @@ def fit_ordered_rmse(
         trace.record_device(ctx, String("ordered.") + String(iteration) + ".estimation_cursor", estimation)
         structure.splits = splits^
         var weak = TObliviousTreeModel(structure^)
+        # driver-loop: over the leaves
         for leaf in range(n_leaves):
             weak.leaf_values.append(identical_mul(leaves[leaf], learning_rate))
         model.add_weak_model(weak^)

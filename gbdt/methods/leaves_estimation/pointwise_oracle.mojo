@@ -488,6 +488,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             if len(self.current_point) != len(new_point):
                 self.yeti_at_search_point = False
             else:
+                # driver-loop: over the Newton point's leaf values (bins x dims)
                 for i in range(len(new_point)):
                     if new_point[i] != self.current_point[i]:
                         self.yeti_at_search_point = False
@@ -541,6 +542,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         self.cached_der2.clear()
         self.der_at_point.clear()
         self.current_point.clear()
+        # driver-loop: over the Newton point's leaf values (bins x dims)
         for i in range(shift_len):
             self.current_point.append(new_point[i])
         self.times.end(self.ctx, "est.move")
@@ -921,6 +923,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # class, so `SingleBinDim() == cursorDim` and the gradient is
         # their `(*gradient) = *DerAtPoint` (`:102-104`) unchanged.
         gradient.clear()
+        # driver-loop: over the leaf gradient slots (bins x dims)
         for _ in range(self.bin_count * self.single_bin_dim):
             gradient.append(Float64(0.0))
         if is_ova or is_multi_rmse:
@@ -1255,6 +1258,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
 
         # `secondDer->resize(singleBinBlockedMatrixSize * BinCount)`
         second_der.clear()
+        # driver-loop: over the per-leaf Hessian blocks (bins x matrix size)
         for _ in range(matrix_size * self.bin_count):
             second_der.append(Float64(0.0))
 
@@ -1409,7 +1413,9 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         if self.objective != OBJECTIVE_MULTICLASS:
             return point.copy()
         var out = List[Float32]()
+        # driver-loop: over the leaf bins
         for bin in range(self.bin_count):
+            # driver-loop: over the cursor dims of one leaf
             for dim in range(self.cursor_dim):
                 out.append(
                     point[bin * self.single_bin_dim + dim]

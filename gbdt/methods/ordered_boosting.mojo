@@ -3319,6 +3319,7 @@ def fit_ordered(
             # its leaves come home on the learn-loss drain below
             weak_later.append(weak^)
         else:
+            # driver-loop: over the leaves
             for leaf in range(n_leaves):
                 weak.leaf_values.append(identical_mul(leaves[leaf], opts.learning_rate))
             model.add_weak_model(weak^)

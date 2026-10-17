@@ -479,6 +479,7 @@ def _apply_last_tree_to_test(
         for k in range(eq_words):
             hw.unsafe_store(4 * depth + k, UInt32(0))
         var hb = (hw + 4 * depth).bitcast[UInt8]()
+        # driver-loop: over the tree depth (split records)
         for level in range(depth):
             ref pcf = layout.features[
                 Int(weak.structure.splits[level].feature_id)
@@ -496,6 +497,7 @@ def _apply_last_tree_to_test(
             )
             hb.unsafe_store(level, UInt8(1) if p_take_bin else UInt8(0))
         var p_values = (1 << depth) * approx_dim
+        # driver-loop: over the last tree's leaf values (leaves x approx_dim)
         for i in range(p_values):
             var v = Float32(0.0)
             if i < len(weak.leaf_values):
@@ -549,6 +551,7 @@ def _apply_last_tree_to_test(
             level, UInt8(1) if take_bin else UInt8(0)
         )
     var n_values = (1 << depth) * approx_dim
+    # driver-loop: over the last tree's leaf values (leaves x approx_dim)
     for i in range(n_values):
         var v = Float32(0.0)
         if i < len(weak.leaf_values):
@@ -1154,10 +1157,12 @@ def _append_deferred_oblivious_tree(
     through `finish_deferred_estimation`; the same statements as the loop's
     own append (DEVIATION 256's host rescale included)."""
     var structure = TObliviousTreeStructure()
+    # driver-loop: over the tree splits (depth)
     for i in range(len(splits)):
         structure.splits.append(splits[i])
     var weak = TObliviousTreeModel(structure^)
     weak.dim = approx_dim
+    # driver-loop: over the leaf values (leaves x approx_dim)
     for i in range(len(leaf_values)):
         weak.leaf_values.append(leaf_values[i] * learning_rate)
     model.add_weak_model(weak^)
@@ -1773,6 +1778,7 @@ def _estimate_and_apply(
             " (the device walk restates MakeZeroAverage)"
         )
     leaf_values.clear()
+    # driver-loop: over the leaf values (leaves x approx_dim)
     for i in range(len(estimated)):
         leaf_values.append(estimated[i])
 
@@ -3957,6 +3963,7 @@ def fit_with_test(
                 loop_times.stop_host("iter_estimate_apply", t_est)
                 if p == est_p:
                     leaf_values.clear()
+                    # driver-loop: over the leaf values (leaves x approx_dim)
                     for i in range(len(pv)):
                         leaf_values.append(pv[i])
             # their `UpdateLeaves(std::move(point))` (`doc_parallel_leaves_
@@ -3969,6 +3976,7 @@ def fit_with_test(
                     + " bins x " + String(approx_dim)
                 )
             tree.leaf_values.clear()
+            # driver-loop: over the leaf values (leaves x approx_dim)
             for i in range(len(leaf_values)):
                 tree.leaf_values.append(leaf_values[i] * learning_rate)
             tree.dim = approx_dim
@@ -4253,6 +4261,7 @@ def fit_with_test(
                 # never read, so they are not accumulated.
                 if p == est_p:
                     leaf_values.clear()
+                    # driver-loop: over the leaf values (leaves x approx_dim)
                     for i in range(len(pv)):
                         leaf_values.append(pv[i])
         # TOMBSTONE: MOJOLEARN_SYM_DERIV_FUSED and MOJOLEARN_SYM_LEAF_FROM_STATS (both DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
@@ -4281,6 +4290,7 @@ def fit_with_test(
                     has_deferred_tree = True
             if not deferred_now:
                 var structure = TObliviousTreeStructure()
+                # driver-loop: over the tree splits (depth)
                 for i in range(len(splits)):
                     structure.splits.append(splits[i])
                 var weak = TObliviousTreeModel(structure^)
@@ -4297,6 +4307,7 @@ def fit_with_test(
                 # correctly-rounded HOST Float32 multiply with no chain to
                 # contract and no device flush policy in play, so its bits are
                 # the same on every host.
+                # driver-loop: over the leaf values (leaves x approx_dim)
                 for i in range(len(leaf_values)):
                     weak.leaf_values.append(leaf_values[i] * learning_rate)
                 model.add_weak_model(weak^)
@@ -4671,9 +4682,11 @@ def predict(
 
     var lvl = 0
     var leaf = 0
+    # driver-loop: over the trees of the model
     for t in range(model.size()):
         ref weak = model.weak_models[t]
         var depth = weak.structure.get_depth()
+        # driver-loop: over the tree depth (split records)
         for level in range(depth):
             ref cf = layout.features[
                 Int(weak.structure.splits[level].feature_id)
@@ -4716,6 +4729,7 @@ def predict(
             )
             lvl += 1
         var n_values = (1 << depth) * approx_dim
+        # driver-loop: over the tree's leaf values (leaves x approx_dim)
         for i in range(n_values):
             var v = Float32(0.0)
             if i < len(weak.leaf_values):

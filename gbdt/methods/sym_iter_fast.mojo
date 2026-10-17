@@ -257,6 +257,7 @@ def sym_compute_bins_pooled(
             "sym_compute_bins_pooled: " + String(len(splits))
             + " splits for depth " + String(depth)
         )
+    # driver-loop: over the tree depth (split records)
     for level in range(depth):
         ref cf = layout.features[Int(splits[level].feature_id)]
         pool.h_off.unsafe_ptr().unsafe_store(

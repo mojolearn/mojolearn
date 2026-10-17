@@ -220,16 +220,20 @@ def _build_packed_predict(
     var n_columns = len(tm.borders)
     var nw = layout.columns
     var per_word = List[List[Int]]()
+    # driver-loop: over the packed words
     for _ in range(nw):
         per_word.append(List[Int]())
+    # driver-loop: over the feature columns
     for f in range(n_columns):
         if len(tm.borders[f]) == 0:
             continue
         per_word[Int(layout.features[f].offset)].append(f)
     var fits = nw > 0
     var ne = 0
+    # driver-loop: over the packed words
     for w in range(nw):
         var total = 0
+        # driver-loop: over the features of one packed word
         for k in range(len(per_word[w])):
             total += len(tm.borders[per_word[w][k]])
         if len(per_word[w]) > PACK_MAX_ENTRIES or total > PACK_BORDER_CAP:
@@ -239,11 +243,13 @@ def _build_packed_predict(
         fits = False
     var n_trees = tm.model.size()
     var depths = List[Int]()
+    # driver-loop: over the trees
     for t in range(n_trees):
         depths.append(tm.model.weak_models[t].structure.get_depth())
     var chunk_start = List[Int]()
     chunk_start.append(0)
     var run = 0
+    # driver-loop: over the trees
     for t in range(n_trees):
         # C50 counts a constant tree as one unit of leaf-load work, ensuring
         # all-constant ensembles are bounded too. Real level bytes can only
@@ -262,8 +268,10 @@ def _build_packed_predict(
     var hp = h.unsafe_ptr()
     if fits:
         var e = 0
+        # driver-loop: over the packed words
         for w in range(nw):
             hp.unsafe_store(w, UInt32(e))
+            # driver-loop: over the features of one packed word
             for k in range(len(per_word[w])):
                 var f = per_word[w][k]
                 ref cf = layout.features[f]
@@ -278,6 +286,7 @@ def _build_packed_predict(
     var at = pack_len
     var lvl = 0
     var leaf = 0
+    # driver-loop: over the trees
     for t in range(n_trees):
         hp.unsafe_store(at + t, UInt32(depths[t]))
         hp.unsafe_store(at + n_trees + t, UInt32(lvl))

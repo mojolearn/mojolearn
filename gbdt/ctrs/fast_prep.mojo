@@ -545,6 +545,7 @@ def uniform_ctr_borders_from_minmax(
     if min_value != max_value:
         var lo = Float64(min_value)
         var hi = Float64(max_value)
+        # driver-loop: over the CTR border slots (a config bound)
         for i in range(max_borders_count):
             var current_value = lo + Float64(i + 1) * (hi - lo) / Float64(
                 max_borders_count + 1
@@ -979,13 +980,16 @@ def group_configs(configs: List[TCtrConfig]) raises -> List[List[Int]]:
     """`CreateEqualUpToPriorAndBinarizationCtrsGroupping` (`ctr.h:60-68`):
     config slots bucketed by (Type, ParamId), in first-seen order."""
     var done = List[Bool]()
+    # driver-loop: over the CTR configs
     for _ in range(len(configs)):
         done.append(False)
     var groups = List[List[Int]]()
+    # driver-loop: over the CTR configs
     for i in range(len(configs)):
         if done[i]:
             continue
         var slots = List[Int]()
+        # driver-loop: over the CTR configs
         for j in range(i, len(configs)):
             if not done[j] and is_equal_up_to_prior_and_binarization(
                 configs[j], configs[i]
@@ -1008,6 +1012,7 @@ def fast_dependent_ctrs(
     """`compute_simple_ctrs_gpu` for permutation `p` on the shared prep:
     `build_bins`, then every equal-up-to-prior group through `borders_ctrs`.
     Columns come back in config order."""
+    # driver-loop: over the CTR configs
     for i in range(len(configs)):
         if configs[i].ctr_type == CTR_FEATURE_FREQ:
             raise Error(
@@ -1016,18 +1021,22 @@ def fast_dependent_ctrs(
             )
     prep.build_bins(ctx, p, codes, unique_values)
     var out = FastCtrColumns(List[List[Float32]](), List[DeviceBuffer[DType.float32]]())
+    # driver-loop: over the CTR configs
     for _ in range(len(configs)):
         out.host.append(List[Float32]())
     var dev_slot = List[Int]()
+    # driver-loop: over the CTR configs
     for _ in range(len(configs)):
         dev_slot.append(-1)
     var groups = group_configs(configs)
     var pending = List[DeviceBuffer[DType.float32]]()
     for g in range(len(groups)):
         var group = List[TCtrConfig]()
+        # driver-loop: over the configs of one CTR group
         for k in range(len(groups[g])):
             group.append(configs[groups[g][k]])
         var cols = prep.borders_ctrs(ctx, group, device_out)
+        # driver-loop: over the configs of one CTR group
         for k in range(len(groups[g])):
             if device_out:
                 dev_slot[groups[g][k]] = len(pending)
@@ -1035,6 +1044,7 @@ def fast_dependent_ctrs(
             else:
                 out.host[groups[g][k]] = cols.host[k].copy()
     if device_out:
+        # driver-loop: over the CTR configs
         for i in range(len(configs)):
             out.dev.append(pending[dev_slot[i]].copy())
     return out^
@@ -1051,24 +1061,29 @@ def fast_freq_ctrs(
     bins the LAST `build_bins` left in the prep (CTR_SORT_ONCE). Host columns
     always; device copies under `device_out`."""
     var out = FastCtrColumns(List[List[Float32]](), List[DeviceBuffer[DType.float32]]())
+    # driver-loop: over the CTR configs
     for _ in range(len(configs)):
         out.host.append(List[Float32]())
     var dev_slot = List[Int]()
+    # driver-loop: over the CTR configs
     for _ in range(len(configs)):
         dev_slot.append(-1)
     var groups = group_configs(configs)
     var pending = List[DeviceBuffer[DType.float32]]()
     for g in range(len(groups)):
         var group = List[TCtrConfig]()
+        # driver-loop: over the configs of one CTR group
         for k in range(len(groups[g])):
             group.append(configs[groups[g][k]])
         var cols = prep.freq_ctrs(ctx, unique_values, group, device_out)
+        # driver-loop: over the configs of one CTR group
         for k in range(len(groups[g])):
             out.host[groups[g][k]] = cols.host[k].copy()
             if device_out:
                 dev_slot[groups[g][k]] = len(pending)
                 pending.append(cols.dev[k].copy())
     if device_out:
+        # driver-loop: over the CTR configs
         for i in range(len(configs)):
             out.dev.append(pending[dev_slot[i]].copy())
     return out^

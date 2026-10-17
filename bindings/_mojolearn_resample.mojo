@@ -420,6 +420,7 @@ def resample_gather_gpu_binding[REPLACE: Bool = True](addrs: PythonObject, param
     var srcs = List[Int]()
     var dsts = List[Int]()
     var widths = List[Int]()
+    # driver-loop: over the gathered arrays (argument spans)
     for a in range(k):
         srcs.append(Int(py=addrs[2 * a]))
         dsts.append(Int(py=addrs[2 * a + 1]))

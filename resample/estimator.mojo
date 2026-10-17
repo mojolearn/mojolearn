@@ -2368,6 +2368,7 @@ def resample_gather_gpu[REPLACE: Bool = True](
             raise Error("resample: invalid gather array spans")
         if count <= 0:
             return False
+        # driver-loop: over the gathered arrays (argument spans)
         for a in range(len(widths)):
             if widths[a] <= 0 or max(n * widths[a], count * widths[a]) > 2147483647:
                 return False

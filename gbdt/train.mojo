@@ -589,8 +589,10 @@ def _qd_pack_word_table(
     var n_features = len(borders)
     var n_words = lay.columns
     var per_word = List[List[Int]]()
+    # driver-loop: over the packed words
     for _ in range(n_words):
         per_word.append(List[Int]())
+    # driver-loop: over the features
     for f in range(n_features):
         if len(borders[f]) == 0 or dev_col_of[f] < 0:
             continue
@@ -600,10 +602,12 @@ def _qd_pack_word_table(
         List[UInt32](), List[Float32](), True,
     )
     t.word_start.append(UInt32(0))
+    # driver-loop: over the packed words
     for w in range(n_words):
         var total = 0
         if len(per_word[w]) > PACK_MAX_ENTRIES:
             t.fits = False
+        # driver-loop: over the features of one packed word
         for k in range(len(per_word[w])):
             var f = per_word[w][k]
             ref cf = lay.features[f]
@@ -653,6 +657,7 @@ def _cindex_from_device_columns(
         max(1, n_features * _QD_SLAB)
     )
     var hs = h_slab.unsafe_ptr()
+    # driver-loop: over the features (border slabs)
     for f in range(n_features):
         if dev_col_of[f] < 0:
             continue
@@ -866,6 +871,7 @@ def _build_cindex_from_columns(
             )
             dev_done = True
             var all_dev = True
+            # driver-loop: over the features
             for f in range(n_features):
                 if len(borders[f]) != 0 and dev_col_of[f] < 0:
                     all_dev = False
@@ -1871,6 +1877,7 @@ def train(
     var has_permutation_features = False
     comptime if CTR_ONEHOT_DEVICE:
         if len(dependent_configs) > 0:
+            # driver-loop: over the features
             for f in range(n_features):
                 if symctr_unique[f] > 0 and (
                     symctr_unique[f] > cat_params.one_hot_max_size
@@ -1889,6 +1896,7 @@ def train(
     var ordered_ctr_column = False
     comptime if CTR_ONEHOT_DEVICE:
         if ordered:
+            # driver-loop: over the features
             for f in range(n_features):
                 if symctr_unique[f] > 0 and (
                     symctr_unique[f] > cat_params.one_hot_max_size
@@ -2068,6 +2076,7 @@ def train(
     var symctr_pre_folds = List[Int]()
     comptime if SYM_CTR_ANY:
         symctr_walk_main = False
+        # driver-loop: over the permutations
         for _ in range(perm_count):
             symctr_dep_dev.append(List[Int]())
         var fprep = CtrPrepFast(ctx, n_rows, perm_count)
@@ -2085,6 +2094,7 @@ def train(
                 and len(independent_configs) > 0
                 and cat_params.counter_calc_method != COUNTER_CALC_FULL
             )
+            # driver-loop: over the independent CTR configs
             for c in range(len(independent_configs)):
                 if independent_configs[c].ctr_type != CTR_FEATURE_FREQ:
                     sort_once_ok = False
@@ -2097,10 +2107,12 @@ def train(
                 # orders, shared by handle (no host order, no re-upload)
                 fprep.target = d_btarget
                 fprep.has_target = True
+                # driver-loop: over the permutations
                 for p in range(perm_count):
                     fprep.orders[p] = d_orders[p]
                     fprep.order_ready[p] = True
         var wants_histogram = False
+        # driver-loop: over the CTR configs
         for c in range(len(configs)):
             if configs[c].ctr_type == CTR_BORDERS:
                 wants_histogram = True
@@ -2148,6 +2160,7 @@ def train(
                             + " has more than 255 categories"
                         )
                     var bs = List[Float32]()
+                    # driver-loop: over the one-hot categories (at most 255 borders)
                     for c in range(unique_values - 1):
                         bs.append(Float32(c) + Float32(0.5))
                     symctr_pre_col.append(len(columns))
@@ -2360,8 +2373,10 @@ def train(
                     f,
                     base_col,
                 )
+            # driver-loop: over the CTR tables
             for c in range(len(tables)):
                 ctr_tables.append(tables[c].copy())
+            # driver-loop: over the dependent CTR slots
             for c in range(len(dependent_slots)):
                 dep_col_index.append(base_col + dependent_slots[c])
             for c in range(len(configs)):  # small-loop(configs: CTR config slots): plan entries per config; the column itself stays on the device
@@ -2551,6 +2566,7 @@ def train(
     var qd_col_of = List[Int]()
     comptime if GBDT_QUANT_DEVICE:
         var qd_n_float = 0
+        # driver-loop: over the columns
         for c in range(n_columns):
             if not column_one_hot[c] and column_ctr_grid[c] < 0:
                 qd_col_of.append(qd_n_float)
@@ -2580,10 +2596,12 @@ def train(
     var symctr_pre_b = List[List[Float32]]()
     var symctr_pre_f = List[Int]()
     comptime if SYM_CTR_ANY:
+        # driver-loop: over the columns
         for _ in range(n_columns):
             symctr_pre_has.append(False)
             symctr_pre_b.append(List[Float32]())
             symctr_pre_f.append(0)
+        # driver-loop: over the pre-quantized CTR columns
         for k in range(len(symctr_pre_col)):
             symctr_pre_has[symctr_pre_col[k]] = True
             symctr_pre_b[symctr_pre_col[k]] = symctr_pre_borders[k].copy()
