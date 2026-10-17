@@ -236,6 +236,34 @@ def par_driver_sabotage():
             and os.environ.get('MOJOLEARN_HOST_ALLOW_SABOTAGE') == '1')
 
 
+def native_method(state, method, *args):
+    """`getattr(state, method)(*args)` called from inside the package, so the
+    estimator returns its native result (the `Array` in the kernel's dtype).
+
+    A worker runs as `python -m mojolearn._parallel_worker`, whose module is
+    `__main__`: a public method called straight from it took the worker for
+    a caller outside the package (`_mode._caller_outside`) and widened the
+    result (an outlier detector's scores and a regressor's `predict` to
+    float64, `_mode._public_result`) BEFORE it crossed back to the driver.
+    The plain estimator gives a caller inside the package (and the identity
+    harness) the native float32 result, so the driver's result differed in
+    dtype and therefore in every byte: the par-iforest and par-svm-svr
+    oracle cells (lane par-oracle-fix, 2026-10-17). The driver applies the
+    public conversion for ITS caller (`public_method_result`)."""
+    return getattr(state, method)(*args)
+
+
+def public_method_result(estimator, method, result, frame):
+    """`result` as the plain `estimator.<method>` returns it to the caller
+    whose frame is `frame`: the public conversion (`_mode._public_result`)
+    for a caller outside the package, the native result otherwise. The
+    driver passes `sys._getframe(1)`, its own caller."""
+    from . import _mode
+    if _mode._caller_outside(frame):
+        return _mode._public_result(estimator, method, result)
+    return result
+
+
 def driver_read_shift(index, first, devices):
     """How far back shard `index` should READ, in the driver's own units.
 

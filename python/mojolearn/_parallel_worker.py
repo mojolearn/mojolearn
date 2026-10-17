@@ -367,7 +367,8 @@ def execute(request):
         X, method = args
         if method not in ('predict', 'decision_function'):
             raise ValueError('invalid SVM prediction operation')
-        return getattr(state, method)(X)
+        from ._parallel_pool import native_method
+        return native_method(state, method, X)  # the native result; the driver converts
     if operation in ('iforest_fit', 'iforest_score'):
         from ._svm_impl import _extension
         native = _extension('identical')
@@ -380,7 +381,8 @@ def execute(request):
         X, method = args
         if method not in ('score_samples', 'decision_function', 'predict'):
             raise ValueError('invalid IsolationForest score operation')
-        return getattr(state, method)(X)
+        from ._parallel_pool import native_method
+        return native_method(state, method, X)  # the native result; the driver converts
     if operation == 'solver_fit':
         from ._backend import binding
         native = binding('_mojolearn_solver')

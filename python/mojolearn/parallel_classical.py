@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cooperative classical estimators with explicit per-algorithm partitions."""
-from ._parallel_pool import DevicePool, driver_read_shift
+import sys
+
+from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
 from ._buffer import as_f32_c
 
 
@@ -250,9 +252,11 @@ def predict_svm(estimator, X, *, devices=(0,), method='predict'):
         raise ValueError('method must be predict, or decision_function for SVC')
     pool = DevicePool(devices, cooperative=True)
     try:
-        return pool.map([('svm_predict', estimator, (X, method))])[0]
+        result = pool.map([('svm_predict', estimator, (X, method))])[0]
     finally:
         pool.close()
+    # what the plain estimator.<method>(X) returns to this caller
+    return public_method_result(estimator, method, result, sys._getframe(1))
 
 
 def fit_gaussian_process(estimator, X, y, *, devices=(0,)):
