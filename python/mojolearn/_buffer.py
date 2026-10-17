@@ -447,6 +447,30 @@ def _materialize(obj, name):
         # so NumPy is already loaded); that block takes the buffer path.
         # Glue: one conversion call, no per-element Python work.
         obj = obj.__array__()
+    if _object_buffer(obj):
+        # An object-dtype array (NumPy dtype=object: a buffer of PyObject
+        # pointers, format 'O') holding numbers. scikit-learn's check_array
+        # treats it as numeric (np.asarray(X, dtype=float64); its
+        # check_dtype_object). Glue: `ravel().tolist()` is one C call that
+        # lists the leaves in C order; the leaf TYPE set (read in C) picks
+        # float64 / int64 like NumPy, and any other leaf is refused with
+        # scikit-learn's error type and wording.
+        from ._array import _SCALAR_TYPES
+        shape = tuple(obj.shape)
+        flat = obj.ravel().tolist()
+        kinds = set(map(type, flat))
+        if kinds <= _SCALAR_TYPES:
+            return Array._from_flat(flat, shape, "<f8" if float in kinds else "<i8"), True
+        import numbers
+        if all(issubclass(t, numbers.Real) for t in kinds):  # glue: the distinct leaf types of the input
+            # real-number subclasses (NumPy scalars): the float64 store casts them
+            return Array._from_flat(flat, shape, "<f8"), True
+        other = sorted(t.__name__ for t in kinds  # glue: the distinct leaf types of the input
+                       if not issubclass(t, (numbers.Real, str)))
+        if other:
+            raise TypeError(f"mojolearn: {name} holds a {other[0]}: float() argument must be "
+                            f"a string or a real number, not '{other[0]}'")
+        raise TypeError(f"mojolearn: {name} holds a str, not a number")
     if isinstance(obj, (list, tuple)) or not _has_buffer(obj):
         if isinstance(obj, (str, bytes)):
             raise TypeError(
@@ -578,6 +602,21 @@ def _same_dtype_store(raw, dtype):
 # that holds every value exactly; a uint64 above 2**63 overflows int64 and
 # is refused by array.array rather than wrapped.
 _NATURAL = {"|b1": "<u1", "|i1": "<i4", "<i2": "<i4", "<u2": "<u4", "<u8": "<i8"}
+
+
+def _object_buffer(obj):
+    """`obj` exports a buffer of Python objects (format 'O': a NumPy
+    object-dtype array) and can list them (`tolist`)."""
+    if isinstance(obj, (list, tuple, str, bytes)) or not callable(getattr(obj, "tolist", None)):
+        return False
+    try:
+        m = memoryview(obj)
+    except TypeError:
+        return False
+    try:
+        return m.format == "O"
+    finally:
+        m.release()
 
 
 def _has_buffer(obj):
