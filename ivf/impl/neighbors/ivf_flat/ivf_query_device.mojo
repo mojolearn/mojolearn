@@ -15,11 +15,13 @@ THE ANSWER IS THE ONE THE HOST LOOP GAVE, BIT FOR BIT.
     so a slot's position in q's merged row is the count of q's candidates
     with a smaller id: a binary search per probed list (`_cand_rank_kernel`,
     one block per (query, probe), threads over the list). Integers only.
-  * Each (query, candidate) distance is `pinned_distance_tile_kernel`'s
-    cell, statement for statement (one ascending `identical_mul_add` chain
-    over d, the norm sum, the `-2` fma, the clamp at zero), reading the
-    candidate row and its norm straight from the device list data and list
-    norms the host gather copied from.
+  * Each (query, candidate) distance is the batched scan's cell, statement
+    for statement: in IDENTICAL the direct ascending sum of squared
+    differences (IVF_DIRECT_DISTANCE, the default since c670e6013), else
+    `pinned_distance_tile_kernel`'s expansion (one ascending
+    `identical_mul_add` chain over d, the norm sum, the `-2` fma); the clamp
+    at zero either way. It reads the candidate row and its norm straight
+    from the device list data and list norms.
   * The k nearest of q are the k smallest of its row under the total order
     (distance, original index): the host path's radix selection keyed on
     (distance, position) with positions in original-id order, then its
@@ -39,6 +41,8 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_mul_add
+from core.classical_distance import direct_distance_step
+from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
 from core.device_fold import device_exclusive_scan_total_from
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from core.segmented_sort import float_to_sortable
@@ -124,8 +128,18 @@ def _cand_dist_kernel(
     xq: _F32P, xq_norm: _F32P, ldata: _F32P, lnorm: _F32P,
     cdist: _F32P, keys: _U32P, vals: _U32P,
 ):
-    """Candidate g: `pinned_distance_tile_kernel`'s cell for (its query, its
-    slot), into cdist[g]; the sort pair (sortable distance bits, g)."""
+    """Candidate g: the batched scan's cell for (its query, its slot), into
+    cdist[g]; the sort pair (sortable distance bits, g).
+
+    The distance follows IVF_DIRECT_DISTANCE exactly as the batched scans
+    (identical_ivf_scan.mojo) and the host twin (ivf/host/ivf_host.mojo) do:
+    the direct ascending sum of squared differences in IDENTICAL, the
+    `-2 q.x + |q|^2 + |x|^2` expansion otherwise. Before (lane
+    par-oracle-fix, 2026-10-17) this kernel kept the expansion when the
+    IDENTICAL default flipped to direct (c670e6013), so a search served
+    here (partial storage, i.e. every DistributedIVFIndex shard; k > 32; a
+    traced search) differed by ulps from the plain batched search and from
+    the host column: the par-ivf oracle's DIVERGENT cells."""
     var g = Int(block_idx.x) * _TPB + Int(thread_idx.x)
     if g >= Int(total_in):
         return
@@ -133,17 +147,25 @@ def _cand_dist_kernel(
     var row = Int(q0_in) + Int(cq[g])
     var col = Int(cslot[g])
     var acc = Float32(0.0)
-    for f in range(d):
-        var qv = ftz(xq.unsafe_load(row * d + f))
-        var yv = ftz(ldata.unsafe_load(col * d + f))
-        acc = ftz(identical_mul_add(qv, yv, acc))
-    var dist = ftz(
-        identical_mul_add(
-            Float32(-2.0),
-            acc,
-            ftz(ftz(xq_norm.unsafe_load(row)) + ftz(lnorm.unsafe_load(col))),
+    var dist = Float32(0.0)
+    comptime if IVF_DIRECT_DISTANCE:
+        for f in range(d):
+            var qv = ftz(xq.unsafe_load(row * d + f))
+            var yv = ftz(ldata.unsafe_load(col * d + f))
+            acc = direct_distance_step[1](acc, qv, yv)
+        dist = acc
+    else:
+        for f in range(d):
+            var qv = ftz(xq.unsafe_load(row * d + f))
+            var yv = ftz(ldata.unsafe_load(col * d + f))
+            acc = ftz(identical_mul_add(qv, yv, acc))
+        dist = ftz(
+            identical_mul_add(
+                Float32(-2.0),
+                acc,
+                ftz(ftz(xq_norm.unsafe_load(row)) + ftz(lnorm.unsafe_load(col))),
+            )
         )
-    )
     if dist <= Float32(0.0):
         dist = Float32(0.0)
     cdist[g] = dist
