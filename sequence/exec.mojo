@@ -201,6 +201,17 @@ struct HostExec(Exec):
         self.bufs.append(q)
         return q
 
+    def free(mut self, p: FP) raises:
+        # The host runs every launch before it returns, so nothing queued
+        # can still read p: free it now and drop it from the end-of-life list.
+        var addr = Int(p)
+        for i in range(len(self.bufs)):  # small-loop(bufs: buffers this Exec allocated): address lookup, no data
+            if Int(self.bufs[i]) == addr:
+                var q = self.bufs.pop(i)
+                q.free()
+                return
+        raise Error("sequence: free names no buffer this host Exec allocated")
+
     def upload(mut self, dst: FP, src: FP, n: Int) raises:
         if n > 0:
             memcpy(dest=dst, src=src, count=n)
