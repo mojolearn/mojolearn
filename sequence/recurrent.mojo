@@ -627,8 +627,36 @@ def opt_step[E: Exec](
     ex.launch[OP_OPT](a, n)
 
 
+# ------------------------------------------------------------------ training step seam
+trait RnnStep(Defaultable, Movable):
+    """One optimizer step's differentiation: forward_head leaves the head's
+    output in w.yhat; backward reads dy [B, O] from w.dy and writes every
+    parameter gradient into Gr (the `Net` layout). rnn_fit keeps the loss,
+    shuffle, batching and optimizer; only this assembly is swappable."""
+
+    def forward_head[E: Exec](mut self, mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work) raises:
+        ...
+
+    def backward[E: Exec](mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
+        ...
+
+
+struct HandStep(RnnStep):
+    """The hand-assembled backward above (`forward`, `head`, `backward`)."""
+
+    def __init__(out self):
+        pass
+
+    def forward_head[E: Exec](mut self, mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work) raises:
+        var hT = forward(ex, net, P, x, T, B, w)
+        head(ex, net, P, hT, B, w.yhat)
+
+    def backward[E: Exec](mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
+        backward(ex, net, P, Gr, x, T, B, w)
+
+
 # ------------------------------------------------------------------ fit / predict
-def rnn_fit[E: Exec](
+def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
     mut ex: E, net: Net, task: Int,
     X: FP, Y: FP, N: Int, T: Int,
     epochs: Int, bs: Int, shuffle: Bool, seed: UInt64,
@@ -665,6 +693,7 @@ def rnn_fit[E: Exec](
     var dloss = ex.alloc(n_steps)
     var w = Work(ex, net, T, bmax, True)
     var st = OptState()
+    var step = S()
     for k in range(n_steps):
         var j = k % per
         if j == 0:
@@ -677,8 +706,7 @@ def rnn_fit[E: Exec](
         var off = j * bs
         var B = min(bs, N - off)
         gather_seq(ex, dX, dord, w.xb, T, B, net.D, off)
-        var hT = forward(ex, net, P, w.xb, T, B, w)
-        head(ex, net, P, hT, B, w.yhat)
+        step.forward_head(ex, net, P, w.xb, T, B, w)
         if task == TASK_MSE:
             gather_rows(ex, dY, dord, w.yb, B, net.O, off)
             var a = Args()
@@ -701,7 +729,7 @@ def rnn_fit[E: Exec](
             a.f0 = Float32(1.0) / Float32(B)
             ex.launch[OP_CE](a, B)
             sum_into(ex, w.sq, B, dloss, k, Float32(1.0) / Float32(B))
-        backward(ex, net, P, Gr, w.xb, T, B, w)
+        step.backward(ex, net, P, Gr, w.xb, T, B, w)
         opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
     ex.sync()
     ex.download(Pio, P, np_)
