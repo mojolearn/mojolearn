@@ -22,6 +22,38 @@ elements; softmax/log-softmax; MSE and dense-target cross-entropy. This is a
 first-order matrix API, not arbitrary-rank tensors, higher-order AD, graph
 compilation/export, distributed training or PyTorch API compatibility.
 
+Caller storage and storage lifetime (lane `ag-fusion`):
+
+- `variable_into(ex, data, grad_destination, rows, cols)` records a
+  differentiable leaf whose gradient buffer is caller-owned executor memory;
+  a backward writes the gradient there directly (`accumulate=True` adds to
+  what it holds). `variable` is unchanged.
+- `unary_into(ex, x, op, output, scale)` and `binary_into(ex, x, y, op,
+  output)` record an elementwise/softmax or broadcast binary operation whose
+  value is written to caller storage; the values equal the plain methods'.
+- Gradients are never zero-filled before use. A backward writes the first
+  contribution to each gradient straight into it (the VJP or matmul GEMM
+  destination is the parent's gradient) and adds later contributions from
+  scratch in the original order, so the bits equal the old zero/copy/add
+  schedule. An unreached differentiable leaf gets a zero gradient; an
+  unreached intermediate has none (`gradient()` refuses), and so does any
+  tensor before its first backward.
+- `release(ex)` returns every tape-owned buffer to the executor through the
+  new `Exec.free` (host: freed at once; device: dropped from lookup at once,
+  storage released at the next `sync` or the end of the executor, after the
+  queued kernels that use it). A slot that grows frees its old buffer. The
+  tape holds no executor, so its destructor cannot free storage; buffers
+  never released go when the executor ends. The MLP trainer releases its
+  tape when the fit finishes.
+
+The MLP tape path records each layer's output into the trainer's
+activation buffers and lands parameter gradients in the trainer's gradient
+vector, so the per-layer launch count drops from about 28 to 6 or 7 (the
+derivation is at the top of `mlp_backward_autograd`). With the defines
+above it is bit for bit the earlier tape path. The A/B define
+`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE` (default off) also folds the 1/B
+normalization into the seed, which removes the bias divides and moves bits.
+
 `BackwardRules` registers native custom VJPs. The tape handles ordering and
 shared-input accumulation; each rule writes distinct per-input contributions.
 `autograd/layers.mojo` adapts the existing LayerNorm forward/backward kernels.
