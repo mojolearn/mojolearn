@@ -628,7 +628,7 @@ def opt_step[E: Exec](
 
 
 # ------------------------------------------------------------------ training step seam
-trait RnnStep(Defaultable, Movable):
+trait RnnStep(Defaultable & Movable & Deinitable):
     """One optimizer step's differentiation: forward_head leaves the head's
     output in w.yhat; backward reads dy [B, O] from w.dy and writes every
     parameter gradient into Gr (the `Net` layout). rnn_fit keeps the loss,
