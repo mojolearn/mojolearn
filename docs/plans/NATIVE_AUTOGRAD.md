@@ -78,8 +78,8 @@ pixi run check-autograd
 pixi run check-autograd-gpu
 ```
 
-The GPU task intentionally runs the unqualified diagnostic path and currently
-fails. It must not be reported as passing, skipped successfully, or covered
+The GPU task intentionally runs the unqualified diagnostic path; it failed
+before the opcode split and its re-test is pending. It must not be reported as passing, skipped successfully, or covered
 by the CPU results. CPU/GPU and Apple/NVIDIA/AMD bitwise identity for the new
 engine remain unverified. No GPU performance measurements were attempted.
 
