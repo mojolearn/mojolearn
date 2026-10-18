@@ -28,6 +28,9 @@ struct _Node(ImplicitlyCopyable, Movable):
     var start: Int
     var count: Int
     var saved: Args
+    # The gradient buffer holds a value: written by a backward (or zeroed for
+    # an unreached leaf), or caller storage from variable_into.
+    var grad_ready: Bool
 
 
 trait BackwardRules:
@@ -114,7 +117,8 @@ struct Tape(Movable):
 
     Use the same executor for every operation on a tape. It owns tensor
     storage and must outlive the tape. reset() invalidates tensor handles
-    and reuses storage for the next graph. Operations are out of place.
+    and reuses storage for the next graph; release() also returns that
+    storage to the executor. Operations are out of place.
 
     Example::
 
@@ -143,8 +147,24 @@ struct Tape(Movable):
         self._generation = 0
 
     def __deinit__(deinit self):
+        # The tape keeps no executor reference, so it cannot free executor
+        # storage here: call release(ex) when done. Anything not released is
+        # reclaimed when the executor ends (it must outlive the tape).
         if self._identity:
             self._identity.value().free()
+
+    def release[E: Exec](mut self, mut ex: E) raises:
+        """Return every buffer this tape allocated to the executor.
+
+        Invalidates all tensor handles, like reset(). Caller-owned storage
+        (variable, variable_into and the *_into outputs) is left alone. The
+        tape can record again afterwards; it allocates fresh storage.
+        """
+        for i in range(len(self._buffers)):  # driver-loop: over tape storage slots
+            ex.free(self._buffers[i])
+        self._buffers.clear()
+        self._capacities.clear()
+        self.reset()
 
     def reset(mut self):
         """Discard the recorded graph and reuse its executor storage."""
@@ -168,9 +188,12 @@ struct Tape(Movable):
             self._buffers.append(ex.alloc(n))
             self._capacities.append(n)
         elif self._capacities[slot] < n:
-            # The executor retains old allocations until destruction. Doubling
-            # capacity bounds retained growth for gradually increasing shapes.
+            # A slot is reused only by a later graph (after reset) or by the
+            # next node's backward scratch, so nothing still names the old
+            # buffer: return it (a device keeps it until its queue drains).
+            # Doubling capacity bounds reallocations for growing shapes.
             var capacity = max(n, self._capacities[slot] * 2)
+            ex.free(self._buffers[slot])
             self._buffers[slot] = ex.alloc(capacity)
             self._capacities[slot] = capacity
         self._cursor += 1
@@ -188,6 +211,7 @@ struct Tape(Movable):
     def _record[E: Exec](
         mut self, mut ex: E, value: FP, rows: Int, cols: Int,
         op: Int, parents: List[Tensor], saved: Args, leaf_grad: Bool = False,
+        grad_storage: FP = dummy_ptr(), caller_grad: Bool = False,
     ) raises -> Tensor:
         self._shape(rows, cols)
         if not self._identity:
@@ -199,12 +223,18 @@ struct Tape(Movable):
             requires = requires or self._nodes[i].requires_grad
         for p in parents:
             self._parents.append(p._index)
+        # No fill here: backward writes each gradient's first contribution
+        # straight into it (see the invariant in _backward).
         var grad = dummy_ptr()
+        var ready = False
         if requires:
-            grad = self._alloc(ex, rows * cols)
-            _fill(ex, grad, rows * cols)
+            if caller_grad:
+                grad = grad_storage
+                ready = True
+            else:
+                grad = self._alloc(ex, rows * cols)
         var index = len(self._nodes)
-        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved))
+        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready))
         return Tensor(Int(self._identity.value()), self._generation, index)
 
     def variable[E: Exec](
@@ -212,6 +242,19 @@ struct Tape(Movable):
     ) raises -> Tensor:
         """Record borrowed executor memory as a leaf; keep it unchanged until backward finishes."""
         return self._record(ex, data, rows, cols, LEAF, List[Tensor](), Args(), requires_grad)
+
+    def variable_into[E: Exec](
+        mut self, mut ex: E, data: FP, grad_destination: FP, rows: Int, cols: Int,
+    ) raises -> Tensor:
+        """Record a differentiable leaf whose gradient lands in caller storage.
+
+        `grad_destination` holds rows * cols floats of this executor. A
+        backward writes the gradient there directly (accumulate=True adds to
+        what it holds). Keep `data` unchanged until backward finishes, and
+        do not let `grad_destination` overlap any tensor of the graph.
+        """
+        return self._record(ex, data, rows, cols, LEAF, List[Tensor](), Args(), True,
+                            grad_destination, True)
 
     def tensor[E: Exec](
         mut self, mut ex: E, values: List[Float32], rows: Int, cols: Int,
@@ -240,6 +283,8 @@ struct Tape(Movable):
         var n = self._nodes[self._check(x)]
         if not n.requires_grad:
             raise Error("tensor does not require a gradient")
+        if not n.grad_ready:
+            raise Error("tensor has no gradient: run backward from an output that depends on it")
         return n.grad
 
     def rows(self, x: Tensor) raises -> Int:
@@ -264,6 +309,22 @@ struct Tape(Movable):
         return result^
 
     def _binary[E: Exec](mut self, mut ex: E, x: Tensor, y: Tensor, op: Int) raises -> Tensor:
+        return self._binary_to(ex, x, y, op, dummy_ptr(), False)
+
+    def binary_into[E: Exec](mut self, mut ex: E, x: Tensor, y: Tensor, op: Int, output: FP) raises -> Tensor:
+        """add/subtract/multiply/divide (op ADD, SUBTRACT, MULTIPLY or DIVIDE
+        from autograd.ops) written to caller storage of the broadcast shape.
+
+        Values equal the matching method's. Keep `output` unchanged until
+        backward finishes; it must not overlap an input.
+        """
+        if op != ADD and op != SUBTRACT and op != MULTIPLY and op != DIVIDE:
+            raise Error("binary_into takes ADD, SUBTRACT, MULTIPLY or DIVIDE")
+        return self._binary_to(ex, x, y, op, output, True)
+
+    def _binary_to[E: Exec](
+        mut self, mut ex: E, x: Tensor, y: Tensor, op: Int, into: FP, use_into: Bool,
+    ) raises -> Tensor:
         var a = self._nodes[self._check(x)]
         var b = self._nodes[self._check(y)]
         if (a.rows != b.rows and a.rows != 1 and b.rows != 1) or (a.cols != b.cols and a.cols != 1 and b.cols != 1):
@@ -271,7 +332,7 @@ struct Tape(Movable):
         var rows = max(a.rows, b.rows)
         var cols = max(a.cols, b.cols)
         self._shape(rows, cols)
-        var output = self._alloc(ex, rows * cols)
+        var output = into if use_into else self._alloc(ex, rows * cols)
         var args = _element_args(output)
         args.i1 = op
         args.i2 = rows
@@ -300,8 +361,27 @@ struct Tape(Movable):
         return self._binary(ex, x, y, DIVIDE)
 
     def _unary[E: Exec](mut self, mut ex: E, x: Tensor, op: Int, scale: Float32 = 1) raises -> Tensor:
+        return self._unary_to(ex, x, op, scale, dummy_ptr(), False)
+
+    def unary_into[E: Exec](
+        mut self, mut ex: E, x: Tensor, op: Int, output: FP, scale: Float32 = 1,
+    ) raises -> Tensor:
+        """An elementwise or row operation written to caller storage.
+
+        op is RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE (factor `scale`),
+        SOFTMAX or LOG_SOFTMAX from autograd.ops. `output` holds x's
+        rows * cols floats; values equal the matching method's. Keep it
+        unchanged until backward finishes; it must not overlap x.
+        """
+        if (op < RELU or op > SCALE) and op != SOFTMAX and op != LOG_SOFTMAX:
+            raise Error("unary_into takes an elementwise or softmax operation")
+        return self._unary_to(ex, x, op, scale, output, True)
+
+    def _unary_to[E: Exec](
+        mut self, mut ex: E, x: Tensor, op: Int, scale: Float32, into: FP, use_into: Bool,
+    ) raises -> Tensor:
         var n = self._nodes[self._check(x)]
-        var output = self._alloc(ex, n.rows * n.cols)
+        var output = into if use_into else self._alloc(ex, n.rows * n.cols)
         var a = _element_args(output)
         a.i1 = op
         a.i2 = n.rows
