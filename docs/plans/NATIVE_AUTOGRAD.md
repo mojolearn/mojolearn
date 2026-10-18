@@ -136,35 +136,41 @@ Bits: the total sum, the broadcast-operand gradients and folds over more
 than 64 terms change bits against `4cea8ebd9` (a single chain before); the
 gradient oracles are tolerance checks and are unchanged.
 
-## GPU status: re-test pending after the opcode split
+## GPU status: Apple passes; NVIDIA and AMD compiled, execution pending
 
 Before the split, the combined operation compiled on Metal but returned
 zeros, and under `MTL_DEBUG_LAYER=1` aborted with "Read-only bytes are being
-bound at index 3 to a shader argument with write access enabled" (evidence
-under `/Users/andrewhendel/mojolearn-evidence/native-autograd-20261018/`:
-`gpu-metal-validation.log`, `gpu-probe-08-codegen.log`, `qualification/`).
-It differed from every other operation in three ways, all removed by the
-split: one body with a runtime mode x operation switch, a read-after-write
-on its output slot (softmax), and one buffer bound into up to nine slots.
+bound at index 3 to a shader argument with write access enabled". The
+orchestrator's bisect on 2026-10-18 (evidence under
+`/Users/andrewhendel/mojolearn-evidence/native-autograd-20261018/orch-metal-folds-01/`
+and `orch-metal-folds-02/`) separated two causes:
 
-`autograd/checks/gpu_arguments.mojo` now probes `OP_AG_BIN_FWD` with p0, p1
-and p2 bound and expects `[6, 8]`:
+1. **Ours.** A pointer select in a kernel body, `a.p0 if a.i10 == 1 else a.p1`,
+   compiles on Metal (Mojo 1.0.0 / MAX 26.5.0) to a pointer whose loads read
+   zeros, with no error; the same body is correct on the host. The library's
+   own OP_SUB through the same harness was correct, the autograd body returned
+   its left operand for add, subtract and x + x alike, and replacing the select
+   with a branch fixed all three (`control-run.log` vs `control-v2-run.log`).
+   Rule: never select or return an FP inside a kernel body; branch and load.
+2. **Not ours.** The validation assertion fires for every seq_kernel that
+   touches pointer slot p3 or beyond, including the library's own OP_LN_FWD
+   (`orch-metal-folds-02/ln-run.log`), and only under `MTL_DEBUG_LAYER=1`.
+   Results are correct without the layer. The repository's Apple tools run the
+   layer with `MTL_DEBUG_LAYER_ERROR_MODE=nslog` for this reason; do the same.
 
-```sh
-mojo build -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
-  -D MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC=1 \
-  autograd/checks/gpu_arguments.mojo -o /tmp/autograd-gpu-arguments
-MTL_DEBUG_LAYER=1 /tmp/autograd-gpu-arguments
-```
+Results on the M4 (Metal), lane/ag-metal-folds at 368c22a79:
 
-Define `MOJOLEARN_AUTOGRAD_PROBE_CPU=1` as well to run it on the host.
+- `autograd/checks/gpu_arguments.mojo`: `[6, 8]` on Metal under the debug layer.
+- `autograd/checks/gpu.mojo`: 97 of 97 cases pass; every case digest equals
+  the CPU digest (`orch-metal-folds-02/{cpu,gpu}-digests.txt`, 0 differing).
+- `autograd/checks/mlp_cpu.mojo`: 48 of 48 fits match the existing trainer.
 
-GPU result: pending (filled in by the orchestrator after the re-test).
+NVIDIA (sm_89) and AMD (gfx942) cross-compiles are recorded below as they
+land; execution on those vendors is queued through `lq`, and the autograd
+identity claim (same bits on Apple, NVIDIA and AMD) waits for it.
 
-Until the re-test passes on Apple, NVIDIA and AMD, DeviceExec refuses every
-code of the range; `MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC` is the only bypass.
-If the split does not clear the Metal failure, record the ask for Modular
-(AGENTS.md: wait for Modular support; no compiler workaround or fallback).
+DeviceExec still refuses the range without `MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC`
+until the NVIDIA and AMD runs pass; then the refusal is removed.
 
 ## Remaining integration
 
