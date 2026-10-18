@@ -37,42 +37,8 @@ Constraints that carry into any public surface:
   `autograd.rules_recurrent` imports `sequence.recurrent`, which imports no
   autograd module; the `RnnStep` seam lets `sequence/pyapi.mojo` pick the
   step, so `sequence.recurrent` never imports the rules.
-- Metal: the combined `OP_AUTOGRAD` launch is blocked (NATIVE_AUTOGRAD.md,
-  ask for Modular). The recurrent path issues no `OP_AUTOGRAD` launch (only
-  OP_FILL/OP_COPY plus the existing kernels, and no tensor has two
-  consumers, so no ACCUMULATE); the MLP path does (`tape.add`).
-
-## (b) Python surface
-
-Python describes a model; Mojo trains it. No per-op Python call happens
-inside a training step, and Python computes no number.
-
-1. `mojolearn.nn.Graph` (name provisional) builds a DESCRIPTION: an ordered
-   list of node specs, each `(kind, inputs, attrs)`. Kinds map 1:1 to tape
-   ops and adapters: `input`, `param(shape, init)`, `linear`, `rnn(cell,
-   hidden, layers)`, `layer_norm`, `embedding`, activations, reductions,
-   `loss(mse|cross_entropy)`. Python checks argument types and names only;
-   shape inference, shape errors and initial values come from Mojo.
-2. The description is encoded as two flat arrays (int32 codes/shapes,
-   float32 attrs) plus the data buffer addresses, and passed to ONE binding:
-   `graph_fit(addrs, ints, floats)`. In Mojo, the entry decodes the spec,
-   allocates parameters on the device, and runs the whole loop: epoch
-   order (`op_mlp_perm`), batch gather, `tape.reset()`, graph record,
-   loss + seed, `backward_with_rules`, optimizer (`opt_step`), stopping.
-   It returns trained parameters and per-step losses by address.
-3. `graph_grad(addrs, ints, floats)` returns loss and flat gradients for
-   one batch, for callers that keep their own optimizer loop. Its output is
-   exactly what `step(gradients)` in `python/mojolearn/_training_impl.py`
-   takes, so `step(gradients)` stays as the public optimizer contract; no
-   `.grad` attributes and no `loss.backward()` in Python.
-4. `graph_predict(addrs, ints, floats)` runs the recorded forward without a
-   tape (or with `requires_grad=False` leaves).
-5. Custom user ops are Mojo only: a user writes a `BackwardRules` struct and
-   builds their own binding. Python never supplies a VJP.
-
-Docstrings that say there is no autograd, to reword when (b) ships (not
-edited in this lane):
-
+- Metal, NVIDIA and AMD: the 97-case gradient suite gives the same digests
+  on all three and on the host (NATIVE_AUTOGRAD.md, "GPU status").
 - `python/mojolearn/_training_impl.py:80` and `:1379` (`step()` rationale).
 - `python/mojolearn/_mlp_impl.py:6` ("not autograd").
 - `python/mojolearn/embedding.py:11` ("There is no autograd here").

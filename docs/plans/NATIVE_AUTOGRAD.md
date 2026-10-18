@@ -199,12 +199,13 @@ Results on the M4 (Metal), lane/ag-metal-folds at 368c22a79:
   the CPU digest (`orch-metal-folds-02/{cpu,gpu}-digests.txt`, 0 differing).
 - `autograd/checks/mlp_cpu.mojo`: 48 of 48 fits match the existing trainer.
 
-NVIDIA (sm_89) and AMD (gfx942) cross-compiles are recorded below as they
-land; execution on those vendors is queued through `lq`, and the autograd
-identity claim (same bits on Apple, NVIDIA and AMD) waits for it.
-
-DeviceExec still refuses the range without `MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC`
-until the NVIDIA and AMD runs pass; then the refusal is removed.
+NVIDIA L40S (pod nvlive, sm_89, `MOJOLEARN_COLUMN_NVIDIA=1`) and AMD MI325X
+(DigitalOcean droplet, gfx942, `MOJOLEARN_COLUMN_AMD=1`), same commit: 97 of
+97 cases pass on each, and every case digest equals the CPU and Metal digest
+(`orch-nv-01/nv-digests.txt`, `orch-amd-01/amd-digests.txt`, 0 differing
+against `orch-metal-folds-02/cpu-digests.txt`). The autograd ops are identical
+on Apple, NVIDIA and AMD. The DeviceExec refusal and the diagnostic define are
+gone (merged tree e6e72cebc and after).
 
 ## Remaining integration
 

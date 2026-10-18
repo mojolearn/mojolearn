@@ -63,8 +63,6 @@ def main():
                    '-D', 'MOJOLEARN_NUMERIC_IDENTICAL=1', '-I', str(ROOT)]
         for define in defines:
             command += ['-D', define]
-        if name.startswith('gpu-'):
-            command += ['-D', 'MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC=1']
         command += [str(ROOT / source), '-o', str(binary)]
         stage(name + '-build', command)
         return stage(name + '-run', ['bash', str(ROOT / 'tools/with_build_lock.sh'), str(binary)])

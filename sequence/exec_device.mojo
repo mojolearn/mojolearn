@@ -661,15 +661,10 @@ struct DeviceExec(Exec):
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
             return
-        # New autograd path is not qualified on GPUs. The combined body was
-        # rejected by Metal validation (Mojo 1.0.0 / MAX 26.5.0); it is now
-        # split into one operation code per body (OP_AG_FIRST..OP_AG_LAST,
-        # autograd/ops.mojo) and awaits the GPU re-test. Every code of the
-        # range refuses; MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC is the only bypass.
-        # See docs/plans/NATIVE_AUTOGRAD.md. No backend fallback or compiler
-        # workaround is installed (AGENTS.md: wait for Modular support).
-        comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST and not is_defined["MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC"]():
-            raise Error("native autograd GPU execution is not qualified; see docs/plans/NATIVE_AUTOGRAD.md")
+        # The autograd family (OP_AG_FIRST..OP_AG_LAST, autograd/ops.mojo) runs
+        # here like every other code: qualified 2026-10-18 with the 97-case
+        # gradient suite giving the same digests on Metal, NVIDIA L40S and AMD
+        # MI325X (docs/plans/NATIVE_AUTOGRAD.md, "GPU status").
         comptime I32_MAX = 2147483647
         for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
             if v > I32_MAX or v < -I32_MAX - 1:
