@@ -49,8 +49,8 @@ Caller storage and storage lifetime (lane `ag-fusion`):
 The MLP tape path records each layer's output into the trainer's
 activation buffers and lands parameter gradients in the trainer's gradient
 vector, so the per-layer launch count drops from about 28 to 6 or 7 (the
-derivation is at the top of `mlp_backward_autograd`). With the defines
-above it is bit for bit the earlier tape path. The A/B define
+derivation is at the top of `mlp_backward_autograd`). With the A/B define off
+it is bit for bit the earlier tape path. The define
 `MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE` (default off) also folds the 1/B
 normalization into the seed, which removes the bias divides and moves bits.
 
