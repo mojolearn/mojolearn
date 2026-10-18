@@ -83,31 +83,72 @@ fails. It must not be reported as passing, skipped successfully, or covered
 by the CPU results. CPU/GPU and Apple/NVIDIA/AMD bitwise identity for the new
 engine remain unverified. No GPU performance measurements were attempted.
 
-## GPU blocker and ask for Modular
+## Operation codes
 
-The new combined operation compiles on Metal but the first addition returns
-zeros. Existing upload/copy/fill operations work. A diagnostic retaining only
-the forward half of the operation returns the expected addition. That
-diagnostic is evidence, not a shipped replacement kernel.
+Lane `ag-metal-folds` (2026-10-18) replaced the single combined body
+(`OP_AUTOGRAD`, a runtime mode x operation switch) with one operation code
+per body, as every other sequence operation is built. Codes are the
+contiguous range `OP_AG_FIRST..OP_AG_LAST` (1000..1010) in
+`autograd/ops.mojo`; `sequence/dispatch.mojo` asserts the range does not
+collide with the recurrent scan codes. Every body is `@always_inline`.
 
-With `MTL_DEBUG_LAYER=1`, the same compiled failing program aborts with:
+| Code | Name | Threads | Slots read | Slots written |
+|---|---|---|---|---|
+| 1000 | `OP_AG_BIN_FWD` | output elements | p0 x, p1 y | p2 z |
+| 1001 | `OP_AG_BIN_VJP` | output elements | p3 upstream; MULTIPLY p0, p1; DIVIDE p1, operand 1 also p2 z | p4 |
+| 1002 | `OP_AG_UNARY_FWD` | elements | p0 x | p1 y |
+| 1003 | `OP_AG_UNARY_VJP` | elements | p2 upstream; RELU/LOG p0 x; SIGMOID/TANH/EXP/SQRT p1 y | p3 |
+| 1004 | `OP_AG_TRANSPOSE` | elements | p0 | p1 |
+| 1005 | `OP_AG_REDUCE_PART` | blocks x outputs | p0 | p1 partials |
+| 1006 | `OP_AG_REDUCE_FOLD` | outputs | p0 partials | p1 |
+| 1007 | `OP_AG_REDUCE_VJP` | input elements | p0 upstream | p1 |
+| 1008 | `OP_AG_SOFTMAX_FWD` | rows | p0 x | p1 y |
+| 1009 | `OP_AG_SOFTMAX_VJP` | rows | p0 y, p1 upstream | p2 |
+| 1010 | `OP_AG_ACCUMULATE` | elements | p0, p1 | p1 (element-wise) |
 
-> Read-only bytes are being bound at index 3 to a shader argument with write access enabled
+The binary and unary kinds (add/subtract/multiply/divide, relu/sigmoid/...)
+stay a runtime integer inside their body. The tape binds only the slots a
+body reads or writes; every other slot keeps the `Args()` placeholder, as
+in the rest of the library. No launch binds one buffer to two slots: for
+`x * x` the right operand is read through p0 (`i10 = 1`) and p1 is left
+unbound. Softmax recomputes its exponentials instead of reading back its
+output slot. A reshape's VJP is its upstream gradient itself (no launch);
+transpose forward and VJP are the same body.
 
-Evidence:
+## Fold rule
 
-- `gpu-pointer-fix-02/gpu-gradients-run.log`: ordinary execution failure.
-- `gpu-metal-validation.log`: full Metal assertion and stack.
-- `gpu-probe-08-codegen.log`: generated LLVM/AIR dumped through the supported
-  `enqueue_function` diagnostic option. The helper takes the packed argument
-  struct; the generated kernel describes argument 3 as a writable device
-  buffer while the runtime supplies read-only bytes.
-- `autograd/checks/gpu_arguments.mojo`: small caller that bypasses the tape,
-  supplies live storage for every pointer slot, and expects `[6, 8]`. The
-  committed probe returns `[6, 8]` on CPU and reproduces the numerical failure
-  and Metal validation assertion on GPU (`qualification/` logs).
+Sums are blocked folds in a fixed order, the same on every executor
+(HostExec runs the same bodies). `ag_fold_block(extent)` is the smallest
+power of two R >= 64 with R * R >= extent (the `ln_fold_rows` rule): it
+depends on the folded extent alone, never on a vendor or a benchmark shape.
+`OP_AG_REDUCE_PART` adds each block's terms ascending from +0.0, one thread
+per (block, output); `OP_AG_REDUCE_FOLD` adds each output's block partials
+ascending from +0.0 and applies the mean factor, one thread per output. This
+covers the total sum/mean (axis -1, used by `mean`, `mse_loss` and
+`cross_entropy`), the column sum (axis 0, parallel over row blocks x
+columns) and the row sum (axis 1). A broadcast operand's gradient (a
+`(1, cols)`, `(rows, 1)` or scalar operand) is its elementwise VJP written
+at the output's shape into tape scratch, then that blocked row/column/total
+fold. An extent of at most 64 is one block. Partials come from the tape's
+storage (`_alloc`), reused after `reset()`.
 
-Reproduce from the worktree in its activated environment:
+Bits: the total sum, the broadcast-operand gradients and folds over more
+than 64 terms change bits against `4cea8ebd9` (a single chain before); the
+gradient oracles are tolerance checks and are unchanged.
+
+## GPU status: re-test pending after the opcode split
+
+Before the split, the combined operation compiled on Metal but returned
+zeros, and under `MTL_DEBUG_LAYER=1` aborted with "Read-only bytes are being
+bound at index 3 to a shader argument with write access enabled" (evidence
+under `/Users/andrewhendel/mojolearn-evidence/native-autograd-20261018/`:
+`gpu-metal-validation.log`, `gpu-probe-08-codegen.log`, `qualification/`).
+It differed from every other operation in three ways, all removed by the
+split: one body with a runtime mode x operation switch, a read-after-write
+on its output slot (softmax), and one buffer bound into up to nine slots.
+
+`autograd/checks/gpu_arguments.mojo` now probes `OP_AG_BIN_FWD` with p0, p1
+and p2 bound and expects `[6, 8]`:
 
 ```sh
 mojo build -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
@@ -116,29 +157,19 @@ mojo build -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
 MTL_DEBUG_LAYER=1 /tmp/autograd-gpu-arguments
 ```
 
-To run the same caller on CPU, also define
-`MOJOLEARN_AUTOGRAD_PROBE_CPU=1`. Without the GPU diagnostic define, the GPU
-caller produces the intended explicit refusal; this was separately checked.
+Define `MOJOLEARN_AUTOGRAD_PROBE_CPU=1` as well to run it on the host.
 
-The evidence points to a compiler/runtime argument-classification problem;
-Modular has not confirmed the diagnosis. Ask Modular to support this native
-argument path correctly and verify the reproducer on their supported compiler
-and runtime. No issue or message has been sent externally from this session.
+GPU result: pending (filled in by the orchestrator after the re-test).
 
-Normal GPU calls to this new operation refuse explicitly. The test-only
-`MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC` define enables the original failing path
-for reproduction; it does not fix or qualify it. Existing GPU operations and
-the default MLP trainer retain their routes.
-
-`AGENTS.md` says: "If Mojo or Modular does not support something yet, do not
-build a workaround for it; wait for their support." Accordingly, no compiler
-output is patched, no unsupported build mode is shipped, and no CPU/Python
-fallback or alternate GPU implementation hides this failure.
+Until the re-test passes on Apple, NVIDIA and AMD, DeviceExec refuses every
+code of the range; `MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC` is the only bypass.
+If the split does not clear the Metal failure, record the ask for Modular
+(AGENTS.md: wait for Modular support; no compiler workaround or fallback).
 
 ## Remaining integration
 
-Resolve the Modular blocker and run the independent gradient/graph checks on
-Apple, NVIDIA and AMD. Extend native custom-rule adapters to the existing
+Re-test the split operation codes and run the independent gradient/graph
+checks on Apple, NVIDIA and AMD. Extend native custom-rule adapters to the existing
 Transformer/Mamba/recurrent blocks, then migrate their model-level backward
 assembly. Qualify each changed trainer on its saved full-workload recipes
 before promoting a default. Decide broader tensor ranks and public packaging
