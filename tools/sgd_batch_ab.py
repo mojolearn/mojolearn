@@ -64,14 +64,26 @@ ESTIMATORS = tuple(FIXED_DEFAULT)
 ARMS = ("auto", "fixed")
 
 
-def arm_params(est, arm):
+#: arm B's rule (--b-arm): "cap" = the 0.8.46 fixed default; "old-auto" = the 0.8.51 'auto' rule (n // 32 rows a
+#: step, capped), passed explicitly, so the B arm's launch count is the old default's.
+B_ARM = "cap"
+OLD_AUTO_STEPS = 32
+
+
+def _b_batch(est, n_train):
+    cap = FIXED_DEFAULT[est]
+    return cap if B_ARM == "cap" else max(1, min(cap, n_train // OLD_AUTO_STEPS))
+
+
+def arm_params(est, arm, n_train=None):
     """The constructor kwargs of one arm: the common set plus batch_size."""
     if est not in COMMON_PARAMS:
         raise ValueError("unknown estimator %r" % (est,))
     if arm not in ARMS:
         raise ValueError("arm must be 'auto' or 'fixed', not %r" % (arm,))
     params = dict(COMMON_PARAMS[est])
-    params["batch_size"] = "auto" if arm == "auto" else FIXED_DEFAULT[est]
+    params["batch_size"] = "auto" if arm == "auto" else (
+        FIXED_DEFAULT[est] if n_train is None else _b_batch(est, n_train))
     return params
 
 
@@ -79,7 +91,7 @@ def resolved_batch(est, arm, n_train):
     """The minibatch the binding uses (x_linear/sgd.mojo sgd_batch), for the record only."""
     cap = FIXED_DEFAULT[est]
     if arm == "fixed":
-        return cap
+        return _b_batch(est, n_train)
     return max(1, min(cap, n_train // AUTO_STEPS))
 
 
@@ -117,7 +129,11 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--estimators", default=",".join(ESTIMATORS))
     ap.add_argument("--sizes", default=",".join(str(s) for s in SIZES))
+    ap.add_argument("--b-arm", choices=("cap", "old-auto"), default="cap",
+                    help="arm B: the 0.8.46 fixed default (cap) or the 0.8.51 'auto' rule n // 32 (old-auto)")
     args = ap.parse_args(argv)
+    global B_ARM
+    B_ARM = args.b_arm
     if os.environ.get("MOJOLEARN_VENDOR", "").lower() == "cpu":
         raise SystemExit("sgd_batch_ab: MOJOLEARN_VENDOR=cpu is never timed; unset it")
 
@@ -149,7 +165,7 @@ def main(argv=None):
                 xtr, ytr, xte, yte = data[(task, rows)]
                 cell = {}
                 for arm in ARMS:
-                    params = arm_params(est, arm)
+                    params = arm_params(est, arm, int(xtr.shape[0]))
                     row = dict(vendor=args.vendor, vendor_used=vendor_used, estimator=est, rows=rows,
                                train_rows=int(xtr.shape[0]), features=FEATURES, seed=SEED, arm=arm,
                                batch_size_param=params["batch_size"],
