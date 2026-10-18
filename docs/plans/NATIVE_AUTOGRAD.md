@@ -64,17 +64,19 @@ into `sequence/layernorm_core.mojo`; existing bindings and the resident entry
 continue importing the same implementations. Autograd does not import the
 Python binding module to reach those routines.
 
-`sequence/mlp_fit.mojo` has a complete graph-based training path under
-`-D MOJOLEARN_AUTOGRAD_MLP=1`. It records the forward composition, seeds the
+`sequence/mlp_fit.mojo` trains through the tape by default (promoted
+2026-10-18 on the A/B below; `-D MOJOLEARN_AUTOGRAD_MLP_OFF=1` restores the
+hand-assembled backward). It records the forward composition, seeds the
 existing combined loss/link derivative at the logits, and obtains parameter
 gradients from the tape. The existing normalization, L2 penalty, optimizer,
 shuffle, batching and stopping conventions remain intact. In particular, the
 estimator's reported squared-loss normalization and its parameter-gradient
 normalization retain their existing distinct conventions.
 
-The new MLP path remains opt-in: full-dataset vendor performance evidence has
-not been collected, so no new default is promoted. Transformer, Mamba,
-recurrent and language-model trainers have not yet migrated to the tape.
+The MLP A/B (`~/mojolearn-evidence/native-autograd-20261018/AB_MLP_RESULTS_2026-10-18.md`,
+HIGGS 1M x 28, one run per arm): NVIDIA L40S 0.334 -> 0.388 s, AMD MI325X
+1.107 -> 0.602 s, average 0.85x; quality equal or better on 200k held-out
+rows; each arm's digest the same on NVIDIA and AMD. Transformer, Mamba,
 
 ## Validation
 

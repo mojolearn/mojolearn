@@ -55,10 +55,16 @@ from autograd.ops import SIGMOID as AG_SIGMOID
 from autograd.ops import SOFTMAX as AG_SOFTMAX
 from autograd.ops import TANH as AG_TANH
 
-# Structural migration, opt-in until the full-workload vendor measurements
-# required by AGENTS.md qualify the new launch schedule. Existing kernels,
-# loss scaling, shuffling, stopping and optimizer semantics are retained.
-comptime AUTOGRAD_MLP = is_defined["MOJOLEARN_AUTOGRAD_MLP"]()
+# The tape-assembled backward is the default (promoted 2026-10-18). A/B
+# fad4bec3e, tools/sequence_speed.py case_mlp, HIGGS 1M x 28, (256,) b512
+# 1 epoch adam, identical, one run per arm: NVIDIA L40S 0.334 -> 0.388 s
+# (1.16x, slower), AMD MI325X 1.107 -> 0.602 s (0.54x); average of the two
+# vendors 0.85x (the switch rule; vendor split flagged). Quality on 200k
+# held-out rows: acc 0.68186 -> 0.68230, logloss 0.59475 -> 0.59462, AUC
+# 0.74755 -> 0.74781. Same digest on NVIDIA and AMD for each arm
+# (~/mojolearn-evidence/native-autograd-20261018/AB_MLP_RESULTS_2026-10-18.md).
+# -D MOJOLEARN_AUTOGRAD_MLP_OFF restores the hand-assembled backward (arm A).
+comptime AUTOGRAD_MLP = not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"]()
 # A/B (lane ag-fusion, default off): fold the 1/B of the parameter gradients
 # into the backward seed (one in-place divide of the B x O seed) so each bias
 # needs no divide and each weight one L2GRAD with alpha/B and n = 1. Saves

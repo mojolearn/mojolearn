@@ -94,8 +94,8 @@ def main():
                 gradient_logs[backend] = path
             if args.only in ('all', 'mlp'):
                 source = f'autograd/checks/mlp_{backend}.mojo'
-                baseline = native(f'{backend}-mlp-existing', source)
-                candidate = native(f'{backend}-mlp-autograd', source, ['MOJOLEARN_AUTOGRAD_MLP=1'])
+                baseline = native(f'{backend}-mlp-existing', source, ['MOJOLEARN_AUTOGRAD_MLP_OFF=1'])
+                candidate = native(f'{backend}-mlp-autograd', source)
                 a, ea = mlp_values(baseline)
                 b, eb = mlp_values(candidate)
                 if a.keys() != b.keys() or ea != eb:
