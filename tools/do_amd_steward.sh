@@ -321,6 +321,12 @@ status)
     ;;
 down)
     load_state; load_token
+    # logs and results go home and to R2 before the delete; a reachable droplet that fails to archive is not deleted
+    # (MOJOLEARN_DOWN_NO_ARCHIVE=1 skips, for a droplet whose results are already home)
+    if [ "${MOJOLEARN_DOWN_NO_ARCHIVE:-0}" != 1 ]; then
+        _arc=0; bash "$ROOT/tools/box_archive.sh" "do-amd-$DROPLET_ID" "root@$IP" || _arc=$?
+        [ "$_arc" = 0 ] || [ "$_arc" = 3 ] || die "droplet $DROPLET_ID: archive failed (box_archive.sh rc=$_arc); not deleting. MOJOLEARN_DOWN_NO_ARCHIVE=1 overrides"
+    fi
     for i in 1 2 3 4; do
         do_call DELETE "droplets/$DROPLET_ID"; say "DELETE $DROPLET_ID -> HTTP $DO_CODE"
         case "$DO_CODE" in 2*|404) break ;; esac; sleep 10

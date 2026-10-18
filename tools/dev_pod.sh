@@ -666,6 +666,13 @@ down)
         mv "$D" "$D.down-$(date -u +%Y%m%dT%H%M%SZ)"
         say "$KEY: slot $SLOT freed (its tree $BOX_DIR stays on the host; the host stays up)"; exit 0
     fi
+    # logs and results go home and to R2 before the delete; a reachable box that fails to archive is not deleted
+    # (MOJOLEARN_DOWN_NO_ARCHIVE=1 skips, for a box whose results are already home)
+    if [ "${MOJOLEARN_DOWN_NO_ARCHIVE:-0}" != 1 ]; then
+        # shellcheck disable=SC2086
+        _arc=0; bash "$ROOT/tools/box_archive.sh" "$KEY" $SSH_TARGET || _arc=$?
+        [ "$_arc" = 0 ] || [ "$_arc" = 3 ] || die "$KEY: archive failed (box_archive.sh rc=$_arc); not deleting. MOJOLEARN_DOWN_NO_ARCHIVE=1 overrides"
+    fi
     if [ "$PROVIDER" = hotaisle ]; then
         ha_load_key || die "no Hot Aisle key ($HA_KEYFILE)"
         HA_RECORD="$D/hotaisle.record"; HA_CREATE_ATTEMPTED=1; HA_GONE=0
