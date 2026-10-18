@@ -1,2 +1,0 @@
-transformer: one thread 412.8 ms, policy 90.9 ms, ratio 4.54x, 786432 floats, sha256 one ac99eab06d1db1d2 policy ac99eab06d1db1d2
-HOST_THREADS_AB PASS transformer

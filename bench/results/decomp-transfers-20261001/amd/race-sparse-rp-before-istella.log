@@ -1,6 +1,0 @@
-BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"eps": 0.1, "n_components": 10, "seed": 7}, "source": "get_params"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/sparse-rp", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
-ALGOS-ROUND lane=sparse-rp dataset=istella arm=ours round=0 ms=447.271 infer_ms=27.30467299988959 digest=d01cdcaa5dd4ef1c
-ALGOS-ROUND lane=sparse-rp dataset=istella arm=ours round=1 ms=219.148 infer_ms=25.117056007729843 digest=d01cdcaa5dd4ef1c
-ALGOS-ROUND lane=sparse-rp dataset=istella arm=ours round=2 ms=205.190 infer_ms=24.74236799753271 digest=d01cdcaa5dd4ef1c
-ALGOS-ROUND lane=sparse-rp dataset=istella arm=ours round=3 ms=205.888 infer_ms=24.809027003357187 digest=d01cdcaa5dd4ef1c
-ALGOS lane=sparse-rp dataset=istella arm=ours status=ok median_ms=205.88849300111178 quality={"mean_abs_distortion": 1.883381293298582}

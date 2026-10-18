@@ -1,5 +1,0 @@
-use  /Users/andrewhendel/mojolearn-wt/verify-applicability/bench/results/identity_break/2026-09-28_admitted-layernorm/do-amd/sequence-layernorm.cpudefault.json: class cpu, commit 64f7d9413, 72 of 81 cell parts; absent rlpair x9 (not run)
-use  /Users/andrewhendel/mojolearn-wt/verify-applicability/bench/results/identity_break/2026-09-28_admitted-layernorm/do-amd/sequence-layernorm.gpu.json: class amd, commit 64f7d9413, 72 of 81 cell parts; absent rlpair x9 (not run)
-use  /Users/andrewhendel/mojolearn-wt/verify-applicability/bench/results/identity_break/2026-09-28_admitted-layernorm/m4-a/sequence-layernorm.cpudefault.json: class cpu, commit 64f7d9413, 72 of 81 cell parts; absent rlpair x9 (not run)
-use  /Users/andrewhendel/mojolearn-wt/verify-applicability/bench/results/identity_break/2026-09-28_admitted-layernorm/m4-a/sequence-layernorm.gpu.json: class apple, commit 64f7d9413, 72 of 81 cell parts; absent rlpair x9 (not run)
-absent rlpair: 36 cell parts over 4 admitted columns (not run x36)
