@@ -3,6 +3,7 @@
 Engineering record, 2026-10-18. This is not a public support announcement.
 Branch: `feature/native-autograd-20261018`, based on `95c41f70b` (0.8.52).
 Worktree: `/Users/andrewhendel/CascadeProjects/mojolearn-autograd`.
+Implementation commit: `4cea8ebd9`.
 
 ## Implemented scope
 
@@ -48,6 +49,7 @@ Complete logs and summaries are retained under
 `/Users/andrewhendel/mojolearn-evidence/native-autograd-20261018/`.
 
 CPU evidence: `cpu-final-02/summary.json` (all stages exit 0).
+Reproducer and target-compilation evidence: `qualification/summary.json`.
 
 - 35 independent float64 central-difference cases, 267 gradient entries;
   forward values also checked. Fixture generator and method manifest are in
@@ -61,7 +63,13 @@ CPU evidence: `cpu-final-02/summary.json` (all stages exit 0).
   This is a numerical regression comparison, not proof of bitwise model
   identity or a performance benchmark.
 - A user-defined regression model trained by the tape reaches the example's
-  loss-reduction acceptance criterion. Its data and updates stay native.
+  loss-reduction acceptance criterion (loss 3.6120834 to 1.3218582e-10).
+  Its data and updates stay native.
+
+The full gradient/lifecycle executable also cross-compiles for NVIDIA sm_89
+and AMD gfx942, with the corresponding vendor defines and the diagnostic GPU
+define. Both builds exit 0. Those binaries have not been executed on either
+vendor; compilation does not establish gradient correctness or identity.
 
 Commands in an activated repository environment:
 
@@ -95,7 +103,22 @@ Evidence:
   struct; the generated kernel describes argument 3 as a writable device
   buffer while the runtime supplies read-only bytes.
 - `autograd/checks/gpu_arguments.mojo`: small caller that bypasses the tape,
-  supplies live storage for every pointer slot, and expects `[6, 8]`.
+  supplies live storage for every pointer slot, and expects `[6, 8]`. The
+  committed probe returns `[6, 8]` on CPU and reproduces the numerical failure
+  and Metal validation assertion on GPU (`qualification/` logs).
+
+Reproduce from the worktree in its activated environment:
+
+```sh
+mojo build -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
+  -D MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC=1 \
+  autograd/checks/gpu_arguments.mojo -o /tmp/autograd-gpu-arguments
+MTL_DEBUG_LAYER=1 /tmp/autograd-gpu-arguments
+```
+
+To run the same caller on CPU, also define
+`MOJOLEARN_AUTOGRAD_PROBE_CPU=1`. Without the GPU diagnostic define, the GPU
+caller produces the intended explicit refusal; this was separately checked.
 
 The evidence points to a compiler/runtime argument-classification problem;
 Modular has not confirmed the diagnosis. Ask Modular to support this native
