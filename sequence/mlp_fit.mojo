@@ -49,11 +49,23 @@ from sequence.recurrent import bias_rows, colsum, gather_rows, gemm
 from checks.numerics import ftz, identical_div, identical_mul, identical_pow64, identical_sqrt
 from std.sys.compile import is_defined
 from autograd.tape import Tape, Tensor
+from autograd.ops import ADD as AG_ADD
+from autograd.ops import RELU as AG_RELU
+from autograd.ops import SIGMOID as AG_SIGMOID
+from autograd.ops import SOFTMAX as AG_SOFTMAX
+from autograd.ops import TANH as AG_TANH
 
 # Structural migration, opt-in until the full-workload vendor measurements
 # required by AGENTS.md qualify the new launch schedule. Existing kernels,
 # loss scaling, shuffling, stopping and optimizer semantics are retained.
 comptime AUTOGRAD_MLP = is_defined["MOJOLEARN_AUTOGRAD_MLP"]()
+# A/B (lane ag-fusion, default off): fold the 1/B of the parameter gradients
+# into the backward seed (one in-place divide of the B x O seed) so each bias
+# needs no divide and each weight one L2GRAD with alpha/B and n = 1. Saves
+# L - 1 launches a batch. MOVES BITS against the default trainer (rounding
+# before rather than after the batch sum); every vendor and the host column
+# move together. Off: the gradients are bit for bit the default trainer's.
+comptime AUTOGRAD_MLP_SEED_SCALE = is_defined["MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE"]()
 
 comptime SOLVER_ADAM = 0
 comptime SOLVER_SGD = 1
@@ -142,75 +154,96 @@ def mlp_forward[E: Exec](mut ex: E, net: MLPNet, P: FP, acts: List[FP], B: Int) 
             _act_launch(ex, acts[i + 1], B, fo, act)
 
 
-def _mlp_autograd_activation[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, act: Int) raises -> Tensor:
+def _mlp_autograd_unary(act: Int) -> Int:
+    """The tape opcode of an MLP activation code, 0 for identity."""
     if act == 1:
-        return tape.sigmoid(ex, x)
+        return AG_SIGMOID
     if act == 2:
-        return tape.tanh(ex, x)
+        return AG_TANH
     if act == 3:
-        return tape.relu(ex, x)
+        return AG_RELU
     if act == ACT_SOFTMAX:
-        return tape.softmax(ex, x)
-    return x
+        return AG_SOFTMAX
+    return 0
 
 
 def mlp_forward_autograd[E: Exec](
-    mut tape: Tape, mut ex: E, net: MLPNet, P: FP, acts: List[FP], B: Int,
-) raises -> Tuple[Tensor, List[Tensor], List[Tensor]]:
+    mut tape: Tape, mut ex: E, net: MLPNet, P: FP, Gr: FP, acts: List[FP], B: Int,
+) raises -> Tensor:
     # The graph is recorded from the forward computation. No reverse-layer
     # loop or manually connected activation gradients remains in this path.
+    # Each layer's output is recorded straight into acts[i + 1] (no copy) and
+    # each parameter's gradient lands in its slot of Gr (no export copy).
     tape.reset()
     var h = tape.variable(ex, acts[0], B, net.sizes[0], False)
     var logits = h
-    var weights = List[Tensor]()
-    var biases = List[Tensor]()
-    for i in range(net.n_layers()):
-        var w = tape.variable(ex, P + net.w_off(i), net.sizes[i], net.sizes[i + 1])
-        var bias = tape.variable(ex, P + net.b_off(i), 1, net.sizes[i + 1])
-        weights.append(w)
-        biases.append(bias)
+    for i in range(net.n_layers()):  # driver-loop: over layers
+        var w = tape.variable_into(ex, P + net.w_off(i), Gr + net.w_off(i), net.sizes[i], net.sizes[i + 1])
+        var bias = tape.variable_into(ex, P + net.b_off(i), Gr + net.b_off(i), 1, net.sizes[i + 1])
         var product = tape.matmul(ex, h, w)
-        logits = tape.add(ex, product, bias)
         var act = net.out_act if i == net.n_layers() - 1 else net.act
-        h = _mlp_autograd_activation(tape, ex, logits, act)
-        var copy = Args()
-        copy.p0 = tape.value(h)
-        copy.p1 = acts[i + 1]
-        ex.launch[OP_COPY](copy, B * net.sizes[i + 1])
-    return (logits, weights^, biases^)
+        var op = _mlp_autograd_unary(act)
+        if op == 0:
+            logits = tape.binary_into(ex, product, bias, AG_ADD, acts[i + 1])
+            h = logits
+        else:
+            logits = tape.add(ex, product, bias)
+            h = tape.unary_into(ex, logits, op, acts[i + 1])
+    return logits
 
 
 def mlp_backward_autograd[E: Exec](
-    mut tape: Tape, mut ex: E, net: MLPNet, logits: Tensor,
-    weights: List[Tensor], biases: List[Tensor], delta: FP, P: FP, Gr: FP,
+    mut tape: Tape, mut ex: E, net: MLPNet, logits: Tensor, delta: FP, P: FP, Gr: FP,
     B: Int, alpha: Float32,
 ) raises:
+    # LAUNCHES PER LAYER, read from the code (lane ag-fusion). Before: the
+    # forward recorded matmul, add and activation (3) plus 5 record-time
+    # gradient fills (W, b, product, logits, activation) plus the copy into
+    # acts = 9; the backward refilled the same 5 gradients, ran each VJP into
+    # scratch and copied it into the parent (activation 2, add 2 + 2, matmul
+    # 2 + 2, the first layer's matmul 2), then exported with copy + L2GRAD +
+    # copy + DIVS (4): 19 for a hidden layer above the first, 17 for the
+    # first and last. About 28 a layer; the default trainer runs 4 (1 + 3).
+    # After: forward 3 (2 for an identity layer), no fills, no copy; backward
+    # activation VJP 1, add VJPs 2, matmul GEMMs 2 (1 for the first layer),
+    # all straight into the parents' gradients and Gr, plus L2GRAD + DIVS 2
+    # (L2GRAD only with AUTOGRAD_MLP_SEED_SCALE): 7 above the first layer,
+    # 6 for the first and last. Per batch on top: the seed copy into the root
+    # gradient (1), and with AUTOGRAD_MLP_SEED_SCALE its divide (1).
+    #
     # Existing row-loss produces the combined loss/link derivative p-y with
     # respect to LOGITS, not probabilities. Seed that precise graph boundary.
-    var seed = tape.variable(ex, delta, B, net.sizes[net.n_layers()], False)
+    var O = net.sizes[net.n_layers()]
+    comptime if AUTOGRAD_MLP_SEED_SCALE:
+        # delta is read only as this seed, and the next batch's row loss
+        # rewrites it, so it is scaled in place.
+        var sd = Args()
+        sd.p0 = delta
+        sd.f0 = Float32(B)
+        ex.launch[OP_DIVS](sd, B * O)
+    var seed = tape.variable(ex, delta, B, O, False)
     tape.backward_from(ex, logits, seed)
     # Preserve sklearn's parameter-gradient convention: add alpha*W then
     # divide by batch size. Output-width normalization of reported squared
-    # loss is intentionally separate, as in the existing estimator.
-    for i in range(net.n_layers()):
+    # loss is intentionally separate, as in the existing estimator. The
+    # gradients are already in Gr (variable_into); each is finished in place.
+    for i in range(net.n_layers()):  # driver-loop: over layers
         var count = net.sizes[i] * net.sizes[i + 1]
-        var copy = Args()
-        copy.p0 = tape.gradient(weights[i])
-        copy.p1 = Gr + net.w_off(i)
-        ex.launch[OP_COPY](copy, count)
         var reg = Args()
         reg.p0 = Gr + net.w_off(i)
         reg.p1 = P + net.w_off(i)
-        reg.f0 = alpha
-        reg.f1 = Float32(B)
+        comptime if AUTOGRAD_MLP_SEED_SCALE:
+            reg.f0 = ftz(identical_div(alpha, Float32(B)))
+            reg.f1 = Float32(1.0)
+        else:
+            reg.f0 = alpha
+            reg.f1 = Float32(B)
         ex.launch[OP_L2GRAD](reg, count)
-        copy.p0 = tape.gradient(biases[i])
-        copy.p1 = Gr + net.b_off(i)
-        ex.launch[OP_COPY](copy, net.sizes[i + 1])
-        var scale = Args()
-        scale.p0 = Gr + net.b_off(i)
-        scale.f0 = Float32(B)
-        ex.launch[OP_DIVS](scale, net.sizes[i + 1])
+        comptime if not AUTOGRAD_MLP_SEED_SCALE:
+            var scale = Args()
+            scale.p0 = Gr + net.b_off(i)
+            scale.f0 = Float32(B)
+            ex.launch[OP_DIVS](scale, net.sizes[i + 1])
 
 
 def _l2_blocked[E: Exec](mut ex: E, net: MLPNet, P: FP, l2: FP, parts: FP) raises:
@@ -308,8 +341,6 @@ def mlp_fit[E: Exec](
     var deltas = List[FP]()
     var tape = Tape()
     var tape_logits = Tensor(0, 0, -1)
-    var tape_weights = List[Tensor]()
-    var tape_biases = List[Tensor]()
     for i in range(L + 1):
         acts.append(ex.alloc(bs * net.sizes[i]))
         deltas.append(ex.alloc(bs * net.sizes[i]))
@@ -374,10 +405,7 @@ def mlp_fit[E: Exec](
             gx.i3 = O
             ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
             comptime if AUTOGRAD_MLP:
-                var graph = mlp_forward_autograd(tape, ex, net, P, acts, B)
-                tape_logits = graph[0]
-                tape_weights = graph[1].copy()
-                tape_biases = graph[2].copy()
+                tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B)
             else:
                 mlp_forward(ex, net, P, acts, B)
             var a = Args()
@@ -443,8 +471,7 @@ def mlp_fit[E: Exec](
                 bl.i5 = nrb
             ex.launch[OP_MLP_BLOSS](bl, 1)
             comptime if AUTOGRAD_MLP:
-                mlp_backward_autograd(tape, ex, net, tape_logits, tape_weights, tape_biases,
-                                      deltas[L], P, Gr, B, alpha)
+                mlp_backward_autograd(tape, ex, net, tape_logits, deltas[L], P, Gr, B, alpha)
             else:
                 var i = L - 1
                 while i >= 0:
@@ -526,6 +553,9 @@ def mlp_fit[E: Exec](
                 no_imp = 0
             else:
                 break
+    comptime if AUTOGRAD_MLP:
+        # lane ag-fusion: return the tape's storage now, not at the end of ex
+        tape.release(ex)
     ex.sync()
     ex.download(Pio, P, np_)
     _ = perm^
