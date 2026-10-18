@@ -47,6 +47,13 @@ from sequence.ops import (
 )
 from sequence.recurrent import bias_rows, colsum, gather_rows, gemm
 from checks.numerics import ftz, identical_div, identical_mul, identical_pow64, identical_sqrt
+from std.sys.compile import is_defined
+from autograd.tape import Tape, Tensor
+
+# Structural migration, opt-in until the full-workload vendor measurements
+# required by AGENTS.md qualify the new launch schedule. Existing kernels,
+# loss scaling, shuffling, stopping and optimizer semantics are retained.
+comptime AUTOGRAD_MLP = is_defined["MOJOLEARN_AUTOGRAD_MLP"]()
 
 comptime SOLVER_ADAM = 0
 comptime SOLVER_SGD = 1
@@ -133,6 +140,77 @@ def mlp_forward[E: Exec](mut ex: E, net: MLPNet, P: FP, acts: List[FP], B: Int) 
                  EPI_BIAS_ACT, P + net.b_off(i), 0 if act == ACT_SOFTMAX else act, Float32(0.0), Float32(0.0))
         if act == ACT_SOFTMAX:
             _act_launch(ex, acts[i + 1], B, fo, act)
+
+
+def _mlp_autograd_activation[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, act: Int) raises -> Tensor:
+    if act == 1:
+        return tape.sigmoid(ex, x)
+    if act == 2:
+        return tape.tanh(ex, x)
+    if act == 3:
+        return tape.relu(ex, x)
+    if act == ACT_SOFTMAX:
+        return tape.softmax(ex, x)
+    return x
+
+
+def mlp_forward_autograd[E: Exec](
+    mut tape: Tape, mut ex: E, net: MLPNet, P: FP, acts: List[FP], B: Int,
+) raises -> Tuple[Tensor, List[Tensor], List[Tensor]]:
+    # The graph is recorded from the forward computation. No reverse-layer
+    # loop or manually connected activation gradients remains in this path.
+    tape.reset()
+    var h = tape.variable(ex, acts[0], B, net.sizes[0], False)
+    var logits = h
+    var weights = List[Tensor]()
+    var biases = List[Tensor]()
+    for i in range(net.n_layers()):
+        var w = tape.variable(ex, P + net.w_off(i), net.sizes[i], net.sizes[i + 1])
+        var bias = tape.variable(ex, P + net.b_off(i), 1, net.sizes[i + 1])
+        weights.append(w)
+        biases.append(bias)
+        var product = tape.matmul(ex, h, w)
+        logits = tape.add(ex, product, bias)
+        var act = net.out_act if i == net.n_layers() - 1 else net.act
+        h = _mlp_autograd_activation(tape, ex, logits, act)
+        var copy = Args()
+        copy.p0 = tape.value(h)
+        copy.p1 = acts[i + 1]
+        ex.launch[OP_COPY](copy, B * net.sizes[i + 1])
+    return (logits, weights^, biases^)
+
+
+def mlp_backward_autograd[E: Exec](
+    mut tape: Tape, mut ex: E, net: MLPNet, logits: Tensor,
+    weights: List[Tensor], biases: List[Tensor], delta: FP, P: FP, Gr: FP,
+    B: Int, alpha: Float32,
+) raises:
+    # Existing row-loss produces the combined loss/link derivative p-y with
+    # respect to LOGITS, not probabilities. Seed that precise graph boundary.
+    var seed = tape.variable(ex, delta, B, net.sizes[net.n_layers()], False)
+    tape.backward_from(ex, logits, seed)
+    # Preserve sklearn's parameter-gradient convention: add alpha*W then
+    # divide by batch size. Output-width normalization of reported squared
+    # loss is intentionally separate, as in the existing estimator.
+    for i in range(net.n_layers()):
+        var count = net.sizes[i] * net.sizes[i + 1]
+        var copy = Args()
+        copy.p0 = tape.gradient(weights[i])
+        copy.p1 = Gr + net.w_off(i)
+        ex.launch[OP_COPY](copy, count)
+        var reg = Args()
+        reg.p0 = Gr + net.w_off(i)
+        reg.p1 = P + net.w_off(i)
+        reg.f0 = alpha
+        reg.f1 = Float32(B)
+        ex.launch[OP_L2GRAD](reg, count)
+        copy.p0 = tape.gradient(biases[i])
+        copy.p1 = Gr + net.b_off(i)
+        ex.launch[OP_COPY](copy, net.sizes[i + 1])
+        var scale = Args()
+        scale.p0 = Gr + net.b_off(i)
+        scale.f0 = Float32(B)
+        ex.launch[OP_DIVS](scale, net.sizes[i + 1])
 
 
 def _l2_blocked[E: Exec](mut ex: E, net: MLPNet, P: FP, l2: FP, parts: FP) raises:
@@ -228,6 +306,10 @@ def mlp_fit[E: Exec](
     var s3 = ex.alloc(np_)
     var acts = List[FP]()
     var deltas = List[FP]()
+    var tape = Tape()
+    var tape_logits = Tensor(0, 0, -1)
+    var tape_weights = List[Tensor]()
+    var tape_biases = List[Tensor]()
     for i in range(L + 1):
         acts.append(ex.alloc(bs * net.sizes[i]))
         deltas.append(ex.alloc(bs * net.sizes[i]))
@@ -291,7 +373,13 @@ def mlp_fit[E: Exec](
             gx.i2 = off
             gx.i3 = O
             ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
-            mlp_forward(ex, net, P, acts, B)
+            comptime if AUTOGRAD_MLP:
+                var graph = mlp_forward_autograd(tape, ex, net, P, acts, B)
+                tape_logits = graph[0]
+                tape_weights = graph[1].copy()
+                tape_biases = graph[2].copy()
+            else:
+                mlp_forward(ex, net, P, acts, B)
             var a = Args()
             a.p0 = acts[L]
             a.p1 = yb
@@ -354,24 +442,28 @@ def mlp_fit[E: Exec](
                 bl.p3 = rowparts
                 bl.i5 = nrb
             ex.launch[OP_MLP_BLOSS](bl, 1)
-            var i = L - 1
-            while i >= 0:
-                var fi = net.sizes[i]
-                var fo = net.sizes[i + 1]
-                # one launch each: GEMM + L2 term, column sum + mean, GEMM + act'
-                gemm_epi(ex, acts[i], deltas[i + 1], Gr + net.w_off(i), fi, fo, B, 1, fi, fo, 1,
-                         EPI_L2GRAD, P + net.w_off(i), 0, alpha, Float32(B))
-                var cs = Args()
-                cs.p0 = deltas[i + 1]
-                cs.p1 = Gr + net.b_off(i)
-                cs.i0 = B
-                cs.i2 = fo
-                cs.f0 = Float32(B)
-                ex.launch[OP_COLSUM_DIV](cs, fo)
-                if i > 0:
-                    gemm_epi(ex, deltas[i + 1], P + net.w_off(i), deltas[i], B, fi, fo, fo, 1, 1, fo,
-                             EPI_ACT_BWD, acts[i], net.act, Float32(0.0), Float32(0.0))
-                i -= 1
+            comptime if AUTOGRAD_MLP:
+                mlp_backward_autograd(tape, ex, net, tape_logits, tape_weights, tape_biases,
+                                      deltas[L], P, Gr, B, alpha)
+            else:
+                var i = L - 1
+                while i >= 0:
+                    var fi = net.sizes[i]
+                    var fo = net.sizes[i + 1]
+                    # one launch each: GEMM + L2 term, column sum + mean, GEMM + act'
+                    gemm_epi(ex, acts[i], deltas[i + 1], Gr + net.w_off(i), fi, fo, B, 1, fi, fo, 1,
+                             EPI_L2GRAD, P + net.w_off(i), 0, alpha, Float32(B))
+                    var cs = Args()
+                    cs.p0 = deltas[i + 1]
+                    cs.p1 = Gr + net.b_off(i)
+                    cs.i0 = B
+                    cs.i2 = fo
+                    cs.f0 = Float32(B)
+                    ex.launch[OP_COLSUM_DIV](cs, fo)
+                    if i > 0:
+                        gemm_epi(ex, deltas[i + 1], P + net.w_off(i), deltas[i], B, fi, fo, fo, 1, 1, fo,
+                                 EPI_ACT_BWD, acts[i], net.act, Float32(0.0), Float32(0.0))
+                    i -= 1
             var o = Args()
             o.p0 = P
             o.p1 = Gr

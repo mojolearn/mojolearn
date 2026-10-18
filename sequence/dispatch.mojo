@@ -129,11 +129,15 @@ from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, op_cell_
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 from sequence.vecar import op_var_resid, op_var_sigma
 from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas
+from autograd.ops import OP_AUTOGRAD, apply_autograd
 
 
 @always_inline
 def apply[OP: Int](t: Int, a: Args):
-    comptime if OP == OP_GEMM:
+    comptime assert OP_AUTOGRAD != OP_CELL_FWD_SCAN and OP_AUTOGRAD != OP_CELL_BWD_SCAN, "autograd opcode collides with recurrent scan"
+    comptime if OP == OP_AUTOGRAD:
+        apply_autograd(t, a)
+    elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
         op_gemm_splitk(t, a)

@@ -37,6 +37,7 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
+from autograd.ops import OP_AUTOGRAD
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
@@ -631,6 +632,14 @@ struct DeviceExec(Exec):
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
             return
+        # New autograd path is not qualified on GPUs. Metal validation on
+        # Mojo 1.0.0 / MAX 26.5.0 rejects its generated argument bindings;
+        # NVIDIA/AMD execution is pending. Keep the reproducer executable
+        # under a diagnostic define, without exposing silent wrong results.
+        # See docs/plans/NATIVE_AUTOGRAD.md. No backend fallback or compiler
+        # workaround is installed (AGENTS.md: wait for Modular support).
+        comptime if OP == OP_AUTOGRAD and not is_defined["MOJOLEARN_AUTOGRAD_GPU_DIAGNOSTIC"]():
+            raise Error("native autograd GPU execution is not qualified; see docs/plans/NATIVE_AUTOGRAD.md")
         comptime I32_MAX = 2147483647
         for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
             if v > I32_MAX or v < -I32_MAX - 1:
