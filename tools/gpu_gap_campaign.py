@@ -70,9 +70,12 @@ def command(args, race, directory):
     cmd = [args.python_env, str(ROOT / "tools/bench_board.py"),
            "--vendor", args.vendor, "--python-env", args.python_env, "--skip-install",
            "--cache", args.cache, "--rows", "full", "--rounds", "1", "--modes", "identical",
-           "--gpu-opponents-only", "--verify-data", "--no-smoke-gate",
+           "--verify-data", "--no-smoke-gate",
            "--round-seconds", str(getattr(args, "round_seconds", 0)),
            "--families", race["family"], "--lanes", race["lane"], "--out", str(directory)]
+    if not getattr(args, "cpu_fallback", False):
+        # --cpu-fallback races the board's own plan: CPU opponents where this vendor has no GPU library
+        cmd.insert(cmd.index("--verify-data"), "--gpu-opponents-only")
     if getattr(args, "wheel_manifest", None):
         # Ours is the PyPI release installed from the manifest's verified files; the board refuses
         # to time unless it loads from them and copies the manifest into every cell's measurement.
@@ -273,9 +276,11 @@ def smoke_command(args, race, directory, mode, receipts):
     cmd = [python, str(ROOT / "tools/bench_board.py"),
            "--vendor", args.vendor, "--python-env", python, "--skip-install",
            "--cache", args.cache, "--rows", "full", "--rounds", str(SMOKE_ROUNDS), "--modes", mode,
-           "--gpu-opponents-only", "--preflight-only", "--preflight-scorer", "--evidence-local-only",
+           "--preflight-only", "--preflight-scorer", "--evidence-local-only",
            "--families", race["family"], "--lanes", race["lane"], "--race-ids", race["id"],
            "--out", str(directory)]
+    if not getattr(args, "cpu_fallback", False):
+        cmd.insert(cmd.index("--preflight-only"), "--gpu-opponents-only")
     if race["dataset"] in B.DATASETS:
         cmd += ["--datasets", race["dataset"]]
     if getattr(args, "wheel_manifest", None):
