@@ -37,16 +37,24 @@ import smoke_inproc as SI
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def selected_plan(vendor, manifest, mode="identical", smoke=False):
+def selected_plan(vendor, manifest, mode="identical", smoke=False, cpu_fallback=False):
     """The manifest's recipes for `vendor` and `mode`. Apple is allowed for --smoke only (Andrew 2026-10-14:
     the M4 runs smoke and identity; Apple timing is the M3 Ultra's). In a smoke, a manifest without this
-    vendor's list selects the vendor's whole GPU-opponent plan."""
+    vendor's list selects the vendor's whole GPU-opponent plan.
+
+    cpu_fallback (2026-10-18, Andrew: "why aren't there more measurement runs for amd?"): the board's own plan
+    (bench_board.plan_races: GPU opponents first, the CPU library only where this vendor has no GPU library),
+    including recipes with no opponent at all (ours alone). The GPU-only plan drops 128 AMD recipes whose only
+    GPU opponent is CUDA-only (cuML, cuGraph, cuVS, implicit, CatBoost GPU, torch int8); our arm still races them."""
     if vendor not in ("nvidia", "amd") and not (smoke and vendor == "apple"):
         raise ValueError("this campaign times NVIDIA and AMD only; Apple runs --smoke only")
     if mode != "identical" and vendor != "apple":
         raise ValueError("fast is Apple only")
-    recipes = {r["id"]: r for r in B.gpu_opponents_only(B.plan_races(vendor, [mode]), vendor)
-               if r["opponents"]}
+    if cpu_fallback:
+        recipes = {r["id"]: r for r in B.plan_races(vendor, [mode])}
+    else:
+        recipes = {r["id"]: r for r in B.gpu_opponents_only(B.plan_races(vendor, [mode]), vendor)
+                   if r["opponents"]}
     if smoke and vendor not in (manifest or {}):
         return [recipes[rid] for rid in sorted(recipes)]
     wanted = manifest[vendor]
@@ -1008,6 +1016,9 @@ def main(argv=None):
                     help="PyPI wheel manifest from tools/pypi_wheel_install.py (bench_board.py setup writes "
                          "<out>/wheel-manifest.json); required to measure")
     ap.add_argument("--plan-only", action="store_true")
+    ap.add_argument("--cpu-fallback", action="store_true",
+                    help="the board's plan: CPU opponents where this vendor has no GPU library, and recipes with no "
+                         "opponent (ours alone); default is the GPU-opponent plan")
     ap.add_argument("--smoke", action="store_true",
                     help="does every recipe start: everything loaded once in one worker, box checks once, then "
                          "each recipe's preflight-only check in that worker under --smoke-timeout; writes "
@@ -1038,7 +1049,7 @@ def main(argv=None):
         manifest = json.loads(Path(args.manifest).read_text()) if args.manifest else {}
         # Apple: IDENTICAL, then FAST (Apple only) as a second pass
         modes = ("identical", "fast") if args.vendor == "apple" else ("identical",)
-        plans = {m: selected_plan(args.vendor, manifest, m, smoke=True) for m in modes}
+        plans = {m: selected_plan(args.vendor, manifest, m, smoke=True, cpu_fallback=args.cpu_fallback) for m in modes}
         os.environ["MOJOLEARN_REPO_COMMIT"] = B.repo_commit()
         suspects = None
         if args.smoke_suspects:
@@ -1053,7 +1064,7 @@ def main(argv=None):
         ap.error("round-seconds must be nonnegative and minimum-start-seconds positive")
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    plan = selected_plan(args.vendor, json.loads(Path(args.manifest).read_text()))
+    plan = selected_plan(args.vendor, json.loads(Path(args.manifest).read_text()), cpu_fallback=args.cpu_fallback)
     os.environ["MOJOLEARN_REPO_COMMIT"] = B.repo_commit()
     path = out / "campaign.json"
     if path.exists():
