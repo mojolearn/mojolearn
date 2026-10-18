@@ -435,14 +435,20 @@ def test_owed_rules_never_enter_the_baseline():
         raise AssertionError("a baseline row of an owed rule must be refused")
 
 
+# main carries no owed finding since lane gbdt-host-loops-12 (0.8.52), so the
+# owed tests run on main just before that merge (12 mojo-host-loop rows)
+OWED_REF = "5018be77d^1"
+
+
 def test_owed_findings_are_reported_not_refused():
+    ref = _git("rev-parse", OWED_REF)
     err = io.StringIO()
     with contextlib.redirect_stderr(err):
-        rc = nhr.check_tree("HEAD")
+        rc = nhr.check_tree(ref)
     out = err.getvalue()
     assert rc == 0, out[-2000:]
     assert "OWED (not baseline debt)" in out and "mojo-host-loop" in out, out[-2000:]
-    rows = nhr.owed_rows("HEAD").splitlines()
+    rows = nhr.owed_rows(ref).splitlines()
     assert rows[0] == "rule\tclass\tpath\tline\ttext" and len(rows) > 1
     # every owed rule HEAD still carries is reported (py-native-host has
     # none left on main since lane py-runtime, 2026-10-05)
@@ -451,17 +457,18 @@ def test_owed_findings_are_reported_not_refused():
 
 
 def test_fixing_an_owed_finding_leaves_no_stale_row():
-    rows = [r.split("\t") for r in nhr.owed_rows("HEAD").splitlines()[1:]]
-    # a py-native-host row when HEAD has one, else a mojo-host-loop row
+    ref = _git("rev-parse", OWED_REF)
+    rows = [r.split("\t") for r in nhr.owed_rows(ref).splitlines()[1:]]
+    # a py-native-host row when the ref has one, else a mojo-host-loop row
     py = [r for r in rows if r[0] == "py-native-host"] or [r for r in rows if r[0] == "mojo-host-loop"]
-    assert py, "HEAD carries no owed finding to remove"
+    assert py, f"{OWED_REF} carries no owed finding to remove"
     rule, path, no = py[0][0], py[0][2], int(py[0][3])
-    text = _git("show", f"HEAD:{path}").splitlines()[no - 1]
+    text = _git("show", f"{ref}:{path}").splitlines()[no - 1]
     # replace the call line by a pass at the same indent: the owed row goes away
-    lines = _git("show", f"HEAD:{path}").splitlines()
+    lines = _git("show", f"{ref}:{path}").splitlines()
     ind = text[:len(text) - len(text.lstrip())]
     lines[no - 1] = ind + "pass"
-    tip = scratch({path: ("=", "\n".join(lines) + "\n")})
+    tip = scratch({path: ("=", "\n".join(lines) + "\n")}, base=ref)
     rc, err = run_tree(tip)
     assert f"[{rule}]" not in err, err[-1500:]
 
