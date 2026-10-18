@@ -1,0 +1,181 @@
+{
+  "method": "NumPy float64 central differences, epsilon=1e-5*max(1,abs(x)); float32-representable inputs",
+  "numpy": "2.4.4",
+  "cases": [
+    {
+      "case": "add_row",
+      "input_elements": 9,
+      "output_elements": 6
+    },
+    {
+      "case": "add_column",
+      "input_elements": 8,
+      "output_elements": 6
+    },
+    {
+      "case": "add_scalar",
+      "input_elements": 7,
+      "output_elements": 6
+    },
+    {
+      "case": "subtract_row",
+      "input_elements": 9,
+      "output_elements": 6
+    },
+    {
+      "case": "subtract_column",
+      "input_elements": 8,
+      "output_elements": 6
+    },
+    {
+      "case": "subtract_scalar",
+      "input_elements": 7,
+      "output_elements": 6
+    },
+    {
+      "case": "multiply_row",
+      "input_elements": 9,
+      "output_elements": 6
+    },
+    {
+      "case": "multiply_column",
+      "input_elements": 8,
+      "output_elements": 6
+    },
+    {
+      "case": "multiply_scalar",
+      "input_elements": 7,
+      "output_elements": 6
+    },
+    {
+      "case": "divide_row",
+      "input_elements": 9,
+      "output_elements": 6
+    },
+    {
+      "case": "divide_column",
+      "input_elements": 8,
+      "output_elements": 6
+    },
+    {
+      "case": "divide_scalar",
+      "input_elements": 7,
+      "output_elements": 6
+    },
+    {
+      "case": "relu",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "sigmoid",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "tanh",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "exp",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "log",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "sqrt",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "scale",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "sum_axis_-1",
+      "input_elements": 6,
+      "output_elements": 1
+    },
+    {
+      "case": "sum_axis_0",
+      "input_elements": 6,
+      "output_elements": 3
+    },
+    {
+      "case": "sum_axis_1",
+      "input_elements": 6,
+      "output_elements": 2
+    },
+    {
+      "case": "mean_axis_-1",
+      "input_elements": 6,
+      "output_elements": 1
+    },
+    {
+      "case": "mean_axis_0",
+      "input_elements": 6,
+      "output_elements": 3
+    },
+    {
+      "case": "mean_axis_1",
+      "input_elements": 6,
+      "output_elements": 2
+    },
+    {
+      "case": "matmul",
+      "input_elements": 12,
+      "output_elements": 4
+    },
+    {
+      "case": "transpose",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "reshape",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "shared_matmul",
+      "input_elements": 6,
+      "output_elements": 4
+    },
+    {
+      "case": "softmax",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "log_softmax",
+      "input_elements": 6,
+      "output_elements": 6
+    },
+    {
+      "case": "mse",
+      "input_elements": 9,
+      "output_elements": 1
+    },
+    {
+      "case": "cross_entropy",
+      "input_elements": 12,
+      "output_elements": 1
+    },
+    {
+      "case": "layer_norm",
+      "input_elements": 12,
+      "output_elements": 6
+    },
+    {
+      "case": "composite_shared_residual",
+      "input_elements": 18,
+      "output_elements": 1
+    }
+  ]
+}

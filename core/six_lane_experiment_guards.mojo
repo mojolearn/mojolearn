@@ -48,6 +48,8 @@ def _check_configuration() -> Bool:
     # Deleted 2026-10-07 (lane serial-cleanup): forbidden serial shape; incumbent route is parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C20_ROW_CACHE"](), "removed: C20_ROW_CACHE was a host loop of 3 launches per working-set row (one 1x1); forbidden serial shape, incumbent square tile is parallel"
     comptime assert not is_defined["MOJOLEARN_C60_DIFF_REUSE"](), "removed: C60_DIFF_REUSE was dead code (select_d never reaches d == 2)"
+    # Deleted 2026-10-18 (feature/native-autograd-20261018): noise. Recoverable at 91ebd1cb4 (never on main).
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE"](), "removed: MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE (1/B folded into the MLP backward seed) was noise: NV 0.388 -> 0.387 s, AMD 0.602 -> 0.599 s on HIGGS 1M (256,) b512, same digest; deleted 2026-10-18, recoverable at feature/native-autograd-20261018@91ebd1cb4"
     # Deleted 2026-10-08 (lane gap-graph, plan 5.3): the batched CC rounds + device relabel are the only path on every vendor; the C33 CC chunking (never compiled) went with it. Recoverable at origin/main 02f7aed95.
     comptime assert not (is_defined["MOJOLEARN_CC_FAST_OFF"]() or is_defined["MOJOLEARN_CC_FAST"]()), "removed: connected_components' batched rounds with the device relabel are the only path (lane gap-graph 2026-10-08); the per-round-wait path is gone"
     # Deleted 2026-10-07 (lane serial-cleanup): forbidden serial shape; incumbent kNN selectors are parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.

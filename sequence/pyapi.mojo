@@ -14,9 +14,10 @@ from sequence.exec_trait import Exec
 from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_COOP, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
-from sequence.layernorm import LN_FOLD_BLOCK, ln_fold_rows
+from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
+from autograd.rules_recurrent import AUTOGRAD_RNN, AutogradRnnStep
 from sequence.ets import ets_scratch
 from sequence.garch import GARCH_GRID, GARCH_GRID_N, GARCH_SNAP
 from sequence.moe_tiled import TILE_P, TILE_Q
@@ -130,8 +131,13 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
             var v = Int(y.unsafe_load(i))
             if v < 0 or v >= net.O or Float32(v) != y.unsafe_load(i):
                 raise Error("rnn_fit: a label is not a class index below the class count")
-    rnn_fit(ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
-            fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
+    comptime if AUTOGRAD_RNN:
+        # -D MOJOLEARN_AUTOGRAD_RNN: the same fit with the tape-assembled backward
+        rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
+                                 fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
+    else:
+        rnn_fit(ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
+                fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
     return PythonObject(net.n_params())
 
 
@@ -1193,72 +1199,6 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
         ex.download_async(fptr(addrs[3], "y"), Y, M * D)
     ex.sync()
     return PythonObject(M * D)
-
-
-def layer_norm_fwd_core[E: Exec](mut ex: E, X: FP, W: FP, Bb: FP, Y: FP, mean: FP, rstd: FP,
-                                 M: Int, D: Int, hw: Bool, hb: Bool, eps: Float32) raises:
-    """The forward launch of `layer_norm_py` on executor-side buffers, queued,
-    no transfer (lane gap-neural-io: shared with the resident-tensor entry
-    `sequence/layernorm_dev.mojo`, the same launch on the same values)."""
-    var a = Args()
-    a.p0 = X
-    a.p1 = W
-    a.p2 = Bb
-    a.p3 = Y
-    a.p4 = mean
-    a.p5 = rstd
-    a.i0 = D
-    a.i1 = 1 if hw else 0
-    a.i2 = 1 if hb else 0
-    a.f0 = eps
-    ex.launch[OP_LN_FWD](a, M)
-
-
-def layer_norm_bwd_core[E: Exec](mut ex: E, X: FP, W: FP, DY: FP, DX: FP, DW: FP, DB: FP, mean: FP,
-                                 rstd: FP, M: Int, D: Int, hw: Bool) raises:
-    """The backward launches of `layer_norm_py` (dx, then the dweight / dbias
-    column folds) after `layer_norm_fwd_core` wrote mean and rstd, queued, no
-    transfer (lane gap-neural-io: shared with `sequence/layernorm_dev.mojo`)."""
-    var b = Args()
-    b.p0 = DY
-    b.p1 = X
-    b.p2 = W
-    b.p3 = DX
-    b.p4 = mean
-    b.p5 = rstd
-    b.i0 = D
-    b.i1 = 1 if hw else 0
-    ex.launch[OP_LN_BWD_X](b, M)
-    var c = Args()
-    c.p0 = DY
-    c.p1 = X
-    c.p2 = DW
-    c.p3 = DB
-    c.p4 = mean
-    c.p5 = rstd
-    c.i0 = D
-    c.i1 = M
-    # FAST: the column folds split over row blocks (about 8192 threads,
-    # at least 1024 rows each), then one ordered sum of the S partials
-    var S = min(max(8192 // D, 1), M // 1024) if _fast_norms() else 0
-    var RS = (M + S - 1) // S if S > 1 else M
-    # IDENTICAL (lane idn-loss-norm-folds, sequence/layernorm.mojo
-    # LN_FOLD_BLOCK): fixed blocks of ln_fold_rows(M) rows
-    comptime if LN_FOLD_BLOCK:
-        RS = ln_fold_rows(M)
-    S = (M + RS - 1) // RS
-    if S > 1:
-        var PW = ex.alloc(S * D)
-        var PB = ex.alloc(S * D)
-        c.p6 = PW
-        c.p7 = PB
-        c.i2 = S
-        c.i3 = RS
-        ex.launch[OP_LN_BWD_W](c, S * D)
-        c.i4 = 1
-        ex.launch[OP_LN_BWD_W](c, D)
-    else:
-        ex.launch[OP_LN_BWD_W](c, D)
 
 
 def theta_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:

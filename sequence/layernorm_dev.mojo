@@ -15,7 +15,8 @@ from std.python import PythonObject
 
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP
-from sequence.pyapi import fptr, fval, ival, layer_norm_bwd_core, layer_norm_fwd_core
+from sequence.pyapi import fptr, fval, ival
+from sequence.layernorm_core import layer_norm_bwd_core, layer_norm_fwd_core
 from sequence.seq_tensor import seq_tensor_ptr
 
 

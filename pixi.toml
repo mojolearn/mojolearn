@@ -33,6 +33,9 @@ mojo = ">=1.0.0,<2"
 max = ">=26.5.0,<27"
 
 [tasks]
+# Native reverse-mode AD correctness and existing/autograd MLP regression.
+check-autograd = "python3 tools/check_autograd.py --backend cpu --output bench/results/autograd/cpu"
+check-autograd-gpu = "python3 tools/check_autograd.py --backend both --output bench/results/autograd/local"
 # Explicit direct/packed resident GPU correctness arms, FAST and IDENTICAL.
 check-forest-resident-layouts = "bash tools/check_forest_resident_layouts.sh"
 # DEVIATION 2512: the kernel zero-fill writes exactly its span (79 spans);

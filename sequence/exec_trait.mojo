@@ -17,6 +17,14 @@ trait Exec:
         """A zero-filled buffer of n floats that lives as long as the Exec."""
         ...
 
+    def free(mut self, p: FP) raises:
+        """Return a buffer that `alloc` handed out before the Exec ends
+        (lane ag-fusion: the autograd tape releases its storage). `p` must be
+        the exact pointer `alloc` returned and must not be used afterwards;
+        work already queued that reads or writes `p` still completes first
+        (the device keeps the storage until its next `sync`)."""
+        ...
+
     def upload(mut self, dst: FP, src: FP, n: Int) raises:
         """Host memory `src` -> this Exec's buffer `dst` (n floats)."""
         ...

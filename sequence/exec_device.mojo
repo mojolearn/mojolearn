@@ -37,6 +37,7 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
+from autograd.ops import OP_AG_FIRST, OP_AG_LAST
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
@@ -441,6 +442,11 @@ struct DeviceExec(Exec):
     #: lane gap-gemm-layers: the pair offsets of the MoE grouping, on the host
     #: (MOE_GROUPED_GEMM: the hidden op downloads them, the out op reuses them)
     var moe_poff: List[Int]
+    #: lane ag-fusion (`free`): buffers returned while kernels that use them
+    #: may still be queued. They stay alive (owned) or held (pooled) until
+    #: the next sync or the end of this Exec drains the queue.
+    var retired: List[DeviceBuffer[DType.float32]]
+    var retired_pdev: List[Int]
     # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
 
@@ -461,9 +467,31 @@ struct DeviceExec(Exec):
         self.pipe_src = List[Int]()
         self.pipe_n = List[Int]()
         self.moe_poff = List[Int]()
+        self.retired = List[DeviceBuffer[DType.float32]]()
+        self.retired_pdev = List[Int]()
 
     def alloc(mut self, n: Int) raises -> FP:
         return self._alloc(n, True)
+
+    def free(mut self, p: FP) raises:
+        # Drop p from the lookup lists now (a later copy naming it refuses);
+        # the storage itself goes at the next sync, after every queued kernel
+        # that reads or writes it has run.
+        var addr = Int(p)
+        for i in range(len(self.base)):  # small-loop(base: buffers this Exec allocated): address lookup, no data
+            if self.base[i] == addr:
+                _ = self.base.pop(i)
+                _ = self.size.pop(i)
+                if self.pooled:
+                    self.retired_pdev.append(self.pdev.pop(i))
+                else:
+                    # bufs also holds workspaces with no base entry: match by address
+                    for j in range(len(self.bufs)):  # small-loop(bufs: buffers this Exec owns): address lookup, no data
+                        if Int(self.bufs[j].unsafe_ptr()) == addr:
+                            self.retired.append(self.bufs.pop(j))
+                            break
+                return
+        raise Error("sequence: free names no buffer this device Exec allocated")
 
     def _alloc(mut self, n: Int, zero: Bool) raises -> FP:
         var count = n if n > 0 else 1
@@ -510,6 +538,8 @@ struct DeviceExec(Exec):
                 _pool_release_host(self.ppend_host[i])
             for i in range(len(self.pdev)):
                 _pool_release_dev(self.pdev[i])
+            for i in range(len(self.retired_pdev)):
+                _pool_release_dev(self.retired_pdev[i])
         except:
             pass
 
@@ -631,6 +661,10 @@ struct DeviceExec(Exec):
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
             return
+        # The autograd family (OP_AG_FIRST..OP_AG_LAST, autograd/ops.mojo) runs
+        # here like every other code: qualified 2026-10-18 with the 97-case
+        # gradient suite giving the same digests on Metal, NVIDIA L40S and AMD
+        # MI325X (docs/plans/NATIVE_AUTOGRAD.md, "GPU status").
         comptime I32_MAX = 2147483647
         for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
             if v > I32_MAX or v < -I32_MAX - 1:
@@ -953,6 +987,11 @@ struct DeviceExec(Exec):
     def sync(mut self) raises:
         self.ctx.synchronize()
         self.staged.clear()
+        # lane ag-fusion: the queue is drained, so freed buffers can go
+        self.retired.clear()
+        for i in range(len(self.retired_pdev)):
+            _pool_release_dev(self.retired_pdev[i])
+        self.retired_pdev.clear()
         for i in range(len(self.pstaged)):
             _pool_release_host(self.pstaged[i])
         self.pstaged.clear()

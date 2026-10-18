@@ -1,0 +1,44 @@
+{
+  "implementation_commit": "4cea8ebd9",
+  "branch": "feature/native-autograd-20261018",
+  "overall_status": "CPU validated; GPU integration blocked and unqualified",
+  "environment": {
+    "mojo": "1.0.0 (ed45d567)",
+    "max": "26.5.0",
+    "hardware": "Mac16,12",
+    "macos": "26.5.2"
+  },
+  "cpu": {
+    "status": "passed",
+    "independent_gradient_cases": 35,
+    "gradient_entries": 267,
+    "invalid_operation_refusals": 10,
+    "repeated_graph_storage_checks": 30,
+    "mlp_existing_vs_autograd_fits": 48,
+    "mlp_parameter_and_loss_values_compared": 2752,
+    "mlp_max_absolute_difference_at_printed_precision": 0.0,
+    "custom_model_initial_loss": 3.6120834,
+    "custom_model_final_loss": 1.3218582e-10,
+    "evidence": "cpu-final-02/summary.json"
+  },
+  "gpu": {
+    "apple_metal": {
+      "compile": "passed",
+      "correctness": "failed",
+      "normal_call_refusal": "verified",
+      "minimal_probe": "reproduced",
+      "metal_validation": "read-only bytes bound to writable shader argument"
+    },
+    "nvidia_sm_89": {"compile": "passed", "execution": "not run"},
+    "amd_gfx942": {"compile": "passed", "execution": "not run"},
+    "cross_vendor_identity": "unverified",
+    "evidence": "qualification/summary.json"
+  },
+  "source_hygiene": "passed",
+  "python_test_tool_syntax": "passed",
+  "mlp_autograd_default_enabled": false,
+  "performance_measurements": "not run",
+  "remaining_trainers": ["Transformer", "Mamba", "recurrent", "language-model", "Samba"],
+  "retained_evidence_root": "/Users/andrewhendel/mojolearn-evidence/native-autograd-20261018",
+  "external_modular_report_sent": false
+}
