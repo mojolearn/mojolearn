@@ -75,12 +75,6 @@ def ag_fold_block(extent: Int) -> Int:
 
 
 @always_inline
-def ag_fold_blocks(extent: Int) -> Int:
-    var b = ag_fold_block(extent)
-    return (extent + b - 1) // b
-
-
-@always_inline
 def div(a: Float32, b: Float32) -> Float32:
     return ftz(identical_div(a, b))
 
