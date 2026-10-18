@@ -204,12 +204,16 @@ def mlp_backward_autograd[E: Exec](
     # 2 + 2, the first layer's matmul 2), then exported with copy + L2GRAD +
     # copy + DIVS (4): 19 for a hidden layer above the first, 17 for the
     # first and last. About 28 a layer; the default trainer runs 4 (1 + 3).
-    # After: forward 3 (2 for an identity layer), no fills, no copy; backward
-    # activation VJP 1, add VJPs 2, matmul GEMMs 2 (1 for the first layer),
-    # all straight into the parents' gradients and Gr, plus L2GRAD + DIVS 2
-    # (L2GRAD only with AUTOGRAD_MLP_SEED_SCALE): 7 above the first layer,
-    # 6 for the first and last. Per batch on top: the seed copy into the root
-    # gradient (1), and with AUTOGRAD_MLP_SEED_SCALE its divide (1).
+    # After (with lane ag-metal-folds' per-opcode bodies): forward 3 (2 for
+    # an identity layer), no fills, no copy; backward activation VJP 1, the
+    # product's add VJP 1, the bias's add VJP 3 (elementwise VJP, then the
+    # two-launch blocked fold over the batch rows), matmul GEMMs 2 (1 for the
+    # first layer), all straight into the parents' gradients and Gr, plus
+    # L2GRAD + DIVS 2 (L2GRAD only with AUTOGRAD_MLP_SEED_SCALE): 9 above the
+    # first layer, 8 for the first and last. Per batch on top: the seed copy
+    # into the root gradient (1), and with AUTOGRAD_MLP_SEED_SCALE its
+    # divide (1). (The base tape's bias VJP was one launch with a serial
+    # per-column fold; the blocked fold replaces it.)
     #
     # Existing row-loss produces the combined loss/link derivative p-y with
     # respect to LOGITS, not probabilities. Seed that precise graph boundary.

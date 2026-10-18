@@ -3,9 +3,13 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr, OP_COPY, OP_FILL, OP_GEMM
 from checks.numerics import identical_div
 from autograd.ops import (
-    OP_AUTOGRAD, FORWARD, VJP, ACCUMULATE, LEAF, ADD, SUBTRACT, MULTIPLY,
+    OP_AG_BIN_FWD, OP_AG_BIN_VJP, OP_AG_UNARY_FWD, OP_AG_UNARY_VJP, OP_AG_TRANSPOSE,
+    OP_AG_REDUCE_PART, OP_AG_REDUCE_FOLD, OP_AG_REDUCE_VJP, OP_AG_SOFTMAX_FWD,
+    OP_AG_SOFTMAX_VJP, OP_AG_ACCUMULATE,
+    LEAF, ADD, SUBTRACT, MULTIPLY,
     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
-    REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, CUSTOM,
+    REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
+    ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output,
 )
 
 
@@ -73,24 +77,20 @@ def _copy[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
     ex.launch[OP_COPY](a, n)
 
 
-def _element_args(anchor: FP) -> Args:
-    # Bind unused slots to live storage as well. The retained Metal argument
-    # probe uses this same convention, ruling out dummy addresses as the
-    # cause of its binding failure (docs/plans/NATIVE_AUTOGRAD.md).
+def _accumulate[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
     var a = Args()
-    a.p0 = anchor
-    a.p1 = anchor
-    a.p2 = anchor
-    a.p3 = anchor
-    a.p4 = anchor
-    a.p5 = anchor
-    a.p6 = anchor
-    a.p7 = anchor
-    a.p8 = anchor
-    a.p9 = anchor
-    a.p10 = anchor
-    a.p11 = anchor
-    return a
+    a.p0 = src
+    a.p1 = dst
+    ex.launch[OP_AG_ACCUMULATE](a, n)
+
+
+def _transpose[E: Exec](mut ex: E, dst: FP, src: FP, src_rows: Int, src_cols: Int) raises:
+    var a = Args()
+    a.p0 = src
+    a.p1 = dst
+    a.i0 = src_rows
+    a.i1 = src_cols
+    ex.launch[OP_AG_TRANSPOSE](a, src_rows * src_cols)
 
 
 def _gemm[E: Exec](
@@ -333,7 +333,9 @@ struct Tape(Movable):
         var cols = max(a.cols, b.cols)
         self._shape(rows, cols)
         var output = into if use_into else self._alloc(ex, rows * cols)
-        var args = _element_args(output)
+        # Every other slot keeps the Args() placeholder; the body touches
+        # p0, p1 and p2 only. x * x binds its one buffer once (i10 = 1).
+        var args = Args()
         args.i1 = op
         args.i2 = rows
         args.i3 = cols
@@ -342,9 +344,12 @@ struct Tape(Movable):
         args.i6 = b.rows
         args.i7 = b.cols
         args.p0 = a.value
-        args.p1 = b.value
+        if Int(b.value) == Int(a.value):
+            args.i10 = 1
+        else:
+            args.p1 = b.value
         args.p2 = output
-        ex.launch[OP_AUTOGRAD](args, rows * cols)
+        ex.launch[OP_AG_BIN_FWD](args, rows * cols)
         return self._record(ex, output, rows, cols, op, [x, y], args)
 
     def add[E: Exec](mut self, mut ex: E, x: Tensor, y: Tensor) raises -> Tensor:
@@ -382,17 +387,17 @@ struct Tape(Movable):
     ) raises -> Tensor:
         var n = self._nodes[self._check(x)]
         var output = into if use_into else self._alloc(ex, n.rows * n.cols)
-        var a = _element_args(output)
-        a.i1 = op
-        a.i2 = n.rows
-        a.i3 = n.cols
-        a.i4 = n.rows
-        a.i5 = n.cols
+        var a = Args()
         a.p0 = n.value
-        a.p2 = output
-        a.f0 = scale
-        var count = n.rows if op == SOFTMAX or op == LOG_SOFTMAX else n.rows * n.cols
-        ex.launch[OP_AUTOGRAD](a, count)
+        a.p1 = output
+        if op == SOFTMAX or op == LOG_SOFTMAX:
+            a.i0 = 1 if op == LOG_SOFTMAX else 0
+            a.i1 = n.cols
+            ex.launch[OP_AG_SOFTMAX_FWD](a, n.rows)
+        else:
+            a.i0 = op
+            a.f0 = scale
+            ex.launch[OP_AG_UNARY_FWD](a, n.rows * n.cols)
         return self._record(ex, output, n.rows, n.cols, op, [x], a)
 
     def relu[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
@@ -437,16 +442,8 @@ struct Tape(Movable):
     def transpose[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
         var n = self._nodes[self._check(x)]
         var output = self._alloc(ex, n.rows * n.cols)
-        var a = _element_args(output)
-        a.i1 = TRANSPOSE
-        a.i2 = n.cols
-        a.i3 = n.rows
-        a.i4 = n.rows
-        a.i5 = n.cols
-        a.p0 = n.value
-        a.p2 = output
-        ex.launch[OP_AUTOGRAD](a, n.rows * n.cols)
-        return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], a)
+        _transpose(ex, output, n.value, n.rows, n.cols)
+        return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], Args())
 
     def reshape[E: Exec](mut self, mut ex: E, x: Tensor, rows: Int, cols: Int) raises -> Tensor:
         self._shape(rows, cols)
@@ -468,18 +465,44 @@ struct Tape(Movable):
         var cols = n.cols if axis == 0 else 1
         var count = n.rows * n.cols if axis == -1 else (n.rows if axis == 0 else n.cols)
         var output = self._alloc(ex, rows * cols)
-        var a = _element_args(output)
-        a.i1 = REDUCE
-        a.i2 = rows
-        a.i3 = cols
-        a.i4 = n.rows
-        a.i5 = n.cols
-        a.i9 = axis
-        a.f0 = identical_div(Float32(1), Float32(count)) if mean else Float32(1)
-        a.p0 = n.value
-        a.p2 = output
-        ex.launch[OP_AUTOGRAD](a, rows * cols)
+        var factor = identical_div(Float32(1), Float32(count)) if mean else Float32(1)
+        self._fold(ex, output, n.value, n.rows, n.cols, axis, factor)
+        var a = Args()
+        a.i0 = axis
+        a.f0 = factor
         return self._record(ex, output, rows, cols, REDUCE, [x], a)
+
+    def _fold[E: Exec](
+        mut self, mut ex: E, dst: FP, src: FP, rows: Int, cols: Int, axis: Int, factor: Float32,
+    ) raises:
+        """dst = factor * (src summed over `axis`) as a blocked fold: blocks of
+        ag_fold_block(extent) consecutive terms, each added ascending from
+        +0.0 (OP_AG_REDUCE_PART, parallel over blocks x outputs), then each
+        output's block partials added ascending from +0.0 (OP_AG_REDUCE_FOLD,
+        parallel over outputs). One order on every executor. The partials
+        are tape scratch (released with the graph's storage at reset)."""
+        var extent = rows * cols if axis == AXIS_ALL else (rows if axis == AXIS_ROWS else cols)
+        var block = ag_fold_block(extent)
+        var blocks = (extent + block - 1) // block
+        var outputs = 1 if axis == AXIS_ALL else (cols if axis == AXIS_ROWS else rows)
+        var partials = self._alloc(ex, blocks * outputs)
+        var a = Args()
+        a.p0 = src
+        a.p1 = partials
+        a.i0 = axis
+        a.i1 = rows
+        a.i2 = cols
+        a.i3 = block
+        ex.launch[OP_AG_REDUCE_PART](a, blocks * outputs)
+        var f = Args()
+        f.p0 = partials
+        f.p1 = dst
+        f.i0 = axis
+        f.i1 = rows
+        f.i2 = cols
+        f.i3 = block
+        f.f0 = factor
+        ex.launch[OP_AG_REDUCE_FOLD](f, outputs)
 
     def sum[E: Exec](mut self, mut ex: E, x: Tensor, axis: Int = -1) raises -> Tensor:
         """Sum all elements or one matrix axis, retaining reduced dimensions."""
@@ -521,6 +544,49 @@ struct Tape(Movable):
         var result = self._record(ex, output, rows, cols, CUSTOM, inputs, args)
         self._nodes[result._index].op = CUSTOM + tag
         return result
+
+    def _binary_vjp[E: Exec](
+        mut self, mut ex: E, n: _Node, edge: Int, contribution: FP, rows: Int, cols: Int,
+    ) raises:
+        """Operand `edge`'s VJP of binary node n into `contribution` (the
+        operand's shape rows x cols). The elementwise VJP is computed at the
+        output's shape; a broadcast operand's gradient is that matrix summed
+        over the broadcast axis (or all of it, for a scalar operand) by the
+        blocked fold (_fold), never one thread per gradient element."""
+        var left = self._nodes[self._parents[n.start]]
+        var right = self._nodes[self._parents[n.start + 1]]
+        var a = Args()
+        a.i1 = n.op
+        a.i2 = n.rows
+        a.i3 = n.cols
+        a.i4 = left.rows
+        a.i5 = left.cols
+        a.i6 = right.rows
+        a.i7 = right.cols
+        a.i8 = edge
+        a.p3 = n.grad
+        # Bind only the slots the kind reads (op_ag_bin_vjp), each buffer once.
+        if n.op == MULTIPLY:
+            a.p0 = left.value
+            if Int(right.value) == Int(left.value):
+                a.i10 = 1
+            else:
+                a.p1 = right.value
+        elif n.op == DIVIDE:
+            a.p1 = right.value
+            if edge == 1:
+                a.p2 = n.value
+        var reduce_rows = rows < n.rows
+        var reduce_cols = cols < n.cols
+        if not reduce_rows and not reduce_cols:
+            a.p4 = contribution
+            ex.launch[OP_AG_BIN_VJP](a, n.rows * n.cols)
+            return
+        var elementwise = self._alloc(ex, n.rows * n.cols)
+        a.p4 = elementwise
+        ex.launch[OP_AG_BIN_VJP](a, n.rows * n.cols)
+        var axis = AXIS_ALL if reduce_rows and reduce_cols else (AXIS_ROWS if reduce_rows else AXIS_COLS)
+        self._fold(ex, contribution, elementwise, n.rows, n.cols, axis, Float32(1))
 
     def backward[E: Exec](mut self, mut ex: E, output: Tensor, accumulate: Bool = False) raises:
         """Differentiate a scalar, clearing gradients unless accumulate=True."""
@@ -612,11 +678,7 @@ struct Tape(Movable):
                 self._nodes[i].grad_ready = False
         # Preserve the seed before overwriting a leaf root's gradient.
         if touched[root]:
-            var a = _element_args(self._nodes[root].grad)
-            a.i0 = ACCUMULATE
-            a.p0 = seed
-            a.p1 = self._nodes[root].grad
-            ex.launch[OP_AUTOGRAD](a, self._nodes[root].rows * self._nodes[root].cols)
+            _accumulate(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         else:
             _copy(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         touched[root] = True
@@ -641,6 +703,10 @@ struct Tape(Movable):
                     first[edge] = True
                     touched[parent] = True
                     contributions.append(p.grad)
+                elif p.requires_grad and n.op == RESHAPE:
+                    # a reshape's VJP is its upstream gradient itself: add it
+                    # straight from n.grad, no scratch and no launch
+                    contributions.append(n.grad)
                 elif p.requires_grad or n.op >= CUSTOM:
                     contributions.append(self._alloc(ex, p.rows * p.cols))
                 else:
@@ -662,8 +728,14 @@ struct Tape(Movable):
                 var p = self._nodes[parent]
                 if not p.requires_grad:
                     continue
+                # contribution is p.grad itself for a first contribution
+                # (every body below, including _binary_vjp's blocked fold,
+                # then writes the parent's gradient directly), else scratch.
                 var contribution = contributions[edge]
-                if n.op < CUSTOM:
+                if n.op == RESHAPE:
+                    if first[edge]:
+                        _copy(ex, p.grad, n.grad, p.rows * p.cols)
+                elif n.op < CUSTOM:
                     if n.op == MATMUL:
                         var left = self._nodes[self._parents[n.start]]
                         var right = self._nodes[self._parents[n.start + 1]]
@@ -673,31 +745,40 @@ struct Tape(Movable):
                         else:
                             _gemm(ex, contribution, left.value, n.grad, right.rows, right.cols, left.rows,
                                   1, left.cols, right.cols, 1)
+                    elif n.op <= DIVIDE:
+                        self._binary_vjp(ex, n, edge, contribution, p.rows, p.cols)
+                    elif n.op == TRANSPOSE:
+                        # n is (p.cols, p.rows); its upstream transposes back.
+                        _transpose(ex, contribution, n.grad, n.rows, n.cols)
+                    elif n.op == REDUCE:
+                        var a = Args()
+                        a.p0 = n.grad
+                        a.p1 = contribution
+                        a.i0 = n.saved.i0
+                        a.i2 = p.cols
+                        a.f0 = n.saved.f0
+                        ex.launch[OP_AG_REDUCE_VJP](a, p.rows * p.cols)
+                    elif n.op == SOFTMAX or n.op == LOG_SOFTMAX:
+                        var a = Args()
+                        a.p0 = n.value
+                        a.p1 = n.grad
+                        a.p2 = contribution
+                        a.i0 = 1 if n.op == LOG_SOFTMAX else 0
+                        a.i1 = p.cols
+                        ex.launch[OP_AG_SOFTMAX_VJP](a, p.rows)
                     else:
-                        var a = n.saved
-                        a.i0 = VJP
-                        a.i1 = n.op
-                        a.i8 = edge
-                        a.p0 = self._nodes[self._parents[n.start]].value
-                        a.p1 = self._nodes[self._parents[n.start + 1]].value if n.count > 1 else a.p0
-                        a.p2 = n.value
-                        a.p3 = n.grad
-                        a.p4 = contribution
-                        a.p5 = n.value
-                        a.p6 = n.value
-                        a.p7 = n.value
-                        a.p8 = n.value
-                        a.p9 = n.value
-                        a.p10 = n.value
-                        a.p11 = n.value
-                        var count = p.rows if n.op == SOFTMAX or n.op == LOG_SOFTMAX else p.rows * p.cols
-                        ex.launch[OP_AUTOGRAD](a, count)
+                        var a = Args()
+                        if unary_vjp_reads_input(n.op):
+                            a.p0 = p.value
+                        if unary_vjp_reads_output(n.op):
+                            a.p1 = n.value
+                        a.p2 = n.grad
+                        a.p3 = contribution
+                        a.i0 = n.op
+                        a.f0 = n.saved.f0
+                        ex.launch[OP_AG_UNARY_VJP](a, p.rows * p.cols)
                 if not first[edge]:
-                    var a = _element_args(p.grad)
-                    a.i0 = ACCUMULATE
-                    a.p0 = contribution
-                    a.p1 = p.grad
-                    ex.launch[OP_AUTOGRAD](a, p.rows * p.cols)
+                    _accumulate(ex, p.grad, contribution, p.rows * p.cols)
         self._cursor = scratch_start
         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
             var n = self._nodes[i]
