@@ -65,13 +65,13 @@ from autograd.ops import TANH as AG_TANH
 # (~/mojolearn-evidence/native-autograd-20261018/AB_MLP_RESULTS_2026-10-18.md).
 # -D MOJOLEARN_AUTOGRAD_MLP_OFF restores the hand-assembled backward (arm A).
 comptime AUTOGRAD_MLP = not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"]()
-# A/B (lane ag-fusion, default off): fold the 1/B of the parameter gradients
-# into the backward seed (one in-place divide of the B x O seed) so each bias
-# needs no divide and each weight one L2GRAD with alpha/B and n = 1. Saves
-# L - 1 launches a batch. MOVES BITS against the default trainer (rounding
-# before rather than after the batch sum); every vendor and the host column
-# move together. Off: the gradients are bit for bit the default trainer's.
-comptime AUTOGRAD_MLP_SEED_SCALE = is_defined["MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE (DROPPED-noise) deleted 2026-10-18 on
+# feature/native-autograd-20261018; code recoverable at 91ebd1cb4 (never on main, no patch).
+# It folded the 1/B into the backward seed (one divide of the B x O seed, then L2GRAD with
+# alpha/B and n = 1, no bias divide), saving L - 1 launches a batch. A/B on HIGGS 1M
+# (256,) b512: NV 0.388 -> 0.387 s, AMD 0.602 -> 0.599 s, same digest as the default
+# (B = 512 is a power of two, so the scaling rounds identically); noise.
+# Restore: git checkout 91ebd1cb4 -- sequence/mlp_fit.mojo (then merge by hand).
 
 comptime SOLVER_ADAM = 0
 comptime SOLVER_SGD = 1
@@ -215,22 +215,14 @@ def mlp_backward_autograd[E: Exec](
     # product's add VJP 1, the bias's add VJP 3 (elementwise VJP, then the
     # two-launch blocked fold over the batch rows), matmul GEMMs 2 (1 for the
     # first layer), all straight into the parents' gradients and Gr, plus
-    # L2GRAD + DIVS 2 (L2GRAD only with AUTOGRAD_MLP_SEED_SCALE): 9 above the
-    # first layer, 8 for the first and last. Per batch on top: the seed copy
-    # into the root gradient (1), and with AUTOGRAD_MLP_SEED_SCALE its
-    # divide (1). (The base tape's bias VJP was one launch with a serial
+    # L2GRAD + DIVS 2: 9 above the first layer, 8 for the first and last.
+    # Per batch on top: the seed copy into the root gradient (1). (The base
+    # tape's bias VJP was one launch with a serial
     # per-column fold; the blocked fold replaces it.)
     #
     # Existing row-loss produces the combined loss/link derivative p-y with
     # respect to LOGITS, not probabilities. Seed that precise graph boundary.
     var O = net.sizes[net.n_layers()]
-    comptime if AUTOGRAD_MLP_SEED_SCALE:
-        # delta is read only as this seed, and the next batch's row loss
-        # rewrites it, so it is scaled in place.
-        var sd = Args()
-        sd.p0 = delta
-        sd.f0 = Float32(B)
-        ex.launch[OP_DIVS](sd, B * O)
     var seed = tape.variable(ex, delta, B, O, False)
     tape.backward_from(ex, logits, seed)
     # Preserve sklearn's parameter-gradient convention: add alpha*W then
@@ -242,18 +234,13 @@ def mlp_backward_autograd[E: Exec](
         var reg = Args()
         reg.p0 = Gr + net.w_off(i)
         reg.p1 = P + net.w_off(i)
-        comptime if AUTOGRAD_MLP_SEED_SCALE:
-            reg.f0 = ftz(identical_div(alpha, Float32(B)))
-            reg.f1 = Float32(1.0)
-        else:
-            reg.f0 = alpha
-            reg.f1 = Float32(B)
+        reg.f0 = alpha
+        reg.f1 = Float32(B)
         ex.launch[OP_L2GRAD](reg, count)
-        comptime if not AUTOGRAD_MLP_SEED_SCALE:
-            var scale = Args()
-            scale.p0 = Gr + net.b_off(i)
-            scale.f0 = Float32(B)
-            ex.launch[OP_DIVS](scale, net.sizes[i + 1])
+        var scale = Args()
+        scale.p0 = Gr + net.b_off(i)
+        scale.f0 = Float32(B)
+        ex.launch[OP_DIVS](scale, net.sizes[i + 1])
 
 
 def _l2_blocked[E: Exec](mut ex: E, net: MLPNet, P: FP, l2: FP, parts: FP) raises:

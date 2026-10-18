@@ -53,8 +53,8 @@ activation buffers and lands parameter gradients in the trainer's gradient
 vector, so the per-layer launch count drops from about 28 to 8 or 9 (with the per-opcode bodies and the bias gradient's blocked fold) (the
 derivation is at the top of `mlp_backward_autograd`). With the A/B define off
 it is bit for bit the earlier tape path. The define
-`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE` (default off) also folds the 1/B
-normalization into the seed, which removes the bias divides and moves bits.
+`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE` (fold the 1/B into the seed) was measured
+as noise on NVIDIA and AMD and deleted 2026-10-18 (docs/TOMBSTONES.md).
 
 `BackwardRules` registers native custom VJPs. The tape handles ordering and
 shared-input accumulation; each rule writes distinct per-input contributions.

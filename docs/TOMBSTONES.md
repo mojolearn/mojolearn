@@ -30,6 +30,7 @@ in the tables after the sections.
 
 | define | area | verdict | date | patch |
 |---|---|---|---|---|
+| [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
 | [`MOJOLEARN_EST_REUSE_PART`](#mojolearn_est_reuse_part) | Trees | DROPPED-BUG | 2026-10-09 | [MOJOLEARN_EST_REUSE_PART.patch](../experiments/removed/MOJOLEARN_EST_REUSE_PART.patch) |
 | [`MOJOLEARN_EST_SHRINK_FUSED`](#mojolearn_est_shrink_fused) | Trees | DROPPED-inconclusive | 2026-10-09 | [MOJOLEARN_EST_SHRINK_FUSED.patch](../experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch) |
 | [`MOJOLEARN_ET_DEVICE_BATCH_65536`](#mojolearn_et_device_batch_65536) | Trees | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ET_DEVICE_BATCH_65536.patch](../experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_65536.patch) |
@@ -358,6 +359,14 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 
 ## Trees
+
+### MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE
+
+- Verdict: DROPPED-noise. Deleted 2026-10-18 on feature/native-autograd-20261018 before it reached main; no patch.
+- Recoverable on the branch: `feature/native-autograd-20261018 @ 91ebd1cb4` (`sequence/mlp_fit.mojo`).
+- What it tried: fold the 1/B of the MLP parameter gradients into the tape's backward seed (one in-place divide of the B x O seed), then one L2GRAD per weight with alpha/B and n = 1 and no bias divide; L - 1 launches fewer a batch.
+- A/B (HIGGS 1M x 28, (256,) b512 1 epoch adam, identical, one run per arm, arm A = the tape default): NVIDIA L40S 0.388 -> 0.387 s (1.00x), AMD MI325X 0.602 -> 0.599 s (0.99x); digest aee3b17ef66dc060 on both arms and both vendors (B = 512 is a power of two, so the scaling rounds identically). Quality unchanged by construction. Runs: `~/mojolearn-evidence/native-autograd-20261018/orch-nv-01/armD.log`, `orch-amd-01/armD.log`.
+- EXPERIMENTS.md (Autograd (2026-10-18)): `MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`, **DROPPED-noise**.
 
 ### MOJOLEARN_ET_DEVICE_BATCH_65536
 
