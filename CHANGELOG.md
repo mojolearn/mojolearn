@@ -2,7 +2,7 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## 0.8.52 (unreleased)
+## 0.8.52 (published 2026-10-18)
 
 - `SGDClassifier`, `SGDRegressor`, `Perceptron` and the passive-aggressive estimators fit small and unscaled datasets as
   well as scikit-learn with the default `batch_size='auto'`: each epoch takes more update steps, and `SGDClassifier` sums
