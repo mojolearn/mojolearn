@@ -85,10 +85,17 @@ def _index(row: Int, col: Int, rows: Int, cols: Int) -> Int:
 
 
 @always_inline
-def _right(a: Args) -> FP:
+def _ld_right(a: Args, i: Int) -> Float32:
     # i10 = 1: the right operand is the left operand's buffer (x * x). The
     # tape then leaves p1 unbound instead of binding one buffer twice.
-    return a.p0 if a.i10 == 1 else a.p1
+    # Load through a branch, never through a pointer select: on Metal
+    # (Mojo 1.0.0 / MAX 26.5.0) `a.p0 if flag else a.p1` compiles to a
+    # pointer whose loads read zeros with no error (orchestrator bisect
+    # 2026-10-18, ~/mojolearn-evidence/native-autograd-20261018/
+    # orch-metal-folds-01/control-run.log vs control-v2-run.log).
+    if a.i10 == 1:
+        return ld(a.p0, i)
+    return ld(a.p1, i)
 
 
 @always_inline
@@ -125,7 +132,7 @@ def op_ag_bin_fwd(t: Int, a: Args):
     var row = t // a.i3
     var col = t % a.i3
     var x = ld(a.p0, _index(row, col, a.i4, a.i5))
-    var y = ld(_right(a), _index(row, col, a.i6, a.i7))
+    var y = _ld_right(a, _index(row, col, a.i6, a.i7))
     var op = a.i1
     var z: Float32
     if op == ADD:
@@ -155,7 +162,7 @@ def op_ag_bin_vjp(t: Int, a: Args):
         g = -g
     elif op == MULTIPLY:
         if a.i8 == 0:
-            g = mul(g, ld(_right(a), _index(row, col, a.i6, a.i7)))
+            g = mul(g, _ld_right(a, _index(row, col, a.i6, a.i7)))
         else:
             g = mul(g, ld(a.p0, _index(row, col, a.i4, a.i5)))
     elif op == DIVIDE:
