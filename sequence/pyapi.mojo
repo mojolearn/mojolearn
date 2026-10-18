@@ -17,6 +17,7 @@ from sequence.recurrent import gemm
 from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
+from autograd.rules_recurrent import AUTOGRAD_RNN, AutogradRnnStep
 from sequence.ets import ets_scratch
 from sequence.garch import GARCH_GRID, GARCH_GRID_N, GARCH_SNAP
 from sequence.moe_tiled import TILE_P, TILE_Q
@@ -130,8 +131,13 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
             var v = Int(y.unsafe_load(i))
             if v < 0 or v >= net.O or Float32(v) != y.unsafe_load(i):
                 raise Error("rnn_fit: a label is not a class index below the class count")
-    rnn_fit(ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
-            fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
+    comptime if AUTOGRAD_RNN:
+        # -D MOJOLEARN_AUTOGRAD_RNN: the same fit with the tape-assembled backward
+        rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
+                                 fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
+    else:
+        rnn_fit(ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
+                fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
     return PythonObject(net.n_params())
 
 
