@@ -1,16 +1,16 @@
 # mojolearn benchmark board
 
-Generated 2026-10-15T03:47:53Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-18T06:49:15Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 > MAIN BOARD amd-mi325x, version label main@feee1b453. Unreleased: not reproducible by pip install; the release boards are the reference.
 
 > Cells: 230 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@feee1b453 (2026-10-15T03:34:40Z). Boxes: AMD Instinct MI325X (amd, DO).
 
-> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 7 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
+> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 6 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
 > Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 89, n/a 141).
 
-> Opponents: retained from each paired session when present; otherwise retained historical pairs or stored opponent boards (none found). Ingestion runs no measurements. `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 0 races.
+> Opponents: retained from each paired session when present; otherwise retained historical pairs or stored opponent boards (opponents-20261006, release-board-resume-r2). Ingestion runs no measurements. `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 44 races.
 
 > Provenance: main@ identifies the source or harness freeze. Paired wheel runs separately record the installed library version and loaded binary hashes; they are not source builds of that harness commit.
 
@@ -81,25 +81,25 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | family | lane | dataset | metric | ours FAST | ours IDENTICAL | opponents |
 |---|---|---|---|---|---|---|
 | algos | adafactor | synthetic | optimizer_update_error_vs_torch_fp32 | - | 3.386e-06 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
-| algos | adafactor | synthetic | rel_fro_vs_torch_eager_fp32 | - | 1.033e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
+| algos | adafactor | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 1.033e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
 | algos | adagrad | synthetic | optimizer_update_error_vs_torch_fp32 | - | 1.874e-06 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
-| algos | adagrad | synthetic | rel_fro_vs_torch_eager_fp32 | - | 3.207e-09 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
+| algos | adagrad | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 3.207e-09 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
 | algos | adam | synthetic | optimizer_update_error_vs_torch_fp32 | - | 8.844e-06 | torch-eager-fp32 0.000000; torch-compile-fp32 1.355e-05; torch-fused-fp32 6.002e-06 |
-| algos | adam | synthetic | rel_fro_vs_torch_eager_fp32 | - | 3.34e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 5.116e-08; torch-fused-fp32 2.267e-08 |
+| algos | adam | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 3.34e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 5.116e-08; torch-fused-fp32 2.267e-08 |
 | algos | adamax | synthetic | optimizer_update_error_vs_torch_fp32 | - | 1.54e-06 | torch-eager-fp32 0.000000; torch-compile-fp32 2.292e-06 |
-| algos | adamax | synthetic | rel_fro_vs_torch_eager_fp32 | - | 4.144e-09 | torch-eager-fp32 0.000000; torch-compile-fp32 6.17e-09 |
+| algos | adamax | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 4.144e-09 | torch-eager-fp32 0.000000; torch-compile-fp32 6.17e-09 |
 | algos | adamw | synthetic | optimizer_update_error_vs_torch_fp32 | - | 8.841e-06 | torch-eager-fp32 0.000000; torch-compile-fp32 6.012e-05; torch-fused-fp32 6.574e-05 |
-| algos | adamw | synthetic | rel_fro_vs_torch_eager_fp32 | - | 3.34e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 2.272e-07; torch-fused-fp32 2.484e-07 |
+| algos | adamw | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 3.34e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 2.272e-07; torch-fused-fp32 2.484e-07 |
 | algos | ard | istella | r2 (higher is better) | - | -0.124856 | sklearn-cpu 0.327436 |
 | algos | ard | istella | rmse (lower is better) | - | 0.885949 | sklearn-cpu 0.685058 |
 | algos | avgpool1d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
-| algos | avgpool1d | synthetic | rel_fro_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | avgpool1d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | avgpool2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
-| algos | avgpool2d | synthetic | rel_fro_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | avgpool2d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | batchnorm1d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.004642 | torch-eager-fp32 0.000000; torch-compile-fp32 0.002793; torch-eager-bf16 0.000000; torch-compile-bf16 0.002793 |
-| algos | batchnorm1d | synthetic | rel_fro_vs_torch_eager_fp32 | - | 8.097e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 5.248e-08; torch-eager-bf16 0.000000; torch-compile-bf16 5.248e-08 |
+| algos | batchnorm1d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 8.097e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 5.248e-08; torch-eager-bf16 0.000000; torch-compile-bf16 5.248e-08 |
 | algos | batchnorm2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.001395 | torch-eager-fp32 0.000000; torch-compile-fp32 0.001471; torch-eager-bf16 0.000000; torch-compile-bf16 0.001471 |
-| algos | batchnorm2d | synthetic | rel_fro_vs_torch_eager_fp32 | - | 1.249e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 6.868e-08; torch-eager-bf16 0.000000; torch-compile-bf16 6.868e-08 |
+| algos | batchnorm2d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 1.249e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 6.868e-08; torch-eager-bf16 0.000000; torch-compile-bf16 6.868e-08 |
 | algos | bayesian-ridge | istella | r2 (higher is better) | - | 0.317909 | sklearn-cpu -8.145e+07 |
 | algos | bayesian-ridge | istella | rmse (lower is better) | - | 0.689893 | sklearn-cpu 7538.692925 |
 | algos | bernoulli-nb | istella | accuracy (higher is better) | - | 0.794050 | sklearn-cpu 0.794050 |
@@ -125,9 +125,9 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | connected-components | istella | n_components | - | 81 | - |
 | algos | connected-components | taxi | n_components | - | 588 | - |
 | algos | conv1d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.318264 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 3418.035805; torch-compile-bf16 3418.035805 |
-| algos | conv1d | synthetic | rel_fro_vs_torch_eager_fp32 | - | 3.948e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.004377; torch-compile-bf16 0.004377 |
+| algos | conv1d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 3.948e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.004377; torch-compile-bf16 0.004377 |
 | algos | conv2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.372529 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 3418.486565; torch-compile-bf16 3418.486565 |
-| algos | conv2d | synthetic | rel_fro_vs_torch_eager_fp32 | - | 3.307e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.003382; torch-compile-bf16 0.003382 |
+| algos | conv2d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 3.307e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.003382; torch-compile-bf16 0.003382 |
 | algos | damped-ets | synthetic | forecast_rmse (lower is better) | - | 13.931153 | statsmodels-cpu 26.588738; statsforecast-cpu 13.945986 |
 | algos | damped-ets | taxi-hourly | forecast_rmse (lower is better) | - | 96.690449 | statsmodels-cpu 196.955273; statsforecast-cpu 96.685568 |
 | algos | dropout2d | synthetic | dropout_contract_relative_error | - | 5.422e-08 | torch-eager-fp32 5.422e-08; torch-compile-fp32 5.421e-08 |
@@ -141,9 +141,9 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | eigh | synthetic | relative_residual | - | 6.672e-07 | torch-gpu 9.614e-07 |
 | algos | elliptic-envelope | istella | fraction_flagged | - | 0.092480 | sklearn-cpu - |
 | algos | elliptic-envelope | taxi | fraction_flagged | - | 0.102090 | sklearn-cpu 0.102470 |
-| algos | elliptic-envelope | taxi | jaccard_vs_sklearn | - | - | sklearn-cpu 1.000000 |
+| algos | elliptic-envelope | taxi | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | - | sklearn-cpu 1.000000 |
 | algos | embedding | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
-| algos | embedding | synthetic | rel_fro_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
+| algos | embedding | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
 | algos | enet-cv | istella | r2 (higher is better) | - | 0.326805 | sklearn-cpu 0.326805 |
 | algos | enet-cv | istella | rmse (lower is better) | - | 0.685379 | sklearn-cpu 0.685379 |
 | algos | enet-cv | taxi | r2 (higher is better) | - | 0.909004 | sklearn-cpu 0.909004 |
@@ -153,17 +153,17 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | gaussian-nb | taxi | accuracy (higher is better) | - | 0.719820 | sklearn-cpu 0.719900 |
 | algos | gaussian-nb | taxi | logloss (lower is better) | - | 1.132249 | sklearn-cpu 1.133898 |
 | algos | gcn | istella | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.025557; torch-eager-bf16 2662.412698; torch-compile-bf16 2662.401917 |
-| algos | gcn | istella | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 9.36e-08; torch-eager-bf16 0.002187; torch-compile-bf16 0.002187 |
+| algos | gcn | istella | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | - | torch-eager-fp32 -; torch-compile-fp32 9.36e-08; torch-eager-bf16 0.002187; torch-compile-bf16 0.002187 |
 | algos | gcn | taxi | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.001702; torch-eager-bf16 1509.509399; torch-compile-bf16 1509.509515 |
-| algos | gcn | taxi | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 7.846e-08; torch-eager-bf16 0.002330; torch-compile-bf16 0.002330 |
+| algos | gcn | taxi | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | - | torch-eager-fp32 -; torch-compile-fp32 7.846e-08; torch-eager-bf16 0.002330; torch-compile-bf16 0.002330 |
 | algos | global-avgpool | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.015661 | torch-eager-fp32 0.000000; torch-compile-fp32 0.007299; torch-eager-bf16 0.000000; torch-compile-bf16 0.007299 |
-| algos | global-avgpool | synthetic | rel_fro_vs_torch_eager_fp32 | - | 1.506e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 1.01e-07; torch-eager-bf16 0.000000; torch-compile-bf16 1.01e-07 |
+| algos | global-avgpool | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 1.506e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 1.01e-07; torch-eager-bf16 0.000000; torch-compile-bf16 1.01e-07 |
 | algos | global-maxpool | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
-| algos | global-maxpool | synthetic | rel_fro_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | global-maxpool | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | graphsage | istella | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.140845; torch-eager-bf16 3907.144070; torch-compile-bf16 3678.232431 |
-| algos | graphsage | istella | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 8.05e-08; torch-eager-bf16 0.003366; torch-compile-bf16 0.003054 |
+| algos | graphsage | istella | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | - | torch-eager-fp32 -; torch-compile-fp32 8.05e-08; torch-eager-bf16 0.003366; torch-compile-bf16 0.003054 |
 | algos | graphsage | taxi | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.162162; torch-eager-bf16 4680.142857; torch-compile-bf16 4608.154297 |
-| algos | graphsage | taxi | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 8.776e-08; torch-eager-bf16 0.003557; torch-compile-bf16 0.003285 |
+| algos | graphsage | taxi | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | - | torch-eager-fp32 -; torch-compile-fp32 8.776e-08; torch-eager-bf16 0.003557; torch-compile-bf16 0.003285 |
 | algos | gru-clf | synthetic | accuracy (higher is better) | - | 0.971625 | torch-eager-fp32 0.971842; torch-compile-fp32 0.971842; torch-eager-bf16 0.971788; torch-compile-bf16 0.971788 |
 | algos | gru-clf | synthetic | logloss (lower is better) | - | 0.070054 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
 | algos | gru-clf | taxi-hourly | accuracy (higher is better) | - | 0.865723 | torch-eager-fp32 0.865668; torch-compile-fp32 0.865668; torch-eager-bf16 0.865777; torch-compile-bf16 0.865777 |
@@ -210,7 +210,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | lasso-lars | taxi | r2 (higher is better) | - | 0.908998 | sklearn-cpu 0.908998 |
 | algos | lasso-lars | taxi | rmse (lower is better) | - | 4.804663 | sklearn-cpu 4.804669 |
 | algos | layernorm | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.011086 | torch-eager-fp32 0.000000; torch-compile-fp32 0.007530; torch-eager-bf16 0.000000; torch-compile-bf16 0.007530 |
-| algos | layernorm | synthetic | rel_fro_vs_torch_eager_fp32 | - | 6.669e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 5.326e-08; torch-eager-bf16 0.000000; torch-compile-bf16 5.326e-08 |
+| algos | layernorm | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 6.669e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 5.326e-08; torch-eager-bf16 0.000000; torch-compile-bf16 5.326e-08 |
 | algos | lda-clf | istella | accuracy (higher is better) | - | 0.912830 | sklearn-cpu 0.899520 |
 | algos | lda-clf | istella | logloss (lower is better) | - | 0.235875 | sklearn-cpu 0.439049 |
 | algos | lda-clf | taxi | accuracy (higher is better) | - | 0.762530 | sklearn-cpu 0.762530 |
@@ -237,9 +237,9 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | maxabs-scaler | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | maxabs-scaler | taxi | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | maxpool1d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
-| algos | maxpool1d | synthetic | rel_fro_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | maxpool1d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | maxpool2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
-| algos | maxpool2d | synthetic | rel_fro_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | maxpool2d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | min-cov-det | istella | n_features | - | 220 | sklearn-cpu - |
 | algos | min-cov-det | istella | rel_diff_vs_sklearn | - | 0.239361 | sklearn-cpu - |
 | algos | min-cov-det | taxi | n_features | - | 11 | sklearn-cpu 11 |
@@ -255,7 +255,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | minmax-scaler | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | minmax-scaler | taxi | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | moe | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.044703; torch-eager-bf16 22862.630675; torch-compile-bf16 22880.029448 |
-| algos | moe | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 2.011e-07; torch-eager-bf16 0.055222; torch-compile-bf16 0.055199 |
+| algos | moe | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | - | torch-eager-fp32 -; torch-compile-fp32 2.011e-07; torch-eager-bf16 0.055222; torch-compile-bf16 0.055199 |
 | algos | multilabel-binarizer | istella | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | multilabel-binarizer | istella | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | multilabel-binarizer | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
@@ -267,7 +267,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | multinomial-nb | text | accuracy (higher is better) | - | 0.983067 | sklearn-cpu 0.983067 |
 | algos | multinomial-nb | text | logloss (lower is better) | - | 0.559529 | sklearn-cpu 0.557319 |
 | algos | nadam | synthetic | optimizer_update_error_vs_torch_fp32 | - | 1.131e-05 | torch-eager-fp32 0.000000; torch-compile-fp32 5.621e-05 |
-| algos | nadam | synthetic | rel_fro_vs_torch_eager_fp32 | - | 2.945e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 1.464e-07 |
+| algos | nadam | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 2.945e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 1.464e-07 |
 | algos | nearest-centroid | istella | accuracy (higher is better) | - | 0.852610 | sklearn-cpu 0.852610 |
 | algos | nearest-centroid | istella | logloss (lower is better) | - | 4.299485 | sklearn-cpu 4.117692 |
 | algos | nearest-centroid | taxi | accuracy (higher is better) | - | 0.666700 | sklearn-cpu 0.666750 |
@@ -312,19 +312,19 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | randomized-svd | taxi | relative_reconstruction_error (lower is better) | - | 0.027197 | torch-gpu 0.027197 |
 | algos | resnet-block | synthetic | relative_error_vs_own_host | - | 0.000000 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
 | algos | resnet-block | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.834465; torch-eager-bf16 28679.370880; torch-compile-bf16 18454.670906 |
-| algos | resnet-block | synthetic | rel_fro_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 1.645e-07; torch-eager-bf16 0.004232; torch-compile-bf16 0.003485 |
+| algos | resnet-block | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | - | torch-eager-fp32 -; torch-compile-fp32 1.645e-07; torch-eager-bf16 0.004232; torch-compile-bf16 0.003485 |
 | algos | rfe | istella | jaccard_vs_exact | - | 0.774194 | sklearn-cpu - |
-| algos | rfe | istella | jaccard_vs_sklearn | - | 0.848739 | sklearn-cpu 1.000000 |
+| algos | rfe | istella | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 0.848739 | sklearn-cpu 1.000000 |
 | algos | rfe | istella | n_selected | - | 110 | sklearn-cpu 110 |
 | algos | rfe | taxi | jaccard_vs_exact | - | 1.000000 | sklearn-cpu - |
-| algos | rfe | taxi | jaccard_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | rfe | taxi | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | rfe | taxi | n_selected | - | 5 | sklearn-cpu 5 |
 | algos | ridge-cv | istella | r2 (higher is better) | - | 0.328684 | sklearn-cpu 0.328683 |
 | algos | ridge-cv | istella | rmse (lower is better) | - | 0.684422 | sklearn-cpu 0.684423 |
 | algos | ridge-cv | taxi | r2 (higher is better) | - | 0.908981 | sklearn-cpu 0.908983 |
 | algos | ridge-cv | taxi | rmse (lower is better) | - | 4.805109 | sklearn-cpu 4.805057 |
 | algos | rmsprop | synthetic | optimizer_update_error_vs_torch_fp32 | - | 2.228e-06 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
-| algos | rmsprop | synthetic | rel_fro_vs_torch_eager_fp32 | - | 3.829e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
+| algos | rmsprop | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 3.829e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
 | algos | rnn-clf | synthetic | accuracy (higher is better) | - | 0.967828 | torch-eager-fp32 0.953559; torch-compile-fp32 0.953559; torch-eager-bf16 0.953559; torch-compile-bf16 0.953559 |
 | algos | rnn-clf | synthetic | logloss (lower is better) | - | 0.079029 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
 | algos | rnn-clf | taxi-hourly | accuracy (higher is better) | - | 0.862684 | torch-eager-fp32 0.868056; torch-compile-fp32 0.868056; torch-eager-bf16 0.867947; torch-compile-bf16 0.867947 |
@@ -337,38 +337,38 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | robust-scaler | istella | rel_diff_vs_sklearn | - | 7.339e-09 | sklearn-cpu - |
 | algos | robust-scaler | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | robust-scaler | taxi | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | select-chi2 | istella | jaccard_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | select-chi2 | istella | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | select-chi2 | istella | n_selected | - | 110 | sklearn-cpu 110 |
-| algos | select-chi2 | taxi | jaccard_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | select-chi2 | taxi | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | select-chi2 | taxi | n_selected | - | 5 | sklearn-cpu 5 |
 | algos | select-d | synthetic | relative_error_vs_own_host | - | 0.000000 | statsmodels-cpu - |
-| algos | select-d | synthetic | d_agreement_vs_statsmodels | - | - | statsmodels-cpu 1.000000 |
+| algos | select-d | synthetic | d_agreement_vs_statsmodels (1 is statsmodels' orders exactly) | - | - | statsmodels-cpu 1.000000 |
 | algos | select-d | taxi-hourly | relative_error_vs_own_host | - | 0.000000 | statsmodels-cpu - |
-| algos | select-d | taxi-hourly | d_agreement_vs_statsmodels | - | - | statsmodels-cpu 1.000000 |
-| algos | select-f-classif | istella | jaccard_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | select-d | taxi-hourly | d_agreement_vs_statsmodels (1 is statsmodels' orders exactly) | - | - | statsmodels-cpu 1.000000 |
+| algos | select-f-classif | istella | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | select-f-classif | istella | n_selected | - | 110 | sklearn-cpu 110 |
-| algos | select-f-classif | taxi | jaccard_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | select-f-classif | taxi | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | select-f-classif | taxi | n_selected | - | 5 | sklearn-cpu 5 |
-| algos | select-f-regression | istella | jaccard_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | select-f-regression | istella | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | select-f-regression | istella | n_selected | - | 110 | sklearn-cpu 110 |
-| algos | select-f-regression | taxi | jaccard_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | select-f-regression | taxi | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | select-f-regression | taxi | n_selected | - | 5 | sklearn-cpu 5 |
-| algos | select-mutual-info-reg | istella | jaccard_vs_sklearn | - | 0.929825 | sklearn-cpu 1.000000 |
+| algos | select-mutual-info-reg | istella | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 0.929825 | sklearn-cpu 1.000000 |
 | algos | select-mutual-info-reg | istella | n_selected | - | 110 | sklearn-cpu 110 |
-| algos | select-mutual-info-reg | taxi | jaccard_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | select-mutual-info-reg | taxi | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | select-mutual-info-reg | taxi | n_selected | - | 5 | sklearn-cpu 5 |
-| algos | select-mutual-info | istella | jaccard_vs_sklearn | - | 0.929825 | sklearn-cpu 1.000000 |
+| algos | select-mutual-info | istella | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 0.929825 | sklearn-cpu 1.000000 |
 | algos | select-mutual-info | istella | n_selected | - | 110 | sklearn-cpu 110 |
-| algos | select-mutual-info | taxi | jaccard_vs_sklearn | - | 0.428571 | sklearn-cpu 1.000000 |
+| algos | select-mutual-info | taxi | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 0.428571 | sklearn-cpu 1.000000 |
 | algos | select-mutual-info | taxi | n_selected | - | 5 | sklearn-cpu 5 |
-| algos | select-r-regression | istella | jaccard_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | select-r-regression | istella | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | select-r-regression | istella | n_selected | - | 110 | sklearn-cpu 110 |
-| algos | select-r-regression | taxi | jaccard_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | select-r-regression | taxi | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | select-r-regression | taxi | n_selected | - | 5 | sklearn-cpu 5 |
 | algos | sgd-clf | istella | accuracy (higher is better) | - | 0.920330 | - |
 | algos | sgd-clf | taxi | accuracy (higher is better) | - | 0.755330 | - |
 | algos | sgd | synthetic | optimizer_update_error_vs_torch_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 4.764e-06; torch-fused-fp32 4.764e-06 |
-| algos | sgd | synthetic | rel_fro_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 6.772e-10; torch-fused-fp32 6.772e-10 |
+| algos | sgd | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 6.772e-10; torch-fused-fp32 6.772e-10 |
 | algos | sparse-coder | istella | max_abs_diff_vs_sklearn | - | 6.104e-05 | sklearn-cpu - |
 | algos | sparse-coder | istella | rel_diff_vs_sklearn | - | 9.356e-08 | sklearn-cpu - |
 | algos | sparse-coder | taxi | max_abs_diff_vs_sklearn | - | 4.292e-06 | sklearn-cpu - |

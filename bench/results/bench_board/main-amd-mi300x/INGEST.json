@@ -1,31 +1,56 @@
 {
- "generated": "2026-10-11T15:38:22Z",
+ "generated": "2026-10-18T06:49:13Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-11T15:38:22Z",
+  "generated": "2026-10-18T06:49:13Z",
   "grid_logs": [
-   "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-new-grid-logs.txt",
-   "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-new-grid-logs.txt"
+   "nv=/dev/null"
   ],
   "json_dir": null,
+  "paired_boards": [
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adafactor.synthetic.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adagrad.synthetic.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adam.synthetic.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adamax.synthetic.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adamw.synthetic.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.als.taxi-zones.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mamba2-forward.gaussian.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mamba3-forward.gaussian.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mlp-predict.gaussian.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mlp-train-step.gaussian.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.samba-forward.bytes.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.samba-train-step.bytes.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.transformer-decode.gaussian.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.transformer-forward.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adafactor.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adagrad.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adam.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adamax.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adamw.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.avgpool1d.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.avgpool2d.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.batchnorm1d.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.batchnorm2d.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cagra.istella.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cagra.taxi.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cholesky.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.gemm-bf16.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.gemm.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.lm-forward.bytes.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mamba2-forward.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mamba3-forward.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mlp-predict.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mlp-train-step.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.samba-forward.bytes.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.samba-train-step.bytes.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.transformer-decode.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.transformer-forward.gaussian.shape=full.json"
+  ],
   "results": [
-   "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-new-results.txt",
-   "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-new-results.txt"
+   "nv=/dev/null"
   ]
  },
- "skip_notes": [
-  "GRIDBB: A/B or switched build: nv2/v0018 r1011.m1-affine.ab",
-  "GRIDBB: A/B or switched build: nv2/v0025 r1011.lm-gadam2.ab",
-  "GRIDBB: A/B or switched build: nv2/v0026 r1011.s17-dbuf2.ab",
-  "GRIDBB: A/B or switched build: amd/a1604 r1011.lm-gadam.ab",
-  "GRIDBB: A/B or switched build: amd/a1605 r1011.m1-affine.ab",
-  "GRIDBB: A/B or switched build: amd/a1606 r1011.s17-dbuf.ab",
-  "GRIDBB: A/B or switched build: amd/a1612 r1011.lm-gadam2.ab",
-  "GRIDBB: A/B or switched build: amd/a1613 r1011.s17-dbuf2.ab"
- ],
- "skipped": {
-  "ALGOS: A/B or grid arm (MOJOLEARN_BUILD_DEFINES)": 38,
-  "GRIDBB: A/B or switched build": 8
- },
- "summary": "MAINBOARD column=amd-mi300x label=main@8d5855b83 races=1 add=0 change=0 drop=0 failed=0 ledger=0 withheld_opponents=0 identity=n/a:1"
+ "skip_notes": [],
+ "skipped": {},
+ "summary": "MAINBOARD column=amd-mi300x label=main@80ace6b7a races=24 add=23 change=0 drop=0 failed=0 ledger=0 withheld_opponents=0 identity=MATCH:12,n/a:12"
 }

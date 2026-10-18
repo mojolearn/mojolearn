@@ -1,23 +1,50 @@
 {
- "generated": "2026-10-15T03:47:51Z",
+ "generated": "2026-10-18T06:49:13Z",
  "inputs": {
   "branch": "main",
-  "generated": "2026-10-15T03:47:51Z",
+  "generated": "2026-10-18T06:49:13Z",
   "grid_logs": [
    "nv=/dev/null"
   ],
   "json_dir": null,
   "paired_boards": [
-   "nv=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/nvidia-algos.lu-solve.synthetic.rows=full.json",
-   "nv=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/nvidia-algos.lu-factor.synthetic.rows=full.json",
-   "nv=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/nvidia-algos.eigh.synthetic.rows=full.json",
-   "nv=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/nvidia-algos.cholesky.synthetic.rows=full.json",
-   "amd=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/amd-algos.lu-solve.synthetic.rows=full.json",
-   "amd=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/amd-algos.lu-factor.synthetic.rows=full.json",
-   "amd=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/amd-algos.eigh.synthetic.rows=full.json",
-   "amd=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/amd-algos.cholesky.synthetic.rows=full.json",
-   "nv=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/nvidia-neural.gemm.gaussian.shape=full.json",
-   "amd=/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/amd-neural.gemm.gaussian.shape=full.json"
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adafactor.synthetic.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adagrad.synthetic.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adam.synthetic.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adamax.synthetic.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adamw.synthetic.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.als.taxi-zones.rows=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mamba2-forward.gaussian.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mamba3-forward.gaussian.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mlp-predict.gaussian.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mlp-train-step.gaussian.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.samba-forward.bytes.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.samba-train-step.bytes.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.transformer-decode.gaussian.shape=full.json",
+   "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.transformer-forward.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adafactor.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adagrad.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adam.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adamax.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adamw.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.avgpool1d.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.avgpool2d.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.batchnorm1d.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.batchnorm2d.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cagra.istella.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cagra.taxi.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cholesky.synthetic.rows=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.gemm-bf16.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.gemm.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.lm-forward.bytes.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mamba2-forward.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mamba3-forward.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mlp-predict.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mlp-train-step.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.samba-forward.bytes.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.samba-train-step.bytes.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.transformer-decode.gaussian.shape=full.json",
+   "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.transformer-forward.gaussian.shape=full.json"
   ],
   "results": [
    "nv=/dev/null"
@@ -25,5 +52,5 @@
  },
  "skip_notes": [],
  "skipped": {},
- "summary": "MAINBOARD column=nvidia-l40s label=main@feee1b453 races=262 add=0 change=1 drop=0 failed=0 ledger=1 withheld_opponents=0 identity=MATCH:89,n/a:173"
+ "summary": "MAINBOARD column=nvidia-l40s label=main@80ace6b7a races=266 add=4 change=11 drop=0 failed=0 ledger=11 withheld_opponents=54 identity=MATCH:94,n/a:172"
 }
