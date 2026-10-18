@@ -585,15 +585,32 @@ struct Tape(Movable):
                 var p = self._parents[n.start + edge]
                 if self._nodes[p].requires_grad:
                     active[p] = True
+        # GRADIENT WRITE INVARIANT (lane ag-fusion). Gradients are never
+        # zero-filled before use. touched[i] says node i's gradient already
+        # holds a contribution. The FIRST contribution to a parent is written
+        # by the VJP (or matmul GEMM) directly into the parent's grad; only
+        # later contributions go to scratch and are added with ACCUMULATE in
+        # the same order as before. That is bit for bit the old zero,
+        # copy-first, add-the-rest schedule. A VJP reads parent VALUES and
+        # the node's own grad, never a parent's grad, so writing the parent's
+        # grad in place is safe. Leaves start touched only when
+        # accumulate=True (a leaf never written before is zeroed first, as
+        # record time used to). After the traversal an unreached
+        # differentiable leaf is zeroed (gradient 0); an unreached
+        # intermediate has no gradient (gradient() refuses).
         var touched = List[Bool](length=len(self._nodes), fill=False)
-        for i in range(len(self._nodes)):
+        for i in range(len(self._nodes)):  # driver-loop: over graph nodes
             var n = self._nodes[i]
-            if n.requires_grad:
-                if accumulate and n.op == LEAF:
-                    touched[i] = True
-                else:
+            if not n.requires_grad:
+                continue
+            if accumulate and n.op == LEAF:
+                if not n.grad_ready:
                     _fill(ex, n.grad, n.rows * n.cols)
-        # Preserve the seed before clearing/overwriting a leaf root's gradient.
+                    self._nodes[i].grad_ready = True
+                touched[i] = True
+            else:
+                self._nodes[i].grad_ready = False
+        # Preserve the seed before overwriting a leaf root's gradient.
         if touched[root]:
             var a = _element_args(self._nodes[root].grad)
             a.i0 = ACCUMULATE
@@ -604,7 +621,7 @@ struct Tape(Movable):
             _copy(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         touched[root] = True
         var scratch_start = self._cursor
-        for reverse in range(root + 1):
+        for reverse in range(root + 1):  # driver-loop: over graph nodes, reverse creation order
             var i = root - reverse
             if not active[i]:
                 continue
@@ -612,30 +629,41 @@ struct Tape(Movable):
             if n.op == LEAF:
                 continue
             self._cursor = scratch_start
+            # Destinations: the parent's own grad for a first contribution,
+            # scratch for a later one (and, for a custom rule, for an input
+            # that needs no gradient: the rule writes every destination).
+            var first = List[Bool](length=n.count, fill=False)
             var contributions = List[FP]()
+            for edge in range(n.count):  # driver-loop: over node inputs
+                var parent = self._parents[n.start + edge]
+                var p = self._nodes[parent]
+                if p.requires_grad and not touched[parent]:
+                    first[edge] = True
+                    touched[parent] = True
+                    contributions.append(p.grad)
+                elif p.requires_grad or n.op >= CUSTOM:
+                    contributions.append(self._alloc(ex, p.rows * p.cols))
+                else:
+                    contributions.append(dummy_ptr())
             if n.op >= CUSTOM:
                 var inputs = List[FP]()
                 var rows = List[Int]()
                 var cols = List[Int]()
-                for edge in range(n.count):
+                for edge in range(n.count):  # driver-loop: over node inputs
                     var p = self._nodes[self._parents[n.start + edge]]
                     inputs.append(p.value)
                     rows.append(p.rows)
                     cols.append(p.cols)
-                    var grad = self._alloc(ex, p.rows * p.cols)
-                    _fill(ex, grad, p.rows * p.cols)
-                    contributions.append(grad)
+                    # BackwardRules receive zeroed, distinct destinations.
+                    _fill(ex, contributions[edge], p.rows * p.cols)
                 rules.apply(ex, n.op - CUSTOM, n.saved, n.value, n.grad, inputs, contributions, rows, cols)
-            for edge in range(n.count):
+            for edge in range(n.count):  # driver-loop: over node inputs
                 var parent = self._parents[n.start + edge]
                 var p = self._nodes[parent]
                 if not p.requires_grad:
                     continue
-                var contribution = dummy_ptr()
-                if n.op >= CUSTOM:
-                    contribution = contributions[edge]
-                else:
-                    contribution = self._alloc(ex, p.rows * p.cols)
+                var contribution = contributions[edge]
+                if n.op < CUSTOM:
                     if n.op == MATMUL:
                         var left = self._nodes[self._parents[n.start]]
                         var right = self._nodes[self._parents[n.start + 1]]
@@ -664,13 +692,20 @@ struct Tape(Movable):
                         a.p11 = n.value
                         var count = p.rows if n.op == SOFTMAX or n.op == LOG_SOFTMAX else p.rows * p.cols
                         ex.launch[OP_AUTOGRAD](a, count)
-                if touched[parent]:
+                if not first[edge]:
                     var a = _element_args(p.grad)
                     a.i0 = ACCUMULATE
                     a.p0 = contribution
                     a.p1 = p.grad
                     ex.launch[OP_AUTOGRAD](a, p.rows * p.cols)
-                else:
-                    _copy(ex, p.grad, contribution, p.rows * p.cols)
-                    touched[parent] = True
         self._cursor = scratch_start
+        for i in range(len(self._nodes)):  # driver-loop: over graph nodes
+            var n = self._nodes[i]
+            if not n.requires_grad:
+                continue
+            if touched[i]:
+                self._nodes[i].grad_ready = True
+            elif n.op == LEAF:
+                # unreached differentiable leaf: its gradient is zero
+                _fill(ex, n.grad, n.rows * n.cols)
+                self._nodes[i].grad_ready = True
