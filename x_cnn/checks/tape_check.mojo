@@ -1,28 +1,30 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CNNClassifier's tape backward (autograd/rules_cnn.mojo) against the hand walk, word for word.
+"""CNNClassifier's tape backward (autograd/rules_cnn.mojo) against stored digests, word for word.
 
 For each case (two conv blocks + head, N 8, 1x28x28, k 10; block 2 with and
 without its max pool; the forward's saved cols and conv output kept or
-recomputed; SGD with momentum and Adam), runs three trainer steps on two
-fresh sets of resident arrays with the same parameters and data, one through
-the hand walk (fit_epoch_d_binding's step, verbatim) and one through the tape
-(cnn_backward_autograd, the binding's default arm), and requires every
-step's loss, every gradient word of the last step, every updated parameter
-word and every optimizer buffer word to be equal. Prints one FNV-1a digest
-per tensor so columns can be compared across vendors.
+recomputed; SGD with momentum and Adam), runs three trainer steps on fresh
+resident arrays through the tape (cnn_backward_autograd, fit_epoch_r/d's
+backward) and requires every step's loss, every gradient word of the last
+step, every updated parameter word and every optimizer buffer word to equal
+the stored digests in x_cnn/checks/tape_check_digests.tsv (recorded when the
+tape matched the deleted hand walk word for word on Metal, NVIDIA and AMD).
+Prints one FNV-1a digest per tensor so columns can be compared across vendors.
 
     mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . x_cnn/checks/tape_check.mojo
 
-Both arms are compiled into this binary (the AUTOGRAD_CNN define picks only
-the binding's arm). A fixture whose gradients are all zero, or whose
-parameters do not move, is refused as VACUOUS."""
+Run from the repo root (the digest file path is relative). A fixture whose
+gradients are all zero, or whose parameters do not move, is refused as
+VACUOUS. There is no float64 oracle for this trainer step."""
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand arm and the tape-vs-hand compare)
 from std.memory import bitcast
 from x_cnn.ops import FP, IP, conv_params, pool_params, AH_ROW, adam_hyper_base, NN14_BOUNDED_IM2COL
 from x_cnn.ops import CP_N, CP_C, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW
 from x_cnn.device import (
-    res_alloc, res_free, res_upload, res_download, conv_block_forward_into, conv_block_backward_into,
-    linear_forward_into, linear_backward_into, softmax_xent_res_loss, opt_many_resident_h, adam_hyper_resident,
+    res_alloc, res_free, res_upload, res_download, conv_block_forward_into, linear_forward_into,
+    softmax_xent_res_loss, opt_many_resident_h, adam_hyper_resident,
 )
 from autograd.rules_cnn import cnn_backward_autograd, conv_block_out_count
 
@@ -33,6 +35,7 @@ comptime K = 10
 comptime OC0 = 4
 comptime OC1 = 8
 comptime STEPS = 3
+comptime DIGESTS = "x_cnn/checks/tape_check_digests.tsv"
 
 
 @always_inline
@@ -94,8 +97,8 @@ struct Result(Movable):
         self.tensors.append(values^)
 
 
-def run[tape: Bool](pool2: Bool, save: Bool, adam: Bool) raises -> Result:
-    """Three steps on fresh resident arrays: the hand walk or the tape."""
+def run(pool2: Bool, save: Bool, adam: Bool) raises -> Result:
+    """Three steps on fresh resident arrays through the tape."""
     # ---- the plan: block 0 conv 1->4 + pool (28 -> 14), block 1 conv 4->8 (+ pool 14 -> 7)
     var cs = List[List[Int32]]()
     var ps = List[List[Int32]]()
@@ -186,24 +189,7 @@ def run[tape: Bool](pool2: Bool, save: Bool, adam: Bool) raises -> Result:
             src = bh[j][4]
         linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, K, _at(a[2]))
         softmax_xent_res_loss(_at(a[2]), _at_i(a[1]), m, K, _at(a[3]), _at(a[4]), lbuf, st)
-        comptime if tape:
-            cnn_backward_autograd(bh, head, a, cs, ps, pools, m, flat, K, tw, tw + 4)
-        else:
-            # fit_epoch_d_binding's hand step, verbatim
-            var glast = bh[nb - 1][6] if nb > 0 else a[5]
-            linear_backward_into[True](
-                _at(src), _at(head[0]), _at(a[3]), m, flat, K, _at(glast), _at(head[2]), _at(head[3])
-            )
-            for jj in range(nb):
-                var j = nb - 1 - jj
-                var bsrc = bh[j - 1][4] if j > 0 else a[0]
-                var dx = bh[j - 1][6] if j > 0 else 0
-                var want = dx != 0
-                conv_block_backward_into[True](
-                    _at(bsrc), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][6]), _at_i(bh[j][5]), cs[j], ps[j],
-                    pools[j], want, _at(dx) if want else _at(bh[j][3]), _at(bh[j][2]), _at(bh[j][3]), bh[j][7],
-                    bh[j][8],
-                )
+        cnn_backward_autograd(bh, head, a, cs, ps, pools, m, flat, K, tw, tw + 4)
         if adam:
             opt_many_resident_h[True](pw, pg, pb, sizes, hbuf + 4 * AH_ROW * st)
         else:
@@ -256,39 +242,59 @@ def run[tape: Bool](pool2: Bool, save: Bool, adam: Bool) raises -> Result:
     return r^
 
 
-def compare(tag: String, hand: Result, tape: Result) -> Int:
+def stored_rows() raises -> List[String]:
+    """The stored digest rows, comments and blank lines skipped."""
+    var f = open(DIGESTS, "r")
+    var text = f.read()
+    f.close()
+    var rows = List[String]()
+    for line in text.splitlines():
+        var r = String(String(line).strip())
+        if r.byte_length() > 0 and not r.startswith("#"):
+            rows.append(r^)
+    if len(rows) == 0:
+        raise Error("VACUOUS cnn tape check: no stored digests in " + String(DIGESTS))
+    return rows^
+
+
+def compare(tag: String, tape: Result, stored: List[String], mut pos: Int) -> Int:
+    """Each printed row against the stored row at `pos`; a missing or different row counts."""
     var bad = 0
-    for s in range(len(hand.losses)):
-        var same = bitcast[DType.uint32](hand.losses[s]) == bitcast[DType.uint32](tape.losses[s])
-        print("CNN_TAPE", tag, "loss step", s, "hand", hand.losses[s], "tape", tape.losses[s], "SAME" if same else "DIFFER")
+    for s in range(len(tape.losses)):
+        var row = tag + "\tloss step " + String(s) + "\t1\t" + String(tape.losses[s])
+        var same = pos < len(stored) and stored[pos] == row
+        print("CNN_TAPE", tag, "loss step", s, "tape", tape.losses[s], "SAME" if same else "DIFFER")
         if not same:
             bad += 1
-    for t in range(len(hand.tensors)):
-        ref h = hand.tensors[t]
+        pos += 1
+    for t in range(len(tape.tensors)):
         ref p = tape.tensors[t]
-        var diff = abs(len(h) - len(p))
-        for i in range(min(len(h), len(p))):
-            if bitcast[DType.uint32](h[i]) != bitcast[DType.uint32](p[i]):
-                diff += 1
-        print("CNN_TAPE", tag, hand.names[t], len(h), "hand", digest(h), "tape", digest(p),
-              String("SAME") if diff == 0 else String("DIFFER ") + String(diff))
-        if diff != 0:
+        var d = digest(p)
+        var row = tag + "\t" + tape.names[t] + "\t" + String(len(p)) + "\t" + String(d)
+        var same = pos < len(stored) and stored[pos] == row
+        print("CNN_TAPE", tag, tape.names[t], len(p), "tape", d, "SAME" if same else "DIFFER")
+        if not same:
             bad += 1
+        pos += 1
     return bad
 
 
-def run_case(tag: String, pool2: Bool, save: Bool, adam: Bool) raises -> Int:
-    var hand = run[False](pool2, save, adam)
-    var tape = run[True](pool2, save, adam)
-    return compare(tag, hand, tape)
+def run_case(tag: String, pool2: Bool, save: Bool, adam: Bool, stored: List[String], mut pos: Int) raises -> Int:
+    var tape = run(pool2, save, adam)
+    return compare(tag, tape, stored, pos)
 
 
 def main() raises:
+    var stored = stored_rows()
+    var pos = 0
     var bad = 0
-    bad += run_case("sgd.pool.saved", True, True, False)
-    bad += run_case("adam.pool.saved", True, True, True)
-    bad += run_case("sgd.nopool.recompute", False, False, False)
-    bad += run_case("adam.nopool.recompute", False, False, True)
+    bad += run_case("sgd.pool.saved", True, True, False, stored, pos)
+    bad += run_case("adam.pool.saved", True, True, True, stored, pos)
+    bad += run_case("sgd.nopool.recompute", False, False, False, stored, pos)
+    bad += run_case("adam.nopool.recompute", False, False, True, stored, pos)
+    if pos != len(stored):
+        bad += abs(len(stored) - pos)
+        print("CNN_TAPE stored rows", len(stored), "printed rows", pos, "DIFFER")
     if bad != 0:
-        raise Error("CNN_TAPE_CHECK_FAIL " + String(bad) + " tensors differ between the tape and the hand walk")
-    print("CNN_TAPE_CHECK_PASS every loss, gradient, parameter and optimizer word equals the hand walk")
+        raise Error("CNN_TAPE_CHECK_FAIL " + String(bad) + " rows differ from the stored digests")
+    print("CNN_TAPE_CHECK_PASS every loss, gradient, parameter and optimizer word equals the stored digests")

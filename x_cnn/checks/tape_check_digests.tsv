@@ -1,0 +1,100 @@
+# x_cnn/checks/tape_check.mojo stored digests: one row per printed value, in print order.
+# case<TAB>name<TAB>words<TAB>value (loss rows: the printed float32; tensor rows: FNV-1a over the float32 words).
+# Recorded from the tape/hand word-for-word runs (every row SAME, tape == hand) on integration fda883af2:
+# Metal compile-22, NVIDIA L40S and AMD MI325X p6-01 and final-02; the five runs print these 96 rows identically.
+sgd.pool.saved	loss step 0	1	2.3037658
+sgd.pool.saved	loss step 1	1	2.3024082
+sgd.pool.saved	loss step 2	1	2.2998545
+sgd.pool.saved	block0.w grad	36	8104314183148238768
+sgd.pool.saved	block0.w param	36	3293484983923039772
+sgd.pool.saved	block0.w opt	72	8039907601755017941
+sgd.pool.saved	block0.b grad	4	13265473500782557063
+sgd.pool.saved	block0.b param	4	13845545538268743125
+sgd.pool.saved	block0.b opt	8	11524473895547991568
+sgd.pool.saved	block1.w grad	288	8220372124592903142
+sgd.pool.saved	block1.w param	288	4270244011106451977
+sgd.pool.saved	block1.w opt	576	7671249351704167528
+sgd.pool.saved	block1.b grad	8	18061822496569614588
+sgd.pool.saved	block1.b param	8	9982639272968139221
+sgd.pool.saved	block1.b opt	16	620720436370172553
+sgd.pool.saved	head.w grad	3920	7810355158328773345
+sgd.pool.saved	head.w param	3920	6511303935257813828
+sgd.pool.saved	head.w opt	7840	12413927351179878746
+sgd.pool.saved	head.b grad	10	12807471776144090497
+sgd.pool.saved	head.b param	10	5291013969643945699
+sgd.pool.saved	head.b opt	20	1283346789918746007
+sgd.pool.saved	block0.gout	6272	11911152793884618261
+sgd.pool.saved	block1.gout	3136	7158447693498068758
+sgd.pool.saved	glog	80	11230793670407808225
+adam.pool.saved	loss step 0	1	2.3037658
+adam.pool.saved	loss step 1	1	2.3019517
+adam.pool.saved	loss step 2	1	2.2998872
+adam.pool.saved	block0.w grad	36	4352378144459286162
+adam.pool.saved	block0.w param	36	15021576751651866798
+adam.pool.saved	block0.w opt	72	1902364243776733380
+adam.pool.saved	block0.b grad	4	6379120879008425299
+adam.pool.saved	block0.b param	4	6163420504083946692
+adam.pool.saved	block0.b opt	8	7083335176704643683
+adam.pool.saved	block1.w grad	288	17333622151233373126
+adam.pool.saved	block1.w param	288	11964672758139883701
+adam.pool.saved	block1.w opt	576	15847886399420962401
+adam.pool.saved	block1.b grad	8	14444240954410019522
+adam.pool.saved	block1.b param	8	8785354851484112576
+adam.pool.saved	block1.b opt	16	6145827171061772504
+adam.pool.saved	head.w grad	3920	2387869440843611754
+adam.pool.saved	head.w param	3920	9570122623033546313
+adam.pool.saved	head.w opt	7840	11031145568465186159
+adam.pool.saved	head.b grad	10	4062646138839671941
+adam.pool.saved	head.b param	10	11030459469399963396
+adam.pool.saved	head.b opt	20	5173011295127271196
+adam.pool.saved	block0.gout	6272	17810196174848863762
+adam.pool.saved	block1.gout	3136	17285092552688314039
+adam.pool.saved	glog	80	17287740291219813343
+sgd.nopool.recompute	loss step 0	1	2.303248
+sgd.nopool.recompute	loss step 1	1	2.3017132
+sgd.nopool.recompute	loss step 2	1	2.2988076
+sgd.nopool.recompute	block0.w grad	36	11736279240771176045
+sgd.nopool.recompute	block0.w param	36	15039473985768783768
+sgd.nopool.recompute	block0.w opt	72	14870130459760385765
+sgd.nopool.recompute	block0.b grad	4	1541152392954409566
+sgd.nopool.recompute	block0.b param	4	840576076622758438
+sgd.nopool.recompute	block0.b opt	8	8096700972098478058
+sgd.nopool.recompute	block1.w grad	288	3028280244625366156
+sgd.nopool.recompute	block1.w param	288	17109016231903897742
+sgd.nopool.recompute	block1.w opt	576	16825584715197288556
+sgd.nopool.recompute	block1.b grad	8	1017579556162279339
+sgd.nopool.recompute	block1.b param	8	13184700540946621108
+sgd.nopool.recompute	block1.b opt	16	6714139828553958667
+sgd.nopool.recompute	head.w grad	15680	7734023717380614247
+sgd.nopool.recompute	head.w param	15680	14669558499535670768
+sgd.nopool.recompute	head.w opt	31360	18015060039941298972
+sgd.nopool.recompute	head.b grad	10	2550040657711805651
+sgd.nopool.recompute	head.b param	10	8914210887965801087
+sgd.nopool.recompute	head.b opt	20	11618809510211127379
+sgd.nopool.recompute	block0.gout	6272	14433602142267468309
+sgd.nopool.recompute	block1.gout	12544	2700283977056759188
+sgd.nopool.recompute	glog	80	6817992723065583060
+adam.nopool.recompute	loss step 0	1	2.303248
+adam.nopool.recompute	loss step 1	1	2.2983856
+adam.nopool.recompute	loss step 2	1	2.2927203
+adam.nopool.recompute	block0.w grad	36	4039022429560834445
+adam.nopool.recompute	block0.w param	36	15811148188894622846
+adam.nopool.recompute	block0.w opt	72	12473436754436713657
+adam.nopool.recompute	block0.b grad	4	13289984823684805063
+adam.nopool.recompute	block0.b param	4	11892549913289052004
+adam.nopool.recompute	block0.b opt	8	6610510187501552558
+adam.nopool.recompute	block1.w grad	288	9875086403135070455
+adam.nopool.recompute	block1.w param	288	15589757169018926170
+adam.nopool.recompute	block1.w opt	576	17201491161420231236
+adam.nopool.recompute	block1.b grad	8	5424989598921750812
+adam.nopool.recompute	block1.b param	8	2484622654167953517
+adam.nopool.recompute	block1.b opt	16	13364871831874891820
+adam.nopool.recompute	head.w grad	15680	15479027408185979560
+adam.nopool.recompute	head.w param	15680	14996520891344104481
+adam.nopool.recompute	head.w opt	31360	1695108762155305813
+adam.nopool.recompute	head.b grad	10	17639555964188402959
+adam.nopool.recompute	head.b param	10	3682804060131384370
+adam.nopool.recompute	head.b opt	20	1333786532265078510
+adam.nopool.recompute	block0.gout	6272	18074556102428034895
+adam.nopool.recompute	block1.gout	12544	13253452362571238158
+adam.nopool.recompute	glog	80	18263833079698021201

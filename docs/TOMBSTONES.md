@@ -34,6 +34,7 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_MAMBA_OFF`](#mojolearn_autograd_mamba_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_LM`](#mojolearn_autograd_lm_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_LM_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_LM_OFF`](#mojolearn_autograd_lm_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_LM_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_CNN_OFF`](#mojolearn_autograd_cnn_off) | Neural | removed | 2026-10-19 | [MOJOLEARN_AUTOGRAD_CNN_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
 | [`MOJOLEARN_AUTOGRAD_RNN_OFF`](#mojolearn_autograd_rnn_off) | Neural | removed (hand glue, tape is the only path) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_RNN_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_SAMBA_OFF`](#mojolearn_autograd_samba_off) | Neural | DELETED (hand path; tape only) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch) |
@@ -3311,3 +3312,29 @@ grid_controls entry existed.
 The `removed` refusal is a `comptime assert` at the top of `llama_decoder_layer_backward_autograd` in
 autograd/rules_transformer.mojo, not in core/six_lane_experiment_guards.mojo: the pre-push rebuild fence refuses a change to
 that module (76 bindings import it) and asks for the area's own module.
+
+## MOJOLEARN_AUTOGRAD_CNN_OFF
+
+- What it was: the hand-chained CNNClassifier backward in `bindings/_mojolearn_x_cnn.mojo` `fit_epoch_r_binding` and
+  `fit_epoch_d_binding`: per step `linear_backward_into[True]` for the head into the last block's gout, then
+  `conv_block_backward_into[True]` per block from last to first, chaining each block's input gradient by hand. The
+  `AUTOGRAD_CNN` switch in `autograd/rules_cnn.mojo` (default on; `MOJOLEARN_AUTOGRAD_CNN_OFF` selected the hand walk,
+  `MOJOLEARN_AUTOGRAD_CNN` the opt-in spelling) picked it against `cnn_backward_autograd`. The fused kernels stay: the tape
+  rules (`CNN_CONV_BLOCK`, `CNN_LINEAR`) call them with the same arguments in the same order.
+- Files: `bindings/_mojolearn_x_cnn.mojo`, `autograd/rules_cnn.mojo`, `x_cnn/checks/tape_check.mojo` (its hand arm and the
+  tape-vs-hand compare).
+- Verdict: removed (Andrew 2026-10-19: every trainer runs its backward on the tape by default; delete the hand glue). Not an
+  A/B loser: the default was flipped on the word-for-word check without timing, and no hand-vs-tape timing run exists for the
+  CNN trainer (TM_LM_TIMING, NV_PASS5, AMD_PASS5 and the pass-6 reports have no CNN row), so there are no NV/AMD ratios.
+  Quality unchanged by construction: same bits.
+- Evidence: `x_cnn/checks/tape_check.mojo`, tape vs hand, 96 rows (per case 3 losses and 21 tensor digests; cases
+  sgd/adam x pool+saved / nopool+recompute) all SAME on integration fda883af2: Metal compile-22 (`cnn-tape-run.log`), NVIDIA L40S
+  and AMD MI325X p6-01 (`checks/cnn-tape-run.log`) and final-02 (`cnn-run.log`), all five printing the same 96 rows
+  (~/mojolearn-evidence/autograd-buildout-20261019/). Those rows are now stored in `x_cnn/checks/tape_check_digests.tsv`
+  and the check compares the tape against them (e.g. sgd.pool.saved loss step 0 2.3037658, block0.w grad 8104314183148238768).
+- Deleted 2026-10-19 by `ddd4fa509` on lane/del-cnn; recoverable at `ddd4fa509^`.
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch` (the three code files, from the lane head back to
+  `ddd4fa509^`; it also removes the inline tombstones and the refusals).
+- Guard: `MOJOLEARN_AUTOGRAD_CNN_OFF` and the opt-in spelling `MOJOLEARN_AUTOGRAD_CNN` refused in `autograd/rules_cnn.mojo`
+  (`cnn_backward_autograd`, reached by every CNN trainer step), not in core: a core line rebuilds every binding (the
+  pre-push rebuild fence refuses it). No `grid_controls` entry existed.

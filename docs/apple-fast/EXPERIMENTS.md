@@ -2183,3 +2183,6 @@ Live finding (M4, pip 0.8.49 and 0.8.50, FactorAnalysis 20k x 64): fast 7016 ms,
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_AUTOGRAD_SAMBA_OFF` (and `MOJOLEARN_AUTOGRAD_SAMBA`; the hand Samba train-step backward walk) | Samba resident train step, samba_tape_step_check 3 stacks | lane/del-samba @ 70ce81192 | final-02 nv/amd samba-run, compile-23 Metal | no timing (none recorded) | **DELETED** | tape = hand word for word on Metal, NVIDIA, AMD; check now against stored digests; docs/TOMBSTONES.md, experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch |
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_AUTOGRAD_CNN_OFF` (hand CNN fit-epoch backward walk; `MOJOLEARN_AUTOGRAD_CNN` opt-in spelling too) | CNNClassifier fit_epoch_r / fit_epoch_d | lane/del-cnn @ ddd4fa509 (recoverable at ddd4fa509^) | none (no CNN timing run) | n/a | DELETED (removed) | tape is the only backward; tape == hand word for word on Metal, NVIDIA, AMD (tape_check 96 rows, now stored digests); docs/TOMBSTONES.md |
