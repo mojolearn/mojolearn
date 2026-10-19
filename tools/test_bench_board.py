@@ -157,6 +157,8 @@ STUB_NEURAL = textwrap.dedent(r'''
     data = "bytes" if a.lane.split("-")[0] in ("lm", "samba") else "gaussian"
     if a.lane.endswith("-fit") or a.lane == "tape-user-model":
         data = "higgs"                    # the fit lanes (bench_board_neural.FIT_LANES)
+    if a.lane == "sequential-fit":
+        data = "synthetic"                # bench_board_neural.SYNTH_FIT_LANES
     arms, qual = {}, {}
     for i, arm in enumerate(a.arms.split(",")):
         ours = arm in ("ours", "ours-cpu")
@@ -762,9 +764,11 @@ NEURAL_IDS = [
     # the whole-fit lanes of the tape-trained models (2026-10-19, lane ag-bench)
     "neural/mlp-fit/higgs/shape=full", "neural/lstm-fit/higgs/shape=full",
     "neural/gru-fit/higgs/shape=full", "neural/rnn-fit/higgs/shape=full",
-    "neural/tape-user-model/higgs/shape=full"]
+    "neural/tape-user-model/higgs/shape=full",
+    # the public tape API lanes (2026-10-19, lane ag-board-twins)
+    "neural/sequential-fit/synthetic/shape=full", "neural/ops-session-step/gaussian/shape=full"]
 #: the fit lanes race ours-fast only on Apple (identical is never timed there), and MLX beside torch
-FIT_IDS = {i for i in NEURAL_IDS if "/higgs/" in i}
+FIT_IDS = {i for i in NEURAL_IDS if "/higgs/" in i or "/sequential-fit/" in i}
 #: decode lanes with no torch carried-state twin race ours alone (bench_board_neural.DECODE_LANES
 #: minus DECODE_TORCH_TWIN); transformer-decode's twin is a per-token loop, never compiled
 NO_TWIN_DECODE = ("mamba1-decode", "mamba2-decode", "mamba3-decode", "samba-decode")
@@ -830,8 +834,10 @@ def test_plan_neural_fast_on_apple_only(vendor):
     # (NVIDIA fp32 and tf32: +6; AMD fp32: +3)
     # + the 5 fit lanes (2026-10-19): apple ours-fast + 4 torch + mlx (+30), amd ours + 4 torch (+25),
     # nvidia ours + 6 torch (+35)
-    assert cells == {"apple": 112, "amd": 92, "nvidia": 129}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 23, "cells": cells}}
+    # + sequential-fit (a fit lane: apple +6, amd +5, nvidia +7) and ops-session-step (apple ours + ours-fast
+    # + 4 torch +6, amd +5, nvidia +7), 2026-10-19 lane ag-board-twins
+    assert cells == {"apple": 124, "amd": 102, "nvidia": 143}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 25, "cells": cells}}
 
 
 def test_fast_for_neural_is_the_apple_tier(env):
@@ -1052,6 +1058,37 @@ def test_neural_driver_tables_and_arm_refusals(tmp_path):
     with pytest.raises(SystemExit, match="no arm 'torch-eager-fp64'"):
         bbn.main(["race", "--lane", "gemm", "--arms", "ours,torch-eager-fp64", "--out",
                   str(tmp_path / "o"), "--work", str(tmp_path / "w"), "--rounds", "1"])
+
+
+def test_neural_tape_api_lanes_tables_fixtures_and_quality(tmp_path):
+    # 2026-10-19 (lane ag-board-twins): sequential-fit is a fit lane on its own synthetic data, its
+    # predict_proba inside the clock; ops-session-step is one recorded step with its own span
+    np = pytest.importorskip("numpy")
+    assert "sequential-fit" in bbn.FIT_LANES and bbn.DATA_OF["sequential-fit"] == "synthetic"
+    assert bbn.DATA_OF["ops-session-step"] == "gaussian" and "ops-session-step" in bbn.OPS_LANES
+    assert bbn.fit_span("sequential-fit")["inside_clock"].startswith("one whole fit and the held-out")
+    assert bbn.fit_params("sequential-fit")["layers"] == [
+        "linear 32 128 bias", "relu", "linear 128 64 bias", "relu", "linear 64 1 bias"]
+    assert bbn.ops_params("small")["layers"][0] == "linear 16 32 bias"
+    for lane in ("sequential-fit", "ops-session-step"):
+        rec = bbn.make_inputs(lane, "small", 2, str(tmp_path / ("%s.npz" % lane)))
+        assert rec["lane"] == lane
+    with np.load(str(tmp_path / "sequential-fit.npz")) as z:
+        assert z["X_train"].shape == (4096, 32) and z["X_test"].shape == (1024, 32)
+        assert 0.2 < float(z["y_train"].mean()) < 0.8
+    with np.load(str(tmp_path / "ops-session-step.npz")) as z:
+        data = {k: z[k] for k in z.files}
+    assert data["X"].shape == (64, 16) and data["y_codes"].shape == (64, 1)
+    assert (data["y_codes"][:, 0].astype(np.int64) == data["y"]).all()
+    # the quality: every arm's gradient digests, every other arm's differences from ours
+    grads = [np.ones_like(data["w:" + n]) for n in bbn.OPS_PARAMS]
+    ours = bbn._ops_outputs(np, 1.5, grads, [data["w:" + n] for n in bbn.OPS_PARAMS])
+    theirs = bbn._ops_outputs(np, 1.25, [g * 2 for g in grads], [data["w:" + n] for n in bbn.OPS_PARAMS])
+    q = bbn.quality("ops-session-step", data, {"ours": ours, "torch-eager-fp32": theirs})
+    assert q["ours"]["grad_digests"] == q["ours"]["grad_digests"] and q["ours"]["loss"] == 1.5
+    t = q["torch-eager-fp32"]
+    assert t["loss_abs_diff_vs_ours"] == 0.25 and t["grad_max_abs_diff_vs_ours_w1"] == 1.0
+    assert t["param_max_abs_diff_vs_ours_b2"] == 0.0 and t["grad_digests_equal_ours"] is False
 
 
 def test_neural_driver_inputs_and_quality(tmp_path, monkeypatch):

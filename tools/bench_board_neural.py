@@ -442,6 +442,10 @@ NOT_COVERED = [
     "The fit lanes time one whole fit (one epoch at the recipe's batch size); the held-out "
     "prediction after it is not timed, and multi-epoch fits, early stopping and the classifier "
     "variants of the recurrent models are not raced.",
+    # 2026-10-19 (lane ag-board-twins)
+    "sequential-fit times the fit and the held-out predict_proba together; ops-session-step times one "
+    "recorded step (no multi-step loop, no optimizer state); the session's other operations are timed per "
+    "operation by tools/ag_opbench.py, not on the board.",
 ]
 
 # FAIRNESS FIX (2026-10-13 audit): the torch twins of these lanes are pure-PyTorch REFERENCE
@@ -2511,6 +2515,100 @@ class OursFit(Ours):
         return h.hexdigest()[:16]
 
 
+# ---------------------------------------------------------------------------
+# ops-session-step (2026-10-19, lane ag-board-twins): one recorded step through mojolearn.ops.Session
+# ---------------------------------------------------------------------------
+
+def _ops_outputs(np, loss, grads, updated):
+    """One ops-session-step round's results, the same keys on every arm: the loss, every gradient (g:<name>)
+    and every updated parameter (p:<name>), float32 host arrays, OPS_PARAMS order."""
+    out = {"loss": np.asarray([loss], dtype=np.float64)}
+    for name, g, p in zip(OPS_PARAMS, grads, updated):
+        out["g:" + name] = np.ascontiguousarray(g, dtype=np.float32)
+        out["p:" + name] = np.ascontiguousarray(p, dtype=np.float32)
+    return out
+
+
+def _ops_digest(np, grads):
+    """The round digest of ops-session-step: sha256 of every gradient's float32 bytes, OPS_PARAMS order."""
+    h = hashlib.sha256()
+    for g in grads:
+        h.update(np.ascontiguousarray(g, dtype=np.float32).tobytes())
+    return h.hexdigest()[:16]
+
+
+class OursOpsStep(Ours):
+    """ops-session-step through the public operation session, mojolearn.ops.Session(record=True): the batch,
+    the codes and the four parameters (requires_grad=True) uploaded, relu(linear(x, w1, b1)), linear(h, w2,
+    b2), cross_entropy, backward, the loss and every gradient read back, then the SGD update p - lr * grad with
+    the session's own ops (detach, scale, sub) and every updated parameter read back. The session exposes a
+    gradient as a host array only (Session.grad), so ours re-uploads each gradient for the update; that copy
+    is inside ours' clock. One session per worker: each round frees the previous round's uploads and resets the
+    session first (inside the clock), so every round is the same step from the same fixture weights."""
+
+    def __init__(self, lane, shape, data):
+        import importlib
+        import numpy as np
+        self.np, self.lane, self.shape = np, lane, shape
+        ml = _ours_module()
+        self.ml = ml
+        try:
+            ops = importlib.import_module("mojolearn.ops")
+        except ImportError as exc:
+            raise ImportError("REFUSED: ops-session-step races mojolearn.ops.Session; this mojolearn (%s, %s) "
+                              "has no ops module (%r)" % (getattr(ml, "__version__", "?"),
+                                                          getattr(ml, "__file__", "?"), exc))
+        w = _weights(data)
+        self.p0 = [np.ascontiguousarray(w[n], dtype=np.float32) for n in OPS_PARAMS]
+        self.X = np.ascontiguousarray(data["X"], dtype=np.float32)
+        self.codes = np.ascontiguousarray(data["y_codes"], dtype=np.float32)
+        self.lr = float(OPS_SGD["lr"])
+        self.s = ops.Session(record=True)
+        if not self.s.record:
+            raise RuntimeError("REFUSED: ops-session-step: Session(record=True) reads back record=%r"
+                               % (self.s.record,))
+        self._uploads = []
+        self.loss, self.grads, self.updated = None, None, None
+        d_in, hidden = (int(v) for v in self.p0[0].shape)
+        classes = int(self.p0[2].shape[1])
+        self.info = _ours_info(ml, getattr(sys.modules[ops.Session.__module__], "__file__", None),
+                               ml.numeric_mode(), "gpu")
+        self.info.update(call=LANE_TEXT[lane][0], session="one Session(record=True) per worker; free + reset "
+                         "at the start of every round, inside the clock",
+                         update="SGD with the session's ops: sub(detach(p), scale(tensor(grad), lr))")
+        self.record = ops_record("mojolearn", ops.Session, shape, batch_size=int(self.X.shape[0]),
+                                 layers=ops_layers(d_in, hidden, classes))
+
+    def call(self):
+        s = self.s
+        for h in self._uploads:          # driver-loop: over the previous round's uploaded tensors (ten handles)
+            s.free(h)
+        s.reset()
+        x = s.tensor(self.X)
+        codes = s.tensor(self.codes)
+        ps = [s.tensor(p, requires_grad=True) for p in self.p0]   # driver-loop: over the four parameters
+        uploads = [x, codes] + ps
+        hidden = s.relu(s.linear(x, ps[0], ps[1]))
+        logits = s.linear(hidden, ps[2], ps[3])
+        loss = s.cross_entropy(logits, codes)
+        s.backward(loss)
+        self.loss = s.scalar(loss)
+        self.grads = [s.grad(p) for p in ps]                       # driver-loop: over the four parameters
+        updated = []
+        for p, g in zip(ps, self.grads):                           # driver-loop: over the four parameters
+            gh = s.tensor(g)
+            uploads.append(gh)
+            updated.append(s.numpy(s.sub(s.detach(p), s.scale(gh, self.lr))))
+        self.updated = updated
+        self._uploads = uploads
+
+    def outputs(self):
+        return _ops_outputs(self.np, self.loss, self.grads, self.updated)
+
+    def digest(self):
+        return _ops_digest(self.np, self.grads)
+
+
 OURS = {"lm": OursLM, "gemm": OursGEMM, "transformer": OursBlock, "mamba1": OursBlock,
         "mamba2": OursBlock, "mamba3": OursBlock, "samba": OursSamba, "mlp": OursMLP}
 
@@ -3344,6 +3442,107 @@ class TorchFitArm:
         return _sha(self.np.ascontiguousarray(self._predict()).data)[:16]
 
 
+class TorchOpsStepArm:
+    """ops-session-step's torch opponent at one setting (2026-10-19, lane ag-board-twins): the same step in
+    torch autograd. The clock covers what ours' covers: the batch, labels and four parameters to the device
+    (fresh leaf tensors with requires_grad every round), relu(x @ w1 + b1) @ w2 + b2 under the setting's
+    autocast, F.cross_entropy (mean), backward, the loss and every gradient back on the host,
+    torch.optim.SGD(lr, momentum=0, weight_decay=0).step() and every updated parameter back on the host. A
+    compile arm compiles the forward + loss function in its untimed warm-up round."""
+
+    def __init__(self, lane, shape, data, arm):
+        import inspect
+        import numpy as np
+        self.np, self.lane, self.shape, self.arm = np, lane, shape, arm
+        where, setting = arm_setting(arm)
+        if where != "gpu":
+            raise RuntimeError("REFUSED: %s: ops-session-step races torch on the GPU only" % arm)
+        twin = _load("torch_lm_step_opponent")
+        col = twin.COLUMNS[setting.replace("-", "_")]
+        torch, dev, kind, name, sync = _torch_device()
+        self.torch, self.dev, self.kind, self._sync = torch, dev, kind, sync
+        torch.manual_seed(SEED)
+        hip = getattr(torch.version, "hip", None)
+        if col["tf32"] and not (kind == "cuda" and not hip):
+            raise RuntimeError("REFUSED: %s: TF32 is an NVIDIA CUDA matmul mode; torch on %s "
+                               "accepts the flag and changes nothing" % (arm, "ROCm" if hip else kind))
+        precision = twin.set_precision(torch, col["tf32"])
+        self.autocast, probe = None, None
+        if col["autocast"]:
+            probe = twin.probe_autocast(torch, dev, col["autocast"], sync)
+            if not probe.get("applicable"):
+                raise RuntimeError("REFUSED: %s: torch.autocast(%r, %s) does not work on this box: %s"
+                                   % (arm, dev.type, col["autocast"], json.dumps(probe)[:600]))
+            self.autocast = getattr(torch, col["autocast"])
+        self.compile = bool(col["compile"])
+        # host tensors (no copy): moved to the device inside every timed round
+        self.p0 = [torch.from_numpy(np.ascontiguousarray(data["w:" + n], dtype=np.float32)) for n in OPS_PARAMS]
+        self.X = torch.from_numpy(np.ascontiguousarray(data["X"], dtype=np.float32))
+        self.y = torch.from_numpy(np.ascontiguousarray(data["y"], dtype=np.int64))
+        F = torch.nn.functional
+
+        def step_loss(x, y, w1, b1, w2, b2):
+            h = torch.relu(x @ w1 + b1)
+            return F.cross_entropy((h @ w2 + b2).float(), y, reduction="mean")
+        self.fn = torch.compile(step_loss) if self.compile else step_loss
+        try:
+            sig = inspect.signature(torch.optim.SGD).parameters
+        except (TypeError, ValueError):
+            sig = {}
+        self.opt_kwargs = dict(lr=OPS_SGD["lr"], momentum=OPS_SGD["momentum"], weight_decay=OPS_SGD["weight_decay"])
+        self.opt_kwargs.update({k: v for k, v in (("dampening", 0.0), ("nesterov", False), ("maximize", False),
+                                                   ("differentiable", False)) if k in sig})
+        back = torch.optim.SGD([torch.zeros(1, requires_grad=True)], **self.opt_kwargs).defaults
+        d_in, hidden = (int(v) for v in self.p0[0].shape)
+        classes = int(self.p0[2].shape[1])
+        self.record = ops_record("torch", torch.optim.SGD, shape, learning_rate=back["lr"],
+                                 momentum=back["momentum"], weight_decay=back["weight_decay"],
+                                 nesterov=back.get("nesterov", False), batch_size=int(self.X.shape[0]),
+                                 layers=ops_layers(d_in, hidden, classes))
+        self.info = {"library": "torch", "version": torch.__version__,
+                     "torch_version_cuda": torch.version.cuda, "torch_version_hip": hip,
+                     "torch_backend": kind, "device": "gpu", "device_name": name,
+                     "setting": setting, "precision": precision_text(setting),
+                     "compile": "torch.compile (inductor, default mode)" if self.compile else "eager",
+                     "mode": "torch %s, %s" % ("compile" if self.compile else "eager", precision_text(setting)),
+                     "precision_readback": precision, "autocast_probe": probe,
+                     "column": setting.replace("-", "_") + " (tools/torch_lm_step_opponent.py COLUMNS)",
+                     "torch_threads": torch.get_num_threads(), "pre_clock_fit": False, "input_home": "host",
+                     "call": LANE_TEXT[lane][1]}
+        self.loss, self.grads, self.updated = None, None, None
+        sync()
+
+    def _ctx(self):
+        import contextlib
+        stack = contextlib.ExitStack()
+        if self.autocast is not None:
+            stack.enter_context(self.torch.autocast(device_type=self.dev.type, dtype=self.autocast))
+        return stack
+
+    def call(self):
+        torch = self.torch
+        torch.manual_seed(SEED)
+        x, y = self.X.to(self.dev), self.y.to(self.dev)
+        ps = [p.to(self.dev, copy=True).requires_grad_(True) for p in self.p0]
+        opt = torch.optim.SGD(ps, **self.opt_kwargs)
+        with self._ctx():
+            loss = self.fn(x, y, *ps)
+        loss.backward()
+        self.loss = float(loss.item())
+        self.grads = [p.grad.detach().float().cpu().numpy() for p in ps]
+        opt.step()
+        self.updated = [p.detach().float().cpu().numpy() for p in ps]
+
+    def sync(self):
+        self._sync()
+
+    def outputs(self):
+        return _ops_outputs(self.np, self.loss, self.grads, self.updated)
+
+    def digest(self):
+        return _ops_digest(self.np, self.grads)
+
+
 class MlxFitArm:
     """The fit lanes' MLX opponent on Apple silicon (2026-10-19, lane ag-bench): mlx.nn (Linear/ReLU,
     LSTM/GRU/RNN with a Linear head on the last hidden state), mlx.optimizers.Adam with bias correction,
@@ -3917,6 +4116,10 @@ def build_runner(lane, arm, shape, data, ab_config=None):
             if operation != "model_default":
                 raise RuntimeError("REFUSED: the fit lanes have no experimental operation")
             return OursFit(lane, shape, data)
+        if lane in OPS_LANES:
+            if operation != "model_default":
+                raise RuntimeError("REFUSED: ops-session-step has no experimental operation")
+            return OursOpsStep(lane, shape, data)
         if operation == "residual_dropout_forward_vjp":
             return OursResidualDropout(lane, shape, data, runtime)
         if operation == "mlp_inference_sessions":
@@ -3950,6 +4153,10 @@ def build_runner(lane, arm, shape, data, ab_config=None):
         return TorchFitArm(lane, shape, data, arm)
     if arm in MLX_ARMS:
         raise RuntimeError("REFUSED: %s races the fit lanes only" % arm)
+    if lane in OPS_LANES:                # 2026-10-19 (lane ag-board-twins): one recorded step
+        if arm in MAMBA_SSM_ARMS:
+            raise RuntimeError("REFUSED: %s races the Mamba lanes only" % arm)
+        return TorchOpsStepArm(lane, shape, data, arm)
     if arm in MAMBA_SSM_ARMS:            # FAIRNESS FIX (2026-10-13 audit): the real Mamba kernels
         return MambaSsmArm(lane, shape, data, arm)
     return TorchArm(lane, shape, data, arm)
@@ -4273,6 +4480,8 @@ def scorer_preflight(lane, shape, data_path, arms, operation):
             need += ["a", "b"]
         if lane in FIT_LANES:
             need += ["X_test", "y_test"]
+        if lane in OPS_LANES:
+            need += ["X", "y", "y_codes"]
         absent = [k for k in need if k not in keys]
         receipt["checks"].append({"check": "reference data", "need": need, "absent": absent,
                                   "status": "failed" if absent else "ok"})
@@ -4379,11 +4588,47 @@ def fit_quality(lane, data, outs):
     return q
 
 
+def ops_quality(outs):
+    """ops-session-step's quality (2026-10-19, lane ag-board-twins), float64: every arm's loss and gradient
+    digests (sha256 of each gradient's float32 bytes), and every other arm's loss difference and max abs / rel
+    difference of each gradient and updated parameter from ours'."""
+    import numpy as np
+    q = {}
+    for arm, o in outs.items():
+        loss = float(np.asarray(o["loss"], dtype=np.float64).ravel()[0])
+        q[arm] = {"loss": loss, "loss_finite": bool(np.isfinite(loss)),
+                  "grads_finite": bool(all(np.isfinite(o["g:" + n]).all() for n in OPS_PARAMS)),
+                  "grad_digests": {n: _sha(np.ascontiguousarray(o["g:" + n], dtype=np.float32).tobytes())[:16]
+                                   for n in OPS_PARAMS}}
+    ref_arm = "ours" if "ours" in outs else ("ours-fast" if "ours-fast" in outs else None)
+    if ref_arm is None:
+        return q
+    ref = outs[ref_arm]
+    for arm, o in outs.items():
+        if arm == ref_arm:
+            continue
+        row = q[arm]
+        row["loss_abs_diff_vs_ours"] = abs(row["loss"] - q[ref_arm]["loss"])
+        row["grad_digests_equal_ours"] = row["grad_digests"] == q[ref_arm]["grad_digests"]
+        for n in OPS_PARAMS:
+            for key, pre in (("grad", "g:"), ("param", "p:")):
+                a, b = np.asarray(o[pre + n], dtype=np.float64), np.asarray(ref[pre + n], dtype=np.float64)
+                if a.shape != b.shape:
+                    row["%s_shape_mismatch_%s" % (key, n)] = "%s vs %s" % (list(a.shape), list(b.shape))
+                    continue
+                diff = float(np.abs(a - b).max())
+                row["%s_max_abs_diff_vs_ours_%s" % (key, n)] = diff
+                row["%s_max_rel_diff_vs_ours_%s" % (key, n)] = diff / (float(np.abs(b).max()) or 1.0)
+    return q
+
+
 def quality(lane, data, outs, *, shape="full"):
     import numpy as np
     q = {}
     if lane in FIT_LANES:
         return fit_quality(lane, data, outs)
+    if lane in OPS_LANES:
+        return ops_quality(outs)
     if lane in TRAIN_LANES:
         for arm, o in outs.items():
             losses = [float(x) for x in o["losses"]]
@@ -4739,7 +4984,7 @@ def race(args):
                 print("NEURAL-DIGEST lane=%s arm=%s digest=%s"
                       % (lane, arm, result["arms"][arm]["outputs_digest"]), flush=True)
                 if (getattr(args, "keep_outputs", False) or lane == "mlp-train-step" or lane in FORWARD_REFERENCE_LANES
-                        or lane in FIT_LANES):
+                        or lane in FIT_LANES or lane in OPS_LANES):
                     # Retain the measured trainer state for independent identity checks.
                     # tools/afn_ab.sh's judge compares two builds' outputs
                     keep = os.path.join(args.out, "%s-%s.outputs.npz" % (tag, arm))
