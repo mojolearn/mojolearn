@@ -12,9 +12,13 @@ that decides each migration. Implementation record: `NATIVE_AUTOGRAD.md`.
   `scalar`. Ops: `matmul`, `add/subtract/multiply/divide` with row, column
   and scalar broadcast, `relu/sigmoid/tanh/exp/log/sqrt/scale`, `transpose`,
   `reshape`, `detach`, `sum/mean` over an axis or all, `softmax`,
-  `log_softmax`, `mse_loss`, `cross_entropy`. Backward: `backward` (scalar),
+  `log_softmax`, `mse_loss`, `cross_entropy`, `dropout`. Backward: `backward` (scalar),
   `backward_from` (explicit seed), `*_with_rules` variants for custom ops.
   `reset()` reuses storage across steps; stale handles are refused.
+- Data layer (`autograd/data.mojo`): `permutation(ex, seed, epoch, n,
+  dst_idx)`, `epoch_order(ex, shuffle, seed, epoch, n, dst_idx)` and
+  `gather_rows(ex, X, idx, start, count, D, dst)`, forward only. See
+  "Randomness" below.
 - `Tensor`: an opaque handle (owner, generation, index); shape via
   `tape.rows/cols`, storage via `tape.value/gradient`.
 - `BackwardRules` trait + `tape.custom(inputs, output, rows, cols, tag,
@@ -48,6 +52,45 @@ Constraints that carry into any public surface:
 
 The public surface is listed in `docs-site/api_exclude.txt` until its
 gradient checks pass on Apple, NVIDIA and AMD.
+
+## Randomness
+
+Contract: the same seed gives the same epoch order, the same batches and the
+same dropout masks on Apple, NVIDIA, AMD and the host, in every run. Every
+draw is a pure function of its position, never of launch geometry, thread
+count or executor.
+
+- Epoch order: `permutation(ex, seed, epoch, n, dst)` launches the trainers'
+  `OP_MLP_PERM` (`sequence/mlp.mojo`) with `mlp_epoch_key(seed, epoch)`: six
+  Feistel rounds on the bits of each position, cycle-walked into `[0, n)`,
+  one thread per position, integers only. It is the MLP's and the recurrent
+  trainer's order bit for bit, a different order per epoch and per seed.
+  Rows travel as float32 words, so `n < 2^24`. `epoch_order` with
+  `shuffle=False` is `0, 1, ..., n-1`.
+- Batches: `gather_rows` (`OP_GATHER_ROWS`) copies rows `idx[start ..
+  start + count)` of a row-major `X`, one thread per (row, column).
+- Dropout: `tape.dropout(ex, x, p, seed, counter)` keeps element `e` when
+  the uniform word of element `e` in the neural Philox4x32-10 stream
+  (`core/philox_neural.mojo`: counter `(e // 4, stream = counter, 0)`, key
+  `seed`, word `e % 4`, mapped exactly to `[0, 1)` as `(x >> 8) * 2^-24`) is
+  `>= p`, and scales kept values by `s = 1 / (1 - p)` (one float32 division
+  at record time, one rounded multiply per element); dropped elements are
+  `+0.0`. The values equal `neural_rng`'s dropout arms for the same seed,
+  stream and `p`. The VJP re-derives the mask from the same `(seed,
+  counter)` instead of storing it, so no mask buffer lives between forward
+  and backward. Callers pass a new `counter` per step (the step number) and
+  the same one when a step is replayed; `0 <= p < 1`, `0 <= counter < 2^32`.
+- Opcodes: dropout is `OP_AG_DROPOUT_FWD`/`OP_AG_DROPOUT_VJP` (1100/1101,
+  `autograd/data_ops.mojo`), a range of its own beside the tape family
+  (1000..1010), asserted disjoint in `sequence/dispatch.mojo`.
+- Trainers: `-D MOJOLEARN_AUTOGRAD_DATA` routes the recurrent trainer's epoch
+  order through `epoch_order` (same launches, same bits expected). The MLP
+  keeps its own `OP_MLP_PERM` launch: `permutation` is that launch with the
+  same key, so moving the MLP onto it would change no bits and needs no
+  define.
+- Checks: `autograd/checks/data_cpu.mojo` (HostExec) and `data_gpu.mojo`
+  (DeviceExec) print a digest per case; the digests must match across the
+  host and the three vendors.
 
 ## (c) Migration order
 
@@ -92,6 +135,7 @@ one run per arm, same frozen commit.
 | Define | Recipes | Identity | Speed | Quality |
 |---|---|---|---|---|
 | `MOJOLEARN_AUTOGRAD_MLP` | MLP classifier/regressor board rows | nv/amd ID check, arm B digest vs arm A | NV + AMD full-size race | board metric unchanged |
+| `MOJOLEARN_AUTOGRAD_DATA` | rnn/lstm/gru clf + reg rows with shuffle | ID check: arm B digest equals arm A (same launches) on nv and amd, and nv = amd | NV + AMD; routing only, expected noise | unchanged by construction |
 | `MOJOLEARN_AUTOGRAD_RNN` | rnn/lstm/gru clf + reg rows, L = 1 and 2 | ID check: arm B digest equals arm A (same launches) on nv and amd, and nv = amd | NV + AMD full-size race; the tape adds fills/copies per node | unchanged by construction; recorded |
 | `MOJOLEARN_AUTOGRAD_TRANSFORMER` | transformer LM rows | nv = amd = Apple digest; arm A equality expected only where launches are reused verbatim | NV + AMD | loss / perplexity no material drop |
 | `MOJOLEARN_AUTOGRAD_MAMBA` | Mamba-1/2 LM rows | as transformer | NV + AMD | as transformer |

@@ -48,6 +48,7 @@ from sequence.ops import (
     gates_of,
 )
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
+from autograd.data import epoch_order as ag_epoch_order
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_applies
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
@@ -627,6 +628,16 @@ def opt_step[E: Exec](
     ex.launch[OP_OPT](a, n)
 
 
+#: -D MOJOLEARN_AUTOGRAD_DATA (default off): rnn_fit's epoch order comes from
+#: autograd/data.mojo (`epoch_order`), the shared data layer of the tape
+#: trainers, instead of the launches below. That module launches the same
+#: OP_MLP_PERM with the same mlp_epoch_key(seed, epoch), or OP_SEQ_IOTA
+#: without shuffle, so the expected result is the same order and the same
+#: bits as the hand path; the A/B confirms the routing. autograd.data
+#: imports no sequence.recurrent, so there is no import cycle.
+comptime AUTOGRAD_DATA = is_defined["MOJOLEARN_AUTOGRAD_DATA"]()
+
+
 # ------------------------------------------------------------------ training step seam
 trait RnnStep(Defaultable & Movable & Deinitable):
     """One optimizer step's differentiation: forward_head leaves the head's
@@ -703,12 +714,15 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
     for k in range(n_steps):
         var j = k % per
         if j == 0:
-            if shuffle:
-                ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, k // per), dord), N)
+            comptime if AUTOGRAD_DATA:
+                ag_epoch_order(ex, shuffle, seed, k // per, N, dord)
             else:
-                var ia = Args()
-                ia.p0 = dord
-                ex.launch[OP_SEQ_IOTA](ia, N)
+                if shuffle:
+                    ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, k // per), dord), N)
+                else:
+                    var ia = Args()
+                    ia.p0 = dord
+                    ex.launch[OP_SEQ_IOTA](ia, N)
         var off = j * bs
         var B = min(bs, N - off)
         gather_seq(ex, dX, dord, w.xb, T, B, net.D, off)
