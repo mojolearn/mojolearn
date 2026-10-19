@@ -8,9 +8,14 @@ each chosen expert down_proj(silu(gate) * up), the weighted sum. The
 weights keep HF's layout: `router` (E, D), `gate_up_proj` (E, 2F, D),
 `down_proj` (E, D, F). Routing ties go to the lower expert index.
 
-Refused (sequence/NOT_IMPLEMENTED.tsv): the backward pass, router jitter
-noise, activations other than SiLU, the auxiliary load-balancing loss,
-float64.
+Refused (sequence/NOT_IMPLEMENTED.tsv): router jitter noise, activations
+other than SiLU, the auxiliary load-balancing loss, float64.
+
+THE BACKWARD (lane ag-moe-backward, 2026-10-19): `backward(x, dy)` runs the
+forward and the backward on the tape in one binding call
+(`moe_backward`, autograd/route_ops.mojo): the gradients of x and the three
+weights, every number from Mojo. Listed in docs-site/api_exclude.txt until
+its cross-vendor check (sequence/checks/moe_backward_check.mojo) is recorded.
 
 THE WEIGHTS STAY ON THE DEVICE (lane gap-neural-overhead2, 2026-10-02). On
 the GPU binding the forward reads device copies of the three weight arrays
@@ -303,3 +308,66 @@ class MoEBlock:
         return y.reshape(shape)
 
     __call__ = forward
+
+    def backward(self, x, dy):
+        """Gradients of the block for input `x` and output gradient `dy`.
+
+        Runs the forward on `x` and returns the gradient with respect to `x`; the
+        weight gradients are stored as `router_grad_`, `gate_up_proj_grad_` and
+        `down_proj_grad_`, and the routing attributes are set as by `forward`.
+
+        Parameters
+        ----------
+        x : ndarray of float32
+            Token activations, shape (..., hidden_size).
+        dy : ndarray of float32
+            Gradient of the loss with respect to the block output, shape of `x`.
+
+        Returns
+        -------
+        dx : ndarray of float32
+            Gradient with respect to `x`, shape of `x`.
+        """
+        if is_seq_tensor(x):
+            x = x.numpy()
+        if is_seq_tensor(dy):
+            dy = dy.numpy()
+        x = np.asarray(x)
+        dy = np.asarray(dy)
+        if x.dtype == np.float64 or dy.dtype == np.float64:
+            raise TypeError("MoEBlock: float64 is refused; pass float32")
+        if x.ndim < 1 or x.shape[-1] != self.D or x.size == 0:
+            raise ValueError(f"MoEBlock: x must have shape (..., {self.D})")
+        if dy.shape != x.shape:
+            raise ValueError(f"MoEBlock: dy has shape {dy.shape}, expected {x.shape}")
+        self._check_weights()
+        shape = x.shape
+        X = np.ascontiguousarray(x, dtype=np.float32).reshape(-1, self.D)
+        DY = np.ascontiguousarray(dy, dtype=np.float32).reshape(-1, self.D)
+        T = X.shape[0]
+        # the binding stores every cell of every output
+        dx = np.empty((T, self.D), np.float32)
+        dr = np.empty((self.E, self.D), np.float32)
+        dgu = np.empty((self.E, 2 * self.F, self.D), np.float32)
+        ddn = np.empty((self.E, self.D, self.F), np.float32)
+        y = np.empty((T, self.D), np.float32)
+        logits = np.empty((T, self.E), np.float32)
+        sel = np.empty((T, self.k), np.float32)
+        w = np.empty((T, self.k), np.float32)
+        b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
+        if not callable(getattr(b, "moe_backward", None)):
+            raise NotImplementedError("MoEBlock: this install has no backward pass")
+        ip = [T, self.D, self.F, self.E, self.k, int(self.norm_topk_prob)]
+        r, gu, dn = (np.ascontiguousarray(a) for a in (self.router, self.gate_up_proj, self.down_proj))  # glue: three contiguous weight buffers for the binding
+        addrs = [X.ctypes.data, r.ctypes.data, gu.ctypes.data, dn.ctypes.data, DY.ctypes.data,
+                 dx.ctypes.data, dr.ctypes.data, dgu.ctypes.data, ddn.ctypes.data,
+                 y.ctypes.data, logits.ctypes.data, sel.ctypes.data, w.ctypes.data]
+        if hasattr(b, "moe_weights_put"):
+            b.moe_backward(addrs, ip + [self._weights_handle(b)])
+        else:
+            b.moe_backward(addrs, ip)
+        object.__setattr__(self, "_routing", [logits, sel, w, None])
+        object.__setattr__(self, "router_grad_", dr)
+        object.__setattr__(self, "gate_up_proj_grad_", dgu)
+        object.__setattr__(self, "down_proj_grad_", ddn)
+        return dx.reshape(shape)
