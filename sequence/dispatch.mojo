@@ -146,6 +146,7 @@ from autograd.loss_ops import OP_LS_FIRST, OP_LS_LAST, apply_losses
 from autograd.model_ops import OP_AGM_FIRST, OP_AGM_LAST, apply_model_ops
 from autograd.pass1_ops import OP_P1_FIRST, OP_P1_LAST, apply_pass1
 from autograd.composed_ops import OP_AGC_FIRST, OP_AGC_LAST, apply_composed
+from sequence.gemm_split import OP_GK_FIRST, OP_GK_LAST, OP_GK_SPLIT, op_gk_split
 
 
 @always_inline
@@ -253,6 +254,18 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_AGC_FIRST or OP_CELL_FWD_SCAN > OP_AGC_LAST) and (
         OP_CELL_BWD_SCAN < OP_AGC_FIRST or OP_CELL_BWD_SCAN > OP_AGC_LAST
     ), "composed-step opcode collides with recurrent scan"
+    # The pass-6 GEMM family (sequence/gemm_split.mojo OP_GK_*, 2100..;
+    # lane ag-pass6-gemm), disjoint from every autograd range and the scans.
+    comptime assert OP_GK_FIRST <= OP_GK_LAST, "pass-6 gemm opcode range is empty"
+    comptime assert OP_GK_FIRST > OP_AGC_LAST or OP_GK_LAST < OP_AGC_FIRST, "pass-6 gemm opcodes overlap the composed family"
+    comptime assert OP_GK_FIRST > OP_AG_LAST or OP_GK_LAST < OP_AG_FIRST, "pass-6 gemm opcodes overlap the tape's"
+    comptime assert OP_GK_FIRST > OP_AGK_LAST or OP_GK_LAST < OP_AGK_FIRST, "pass-6 gemm opcodes overlap the kernel family"
+    comptime assert OP_GK_FIRST > OP_AGF_LAST or OP_GK_LAST < OP_AGF_FIRST, "pass-6 gemm opcodes overlap the fold levels"
+    comptime assert OP_GK_FIRST > OP_P1_LAST or OP_GK_LAST < OP_P1_FIRST, "pass-6 gemm opcodes overlap the fused family"
+    comptime assert OP_GK_FIRST > OP_MLP_LB_LAST or OP_GK_LAST < OP_MLP_LB_FIRST, "pass-6 gemm opcodes overlap the MLP loss block"
+    comptime assert (OP_CELL_FWD_SCAN < OP_GK_FIRST or OP_CELL_FWD_SCAN > OP_GK_LAST) and (
+        OP_CELL_BWD_SCAN < OP_GK_FIRST or OP_CELL_BWD_SCAN > OP_GK_LAST
+    ), "pass-6 gemm opcode collides with recurrent scan"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
     elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
@@ -280,6 +293,9 @@ def apply[OP: Int](t: Int, a: Args):
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
         op_gemm_splitk(t, a)
+    elif OP == OP_GK_SPLIT:
+        # lane ag-pass6-gemm: the split-K order of the three GEMM opcodes
+        op_gk_split(t, a)
     elif OP == OP_BIAS:
         op_bias(t, a)
     elif OP == OP_COLSUM:
