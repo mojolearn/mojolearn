@@ -1,4 +1,0 @@
-CTD-PREP block=reg-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
-MORE-PREP dataset=istella seconds=2.8
-CTD-PREP block=reg-taxi X=1000000x11 y=1000000 Xq=100000x11 yq=100000
-MORE-PREP dataset=taxi seconds=0.4

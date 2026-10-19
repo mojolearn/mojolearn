@@ -1,5 +1,0 @@
-GPU 0: NVIDIA L40S (UUID: GPU-7bfd23a8-de13-8ac8-59d8-c5fd16611b13)
-GPU 1: NVIDIA L40S (UUID: GPU-3ed32994-f022-2653-d113-a4b5e43ded9b)
-index, name, uuid, pci.bus_id, driver_version, compute_cap, memory.total [MiB]
-0, NVIDIA L40S, GPU-7bfd23a8-de13-8ac8-59d8-c5fd16611b13, 00000000:45:00.0, 580.178.04, 8.9, 46068 MiB
-1, NVIDIA L40S, GPU-3ed32994-f022-2653-d113-a4b5e43ded9b, 00000000:83:00.0, 580.178.04, 8.9, 46068 MiB
