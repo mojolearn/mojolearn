@@ -484,6 +484,51 @@ one run per arm, same frozen commit.
 | `MOJOLEARN_AUTOGRAD_TRANSFORMER` | transformer LM rows | nv = amd = Apple digest; arm A equality expected only where launches are reused verbatim | NV + AMD | loss / perplexity no material drop |
 | `MOJOLEARN_AUTOGRAD_MAMBA` | Mamba-1/2 LM rows | as transformer | NV + AMD | as transformer |
 
+### Backward timing: transformer and Mamba, hand vs tape
+
+Andrew's rule for these two: flip to the tape and delete the hand glue once
+one timed run per arm on NVIDIA and AMD shows equal time (the digests are
+already equal word for word). One run per arm, N repeated calls inside it,
+one warm-up dropped, median reported.
+
+| Define | Shape | Arm A (hand) | Arm B (tape) | Prints |
+|---|---|---|---|---|
+| `MOJOLEARN_AUTOGRAD_TRANSFORMER` | one decoder layer, B8 L512 d_model 512, 8 heads, 2 KV heads, head_dim 64, intermediate 1376 (chosen by cost: GEMM-dominated, tiled attention; not a board row) | binding built without the define | binding built with it | `TIME <arm> session.forward`, `TIME <arm> session`, `TIME <arm> saved` median_ms, kernel-only clock (inputs and weights on the device first) |
+| `MOJOLEARN_AUTOGRAD_MAMBA` | largest fixture case: Mamba-1 comp_b2_l257_d8, Mamba-2 m2_statepass_b2_l770_d64, plus a 4-block tape stack | `mamba1/2_prefill_backward` | `mamba1/2_tape_backward` (same binary) | `TIME m1.hand`, `TIME m1.tape`, `TIME m1.stack4.tape`, the same for m2; host lists in and out, the same copies in both arms |
+
+Transformer, per box (`COL=nvidia BK=cuda` on nv, `COL=amd BK=hip` on amd).
+The forward tape (`MOJOLEARN_IDN_ACT_RETAIN=3`) is on in both arms so the
+saved-tape backward is timed too; each arm's binding keeps its file name in
+its own directory (the module name must match):
+
+    MOJOLEARN_TARGET_COLUMN=$COL MOJOLEARN_BUILD_DEFINES=MOJOLEARN_IDN_ACT_RETAIN=3 \
+        bash bindings/build_transformer.sh
+    mkdir -p ab-tm/hand && cp python/mojolearn/identical/_mojolearn_transformer.so ab-tm/hand/
+    MOJOLEARN_TARGET_COLUMN=$COL MOJOLEARN_BUILD_DEFINES=MOJOLEARN_IDN_ACT_RETAIN=3,MOJOLEARN_AUTOGRAD_TRANSFORMER \
+        bash bindings/build_transformer.sh
+    mkdir -p ab-tm/tape && cp python/mojolearn/identical/_mojolearn_transformer.so ab-tm/tape/
+    for arm in hand tape; do
+        MOJOLEARN_AG_PROFILE=1 python3 tools/transformer_tape_arm_check.py \
+            --binding ab-tm/$arm/_mojolearn_transformer.so --backend $BK --time 20 \
+            --out ab-tm/$arm.json > ab-tm/$arm.log 2>&1; echo $arm rc=$?
+        grep -E '^(TIME|LAUNCHES|PATHS|SKIP)' ab-tm/$arm.log
+    done
+
+`MOJOLEARN_AG_PROFILE=1` only adds the LAUNCHES lines (level 1 counts,
+no extra syncs); the GRAD lines of the two arms must still be equal.
+
+Mamba, per box (`-D MOJOLEARN_COLUMN_NVIDIA` on nv, `-D MOJOLEARN_COLUMN_AMD`
+on amd); one binary holds both arms:
+
+    pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_NVIDIA -I . \
+        mamba/checks/mamba_tape_backward_time.mojo -o ab-mamba-time > ab-mamba-build.log 2>&1; echo rc=$?
+    MOJOLEARN_MAMBA_TAPE_TIME=20 MOJOLEARN_AG_PROFILE=1 ./ab-mamba-time > ab-mamba.log 2>&1; echo rc=$?
+    grep -E '^(CASE|TIME|LAUNCHES|MAMBA_TAPE_TIME_DONE)' ab-mamba.log
+
+Verdict: the tape median over the hand median, per box; the average of the
+NV and AMD ratios against the noise floor decides. Equal: flip the define
+to default on (with an `_OFF` define) and delete the hand glue.
+
 Verdict: IDENTICAL switches by the average NV/AMD ratio against the noise
 floor; a winner becomes the default with an `_OFF` define, a loser is
 deleted with the tombstone procedure. A digest change between arms is a
