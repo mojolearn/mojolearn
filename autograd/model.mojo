@@ -19,6 +19,7 @@ from sequence.mlp import mlp_epoch_key, mlp_perm_args
 from sequence.recurrent import OptConfig, OptState, opt_step
 from checks.numerics import ftz, identical_div, identical_pow64, identical_sqrt
 from autograd.tape import Tape, Tensor
+from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX
 from autograd.layers import NeuralRules, layer_norm
 from autograd.model_ops import OP_AGM_INIT_UNIFORM
 
@@ -28,6 +29,25 @@ from autograd.model_ops import OP_AGM_INIT_UNIFORM
 # prediction records a plain forward with gradient-free leaves).
 comptime HAS_DROPOUT = is_defined["MOJOLEARN_AUTOGRAD_HAS_DROPOUT"]()
 comptime HAS_INFERENCE = is_defined["MOJOLEARN_AUTOGRAD_HAS_INFERENCE"]()
+
+# LAUNCHES (lane ag-pass1-launches, read from the code; tape.mojo's
+# _linear_to and softmax_cross_entropy have the per-node detail).
+# Default: a Linear layer and the activation layer right after it are one
+# tape.linear node, and cross_entropy against class codes is one
+# tape.softmax_cross_entropy node.
+#   Linear(+bias)+activation, per layer: forward 1 (gemm_epi; + the row
+#     softmax for Softmax), backward 3 (dW, db, dX with the activation
+#     derivative of the layer below in its epilogue; 2 when the input needs
+#     no gradient); was forward 3, backward 7 (activation VJP, add VJP 1,
+#     bias fold 2, 2 GEMMs; 6 for the first layer).
+#   cross_entropy on codes: forward 3, backward 1; was the dense one-hot
+#     composition, forward 7, backward 5 (and a one-hot target of N x out
+#     floats where the codes take N).
+#   Seed: one fill straight into the loss's gradient (was fill + copy).
+# Bits: the fused path is a bit version of its own (its GEMM epilogue and
+# column-sum bias gradient sum in a different order than the composed ops);
+# -D MOJOLEARN_AUTOGRAD_MODEL_UNFUSED keeps the composed nodes, for checks.
+comptime MODEL_UNFUSED = is_defined["MOJOLEARN_AUTOGRAD_MODEL_UNFUSED"]()
 
 # ---------------------------------------------------------------- description
 comptime SPEC_VERSION = 1
@@ -318,17 +338,30 @@ def model_forward[E: Exec](
     layer index pick its masks."""
     var outs = List[Tensor]()
     var h = x
-    for i in range(spec.n_layers()):  # driver-loop: over layers
+    var i = 0
+    while i < spec.n_layers():  # driver-loop: over layers
         var k = spec.kinds[i]
         if k == LAYER_LINEAR:
             var fi = spec.in_width[i]
             var fo = spec.arg0[i]
             var off = spec.param_off[i]
             var w = _param(tape, ex, P, Gr, off, fi, fo, train)
-            h = tape.matmul(ex, h, w)
-            if spec.arg1[i] == 1:
-                var b = _param(tape, ex, P, Gr, off + fi * fo, 1, fo, train)
-                h = tape.add(ex, h, b)
+            comptime if MODEL_UNFUSED:
+                h = tape.matmul(ex, h, w)
+                if spec.arg1[i] == 1:
+                    var b = _param(tape, ex, P, Gr, off + fi * fo, 1, fo, train)
+                    h = tape.add(ex, h, b)
+            else:
+                var bias: Optional[Tensor] = None
+                if spec.arg1[i] == 1:
+                    bias = Optional[Tensor](_param(tape, ex, P, Gr, off + fi * fo, 1, fo, train))
+                var act = _absorbed_activation(spec, i)
+                h = tape.linear(ex, h, w, bias, act)
+                if act != 0:
+                    # the activation layer i + 1 rode in this node; layer i's
+                    # own (pre-activation) output is referenced by no layer
+                    outs.append(h)
+                    i += 1
         elif k == LAYER_RELU:
             h = tape.relu(ex, h)
         elif k == LAYER_SIGMOID:
@@ -356,7 +389,39 @@ def model_forward[E: Exec](
             var src = x if spec.arg0[i] == -1 else outs[spec.arg0[i]]
             h = tape.add(ex, h, src)
         outs.append(h)
+        i += 1
     return h
+
+
+def _absorbed_activation(spec: ModelSpec, i: Int) -> Int:
+    """The tape activation code (RELU, SIGMOID, TANH or SOFTMAX) of the
+    activation layer right after Linear layer i, when tape.linear can take
+    it into the same node; 0 when there is none or a Residual layer reads
+    layer i's pre-activation output."""
+    if i + 1 >= spec.n_layers():
+        return 0
+    for j in range(i + 1, spec.n_layers()):  # driver-loop: over layers
+        if spec.kinds[j] == LAYER_RESIDUAL and spec.arg0[j] == i:
+            return 0
+    var nk = spec.kinds[i + 1]
+    if nk == LAYER_RELU:
+        return RELU
+    if nk == LAYER_SIGMOID:
+        return SIGMOID
+    if nk == LAYER_TANH:
+        return TANH
+    if nk == LAYER_SOFTMAX:
+        return SOFTMAX
+    return 0
+
+
+def _fused_codes(cfg: FitConfig) -> Bool:
+    """True when the batch target is the (B, 1) class codes and the loss is
+    one softmax_cross_entropy node (the default build, cross_entropy on
+    class codes)."""
+    comptime if MODEL_UNFUSED:
+        return False
+    return cfg.loss == LOSS_CROSS_ENTROPY and cfg.target == TARGET_CODES
 
 
 def model_loss[E: Exec](
@@ -370,6 +435,9 @@ def model_loss[E: Exec](
     if cfg.loss == LOSS_MSE:
         return tape.mse_loss(ex, pred, target)
     if cfg.loss == LOSS_CROSS_ENTROPY:
+        if _fused_codes(cfg):
+            # target holds the (B, 1) codes as float values
+            return tape.softmax_cross_entropy(ex, pred, target)
         return tape.cross_entropy(ex, pred, target)
     if cfg.loss == LOSS_BCE_WITH_LOGITS:
         # max(x, 0) - x y + log(1 + exp(-|x|)); its gradient is sigmoid(x) - y
@@ -431,7 +499,10 @@ def model_fit[E: Exec](
     var bs = cfg.batch if cfg.batch < N else N
     var dX = ex.alloc(N * D)
     ex.upload(dX, X, N * D)
-    var dY = ex.alloc(N * O)
+    # the batch target's width: the outputs, or 1 for the class codes of the
+    # fused cross-entropy (no one-hot target)
+    var TW = 1 if _fused_codes(cfg) else O
+    var dY = ex.alloc(N * TW)
     if cfg.target == TARGET_CODES or cfg.target == TARGET_CODE_VALUES:
         # the codes' int32 bits travel in float32 words (op_one_hot reads them)
         var dC = ex.alloc(N)
@@ -439,9 +510,9 @@ def model_fit[E: Exec](
         var oh = Args()
         oh.p0 = dC
         oh.p1 = dY
-        oh.i0 = O
-        oh.i1 = 1 if cfg.target == TARGET_CODE_VALUES else 0
-        ex.launch[OP_ONE_HOT](oh, N * O)
+        oh.i0 = TW
+        oh.i1 = 1 if (cfg.target == TARGET_CODE_VALUES or TW == 1) else 0
+        ex.launch[OP_ONE_HOT](oh, N * TW)
     else:
         ex.upload(dY, Y, N * O)
     var P = ex.alloc(np_)
@@ -455,7 +526,7 @@ def model_fit[E: Exec](
     var s3 = ex.alloc(np_)
     var didx = ex.alloc(N)
     var xb = ex.alloc(bs * D)
-    var yb = ex.alloc(bs * O)
+    var yb = ex.alloc(bs * TW)
     var n_batches = (N + bs - 1) // bs
     var dloss = ex.alloc(n_batches)
     var dcurve = ex.alloc(cfg.epochs)
@@ -489,11 +560,11 @@ def model_fit[E: Exec](
             gx.i0 = B
             gx.i1 = D
             gx.i2 = off
-            gx.i3 = O
-            ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
+            gx.i3 = TW
+            ex.launch[OP_GATHER_ROWS](gx, B * (D + TW))
             tape.reset()
             var x = tape.variable(ex, xb, B, D, False)
-            var target = tape.variable(ex, yb, B, O, False)
+            var target = tape.variable(ex, yb, B, TW, False)
             var out = model_forward(tape, ex, spec, P, Gr, x, True, cfg.seed, step)
             var loss = model_loss(tape, ex, cfg, out, target)
             tape.backward_scalar_with_rules(ex, loss, NeuralRules())
