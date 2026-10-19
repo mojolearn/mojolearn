@@ -546,3 +546,22 @@ and AUC for the classifiers and RMSE and AUC for the regressors. On Apple the fi
 fast tier only; identical is timed on NVIDIA and AMD. A broken tape is caught before a release by
 the autograd smoke entries (`tools/autograd_smoke.py`: the gradient suite, the MLP identity check
 and `tests/test_autograd_smoke.py`), 5 s each on every vendor.
+
+Per-op microbenchmark (lane ag-opbench, data for optimization pass 6): `tools/ag_opbench.py` times
+every operation of the session table above through `mojolearn.ops.Session` in identical mode
+(elementwise binary in the same-shape, row, column and scalar broadcast forms; the unary ops and
+scale; matmul on the five GEMMs of one MLP batch step and a square grid 64..4096; transpose,
+reshape, sum/mean per axis, softmax/log_softmax, linear with and without bias and activation,
+layer_norm, dropout, permutation and gather_rows, every loss in mean and sum, every metric, and a
+recorded 2-layer forward and backward) over rows {512, 4096, 65536} x cols {1, 64, 256, 4096}
+bounded by `--max-elems`. Each case gets one warm-up and 20 repeats, each between two syncs (a
+one-value read back); it reports median and p10, the median net of the measured sync cost, the
+per-launch floor (10k one-element adds in batches of 100 between syncs) and, from a
+`MOJOLEARN_AG_PROFILE=1` child pass, launches per call. The launch counts need two binding entries
+the session does not have yet, `ops_profile_reset()` and `ops_profile_report()` over
+`autograd/profile.mojo`; until they exist the JSON records launches as null and lists them as
+owed. `tools/ag_opbench_report.py <nv.json> <amd.json>` prints one table per op (NV and AMD us,
+launches, us per launch, bytes moved from the shapes, achieved GB/s and share of peak) and flags
+cells whose us per launch exceeds 3x the vendor's floor. Results live in
+`~/mojolearn-evidence/autograd-buildout-20261019/opbench-<vendor>/` (`opbench-<vendor>.json`, its
+`.txt` table and the report).
