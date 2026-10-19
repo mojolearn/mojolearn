@@ -387,7 +387,11 @@ comptime SUMSQ_STAGE = 64
 #: many loads are in flight before the fmas changes.
 #: -D MOJOLEARN_IDN_GEMM_STAGE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores 16 and
 #: the serial tail (the A/B arm).
-comptime GEMM_STAGE_V2 = not has_apple_gpu_accelerator() and not (
+# DEFAULT OFF since 2026-10-19 (orchestrator): on AMD MI325X the 64-wide stage cost the HIGGS MLP 30% (fused arm 0.361 ->
+# 0.250 s with it off, same bits 8f410a4ae2d620af) and spilled the one-thread recurrent cells 2.7x before 3c5f15500; NVIDIA
+# never measured it (the L40S pod lost its runtime during the A/B). It stays available as -D MOJOLEARN_IDN_GEMM_STAGE64 for
+# the owed NVIDIA A/B; MOJOLEARN_IDN_GEMM_STAGE_OFF / IDN_ALL_OFF still force it off.
+comptime GEMM_STAGE_V2 = not has_apple_gpu_accelerator() and is_defined["MOJOLEARN_IDN_GEMM_STAGE64"]() and not (
     is_defined["MOJOLEARN_IDN_GEMM_STAGE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime GEMM_STAGE = 16
