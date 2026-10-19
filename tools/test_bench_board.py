@@ -506,11 +506,13 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # six GPU inference lanes *-decode and mlp-predict joined Oct 7 2026), each `ours` plus
     # its torch GPU arms: 64 cells identical only, 82 with the Apple FAST arm `ours-fast`
     # (see test_plan_neural_fast_on_apple_only)
+    # (2026-10-19) the five fit lanes race ours-fast only on Apple (identical is never timed there), so an
+    # identical-only Apple plan has none of them and the full plan adds 5 races of 6 cells each
     neural = bb.plan_races("apple", ["identical"], ["neural"])
     assert len(neural) == 18 and sum(len(r["arms"]) for r in neural) == 64
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
-    assert len(both) == 18 and sum(len(r["arms"]) for r in both) == 82
-    assert "family neural     races=18 cells=82" in text
+    assert len(both) == 23 and sum(len(r["arms"]) for r in both) == 112
+    assert "family neural     races=23 cells=112" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
