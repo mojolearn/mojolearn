@@ -1232,10 +1232,37 @@ struct Tape(Movable):
         # copy-first, add-the-rest schedule. A VJP reads parent VALUES and
         # the node's own grad, never a parent's grad, so writing the parent's
         # grad in place is safe. Leaves start touched only when
-        # accumulate=True (a leaf never written before is zeroed first, as
-        # record time used to). After the traversal an unreached
-        # differentiable leaf is zeroed (gradient 0); an unreached
-        # intermediate has no gradient (gradient() refuses).
+        # accumulate=True and they already hold a gradient (a leaf never
+        # written before takes its first contribution in place, so where
+        # that contribution is -0.0 it keeps the sign the old 0 + c fill
+        # dropped). After the traversal an unreached differentiable leaf is
+        # zeroed (gradient 0); an unreached intermediate has no gradient
+        # (gradient() refuses).
+        #
+        # LAUNCHES THE TRAVERSAL ADDS (lane ag-pass1-launches, from the code;
+        # the operations' own VJP launches are listed at each operation).
+        # Before this pass, per backward and per node:
+        #   seed: scalar backward fill + copy (2); explicit seed copy 1
+        #   custom node: 1 zero fill per input (zeroed_destination True in
+        #     every rule set but the recurrent one)
+        #   later contribution to an input: scratch VJP + 1 ACCUMULATE
+        #     (a same-shape add: its 1 copy VJP + 1 ACCUMULATE)
+        #   broadcast add operand: elementwise VJP 1 + fold 2
+        #   reshape, first contribution: 1 copy
+        #   accumulate=True leaf never written before: 1 fill
+        # After:
+        #   seed: scalar backward 1 fill into the root's gradient (none
+        #     copied); explicit seed copy 1, 0 when the root's gradient is
+        #     the seed's storage (custom_into / variable_into)
+        #   custom node: a fill only where the rule asks for one (the
+        #     transformer, Mamba-1 and Mamba-2 rules ask for none); 0
+        #     scratch and 0 ACCUMULATE for a writes_total input
+        #   later contribution: same-shape add 1 ACCUMULATE straight from
+        #     the upstream (no VJP launch); others unchanged
+        #   broadcast add operand: fold 2 (the upstream folded directly)
+        #   reshape, first contribution: 0 when the operand is consumed only
+        #     there and its gradient is tape storage (it shares the buffer)
+        #   accumulate=True leaf never written before: 0
         var touched = List[Bool](length=len(self._nodes), fill=False)
         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
             self._nodes[i].grad_preact = False
