@@ -104,6 +104,9 @@ from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_T
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
+# lane ag-lm-migrate: -D MOJOLEARN_AUTOGRAD_LM (default off) runs the step's
+# backward (loss, head, every layer, embedding) on one autograd tape.
+from autograd.rules_lm import AUTOGRAD_LM, byte_backward_autograd, byte_lm_tape_eligible
 from transformer.impl.llama.fused_attention import (
     ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY,
 )
@@ -1729,9 +1732,60 @@ def _byte_release_eager(ctx: DeviceContext, mut fwd: LlamaDeviceStages,
     return released
 
 
-def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer,
+def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
+    """-D MOJOLEARN_AUTOGRAD_LM: byte_gradient_device's backward half (CE,
+    head, the layers, the embedding, the pack) with the stage order and the
+    layer chaining owned by the autograd tape (autograd/rules_lm.mojo). The
+    same kernels on the same buffers, so the same gradient in `grad`."""
+    var config = tr.config.copy()
+    var M = config.batch * config.length
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
+    comptime if BYTE_LM_BLOCK_VIEWS:
+        # The weight gradients land in the current flat `grad` owner.
+        for layer in range(config.n_layers):
+            _afn_bind_grad_views(tr.buffers, tr.backward[layer], layer)
+    # byte_gradient_device's plan pick, verbatim (see the comment there).
+    var emb_plan = (
+        PLAN_SORT if config.vocab_size * M >= EMB_AUTO_SORT_MIN_CELLS
+        else PLAN_SCAN
+    )
+    byte_backward_autograd(
+        ctx, tr.backward, tr.forward, tr.weights, tr.rope.cos, tr.rope.sin,
+        tr.buffers.x, tr.buffers.emb_w, tr.buffers.dw_emb, tr.buffers.lm_w, tr.buffers.dw_lm,
+        tr.buffers.d_h, tr.buffers.logits, tr.buffers.ce_dlogits, tr.buffers.ce_loss,
+        tr.buffers.ce_ones, tr.buffers.ce_weights, tr.buffers.ce_expo, tr.buffers.ce_denom,
+        tr.buffers.ce_logp, tr.buffers.ce_max, tr.buffers.head_ws, tr.buffers.head_bwd_ws,
+        tr.buffers.targets, tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
+        tr.buffers.emb_perm, tr.embedding_runs, config.batch, config.length, config.vocab_size,
+        config.chunked_lm_head_v2, AFN_LM_HEAD_FUSE and not config.chunked_lm_head_v2,
+        NN51_RESIDENT_TOKEN_VALIDATION or IDN_LM_OWNED_TOKENS, emb_plan,
+    )
+    # The tape's backward has drained the queue (its one wait): the hand
+    # walk's per-layer policy and release steps, after every layer.
+    for layer in range(config.n_layers):  # driver-loop: over decoder layers
+        comptime if BYTE_LM_STICKY_EAGER:
+            if tr.forward[layer].attn_forward_status == FUSED_CORNER or tr.backward[layer].attn_backward_status == FUSED_CORNER:
+                tr.forward[layer].attn_prefer_eager = True
+        comptime if BYTE_LM_RELEASE_EAGER:
+            tr.released_eager_cells += _byte_release_eager(ctx, tr.forward[layer], tr.backward[layer])
+    timing_tick(ctx, ton, tk, "envelope.backward_tape")
+    for layer in range(0 if BYTE_LM_BLOCK_VIEWS else config.n_layers):
+        _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
+    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
+    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
+    timing_tick(ctx, ton, tk, "step.pack_grads")
+    var packed_cells = 2 * config.vocab_size * config.d_model if BYTE_LM_BLOCK_VIEWS else config.n_total()
+    timing_bytes(ton, "step.pack_grads_bytes", packed_cells * 4)
+
+
+def byte_gradient_device[deferred: Bool = False, tape: Bool = AUTOGRAD_LM](ctx: DeviceContext, mut tr: ByteTrainer,
                          ids: List[Int32]) raises -> Float32:
-    """Internal gradient half. Caller owns admission and transaction recovery."""
+    """Internal gradient half. Caller owns admission and transaction recovery.
+
+    `tape` (default: -D MOJOLEARN_AUTOGRAD_LM) takes the backward half
+    through the autograd tape when every layer is a default block; the
+    hand walk below is otherwise untouched."""
     tr.released_eager_cells = 0
     var config = tr.config.copy()
     var M = config.batch * config.length
@@ -1739,6 +1793,10 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     var ce = CeConfig.causal_lm(config.vocab_size)
     var trace = IdentityTrace.disabled()
     var loss = _byte_forward_loss[deferred](ctx, tr, ids, trace)
+    comptime if tape:
+        if byte_lm_tape_eligible(tr.weights):
+            _byte_backward_tape(ctx, tr)
+            return loss
     # DEVIATION 2499 step-phase timers; see byte_train_step. The forward's
     # own clock ended at `step.loss_download`; this one starts here.
     var ton = timing_on()
