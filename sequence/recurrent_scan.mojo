@@ -63,14 +63,14 @@ from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, s
 # backward per-step device/host state digests and full training quality remain
 # required before timing or promoting this candidate. The owner forbids those
 # runs in this worktree; none were attempted. A faster broken arm is a loser.
-# Lane ag-pass5-recurrent (2026-10-19, PASS5 idea 3): the scan is the
-# IDENTICAL default for every recurrent cell (rnn, lstm, gru), in the hand
-# trainer (sequence/recurrent.mojo forward / backward, HandStep) and the tape
-# trainer (autograd/rules_recurrent.mojo rnn_layer / _layer_bwd,
-# AutogradRnnStep) alike, so the two steps stay equal.
-# -D MOJOLEARN_SEQ_RNN_SCAN_OFF (or MOJOLEARN_IDN_ALL_OFF) is arm A, the
-# per-step chain (T launches of OP_CELL_FWD_H / OP_CELL_BWD_H plus 4 fills a
-# layer). The older opt-in -D MOJOLEARN_IDN_SEQ_LSTM_SCAN is now a no-op.
+# Lane ag-pass5-recurrent (2026-10-19, PASS5 idea 3): under IDENTICAL the
+# scan is the default for the cells the gate-count rule below picks (the
+# one-gate rnn), in the hand trainer (sequence/recurrent.mojo forward /
+# backward, HandStep) and the tape trainer (autograd/rules_recurrent.mojo
+# rnn_layer / _layer_bwd, AutogradRnnStep) alike, both through scan_routes, so
+# the two steps stay equal. The other route is the per-step chain (T launches
+# of OP_CELL_FWD_H / OP_CELL_BWD_H plus 4 fills a layer). The older opt-in
+# -D MOJOLEARN_IDN_SEQ_LSTM_SCAN is a no-op (MOJOLEARN_SEQ_RNN_SCAN replaces it).
 # BITS: the same as the per-step chain, by construction. Each lane runs the
 # per-step launch's element body (op_cell_fwd_h / op_cell_bwd_h) on the same
 # Args the host built for that step (fwd_step / bwd_step reproduce the
@@ -101,24 +101,33 @@ from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, s
 # property of the build host: an Apple build's host column takes the chain too,
 # with the same bits.
 comptime SEQ_RNN_SCAN_ON_THIS_TARGET = not has_apple_gpu_accelerator() or is_defined["MOJOLEARN_SEQ_RNN_SCAN_APPLE"]()
-# THE DEFAULT, one line (orchestrator sets it after the NV numbers).
-# A/B so far (one run per arm, bits equal scan == per-step on both vendors;
-# rnn_scan_check 12/12 PASS on NV and AMD, 12/12 FAIL on the M4, see above):
-#   AMD MI325X, s a fit, per-step -> scan: lstm 0.1206 -> 0.1388 (1.15x slower),
-#   gru 0.1021 -> 0.1138 (1.11x slower), rnn 0.0672 -> 0.0591 (0.88x, faster).
-#   NVIDIA L40S: owed.
-# True: the scan is the IDENTICAL default and -D MOJOLEARN_SEQ_RNN_SCAN_OFF is
-# arm A. False: the per-step chain is the default everywhere and
-# -D MOJOLEARN_SEQ_RNN_SCAN opts in (the scan's arm B, and the Metal probe
-# with MOJOLEARN_SEQ_RNN_SCAN_APPLE).
-comptime SEQ_RNN_SCAN_DEFAULT = True
-comptime SEQ_RNN_SCAN_REQUESTED = (
-    is_defined["MOJOLEARN_SEQ_RNN_SCAN"]() or (SEQ_RNN_SCAN_DEFAULT and not is_defined["MOJOLEARN_SEQ_RNN_SCAN_OFF"]())
-)
+# THE ROUTE (orchestrator decision 2026-10-19, nv-04/NV_PASS5 + AMD pass 5):
+# a cost rule on the cell's gate count G, the same for HandStep and
+# AutogradRnnStep (both call scan_routes). The scan saves T + 1 launches and 2
+# fills a layer direction, a fixed cost; but it runs one block per batch row,
+# so each block walks its row's G gate folds (G x gemm_dot over K = H) and the
+# cell step by step behind a barrier, with B blocks of H lanes where the chain
+# spreads B H threads over the whole GPU each step. That serialized gate work
+# grows with G and eats the launch saving: at G = 1 the scan wins on both
+# vendors, at G = 3 and 4 it is a tie on the average (NVIDIA faster, AMD
+# slower). One run per arm, s a fit, scan / chain, bits equal:
+#   rnn  (G 1): NV L40S 0.83, AMD MI325X 0.88, average 0.86  -> scan
+#   gru  (G 3): NV 0.87, AMD 1.11, average 0.99              -> chain (tie)
+#   lstm (G 4): NV 0.88, AMD 1.15, average 1.015             -> chain (tie)
+# SCAN_MAX_GATES is the one-line default: the scan for cells with
+# G <= SCAN_MAX_GATES (0 = the chain everywhere, 4 = the scan everywhere).
+# The A/B arms: -D MOJOLEARN_SEQ_RNN_SCAN forces the scan for every cell,
+# -D MOJOLEARN_SEQ_RNN_SCAN_OFF forces the chain for every cell. Apple stays
+# on the chain (SEQ_RNN_SCAN_ON_THIS_TARGET above) unless
+# MOJOLEARN_SEQ_RNN_SCAN_APPLE. Not a shape rule: G is the cell's structure,
+# not a board dimension, and the same bits come out on either route.
+comptime SCAN_MAX_GATES = 1
+comptime SEQ_RNN_SCAN_ALL = is_defined["MOJOLEARN_SEQ_RNN_SCAN"]()
 comptime SEQ_RNN_SCAN_IDN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and SEQ_RNN_SCAN_ON_THIS_TARGET
-    and SEQ_RNN_SCAN_REQUESTED
+    and (SEQ_RNN_SCAN_ALL or SCAN_MAX_GATES > 0)
+    and not is_defined["MOJOLEARN_SEQ_RNN_SCAN_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime SEQ_LSTM_SCAN_IDN = SEQ_RNN_SCAN_IDN
@@ -152,6 +161,18 @@ comptime SCAN_SMEM = 4096
 def scan_applies(H: Int, G: Int) -> Bool:
     """The scan kernels' shape bound: one lane per unit, the staged row fits."""
     return H >= 1 and H <= SCAN_MAX_H and G * H <= SCAN_SMEM
+
+
+def scan_routes(H: Int, G: Int) -> Bool:
+    """Whether a layer of G gates and H units takes the scan (when
+    SEQ_LSTM_SCAN compiles it in): inside the kernels' shape bound and, unless
+    -D MOJOLEARN_SEQ_RNN_SCAN forces every cell, G <= SCAN_MAX_GATES (the
+    cost rule above). Every trainer route asks this one function."""
+    if not scan_applies(H, G):
+        return False
+    comptime if SEQ_RNN_SCAN_ALL:
+        return True
+    return G <= SCAN_MAX_GATES
 
 
 def scan_tpb(H: Int) -> Int:

@@ -42,7 +42,7 @@ from sequence.ops import (
     OP_COPY,
     gates_of,
 )
-from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_applies
+from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
 from sequence.recurrent import (
     Net,
     Work,
@@ -162,7 +162,7 @@ def rnn_layer[E: Exec](
     # The IDENTICAL default, as recurrent.forward (HandStep): the two steps
     # take the same route under the same defines, so they stay equal.
     comptime if SEQ_LSTM_SCAN:
-        if scan_applies(H, gates_of(cell)):
+        if scan_routes(H, gates_of(cell)):
             var sa = Args()
             sa.p0 = gxp
             sa.p1 = w.gh[l]
@@ -282,7 +282,7 @@ def _layer_bwd[E: Exec](
     var whh = inputs[1]
     var scanned = False
     comptime if SEQ_LSTM_SCAN:
-        if scan_applies(H, gates_of(cell)):
+        if scan_routes(H, gates_of(cell)):
             var sa = Args()
             sa.p0 = act
             sa.p1 = gh

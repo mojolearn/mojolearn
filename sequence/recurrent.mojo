@@ -49,7 +49,7 @@ from sequence.ops import (
 )
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
 from autograd.data import epoch_order as ag_epoch_order
-from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_applies
+from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
 from std.sys.compile import is_defined, get_defined_int
@@ -410,7 +410,7 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
         comptime if not NN42_INPUT_BIAS_FUSED or SEQ_LSTM_SCAN:
             bias_rows(ex, w.gx[l], P + net.b_ih(l), w.gx[l], T * B, GH)
         comptime if SEQ_LSTM_SCAN:
-            if scan_applies(H, net.G()):
+            if scan_routes(H, net.G()):
                 # the whole recurrence, one block per row (h_0 = c_0 = 0
                 # inside): sequence/recurrent_scan.mojo. The IDENTICAL
                 # default (-D MOJOLEARN_SEQ_RNN_SCAN_OFF keeps the per-step
@@ -491,7 +491,7 @@ def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int,
         var dhn = w.dhn
         var scanned = False
         comptime if SEQ_LSTM_SCAN:
-            if scan_applies(H, net.G()):
+            if scan_routes(H, net.G()):
                 # every step from T - 1 down, one block per row (dh = dc = 0
                 # inside): sequence/recurrent_scan.mojo
                 var sa = Args()
