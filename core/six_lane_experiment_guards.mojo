@@ -450,6 +450,12 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch (or MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch)
     comptime assert not is_defined["MOJOLEARN_RF_FAST_QSAMPLE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): RF_FAST_QSAMPLE (split candidates from >= 65,536 sampled rows) was DROPPED-slower: M4 DecisionTreeRegressor 1,000,000 x 32 7995 -> 8673 ms (8% slower), R2 0.99118 -> 0.99159 (noise). Restore with experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch."
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_STRIDED_COARSE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): IVF_FAST_STRIDED_COARSE (FAST coarse quantizer on the IDENTICAL strided trainset and start) was DROPPED-noise: M4 IVFSQIndex 500,000 x 128, n_lists 1024, n_probes 32 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183. Restore with experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch."
+    # ---- lane del-lm (2026-10-19): hand LM backward walk deleted, the tape is the only path ----
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_LM_OFF"](), "removed 2026-10-19 (lane/del-lm, a54a5fb2e): AUTOGRAD_LM_OFF restored the hand byte LM backward walk; the tape replaced it (lm-train-step NV 34.611 -> 35.351 ms 1.02, AMD 42.939 -> 42.953 ms 1.00, avg 1.01; 44/44 words equal on Metal, NVIDIA, AMD). Restore with experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_LM"](), "removed 2026-10-19 (lane/del-lm, a54a5fb2e): AUTOGRAD_LM was the opt-in spelling of the byte LM tape backward, now the only path. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch"
+    # ---- end lane del-lm ----
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

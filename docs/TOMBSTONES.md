@@ -30,6 +30,8 @@ in the tables after the sections.
 
 | define | area | verdict | date | patch |
 |---|---|---|---|---|
+| [`MOJOLEARN_AUTOGRAD_LM`](#mojolearn_autograd_lm_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_LM_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_LM_OFF`](#mojolearn_autograd_lm_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_LM_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
 | [`MOJOLEARN_EST_REUSE_PART`](#mojolearn_est_reuse_part) | Trees | DROPPED-BUG | 2026-10-09 | [MOJOLEARN_EST_REUSE_PART.patch](../experiments/removed/MOJOLEARN_EST_REUSE_PART.patch) |
 | [`MOJOLEARN_EST_SHRINK_FUSED`](#mojolearn_est_shrink_fused) | Trees | DROPPED-inconclusive | 2026-10-09 | [MOJOLEARN_EST_SHRINK_FUSED.patch](../experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch) |
@@ -359,6 +361,32 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 
 ## Trees
+
+### MOJOLEARN_AUTOGRAD_LM_OFF
+
+- What it was: the hand-written byte LM backward walk in `training/byte_lm.mojo::byte_gradient_device` (CE backward or the
+  chunked v2 head, the two head GEMM backwards, `llama_decoder_layer_backward_device` per layer in reverse with the per-layer
+  host wait, the embedding backward, the pack), selected by `MOJOLEARN_AUTOGRAD_LM_OFF` (and the old opt-in spelling
+  `MOJOLEARN_AUTOGRAD_LM`) through `autograd/rules_lm.mojo::AUTOGRAD_LM` and the `tape` parameter of `byte_gradient_device`;
+  `training/samba_resident.mojo` read the same switch for its attention blocks. The fused kernels stay (the tape rules call
+  them) and `training/byte_lm_host_backward.mojo` stays (the host column's oracle walk).
+- Verdict: removed, superseded by the tape backward (`autograd/rules_lm.mojo::byte_backward_autograd`), the default since
+  2026-10-19. One run per arm, `tools/bench_board_neural.py` lm-train-step, ours, full shape
+  (`~/mojolearn-evidence/autograd-buildout-20261019/final-01/TM_LM_TIMING_2026-10-19.md`): NVIDIA L40S 34.611 -> 35.351 ms
+  (1.021), AMD MI325X 42.939 -> 42.953 ms (1.000), average 1.01; same `loss_first_step` 9.0155868 (no quality change). The
+  pass-5 and pass-6 reports (nv-04/NV_PASS5, amd-08/AMD_PASS5, p6-01/*_PASS6) carry no LM timing row.
+- Bits: `training/checks/lm_tape_backward_check.mojo` hand vs tape, every gradient and updated parameter word equal, 44/44 on
+  Metal (compile-21), NVIDIA and AMD (p6-01 `checks/lm-check-run.log`); digests identical on the three, e.g. v1 loss bits
+  1085369304, v1 `grad.embed` 5562955793640804344, v1 `params_after` 6614463532828634214, chunked_v2 `params_after`
+  8759336185958287388. They are stored in `training/checks/lm_tape_backward_digests.tsv`; the check now compares the tape
+  against them and word for word against `byte_host_train_step`.
+- Deleted 2026-10-19 by `a54a5fb2e` on lane/del-lm; recoverable at `a54a5fb2e^` (main `66e0842f8`).
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch` (`git diff a54a5fb2e a54a5fb2e^` over `training/byte_lm.mojo`,
+  `autograd/rules_lm.mojo`, `training/samba_resident.mojo`; it also drops the tombstone comments). The hand arm calls
+  `llama_decoder_layer_backward_device`; if lane del-transformer has removed that walk, restore it too.
+- Guard: `MOJOLEARN_AUTOGRAD_LM_OFF` and `MOJOLEARN_AUTOGRAD_LM` refused in `core/six_lane_experiment_guards.mojo` (lane del-lm
+  block). No `grid_controls` entry existed.
+- EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_LM_OFF`, **removed**.
 
 ### MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE
 
