@@ -30,6 +30,7 @@ in the tables after the sections.
 
 | define | area | verdict | date | patch |
 |---|---|---|---|---|
+| [`MOJOLEARN_AUTOGRAD_MLP_OFF`](#mojolearn_autograd_mlp_off) | Neural | DELETED-superseded | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MLP_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
 | [`MOJOLEARN_EST_REUSE_PART`](#mojolearn_est_reuse_part) | Trees | DROPPED-BUG | 2026-10-09 | [MOJOLEARN_EST_REUSE_PART.patch](../experiments/removed/MOJOLEARN_EST_REUSE_PART.patch) |
 | [`MOJOLEARN_EST_SHRINK_FUSED`](#mojolearn_est_shrink_fused) | Trees | DROPPED-inconclusive | 2026-10-09 | [MOJOLEARN_EST_SHRINK_FUSED.patch](../experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch) |
@@ -359,6 +360,29 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 
 ## Trees
+
+### MOJOLEARN_AUTOGRAD_MLP_OFF
+
+- What it was: the hand-assembled MLP backward in `sequence/mlp_fit.mojo` `mlp_fit` (arm A of the 2026-10-18 tape promotion):
+  per layer, top down, `gemm_epi` EPI_L2GRAD (dW + alpha W, / B), `OP_COLSUM_DIV` (db) and `gemm_epi` EPI_ACT_BWD (dX times the
+  layer below's act'), with the fused hand forward `mlp_forward` and one delta buffer a layer. The fused kernels stay (the tape's
+  `linear_into` node issues the same bodies); `mlp_forward` stays for `mlp_predict`. Kept: the fused tape default and the composed
+  tape arm `MOJOLEARN_AUTOGRAD_MLP_UNFUSED`.
+- Verdict: DELETED-superseded (Andrew, 2026-10-19: every trainer runs its backward on the tape by default; delete the hand glue).
+  The tape gives the same bits: the 48 `autograd/checks/mlp_cases.mojo` digests are equal on the hand, fused and composed arms and
+  on host, Metal, NVIDIA L40S and AMD MI325X (compile-01 .. compile-25, nv-01..nv-03, amd-01, amd-05, p6-01); they are now the stored
+  reference `autograd/checks/mlp_cases_digests.tsv`, which `tools/check_autograd.py` compares instead of building this arm.
+- Numbers (tools/sequence_speed.py case_mlp, HIGGS 1M x 28, (256,) b512 1 epoch adam, identical, one run per arm, fit s):
+  pass 5 (nv-04/NV_PASS5, amd-08/AMD_PASS5): hand NV 0.237 AMD 0.388, fused default NV 0.219 AMD 0.413, composed NV 0.279 AMD 0.353;
+  fused/hand NV 0.92 AMD 1.06 (average 0.99). Pass 6 (p6-01/NV_PASS6, AMD_PASS6, integration fda883af2): hand NV 0.476 AMD 0.408,
+  fused NV 0.526 AMD 0.366 (average 1.00), digest 8f410a4ae2d620af on hand and fused on both vendors (composed cddd9670ee871d53).
+  Quality unchanged by construction (same digests). No transformer/LM rows apply (final-01/TM_LM_TIMING has none for the MLP).
+- Deleted 2026-10-19 by `6784245b2` on lane/del-mlp (base main `66e0842f8`); recoverable at `6784245b2^`.
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch`, the lane's whole `sequence/mlp_fit.mojo` change reversed (the
+  deletion plus its tombstone comments), so `git apply` on the lane head restores main `66e0842f8`'s file; `git apply -3` after main moves.
+  Restoring it does not bring back the old two-build check in `tools/check_autograd.py`; the stored digests still apply.
+- Guard: `removed` refusal in `core/six_lane_experiment_guards.mojo` (lane del-mlp block). No grid_controls entry existed.
+- EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_MLP_OFF`, **DELETED-superseded**.
 
 ### MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE
 
