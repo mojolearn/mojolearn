@@ -412,7 +412,9 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
         comptime if SEQ_LSTM_SCAN:
             if scan_applies(H, net.G()):
                 # the whole recurrence, one block per row (h_0 = c_0 = 0
-                # inside): sequence/recurrent_scan.mojo
+                # inside): sequence/recurrent_scan.mojo. The IDENTICAL
+                # default (-D MOJOLEARN_SEQ_RNN_SCAN_OFF keeps the per-step
+                # chain below); the same bits as that chain.
                 var sa = Args()
                 sa.p0 = w.gx[l]
                 sa.p1 = w.gh[l]
@@ -423,6 +425,12 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
                 sa.p6 = w.call[l] + B * H
                 sa.p7 = P + net.w_hh(l)
                 sa.p8 = P + net.b_hh(l)
+                # p9..p11 are never read by the forward cell (NN42 is off on
+                # this route); bound to live storage, not dummy_ptr, so every
+                # kernel pointer argument is a real buffer (the Metal rule).
+                sa.p9 = P + net.b_ih(l)
+                sa.p10 = w.gx[l]
+                sa.p11 = P + net.w_hh(l)
                 sa.i0 = net.cell
                 sa.i1 = B
                 sa.i2 = H

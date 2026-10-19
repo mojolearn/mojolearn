@@ -154,6 +154,8 @@ def rnn_layer[E: Exec](
     var whh = tape.value(w_hh)
     var bhh = tape.value(b_hh)
     var scanned = False
+    # The IDENTICAL default, as recurrent.forward (HandStep): the two steps
+    # take the same route under the same defines, so they stay equal.
     comptime if SEQ_LSTM_SCAN:
         if scan_applies(H, gates_of(cell)):
             var sa = Args()
@@ -166,6 +168,11 @@ def rnn_layer[E: Exec](
             sa.p6 = w.call[l] + B * H
             sa.p7 = whh
             sa.p8 = bhh
+            # never read on this route (b_ih is in gx); live storage, as
+            # recurrent.forward binds them
+            sa.p9 = b_ih
+            sa.p10 = gxp
+            sa.p11 = whh
             sa.i0 = cell
             sa.i1 = B
             sa.i2 = H
