@@ -464,8 +464,9 @@ kernels. What stays hand-written becomes a custom rule.
    (`mamba/impl/ops/selective_scan_backward.mojo`,
    `mamba/impl/ops/mamba2_ssd_backward.mojo`), the conv tap kernels and the
    `mamba_bwd_*_into` gate/norm kernels, each as one rule.
-   Code-complete under `MOJOLEARN_AUTOGRAD_MAMBA` (lane ag-mamba, not yet
-   compiled or run): `autograd/rules_mamba.mojo` records each block over the
+   The only GPU Mamba-1/2 backward since 2026-10-19 (the hand glue and
+   `MOJOLEARN_AUTOGRAD_MAMBA(_OFF)` deleted, lane del-mamba, docs/TOMBSTONES.md);
+   built by lane ag-mamba: `autograd/rules_mamba.mojo` records each block over the
    forward's own stage buffers as custom nodes (Mamba-1: norm, in_proj,
    conv, x_proj, dt, scan, gate, out_proj, tags 48-55; Mamba-2: norm,
    in_proj, SSD, gated norm, out_proj, tags 56-60), the residual as a tape
@@ -538,7 +539,7 @@ one run per arm, same frozen commit.
 | `MOJOLEARN_AUTOGRAD_MLP_FUSED` | MLP rows; three arms: hand (`_MLP_OFF`), tape, fused tape | fused digest equals the hand digest (same launches and arguments), nv = amd | NV + AMD full-size race | equal to the hand path by construction |
 | `MOJOLEARN_AUTOGRAD_RNN` | rnn/lstm/gru clf + reg rows, L = 1 and 2 | ID check: arm B digest equals arm A (same launches) on nv and amd, and nv = amd | NV + AMD full-size race; the tape adds fills/copies per node | unchanged by construction; recorded |
 | `MOJOLEARN_AUTOGRAD_TRANSFORMER` | transformer LM rows | nv = amd = Apple digest; arm A equality expected only where launches are reused verbatim | NV + AMD | loss / perplexity no material drop |
-| `MOJOLEARN_AUTOGRAD_MAMBA` | Mamba-1/2 LM rows | as transformer | NV + AMD | as transformer |
+| `MOJOLEARN_AUTOGRAD_MAMBA` (removed 2026-10-19: tape only) | Mamba-1/2 LM rows | as transformer | NV + AMD | as transformer |
 | `MOJOLEARN_AUTOGRAD_LM` | `lm-train-step` (byte LM), Samba train step | ID check: arm B digest equals arm A (same launches, same buffers) on nv and amd, and nv = amd | NV + AMD, one train step per arm (`tools/bench_board_neural.py lm-train-step`) | unchanged by construction |
 
 ### Backward timing: transformer and Mamba, hand vs tape

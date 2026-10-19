@@ -30,6 +30,7 @@ in the tables after the sections.
 
 | define | area | verdict | date | patch |
 |---|---|---|---|---|
+| [`MOJOLEARN_AUTOGRAD_MAMBA_OFF`](#mojolearn_autograd_mamba_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
 | [`MOJOLEARN_EST_REUSE_PART`](#mojolearn_est_reuse_part) | Trees | DROPPED-BUG | 2026-10-09 | [MOJOLEARN_EST_REUSE_PART.patch](../experiments/removed/MOJOLEARN_EST_REUSE_PART.patch) |
 | [`MOJOLEARN_EST_SHRINK_FUSED`](#mojolearn_est_shrink_fused) | Trees | DROPPED-inconclusive | 2026-10-09 | [MOJOLEARN_EST_SHRINK_FUSED.patch](../experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch) |
@@ -359,6 +360,17 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 
 ## Trees
+
+### MOJOLEARN_AUTOGRAD_MAMBA_OFF
+
+- Verdict: removed, superseded by the tape (Andrew, 2026-10-19: every trainer's backward runs on the tape by default, word-for-word checks passed on Metal, NVIDIA and AMD; delete the hand glue, keep the kernels). The opt-in spelling `MOJOLEARN_AUTOGRAD_MAMBA` is refused with it.
+- What it was: the hand-chained Mamba-1 prefill backward (`mamba1_prefill_backward`, launches B1-B17) and Mamba-2 prefill backward (`mamba2_prefill_backward`, C1-C8), selected in `bindings/_mojolearn_mamba.mojo` (`_mamba1_backward_run`, `_mamba2_backward_run`) by `comptime if AUTOGRAD_MAMBA` (`autograd/rules_mamba.mojo`). The tape (`mamba1_tape_backward` / `mamba2_tape_backward`) launches the same kernels in the same order; every kernel stays.
+- Deleted 2026-10-19 by `e378999c7` (the device walks moved out of `mamba/impl/modeling/modeling_mamba_prefill_backward.mojo` and `mamba/impl/modules/mamba2_prefill_backward.mojo`; those keep `Mamba1PrefillGradients`, `m1_conv_w_interleave_kernel` and `Mamba2PrefillGradients`) and `47582a7fb` (the binding seam, the define, the checks). Recoverable at `e378999c7^` = main `66e0842f8`. Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch` (both commits reversed, code files only; applies cleanly to the lane head).
+- The CPU column is unchanged: its backward is the same walk restated on the host by `tools/mamba_host_gen.py`, whose input now lives at `mamba/host/mamba1_prefill_chain.mojo` / `mamba/host/mamba2_prefill_chain.mojo` (generator input only; no device module imports them). The generated glue is byte-identical, in the new modules `mamba/host/gen/mamba1_prefill_chain.mojo` / `mamba2_prefill_chain.mojo`.
+- Files the patch restores: `autograd/rules_mamba.mojo`, `bindings/_mojolearn_mamba.mojo`, `bindings/_mojolearn_mamba_host.mojo`, `mamba/impl/modeling/modeling_mamba_prefill_backward.mojo`, `mamba/impl/modules/mamba2_prefill_backward.mojo`, `mamba/host/*_prefill_chain.mojo` (removed again), `mamba/host/gen/{modeling_mamba_prefill_backward,mamba2_prefill_backward,mamba1_prefill_chain,mamba2_prefill_chain}.mojo`, `mamba/checks/mamba_tape_backward_{check,time}.mojo`, `mamba/checks/mamba_backward_device_tail_dump.mojo`, `mamba/checks/mamba_backward_host_oracle_check.mojo`, `experiments/performance_ideas/I08/{backward_check,time}.mojo`, `tools/mamba_host_gen.py`, `python/mojolearn/host_surface.py`.
+- Timing, one timed series per arm (20 calls, median; host copies in both clocks; `mamba/checks/mamba_tape_backward_time.mojo`; autograd-buildout-20261019/final-01, TM_LM_TIMING_2026-10-19.md): NVIDIA L40S m1 1.942 -> 2.035 ms (1.05), m2 6.462 -> 6.554 ms (1.01); AMD MI325X m1 5.131 -> 5.285 ms (1.03), m2 17.620 -> 18.458 ms (1.05); NV+AMD averages m1 1.04, m2 1.03 (tape 3-4% slower, accepted for one backward path; flip a2f6f51db). The pass-5 (nv-04 NV_PASS5, amd-08 AMD_PASS5) and pass-6 (p6-01 NV_PASS6 / AMD_PASS6) reports carry no Mamba timing; p6-01 ran the word-for-word check only.
+- Bits: unchanged. The tape equals the hand path on every gradient word on Apple Metal (compile-21), NVIDIA (p6-01/nv/checks/mamba-tape-run.log) and AMD (p6-01/amd/checks/mamba-tape-run.log), all three digest sets equal; e.g. m1.case1 x 8834719169517249902, m2.case4 x 2231443176492846100. Those 70 digests (46 gradients + 24 two-block stack rows) are stored in `mamba/checks/mamba_tape_backward_digests.tsv`, which `mamba_tape_backward_check.mojo` now checks, with the Mamba-1 public gradients compared word for word against the host backward oracle.
+- grid_controls: no entry. EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_MAMBA_OFF`, **removed**.
 
 ### MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE
 
