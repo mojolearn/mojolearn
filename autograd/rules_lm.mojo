@@ -434,8 +434,8 @@ def byte_backward_autograd(
     every layer's `bsts[k]` gradients (d_x and the nine weight gradients)
     and dw_emb, with the same kernels on the same buffers. The caller packs
     them into its flat gradient as before."""
-    var n = len(fwds)
-    if n < 1 or len(bsts) != n or len(ws) != n:
+    var n_layers = len(fwds)
+    if n_layers < 1 or len(bsts) != n_layers or len(ws) != n_layers:
         raise Error("byte LM backward (autograd): one forward stage, backward stage and weight set per layer")
     if not byte_lm_tape_eligible(ws):
         raise Error("byte LM backward (autograd): only default Llama blocks are recorded")
@@ -445,7 +445,7 @@ def byte_backward_autograd(
     dims.validate()
     var dm = dims.d_model
     var m = b * l
-    for k in range(n):  # driver-loop: over decoder layers
+    for k in range(n_layers):  # driver-loop: over decoder layers
         # the hand path's per-layer refusals that need no device read
         if bsts[k].b != b or bsts[k].l != l:
             raise Error("llama backward: the stage buffers do not match (B, L)")
@@ -464,8 +464,8 @@ def byte_backward_autograd(
     var h = tape.custom_into(ex, [g_emb], _fp(x), _fp(bsts[0].d_x), m, dm, LM_EMBEDDING, Args())
     # ---- the layers; layer k's output gradient is the storage the hand
     # path passes layer k as d_out: bst[k+1].d_x, the top layer's d_h
-    for k in range(n):  # driver-loop: over decoder layers
-        var din = _fp(d_h) if k == n - 1 else _fp(bsts[k + 1].d_x)
+    for k in range(n_layers):  # driver-loop: over decoder layers
+        var din = _fp(d_h) if k == n_layers - 1 else _fp(bsts[k + 1].d_x)
         h = llama_decoder_layer_record(tape, ex, h, bsts[k], fwds[k], ws[k], din, b, l, k)
     # ---- head and loss; the loss's gradient is the unit seed (ce_ones[0])
     var g_lm = tape.variable_into(ex, _fp(lm_w), _fp(dw_lm), vocab, dm)
@@ -481,7 +481,7 @@ def byte_backward_autograd(
     var bst_refs = List[_BstRef]()
     var fwd_refs = List[_FwdRef]()
     var eps = List[Float32]()
-    for k in range(n):  # driver-loop: over decoder layers
+    for k in range(n_layers):  # driver-loop: over decoder layers
         bst_refs.append(_BstRef(unsafe_from_address=Int(MutPointer(to=bsts[k]))))
         fwd_refs.append(_FwdRef(unsafe_from_address=Int(MutPointer(to=fwds[k]))))
         eps.append(ws[k].eps)
