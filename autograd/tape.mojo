@@ -55,6 +55,9 @@ struct _Node(ImplicitlyCopyable, Movable):
     # dL/d(output): its activation derivative was already applied, by its
     # one consumer's dX epilogue or in place by its own backward.
     var grad_preact: Bool
+    # The gradient buffer is caller storage (variable_into, custom_into,
+    # binary_recorded with caller_grad): never re-pointed by a backward.
+    var caller_grad: Bool
 
 
 trait BackwardRules:
@@ -71,6 +74,17 @@ trait BackwardRules:
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         ...
 
+    # True: destination `edge` is the input's gradient buffer itself, never
+    # scratch, and the tape adds nothing to it afterwards. The rule writes
+    # that input's whole gradient there (or, for a graph whose rules share
+    # the join, leaves it to the rule that does), including whatever other
+    # consumers contributed. It is never zero-filled. A driver that records
+    # a fixed graph uses it to run a fan-in or residual join inside the
+    # kernel that already reads the operands, as a hand-written backward
+    # does. False everywhere is the plain contract above.
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        ...
+
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
@@ -85,6 +99,9 @@ struct NoCustomRules(BackwardRules):
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         return True
+
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return False
 
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
@@ -332,7 +349,7 @@ struct Tape(Movable):
                 _ = self._check(p)
             var at = len(self._nodes)
             self._nodes.append(_Node(value, dummy_ptr(), rows, cols, False, op, len(self._parents), 0,
-                                     saved, False, True, False))
+                                     saved, False, True, False, False))
             return Tensor(Int(self._identity.value()), self._generation, at)
         var requires = leaf_grad
         var start = len(self._parents)
@@ -352,7 +369,8 @@ struct Tape(Movable):
             else:
                 grad = self._alloc(ex, rows * cols)
         var index = len(self._nodes)
-        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False, False))
+        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False, False,
+                                 requires and caller_grad))
         return Tensor(Int(self._identity.value()), self._generation, index)
 
     def variable[E: Exec](

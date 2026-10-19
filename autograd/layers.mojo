@@ -18,6 +18,9 @@ struct NeuralRules(BackwardRules):
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         return True
 
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return False
+
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
