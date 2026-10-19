@@ -237,6 +237,13 @@ in Mojo. Moving arithmetic to Mojo while Python still drives these operations is
 only a partial repair, not compliance. Measure performance gains; do not assume
 that removing Python makes every full workload faster.
 
+Andrew, 2026-10-19 (restated): the ONLY job of the Python package is to connect users to the compiled Mojo through PyPI.
+A public method is one binding call that hands over buffers and returns the result; nothing else runs in Python.
+This applies to the autograd surface too: `Sequential.fit` is one call and the whole training loop (epochs, batches,
+launches, the tape, the backward walk, the optimizer) runs in Mojo; `ops.Session` records in Mojo and `backward` is one
+call that walks the tape in Mojo. A user composing operations one call at a time is the API, not a runtime loop; a
+Python loop inside the package that walks a tape, a batch or a model is a violation.
+
 Python test/benchmark controllers, test-data preparation and independent test
 oracles remain allowed as testing tools. Keep their work explicitly distinguished
 from product execution and accurately included in or excluded from declared timing
