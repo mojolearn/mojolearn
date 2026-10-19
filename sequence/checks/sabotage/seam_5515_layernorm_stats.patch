@@ -1,14 +1,26 @@
+diff --git a/sequence/coop.mojo b/sequence/coop.mojo
+index 6f9d9f9c9..ce7174fcb 100644
+--- a/sequence/coop.mojo
++++ b/sequence/coop.mojo
+@@ -589,7 +589,7 @@ def apply_coop[OP: Int](cell: Int, lane: Int, a: Args):
+         if lane == 0:
+             af_rmean_tail(a, s)
+     elif OP == OP_LN_FWD:
+-        comptime if LN_ROW_WARP:
++        comptime if False:
+             # lane ag-pass6-host idea L: the row in registers (same bits)
+             if ln_one_pass_on(a.i0):
+                 ln_fwd_rw_one_pass(cell, lane, a)
 diff --git a/sequence/layernorm.mojo b/sequence/layernorm.mojo
-index 64308a54c..8055662b6 100644
+index da8bab366..02edb1792 100644
 --- a/sequence/layernorm.mojo
 +++ b/sequence/layernorm.mojo
-@@ -18,7 +18,8 @@ def div(a: Float32, b: Float32) -> Float32:
- 
- def _stats(x: FP, base: Int, D: Int, eps: Float32) -> Tuple[Float32, Float32]:
+@@ -126,7 +126,7 @@ def _stats(x: FP, base: Int, D: Int, eps: Float32) -> Tuple[Float32, Float32]:
      var s = Float32(0.0)
--    for c in range(D):
-+    for cc in range(D):
-+        var c = D - 1 - cc
-         s = add(s, ld(x, base + c))
-     var mean = div(s, Float32(D))
      var q = Float32(0.0)
+     var mean = Float32(0.0)
+-    comptime if LN_ROW_WARP:
++    comptime if False:
+         s = _rw_fold_sum(x, base, D)
+         mean = div(s, Float32(D))
+         q = _rw_fold_sq(x, base, D, mean)

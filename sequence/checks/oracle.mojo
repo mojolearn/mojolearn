@@ -32,8 +32,10 @@ Seams (DEVIATION numbers, lane sequence 5500-5599):
        status word                                                  alt: k descending
   5513 Nelder-Mead simplex order: ties keep the lower index        alt: the higher index
   5514 MoE top-k routing: ties go to the lower expert index         alt: the higher
-  5515 LayerNorm statistics: the mean folded columns ascending,
-       then the centred squares                                     alt: mean descending
+  5515 LayerNorm statistics: the 32-slot fold (slot j sums columns
+       j, j + 32, ... ascending, then the pairwise tree), the mean,
+       then the centred squares the same way                       alt: one ascending chain
+       (under -D MOJOLEARN_IDN_LN_ROW_WARP_OFF: one ascending chain, alt: mean descending)
   5516 SES recursion (Croston): alpha x + (1 - alpha) f, one fma    alt: f + alpha (x - f)
   5517 ETS seasonal update: s + gamma (t - s), one fma             alt: (1 - gamma) s + gamma t
   5518 ETS decomposition moving average: taps ascending, 0.5 x
@@ -699,22 +701,73 @@ def o_moe_route(x: List[Float32], Wg: List[Float32], T: Int, D: Int, E: Int, k: 
 
 
 # ---------------------------------------------------------------- 5515
+def _o_ln_row_warp() -> Bool:
+    """Restated (sequence/layernorm.mojo `LN_ROW_WARP`): the row folds are the
+    32-slot fold under IDENTICAL unless a row-warp or all-off define is set."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_LN_ROW_WARP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        return False
+    return True
+
+
+def _o_ln_tree(mut p: List[Float32]) -> Float32:
+    """The 32 slots' pairwise tree: offsets 16, 8, 4, 2, 1, p[l] += p[l + off]
+    for l < off; p[0] is the total."""
+    var off = 16
+    while off >= 1:
+        for l in range(off):
+            p[l] = _a(p[l], p[l + off])
+        off //= 2
+    return p[0]
+
+
+def _o_ln_sum(x: List[Float32], base: Int, D: Int, slots: Bool, rev: Bool) -> Float32:
+    """sum of x[base + c], c < D: the 32-slot fold (slot j adds c = j, j + 32,
+    ... ascending from +0.0, then the tree) when slots, else one chain
+    (ascending, or descending when rev)."""
+    if slots:
+        var p = List[Float32](length=32, fill=Float32(0.0))
+        for c in range(D):
+            p[c % 32] = _a(p[c % 32], x[base + c])
+        return _o_ln_tree(p)
+    var s = Float32(0.0)
+    for cc in range(D):
+        var c = D - 1 - cc if rev else cc
+        s = _a(s, x[base + c])
+    return s
+
+
+def _o_ln_sq(x: List[Float32], base: Int, D: Int, mean: Float32, slots: Bool) -> Float32:
+    """sum of (x[base + c] - mean)^2, each term one fma: the 32-slot fold when
+    slots, else one ascending chain."""
+    if slots:
+        var p = List[Float32](length=32, fill=Float32(0.0))
+        for c in range(D):
+            var d = _s(x[base + c], mean)
+            p[c % 32] = _f(d, d, p[c % 32])
+        return _o_ln_tree(p)
+    var q = Float32(0.0)
+    for c in range(D):
+        var d = _s(x[base + c], mean)
+        q = _f(d, d, q)
+    return q
+
+
 def o_layer_norm(x: List[Float32], w: List[Float32], b: List[Float32], M: Int, D: Int, eps: Float32, alt: Bool) -> List[Float32]:
-    """[y (M D), mean (M), rstd (M)] of torch.nn.functional.layer_norm."""
+    """[y (M D), mean (M), rstd (M)] of torch.nn.functional.layer_norm.
+    Pinned: the 32-slot fold for both row sums (the IDENTICAL default); alt:
+    one ascending chain. With the row fold off: one ascending chain; alt: the
+    mean's sum descending."""
+    var warp = _o_ln_row_warp()
+    var slots = warp and not alt
+    var rev = alt and not warp
     var y = List[Float32]()
     var means = List[Float32]()
     var rstds = List[Float32]()
     for r in range(M):
         var base = r * D
-        var s = Float32(0.0)
-        for cc in range(D):
-            var c = D - 1 - cc if alt else cc
-            s = _a(s, x[base + c])
+        var s = _o_ln_sum(x, base, D, slots, rev)
         var mean = _d(s, Float32(D))
-        var q = Float32(0.0)
-        for c in range(D):
-            var d = _s(x[base + c], mean)
-            q = _f(d, d, q)
+        var q = _o_ln_sq(x, base, D, mean, slots)
         var rstd = _z(identical_rsqrt(_a(_d(q, Float32(D)), eps)))
         for c in range(D):
             y.append(_a(_m(_m(_s(x[base + c], mean), rstd), w[c]), b[c]))
