@@ -29,8 +29,9 @@
 # consumers, zeroed_destination is False (every kernel overwrites its whole
 # destination) and the seed is the trainer's dlogits read in place.
 # Launches: hand 6 (+1 dx) + 2 scans; tape 6 (+1 dx) + 2 scans. Waits: the
-# same (the scans'); the executor the tape records on drains the queue
-# when it goes, after the step's own closing wait.
+# same (the scans'). The tape records on SmallMlpRecordExec, which raises on
+# any launch, allocation, copy or wait: so the tape provably adds none, and
+# no executor drain (DeviceExec's destructor) enters the step.
 #
 # ReLU. The tape's own RELU op (OP_AG_UNARY_VJP: `g if x > 0 else 0`, g
 # loaded through ftz) gives the same word as op 2 (`ftz(g) if act > 0 else
@@ -205,6 +206,43 @@ struct SmallMlpRules[K: SmallMlpKernels](BackwardRules):
             # the hand path passes.
             _same(gradients[0], self.dz[layer][], "the shared output gradient")
             self.k.cells(upstream, _fp(self.dx[layer][]), gradients[1], self.batch, n, 3)
+
+
+struct SmallMlpRecordExec(Exec, Movable):
+    """The executor the small MLP's tape records on. The graph holds only
+    caller storage and its rules launch on the trainer's context, so the
+    tape needs no storage, launch, copy or wait of its own: every method
+    raises, which keeps it that way."""
+
+    def __init__(out self):
+        pass
+
+    def alloc(mut self, n: Int) raises -> FP:
+        raise Error(_RECORD_ONLY)
+
+    def free(mut self, p: FP) raises:
+        raise Error(_RECORD_ONLY)
+
+    def upload(mut self, dst: FP, src: FP, n: Int) raises:
+        raise Error(_RECORD_ONLY)
+
+    def download(mut self, dst: FP, src: FP, n: Int) raises:
+        raise Error(_RECORD_ONLY)
+
+    def download_async(mut self, dst: FP, src: FP, n: Int) raises:
+        raise Error(_RECORD_ONLY)
+
+    def bind(mut self, src: FP, n: Int) raises -> FP:
+        raise Error(_RECORD_ONLY)
+
+    def launch[OP: Int](mut self, a: Args, n: Int) raises:
+        raise Error(_RECORD_ONLY)
+
+    def sync(mut self) raises:
+        raise Error(_RECORD_ONLY)
+
+
+comptime _RECORD_ONLY = "small MLP backward (autograd): the tape asked its record-only executor for storage, a launch, a copy or a wait"
 
 
 @always_inline
